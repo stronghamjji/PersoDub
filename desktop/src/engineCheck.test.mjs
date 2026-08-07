@@ -1,0 +1,123 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { checkKit, readKitVersion, REQUIRED } from "./engineCheck.js";
+
+function makeKit(paths, { version } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), "odkit-"));
+  for (const rel of paths) {
+    const p = join(dir, rel);
+    mkdirSync(join(p, ".."), { recursive: true });
+    writeFileSync(p, "");
+  }
+  if (version !== undefined) writeFileSync(join(dir, "KIT_VERSION"), version);
+  return dir;
+}
+
+test("complete kit with matching KIT_VERSION passes", () => {
+  const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
+  assert.deepEqual(checkKit(dir, "1.0.0+abc1234"), { ok: true, missing: [] });
+});
+
+test("complete kit with mismatching KIT_VERSION is not installed", () => {
+  const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
+  const res = checkKit(dir, "2.0.0+def5678");
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.missing, []);
+});
+
+test("complete kit missing KIT_VERSION (legacy kit) is not installed", () => {
+  const dir = makeKit(REQUIRED); // e.g. a hand-installed mac_kit predating this feature
+  const res = checkKit(dir, "1.0.0+abc1234");
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.missing, []);
+});
+
+test("missing uvicorn binaries are reported even with a matching version", () => {
+  const dir = makeKit(["mac.env", "sidecar/server.py"], { version: "1.0.0+abc1234" });
+  const res = checkKit(dir, "1.0.0+abc1234");
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.missing.sort(), [
+    "app_venv/bin/uvicorn",
+    "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b",
+    "ollama/ollama",
+    "qwen_venv/bin/uvicorn",
+  ]);
+});
+
+// The install's Ollama runtime + 8 GB Gemma pull used to sit outside this
+// check, so a kit whose download died halfway still reported ok: boot skipped
+// runInstall, the app never repaired itself, and local translation stayed dead
+// across every restart with no way out but a reinstall.
+test("kit missing the Ollama runtime is not installed", () => {
+  const dir = makeKit(REQUIRED.filter((p) => p !== "ollama/ollama"), { version: "1.0.0+abc1234" });
+  const res = checkKit(dir, "1.0.0+abc1234");
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.missing, ["ollama/ollama"]);
+});
+
+test("kit missing the pulled Gemma model is not installed", () => {
+  const manifest = "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b";
+  const dir = makeKit(REQUIRED.filter((p) => p !== manifest), { version: "1.0.0+abc1234" });
+  const res = checkKit(dir, "1.0.0+abc1234");
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.missing, [manifest]);
+});
+
+test("nonexistent kitDir reports everything missing", () => {
+  const res = checkKit("/nonexistent/kit", "1.0.0+abc1234");
+  assert.equal(res.ok, false);
+  assert.equal(res.missing.length, REQUIRED.length);
+});
+
+// No expectedVersion available (e.g. a dev checkout with no bundled payload
+// to compare against) -- falls back to the pre-versioning 4-file-only check,
+// so a plain dev kit still works and the dev loop isn't broken.
+test("complete kit passes when no expected version is available (null)", () => {
+  const dir = makeKit(REQUIRED); // no KIT_VERSION at all
+  assert.deepEqual(checkKit(dir, null), { ok: true, missing: [] });
+});
+
+test("complete kit passes when no expected version is available (undefined)", () => {
+  const dir = makeKit(REQUIRED);
+  assert.deepEqual(checkKit(dir), { ok: true, missing: [] });
+});
+
+test("file-presence-only fallback ignores a KIT_VERSION already on the kit", () => {
+  const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
+  assert.deepEqual(checkKit(dir, null), { ok: true, missing: [] });
+});
+
+test("file-presence-only fallback still reports missing files", () => {
+  const dir = makeKit(["mac.env", "sidecar/server.py"]);
+  const res = checkKit(dir, null);
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.missing.sort(), [
+    "app_venv/bin/uvicorn",
+    "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b",
+    "ollama/ollama",
+    "qwen_venv/bin/uvicorn",
+  ]);
+});
+
+test("readKitVersion reads and trims the file", () => {
+  const dir = makeKit([]);
+  writeFileSync(join(dir, "KIT_VERSION"), "1.2.3+abcdef1\n");
+  assert.equal(readKitVersion(dir), "1.2.3+abcdef1");
+});
+
+test("readKitVersion returns null when the file is missing", () => {
+  const dir = makeKit([]);
+  assert.equal(readKitVersion(dir), null);
+});
+
+// Important-1 fix: a payload cached by a pre-versioning collect-payload.mjs
+// (or any other unreadable KIT_VERSION) must never throw -- an uncaught
+// exception here happens before boot()'s try/catch and boot(win) has no
+// .catch(), so it would be an unhandled rejection instead of error.html.
+test("readKitVersion never throws for a nonexistent directory", () => {
+  assert.doesNotThrow(() => readKitVersion("/nonexistent/payload/dir/for/sure"));
+  assert.equal(readKitVersion("/nonexistent/payload/dir/for/sure"), null);
+});

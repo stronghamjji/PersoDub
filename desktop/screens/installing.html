@@ -1,0 +1,56 @@
+<!doctype html><meta charset="utf-8"><title>PersoDub: Installing</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 560px; margin: 60px auto; color: #333; }
+  li { margin: 6px 0; color: #999; }
+  li.active { color: #333; font-weight: 600; }
+  li.done { color: #2a8a4a; }
+  li.done::after { content: " ✓"; }
+  #bar { width: 100%; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 18px 0 6px; }
+  #fill { height: 100%; width: 0%; background: #4a7dff; transition: width .3s; }
+  #detail { color: #888; font-size: 13px; min-height: 1.2em; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; }
+  p.note { color: #888; font-size: 14px; }
+</style>
+<h2>Setting up PersoDub</h2>
+<p class="note">First launch only. Downloading engines and AI models (about 19 GB).
+Keep the app open; if it closes, setup resumes where it left off.</p>
+<ol id="steps"></ol>
+<div id="bar"><div id="fill"></div></div>
+<div id="detail"></div>
+<script>
+  // Titles must match src/installSpec.js step order.
+  const TITLES = {
+    "payload": "Copying bundled files",
+    "python": "Downloading Python runtime (~50 MB)",
+    "venv-app": "Installing app environment",
+    "venv-engines": "Installing AI engines (~3 GB)",
+    "ffmpeg": "Setting up ffmpeg",
+    "venv-qwen": "Installing voice engine",
+    "models": "Downloading AI models (~7 GB)",
+    "gemma": "Downloading translation model (Gemma, ~8 GB)",
+    "nonverbal-weights": "Downloading sound-detection weights (~140 MB)",
+    "mac-env": "Writing configuration",
+  };
+  const ol = document.getElementById("steps");
+  const items = {};
+  for (const [id, title] of Object.entries(TITLES)) {
+    const li = document.createElement("li");
+    li.textContent = title;
+    ol.appendChild(li);
+    items[id] = li;
+  }
+  const fill = document.getElementById("fill");
+  const detail = document.getElementById("detail");
+  window.persodubShell.onInstallProgress((p) => {
+    const li = items[p.stepId];
+    if (!li) return;
+    if (p.state === "start") li.className = "active";
+    if (p.state === "skipped" || p.state === "done") { li.className = "done"; fill.style.width = "0%"; }
+    if (p.state === "progress") {
+      li.className = "active";
+      if (p.pct != null) fill.style.width = p.pct + "%";
+      if (p.detail) detail.textContent = p.detail;
+    }
+    if (p.state === "error") { li.className = "active"; detail.textContent = p.detail || "failed"; }
+  });
+</script>

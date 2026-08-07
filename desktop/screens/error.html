@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><title>PersoDub: Startup failed</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 560px; margin: 80px auto; color: #333; }
+  pre { background: #f4f4f4; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+  button { font-size: 15px; padding: 8px 20px; border-radius: 6px; border: 1px solid #4a7dff;
+           background: #4a7dff; color: white; cursor: pointer; }
+</style>
+<h2>The engines failed to start</h2>
+<pre id="message"></pre>
+<p>Logs: <code id="logDir"></code></p>
+<button onclick="window.persodubShell.retry()">Try again</button>
+<script>
+  const q = new URLSearchParams(location.search);
+  document.getElementById("message").textContent = q.get("message") || "(no details)";
+  document.getElementById("logDir").textContent = q.get("logDir") || "(unknown)";
+</script>

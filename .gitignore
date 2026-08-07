@@ -1,0 +1,59 @@
+# ---- Secrets: NEVER commit these ----
+.env
+.env*
+*.env
+config/
+**/config/*.json
+*.key
+*.pem
+service_account*.json
+gemini_key.json
+
+# ---- This server's real internal paths/hostnames (not for public repo) ----
+INTERNAL_SETUP.md
+.env.server.local
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Runtime / working data ----
+workspace/
+*.log
+logs/
+
+# ---- Build / media outputs ----
+*.mp4
+!docs/demo/*.mp4
+*.wav
+*.mp3
+dist/
+build/
+
+# ---- Desktop app (future: Tauri / Node) ----
+node_modules/
+src-tauri/target/
+target/
+
+# ---- Stray local artifacts ----
+_probe_tmp/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ---- Node (desktop/ Electron shell) ----
+node_modules/
+
+# ---- Agent worktrees / local tooling (never publish) ----
+.claude/
+dub.sh

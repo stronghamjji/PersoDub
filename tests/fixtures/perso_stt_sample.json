@@ -1,0 +1,472 @@
+[
+ {
+  "order": 0,
+  "speaker_id": "spk_0",
+  "speaker_name": "Joker",
+  "text_original": "This is the opening line.",
+  "words": [
+   [
+    {
+     "start": 0.171,
+     "end": 0.9,
+     "word": "This"
+    },
+    {
+     "start": 0.95,
+     "end": 1.74,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 1,
+  "speaker_id": "spk_1",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 1.",
+  "words": [
+   [
+    {
+     "start": 3.0,
+     "end": 4.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 2,
+  "speaker_id": "spk_2",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 2.",
+  "words": [
+   [
+    {
+     "start": 5.0,
+     "end": 6.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 3,
+  "speaker_id": "spk_3",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 3.",
+  "words": [
+   [
+    {
+     "start": 7.0,
+     "end": 8.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 4,
+  "speaker_id": "spk_4",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 4.",
+  "words": [
+   [
+    {
+     "start": 9.0,
+     "end": 10.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 5,
+  "speaker_id": "spk_5",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 5.",
+  "words": [
+   [
+    {
+     "start": 11.0,
+     "end": 12.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 6,
+  "speaker_id": "spk_6",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 6.",
+  "words": [
+   [
+    {
+     "start": 13.0,
+     "end": 14.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 7,
+  "speaker_id": "spk_7",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 7.",
+  "words": [
+   [
+    {
+     "start": 15.0,
+     "end": 16.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 8,
+  "speaker_id": "spk_8",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 8.",
+  "words": [
+   [
+    {
+     "start": 17.0,
+     "end": 18.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 9,
+  "speaker_id": "spk_9",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 9.",
+  "words": [
+   [
+    {
+     "start": 19.0,
+     "end": 20.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 10,
+  "speaker_id": "spk_10",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 10.",
+  "words": [
+   [
+    {
+     "start": 21.0,
+     "end": 22.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 11,
+  "speaker_id": "spk_11",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 11.",
+  "words": [
+   [
+    {
+     "start": 23.0,
+     "end": 24.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 12,
+  "speaker_id": "spk_12",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 12.",
+  "words": [
+   [
+    {
+     "start": 25.0,
+     "end": 26.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 13,
+  "speaker_id": "spk_13",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 13.",
+  "words": [
+   [
+    {
+     "start": 27.0,
+     "end": 28.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 14,
+  "speaker_id": "spk_14",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 14.",
+  "words": [
+   [
+    {
+     "start": 29.0,
+     "end": 30.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 15,
+  "speaker_id": "spk_15",
+  "speaker_name": "Joker",
+  "text_original": "Joker sample line 15.",
+  "words": [
+   [
+    {
+     "start": 31.0,
+     "end": 32.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 16,
+  "speaker_id": "spk_16",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 16.",
+  "words": [
+   [
+    {
+     "start": 50.0,
+     "end": 51.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 17,
+  "speaker_id": "spk_17",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 17.",
+  "words": [
+   [
+    {
+     "start": 52.0,
+     "end": 53.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 18,
+  "speaker_id": "spk_18",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 18.",
+  "words": [
+   [
+    {
+     "start": 54.0,
+     "end": 55.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 19,
+  "speaker_id": "spk_19",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 19.",
+  "words": [
+   [
+    {
+     "start": 56.0,
+     "end": 57.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 20,
+  "speaker_id": "spk_20",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 20.",
+  "words": [
+   [
+    {
+     "start": 58.0,
+     "end": 59.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 21,
+  "speaker_id": "spk_21",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 21.",
+  "words": [
+   [
+    {
+     "start": 60.0,
+     "end": 61.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 22,
+  "speaker_id": "spk_22",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 22.",
+  "words": [
+   [
+    {
+     "start": 62.0,
+     "end": 63.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 23,
+  "speaker_id": "spk_23",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 23.",
+  "words": [
+   [
+    {
+     "start": 64.0,
+     "end": 65.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 24,
+  "speaker_id": "spk_24",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 24.",
+  "words": [
+   [
+    {
+     "start": 66.0,
+     "end": 67.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 25,
+  "speaker_id": "spk_25",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 25.",
+  "words": [
+   [
+    {
+     "start": 68.0,
+     "end": 69.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 26,
+  "speaker_id": "spk_26",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 26.",
+  "words": [
+   [
+    {
+     "start": 70.0,
+     "end": 71.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 27,
+  "speaker_id": "spk_27",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 27.",
+  "words": [
+   [
+    {
+     "start": 72.0,
+     "end": 73.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 28,
+  "speaker_id": "spk_28",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 28.",
+  "words": [
+   [
+    {
+     "start": 74.0,
+     "end": 75.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 29,
+  "speaker_id": "spk_29",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 29.",
+  "words": [
+   [
+    {
+     "start": 76.0,
+     "end": 77.0,
+     "word": "line"
+    }
+   ]
+  ]
+ },
+ {
+  "order": 30,
+  "speaker_id": "spk_30",
+  "speaker_name": "Batman",
+  "text_original": "Batman sample line 30.",
+  "words": [
+   [
+    {
+     "start": 78.0,
+     "end": 79.0,
+     "word": "line"
+    }
+   ]
+  ]
+ }
+]

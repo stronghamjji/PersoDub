@@ -1,0 +1,48 @@
+# "engines" venv: shared interpreter for the app's 4 subprocess workers
+# (SEP_PYTHON / STT_PYTHON / DIAR_PYTHON / QWEN_SCORER_PYTHON) -- see
+# app/scripts/demucs_separate.py, whisper_transcribe.py, campplus_diarize.py,
+# qwen_score_takes.py in opendub-desktop_02.
+#
+# On the Linux server these are 3 separate venvs because the host only has
+# Python 3.8 for two of them (old manylinux wheel constraints). On Mac,
+# Python 3.11 is used uniformly, so one venv covers all 4 roles -- verified
+# via PyPI metadata (2026-07-30): no numpy/torch version conflicts between
+# these packages on macOS arm64 (demucs's numpy<2 pin only applies to
+# macOS+x86_64/Intel, not Apple Silicon).
+#
+# torch/torchaudio: pip auto-selects the Apple Silicon (arm64, MPS-capable)
+# wheel for these version numbers on macOS -- do not add a CUDA index-url.
+torch==2.8.0
+torchaudio==2.8.0
+
+# Local Demucs source separation (app/scripts/demucs_separate.py).
+# 4.1.0 (not the server's 4.0.1) because it ships a real wheel and supports
+# Python 3.10+ -- the server pinned 4.0.1 only because its host is Python 3.8.
+demucs==4.1.0
+
+# Local Whisper transcription (app/scripts/whisper_transcribe.py). Newer than
+# the server's faster-whisper==1.0.3, which was pinned only because the
+# server's Python 3.8 host lacked a prebuilt tokenizers wheel for newer
+# versions -- Python 3.11 on Mac doesn't have that constraint.
+faster-whisper==1.2.1
+
+# The laughter/breath whitelist (app/nonverbal.py) shells out to the ORIGINAL
+# openai-whisper, not faster-whisper -- different package, different weights
+# (~140MB "base", fetched on first use). It is absent from every requirements
+# file, so the server must have had it in its system python3; on a clean Mac
+# the veto could not run and fail-closed every laugh, breath and sigh.
+openai-whisper
+
+# Local CAM++ diarization (app/scripts/campplus_diarize.py) + Qwen take
+# scoring (app/scripts/qwen_score_takes.py). Matches the version already
+# verified working on the server's qwen venv (same onnxruntime used there).
+onnxruntime==1.27.0
+scikit-learn==1.9.0
+scipy==1.17.1
+soundfile==0.14.0
+numpy==2.4.6
+
+# Not listed explicitly: PyYAML, safetensors, einops, huggingface-hub, julius,
+# lameenc, sphn, tqdm (all imported by demucs_separate.py or its deps) --
+# pip installs these automatically as demucs==4.1.0's own dependencies, all
+# confirmed to have macOS arm64 wheels or pure-Python sdists (2026-07-30).

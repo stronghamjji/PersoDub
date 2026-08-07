@@ -1,0 +1,64 @@
+PersoDub
+
+This product includes software developed by third parties, listed below.
+
+
+================================================================================
+Redistributed artifacts
+================================================================================
+
+The following third-party artifacts are redistributed by this project and are
+therefore covered by this notice. Everything else listed further down is fetched
+from its own upstream source at install time and is not redistributed here.
+
+CAM++ speaker verification model (campplus.onnx)
+  Attached to this repository's "models-v1" release and downloaded by
+  install.sh. From the 3D-Speaker project.
+  https://github.com/modelscope/3D-Speaker
+  Licensed under the Apache License, Version 2.0.
+
+Demucs (ported code in app/scripts/demucs_separate.py)
+  Functions in app/scripts/demucs_separate.py derive from the Demucs project.
+  https://github.com/adefossez/demucs
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+  Licensed under the MIT License:
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+
+================================================================================
+Components installed from upstream at install time
+================================================================================
+
+Not redistributed by this project -- each is downloaded from its own source on
+the user's machine during installation. Listed for attribution.
+
+Qwen3-TTS                 https://github.com/QwenLM/Qwen3-TTS
+Demucs (package/weights)  https://github.com/adefossez/demucs
+                          (ported code is redistributed -- see above)
+faster-whisper            https://github.com/SYSTRAN/faster-whisper
+Ollama                    https://github.com/ollama/ollama
+Gemma                     https://github.com/google-deepmind/gemma
+FFmpeg                    https://github.com/FFmpeg/FFmpeg
+Electron                  https://github.com/electron/electron
+
+Each is governed by its own licence; see the linked project for terms. FFmpeg in
+particular is obtained by the installer (via static-ffmpeg) rather than shipped
+with this project -- if a future build bundles FFmpeg binaries instead, its LGPL
+or GPL terms will apply to that distribution and this notice must be updated.
