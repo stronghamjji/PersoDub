@@ -1,0 +1,10 @@
+# Extra deps for the local CAM++ diarization engine (app/diar_campplus_client.py).
+# Kept separate from requirements.txt so the lightweight API/test env stays slim;
+# install into the runtime env only when diar_engine="campplus" is used.
+onnxruntime
+torch
+torchaudio
+scipy
+scikit-learn
+soundfile
+numpy

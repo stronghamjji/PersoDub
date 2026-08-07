@@ -1,0 +1,33 @@
+# Runs the full test suite on every push and pull request. Both suites are
+# pure-logic (no models, network, or ffmpeg needed -- see tests/conftest.py),
+# so plain runners are enough.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # matches the Mac kit's interpreter (pyproject requires-python)
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests/ -q
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+        working-directory: desktop
+      - run: npm test
+        working-directory: desktop

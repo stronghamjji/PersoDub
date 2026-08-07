@@ -1,0 +1,46 @@
+# persodub stack — bundles the app + Ollama (translation). The Qwen3-TTS sidecar,
+# local Demucs/CAM++/Whisper subprocess venvs, and Perso (if used) are all expected
+# to already be reachable and are just connected to over HTTP / env-configured
+# interpreter paths -- the old docker-based TTS container this file used to
+# reference has been removed entirely (see README.md / PLAN.md status header).
+#
+# NOTE (2026-07-30): this compose file is currently UNTESTED as a way to run the app.
+# It does not build or mount the subprocess venvs app/config.py expects
+# (SEP_PYTHON/DIAR_PYTHON/STT_PYTHON/QWEN_SCORER_PYTHON/NONVERBAL_WHISPER_PYTHON) --
+# without them, local separation/diarization/STT/take-scoring will fail inside the
+# container. The supported way to run this app today is the local `uvicorn` command
+# documented in README.md. Update this file (and remove this note) once the docker
+# path is verified to actually work end-to-end.
+services:
+  # Translation engine (local LLM). Reuses the previously downloaded qwen-dub model as-is.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: persodub-ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - NVIDIA_VISIBLE_DEVICES=0          # GPU 0 only (leaves other GPUs untouched)
+    # Set this to your own absolute host path before running.
+    volumes:
+      - /ABSOLUTE/PATH/TO/persodub/models/ollama_store:/root/.ollama/models
+    ports:
+      - "127.0.0.1:11434:11434"           # Accessible only from inside the host
+    restart: unless-stopped
+
+  # persodub app (lightweight orchestrator)
+  persodub:
+    build: .
+    container_name: persodub-app
+    network_mode: host                     # Reaches the Qwen3-TTS sidecar and Ollama directly via 127.0.0.1
+    # Set this to your own absolute host path before running.
+    env_file:
+      - /ABSOLUTE/PATH/TO/persodub/config/.env   # Injects secrets such as PERSO_API_KEY (file not exposed)
+    # Set the host paths (left side of the colon) to your own absolute paths before running.
+    volumes:
+      - /ABSOLUTE/PATH/TO/persodub/config:/ABSOLUTE/PATH/TO/persodub/config:ro   # Service-account / API keys (read-only, contents not exposed)
+    environment:
+      - QWEN_TTS_URL=http://127.0.0.1:3901
+      - OLLAMA_URL=http://127.0.0.1:11434
+      - TRANSLATE_ENGINE=gemma
+    depends_on:
+      - ollama
+    restart: unless-stopped

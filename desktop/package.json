@@ -1,0 +1,28 @@
+{
+  "name": "persodub-desktop-shell",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test src/*.test.mjs smoke/*.test.mjs",
+    "dist": "node scripts/collect-payload.mjs && electron-builder --mac zip --arm64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.persodub.desktop",
+    "productName": "PersoDub",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.cjs", "src/**", "screens/**", "fake/**", "config.json"],
+    "extraResources": [
+      { "from": "resources/payload", "to": "payload" },
+      { "from": "../LICENSE", "to": "LICENSE" },
+      { "from": "../NOTICE", "to": "NOTICE" }
+    ],
+    "mac": { "identity": null }
+  }
+}

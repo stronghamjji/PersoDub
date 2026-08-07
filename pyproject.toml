@@ -1,0 +1,86 @@
+[project]
+name = "persodub"
+version = "0.1.0"
+description = "Voice-cloned video dubbing that runs locally"
+# The supported product is the Mac desktop app, whose kit runs Python 3.11
+# (desktop/src/installSpec.js PYTHON_URL). Upper bound: six modules import
+# audioop, removed in Python 3.13.
+requires-python = ">=3.11,<3.13"
+license = { text = "Apache-2.0" }
+
+# Lets a plain `pytest` find the `app` package (otherwise only
+# `python -m pytest` from the repo root works).
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+# Lint configuration. There was none before 2026-08-02: no linter, no formatter,
+# no type checker, no CI. The code was nonetheless clean (a full scan found six
+# unused imports and nothing else), so this is about keeping it that way rather
+# than digging out of a hole.
+#
+# Principle: select broadly, then list every real finding below with its count.
+# Nothing is hidden -- an ignored rule is a TODO with a number attached, and the
+# build is green today so a red build always means "you just broke something".
+
+[tool.ruff]
+line-length = 120        # 21 violations; 100 would be 175, and the longest line in app/ is 142
+target-version = "py38"  # conservative floor; code is written to the 3.8 stdlib and runs on the kit's 3.11
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "B", "C4", "RET", "SIM", "UP", "PLE", "PLC"]
+
+ignore = [
+  # ---- Ratchet list: real findings, deferred so the build starts green. ----
+  # Fix these in roughly this order; delete the line when the count reaches 0.
+
+  "B904",     #   8  raise-without-from inside except -- loses the original
+              #      traceback. Worth fixing first: app/stt_local.py already
+              #      does it correctly, the other bridges do not.
+  "SIM115",   #   9  open() without a context manager
+  "E501",     #  21  line-too-long (at 120)
+  "E702",     #  15  multiple statements on one line (semicolons)
+  "B023",     #  10  function-uses-loop-variable -- all in tests/, but this one
+              #      is a genuine late-binding bug detector, not style
+  "E741",     #   4  ambiguous variable name (l/I/O)
+  "B007",     #   4  unused loop control variable
+  "B008",     #   3  function call in default argument
+  "E402",     #   2  module import not at top of file
+  "B011",     #   2  assert False
+  "UP009",    #   6  utf-8 encoding declaration (auto-fixable)
+
+  # ---- Deliberate, not a TODO. ----
+  "UP031",    # 171  printf-style % formatting. Used consistently throughout;
+              #      converting is pure churn with real risk in log strings.
+  "PLC0415",  #  91  import-outside-top-level. Some are lazy heavy-dependency
+              #      imports (the subprocess workers) and are correct as-is.
+              #      NOTE: one is not -- app/translate.py's function-body import
+              #      of app.len_fit exists only to break a circular import. That
+              #      is tracked as a refactor task, not by this rule.
+]
+
+# Known limitation, recorded so nobody assumes the linter has it covered:
+# ruff does NOT flag `from app.translate import _ask_with_retry` and friends.
+# Its private-import rule treats same-package imports as internal and exempt, so
+# the three cross-module private imports in app/ need review discipline, not
+# tooling.
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+  "B011",    # `assert False` is idiomatic in a test that must not be reached
+  "RET504",  # 1  unnecessary assign before return -- reads better in a fixture
+]
+"app/scripts/demucs_separate.py" = [
+  # SIM118 is a FALSE POSITIVE here. Line 108 is
+  #     {key: f.get_tensor(key) for key in f.keys()}
+  # where `f` is a safetensors `safe_open` handle, not a dict. `.keys()` is that
+  # library's documented API and `key in f` is not supported -- taking ruff's
+  # advice would break model loading. Do not "fix" this.
+  "SIM118",
+  "SIM108",  # 1  the equivalent ternary runs past 120 chars and reads worse
+]
+"app/scripts/check_speaker_identity.py" = [
+  "C416",    # 1  dict comprehension -> dict(); the comprehension is clearer here
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
