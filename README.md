@@ -51,7 +51,7 @@ cloned.
 
 ---
 
-<video src="https://github.com/stronghamjji/PersoDub/raw/main/docs/demo/original.mp4" controls muted></video>
+https://github.com/user-attachments/assets/39589651-83fe-4673-91b4-fa078f0e523e
 
 </td>
 <td width="50%">
@@ -60,7 +60,7 @@ cloned.
 
 ---
 
-<video src="https://github.com/stronghamjji/PersoDub/raw/main/docs/demo/persodub.mp4" controls muted></video>
+https://github.com/user-attachments/assets/09f6dbd8-70f1-487f-bf8d-2d9fa5cb6433
 
 </td>
 </tr>
@@ -76,22 +76,22 @@ cloned.
 <tr>
 <td width="25%">
 
-<video src="https://github.com/stronghamjji/PersoDub/raw/main/docs/demo/videolingo.mp4" controls muted></video>
+https://github.com/user-attachments/assets/1045c7f6-eb6e-4df5-aee9-16cd231e5d53
 
 </td>
 <td width="25%">
 
-<video src="https://github.com/stronghamjji/PersoDub/raw/main/docs/demo/krillinai.mp4" controls muted></video>
+https://github.com/user-attachments/assets/7cd0456a-0f0f-4be9-88d8-5ab5dece2f5a
 
 </td>
 <td width="25%">
 
-<video src="https://github.com/stronghamjji/PersoDub/raw/main/docs/demo/voicepro.mp4" controls muted></video>
+https://github.com/user-attachments/assets/1d84b466-57b4-43ea-8760-35eae9a198d3
 
 </td>
 <td width="25%">
 
-<video src="https://github.com/stronghamjji/PersoDub/raw/main/docs/demo/voicestudio.mp4" controls muted></video>
+https://github.com/user-attachments/assets/fac60bb8-a18b-47ec-a9c8-c1a4509fa4fb
 
 </td>
 </tr>
