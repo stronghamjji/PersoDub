@@ -13,6 +13,8 @@
 > Copies of this project hosted under any other account are not maintained by us --
 > please do not run software you obtained from them.
 
+---
+
 **Dub a video into another language in the original speaker's own voice — entirely on your Mac.**
 
 PersoDub is a desktop app that takes one video file and returns a dubbed version of it.
