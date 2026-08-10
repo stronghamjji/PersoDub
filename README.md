@@ -15,6 +15,8 @@
 
 ---
 
+## What is PersoDub?
+
 **Dub a video into another language in the original speaker's own voice — entirely on your Mac.**
 
 PersoDub is a desktop app that takes one video file and returns a dubbed version of it.
@@ -116,6 +118,7 @@ The source files live in [docs/demo](docs/demo).
 
 ## Table of contents
 
+- [What is PersoDub?](#what-is-persodub)
 - [Installation](#installation)
 - [Hear the difference](#hear-the-difference)
 - [Why PersoDub](#why-persodub)
