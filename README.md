@@ -15,20 +15,6 @@
 
 ---
 
-## What is PersoDub?
-
-**Dub a video into another language in the original speaker's own voice — entirely on your Mac.**
-
-PersoDub is a desktop app that takes one video file and returns a dubbed version of it.
-It separates speech from background audio, transcribes it, works out who spoke when,
-translates each line, clones each speaker's voice, and mixes the result back over the
-original soundtrack. With the default settings, every one of those steps runs locally.
-
-> **Status: early release (v0.1.0).** PersoDub is usable today and is under active
-> development. macOS on Apple Silicon is the first supported platform; other platforms
-> are planned. Interfaces and defaults may change. Please report problems through
-> [Issues](https://github.com/stronghamjji/PersoDub/issues).
-
 ## Installation
 
 On an Apple Silicon Mac, paste this into Terminal. It fetches the code, installs the
@@ -39,7 +25,8 @@ curl -fsSL https://raw.githubusercontent.com/stronghamjji/PersoDub/HEAD/install.
 ```
 
 The first launch downloads the AI models and runtimes (roughly 19 GB — see
-[Requirements](#requirements)). This takes a while and only happens once.
+[Requirements](#requirements)). This takes a while and only happens once;
+[docs/usage.md](docs/usage.md#first-launch) shows what that screen looks like.
 
 Prefer to go step by step, starting from installing git and Node.js?
 See **[INSTALL.md](INSTALL.md)**.
@@ -50,6 +37,23 @@ Terminal:
 ```bash
 open -a PersoDub
 ```
+
+## What is PersoDub?
+
+**Dub a video into another language in the original speaker's own voice — entirely on your Mac.**
+
+PersoDub is a desktop app that takes one video file and returns a dubbed version of it.
+It separates speech from background audio, transcribes it, works out who spoke when,
+translates each line, clones each speaker's voice, and mixes the result back over the
+original soundtrack. With the default settings, every one of those steps runs locally.
+
+<img src="docs/images/advanced-options.png" width="100%"
+     alt="PersoDub main window with Advanced options expanded: a drop zone for the video, pickers for speech-to-text, original language, target language and voice quality, and below them the translation engine, the text-to-speech engine, and the number of speakers.">
+
+> **Status: early release (v0.1.0).** PersoDub is usable today and is under active
+> development. macOS on Apple Silicon is the first supported platform; other platforms
+> are planned. Interfaces and defaults may change. Please report problems through
+> [Issues](https://github.com/stronghamjji/PersoDub/issues).
 
 ## Hear the difference
 
@@ -118,8 +122,8 @@ The source files live in [docs/demo](docs/demo).
 
 ## Table of contents
 
-- [What is PersoDub?](#what-is-persodub)
 - [Installation](#installation)
+- [What is PersoDub?](#what-is-persodub)
 - [Hear the difference](#hear-the-difference)
 - [Why PersoDub](#why-persodub)
 - [Where PersoDub fits](#where-persodub-fits)
@@ -218,6 +222,9 @@ down the others. Architecture details are in [docs/development.md](docs/developm
 Engine choices (transcription, translation, quality) live under **Advanced options**.
 The defaults are the fully local, free path and are a good starting point.
 
+A screen-by-screen walkthrough, with screenshots of every option, is in
+**[docs/usage.md](docs/usage.md)**.
+
 ## Supported languages
 
 English · Korean · Chinese · Japanese · French · German · Italian · Portuguese ·
@@ -226,7 +233,8 @@ Russian · Spanish
 ## Configuration
 
 PersoDub works with no configuration. The settings below are **optional** and are
-entered in the app's **Settings** screen.
+entered in the app's **Settings** screen
+([screenshot](docs/usage.md#settings)).
 
 | Setting | Default behavior | With a key |
 |---|---|---|
