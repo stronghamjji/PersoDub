@@ -4,6 +4,15 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-lightgrey.svg)](#requirements)
 [![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
 
+> [!WARNING]
+> **The only official source for PersoDub is
+> [github.com/stronghamjji/PersoDub](https://github.com/stronghamjji/PersoDub).**
+>
+> Downloads, when published, appear only on
+> [this repository's Releases page](https://github.com/stronghamjji/PersoDub/releases).
+> Copies of this project hosted under any other account are not maintained by us --
+> please do not run software you obtained from them.
+
 **Dub a video into another language in the original speaker's own voice — entirely on your Mac.**
 
 PersoDub is a desktop app that takes one video file and returns a dubbed version of it.
