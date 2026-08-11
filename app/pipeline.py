@@ -341,6 +341,9 @@ def run_dub(
     # local engine meant paid-quality was quietly downgraded with only a log
     # line to show for it (user decision 2026-08-06: no fallback; say what is
     # wrong and how to fix it instead).
+    # Whisper auto-detects the source language; capture it so the result can
+    # surface it. Perso STT reports no language, so this stays None there.
+    detected_language = {"code": None}
     perso_cues = None
     if stt_engine == "perso":
         try:
@@ -411,7 +414,10 @@ def run_dub(
             # forcing it once made an en->ko job decode English speech as Korean
             # phonetic gibberish. Only the UI's explicit SOURCE pick
             # (source_language_code) may be given as a hint; None = auto-detect.
-            src_cues = transcribe_local(video_path, language=source_language_code, log=log)
+            src_cues = transcribe_local(
+                video_path, language=source_language_code, log=log,
+                on_language=lambda c: detected_language.__setitem__("code", c),
+            )
         except Exception as e:
             log(f"   ❌ Local STT failed ({str(e)[:120]})")
             raise
@@ -545,4 +551,5 @@ def run_dub(
         "out_path": out_path,
         "num_segments": len(segments),
         "auto_translated": auto_translated,
+        "detected_source_language": detected_language["code"],
     }

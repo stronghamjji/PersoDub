@@ -30,6 +30,7 @@ from app.jobs import JobStore
 from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
 from app.pipeline import run_dub
 from app.settings_env import read_key_status, read_value, write_keys
+from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
 from app.translate import get_translator
 
 app = FastAPI(title="PersoDub", version=APP_VERSION)
@@ -290,7 +291,8 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
 
 @app.post("/api/dub/start")
 def dub_start(
-    video: UploadFile = File(...),
+    video: Optional[UploadFile] = File(None),
+    source_url: Optional[str] = Form(None),
     srt: Optional[UploadFile] = File(None),
     source_srt: Optional[UploadFile] = File(None),
     language: str = Form("English"),
@@ -314,6 +316,13 @@ def dub_start(
     job with an actionable message (no silent local substitute — the engine was
     chosen for a reason); pick Whisper explicitly for the free offline path.
     """
+    # Exactly one source. Accepting both would silently pick a winner, and the
+    # user would watch the wrong video get dubbed.
+    source_url = (source_url or "").strip() or None
+    has_upload = video is not None and bool(video.filename)
+    if has_upload == bool(source_url):
+        raise HTTPException(422, "Provide either a video file or a source_url, not both.")
+
     # Normalize like translate_engine below: without this, "Perso" (capital P)
     # skipped both the preflight and the Perso branch and silently ran the
     # free local engine -- the exact downgrade the no-fallback rule forbids.
@@ -358,8 +367,9 @@ def dub_start(
     work = os.path.join(WORKSPACE, uuid.uuid4().hex[:8])
     os.makedirs(work, exist_ok=True)
     video_path = os.path.join(work, "input.mp4")
-    with open(video_path, "wb") as f:
-        shutil.copyfileobj(video.file, f)
+    if has_upload:
+        with open(video_path, "wb") as f:
+            shutil.copyfileobj(video.file, f)
 
     srt_path = None
     if srt is not None and srt.filename:
@@ -374,12 +384,20 @@ def dub_start(
     out_path = os.path.join(work, "dubbed.mp4")
 
     jid = job_store.create()
-    # First log line names the source video -- log files are job-<id>.log, so
-    # without this there is no way to tell which video a log belongs to.
-    job_store.append_log(jid, f"🎬 {video.filename or 'video'}")
-    job_store.start(
-        jid,
-        lambda log: run_dub(
+    # The download filenames are built from this; the job record is the only
+    # place the result endpoints can read the user's choice back from.
+    job_store._update(jid, language_code=language_code)
+    # First log line names the source -- log files are job-<id>.log, so without
+    # this there is no way to tell which video a log belongs to.
+    job_store.append_log(jid, f"🎬 {source_url or video.filename or 'video'}")
+
+    def _target(log):
+        if source_url:
+            fetch_source(
+                source_url, video_path, log=log,
+                cancel_check=lambda: job_store.is_cancel_requested(jid),
+            )
+        return run_dub(
             video_path=video_path,
             srt_path=srt_path,
             source_srt_path=source_srt_path,
@@ -394,9 +412,27 @@ def dub_start(
             cancel_check=lambda: job_store.is_cancel_requested(jid),
             on_notice=lambda n: job_store.append_notice(jid, n),
             log=log,
-        ),
-    )
+        )
+
+    job_store.start(jid, _target)
     return {"job_id": jid, "status": "running"}
+
+
+class ProbeRequest(BaseModel):
+    url: str
+
+
+@app.post("/api/source/probe")
+def source_probe(body: ProbeRequest):
+    """Read a link's title/duration/thumbnail without downloading it.
+
+    Answers in seconds, which is what lets the UI show a confirm card before
+    committing the user to an hours-long dub.
+    """
+    try:
+        return probe_source(body.url)
+    except FetchError as e:
+        raise HTTPException(422, {"reason": e.reason, "message": e.message})
 
 
 class TranslateRequest(BaseModel):
@@ -418,6 +454,10 @@ def translate_api(body: TranslateRequest):
     return {"translations": out}
 
 
+def _target_code(job: dict) -> str:
+    return job.get("language_code") or "out"
+
+
 @app.get("/api/dub/result/{jid}")
 def dub_result(jid: str):
     """Return the finished dubbed file."""
@@ -429,11 +469,31 @@ def dub_result(jid: str):
     out = (j.get("result") or {}).get("out_path")
     if not out or not os.path.exists(out):
         raise HTTPException(status_code=404, detail="Result file not found")
-    return FileResponse(out, media_type="video/mp4", filename="dubbed.mp4")
+    return FileResponse(out, media_type="video/mp4",
+                        filename=f"dubbed_{_target_code(j)}.mp4")
+
+
+@app.get("/api/dub/result/{jid}/original")
+def dub_result_original(jid: str):
+    """Return the source video the job worked from.
+
+    Same file for both entry paths: an upload is copied to input.mp4 and a
+    fetched link is written to input.mp4, so this needs no special case.
+    """
+    j = job_store.get(jid)
+    if j is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    out = (j.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=404, detail="Result file not found")
+    original = os.path.join(os.path.dirname(out), "input.mp4")
+    if not os.path.exists(original):
+        raise HTTPException(status_code=404, detail="Original file not found")
+    return FileResponse(original, media_type="video/mp4", filename="original.mp4")
 
 
 @app.get("/api/dub/result/{jid}/srt")
-def dub_result_srt(jid: str):
+def dub_result_srt(jid: str, download: int = 0):
     """Return the translated subtitles used for the dub, as plain text (for the UI's
     subtitle viewer). run_dub()'s result dict doesn't carry the srt path, but it
     always writes/copies it into the same job workspace folder as out_path, under
@@ -454,5 +514,12 @@ def dub_result_srt(jid: str):
         candidate = os.path.join(work_dir, name)
         if os.path.exists(candidate):
             with open(candidate, encoding="utf-8-sig") as f:
-                return Response(content=f.read(), media_type="text/plain; charset=utf-8")
+                text = f.read()
+            headers = None
+            if download:
+                headers = {"Content-Disposition":
+                           f'attachment; filename="dubbed_{_target_code(j)}.srt"'}
+            return Response(content=text,
+                            media_type="text/plain; charset=utf-8",
+                            headers=headers)
     raise HTTPException(status_code=404, detail="Subtitle file not found")

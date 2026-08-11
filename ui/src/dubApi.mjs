@@ -88,7 +88,9 @@ export function qualityModeToNTakes(qualityMode) {
  * @returns {FormData}
  */
 export function buildDubFormData(opts) {
-  if (!opts || !opts.video) throw new Error("A video file is required.");
+  if (!opts || (!opts.video && !opts.sourceUrl)) {
+    throw new Error("A video file or a link is required.");
+  }
   let language, language_code, sourceCode = null;
   if (opts.targetLang) {
     // New source/target pair path (the Direction dropdown was split 2026-08-04).
@@ -107,7 +109,9 @@ export function buildDubFormData(opts) {
   const nTakes = opts.nTakesOverride ?? qualityModeToNTakes(opts.qualityMode ?? "fast");
 
   const fd = new FormData();
-  fd.append("video", opts.video);
+  // Exactly one source -- the server rejects both (app/main.py:dub_start).
+  if (opts.video) fd.append("video", opts.video);
+  else fd.append("source_url", opts.sourceUrl);
   fd.append("language", language);
   fd.append("language_code", language_code);
   if (sourceCode) fd.append("source_language_code", sourceCode);
@@ -208,6 +212,27 @@ export async function fetchJob(jobId, { baseUrl = "" } = {}) {
 /** URL for GET /api/dub/result/{jobId} (cache-busted). */
 export function resultUrl(jobId, { baseUrl = "" } = {}) {
   return `${baseUrl}/api/dub/result/${jobId}?t=${Date.now()}`;
+}
+
+/**
+ * POST /api/source/probe -- read a link's title/duration/thumbnail without
+ * downloading it. On failure the thrown Error carries a `.reason` (login /
+ * geo / gone / network / unsupported / unknown) so the caller can steer the
+ * user toward the upload tab with a sentence that fits.
+ */
+export async function probeSource(url, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/source/probe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => ({}))).detail || {};
+    const err = new Error(detail.message || "Couldn't fetch the video.");
+    err.reason = detail.reason || "unknown";
+    throw err;
+  }
+  return res.json();
 }
 
 /**

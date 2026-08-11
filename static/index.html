@@ -223,6 +223,35 @@
   .upload-file-info { margin-top: 10px; font-size: 0.82rem; color: var(--foreground); display: none; }
   .upload-file-info.shown { display: block; }
 
+  /* Source toggle: choose an uploaded file or a pasted link. */
+  .source-toggle { display: inline-flex; gap: 4px; padding: 3px; margin-bottom: 12px; background: var(--secondary); border-radius: 999px; }
+  .source-tab { border: none; background: transparent; color: var(--muted-foreground); font-size: 0.78rem; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .source-tab.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .link-input { width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.85rem; color: var(--foreground); background: var(--background); }
+  .link-input:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus-ring); }
+  .link-card { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--secondary); }
+  .link-card.error { border-color: var(--destructive); }
+  .link-card .lc-row { display: flex; gap: 12px; align-items: flex-start; }
+  .link-card img { width: 120px; border-radius: var(--radius-sm); flex: none; }
+  .link-card .lc-title { font-weight: 600; font-size: 0.86rem; color: var(--foreground); margin-bottom: 3px; }
+  .link-card .lc-meta { font-size: 0.78rem; color: var(--muted-foreground); }
+  .link-card .lc-msg { font-size: 0.83rem; color: var(--foreground); margin: 0 0 4px; }
+  .link-card .lc-sub { font-size: 0.78rem; color: var(--muted-foreground); margin: 0 0 10px; }
+  .link-card .lc-loading { font-size: 0.8rem; color: var(--muted-foreground); }
+  .result-langs { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0; font-size: 0.82rem; color: var(--muted-foreground); }
+  .result-langs b { color: var(--foreground); font-weight: 600; }
+
+  /* Auto-update banner: appears only in the desktop shell, only after a new
+     version finished downloading. Quiet by design -- no modal, no countdown. */
+  .update-banner { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: none; align-items: center; gap: 12px; padding: 10px 16px;
+    background: var(--foreground); color: var(--background); border-radius: 999px;
+    font-size: 0.82rem; box-shadow: 0 4px 14px rgba(0,0,0,0.25); z-index: 60; }
+  .update-banner.shown { display: flex; }
+  .update-banner button { border: none; border-radius: 999px; padding: 6px 14px;
+    font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    background: var(--background); color: var(--foreground); }
+
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 0.84rem; font-weight: 600; cursor: pointer; font-family: inherit; }
   .btn-primary { background: var(--primary); color: var(--primary-foreground); }
   .btn-primary:hover { box-shadow: var(--focus-ring); }
@@ -274,7 +303,10 @@
   .result-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
   /* Cap the player height to the window (portrait videos used to fill the
      whole viewport and push the download buttons below the fold). */
-  .video-wrap video { width: 100%; max-height: 52vh; object-fit: contain; border-radius: var(--radius); background: #111; display: block; }
+  /* Size the player to the video's own shape (portrait stays narrow, landscape
+     wide) instead of forcing full column width -- a 9:16 short inside a forced
+     16:9 box grew black side bars that read as "my video got resized". */
+  .video-wrap video { width: auto; max-width: 100%; max-height: 52vh; object-fit: contain; border-radius: var(--radius); background: #111; display: block; margin: 0 auto; }
   .video-placeholder { background: #111; border-radius: var(--radius); aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; color: #666; }
   /* Grow with the window instead of a fixed 320px -- show every line that
      fits; only scroll when the list is genuinely taller than the screen. */
@@ -384,7 +416,12 @@
       <!-- ============ Tab 1: Upload ============ -->
       <div class="tab-panel active" id="p-upload" data-panel="upload">
         <h2>Add your video</h2>
-        <p class="panel-desc">Drop a video file to dub, then choose the basics below.</p>
+        <p class="panel-desc">Drop a video file, or paste a link, then choose the basics below.</p>
+
+        <div class="source-toggle" role="tablist">
+          <button class="source-tab active" id="tabUpload" type="button" data-source="upload">Upload file</button>
+          <button class="source-tab" id="tabLink" type="button" data-source="link">Paste link</button>
+        </div>
 
         <div class="upload-zone" id="uploadZone" tabindex="0">
           <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
@@ -392,6 +429,12 @@
           <div class="upload-hint" id="uploadHint"></div>
           <div class="upload-file-info" id="uploadFileInfo"></div>
           <input type="file" id="videoInput" accept="video/*" style="display:none">
+        </div>
+
+        <div class="link-pane" id="linkPane" hidden>
+          <input class="link-input" id="linkInput" type="url" inputmode="url"
+                 placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
+          <div class="link-card" id="linkCard" hidden></div>
         </div>
 
         <div class="section-gap">
@@ -656,7 +699,7 @@
 </div>
 
 <script type="module">
-import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, fetchResultSrt, parseProgress, applyEngineAvailability } from "/js/dubApi.mjs";
+import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, fetchResultSrt, parseProgress, applyEngineAvailability, probeSource } from "/js/dubApi.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -720,7 +763,9 @@ for (const [selId, defCode] of [["sourceLangSelect", null], ["targetLangSelect",
 // ---------------- App state ----------------
 const state = {
   tab: "upload",
+  source: "upload",   // "upload" | "link"
   videoFile: null,
+  linkProbe: null,    // {url, title, duration_sec, thumbnail_url} once a link probes OK
   jobId: null,
   job: null,
   pollGeneration: 0, // bumped whenever we switch jobs, so a stale poll loop stops itself
@@ -1029,6 +1074,114 @@ uploadZone.addEventListener("drop", (e) => {
   if (file) setVideoFile(file);
 });
 
+// ---------------- Auto-update banner (desktop shell only) ----------------
+// The shell announces a fully-downloaded update; outside Electron (plain
+// browser, tests) persodubShell is absent and none of this runs.
+if (window.persodubShell?.onUpdateReady) {
+  window.persodubShell.onUpdateReady((info) => {
+    let el = $("updateBanner");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "updateBanner";
+      el.className = "update-banner";
+      el.innerHTML = `<span></span><button type="button">Restart to update</button>`;
+      el.querySelector("button").addEventListener("click", () => window.persodubShell.restartToUpdate());
+      document.body.appendChild(el);
+    }
+    el.querySelector("span").textContent =
+      `Version ${info.version || "update"} is ready.`;
+    el.classList.add("shown");
+  });
+}
+
+// ---------------- Link source (paste a URL) ----------------
+// Probing is cheap (seconds, no download), so it runs as soon as a URL looks
+// complete. The card is advisory -- it never blocks the rest of the form, which
+// is why this is inline rather than a modal (see the spec's confirm-card note).
+function setSource(which) {
+  state.source = which;
+  $("tabUpload").classList.toggle("active", which === "upload");
+  $("tabLink").classList.toggle("active", which === "link");
+  $("uploadZone").hidden = which !== "upload";
+  $("linkPane").hidden = which !== "link";
+  // Only one source can be armed at a time -- clear the other so the Start
+  // button never sees both (the server would reject that anyway).
+  if (which === "upload") clearLink();
+  else setVideoFile(null);
+}
+$("tabUpload").addEventListener("click", () => setSource("upload"));
+$("tabLink").addEventListener("click", () => setSource("link"));
+
+function secsToClock(sec) {
+  if (!sec) return "";
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  const mm = h ? String(m).padStart(2, "0") : String(m);
+  return (h ? h + ":" : "") + mm + ":" + String(s).padStart(2, "0");
+}
+
+function clearLink() {
+  state.linkProbe = null;
+  $("linkCard").hidden = true;
+  $("linkCard").classList.remove("error");
+  $("linkCard").innerHTML = "";
+}
+
+function renderLinkLoading() {
+  const card = $("linkCard");
+  card.hidden = false;
+  card.classList.remove("error");
+  card.innerHTML = `<div class="lc-loading">Reading the link…</div>`;
+}
+
+function renderLinkCard(info) {
+  const card = $("linkCard");
+  card.hidden = false;
+  card.classList.remove("error");
+  const thumb = info.thumbnail_url
+    ? `<img src="${escapeHtml(info.thumbnail_url)}" alt="">` : "";
+  card.innerHTML = `
+    <div class="lc-row">
+      ${thumb}
+      <div>
+        <div class="lc-title">${escapeHtml(info.title)}</div>
+        <div class="lc-meta">${secsToClock(info.duration_sec)}</div>
+      </div>
+    </div>`;
+}
+
+function renderLinkError(message) {
+  const card = $("linkCard");
+  card.hidden = false;
+  card.classList.add("error");
+  card.innerHTML = `
+    <p class="lc-msg">${escapeHtml(message)}</p>
+    <p class="lc-sub">You can download the video yourself and drop it in.</p>
+    <button class="btn btn-secondary" type="button" id="linkToUpload">Upload a file</button>`;
+  $("linkToUpload").addEventListener("click", () => setSource("upload"));
+}
+
+let probeTimer = null;
+let probeSeq = 0;
+$("linkInput").addEventListener("input", () => {
+  clearTimeout(probeTimer);
+  clearLink();
+  const url = $("linkInput").value.trim();
+  if (!/^https?:\/\/\S+$/.test(url)) return;
+  const mySeq = ++probeSeq;
+  renderLinkLoading();
+  probeTimer = setTimeout(async () => {
+    try {
+      const info = await probeSource(url);
+      if (mySeq !== probeSeq) return;   // a newer edit already superseded this
+      state.linkProbe = { url, ...info };
+      renderLinkCard(info);
+    } catch (e) {
+      if (mySeq !== probeSeq) return;
+      renderLinkError(e.message);
+    }
+  }, 400);
+});
+
 // ---------------- Progress rendering ----------------
 function renderProgress(progress) {
   // Developer-only detailed dots (see applyDevDetailsVisibility) -- harmless
@@ -1272,7 +1425,8 @@ updateQualityHint();
 // ---------------- Start dubbing ----------------
 function readOptions() {
   return {
-    video: state.videoFile,
+    video: state.source === "upload" ? state.videoFile : null,
+    sourceUrl: state.source === "link" && state.linkProbe ? state.linkProbe.url : null,
     sourceLang: $("sourceLangSelect").value,
     targetLang: $("targetLangSelect").value,
     sttEngine: $("sttSelect").value,
@@ -1284,7 +1438,12 @@ function readOptions() {
 
 $("startBtn").addEventListener("click", async () => {
   $("formError").textContent = "";
-  if (!state.videoFile) { $("formError").textContent = "Choose a video first."; return; }
+  if (state.source === "upload" && !state.videoFile) {
+    $("formError").textContent = "Choose a video first."; return;
+  }
+  if (state.source === "link" && !state.linkProbe) {
+    $("formError").textContent = "Paste a link that loads a video first."; return;
+  }
 
   $("startBtn").disabled = true;
   try {
@@ -1294,9 +1453,10 @@ $("startBtn").addEventListener("click", async () => {
     state.pollGeneration += 1;
     const myGeneration = state.pollGeneration;
 
+    const label = state.source === "link" ? state.linkProbe.title : state.videoFile.name;
     unlockTabs();
     switchTab("export");
-    upsertHistory({ jobId, fileName: state.videoFile.name, lastStatus: "running", metaText: "Processing…" });
+    upsertHistory({ jobId, fileName: label, lastStatus: "running", metaText: "Processing…" });
     runPollLoop(jobId, myGeneration);
   } catch (e) {
     $("formError").textContent = e.message;
@@ -1365,22 +1525,43 @@ function renderExportRunning(progress) {
   el.innerHTML = `<div class="export-empty">${escapeHtml(progress.plainLabel || progress.label)}… the finished video appears here when the dub completes.</div>`;
 }
 
+// Human name for a language code, falling back to the code itself.
+function langName(code) {
+  if (!code) return null;
+  const l = LANGUAGES.find((x) => x.code === code);
+  return l ? l.name : code.toUpperCase();
+}
+
 // ---------------- Export tab ----------------
 async function renderExport(job) {
   const el = $("exportContent");
   const url = resultUrl(job.id);
+  const target = job.language_code || "out";
   const srtText = await fetchResultSrt(job.id).catch(() => null);
   const srtRows = srtText
     ? parseSrt(srtText).map((c) => `<div class="srt-row"><span class="srt-time">${c.start}–${c.end}</span><span class="srt-text">${escapeHtml(c.text)}</span></div>`).join("")
     : '<div class="srt-empty">No subtitle file was recorded for this job.</div>';
 
+  // The four things a finished job can hand back: original + dub, and the two
+  // languages. Source is only known when local Whisper auto-detected it
+  // (app/pipeline.py) -- otherwise show a dash rather than an empty gap.
+  const sourceName = langName((job.result || {}).detected_source_language) || "—";
+  const targetName = langName(job.language_code) || "—";
+  const langLine = `
+    <div class="result-langs">
+      <span><b>Original language:</b> ${escapeHtml(sourceName)}</span>
+      <span><b>Dubbed into:</b> ${escapeHtml(targetName)}</span>
+    </div>`;
+
   el.innerHTML = `
     <div class="result-grid">
       <div class="video-wrap">
         <video controls src="${url}"></video>
+        ${langLine}
         <div class="result-actions">
-          <a class="btn btn-primary" href="${url}" download="dubbed.mp4">Download video</a>
-          ${srtText ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/srt" download="subtitles.srt">Download subtitles (.srt)</a>` : ""}
+          <a class="btn btn-primary" href="${url}" download="dubbed_${target}.mp4">Download dubbed video</a>
+          <a class="btn btn-secondary" href="/api/dub/result/${job.id}/original" download="original.mp4">Download original</a>
+          ${srtText ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/srt?download=1" download="dubbed_${target}.srt">Download subtitles (.srt)</a>` : ""}
         </div>
       </div>
       <div class="srt-list">${srtRows}</div>

@@ -304,7 +304,7 @@ def _stub_run_dub_until_translation(monkeypatch):
     monkeypatch.setattr(pipeline, "SeparationEngine", _FakeSep)
     monkeypatch.setattr(
         pipeline, "transcribe_local",
-        lambda video, language=None, log=None: [{"start": 0.0, "end": 2.0, "text": "hi"}],
+        lambda video, language=None, log=None, on_language=None: [{"start": 0.0, "end": 2.0, "text": "hi"}],
     )
     monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
 

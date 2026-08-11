@@ -56,4 +56,8 @@ node_modules/
 
 # ---- Agent worktrees / local tooling (never publish) ----
 .claude/
+.superpowers/
 dub.sh
+
+# ---- Internal design docs (never publish) ----
+docs/superpowers/

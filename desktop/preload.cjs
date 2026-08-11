@@ -8,4 +8,8 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // the step that silently didn't happen.
   relaunch: () => ipcRenderer.send("shell:relaunch"),
   onInstallProgress: (cb) => ipcRenderer.on("shell:install-progress", (_e, p) => cb(p)),
+  // Auto-update: main.js announces a downloaded update; the page shows the
+  // banner and the button hands control back here to apply it.
+  onUpdateReady: (cb) => ipcRenderer.on("shell:update-ready", (_e, info) => cb(info)),
+  restartToUpdate: () => ipcRenderer.send("shell:restart-to-update"),
 });
