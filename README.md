@@ -1,8 +1,15 @@
 # PersoDub
 
+**PersoDub - 100% Locally on Your Desktop: Dub Videos in Your Own Voice**
+
+PersoDub re-voices a video into another language in the speaker's own cloned voice,
+entirely on your desktop. No cloud, no account, no uploads, no telemetry: your footage
+never leaves your computer.
+
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-lightgrey.svg)](#requirements)
 [![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
+[![Privacy](https://img.shields.io/badge/privacy-100%25%20local%20by%20default-brightgreen.svg)](#data-and-privacy)
 
 > [!WARNING]
 > **The only official source for PersoDub is
@@ -40,7 +47,7 @@ open -a PersoDub
 
 ## What is PersoDub?
 
-**Dub a video into another language in the original speaker's own voice — entirely on your Mac.**
+**Dub a video into another language in the original speaker's own voice — entirely on your desktop.**
 
 PersoDub is a desktop app that takes one video file and returns a dubbed version of it.
 It separates speech from background audio, transcribes it, works out who spoke when,
@@ -148,6 +155,13 @@ The source files live in [docs/demo](docs/demo).
 
 ## Why PersoDub
 
+**Your data stays yours — 100% local by default.** Separation, transcription,
+diarization, translation and speech synthesis all run on your machine, offline after
+the one-time model download. No account, no API key, no telemetry, no uploads. If you
+dub confidential, unreleased or personal footage, nothing about it ever touches a
+server — cloud engines are available but strictly opt-in, see
+[Data and privacy](#data-and-privacy).
+
 **No time-stretching.** Most dubbing tools speed the audio up when a translation runs
 longer than the original line. That is the main reason dubs sound rushed and artificial.
 PersoDub never resamples the dubbed audio. Instead the constraint is moved upstream: each
@@ -158,10 +172,6 @@ playback speed in the job log. The rule is enforced in code, not by convention.
 **Voice cloning, not narration.** Each speaker's timbre is cloned from the source audio,
 so the dub sounds like that person speaking another language rather than a generic
 synthetic narrator.
-
-**Local by default.** Separation, transcription, diarization, translation and speech
-synthesis all run on your machine with no account and no API key. Cloud engines are
-available but strictly opt-in — see [Data and privacy](#data-and-privacy).
 
 **Everything else is preserved.** Music and effects stay untouched; only speech is
 replaced. Translated subtitles (`.srt`) are exported alongside the dubbed video.
