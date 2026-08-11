@@ -24,19 +24,31 @@ never leaves your computer.
 
 ## Installation
 
-On an Apple Silicon Mac, paste this into Terminal. It fetches the code, installs the
-prerequisites (including Node.js), builds the app, and launches it:
+Apple Silicon Mac. There are two ways to install — pick either.
+
+### Option 1 — Download the app (easiest)
+
+Download **`PersoDub-<version>-arm64.dmg`** from the
+[latest release](https://github.com/stronghamjji/PersoDub/releases/latest), open it,
+and drag **PersoDub** into your Applications folder. It is signed and notarized, so it
+opens with a normal double-click. Installed this way, the app keeps itself up to date:
+on launch it checks for a newer release and offers to install it.
+
+### Option 2 — One line in Terminal
+
+Paste this into Terminal. It fetches the code, installs the prerequisites (including
+Node.js), builds the app, and launches it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/stronghamjji/PersoDub/HEAD/install.sh | bash
 ```
 
-The first launch downloads the AI models and runtimes (roughly 19 GB — see
+This builds from source; to update later, re-run the same command. Prefer to go step by
+step, starting from installing git and Node.js? See **[INSTALL.md](INSTALL.md)**.
+
+Either way, the first launch downloads the AI models and runtimes (roughly 19 GB — see
 [Requirements](#requirements)). This takes a while and only happens once;
 [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks like.
-
-Prefer to go step by step, starting from installing git and Node.js?
-See **[INSTALL.md](INSTALL.md)**.
 
 Already installed? Launch **PersoDub** from your Applications folder, or from
 Terminal:
