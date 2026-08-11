@@ -278,6 +278,12 @@ PersoDub contains no analytics, telemetry, or usage reporting. When a Perso key 
 configured, requests to Perso carry a header identifying the application name, version,
 and operating system family so the vendor can attribute API usage.
 
+The desktop app checks GitHub Releases once at launch to learn whether a newer
+version exists, and downloads it in the background when there is one. The request
+carries no personal data — it is the same anonymous read anyone makes opening the
+releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `mac.env` to turn
+the check off entirely; the app then makes no network requests of its own at all.
+
 ## Responsible use
 
 PersoDub clones the voices of real people. Please use it accordingly.
@@ -287,6 +293,13 @@ PersoDub clones the voices of real people. Please use it accordingly.
 - Do not use PersoDub to impersonate anyone, or to misrepresent what a person said.
 - You are responsible for holding the rights to your source material and for complying
   with the laws and regulations that apply where you are.
+
+**Dubbing from a link.** Link fetching is powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+(released under the [Unlicense](https://github.com/yt-dlp/yt-dlp/blob/master/LICENSE)),
+installed from PyPI on your machine at install time; PersoDub does not bundle or
+redistribute its code. The fetched video is saved locally and dubbed locally, like any
+dropped file. Only dub videos you hold the rights to — downloading content may be
+restricted by the source platform's terms of service, and that responsibility is yours.
 
 ## Known limitations
 

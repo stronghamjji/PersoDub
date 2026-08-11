@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <!-- Hardened-runtime entitlements for the notarized build. Electron needs
+       JIT for V8; unsigned-executable-memory covers the helper processes.
+       Nothing here grants network/file powers - those are unrestricted for
+       non-sandboxed apps anyway, and PersoDub is not App-Store-sandboxed. -->
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+  </dict>
+</plist>

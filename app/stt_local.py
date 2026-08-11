@@ -31,6 +31,7 @@ def transcribe_local(
     word_timestamps: bool = False,
     timeout: int = 900,
     log: Optional[Callable[[str], None]] = None,
+    on_language: Optional[Callable[[str], None]] = None,
 ) -> List[dict]:
     """Transcribe audio_path with local Whisper. Returns a list of cues in the
     same shape the pipeline expects everywhere else: [{"start": float,
@@ -80,10 +81,13 @@ def transcribe_local(
     if not result.get("ok"):
         raise RuntimeError("local STT reported an error (%s)" % str(result.get("error"))[:300])
 
-    if not language and log:
+    if not language:
         detected = result.get("language")
         if detected:
-            log("   detected source language: %s" % detected)
+            if log:
+                log("   detected source language: %s" % detected)
+            if on_language:
+                on_language(detected)
 
     segments = result.get("segments")
     if not segments:

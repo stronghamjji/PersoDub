@@ -1,13 +1,14 @@
 {
   "name": "persodub-desktop-shell",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "test": "node --test src/*.test.mjs smoke/*.test.mjs",
-    "dist": "node scripts/collect-payload.mjs && electron-builder --mac zip --arm64 --publish never"
+    "dist": "node scripts/collect-payload.mjs && electron-builder --mac zip --arm64 --publish never",
+    "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never"
   },
   "devDependencies": {
     "electron": "^37.0.0",
@@ -16,13 +17,46 @@
   "build": {
     "appId": "com.persodub.desktop",
     "productName": "PersoDub",
-    "directories": { "output": "dist" },
-    "files": ["main.js", "preload.cjs", "src/**", "screens/**", "fake/**", "config.json"],
-    "extraResources": [
-      { "from": "resources/payload", "to": "payload" },
-      { "from": "../LICENSE", "to": "LICENSE" },
-      { "from": "../NOTICE", "to": "NOTICE" }
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "src/**",
+      "screens/**",
+      "fake/**",
+      "config.json"
     ],
-    "mac": { "identity": null }
+    "extraResources": [
+      {
+        "from": "resources/payload",
+        "to": "payload"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../NOTICE",
+        "to": "NOTICE"
+      }
+    ],
+    "mac": {
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "notarize": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "stronghamjji",
+        "repo": "PersoDub"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

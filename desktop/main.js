@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join, dirname } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { parseEnvFile } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
@@ -11,9 +12,55 @@ import { download } from "./src/download.js";
 import { extractTarGz } from "./src/extract.js";
 import { run } from "./src/exec.js";
 import { pullOllamaModel } from "./src/ollamaPull.js";
+import { resolveUpdateMode, resolveFeed } from "./src/updater.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
+let updateDownloaded = false;
+
+// Auto-update (packaged builds only -- see src/updater.js for the decision
+// rules). Checks GitHub Releases after the window is up, downloads in the
+// background, and lets the page offer "Restart to update"; nothing is ever
+// forced. electron-updater validates the new build's code signature, which is
+// why signing came first. Errors are logged and swallowed: an update check
+// must never break a working app.
+async function startUpdater(win, kitDir) {
+  // The documented off-switch (PERSODUB_DISABLE_UPDATE_CHECK=1) lives in the
+  // kit's mac.env with the user's other settings -- read it from there, since
+  // a GUI app's process.env never carries it.
+  let env = process.env;
+  try {
+    const macEnvPath = kitDir ? join(kitDir, "mac.env") : null;
+    if (macEnvPath && existsSync(macEnvPath)) {
+      env = { ...process.env, ...parseEnvFile(readFileSync(macEnvPath, "utf8")) };
+    }
+  } catch { /* unreadable mac.env: fall back to process.env */ }
+  if (resolveUpdateMode({ isPackaged: app.isPackaged, env }) !== "auto") return;
+  try {
+    const { default: electronUpdater } = await import("electron-updater");
+    const { autoUpdater } = electronUpdater;
+    const feed = resolveFeed(process.env);
+    if (feed) autoUpdater.setFeedURL(feed);
+    autoUpdater.autoDownload = true;
+    autoUpdater.on("update-downloaded", (info) => {
+      updateDownloaded = true;
+      console.log(`PERSODUB_UPDATE downloaded ${info?.version ?? ""}`);
+      win.webContents.send("shell:update-ready", { version: info?.version ?? "" });
+      // Test-only hook: lets the end-to-end update test apply the swap without
+      // a human clicking the banner. (true, false) = silent, no relaunch --
+      // the test verifies the version stamp on disk, and a relaunched app
+      // would fight the real one over the sidecar port. Never set outside tests.
+      if (process.env.PERSODUB_TEST_AUTO_RESTART === "1") {
+        if (engines) engines.stopAll();
+        autoUpdater.quitAndInstall(true, false);
+      }
+    });
+    autoUpdater.on("error", (err) => console.warn("PERSODUB_UPDATE check failed:", String(err?.message || err)));
+    await autoUpdater.checkForUpdates();
+  } catch (err) {
+    console.warn("PERSODUB_UPDATE unavailable:", String((err && err.message) || err));
+  }
+}
 
 function fakeOverrides() {
   return {
@@ -96,6 +143,7 @@ async function boot(win) {
     });
     await win.loadURL(engines.url);
     console.log(`PERSODUB_READY ${engines.url}`);
+    startUpdater(win, cfg.kitDir); // deliberately not awaited: boot never waits on the network
   } catch (err) {
     await win.loadFile(join(HERE, "screens", "error.html"), {
       query: { message: String((err && err.message) || err), logDir: String((err && err.logDir) || "") },
@@ -104,6 +152,9 @@ async function boot(win) {
 }
 
 app.whenReady().then(() => {
+  // One greppable line naming the running version -- the e2e update test (and
+  // any future bug report) reads it instead of guessing from filenames.
+  console.log(`PERSODUB_VERSION ${app.getVersion()}`);
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -149,6 +200,14 @@ app.whenReady().then(() => {
   // app.quit() (not app.exit()) so will-quit still runs and stops the child
   // engines before the fresh instance starts -- exit() would orphan them.
   ipcMain.on("shell:relaunch", () => { app.relaunch(); app.quit(); });
+  ipcMain.on("shell:restart-to-update", async () => {
+    if (!updateDownloaded) return; // stray click before a download finished
+    const { default: electronUpdater } = await import("electron-updater");
+    // quitAndInstall bypasses will-quit in some paths -- stop the engines
+    // explicitly first so no uvicorn is orphaned across the swap.
+    if (engines) engines.stopAll();
+    electronUpdater.autoUpdater.quitAndInstall();
+  });
   guardedBoot();
 });
 
