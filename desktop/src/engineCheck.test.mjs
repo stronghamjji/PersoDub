@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { checkKit, readKitVersion, REQUIRED } from "./engineCheck.js";
+import { exeName } from "./platform.js";
 
 function makeKit(paths, { version } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "odkit-"));
@@ -39,12 +40,10 @@ test("missing uvicorn binaries are reported even with a matching version", () =>
   const dir = makeKit(["mac.env", "sidecar/server.py"], { version: "1.0.0+abc1234" });
   const res = checkKit(dir, "1.0.0+abc1234");
   assert.equal(res.ok, false);
-  assert.deepEqual(res.missing.sort(), [
-    "app_venv/bin/uvicorn",
-    "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b",
-    "ollama/ollama",
-    "qwen_venv/bin/uvicorn",
-  ]);
+  // Derived from REQUIRED (not hard-coded) so the expected paths carry each
+  // platform's venv/exe layout -- POSIX bin/uvicorn vs Windows Scripts\uvicorn.exe.
+  const present = ["mac.env", "sidecar/server.py"];
+  assert.deepEqual(res.missing.sort(), REQUIRED.filter((r) => !present.includes(r)).sort());
 });
 
 // The install's Ollama runtime + 8 GB Gemma pull used to sit outside this
@@ -52,10 +51,11 @@ test("missing uvicorn binaries are reported even with a matching version", () =>
 // runInstall, the app never repaired itself, and local translation stayed dead
 // across every restart with no way out but a reinstall.
 test("kit missing the Ollama runtime is not installed", () => {
-  const dir = makeKit(REQUIRED.filter((p) => p !== "ollama/ollama"), { version: "1.0.0+abc1234" });
+  const ollamaRel = join("ollama", exeName("ollama"));
+  const dir = makeKit(REQUIRED.filter((p) => p !== ollamaRel), { version: "1.0.0+abc1234" });
   const res = checkKit(dir, "1.0.0+abc1234");
   assert.equal(res.ok, false);
-  assert.deepEqual(res.missing, ["ollama/ollama"]);
+  assert.deepEqual(res.missing, [ollamaRel]);
 });
 
 test("kit missing the pulled Gemma model is not installed", () => {
@@ -94,12 +94,8 @@ test("file-presence-only fallback still reports missing files", () => {
   const dir = makeKit(["mac.env", "sidecar/server.py"]);
   const res = checkKit(dir, null);
   assert.equal(res.ok, false);
-  assert.deepEqual(res.missing.sort(), [
-    "app_venv/bin/uvicorn",
-    "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b",
-    "ollama/ollama",
-    "qwen_venv/bin/uvicorn",
-  ]);
+  const present = ["mac.env", "sidecar/server.py"];
+  assert.deepEqual(res.missing.sort(), REQUIRED.filter((r) => !present.includes(r)).sort());
 });
 
 test("readKitVersion reads and trims the file", () => {

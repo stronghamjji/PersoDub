@@ -1,0 +1,29 @@
+# Windows (x86_64) qwen venv -- the mirror of requirements_qwen_mac.txt for the
+# Windows kit. Verified installing + generating on Windows 11 + RTX 3080
+# (torch 2.8.0+cu128, Python 3.11) on 2026-08-12.
+#
+# torch/torchaudio are NOT listed here: the CUDA build is installed separately
+# from the pytorch.org cu128 index by installSpec.js (buildSteps: torchCuda)
+# BEFORE this file, because plain PyPI torch on Windows is CPU-only.
+
+# The sidecar itself (sidecar/server.py) is a small FastAPI app.
+fastapi
+uvicorn[standard]
+python-multipart
+
+# The qwen-tts package itself (from PyPI, verified: qwen-tts==0.1.1)
+qwen-tts==0.1.1
+
+# qwen-tts's own dependencies, pinned to the server's working versions.
+accelerate==1.12.0
+einops==0.8.2
+gradio==6.17.3
+librosa==0.11.0
+onnxruntime==1.27.0
+soundfile==0.14.0
+transformers==4.57.3
+# pysox wrapper. On Windows it warns "SoX not found" at import when no sox.exe
+# is on PATH, but the timbre-clone path used by the app does not call it, so
+# generation still succeeds (verified 2026-08-12).
+sox==1.5.0
+numpy==2.4.6

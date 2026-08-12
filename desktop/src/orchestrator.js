@@ -1,16 +1,34 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, openSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnvFile } from "./kitEnv.js";
 import { getFreePort } from "./freePort.js";
 import { waitForHealth } from "./health.js";
+import { IS_WIN, venvBin, exeName, PATH_SEP } from "./platform.js";
 
 const PIDS_FILE = "pids.json";
+
+// Force-kill a spawned engine and its descendants. POSIX kills the process
+// group (the child is a group leader via detached); Windows has no process
+// groups, so taskkill /T walks the process tree by PID.
+function forceKillTree(pid) {
+  if (!Number.isInteger(pid) || pid <= 1) return;
+  if (IS_WIN) {
+    try { spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* gone */ }
+    return;
+  }
+  try { process.kill(-pid, "SIGKILL"); } catch { /* group gone */ }
+  try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
+}
 
 // mac.env's PERSODUB_BIN_DIR (kit/bin: ffmpeg, ffprobe) must be visible to the
 // backend's subprocesses; GUI apps start with a minimal PATH.
 export function applyBinDir(env) {
-  if (env.PERSODUB_BIN_DIR) env.PATH = `${env.PERSODUB_BIN_DIR}:${env.PATH || ""}`;
+  if (!env.PERSODUB_BIN_DIR) return env;
+  // Windows env names are case-insensitive and the real key is usually "Path",
+  // so prepend to whatever spelling already exists rather than a stray "PATH".
+  const key = IS_WIN ? (Object.keys(env).find((k) => k.toLowerCase() === "path") || "Path") : "PATH";
+  env[key] = `${env.PERSODUB_BIN_DIR}${PATH_SEP}${env[key] || ""}`;
   return env;
 }
 
@@ -22,9 +40,7 @@ export async function killStalePids(logDir) {
   for (const pid of pids) {
     // A failed spawn records pid null, and kill(-null) === kill(-0) SIGKILLs
     // OUR OWN process group -- the app would kill itself on every launch.
-    if (!Number.isInteger(pid) || pid <= 1) continue;
-    try { process.kill(-pid, "SIGKILL"); } catch { /* group gone */ }
-    try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
+    forceKillTree(pid);
   }
   rmSync(path, { force: true });
 }
@@ -35,15 +51,17 @@ function substitute(argv, port) {
 
 function launch(argv, { cwd, env, logPath }) {
   const fd = openSync(logPath, "a");
-  return spawn(argv[0], argv.slice(1), { cwd, env, detached: true, stdio: ["ignore", fd, fd] });
+  // windowsHide keeps detached children from flashing a console window; on
+  // Windows detached also makes the child a new process group so taskkill /T
+  // can later reap its whole tree.
+  return spawn(argv[0], argv.slice(1), { cwd, env, detached: true, windowsHide: true, stdio: ["ignore", fd, fd] });
 }
 
 function stopChild(child) {
   if (!child || child.exitCode !== null) return;
+  if (IS_WIN) { forceKillTree(child.pid); return; }
   try { process.kill(-child.pid, "SIGTERM"); } catch { /* group gone */ }
-  const killTimer = setTimeout(() => {
-    try { process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ }
-  }, 3000);
+  const killTimer = setTimeout(() => forceKillTree(child.pid), 3000);
   killTimer.unref();
 }
 
@@ -77,7 +95,7 @@ export async function startEngines(cfg, { logDir, appVersion }) {
     // and the backend then reports Gemma as unavailable -- boot never gates
     // on it.
     if (!overrideMode) {
-      const ollamaBin = join(cfg.kitDir, "ollama", "ollama");
+      const ollamaBin = join(cfg.kitDir, "ollama", exeName("ollama"));
       if (existsSync(ollamaBin)) {
         const ollamaPort = await getFreePort();
         env = { ...env, OLLAMA_URL: `http://127.0.0.1:${ollamaPort}` };
@@ -93,7 +111,7 @@ export async function startEngines(cfg, { logDir, appVersion }) {
     const sidecarPort = overrideMode && cfg.sidecarPort === 0 ? await getFreePort() : cfg.sidecarPort;
     const sidecarArgv = overrideMode
       ? substitute(cfg.sidecarCmd, sidecarPort)
-      : [join(cfg.kitDir, "qwen_venv", "bin", "uvicorn"),
+      : [venvBin(join(cfg.kitDir, "qwen_venv"), "uvicorn"),
          "server:app", "--host", "127.0.0.1", "--port", String(sidecarPort)];
     children.push(launch(sidecarArgv, {
       cwd: overrideMode ? process.cwd() : join(cfg.kitDir, "sidecar"),
@@ -108,7 +126,7 @@ export async function startEngines(cfg, { logDir, appVersion }) {
     const backendPort = await getFreePort();
     const backendArgv = overrideMode
       ? substitute(cfg.backendCmd, backendPort)
-      : [join(cfg.kitDir, "app_venv", "bin", "uvicorn"),
+      : [venvBin(join(cfg.kitDir, "app_venv"), "uvicorn"),
          "app.main:app", "--host", "127.0.0.1", "--port", String(backendPort)];
     children.push(launch(backendArgv, { cwd: backendCwd, env, logPath: join(logDir, "backend.log") }));
     record();

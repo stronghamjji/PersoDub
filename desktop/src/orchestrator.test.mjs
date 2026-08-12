@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { startEngines, killStalePids, applyBinDir } from "./orchestrator.js";
 import { DEFAULTS } from "./config.js";
+import { PATH_SEP } from "./platform.js";
 
 const FAKE = join(dirname(fileURLToPath(import.meta.url)), "..", "fake");
 
@@ -38,7 +39,7 @@ async function waitGone(pids, ms = 5000) {
 test("applyBinDir prepends PERSODUB_BIN_DIR to PATH when present", () => {
   assert.equal(applyBinDir({ PATH: "/usr/bin" }).PATH, "/usr/bin");
   const env = applyBinDir({ PERSODUB_BIN_DIR: "/kit/bin", PATH: "/usr/bin" });
-  assert.equal(env.PATH, "/kit/bin:/usr/bin");
+  assert.equal(env.PATH, `/kit/bin${PATH_SEP}/usr/bin`);
 });
 
 test("starts fakes, reports url, stopAll kills everything", async () => {

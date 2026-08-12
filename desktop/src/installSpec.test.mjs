@@ -1,12 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   buildSteps, writeMacEnv, PYTHON_URL, PYTHON_SHA256, CAMPPLUS_SHA256,
   OLLAMA_TGZ_SHA256, GEMMA_MODEL, GEMMA_MANIFEST,
 } from "./installSpec.js";
+import { IS_WIN, venvBin, exeName, TTS_DEVICE } from "./platform.js";
+
+// Bundled dependency lists are platform-specific (see buildSteps' reqSuffix).
+const REQ_SUFFIX = IS_WIN ? "win" : "mac";
 
 function freshCtx(extra = {}) {
   const base = mkdtempSync(join(tmpdir(), "odspec-"));
@@ -22,8 +26,8 @@ function makePayload(payloadDir, { campplus = true, version = "1.0.0+abc1234" } 
   writeFileSync(join(payloadDir, "app-repo", "requirements.txt"), "fastapi");
   mkdirSync(join(payloadDir, "kit-src", "sidecar"), { recursive: true });
   writeFileSync(join(payloadDir, "kit-src", "sidecar", "server.py"), "# sidecar");
-  writeFileSync(join(payloadDir, "kit-src", "requirements_engines_mac.txt"), "torch");
-  writeFileSync(join(payloadDir, "kit-src", "requirements_qwen_mac.txt"), "uvicorn");
+  writeFileSync(join(payloadDir, "kit-src", `requirements_engines_${REQ_SUFFIX}.txt`), "torch");
+  writeFileSync(join(payloadDir, "kit-src", `requirements_qwen_${REQ_SUFFIX}.txt`), "uvicorn");
   if (campplus) writeFileSync(join(payloadDir, "campplus.onnx"), "onnx");
   writeFileSync(join(payloadDir, "KIT_VERSION"), version);
 }
@@ -42,7 +46,7 @@ test("gemma step downloads the runtime once, then only pulls", async () => {
   const calls = { download: [], pull: [] };
   const ctx = freshCtx({
     download: async (url, dest, opts) => { calls.download.push([url, opts.sha256]); writeFileSync(dest, "tgz"); },
-    extract: async (_file, dest) => { mkdirSync(dest, { recursive: true }); writeFileSync(join(dest, "ollama"), "bin"); },
+    extract: async (_file, dest) => { mkdirSync(dest, { recursive: true }); writeFileSync(join(dest, exeName("ollama")), "bin"); },
     pullOllama: async (args) => calls.pull.push(args),
   });
   const step = byId(ctx).gemma;
@@ -52,7 +56,7 @@ test("gemma step downloads the runtime once, then only pulls", async () => {
   assert.equal(calls.download[0][1], OLLAMA_TGZ_SHA256);
   assert.equal(calls.pull.length, 1);
   assert.equal(calls.pull[0].model, GEMMA_MODEL);
-  assert.ok(calls.pull[0].bin.endsWith("ollama"));
+  assert.ok(calls.pull[0].bin.endsWith(exeName("ollama")));
   assert.ok(calls.pull[0].modelsDir.includes(join("models", "ollama")));
   // Second run: runtime already extracted -- no re-download, still pulls.
   await step.run(() => {});
@@ -70,7 +74,7 @@ test("gemma step is done only when BOTH the manifest and the ollama binary exist
   writeFileSync(manifest, "{}");
   assert.equal(byId(ctx).gemma.isDone(), false);  // binary still missing
   mkdirSync(join(ctx.kitDir, "ollama"), { recursive: true });
-  writeFileSync(join(ctx.kitDir, "ollama", "ollama"), "");
+  writeFileSync(join(ctx.kitDir, "ollama", exeName("ollama")), "");
   assert.equal(byId(ctx).gemma.isDone(), true);
 });
 
@@ -82,7 +86,7 @@ test("payload step copies bundle including campplus and marks done", async () =>
   await step.run(() => {});
   assert.ok(existsSync(join(ctx.kitDir, "app", "app", "main.py")));
   assert.ok(existsSync(join(ctx.kitDir, "sidecar", "server.py")));
-  assert.ok(existsSync(join(ctx.kitDir, "requirements_engines_mac.txt")));
+  assert.ok(existsSync(join(ctx.kitDir, `requirements_engines_${REQ_SUFFIX}.txt`)));
   assert.ok(existsSync(join(ctx.kitDir, "models", "campplus", "campplus.onnx")));
   assert.equal(await step.isDone(), true);
 });
@@ -173,7 +177,7 @@ test("venv-app runs venv + pip installs and marks done", async () => {
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
   assert.ok(argvs.some((a) => a.includes("-m venv") && a.includes("app_venv")));
-  assert.ok(argvs.some((a) => a.includes("pip install -r") && a.includes("requirements.txt")));
+  assert.ok(argvs.some((a) => a.includes("install -r") && a.includes("requirements.txt")));
   assert.equal(await step.isDone(), true);
 });
 
@@ -188,18 +192,20 @@ test("venv-qwen keeps huggingface_hub below 1.0", async () => {
   assert.ok(hub[0].includes("huggingface_hub>=0.34,<1.0"), `unpinned: ${hub[0]}`);
 });
 
-test("ffmpeg step symlinks binaries reported by static-ffmpeg", async () => {
+test("ffmpeg step copies binaries reported by static-ffmpeg", async () => {
   const ctx = freshCtx();
   const f1 = join(ctx.base, "real-ffmpeg");
   const f2 = join(ctx.base, "real-ffprobe");
-  writeFileSync(f1, "");
-  writeFileSync(f2, "");
+  writeFileSync(f1, "ffmpeg-bytes");
+  writeFileSync(f2, "ffprobe-bytes");
   ctx.run = async (_argv, { onLine } = {}) => { onLine?.(JSON.stringify([f1, f2])); };
   const step = byId(ctx).ffmpeg;
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
-  assert.equal(realpathSync(join(ctx.kitDir, "bin", "ffmpeg")), realpathSync(f1));
-  assert.equal(realpathSync(join(ctx.kitDir, "bin", "ffprobe")), realpathSync(f2));
+  // Copied (not symlinked -- Windows needs admin for symlinks) into the kit's
+  // bin/ under the platform's executable name (.exe suffix on Windows).
+  assert.equal(readFileSync(join(ctx.kitDir, "bin", exeName("ffmpeg")), "utf8"), "ffmpeg-bytes");
+  assert.equal(readFileSync(join(ctx.kitDir, "bin", exeName("ffprobe")), "utf8"), "ffprobe-bytes");
   assert.equal(await step.isDone(), true);
 });
 
@@ -257,7 +263,7 @@ test("nonverbal-weights step runs the prefetch when the cache is missing", async
     assert.equal(await step.isDone(), false);
     await step.run(() => {});
     assert.equal(calls.length, 1);
-    assert.equal(calls[0][0], join(ctx.kitDir, "engines_venv", "bin", "python"));
+    assert.equal(calls[0][0], venvBin(join(ctx.kitDir, "engines_venv"), "python"));
     assert.ok(calls[0].join(" ").includes("whisper.load_model"), calls[0].join(" "));
   });
 });
@@ -295,7 +301,7 @@ test("mac-env step writes template with kit paths", async () => {
   assert.ok(!env.includes("PERSO_SPACE_SEQ"), "PERSO_SPACE_SEQ must not be written by the installer");
   assert.ok(!env.includes("PERSO_MEDIA_HOST"), "PERSO_MEDIA_HOST must not be written by the installer");
   assert.ok(env.includes(ctx.kitDir));
-  assert.ok(env.includes("QWEN_TTS_DEVICE=mps"));
+  assert.ok(env.includes(`QWEN_TTS_DEVICE=${TTS_DEVICE}`));
   assert.equal(await step.isDone(), true);
 });
 
@@ -345,10 +351,13 @@ test("mac-env step fresh-install path is unchanged (no existing file -> full tem
 });
 
 test("writeMacEnv substitutes kitDir everywhere", () => {
-  const s = writeMacEnv({ kitDir: "/K" });
-  assert.ok(s.includes("/K/engines_venv/bin/python"));
-  assert.ok(s.includes("PERSODUB_APP_REPO_DIR=/K/app"));
-  assert.ok(s.includes("PERSODUB_BIN_DIR=/K/bin"));
+  const kitDir = "/K";
+  const k = (...p) => join(kitDir, ...p);
+  const s = writeMacEnv({ kitDir });
+  // Expected paths carry each platform's venv layout and separators.
+  assert.ok(s.includes(venvBin(k("engines_venv"), "python")));
+  assert.ok(s.includes(`PERSODUB_APP_REPO_DIR=${k("app")}`));
+  assert.ok(s.includes(`PERSODUB_BIN_DIR=${k("bin")}`));
 });
 
 // gate=measure: log leakage, never rewrite the mix, until validated on Mac.

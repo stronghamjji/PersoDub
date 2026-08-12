@@ -155,8 +155,11 @@ class QwenSynth:
         import torch
         from qwen_tts import Qwen3TTSModel
         self._torch = torch
+        # CPU lacks fast bfloat16 kernels; use float32 there. GPU backends
+        # (cuda, Apple mps) keep bfloat16.
+        dtype = torch.float32 if str(device).startswith("cpu") else torch.bfloat16
         self.model = Qwen3TTSModel.from_pretrained(
-            model_path, device_map=device, dtype=torch.bfloat16,
+            model_path, device_map=device, dtype=dtype,
         )
 
     def clone(self, ref_audio_path, ref_text, mode="icl"):
@@ -181,6 +184,19 @@ class QwenSynth:
         return wavs[0], sr
 
 
+def _resolve_device(device):
+    """Map "auto" to cuda when a GPU is visible, else cpu. Explicit values
+    (cuda:0, mps, cpu) pass through untouched. The Windows kit env sets "auto";
+    macOS sets "mps"."""
+    if device != "auto":
+        return device
+    try:
+        import torch
+        return "cuda:0" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
 @app.on_event("startup")
 def _load_model():
     # Skip the heavy load when a fake was injected (tests) or explicitly disabled.
@@ -188,4 +204,4 @@ def _load_model():
         return
     if os.environ.get("QWEN_TTS_SKIP_LOAD") == "1":
         return
-    app.state.synth = QwenSynth(device=os.environ.get("QWEN_TTS_DEVICE", "cuda:0"))
+    app.state.synth = QwenSynth(device=_resolve_device(os.environ.get("QWEN_TTS_DEVICE", "cuda:0")))
