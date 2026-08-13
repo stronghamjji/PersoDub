@@ -93,7 +93,7 @@ original soundtrack. With the default settings, every one of those steps runs lo
 <img src="docs/images/advanced-options.png" width="100%"
      alt="PersoDub main window with Advanced options expanded: a drop zone for the video, pickers for speech-to-text, original language, target language and voice quality, and below them the translation engine, the text-to-speech engine, and the number of speakers.">
 
-> **Status: early release (v0.1.0).** PersoDub is usable today and is under active
+> **Status: early release (v0.3.0).** PersoDub is usable today and is under active
 > development. macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
 > Interfaces and defaults may change. Please report problems through
 > [Issues](https://github.com/stronghamjji/PersoDub/issues).
