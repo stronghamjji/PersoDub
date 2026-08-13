@@ -523,6 +523,12 @@ def run_dub(
             else f"high quality, best of {effective_n_takes} takes")
     log(f"4/6 Cloning & synthesizing voices (Qwen3-TTS — {mode})…")
     engine = qwen_engine or QwenTTSEngine()
+    # Say which device this is about to run on. Without it the only symptom of
+    # a CPU fallback is the wait, and the user has no way to tell that from the
+    # app being slow. Absent (not guessed) when the engine cannot say.
+    device = getattr(engine, "device_label", lambda: None)()
+    if device:
+        log(f"   synthesis device: {device}")
 
     audio_wav = run_qwen_dub(engine, segments, ref_cues, work_dir,
                              vocals_path=vocals_path, background_path=background_path,

@@ -207,3 +207,51 @@ def test_generate_timeout_garbage_env_falls_back_to_default(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(qt)
+
+
+# --- which device the synthesis actually ran on ---------------------------
+# "Why is this so slow?" is the first thing a user asks, and on Windows the
+# answer is usually "your GPU isn't NVIDIA, so this ran on CPU". Nothing in
+# the app said so; the job log now does.
+
+def test_device_label_reports_what_the_sidecar_says(monkeypatch):
+    class R:
+        status_code = 200
+        def json(self):
+            return {"status": "ok", "model_loaded": True, "device": "cuda:0"}
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
+    assert QwenTTSEngine(base_url="http://x").device_label() == "GPU (cuda:0)"
+
+
+def test_device_label_calls_cpu_by_its_name(monkeypatch):
+    class R:
+        status_code = 200
+        def json(self):
+            return {"status": "ok", "model_loaded": True, "device": "cpu"}
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
+    assert QwenTTSEngine(base_url="http://x").device_label() == "CPU — no GPU acceleration"
+
+
+def test_device_label_names_apple_acceleration(monkeypatch):
+    class R:
+        status_code = 200
+        def json(self):
+            return {"status": "ok", "model_loaded": True, "device": "mps"}
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
+    assert QwenTTSEngine(base_url="http://x").device_label() == "GPU (Apple)"
+
+
+def test_device_label_is_absent_rather_than_wrong(monkeypatch):
+    # An older sidecar, or one that cannot be reached, must not make the dub
+    # log claim a device it does not know.
+    class R:
+        status_code = 200
+        def json(self):
+            return {"status": "ok", "model_loaded": True}
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
+    assert QwenTTSEngine(base_url="http://x").device_label() is None
+
+    def boom(*a, **k):
+        raise httpx.ConnectError("no route")
+    monkeypatch.setattr(httpx, "get", boom)
+    assert QwenTTSEngine(base_url="http://x").device_label() is None

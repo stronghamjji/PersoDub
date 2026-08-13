@@ -75,8 +75,13 @@ def _to_wav_bytes(wav, sr):
 
 @app.get("/health")
 def health():
+    # device is what the app shows the user in the dub log: on Windows, where
+    # only NVIDIA is accelerated, "it ran on CPU" is the answer to almost every
+    # "why is this slow". Reported even when the model was not loaded, since
+    # the choice is made from the environment, not from the load.
     return {"status": "ok",
-            "model_loaded": getattr(app.state, "synth", None) is not None}
+            "model_loaded": getattr(app.state, "synth", None) is not None,
+            "device": getattr(app.state, "device", None)}
 
 
 @app.post("/clone")
@@ -199,9 +204,15 @@ def _resolve_device(device):
 
 @app.on_event("startup")
 def _load_model():
+    # Resolved first and kept on app.state so /health can report it even when
+    # the load below is skipped -- the device is decided by the environment,
+    # not by whether a model is resident.
+    device = _resolve_device(os.environ.get("QWEN_TTS_DEVICE", "cuda:0"))
+    app.state.device = device
+    print(f"QWEN_TTS device={device}", flush=True)
     # Skip the heavy load when a fake was injected (tests) or explicitly disabled.
     if getattr(app.state, "synth", None) is not None:
         return
     if os.environ.get("QWEN_TTS_SKIP_LOAD") == "1":
         return
-    app.state.synth = QwenSynth(device=_resolve_device(os.environ.get("QWEN_TTS_DEVICE", "cuda:0")))
+    app.state.synth = QwenSynth(device=device)
