@@ -8,8 +8,15 @@ never leaves your computer.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
-[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
 [![Privacy](https://img.shields.io/badge/privacy-100%25%20local%20by%20default-brightgreen.svg)](#data-and-privacy)
+
+<p>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+</p>
+
+<sub><b>macOS:</b> signed and notarized, opens with a double-click. &middot; <b>Windows (beta):</b> not signed yet, so SmartScreen asks first - click <b>More info</b>, then <b>Run anyway</b>. <a href="INSTALL.md#windows-beta">Details</a>.</sub>
 
 > [!WARNING]
 > **The only official source for PersoDub is
