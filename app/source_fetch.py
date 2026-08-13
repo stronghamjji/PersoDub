@@ -8,6 +8,7 @@ from. Shelling out to a heavy tool also matches how app/stt_local.py and
 app/qwen_scoring.py already work.
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -95,9 +96,19 @@ def _run(
     The single place this module starts a process -- tests replace exactly this
     function, which is why nothing else in the module calls subprocess.
     """
+    # Both ends of this pipe are pinned to UTF-8. Left alone, each end follows
+    # the machine's locale -- cp949 on a Korean Windows, UTF-8 on macOS -- and
+    # they agree only as long as nothing moves one of them: a PYTHONIOENCODING
+    # already in the environment, or a yt-dlp that picks its own encoding, is
+    # enough to split them. A split costs the whole fetch, because a byte the
+    # reader cannot decode raises UnicodeDecodeError out of the line loop
+    # below. Naming the encoding on both ends makes a Korean title behave the
+    # same on every machine. errors="replace" is the last resort: a stray
+    # undecodable byte should never cost a download.
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     proc = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, bufsize=1,
+        text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
     )
     out_lines = []
     try:

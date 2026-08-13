@@ -4,6 +4,7 @@ Nothing here touches the network. source_fetch._run is the only place that
 starts a process, and every test that needs a yt-dlp result replaces it.
 """
 import json
+import sys
 
 import pytest
 
@@ -52,6 +53,38 @@ def test_classify_prefers_network_over_everything():
     # network verdict has to win or fetch() will waste two minutes upgrading.
     stderr = "ERROR: unable to download webpage. Sign in to confirm your age"
     assert source_fetch.classify(stderr)[0] == "network"
+
+
+# ---------------------------------------------------------------- _run
+
+
+TITLE = "한국어 제목"  # a title in the source language, as yt-dlp reports it
+
+
+def test_run_decodes_child_output_as_utf8():
+    """The two tests that let _run start a real process.
+
+    Every other test replaces _run, so its pipe was never exercised. Both ends
+    have to name UTF-8 or they agree only by accident of the machine's locale.
+    This one writes raw UTF-8 bytes, so it fails if the PARENT is left to the
+    locale: under cp949 these bytes raise UnicodeDecodeError and cost the
+    fetch.
+    """
+    code, out, err = source_fetch._run(
+        [sys.executable, "-c",
+         "import sys; sys.stdout.buffer.write(%r)" % (TITLE + "\n").encode("utf-8")])
+    assert code == 0
+    assert out.strip() == TITLE
+
+
+def test_run_pins_the_child_to_utf8_output():
+    """...and this one lets the child encode the text itself, the way yt-dlp
+    does when it prints a line carrying the video's own title. It fails if the
+    CHILD is left to the locale while the reader expects UTF-8."""
+    code, out, err = source_fetch._run(
+        [sys.executable, "-c", "print(%r)" % TITLE])
+    assert code == 0
+    assert out.strip() == TITLE
 
 
 # ---------------------------------------------------------------- probe
