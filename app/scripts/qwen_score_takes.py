@@ -42,7 +42,9 @@ warnings.filterwarnings("ignore")
 # CPU-only scoring: this subprocess must never fight the dub job for the shared GPU.
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 
-DEFAULT_CAMPPLUS = "models/campplus/campplus.onnx"
+# Joined rather than written as a literal so the separator is native: a
+# "models/..." literal joined onto a Windows cwd yields a mixed-separator path.
+DEFAULT_CAMPPLUS = os.path.join("models", "campplus", "campplus.onnx")
 # Repo root = two directories above this file (app/scripts/ -> app/ -> root).
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SR = 16000
