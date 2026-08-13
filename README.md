@@ -293,7 +293,7 @@ and operating system family so the vendor can attribute API usage.
 The desktop app checks GitHub Releases once at launch to learn whether a newer
 version exists, and downloads it in the background when there is one. The request
 carries no personal data — it is the same anonymous read anyone makes opening the
-releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `mac.env` to turn
+releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `kit.env` to turn
 the check off entirely; the app then makes no network requests of its own at all.
 
 ## Responsible use

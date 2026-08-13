@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join, dirname } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
-import { parseEnvFile } from "./src/kitEnv.js";
+import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
@@ -26,15 +26,15 @@ let updateDownloaded = false;
 // must never break a working app.
 async function startUpdater(win, kitDir) {
   // The documented off-switch (PERSODUB_DISABLE_UPDATE_CHECK=1) lives in the
-  // kit's mac.env with the user's other settings -- read it from there, since
+  // kit's kit.env with the user's other settings -- read it from there, since
   // a GUI app's process.env never carries it.
   let env = process.env;
   try {
-    const macEnvPath = kitDir ? join(kitDir, "mac.env") : null;
-    if (macEnvPath && existsSync(macEnvPath)) {
-      env = { ...process.env, ...parseEnvFile(readFileSync(macEnvPath, "utf8")) };
+    const kitEnvPath = kitDir ? join(kitDir, KIT_ENV) : null;
+    if (kitEnvPath && existsSync(kitEnvPath)) {
+      env = { ...process.env, ...parseEnvFile(readFileSync(kitEnvPath, "utf8")) };
     }
-  } catch { /* unreadable mac.env: fall back to process.env */ }
+  } catch { /* unreadable kit.env: fall back to process.env */ }
   if (resolveUpdateMode({ isPackaged: app.isPackaged, env }) !== "auto") return;
   try {
     const { default: electronUpdater } = await import("electron-updater");
@@ -95,6 +95,15 @@ async function boot(win) {
       // compare a kit's version against: checkKit falls back to its
       // pre-versioning 4-file-only check so the dev loop still works.
       console.warn("PERSODUB_KIT no bundled payload KIT_VERSION found -- version enforcement skipped, falling back to file-presence check");
+    }
+
+    // A kit installed before the settings file was renamed still calls it
+    // mac.env, which is on checkKit's required list under its new name -- so
+    // this runs first, or an installed kit reads as missing and the whole
+    // 30+ GB is downloaded again. Both candidate directories are tried
+    // because the redirect below may still move the target.
+    for (const dir of [cfg.kitDir, defaultKitDir({ ignoreLegacy: true })]) {
+      if (migrateKitEnv(dir)) console.log(`PERSODUB_KIT migrated mac.env -> kit.env in ${dir}`);
     }
 
     // Prefer an existing kit (e.g. a mac_kit install); otherwise install into

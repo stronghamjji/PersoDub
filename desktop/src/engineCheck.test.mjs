@@ -37,12 +37,12 @@ test("complete kit missing KIT_VERSION (legacy kit) is not installed", () => {
 });
 
 test("missing uvicorn binaries are reported even with a matching version", () => {
-  const dir = makeKit(["mac.env", "sidecar/server.py"], { version: "1.0.0+abc1234" });
+  const dir = makeKit(["kit.env", "sidecar/server.py"], { version: "1.0.0+abc1234" });
   const res = checkKit(dir, "1.0.0+abc1234");
   assert.equal(res.ok, false);
   // Derived from REQUIRED (not hard-coded) so the expected paths carry each
   // platform's venv/exe layout -- POSIX bin/uvicorn vs Windows Scripts\uvicorn.exe.
-  const present = ["mac.env", "sidecar/server.py"];
+  const present = ["kit.env", "sidecar/server.py"];
   assert.deepEqual(res.missing.sort(), REQUIRED.filter((r) => !present.includes(r)).sort());
 });
 
@@ -91,10 +91,10 @@ test("file-presence-only fallback ignores a KIT_VERSION already on the kit", () 
 });
 
 test("file-presence-only fallback still reports missing files", () => {
-  const dir = makeKit(["mac.env", "sidecar/server.py"]);
+  const dir = makeKit(["kit.env", "sidecar/server.py"]);
   const res = checkKit(dir, null);
   assert.equal(res.ok, false);
-  const present = ["mac.env", "sidecar/server.py"];
+  const present = ["kit.env", "sidecar/server.py"];
   assert.deepEqual(res.missing.sort(), REQUIRED.filter((r) => !present.includes(r)).sort());
 });
 

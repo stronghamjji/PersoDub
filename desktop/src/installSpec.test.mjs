@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  buildSteps, writeMacEnv, PYTHON_URL, PYTHON_SHA256, CAMPPLUS_SHA256,
+  buildSteps, writeKitEnv, PYTHON_URL, PYTHON_SHA256, CAMPPLUS_SHA256,
   OLLAMA_TGZ_SHA256, GEMMA_MODEL, GEMMA_MANIFEST,
 } from "./installSpec.js";
 import { IS_WIN, venvBin, exeName, TTS_DEVICE } from "./platform.js";
@@ -38,7 +38,7 @@ test("returns the 10 steps in install order", () => {
   const ids = buildSteps(freshCtx()).map((s) => s.id);
   assert.deepEqual(ids, [
     "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
-    "models", "gemma", "nonverbal-weights", "mac-env",
+    "models", "gemma", "nonverbal-weights", "kit-env",
   ]);
 });
 
@@ -278,12 +278,12 @@ test("nonverbal-weights step failure fails the install, not silently skipped", a
   });
 });
 
-test("mac-env step writes template with kit paths", async () => {
+test("kit-env step writes template with kit paths", async () => {
   const ctx = freshCtx();
-  const step = byId(ctx)["mac-env"];
+  const step = byId(ctx)["kit-env"];
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
-  const env = readFileSync(join(ctx.kitDir, "mac.env"), "utf8");
+  const env = readFileSync(join(ctx.kitDir, "kit.env"), "utf8");
   for (const key of [
     "SEP_PYTHON", "STT_PYTHON", "DIAR_PYTHON", "QWEN_SCORER_PYTHON",
     "SEP_MODEL_DIR", "WHISPER_MODEL_DIR", "PERSODUB_CAMPPLUS_MODEL", "QWEN_CAMPPLUS_MODEL",
@@ -297,7 +297,7 @@ test("mac-env step writes template with kit paths", async () => {
   ]) assert.ok(env.includes(key), `missing ${key}`);
   // Deliberately absent: the backend resolves the workspace id from the API
   // key itself and the media host has a public default (app/perso_client.py),
-  // so the installer must not pin another account's values into mac.env.
+  // so the installer must not pin another account's values into kit.env.
   assert.ok(!env.includes("PERSO_SPACE_SEQ"), "PERSO_SPACE_SEQ must not be written by the installer");
   assert.ok(!env.includes("PERSO_MEDIA_HOST"), "PERSO_MEDIA_HOST must not be written by the installer");
   assert.ok(env.includes(ctx.kitDir));
@@ -305,21 +305,21 @@ test("mac-env step writes template with kit paths", async () => {
   assert.equal(await step.isDone(), true);
 });
 
-// I1: isDone used to sniff only PERSODUB_KIT_DIR, so any mac.env from before
+// I1: isDone used to sniff only PERSODUB_KIT_DIR, so any kit.env from before
 // these keys existed satisfied it forever and the 4 new keys never reached
 // upgraders. The fix must merge them in without disturbing anything else --
 // app/settings_env.py writes user API keys into this same file.
-test("mac-env step appends missing managed keys to a legacy mac.env, preserving existing lines", async () => {
+test("kit-env step appends missing managed keys to a legacy kit.env, preserving existing lines", async () => {
   const ctx = freshCtx();
   mkdirSync(ctx.kitDir, { recursive: true });
   const legacy = "PERSODUB_KIT_DIR=/old/kit\nGEMINI_API_KEY=sk-legacy-key\n";
-  writeFileSync(join(ctx.kitDir, "mac.env"), legacy);
-  const step = byId(ctx)["mac-env"];
+  writeFileSync(join(ctx.kitDir, "kit.env"), legacy);
+  const step = byId(ctx)["kit-env"];
   assert.equal(await step.isDone(), false); // missing the 4 new keys
 
   await step.run(() => {});
 
-  const env = readFileSync(join(ctx.kitDir, "mac.env"), "utf8");
+  const env = readFileSync(join(ctx.kitDir, "kit.env"), "utf8");
   assert.ok(env.includes("PERSODUB_KIT_DIR=/old/kit"), "existing line must survive");
   assert.ok(env.includes("GEMINI_API_KEY=sk-legacy-key"), "user API key must survive");
   for (const key of ["PERSODUB_LEAKAGE_GATE=measure", "PERSODUB_SCORER_ASR_TIMEOUT=60",
@@ -330,30 +330,30 @@ test("mac-env step appends missing managed keys to a legacy mac.env, preserving 
   assert.equal(await step.isDone(), true);
 });
 
-test("mac-env step run is a no-op once a legacy mac.env already has all managed keys", async () => {
+test("kit-env step run is a no-op once a legacy kit.env already has all managed keys", async () => {
   const ctx = freshCtx();
   mkdirSync(ctx.kitDir, { recursive: true });
-  writeFileSync(join(ctx.kitDir, "mac.env"), "PERSODUB_KIT_DIR=/old/kit\nGEMINI_API_KEY=sk-legacy-key\n");
-  const step = byId(ctx)["mac-env"];
+  writeFileSync(join(ctx.kitDir, "kit.env"), "PERSODUB_KIT_DIR=/old/kit\nGEMINI_API_KEY=sk-legacy-key\n");
+  const step = byId(ctx)["kit-env"];
   await step.run(() => {});
-  const afterFirstRun = readFileSync(join(ctx.kitDir, "mac.env"), "utf8");
+  const afterFirstRun = readFileSync(join(ctx.kitDir, "kit.env"), "utf8");
 
   await step.run(() => {}); // second run: nothing left to add
 
-  assert.equal(readFileSync(join(ctx.kitDir, "mac.env"), "utf8"), afterFirstRun);
+  assert.equal(readFileSync(join(ctx.kitDir, "kit.env"), "utf8"), afterFirstRun);
 });
 
-test("mac-env step fresh-install path is unchanged (no existing file -> full template)", async () => {
+test("kit-env step fresh-install path is unchanged (no existing file -> full template)", async () => {
   const ctx = freshCtx();
-  const step = byId(ctx)["mac-env"];
+  const step = byId(ctx)["kit-env"];
   await step.run(() => {});
-  assert.equal(readFileSync(join(ctx.kitDir, "mac.env"), "utf8"), writeMacEnv({ kitDir: ctx.kitDir }));
+  assert.equal(readFileSync(join(ctx.kitDir, "kit.env"), "utf8"), writeKitEnv({ kitDir: ctx.kitDir }));
 });
 
-test("writeMacEnv substitutes kitDir everywhere", () => {
+test("writeKitEnv substitutes kitDir everywhere", () => {
   const kitDir = "/K";
   const k = (...p) => join(kitDir, ...p);
-  const s = writeMacEnv({ kitDir });
+  const s = writeKitEnv({ kitDir });
   // Expected paths carry each platform's venv layout and separators.
   assert.ok(s.includes(venvBin(k("engines_venv"), "python")));
   assert.ok(s.includes(`PERSODUB_APP_REPO_DIR=${k("app")}`));
@@ -362,8 +362,8 @@ test("writeMacEnv substitutes kitDir everywhere", () => {
 
 // gate=measure: log leakage, never rewrite the mix, until validated on Mac.
 // Timeouts are Mac-CPU-calibrated versions of backend defaults 15/300/600.
-test("writeMacEnv includes the leakage-gate and worker-timeout additions", () => {
-  const s = writeMacEnv({ kitDir: "/K" });
+test("writeKitEnv includes the leakage-gate and worker-timeout additions", () => {
+  const s = writeKitEnv({ kitDir: "/K" });
   assert.ok(s.includes("PERSODUB_LEAKAGE_GATE=measure"));
   assert.ok(s.includes("PERSODUB_SCORER_ASR_TIMEOUT=60"));
   assert.ok(s.includes("PERSODUB_TTS_TIMEOUT=900"));

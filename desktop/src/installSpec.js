@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, cpSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { KIT_ENV } from "./kitEnv.js";
 import { IS_WIN, venvBin, standalonePython, exeName, TTS_DEVICE } from "./platform.js";
 
 // Standalone CPython, per platform. macOS uses the Apple Silicon build; Windows
@@ -86,13 +87,13 @@ function whisperCachePath() {
   return join(base, "whisper", "base.pt");
 }
 
-// Knobs added to mac.env after the initial template (writeMacEnv) landed --
+// Knobs added to kit.env after the initial template (writeKitEnv) landed --
 // listed here (with a real "#" comment each, for the file itself) so the
-// upgrade-merge path (the "mac-env" step below) can append them to an
-// existing mac.env. The step's old isDone only sniffed for PERSODUB_KIT_DIR,
+// upgrade-merge path (the "kit-env" step below) can append them to an
+// existing kit.env. The step's old isDone only sniffed for PERSODUB_KIT_DIR,
 // so any kit installed before these existed satisfied it forever and never
 // received them.
-const MAC_ENV_MANAGED_ADDITIONS = [
+const KIT_ENV_MANAGED_ADDITIONS = [
   {
     key: "PERSODUB_LEAKAGE_GATE",
     comment: "# Stage-5/6 leakage gate: log-only dark launch until validated on Mac.",
@@ -115,7 +116,7 @@ const MAC_ENV_MANAGED_ADDITIONS = [
   },
 ];
 
-export function writeMacEnv({ kitDir }) {
+export function writeKitEnv({ kitDir }) {
   const k = (...p) => join(kitDir, ...p);
   const enginesPy = venvBin(k("engines_venv"), "python");
   return [
@@ -158,12 +159,12 @@ export function writeMacEnv({ kitDir }) {
   ].join("\n");
 }
 
-// Adds any of MAC_ENV_MANAGED_ADDITIONS missing from an existing mac.env,
+// Adds any of KIT_ENV_MANAGED_ADDITIONS missing from an existing kit.env,
 // preserving every existing line untouched -- app/settings_env.py writes user
 // API keys into this same file and they must survive an upgrade. A no-op
 // (returns text unchanged) once all managed keys are already present.
-function withMissingMacEnvKeys(text) {
-  const missing = MAC_ENV_MANAGED_ADDITIONS.filter((a) => !text.includes(`${a.key}=`));
+function withMissingKitEnvKeys(text) {
+  const missing = KIT_ENV_MANAGED_ADDITIONS.filter((a) => !text.includes(`${a.key}=`));
   if (missing.length === 0) return text;
   const sep = text.endsWith("\n") ? "" : "\n";
   return text + sep + missing.flatMap((a) => [a.comment, a.line]).join("\n") + "\n";
@@ -359,28 +360,28 @@ export function buildSteps(ctx) {
       },
     },
     {
-      id: "mac-env",
+      id: "kit-env",
       title: "Writing configuration",
       // Must also check the managed additions, not just the original sniff
       // key -- otherwise a kit installed before they existed would satisfy
       // this forever and never receive them (see run, below).
       isDone: () => {
-        if (!existsSync(k("mac.env"))) return false;
-        const text = readFileSync(k("mac.env"), "utf8");
-        return text.includes("PERSODUB_KIT_DIR") && MAC_ENV_MANAGED_ADDITIONS.every((a) => text.includes(`${a.key}=`));
+        if (!existsSync(k(KIT_ENV))) return false;
+        const text = readFileSync(k(KIT_ENV), "utf8");
+        return text.includes("PERSODUB_KIT_DIR") && KIT_ENV_MANAGED_ADDITIONS.every((a) => text.includes(`${a.key}=`));
       },
       run: async (report) => {
-        const path = k("mac.env");
+        const path = k(KIT_ENV);
         if (!existsSync(path)) {
-          report(null, "Writing mac.env");
-          writeFileSync(path, writeMacEnv({ kitDir: ctx.kitDir }));
+          report(null, "Writing kit.env");
+          writeFileSync(path, writeKitEnv({ kitDir: ctx.kitDir }));
           return;
         }
         // Existing kit (installed before these keys existed): merge, never
         // clobber -- app/settings_env.py writes user API keys into this same
         // file and they must survive.
-        report(null, "Updating mac.env");
-        writeFileSync(path, withMissingMacEnvKeys(readFileSync(path, "utf8")));
+        report(null, "Updating kit.env");
+        writeFileSync(path, withMissingKitEnvKeys(readFileSync(path, "utf8")));
       },
     },
   ];

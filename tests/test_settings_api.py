@@ -1,7 +1,7 @@
-"""Settings endpoint: the Settings modal's API keys actually land in mac.env.
+"""Settings endpoint: the Settings modal's API keys actually land in kit.env.
 
 Until now the modal stored keys in localStorage only -- the engines never saw
-them (they read mac.env at startup), so users followed the UI and nothing
+them (they read kit.env at startup), so users followed the UI and nothing
 happened. The backend now owns reading/writing the file. Keys are NEVER
 returned to the client -- only set/unset booleans.
 """
@@ -19,7 +19,7 @@ client = TestClient(main.app, base_url="http://127.0.0.1")
 def _kit(tmp_path, monkeypatch, envtext):
     kit = tmp_path / "kit"
     kit.mkdir()
-    (kit / "mac.env").write_text(envtext, encoding="utf-8")
+    (kit / "kit.env").write_text(envtext, encoding="utf-8")
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
     return kit
 
@@ -110,7 +110,7 @@ def test_rejects_cross_origin_writes(tmp_path, monkeypatch):
     r = client.post("/api/settings", json={"gemini_api_key": "evilkey"},
                     headers={"Origin": "https://evil.example.com"})
     assert r.status_code == 403
-    assert "evilkey" not in (kit / "mac.env").read_text(encoding="utf-8")
+    assert "evilkey" not in (kit / "kit.env").read_text(encoding="utf-8")
     # Our own UI (same-origin) keeps working.
     r = client.post("/api/settings", json={"gemini_api_key": "goodkey"},
                     headers={"Origin": "http://127.0.0.1"})
@@ -130,10 +130,10 @@ def test_post_writes_keys_and_backs_up(tmp_path, monkeypatch):
     assert r.status_code == 200
     assert r.json() == {"gemini_key_set": True, "perso_key_set": True,
                         "perso_space_seq": None, "restart_required": True}
-    text = (kit / "mac.env").read_text(encoding="utf-8")
+    text = (kit / "kit.env").read_text(encoding="utf-8")
     assert "GEMINI_API_KEY=g123" in text and "PERSO_API_KEY=p456" in text
     assert "PERSODUB_KIT_DIR=/x" in text  # other lines survive
-    assert (kit / "mac.env.bak").exists()
+    assert (kit / "kit.env.bak").exists()
     assert "g123" not in r.text.replace("gemini_key_set", "")  # value not echoed
 
 
@@ -150,18 +150,18 @@ def test_post_omitted_field_changes_nothing_but_empty_clears(tmp_path, monkeypat
     assert body["gemini_key_set"] is False       # cleared
     assert body["perso_key_set"] is True         # untouched
     assert body["perso_space_seq"] is None       # cleared
-    text = (kit / "mac.env").read_text(encoding="utf-8")
+    text = (kit / "kit.env").read_text(encoding="utf-8")
     assert "GEMINI_API_KEY=keepme" not in text
     assert "PERSO_API_KEY=keepme2" in text
 
 
 def test_post_rejects_control_characters_in_keys(tmp_path, monkeypatch):
     # A newline in a posted value would inject arbitrary KEY=value lines into
-    # mac.env, which the desktop shell feeds into the engine environment.
+    # kit.env, which the desktop shell feeds into the engine environment.
     kit = _kit(tmp_path, monkeypatch, BASE)
     r = client.post("/api/settings", json={"gemini_api_key": "abc\nEVIL=1"})
     assert r.status_code == 422
-    assert "EVIL" not in (kit / "mac.env").read_text(encoding="utf-8")
+    assert "EVIL" not in (kit / "kit.env").read_text(encoding="utf-8")
 
 
 def test_post_writes_space_seq(tmp_path, monkeypatch):
@@ -169,7 +169,7 @@ def test_post_writes_space_seq(tmp_path, monkeypatch):
     r = client.post("/api/settings", json={"perso_space_seq": "114"})
     assert r.status_code == 200
     assert r.json()["perso_space_seq"] == "114"
-    assert "PERSO_SPACE_SEQ=114" in (kit / "mac.env").read_text(encoding="utf-8")
+    assert "PERSO_SPACE_SEQ=114" in (kit / "kit.env").read_text(encoding="utf-8")
 
 
 def test_post_rejects_non_numeric_space_seq(tmp_path, monkeypatch):
@@ -177,7 +177,7 @@ def test_post_rejects_non_numeric_space_seq(tmp_path, monkeypatch):
     # a hand-crafted request and must not reach the engine environment file.
     kit = _kit(tmp_path, monkeypatch, BASE)
     assert client.post("/api/settings", json={"perso_space_seq": "abc; rm -rf"}).status_code == 422
-    assert "PERSO_SPACE_SEQ" not in (kit / "mac.env").read_text(encoding="utf-8").replace("# PERSO_API_KEY", "")
+    assert "PERSO_SPACE_SEQ" not in (kit / "kit.env").read_text(encoding="utf-8").replace("# PERSO_API_KEY", "")
 
 
 def test_post_rejects_unicode_digit_lookalikes_and_oversized_space_seq(tmp_path, monkeypatch):
@@ -197,7 +197,7 @@ def test_perso_spaces_requires_a_key(tmp_path, monkeypatch):
 
 
 def test_perso_spaces_lists_workspaces_for_the_saved_key(tmp_path, monkeypatch):
-    # The key saved via Settings (mac.env) must work BEFORE a restart puts it
+    # The key saved via Settings (kit.env) must work BEFORE a restart puts it
     # into the process env -- otherwise picking a workspace needs two restarts.
     _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=SECRETKEY\n")
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
@@ -216,7 +216,7 @@ def test_perso_spaces_lists_workspaces_for_the_saved_key(tmp_path, monkeypatch):
 
 
 def test_perso_spaces_falls_back_to_process_env_key(monkeypatch):
-    # Server deployments have no kit/mac.env at all -- the key lives in the
+    # Server deployments have no kit/kit.env at all -- the key lives in the
     # process env there, and the picker endpoint must still work.
     monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
     monkeypatch.setenv("PERSO_API_KEY", "ENVKEY")

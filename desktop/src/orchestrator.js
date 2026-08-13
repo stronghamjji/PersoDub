@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, openSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { parseEnvFile } from "./kitEnv.js";
+import { parseEnvFile, KIT_ENV } from "./kitEnv.js";
 import { getFreePort } from "./freePort.js";
 import { waitForHealth } from "./health.js";
 import { IS_WIN, venvBin, exeName, PATH_SEP } from "./platform.js";
@@ -21,7 +21,7 @@ function forceKillTree(pid) {
   try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
 }
 
-// mac.env's PERSODUB_BIN_DIR (kit/bin: ffmpeg, ffprobe) must be visible to the
+// kit.env's PERSODUB_BIN_DIR (kit/bin: ffmpeg, ffprobe) must be visible to the
 // backend's subprocesses; GUI apps start with a minimal PATH.
 export function applyBinDir(env) {
   if (!env.PERSODUB_BIN_DIR) return env;
@@ -73,13 +73,13 @@ export async function startEngines(cfg, { logDir, appVersion }) {
   let env = process.env;
   let backendCwd = cfg.backendCwd ?? process.cwd();
   if (!overrideMode) {
-    const kitEnv = parseEnvFile(readFileSync(join(cfg.kitDir, "mac.env"), "utf8"));
+    const kitEnv = parseEnvFile(readFileSync(join(cfg.kitDir, KIT_ENV), "utf8"));
     env = applyBinDir({ ...process.env, ...kitEnv });
     backendCwd = kitEnv.PERSODUB_APP_REPO_DIR;
   }
   // Tells the backend it is the desktop app rather than a plain server run, and which
   // version it is -- the two facts it reports to Perso (see app/perso_client.py). Set here,
-  // after the kit env, so a stale mac.env can never override what this build actually is.
+  // after the kit env, so a stale kit.env can never override what this build actually is.
   env = { ...env, PERSODUB_CLIENT: "desktop", PERSODUB_APP_VERSION: appVersion ?? "" };
 
   const children = [];

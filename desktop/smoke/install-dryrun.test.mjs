@@ -95,7 +95,7 @@ test("full install dry run completes, satisfies checkKit, and resumes as all-ski
     await runInstall(buildSteps(ctx), { onProgress: (e) => events1.push(e) });
     assert.equal(checkKit(kitDir, KIT_VERSION).ok, true, "installed kit must satisfy Phase-1 checkKit");
     assert.ok(existsSync(join(kitDir, "bin", exeName("ffmpeg"))));
-    assert.ok(existsSync(join(kitDir, "mac.env")));
+    assert.ok(existsSync(join(kitDir, "kit.env")));
 
     const events2 = [];
     await runInstall(buildSteps(ctx), { onProgress: (e) => events2.push(e) });

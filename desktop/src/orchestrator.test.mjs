@@ -83,13 +83,13 @@ test("killStalePids survives null/garbage pids and still clears the file", async
   assert.ok(!existsSync(path), "pids file should be removed");
 });
 
-test("hands the backend its desktop identity, overriding a stale mac.env", async () => {
+test("hands the backend its desktop identity, overriding a stale kit.env", async () => {
   // The backend reports to Perso as the desktop app only because these two arrive here
   // (app/perso_client.py). Without them it reports as a plain server run, so a desktop
   // release would silently stop counting -- with nothing failing. Hence an end-to-end
   // assertion on what the spawned process actually received, not on how it was built.
   const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
-  // Inherited from the environment here, the way a stale value in the kit's mac.env would
+  // Inherited from the environment here, the way a stale value in the kit's kit.env would
   // reach the same merge -- what this build is must win over what it once was told.
   const prior = process.env.PERSODUB_CLIENT;
   process.env.PERSODUB_CLIENT = "server";

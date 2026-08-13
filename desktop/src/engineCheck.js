@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { venvBin, exeName } from "./platform.js";
+import { KIT_ENV } from "./kitEnv.js";
 
 export const REQUIRED = [
-  "mac.env",
+  KIT_ENV,
   // venv entrypoints and the ollama binary carry platform-specific layout
   // (bin/x vs Scripts\x.exe, ".exe" suffix) -- see platform.js.
   venvBin("qwen_venv", "uvicorn"),

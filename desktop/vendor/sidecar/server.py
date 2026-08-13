@@ -47,7 +47,7 @@ DEFAULT_REP_PENALTY = 1.05
 # reference audio alone (no transcript needed) -- see module docstring.
 QWEN_VOICE_MODE = os.environ.get("QWEN_VOICE_MODE", "timbre")
 
-# QWEN_TTS_MODEL must be provided by the environment (mac.env sets it); the
+# QWEN_TTS_MODEL must be provided by the environment (kit.env sets it); the
 # vendored copy ships no default path.
 MODEL_PATH = os.environ.get("QWEN_TTS_MODEL", "")
 
