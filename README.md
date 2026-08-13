@@ -227,11 +227,37 @@ down the others. Architecture details are in [docs/development.md](docs/developm
 
 | | |
 |---|---|
-| **Hardware** | Apple Silicon Mac (M1 or newer). Intel Macs are not supported. |
-| **OS** | macOS 11 (Big Sur) or later. Windows and Linux builds are [planned](#roadmap). |
+| **Hardware** | Apple Silicon Mac (M1 or newer), or a 64-bit PC. Intel Macs are not supported. |
+| **OS** | macOS 11 (Big Sur) or later, or Windows 10 (21H2) / Windows 11. Linux is [planned](#roadmap). |
+| **Graphics (Windows)** | An NVIDIA GPU is strongly recommended. Everything works without one, but see [Speed without a GPU](#speed-without-a-gpu). AMD and Intel graphics are not accelerated. |
 | **Memory** | 24 GB recommended, 16 GB minimum |
 | **Disk** | At least 30 GB free. Roughly 19 GB is downloaded on first launch (AI models and runtimes); this happens once. |
 | **Network** | Required for the first-run download. Afterwards PersoDub runs offline unless you enable a cloud engine. |
+
+<a id="speed-without-a-gpu"></a>
+
+### Speed without a GPU
+
+PersoDub runs entirely on the processor when no supported GPU is present. Nothing
+breaks and no step is skipped — but two of the six stages, translation and voice
+synthesis, get **much** slower, and the gap grows with the length of the video.
+
+Measured on one desktop (Core i9-13900K, RTX 3080), same clip and settings, with the
+GPU available and then hidden:
+
+| | With GPU | Processor only |
+|---|---|---|
+| 10-second clip | about 1 minute | about 2 minutes |
+| Per line of dialogue: translation | about 1 second | about 30 seconds |
+| Per line of dialogue: voice synthesis | about 2 seconds | about 19 seconds |
+
+A short clip stays comfortable because half the work — separating the background and
+transcribing — never used the GPU anyway. A minute of dense dialogue is a different
+story: the same work that takes a few minutes on a GPU can take the better part of an
+hour without one, and a laptop processor is slower again than the desktop measured here.
+
+**Without a GPU, stick to short clips.** Long videos are best left to a machine that
+has one.
 
 ## Usage
 
@@ -319,7 +345,10 @@ restricted by the source platform's terms of service, and that responsibility is
   intense emotional performance does not fully carry over.
 - **Diarization can slip when speakers sound alike.** Similar voices may be merged or
   swapped, particularly in crowded scenes.
-- **macOS on Apple Silicon only, for now.** Windows and Linux builds are planned; see
+- **Without a GPU, long videos are impractical.** Everything still runs, but translation
+  and voice synthesis fall back to the processor and slow down sharply — see
+  [Speed without a GPU](#speed-without-a-gpu). Short clips remain fine.
+- **Linux is not supported yet.** macOS (Apple Silicon) and Windows are; see
   [Roadmap](#roadmap).
 - **The voice-leak check reports, it does not correct.** It measures whether original
   speech bleeds through beneath the dub and surfaces the result; it does not modify the mix.
