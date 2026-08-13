@@ -7,9 +7,16 @@ entirely on your desktop. No cloud, no account, no uploads, no telemetry: your f
 never leaves your computer.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-lightgrey.svg)](#requirements)
-[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
+[![Version](https://img.shields.io/badge/version-0.3.0-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
 [![Privacy](https://img.shields.io/badge/privacy-100%25%20local%20by%20default-brightgreen.svg)](#data-and-privacy)
+
+<p>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+</p>
+
+<sub><b>macOS:</b> signed and notarized, opens with a double-click. &middot; <b>Windows (beta):</b> not signed yet, so SmartScreen asks first - click <b>More info</b>, then <b>Run anyway</b>. <a href="INSTALL.md#windows-beta">Details</a>.</sub>
 
 > [!WARNING]
 > **The only official source for PersoDub is
@@ -24,9 +31,11 @@ never leaves your computer.
 
 ## Installation
 
+### macOS
+
 Apple Silicon Mac. There are two ways to install — pick either.
 
-### Option 1 — Download the app (easiest)
+#### Option 1 — Download the app (easiest)
 
 Download **`PersoDub-<version>-arm64.dmg`** from the
 [latest release](https://github.com/stronghamjji/PersoDub/releases/latest), open it,
@@ -34,7 +43,7 @@ and drag **PersoDub** into your Applications folder. It is signed and notarized,
 opens with a normal double-click. Installed this way, the app keeps itself up to date:
 on launch it checks for a newer release and offers to install it.
 
-### Option 2 — One line in Terminal
+#### Option 2 — One line in Terminal
 
 Paste this into Terminal. It fetches the code, installs the prerequisites (including
 Node.js), builds the app, and launches it:
@@ -46,16 +55,31 @@ curl -fsSL https://raw.githubusercontent.com/stronghamjji/PersoDub/HEAD/install.
 This builds from source; to update later, re-run the same command. Prefer to go step by
 step, starting from installing git and Node.js? See **[INSTALL.md](INSTALL.md)**.
 
-Either way, the first launch downloads the AI models and runtimes (roughly 19 GB — see
-[Requirements](#requirements)). This takes a while and only happens once;
-[docs/usage.md](docs/usage.md#first-launch) shows what that screen looks like.
+### Windows (beta)
 
-Already installed? Launch **PersoDub** from your Applications folder, or from
+Windows 10 (21H2 or newer) or Windows 11, 64-bit. Download
+**`PersoDub-Setup-<version>.exe`** from the
+[latest release](https://github.com/stronghamjji/PersoDub/releases/latest) and run it.
+It installs for your user account only, into `%LOCALAPPDATA%\Programs\PersoDub`, so no
+administrator rights are needed.
+
+The Windows build is not code-signed yet, so SmartScreen shows **"Windows protected your
+PC"** the first time you run the installer. Click **More info**, then **Run anyway**.
+
+On either platform, the first launch downloads the AI models and runtimes — roughly
+19 GB on macOS, about 34 GB on Windows, where the kit carries the CUDA build of PyTorch
+(see [Requirements](#requirements)). On Windows the download took about 27 minutes on a
+fast connection. It happens once; [docs/usage.md](docs/usage.md#first-launch) shows what
+that screen looks like. On Windows the kit is stored in `%LOCALAPPDATA%\PersoDub`.
+
+Already installed? On macOS, launch **PersoDub** from your Applications folder, or from
 Terminal:
 
 ```bash
 open -a PersoDub
 ```
+
+On Windows, launch **PersoDub** from the Start menu.
 
 ## What is PersoDub?
 
@@ -69,9 +93,9 @@ original soundtrack. With the default settings, every one of those steps runs lo
 <img src="docs/images/advanced-options.png" width="100%"
      alt="PersoDub main window with Advanced options expanded: a drop zone for the video, pickers for speech-to-text, original language, target language and voice quality, and below them the translation engine, the text-to-speech engine, and the number of speakers.">
 
-> **Status: early release (v0.1.0).** PersoDub is usable today and is under active
-> development. macOS on Apple Silicon is the first supported platform; other platforms
-> are planned. Interfaces and defaults may change. Please report problems through
+> **Status: early release (v0.3.0).** PersoDub is usable today and is under active
+> development. macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
+> Interfaces and defaults may change. Please report problems through
 > [Issues](https://github.com/stronghamjji/PersoDub/issues).
 
 ## Hear the difference
@@ -227,15 +251,42 @@ down the others. Architecture details are in [docs/development.md](docs/developm
 
 | | |
 |---|---|
-| **Hardware** | Apple Silicon Mac (M1 or newer). Intel Macs are not supported. |
-| **OS** | macOS 11 (Big Sur) or later. Windows and Linux builds are [planned](#roadmap). |
+| **Hardware** | Apple Silicon Mac (M1 or newer), or a 64-bit PC. Intel Macs are not supported. |
+| **OS** | macOS 11 (Big Sur) or later, or Windows 10 (21H2) / Windows 11. Linux is [planned](#roadmap). |
+| **Graphics (Windows)** | An NVIDIA GPU is strongly recommended. Everything works without one, but see [Speed without a GPU](#speed-without-a-gpu). AMD and Intel graphics are not accelerated. |
 | **Memory** | 24 GB recommended, 16 GB minimum |
-| **Disk** | At least 30 GB free. Roughly 19 GB is downloaded on first launch (AI models and runtimes); this happens once. |
+| **Disk** | 30 GB free on macOS, 45 GB on Windows. The first launch downloads the AI models and runtimes once — roughly 19 GB on macOS, 34 GB on Windows, which additionally carries the CUDA build of PyTorch. |
 | **Network** | Required for the first-run download. Afterwards PersoDub runs offline unless you enable a cloud engine. |
+
+<a id="speed-without-a-gpu"></a>
+
+### Speed without a GPU
+
+PersoDub runs entirely on the processor when no supported GPU is present. Nothing
+breaks and no step is skipped — but two of the six stages, translation and voice
+synthesis, get **much** slower, and the gap grows with the length of the video.
+
+Measured on one desktop (Core i9-13900K, RTX 3080), same clip and settings, with the
+GPU available and then hidden:
+
+| | With GPU | Processor only |
+|---|---|---|
+| 10-second clip | about 1 minute | about 2 minutes |
+| Per line of dialogue: translation | about 1 second | about 30 seconds |
+| Per line of dialogue: voice synthesis | about 2 seconds | about 19 seconds |
+
+A short clip stays comfortable because half the work — separating the background and
+transcribing — never used the GPU anyway. A minute of dense dialogue is a different
+story: the same work that takes a few minutes on a GPU can take the better part of an
+hour without one, and a laptop processor is slower again than the desktop measured here.
+
+**Without a GPU, stick to short clips.** Long videos are best left to a machine that
+has one.
 
 ## Usage
 
-1. Launch **PersoDub** from your Applications folder.
+1. Launch **PersoDub** — from your Applications folder on macOS, or the Start menu on
+   Windows.
 2. Drag a video file onto the window.
 3. Choose the language to dub into.
 4. Start the job. Progress is shown stage by stage.
@@ -293,7 +344,7 @@ and operating system family so the vendor can attribute API usage.
 The desktop app checks GitHub Releases once at launch to learn whether a newer
 version exists, and downloads it in the background when there is one. The request
 carries no personal data — it is the same anonymous read anyone makes opening the
-releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `mac.env` to turn
+releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `kit.env` to turn
 the check off entirely; the app then makes no network requests of its own at all.
 
 ## Responsible use
@@ -319,7 +370,10 @@ restricted by the source platform's terms of service, and that responsibility is
   intense emotional performance does not fully carry over.
 - **Diarization can slip when speakers sound alike.** Similar voices may be merged or
   swapped, particularly in crowded scenes.
-- **macOS on Apple Silicon only, for now.** Windows and Linux builds are planned; see
+- **Without a GPU, long videos are impractical.** Everything still runs, but translation
+  and voice synthesis fall back to the processor and slow down sharply — see
+  [Speed without a GPU](#speed-without-a-gpu). Short clips remain fine.
+- **Linux is not supported yet.** macOS (Apple Silicon) and Windows are; see
   [Roadmap](#roadmap).
 - **The voice-leak check reports, it does not correct.** It measures whether original
   speech bleeds through beneath the dub and surfaces the result; it does not modify the mix.
@@ -328,7 +382,7 @@ restricted by the source platform's terms of service, and that responsibility is
 
 Planned, in no committed order:
 
-- **Additional platforms** — Windows and Linux desktop builds
+- **Additional platforms** — a Linux desktop build
 - Stronger emotional delivery in synthesized speech
 - More reliable diarization when speakers sound alike
 
@@ -337,8 +391,9 @@ Have a use case that is not covered? Open an
 
 ## Troubleshooting
 
-**The first launch seems to take forever.** It is downloading roughly 19 GB of models
-and runtimes. This happens once; later launches start immediately.
+**The first launch seems to take forever.** It is downloading the models and runtimes —
+roughly 19 GB on macOS, about 34 GB on Windows. This happens once; later launches start
+immediately.
 
 **A cloud engine is greyed out in the dropdown.** Save the corresponding API key in
 Settings, then restart the app. Engine availability is evaluated at startup.
@@ -362,18 +417,22 @@ Perso key, which uploads the video for transcription. See
 Yes. It is Apache-2.0. You remain responsible for holding the rights to the material you
 dub, and for the terms of any optional cloud service you enable.
 
-**Why Apple Silicon only?**
-The first release targets one platform properly rather than several poorly. Windows and
-Linux are on the [roadmap](#roadmap).
+**Why are Intel Macs not supported?**
+The Mac build targets Apple Silicon, whose built-in acceleration the pipeline relies on;
+an Intel Mac has no equivalent path and would run every stage on the processor. Linux is
+on the [roadmap](#roadmap) but has no date.
 
 **Why is the first-run download so large?**
 PersoDub ships no AI models. On first launch it downloads the separation, recognition,
-diarization, translation and speech-synthesis models — roughly 19 GB — so that
-everything can run offline afterwards. It happens once.
+diarization, translation and speech-synthesis models — roughly 19 GB on macOS, about
+34 GB on Windows, which also carries the CUDA build of PyTorch — so that everything can
+run offline afterwards. It happens once.
 
 **Do I need a GPU?**
-No. PersoDub uses the acceleration built into Apple Silicon. Memory matters more than
-anything else; 24 GB is comfortable.
+On a Mac, no — PersoDub uses the acceleration built into Apple Silicon. On Windows, an
+NVIDIA GPU is used when one is present; AMD and Intel graphics are not accelerated.
+Everything still runs on the processor without a supported GPU, just much slower — see
+[Speed without a GPU](#speed-without-a-gpu). Memory matters too; 24 GB is comfortable.
 
 **Is the dubbed audio watermarked?**
 No. Please disclose AI-dubbed audio as synthetic wherever you publish it — see
@@ -395,8 +454,9 @@ The backend targets Python 3.11 and is not yet compatible with 3.13 or later.
 
 Issues and pull requests are welcome. Please open an issue describing the problem or
 proposal before starting substantial work, so effort is not duplicated. Bug reports are
-most useful when they include your macOS version, your Mac's chip, and the job log from
-the failing run.
+most useful when they include your operating system version — macOS version and your
+Mac's chip, or your Windows version and whether the machine has an NVIDIA GPU — and the
+job log from the failing run.
 
 ## Security
 

@@ -278,6 +278,10 @@ def apply_nonverbal_whitelist(mix_path: str, vocals_path: str,
         % (len(candidates), len(kept), len(rejected)))
     manifest = {"candidates": len(candidates), "kept": kept, "rejected": rejected}
     if manifest_path:
-        with open(manifest_path, "w") as f:
+        # encoding is explicit because the transcripts are not ASCII (see
+        # ensure_ascii=False) and pipeline.py reads this back as UTF-8: the
+        # platform default would write cp949 on a Korean Windows and the 5/6
+        # leakage gate would skip itself on a UnicodeDecodeError.
+        with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=1)
     return manifest

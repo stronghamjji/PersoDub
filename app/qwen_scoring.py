@@ -35,7 +35,7 @@ def _scorer_asr_timeout_per_take() -> float:
     PERSODUB_SCORER_ASR_TIMEOUT env var and default-15 garbage-safe parse
     app/scripts/qwen_score_takes.py uses for its own ASR_BATCH_TIMEOUT_PER_FILE,
     read live (not cached at import time) so the two actually stay in sync
-    (e.g. mac.env's 60) instead of this parent silently hardcoding 15."""
+    (e.g. kit.env's 60) instead of this parent silently hardcoding 15."""
     try:
         return float(os.environ.get("PERSODUB_SCORER_ASR_TIMEOUT", "15"))
     except (TypeError, ValueError):

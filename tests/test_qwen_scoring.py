@@ -246,7 +246,7 @@ def test_asr_timeout_per_file_garbage_env_falls_back_to_default(monkeypatch):
 
 # --- C1: the parent (qwen_scoring.score_takes) subprocess timeout must read the
 # SAME PERSODUB_SCORER_ASR_TIMEOUT env var as the child, not hardcode 15 -- for
-# n>=14 takes a mismatched (mac.env sets 60) parent timeout killed the scorer
+# n>=14 takes a mismatched (kit.env sets 60) parent timeout killed the scorer
 # before the child's own budget expired, causing a silent take-0 fallback ---
 
 def test_scorer_asr_timeout_per_take_defaults_to_15():
@@ -264,7 +264,7 @@ def test_scorer_asr_timeout_per_take_garbage_env_falls_back_to_default(monkeypat
 
 
 def test_score_takes_subprocess_timeout_honours_asr_timeout_env(monkeypatch, tmp_path):
-    # mac.env sets PERSODUB_SCORER_ASR_TIMEOUT=60 for slower Mac CPUs -- the
+    # kit.env sets PERSODUB_SCORER_ASR_TIMEOUT=60 for slower Mac CPUs -- the
     # parent's own subprocess timeout must scale with that, not a hardcoded 15,
     # or it kills the child before the child's own (larger) budget expires.
     captured = {}

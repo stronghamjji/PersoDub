@@ -3,6 +3,7 @@
 Fake wavs only; whisper is NEVER run here (the veto is injected as a callable).
 """
 import audioop
+import json
 import math
 import struct
 import wave
@@ -147,6 +148,26 @@ def test_apply_whitelist_injectable_veto_drops_rejected_segment(tmp_path):
     assert manifest["rejected"][0]["text"] == "hello there"
     assert _rms_span_48k(mix, 1.15, 1.35) > 100     # kept laughter is audible
     assert _rms_span_48k(mix, 2.15, 2.35) == 0      # rejected segment stayed out
+
+
+def test_manifest_is_utf8_whatever_the_platform_encoding_is(tmp_path):
+    """A transcript is in the video's own language, so the manifest holds
+    non-ASCII; app/pipeline.py reads it back as UTF-8. Writing it in the
+    platform's locale encoding (cp949 on a Korean Windows) made the 5/6
+    leakage gate skip itself with a UnicodeDecodeError on that machine.
+    """
+    vocals = _write_tone_wav(tmp_path / "vocals.wav", [(1.0, 1.5)], dur=4.0)
+    mix = _write_silent_48k_stereo(tmp_path / "mix.wav", 4.0)
+    manifest_path = str(tmp_path / "nonverbal.json")
+
+    def veto(vocals_path, cands):
+        return [{"start": a, "end": b, "text": "하하", "keep": True} for a, b in cands]
+
+    nv.apply_nonverbal_whitelist(mix, vocals, [], [], veto=veto,
+                                 manifest_path=manifest_path)
+    # exactly how app/pipeline.py:_manifest_exclude_spans reads it
+    m = json.load(open(manifest_path, encoding="utf-8"))
+    assert m["kept"] and all(k["text"] == "하하" for k in m["kept"])
 
 
 def test_apply_whitelist_no_candidates_leaves_mix_untouched(tmp_path):

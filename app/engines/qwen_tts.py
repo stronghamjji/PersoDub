@@ -5,7 +5,7 @@ socket spec (app/engines/base.py). Qwen does not use num_step / guidance_scale /
 speed -- those are generic knobs the socket spec defines for other engines.
 """
 import os
-from typing import Dict
+from typing import Dict, Optional
 
 import httpx
 
@@ -39,6 +39,27 @@ class QwenTTSEngine(TTSEngine):
             return r.status_code == 200 and bool(r.json().get("model_loaded"))
         except Exception:
             return False
+
+    def device_label(self) -> Optional[str]:
+        """Human-readable compute device, or None when it cannot be known.
+
+        Users cannot otherwise tell a GPU run from a CPU one except by how long
+        they wait -- and on Windows, where only NVIDIA is accelerated, "it's
+        slow" is nearly always "it ran on CPU". None (rather than a guess) when
+        the sidecar is unreachable or predates the /health field.
+        """
+        try:
+            r = httpx.get(self.base_url + "/health", timeout=5)
+            device = r.json().get("device") if r.status_code == 200 else None
+        except Exception:
+            return None
+        if not device:
+            return None
+        if device.startswith("cpu"):
+            return "CPU — no GPU acceleration"
+        if device.startswith("mps"):
+            return "GPU (Apple)"
+        return f"GPU ({device})"
 
     def _build_form(self, req: SynthesisRequest) -> Dict[str, str]:
         """Convert the request into /generate form fields (network-free, so it

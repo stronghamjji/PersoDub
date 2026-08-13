@@ -47,7 +47,7 @@ DEFAULT_REP_PENALTY = 1.05
 # reference audio alone (no transcript needed) -- see module docstring.
 QWEN_VOICE_MODE = os.environ.get("QWEN_VOICE_MODE", "timbre")
 
-# QWEN_TTS_MODEL must be provided by the environment (mac.env sets it); the
+# QWEN_TTS_MODEL must be provided by the environment (kit.env sets it); the
 # vendored copy ships no default path.
 MODEL_PATH = os.environ.get("QWEN_TTS_MODEL", "")
 
@@ -75,8 +75,13 @@ def _to_wav_bytes(wav, sr):
 
 @app.get("/health")
 def health():
+    # device is what the app shows the user in the dub log: on Windows, where
+    # only NVIDIA is accelerated, "it ran on CPU" is the answer to almost every
+    # "why is this slow". Reported even when the model was not loaded, since
+    # the choice is made from the environment, not from the load.
     return {"status": "ok",
-            "model_loaded": getattr(app.state, "synth", None) is not None}
+            "model_loaded": getattr(app.state, "synth", None) is not None,
+            "device": getattr(app.state, "device", None)}
 
 
 @app.post("/clone")
@@ -155,8 +160,11 @@ class QwenSynth:
         import torch
         from qwen_tts import Qwen3TTSModel
         self._torch = torch
+        # CPU lacks fast bfloat16 kernels; use float32 there. GPU backends
+        # (cuda, Apple mps) keep bfloat16.
+        dtype = torch.float32 if str(device).startswith("cpu") else torch.bfloat16
         self.model = Qwen3TTSModel.from_pretrained(
-            model_path, device_map=device, dtype=torch.bfloat16,
+            model_path, device_map=device, dtype=dtype,
         )
 
     def clone(self, ref_audio_path, ref_text, mode="icl"):
@@ -181,11 +189,30 @@ class QwenSynth:
         return wavs[0], sr
 
 
+def _resolve_device(device):
+    """Map "auto" to cuda when a GPU is visible, else cpu. Explicit values
+    (cuda:0, mps, cpu) pass through untouched. The Windows kit env sets "auto";
+    macOS sets "mps"."""
+    if device != "auto":
+        return device
+    try:
+        import torch
+        return "cuda:0" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
 @app.on_event("startup")
 def _load_model():
+    # Resolved first and kept on app.state so /health can report it even when
+    # the load below is skipped -- the device is decided by the environment,
+    # not by whether a model is resident.
+    device = _resolve_device(os.environ.get("QWEN_TTS_DEVICE", "cuda:0"))
+    app.state.device = device
+    print(f"QWEN_TTS device={device}", flush=True)
     # Skip the heavy load when a fake was injected (tests) or explicitly disabled.
     if getattr(app.state, "synth", None) is not None:
         return
     if os.environ.get("QWEN_TTS_SKIP_LOAD") == "1":
         return
-    app.state.synth = QwenSynth(device=os.environ.get("QWEN_TTS_DEVICE", "cuda:0"))
+    app.state.synth = QwenSynth(device=device)

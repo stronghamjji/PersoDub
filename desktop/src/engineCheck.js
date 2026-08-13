@@ -1,17 +1,21 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { venvBin, exeName } from "./platform.js";
+import { KIT_ENV } from "./kitEnv.js";
 
 export const REQUIRED = [
-  "mac.env",
-  "qwen_venv/bin/uvicorn",
-  "app_venv/bin/uvicorn",
+  KIT_ENV,
+  // venv entrypoints and the ollama binary carry platform-specific layout
+  // (bin/x vs Scripts\x.exe, ".exe" suffix) -- see platform.js.
+  venvBin("qwen_venv", "uvicorn"),
+  venvBin("app_venv", "uvicorn"),
   "sidecar/server.py",
   // Local Gemma translation, the app's default engine. Left out of this list
   // the install's biggest download (~8 GB) was also its only unverified one:
   // a kit that lost the pull partway still passed, so boot never re-ran the
   // installer and no amount of restarting brought local translation back.
   // Paths mirror installSpec.js's ollama step (binary + GEMMA_MANIFEST).
-  "ollama/ollama",
+  join("ollama", exeName("ollama")),
   "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b",
 ];
 

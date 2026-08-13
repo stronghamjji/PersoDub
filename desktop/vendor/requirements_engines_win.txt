@@ -1,0 +1,24 @@
+# Windows (x86_64) "engines" venv -- the mirror of requirements_engines_mac.txt
+# for the Windows kit. Same pinned versions; the ONLY difference is torch:
+#
+# torch/torchaudio are NOT listed here. On Windows, plain PyPI torch is the
+# CPU-only wheel, so the CUDA build is installed separately from the pytorch.org
+# cu128 index by installSpec.js (buildSteps: torchCuda) BEFORE this file. That
+# keeps GPU acceleration while letting these packages resolve normally.
+
+# Local Demucs source separation (app/scripts/demucs_separate.py).
+demucs==4.1.0
+
+# Local Whisper transcription (app/scripts/whisper_transcribe.py).
+faster-whisper==1.2.1
+
+# The laughter/breath whitelist (app/nonverbal.py) shells out to the ORIGINAL
+# openai-whisper (~140MB "base", fetched on first use).
+openai-whisper
+
+# Local CAM++ diarization + Qwen take scoring.
+onnxruntime==1.27.0
+scikit-learn==1.9.0
+scipy==1.17.1
+soundfile==0.14.0
+numpy==2.4.6

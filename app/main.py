@@ -156,7 +156,7 @@ class SettingsRequest(BaseModel):
 
 @app.get("/api/settings")
 def settings_get():
-    """The saved keys and workspace from mac.env, values included.
+    """The saved keys and workspace from kit.env, values included.
 
     Values come back verbatim (user decision 2026-08-06): this is a
     single-user desktop app and the keys live in a file that user owns, so
@@ -166,7 +166,7 @@ def settings_get():
     changing the bind to 0.0.0.0 WOULD expose these values."""
     status = read_key_status()
     if status is None:
-        raise HTTPException(503, "Settings need a desktop install (no mac.env found)")
+        raise HTTPException(503, "Settings need a desktop install (no kit.env found)")
     # perso_signup_link carries the UTM tag, which is built from the running platform --
     # the static page can't know it, so it comes from here.
     return {"gemini_key_set": status["GEMINI_API_KEY"], "perso_key_set": status["PERSO_API_KEY"],
@@ -179,10 +179,10 @@ def settings_get():
 
 @app.post("/api/settings")
 def settings_post(body: SettingsRequest):
-    """Write non-empty API keys (and the picked Perso workspace) into mac.env,
+    """Write non-empty API keys (and the picked Perso workspace) into kit.env,
     backing it up first.
 
-    The engines read mac.env once at startup, so a change only applies after
+    The engines read kit.env once at startup, so a change only applies after
     the app restarts -- restart_required tells the UI to say so."""
     space = None if body.perso_space_seq is None else body.perso_space_seq.strip()
     # The picker only ever posts a seq it got from /api/perso/spaces; anything
@@ -199,7 +199,7 @@ def settings_post(body: SettingsRequest):
             "PERSO_SPACE_SEQ": space,
         })
     except FileNotFoundError:
-        raise HTTPException(503, "Settings need a desktop install (no mac.env found)")
+        raise HTTPException(503, "Settings need a desktop install (no kit.env found)")
     except ValueError as e:
         raise HTTPException(422, str(e))
     return {"gemini_key_set": status["GEMINI_API_KEY"], "perso_key_set": status["PERSO_API_KEY"],
@@ -211,7 +211,7 @@ def settings_post(body: SettingsRequest):
 def perso_spaces():
     """Workspaces the saved Perso key can dub in, for the Settings picker.
 
-    The key comes from mac.env first (a key saved moments ago, before any
+    The key comes from kit.env first (a key saved moments ago, before any
     restart) and the process env second (server deployments with no kit) --
     otherwise picking a workspace right after saving the key would take two
     restarts. The key itself is used server-side only and never returned.
