@@ -249,6 +249,8 @@ def apply_company_ambience(mix_path: str, vocals_path: str,
         "muted_regions": [[round(a, 3), round(b, 3)] for a, b in mute_regions],
     }
     if manifest_path:
-        with open(manifest_path, "w") as f:
+        # UTF-8 explicitly: same manifest, same reader, same reason as
+        # app/nonverbal.py -- the platform default is not UTF-8 on Windows.
+        with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=1)
     return manifest

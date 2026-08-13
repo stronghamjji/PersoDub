@@ -202,6 +202,26 @@ def test_manifest_spans_split_and_validate(scene, tmp_path):
     assert _validate_manifest_spans(m["kept"], 10.0, mode=m.get("mode")) is None
 
 
+def test_manifest_is_utf8_whatever_the_platform_encoding_is(scene, tmp_path):
+    """A transcript is in the video's own language, so the manifest holds
+    non-ASCII; app/pipeline.py reads it back as UTF-8. Writing it in the
+    platform's locale encoding (cp949 on a Korean Windows) made the 5/6
+    leakage gate skip itself with a UnicodeDecodeError on that machine.
+    """
+    mix = _write_silent_48k_stereo(tmp_path / "mix.wav", 10.0)
+    manifest_path = str(tmp_path / "gate_manifest.json")
+
+    def veto(vocals_path, candidates):
+        return [{"start": a, "end": b, "keep": True, "text": "하하하"}
+                for a, b in candidates]
+
+    cg.apply_company_ambience(mix, scene, SPEECH_SPANS, DUB_SPANS,
+                              veto=veto, manifest_path=manifest_path)
+    # exactly how app/pipeline.py:_manifest_exclude_spans reads it
+    m = json.load(open(manifest_path, encoding="utf-8"))
+    assert m["kept"] and all(k["text"] == "하하하" for k in m["kept"])
+
+
 def test_long_verified_span_is_split_at_quiet_dips(tmp_path):
     # one 4.5s energetic span with a clear quiet dip at ~2.2s into it
     vocals = _write_vocals_wav(tmp_path / "v.wav",

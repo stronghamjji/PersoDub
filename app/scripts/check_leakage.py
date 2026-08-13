@@ -261,7 +261,9 @@ def main(argv: List[str]) -> int:
         final_path = tmp.name
     exclude_spans = None
     if len(argv) >= 3:
-        manifest = json.load(open(argv[2]))
+        # UTF-8 to match the writers (app/nonverbal.py, app/audio/ambience.py)
+        # and the in-process reader in app/pipeline.py.
+        manifest = json.load(open(argv[2], encoding="utf-8"))
         kept = manifest["kept"]
         mode = manifest.get("mode")
         if mode == "company":
