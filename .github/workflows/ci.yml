@@ -1,6 +1,11 @@
 # Runs the full test suite on every push and pull request. Both suites are
 # pure-logic (no models, network, or ffmpeg needed -- see tests/conftest.py),
 # so plain runners are enough.
+#
+# Every suite runs on Linux and on Windows. The Windows leg is not about a
+# supported platform list: it is the only automatic check that the path,
+# separator, and process handling in the desktop shell still work off the one
+# machine this project is developed on.
 name: CI
 
 on:
@@ -11,17 +16,27 @@ on:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    strategy:
+      # A failure on one OS must not cancel the other leg -- knowing whether a
+      # break is platform-specific is the whole point of the matrix.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"  # matches the Mac kit's interpreter (pyproject requires-python)
+          python-version: "3.11"  # matches the kit's interpreter (pyproject requires-python)
       - run: pip install -r requirements.txt
       - run: python -m pytest tests/ -q
 
   desktop:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,3 +46,27 @@ jobs:
         working-directory: desktop
       - run: npm test
         working-directory: desktop
+
+  # Fails the build if a credential was ever committed, on this branch or
+  # anywhere in the history behind it. gitleaks is fetched from its own release
+  # and checksum-verified rather than pulled in as a marketplace action: the
+  # same pinning the installer uses for every binary it downloads, and it keeps
+  # a third party out of the repository token.
+  secrets:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # scan the whole history, not just the tip commit
+      - name: Install gitleaks
+        run: |
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL "$url" -o gitleaks.tar.gz
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+      # --redact keeps a leaked value out of the public log; the finding still
+      # names the file and commit, which is all a fix needs.
+      - run: ./gitleaks git . --redact --no-banner
