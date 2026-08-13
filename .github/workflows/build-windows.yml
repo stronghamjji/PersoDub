@@ -1,0 +1,56 @@
+# Builds the Windows installer and keeps it as a downloadable artifact.
+#
+# Separate from ci.yml on purpose: ci.yml is the fast check that runs on every
+# push, this one is the slow packaging job that only runs when asked. It also
+# exists because the installer cannot be built on a locked-down workstation --
+# electron-builder unpacks a signing toolset that contains symlinks, and
+# creating those needs a privilege a standard Windows account does not have. A
+# hosted runner has it.
+#
+# The build is unsigned, so the installer it produces raises a SmartScreen
+# warning. That is expected until a certificate exists.
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/windows-support]
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Not in the repository (27 MB binary), so the packager fetches its own
+      # copy from the same pinned URL and checksum the installer uses at run
+      # time -- see CAMPPLUS_URL / CAMPPLUS_SHA256 in desktop/src/installSpec.js.
+      - name: Fetch the CAM++ speaker model
+        shell: bash
+        env:
+          URL: https://huggingface.co/welcomyou/campplus-3dspeaker-200k-onnx/resolve/main/campplus_cn_en_common_200k.onnx
+          SHA256: dd1740aa1e1ffa3895f96aef2166b8af2bb2ad09c00769dd275ee36aef6a2a7f
+        run: |
+          curl -sSfL "$URL" -o campplus.onnx
+          echo "${SHA256}  campplus.onnx" | sha256sum -c -
+
+      - run: npm ci
+        working-directory: desktop
+
+      - name: Build the installer
+        working-directory: desktop
+        env:
+          CAMPPLUS_SRC: ${{ github.workspace }}\campplus.onnx
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"  # no certificate: do not go looking for one
+        run: npm run dist:win
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PersoDub-Setup-windows
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/latest.yml
+          if-no-files-found: error

@@ -8,7 +8,8 @@
     "start": "electron .",
     "test": "node --test src/*.test.mjs smoke/*.test.mjs",
     "dist": "node scripts/collect-payload.mjs && electron-builder --mac zip --arm64 --publish never",
-    "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never"
+    "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never",
+    "dist:win": "node scripts/collect-payload.mjs && electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^37.0.0",
@@ -47,6 +48,20 @@
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
       "notarize": true
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
     },
     "publish": [
       {
