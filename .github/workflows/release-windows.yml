@@ -1,0 +1,65 @@
+# Attaches the Windows installer to a GitHub Release.
+#
+# Split from build-windows.yml deliberately: that one produces a throwaway
+# artifact for testing on every branch push, this one publishes and only runs
+# when a release is created or when someone asks for it by tag. Nothing here
+# builds macOS -- the mac build is signed and notarized on an Apple machine,
+# and mixing the two into one job would make a failure on either side block the
+# other's upload.
+#
+# The Windows build is unsigned. SmartScreen will warn on first run; INSTALL.md
+# tells the user what to click. electron-updater verifies a signature before
+# applying an update, so automatic updates are expected NOT to work on Windows
+# until a certificate exists -- treat a Windows release as download-and-install
+# until then.
+name: Release Windows installer
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to attach the installer to (e.g. v0.2.0)
+        required: true
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    permissions:
+      contents: write  # to upload the asset onto the release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Not in the repository (27 MB binary): fetched from the same pinned URL
+      # and checksum the installer itself uses at run time.
+      - name: Fetch the CAM++ speaker model
+        shell: bash
+        env:
+          URL: https://huggingface.co/welcomyou/campplus-3dspeaker-200k-onnx/resolve/main/campplus_cn_en_common_200k.onnx
+          SHA256: dd1740aa1e1ffa3895f96aef2166b8af2bb2ad09c00769dd275ee36aef6a2a7f
+        run: |
+          curl -sSfL "$URL" -o campplus.onnx
+          echo "${SHA256}  campplus.onnx" | sha256sum -c -
+
+      - run: npm ci
+        working-directory: desktop
+
+      - name: Build the installer
+        working-directory: desktop
+        env:
+          CAMPPLUS_SRC: ${{ github.workspace }}\campplus.onnx
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"  # no certificate: do not go looking for one
+        run: npm run dist:win
+
+      - name: Attach the installer to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+        shell: bash
+        run: gh release upload "$TAG" desktop/dist/*.exe desktop/dist/latest.yml --clobber

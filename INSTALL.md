@@ -1,8 +1,15 @@
-# PersoDub installation guide (Mac)
+# PersoDub installation guide
 
 How to install **PersoDub**, the app that auto-dubs videos into other languages,
 starting from scratch. Written so you can follow along without being technical —
 just go step by step.
+
+Pick the path for your computer: **[macOS](#macos)** or **[Windows](#windows-beta)**.
+Both end in the same place — [After installing](#after-installing).
+
+---
+
+## macOS
 
 **What you need**
 - An Apple Silicon Mac (M1/M2/M3/M4 — most MacBooks from 2021 onward; Intel Macs are not supported)
@@ -13,9 +20,7 @@ just go step by step.
 
 > Developer tools like Node.js are **prepared automatically by the install command** — no need to install them yourself.
 
----
-
-## Step 1. Open Terminal
+### Step 1. Open Terminal
 
 1. Press **⌘ (command) + Space** to open Spotlight search.
 2. Type `Terminal` and press Enter.
@@ -23,7 +28,7 @@ just go step by step.
 
 > From here on, "run a command" always means: **copy the command → paste it into Terminal → press Enter**.
 
-## Step 2. Install the developer tool (git) — once
+### Step 2. Install the developer tool (git) — once
 
 Paste this into Terminal and press Enter:
 
@@ -34,7 +39,7 @@ xcode-select --install
 - If a popup appears, click **Install** and wait for it to finish (5–15 minutes).
 - If it says it is already installed, just move on to the next step.
 
-## Step 3. Run the install command (one line)
+### Step 3. Run the install command (one line)
 
 Paste this single line into Terminal and press Enter:
 
@@ -51,13 +56,90 @@ Progress is shown as `[1/7]`, `[2/7]`, and so on. **It takes 10–20 minutes —
 > 3. In Terminal, go into the cloned folder and run `bash install.sh`
 >    (the script detects that folder automatically)
 
-## Step 4. First launch
+### Step 4. First launch
 
 - The app opens automatically at the end.
 - **If you see an "unidentified developer" warning**: System Settings → Privacy & Security → click **"Open Anyway"** at the bottom (needed only once).
 - On a first install, a "Setting up PersoDub" screen appears and the engines install automatically (30 minutes to 2 hours). It is safe to quit during this — reopening the app resumes where it left off.
 
-## Step 5. Add API keys (optional)
+Next: [After installing](#after-installing).
+
+---
+
+## Windows (beta)
+
+Windows support ships as a beta. Everything works, but it has had less use than the Mac
+version, so please [report anything that breaks](https://github.com/stronghamjji/PersoDub/issues).
+
+**What you need**
+- Windows 10 (21H2 or newer) or Windows 11, 64-bit
+- About 40 GB of free disk space
+- An NVIDIA graphics card — strongly recommended, see [Graphics: NVIDIA only](#graphics-nvidia-only) below
+- An internet connection
+- No administrator rights
+
+### Download and run the installer
+
+Download **`PersoDub-Setup-<version>.exe`** from the project's
+[Releases page](https://github.com/stronghamjji/PersoDub/releases) and double-click it.
+
+### "Windows protected your PC"
+
+The build is not code-signed yet, so Windows shows a blue box titled
+**"Windows protected your PC"** with only a **Don't run** button. This is ordinary for
+unsigned open-source software. To carry on:
+
+1. Click **More info**.
+2. Click **Run anyway**.
+
+Signing is planned. Once the build is signed, the warning stops appearing.
+
+### Where it installs
+
+The installer is per-user, which is why it never asks for an administrator password.
+It installs the app into `%LOCALAPPDATA%\Programs\PersoDub`, adds a **Start menu** entry
+and a desktop shortcut, and registers an uninstaller.
+
+### First launch
+
+The first time you open PersoDub, it downloads the engine kit into
+`%LOCALAPPDATA%\PersoDub` — about **34 GB**, roughly **27 minutes** on a fast
+connection. This happens once.
+
+Leave the app open while it downloads. If it closes, open it again — setup resumes where
+it left off.
+
+### Graphics: NVIDIA only
+
+On Windows, only NVIDIA graphics are accelerated. With AMD or Intel graphics everything
+still runs, on the processor instead. Nothing is skipped and no step fails, but
+translation and voice synthesis get much slower, and long videos become impractical.
+The measured numbers are in [Speed without a GPU](README.md#speed-without-a-gpu).
+
+### Uninstalling
+
+Use the uninstaller in the **Start menu**, or **Settings > Apps**.
+
+> **That removes the app, but not the engine kit.** The roughly 34 GB in
+> `%LOCALAPPDATA%\PersoDub` stays on your disk. To get that space back, open that folder
+> and delete it yourself.
+
+### Log files
+
+Attach these when you report a bug:
+
+- Per-dub logs: `%LOCALAPPDATA%\PersoDub\app\logs`
+- Engine logs: `%APPDATA%\persodub-desktop-shell\logs`
+
+Next: [After installing](#after-installing).
+
+---
+
+## After installing
+
+These two steps are the same on macOS and Windows.
+
+### Step 5. Add API keys (optional)
 
 Translation runs on the local **Gemma** model by default, so dubbing works with no keys at all.
 To enable the cloud engines:
@@ -71,7 +153,7 @@ To enable the cloud engines:
      Get one from [Google AI Studio](https://aistudio.google.com/app/apikey).
 3. Save, then quit and reopen the app to apply them.
 
-## Step 6. Try your first dub
+### Step 6. Try your first dub
 
 1. Drop a short video file (mp4) onto the app.
 2. Pick the target language and press start.
@@ -89,7 +171,14 @@ To enable the cloud engines:
 | The build stops with an error | Re-running the script is safe (completed steps are skipped). If it still fails, screenshot the error in Terminal and [open an issue](https://github.com/stronghamjji/PersoDub/issues). |
 | The app won't open and shows a security warning | See "Open Anyway" in Step 4. |
 | The install was interrupted | Run the same command again — it resumes where it stopped. |
+| **Windows:** "Windows protected your PC" blocks the installer | Click **More info**, then **Run anyway**. See ["Windows protected your PC"](#windows-protected-your-pc). |
+| **Windows:** the app was force-quit and engines are still running | Start PersoDub again. It clears the leftovers as it launches. |
+| **Windows:** uninstalled, but the disk space is still gone | The engine kit is left behind on purpose. Delete `%LOCALAPPDATA%\PersoDub` by hand. |
 
 ## Updating to a new version later
 
-Run the **same one-line command** you installed with. It fetches the latest code, rebuilds, and replaces the app.
+**macOS.** Run the **same one-line command** you installed with. It fetches the latest code, rebuilds, and replaces the app.
+
+**Windows.** Download the newer `PersoDub-Setup-<version>.exe` from the
+[Releases page](https://github.com/stronghamjji/PersoDub/releases) and run it. Updates
+are not automatic on Windows while the build is unsigned.
