@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { join, dirname } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
@@ -13,6 +13,7 @@ import { extractTarGz } from "./src/extract.js";
 import { run } from "./src/exec.js";
 import { pullOllamaModel } from "./src/ollamaPull.js";
 import { resolveUpdateMode, resolveFeed } from "./src/updater.js";
+import { findForeignLockers } from "./src/lockCheck.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
@@ -226,6 +227,38 @@ app.whenReady().then(() => {
   ipcMain.on("shell:relaunch", () => { app.relaunch(); app.quit(); });
   ipcMain.on("shell:restart-to-update", async () => {
     if (!updateDownloaded) return; // stray click before a download finished
+    // Windows only: the NSIS updater replaces every file in the install dir
+    // and, when some OTHER program holds one open (an editor pinning
+    // app.asar, antivirus, backup tools), it fails AFTER the app has quit --
+    // behind a retry dialog that blames the app and can't succeed until the
+    // real culprit lets go. Ask the Restart Manager now, while there is
+    // still a window to name that program in. findForeignLockers fails open,
+    // so a broken probe can only ever skip the warning, never the update.
+    if (process.platform === "win32") {
+      const lockers = await findForeignLockers({
+        installDir: dirname(process.execPath),
+        ownExePath: process.execPath,
+      });
+      // One greppable line per check -- when a user reports the installer's
+      // file-in-use dialog anyway, this says what the pre-flight saw.
+      console.log(`PERSODUB_UPDATE lock check: ${lockers.length} foreign holder(s)${lockers.length > 0 ? " -- " + lockers.map((l) => l.exe || l.name).join(", ") : ""}`);
+      if (lockers.length > 0) {
+        const names = [...new Set(lockers.map((l) => l.name || l.exe))].join(", ");
+        const { response } = await dialog.showMessageBox(win, {
+          type: "warning",
+          title: "PersoDub update",
+          message: `Close ${names} first, then update`,
+          detail:
+            "That program is using files in PersoDub's installation folder, so the " +
+            "update would stall halfway through. Close it and click \"Restart to " +
+            "update\" again -- or choose Update anyway to try regardless.",
+          buttons: ["OK", "Update anyway"],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (response === 0) return;
+      }
+    }
     const { default: electronUpdater } = await import("electron-updater");
     // quitAndInstall bypasses will-quit in some paths -- stop the engines
     // explicitly first so no uvicorn is orphaned across the swap.
