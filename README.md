@@ -31,35 +31,27 @@ never leaves your computer.
 
 ## Installation
 
+Both platforms install the same way: **go to the
+[latest release](https://github.com/stronghamjji/PersoDub/releases/latest)** and
+download the file for your computer.
+
+| Your computer | File to download |
+|---|---|
+| Mac with Apple Silicon (M1 or newer) | `PersoDub-<version>-arm64.dmg` |
+| Windows 10 (21H2+) / 11, 64-bit | `PersoDub-Setup-<version>.exe` |
+
 ### macOS
 
-Apple Silicon Mac. There are two ways to install — pick either.
+Open the downloaded `.dmg` and drag **PersoDub** into your Applications folder. The
+app is signed and notarized, so it opens with a normal double-click, and it keeps
+itself up to date: on launch it checks for a newer release and offers to install it.
 
-#### Option 1 — Download the app (easiest)
-
-Download **`PersoDub-<version>-arm64.dmg`** from the
-[latest release](https://github.com/stronghamjji/PersoDub/releases/latest), open it,
-and drag **PersoDub** into your Applications folder. It is signed and notarized, so it
-opens with a normal double-click. Installed this way, the app keeps itself up to date:
-on launch it checks for a newer release and offers to install it.
-
-#### Option 2 — One line in Terminal
-
-Paste this into Terminal. It fetches the code, installs the prerequisites (including
-Node.js), builds the app, and launches it:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/stronghamjji/PersoDub/HEAD/install.sh | bash
-```
-
-This builds from source; to update later, re-run the same command. Prefer to go step by
-step, starting from installing git and Node.js? See **[INSTALL.md](INSTALL.md)**.
+Developers who prefer to build from source can follow
+[INSTALL.md](INSTALL.md#macos--install-from-source-for-developers).
 
 ### Windows (beta)
 
-Windows 10 (21H2 or newer) or Windows 11, 64-bit. Download
-**`PersoDub-Setup-<version>.exe`** from the
-[latest release](https://github.com/stronghamjji/PersoDub/releases/latest) and run it.
+Run the downloaded **`PersoDub-Setup-<version>.exe`**.
 It installs for your user account only, into `%LOCALAPPDATA%\Programs\PersoDub`, so no
 administrator rights are needed.
 
