@@ -16,7 +16,30 @@ Both end in the same place — [After installing](#after-installing).
 - macOS 11 (Big Sur) or later
 - 16 GB of memory (RAM) or more (24 GB recommended — the AI models use a lot of memory while dubbing)
 - An internet connection and at least 30 GB of free disk space
-- Time: about 30 minutes to install + 30 minutes to 2 hours for the automatic engine setup on first launch
+
+### Download and install
+
+1. Go to the [latest release](https://github.com/stronghamjji/PersoDub/releases/latest).
+2. Download **`PersoDub-<version>-arm64.dmg`**.
+3. Open the downloaded file and drag **PersoDub** into your **Applications** folder.
+4. Launch **PersoDub** from Applications. The app is signed and notarized, so it opens
+   with a normal double-click — no security warnings.
+
+On a first install, a "Setting up PersoDub" screen appears and the engines install
+automatically (30 minutes to 2 hours). It is safe to quit during this — reopening the
+app resumes where it left off. Installed this way, the app also keeps itself up to
+date: on launch it checks for a newer release and offers to install it.
+
+Next: [After installing](#after-installing).
+
+---
+
+## macOS — install from source (for developers)
+
+The download above is the recommended way to install. This path builds the app from
+the repository instead — use it if you want to work on PersoDub itself, or if you
+installed this way before (updates on this path arrive by re-running the same
+command).
 
 > Developer tools like Node.js are **prepared automatically by the install command** — no need to install them yourself.
 
@@ -178,9 +201,11 @@ To enable the cloud engines:
 
 ## Updating to a new version later
 
-**macOS.** Run the **same one-line command** you installed with. It fetches the latest code, rebuilds, and replaces the app.
+**On both platforms the app updates itself**: it checks for updates on launch,
+downloads them in the background, and offers **Restart to update** when one is
+ready. You can also update by hand anytime — download the newer file for your
+platform from the [latest release](https://github.com/stronghamjji/PersoDub/releases/latest)
+and install it over the existing app.
 
-**Windows.** The app checks for updates on launch and downloads them in the
-background; when one is ready it offers **Restart to update**. You can also
-update by hand anytime: download the newer `PersoDub-Setup-<version>.exe` from
-the [Releases page](https://github.com/stronghamjji/PersoDub/releases) and run it.
+**Installed from source on macOS?** Run the **same one-line command** you
+installed with. It fetches the latest code, rebuilds, and replaces the app.
