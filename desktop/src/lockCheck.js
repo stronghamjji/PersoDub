@@ -11,7 +11,7 @@
 // Everything here fails open: a broken probe returns "no lockers", because a
 // safety check must never be the thing that blocks an update.
 import { execFile } from "node:child_process";
-import { basename } from "node:path";
+import { win32 } from "node:path";
 
 // The Restart Manager lives behind a C API (rstrtmgr.dll); Node can't reach it
 // without a native module, so the probe is a PowerShell script using P/Invoke.
@@ -100,7 +100,10 @@ export function parseLockers(stdout) {
 // match on exe name, case-insensitively, since Windows paths aren't
 // case-sensitive.
 export function foreignLockers(lockers, ownExePath) {
-  const own = basename(String(ownExePath)).toLowerCase();
+  // win32.basename explicitly: ownExePath is always a Windows path, but the
+  // test suite also runs on Linux CI, where the platform default treats
+  // backslashes as ordinary characters.
+  const own = win32.basename(String(ownExePath)).toLowerCase();
   return lockers.filter((l) => l.exe.toLowerCase() !== own);
 }
 
