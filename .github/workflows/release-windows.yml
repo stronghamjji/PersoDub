@@ -8,10 +8,9 @@
 # other's upload.
 #
 # The Windows build is unsigned. SmartScreen will warn on first run; INSTALL.md
-# tells the user what to click. electron-updater verifies a signature before
-# applying an update, so automatic updates are expected NOT to work on Windows
-# until a certificate exists -- treat a Windows release as download-and-install
-# until then.
+# tells the user what to click. Automatic updates still work on the unsigned
+# build (verified end-to-end on a real 0.2.0 -> 0.3.0 update) -- a certificate
+# is only worth getting for SmartScreen reputation, not for the updater.
 name: Release Windows installer
 
 on:

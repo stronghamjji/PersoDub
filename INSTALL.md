@@ -174,11 +174,13 @@ To enable the cloud engines:
 | **Windows:** "Windows protected your PC" blocks the installer | Click **More info**, then **Run anyway**. See ["Windows protected your PC"](#windows-protected-your-pc). |
 | **Windows:** the app was force-quit and engines are still running | Start PersoDub again. It clears the leftovers as it launches. |
 | **Windows:** uninstalled, but the disk space is still gone | The engine kit is left behind on purpose. Delete `%LOCALAPPDATA%\PersoDub` by hand. |
+| **Windows:** during an update or reinstall, the installer says "PersoDub cannot be closed. Please close it manually and click Retry to continue." even though PersoDub isn't running, and **Retry** does nothing | Another program — a code editor, antivirus, or backup tool are common culprits — has a file inside the install folder open, so the installer can't replace it yet. Close anything that might be reading files in `%LOCALAPPDATA%\Programs\PersoDub` (or just restart Windows), then click **Retry**. You can also cancel and run the installer again afterward. |
 
 ## Updating to a new version later
 
 **macOS.** Run the **same one-line command** you installed with. It fetches the latest code, rebuilds, and replaces the app.
 
-**Windows.** Download the newer `PersoDub-Setup-<version>.exe` from the
-[Releases page](https://github.com/stronghamjji/PersoDub/releases) and run it. Updates
-are not automatic on Windows while the build is unsigned.
+**Windows.** The app checks for updates on launch and downloads them in the
+background; when one is ready it offers **Restart to update**. You can also
+update by hand anytime: download the newer `PersoDub-Setup-<version>.exe` from
+the [Releases page](https://github.com/stronghamjji/PersoDub/releases) and run it.
