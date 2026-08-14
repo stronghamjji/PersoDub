@@ -18,6 +18,54 @@ gets its own interpreter via environment variables (`SEP_PYTHON`,
 takes the core app down — the affected stage either falls back or fails
 cleanly on its own.
 
+## Getting started from a clone
+
+The releases page is the way to use PersoDub; this is the way to work on it.
+
+```bash
+git clone https://github.com/stronghamjji/PersoDub.git
+cd PersoDub
+```
+
+**The desktop app** (the Electron shell) lives in `desktop/` and needs Node.js 22
+or newer:
+
+```bash
+cd desktop
+npm install
+npm start
+```
+
+What `npm start` does depends on what it finds:
+
+- **A machine that already ran a packaged PersoDub** has the engine kit on disk
+  — `~/Library/Application Support/PersoDub` on macOS,
+  `%LOCALAPPDATA%\PersoDub` on Windows — and the app boots the full pipeline
+  with it. A kit in a non-default location can be pointed at with
+  `PERSODUB_KIT_DIR=/path/to/kit npm start`.
+- **A machine with no kit** gets the "not installed" screen: a dev checkout
+  carries no bundled payload, so nothing is downloaded. For UI work that is
+  usually what you want anyway — run against fakes instead:
+
+```bash
+PERSODUB_FAKE=1 npm start    # full UI, fake engines: no models, no downloads
+```
+
+(On Windows PowerShell, set variables as `$env:PERSODUB_FAKE="1"; npm start`.)
+
+**The backend** — the dubbing pipeline itself — runs separately from the shell;
+see [Running locally](#running-locally) below. It targets Python 3.11.
+
+**Tests:**
+
+```bash
+cd desktop && npm test       # desktop shell (node --test)
+.venv/bin/python -m pytest   # backend, from the repository root
+```
+
+Dev runs never update themselves: the auto-updater arms itself only in packaged
+builds.
+
 ## Dependent services
 
 | Service | Role | Required? | How the app finds it |
