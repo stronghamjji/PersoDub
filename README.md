@@ -29,50 +29,6 @@ never leaves your computer.
 
 ---
 
-## Installation
-
-Both platforms install the same way: **go to the
-[latest release](https://github.com/stronghamjji/PersoDub/releases/latest)** and
-download the file for your computer.
-
-| Your computer | File to download |
-|---|---|
-| Mac with Apple Silicon (M1 or newer) | `PersoDub-<version>-arm64.dmg` |
-| Windows 10 (21H2+) / 11, 64-bit | `PersoDub-Setup-<version>.exe` |
-
-### macOS
-
-Open the downloaded `.dmg` and drag **PersoDub** into your Applications folder. The
-app is signed and notarized, so it opens with a normal double-click, and it keeps
-itself up to date: on launch it checks for a newer release and offers to install it.
-
-Developers who prefer to build from source can follow
-[INSTALL.md](INSTALL.md#macos--install-from-source-for-developers).
-
-### Windows (beta)
-
-Run the downloaded **`PersoDub-Setup-<version>.exe`**.
-It installs for your user account only, into `%LOCALAPPDATA%\Programs\PersoDub`, so no
-administrator rights are needed.
-
-The Windows build is not code-signed yet, so SmartScreen shows **"Windows protected your
-PC"** the first time you run the installer. Click **More info**, then **Run anyway**.
-
-On either platform, the first launch downloads the AI models and runtimes — roughly
-19 GB on macOS, about 34 GB on Windows, where the kit carries the CUDA build of PyTorch
-(see [Requirements](#requirements)). On Windows the download took about 27 minutes on a
-fast connection. It happens once; [docs/usage.md](docs/usage.md#first-launch) shows what
-that screen looks like. On Windows the kit is stored in `%LOCALAPPDATA%\PersoDub`.
-
-Already installed? On macOS, launch **PersoDub** from your Applications folder, or from
-Terminal:
-
-```bash
-open -a PersoDub
-```
-
-On Windows, launch **PersoDub** from the Start menu.
-
 ## What is PersoDub?
 
 **Dub a video into another language in the original speaker's own voice — entirely on your desktop.**
@@ -150,16 +106,60 @@ https://github.com/user-attachments/assets/fac60bb8-a18b-47ec-a9c8-c1a4509fa4fb
 </table>
 
 Listen for pacing: PersoDub's lines land inside their original time slots without
-speeding the audio up — the difference the [next section](#why-persodub) explains.
+speeding the audio up — the difference explained in [Why PersoDub](#why-persodub).
 The source files live in [docs/demo](docs/demo).
 
 ---
 
+## Installation
+
+Both platforms install the same way: **go to the
+[latest release](https://github.com/stronghamjji/PersoDub/releases/latest)** and
+download the file for your computer.
+
+| Your computer | File to download |
+|---|---|
+| Mac with Apple Silicon (M1 or newer) | `PersoDub-<version>-arm64.dmg` |
+| Windows 10 (21H2+) / 11, 64-bit | `PersoDub-Setup-<version>.exe` |
+
+### macOS
+
+Open the downloaded `.dmg` and drag **PersoDub** into your Applications folder. The
+app is signed and notarized, so it opens with a normal double-click, and it keeps
+itself up to date: on launch it checks for a newer release and offers to install it.
+
+Developers who prefer to build from source can follow
+[INSTALL.md](INSTALL.md#macos--install-from-source-for-developers).
+
+### Windows (beta)
+
+Run the downloaded **`PersoDub-Setup-<version>.exe`**.
+It installs for your user account only, into `%LOCALAPPDATA%\Programs\PersoDub`, so no
+administrator rights are needed.
+
+The Windows build is not code-signed yet, so SmartScreen shows **"Windows protected your
+PC"** the first time you run the installer. Click **More info**, then **Run anyway**.
+
+On either platform, the first launch downloads the AI models and runtimes — roughly
+19 GB on macOS, about 34 GB on Windows, where the kit carries the CUDA build of PyTorch
+(see [Requirements](#requirements)). On Windows the download took about 27 minutes on a
+fast connection. It happens once; [docs/usage.md](docs/usage.md#first-launch) shows what
+that screen looks like. On Windows the kit is stored in `%LOCALAPPDATA%\PersoDub`.
+
+Already installed? On macOS, launch **PersoDub** from your Applications folder, or from
+Terminal:
+
+```bash
+open -a PersoDub
+```
+
+On Windows, launch **PersoDub** from the Start menu.
+
 ## Table of contents
 
-- [Installation](#installation)
 - [What is PersoDub?](#what-is-persodub)
 - [Hear the difference](#hear-the-difference)
+- [Installation](#installation)
 - [Why PersoDub](#why-persodub)
 - [Where PersoDub fits](#where-persodub-fits)
 - [How it works](#how-it-works)
