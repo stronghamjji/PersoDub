@@ -75,7 +75,7 @@ def test_campplus_labels_written_into_src_cues(monkeypatch, tmp_path):
     assert captured["ref_labels"] == ["SPK0", "SPK1"]
 
 
-# test_no_diar_engine_leaves_cues_untouched used to live here (OmniVoice-container
+# test_no_diar_engine_leaves_cues_untouched used to live here (container-based
 # transcription already carried speaker labels, so diar_engine stayed unset). That
 # STT source no longer exists -- the equivalent guarantee ("diarize() must not run
 # when speaker labels are already known") is now covered by

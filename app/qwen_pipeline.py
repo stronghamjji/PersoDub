@@ -2,7 +2,7 @@
 
 Called by app/pipeline.py's run_dub(), which drives STT (Perso/local Whisper) and
 local Demucs separation (app/separate.py) upstream and hands this module the
-resulting vocals/background tracks directly -- no OmniVoice container involved
+resulting vocals/background tracks directly -- no third-party container involved
 anywhere in this app (removed: CC-BY-NC weights + AGPL studio, incompatible with
 a commercial product).
 

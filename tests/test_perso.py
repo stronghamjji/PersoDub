@@ -283,8 +283,8 @@ def test_pick_speaker_spans_respects_max_total():
 
 
 # ── 4. Pipeline branch: see tests/test_stt_engine_wiring.py -----------------
-# (the OmniVoice-profile "pipeline uses perso branch" / "falls back on failure"
-# tests that used to live here tested the now-deleted OmniVoice-container
+# (the "pipeline uses perso branch" / "falls back on failure" tests that used
+# to live here tested the now-deleted container-based
 # generate/profile-registration path -- the Perso-vs-local-Whisper STT chain
 # itself is covered there, against the current Qwen-only pipeline.)
 

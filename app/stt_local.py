@@ -1,4 +1,4 @@
-"""Local Whisper STT (no-API-key fallback, no OmniVoice container dependency).
+"""Local Whisper STT (no-API-key fallback, no container dependency).
 
 Subprocess bridge to app/scripts/whisper_transcribe.py -- the app's own Python
 3.8 venv doesn't have faster-whisper/ctranslate2 installed, so transcription
