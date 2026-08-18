@@ -5,9 +5,8 @@ inside the dedicated STT venv -- see app/stt_local.py, STT_PYTHON).
 Uses faster-whisper (CTranslate2 backend) against a local model directory --
 no network access needed at runtime, matching the offline-firewall constraint
 (HuggingFace CDN is blocked for weight downloads from this host). The model
-directory is the same faster-whisper-large-v3 weights the OmniVoice container
-uses for its Whisper fallback, copied out via `docker cp` (never modifies the
-container).
+directory holds the faster-whisper-large-v3 weights the installer downloads
+into the kit (WHISPER_MODEL_DIR in kit.env).
 
 Usage:
   python whisper_transcribe.py --audio in.wav --output out.json [--language en] [--word-timestamps]

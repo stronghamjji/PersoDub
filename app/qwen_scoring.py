@@ -1,9 +1,8 @@
 """Subprocess bridge to app/scripts/qwen_score_takes.py (the CAM++/whisper take
 scorer). The app's own Python 3.8 venv has neither onnxruntime nor torch, so
 scoring runs as a separate process under QWEN_SCORER_PYTHON (config.py) --
-same "docker exec a heavy tool, parse its JSON" convention app/quality.py uses
-for the OmniVoice container, just with a local venv interpreter instead of
-docker exec.
+same "run a heavy tool in its own process, parse its JSON" convention
+app/quality.py uses, just with a local venv interpreter instead of a container.
 
 Graceful degradation is the whole point of this module: any failure (missing
 interpreter, missing script, subprocess crash/timeout, bad JSON, or the

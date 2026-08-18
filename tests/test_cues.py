@@ -1,6 +1,6 @@
-"""Pure-function quality helpers that survive OmniVoice's removal -- used by the
-Qwen3-TTS dub path (app/qwen_pipeline.py). Everything that used to talk to the
-OmniVoice container (docker exec) has been deleted along with the container itself.
+"""Pure-function quality helpers used by the Qwen3-TTS dub path
+(app/qwen_pipeline.py). Everything that used to talk to a container (docker exec)
+has been deleted along with the container itself.
 """
 
 import pytest

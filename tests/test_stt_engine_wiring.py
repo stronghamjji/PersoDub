@@ -1,6 +1,6 @@
 """run_dub STT-engine chain: Perso (if requested) -> local Whisper only.
 
-The OmniVoice-container STT link has been removed entirely -- there is no more
+The container-based STT link has been removed entirely -- there is no more
 "default = container transcription, fall back to local Whisper only on failure"
 middle step. Either Perso runs (falling back to local Whisper on failure), or
 local Whisper runs directly (the default, and what stt_engine="local" also

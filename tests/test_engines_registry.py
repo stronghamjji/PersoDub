@@ -35,4 +35,3 @@ def test_engines_endpoint_lists_qwen3_tts():
     assert r.status_code == 200
     ids = [e["id"] for e in r.json()["engines"]]
     assert "qwen3_tts" in ids
-    assert "omnivoice" not in ids

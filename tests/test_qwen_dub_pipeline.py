@@ -1,5 +1,5 @@
 """run_dub's Qwen3-TTS synthesis wiring + the local job-workspace/SRT bookkeeping
-that replaced the OmniVoice container's upload()/import_srt() (fakes only -- no
+that replaced the old container client's upload()/import_srt() (fakes only -- no
 container, no ffmpeg, no GPU). Qwen3-TTS is the app's only TTS engine now.
 """
 import os
@@ -160,7 +160,7 @@ def test_run_dub_passes_local_separation_paths_to_run_qwen_dub(monkeypatch, tmp_
 
 
 def test_local_separation_failure_aborts_job_with_no_fallback(monkeypatch, tmp_path):
-    # There is no more OmniVoice container to fall back to -- a local separation
+    # There is no container to fall back to -- a local separation
     # failure must fail the whole job loudly instead of silently degrading.
     monkeypatch.setattr(pipeline, "SeparationEngine", _FailingSeparationEngine)
 
@@ -281,7 +281,7 @@ def test_step4_log_shows_the_quality_mode(monkeypatch, tmp_path):
                for m in logs_high)
 
 
-# --- local job workspace + SRT bookkeeping (replaces OmniClient.upload/import_srt) --
+# --- local job workspace + SRT bookkeeping (replaces the old upload/import_srt) --
 
 def test_job_id_is_a_local_uuid_not_a_container_job(monkeypatch, tmp_path):
     _stub_qwen_io(monkeypatch)
@@ -303,7 +303,7 @@ def test_job_id_is_a_local_uuid_not_a_container_job(monkeypatch, tmp_path):
 
 def test_segments_are_parsed_locally_from_the_srt_file(monkeypatch, tmp_path):
     # Two-line SRT -> segments must come from app.text.srt.parse_srt directly
-    # (no OmniClient.import_srt round-trip -- that class no longer exists).
+    # (no container import_srt round-trip -- that client no longer exists).
     _stub_qwen_io(monkeypatch)
     monkeypatch.setattr(pipeline, "_video_duration", lambda path: 4.0)
     monkeypatch.setattr(pipeline, "_mux", _fake_mux)

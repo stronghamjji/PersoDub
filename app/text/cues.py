@@ -1,10 +1,8 @@
 """Dubbing quality helpers used by the Qwen3-TTS dub path (app/qwen_pipeline.py).
 
-OmniVoice (and its container-exec tools) has been removed entirely from this app --
-OmniVoice's weights are CC-BY-NC (non-commercial) and its studio is AGPL, neither of
-which is compatible with a commercial product. Only the pure/local helpers the Qwen
-path actually uses survive here; everything that talked to the OmniVoice container
-(docker exec) or its /generate API has been deleted.
+Only the pure/local helpers the Qwen path actually uses live here. The
+container-exec tooling that once sat alongside them -- and its /generate API
+client -- has been removed entirely.
 """
 import os
 from typing import List, Optional
@@ -13,8 +11,8 @@ REF_PAD_SECONDS = 0.4
 
 
 def _check_docker_allowed() -> None:
-    """Containerless tripwire. Nothing in this app calls docker anymore -- OmniVoice
-    is fully removed -- but this guard stays in place (default ON) so that any future
+    """Containerless tripwire. Nothing in this app calls docker anymore, but this
+    guard stays in place (default ON) so that any future
     docker/container call fails loudly instead of silently reintroducing an
     unlicensed dependency. Set PERSODUB_FORBID_DOCKER=0 to disable (debugging only)."""
     if os.environ.get("PERSODUB_FORBID_DOCKER", "1") != "0":
@@ -96,7 +94,7 @@ def ref_text_from_spans(cues: List[dict], spans: list) -> str:
     return " ".join(c["text"].strip() for c in use)
 
 
-# Same rule as the old OmniVoice assembly (concise) -- we don't cut audio that can
+# Same rule as the previous assembly step (concise) -- we don't cut audio that can
 # spill into the silence before the next line either (prevents clipped speech)
 GAP_SPILL_BUFFER = 0.05  # headroom (seconds) kept so it doesn't overlap the next line
 GAP_SPILL_MAX = 0.4      # maximum time (seconds) allowed to spill into the silence (aligned with srt_utils.BORROW_SPILL)

@@ -2,9 +2,8 @@
 
 Video + translated subtitles (SRT) -> finished dubbed video (mp4).
 If no subtitles are provided: transcribe -> Gemini translation -> dub (auto-translate mode).
-Every stage runs locally or through our own Qwen3-TTS sidecar -- no OmniVoice container
-anywhere in this app (OmniVoice's weights are CC-BY-NC and its studio is AGPL, both
-incompatible with a commercial product).
+Every stage runs locally or through our own Qwen3-TTS sidecar -- no third-party
+container anywhere in this app.
 """
 import os
 import subprocess
@@ -318,7 +317,7 @@ def run_dub(
     """
     log = log or (lambda m: None)
 
-    # 1. Local job workspace (uuid tag for scratch filenames; no OmniVoice upload/job)
+    # 1. Local job workspace (uuid tag for scratch filenames; nothing is uploaded)
     job_id = uuid.uuid4().hex[:8]
     work_dir = os.path.dirname(out_path) or tempfile.gettempdir()
     os.makedirs(work_dir, exist_ok=True)
@@ -326,7 +325,7 @@ def run_dub(
     _check_cancel(cancel_check, log)
 
     # 1b. Local Demucs separation -- mandatory, no container fallback. A failure
-    # here fails the whole job rather than silently falling back to OmniVoice.
+    # here fails the whole job rather than silently falling back to a remote service.
     log("1/6 Separating background audio locally (Demucs)…")
     try:
         sep_paths = SeparationEngine().separate(video_path, work_dir)
