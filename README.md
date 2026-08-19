@@ -8,7 +8,7 @@ never leaves your computer.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
-[![Version](https://img.shields.io/badge/version-0.3.1-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
+[![Version](https://img.shields.io/badge/version-0.3.2-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
 [![Privacy](https://img.shields.io/badge/privacy-100%25%20local%20by%20default-brightgreen.svg)](#data-and-privacy)
 
 <p>
@@ -41,7 +41,7 @@ original soundtrack. With the default settings, every one of those steps runs lo
 <img src="docs/images/advanced-options.png" width="100%"
      alt="PersoDub main window with Advanced options expanded: a drop zone for the video, pickers for speech-to-text, original language, target language and voice quality, and below them the translation engine, the text-to-speech engine, and the number of speakers.">
 
-> **Status: early release (v0.3.1).** PersoDub is usable today and is under active
+> **Status: early release (v0.3.2).** PersoDub is usable today and is under active
 > development. macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
 > Interfaces and defaults may change. Please report problems through
 > [Issues](https://github.com/stronghamjji/PersoDub/issues).
