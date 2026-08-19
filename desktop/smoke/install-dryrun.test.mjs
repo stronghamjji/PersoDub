@@ -72,7 +72,11 @@ test("full install dry run completes, satisfies checkKit, and resumes as all-ski
         mkdirSync(dir, { recursive: true });
         if (dir.includes("HTDemucs")) writeFileSync(join(dir, "955717e8.safetensors"), "");
         if (dir.includes("whisper")) writeFileSync(join(dir, "model.bin"), "");
-        if (dir.includes("qwen3-tts")) writeFileSync(join(dir, "config.json"), "");
+        if (dir.includes("qwen3-tts")) {
+          mkdirSync(join(dir, "speech_tokenizer"), { recursive: true });
+          writeFileSync(join(dir, "model.safetensors"), "");
+          writeFileSync(join(dir, "speech_tokenizer", "model.safetensors"), "");
+        }
       }
       if (joined.includes("whisper.load_model")) {
         mkdirSync(join(cacheDir, "whisper"), { recursive: true });
