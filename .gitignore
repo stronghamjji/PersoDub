@@ -61,3 +61,6 @@ dub.sh
 
 # ---- Internal design docs (never publish) ----
 docs/superpowers/
+
+# ---- Wrangler local state (holds account info; never commit) ----
+.wrangler/

@@ -1,0 +1,13 @@
+{
+  "name": "persodub-count",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-19",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "persodub_count",
+      "database_name": "persodub-count",
+      "database_id": "b69f7d89-2e08-4115-8ff1-e75b8beab8cd"
+    }
+  ]
+}
