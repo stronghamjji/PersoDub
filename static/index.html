@@ -1492,6 +1492,10 @@ async function handleJobUpdate(job) {
   entry.metaText = job.status === "done" ? "Done" : job.status === "cancelled" ? "Cancelled" : "Failed";
   upsertHistory(entry);
 
+  // Desktop only: in a plain browser persodubShell is undefined and nothing is
+  // counted, which is the intended behaviour -- the counts describe app installs.
+  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(-6).join("\n"));
+
   if (job.status === "done") {
     await renderExport(job);
   } else {

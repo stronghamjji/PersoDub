@@ -8,7 +8,7 @@
 const EVENTS = new Set(["app_launch", "dub_success", "dub_failure", "install_failure"]);
 const PLATFORMS = new Set(["mac", "windows"]);
 const ERROR_CODES = new Set([
-  "path-too-long", "disk-full", "network", "permission",
+  "path-too-long", "disk-full", "network", "permission", "engine-start",
   "out-of-memory", "unsupported-format", "engine-crash",
   "unknown",
 ]);

@@ -12,4 +12,8 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // banner and the button hands control back here to apply it.
   onUpdateReady: (cb) => ipcRenderer.on("shell:update-ready", (_e, info) => cb(info)),
   restartToUpdate: () => ipcRenderer.send("shell:restart-to-update"),
+  // Usage counts for finished dubs. The page hands over the raw log tail
+  // because it cannot classify it -- main.js turns that into one published
+  // word and drops the text. Nothing here reaches the network.
+  countDub: (status, detail) => ipcRenderer.send("shell:count-dub", { status, detail }),
 });
