@@ -55,29 +55,41 @@ export const GEMMA_MANIFEST = [
 // Each model is pinned to a HuggingFace commit (--revision) the way the
 // Python/CAM++/Ollama downloads are pinned by SHA-256: an upstream repo
 // takeover or force-push must not change what lands on user machines.
+// markers list every weight file a model needs, never the small config files
+// beside them: hf writes each download to a temp name and renames it only
+// once complete, so a weight present at its real path is a finished file --
+// while a config.json arrives seconds in and proves nothing about the rest.
 const MODELS = [
   {
     name: "Demucs (81 MB)",
     dir: ["models", "demucs", "HTDemucs"],
-    marker: ["models", "demucs", "HTDemucs", "955717e8.safetensors"],
+    markers: [["models", "demucs", "HTDemucs", "955717e8.safetensors"]],
     args: ["adefossez/HTDemucs", "htdemucs.yaml", "955717e8.safetensors"],
     revision: "bf35a81b663819a8255c8fefee17f9d812b786b5",
   },
   {
     name: "Whisper large-v3 (2.9 GB)",
     dir: ["models", "whisper", "faster-whisper-large-v3"],
-    marker: ["models", "whisper", "faster-whisper-large-v3", "model.bin"],
+    markers: [["models", "whisper", "faster-whisper-large-v3", "model.bin"]],
     args: ["Systran/faster-whisper-large-v3"],
     revision: "edaa852ec7e145841d8ffdb056a99866b5f0a478",
   },
   {
     name: "Qwen3-TTS (4.3 GB)",
     dir: ["models", "qwen3-tts"],
-    marker: ["models", "qwen3-tts", "config.json"],
+    markers: [
+      ["models", "qwen3-tts", "model.safetensors"],
+      ["models", "qwen3-tts", "speech_tokenizer", "model.safetensors"],
+    ],
     args: ["Qwen/Qwen3-TTS-12Hz-1.7B-Base"],
     revision: "fd4b254389122332181a7c3db7f27e918eec64e3",
   },
 ];
+
+// The same paths engineCheck requires at boot -- one list, so "the install is
+// done" and "the kit is usable" can never disagree the way they did when only
+// this file knew about the models.
+export const MODEL_MARKERS = MODELS.flatMap((m) => m.markers);
 
 // Mirrors openai-whisper's own load_model() default: XDG_CACHE_HOME (if set)
 // joined with "whisper", else ~/.cache/whisper -- verified against the
@@ -172,6 +184,7 @@ function withMissingKitEnvKeys(text) {
 
 export function buildSteps(ctx) {
   const k = (...p) => join(ctx.kitDir, ...p);
+  const modelDone = (m) => m.markers.every((rel) => existsSync(k(...rel)));
   const py = standalonePython(k("python"));
   // Per-platform pinned dependency lists (bundled by collect-payload.mjs).
   const reqSuffix = IS_WIN ? "win" : "mac";
@@ -306,11 +319,11 @@ export function buildSteps(ctx) {
     {
       id: "models",
       title: "Downloading AI models (~7 GB)",
-      isDone: () => MODELS.every((m) => existsSync(k(...m.marker))),
+      isDone: () => MODELS.every(modelDone),
       run: async (report) => {
         const hf = venvBin(k("qwen_venv"), "hf");
         for (const m of MODELS) {
-          if (existsSync(k(...m.marker))) continue;
+          if (modelDone(m)) continue;
           report(null, `Downloading ${m.name}`);
           mkdirSync(k(...m.dir), { recursive: true });
           await ctx.run([hf, "download", ...m.args, "--revision", m.revision, "--local-dir", k(...m.dir)], {

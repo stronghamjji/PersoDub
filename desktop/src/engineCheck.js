@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { venvBin, exeName } from "./platform.js";
 import { KIT_ENV } from "./kitEnv.js";
+import { MODEL_MARKERS } from "./installSpec.js";
 
 export const REQUIRED = [
   KIT_ENV,
@@ -17,6 +18,11 @@ export const REQUIRED = [
   // Paths mirror installSpec.js's ollama step (binary + GEMMA_MANIFEST).
   join("ollama", exeName("ollama")),
   "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b",
+  // The HuggingFace models, taken straight from installSpec's own list rather
+  // than copied: the TTS weights went missing from a half-finished install and
+  // nothing here noticed, so boot kept starting a sidecar with no model and
+  // never sent the user back to the installer that would have finished it.
+  ...MODEL_MARKERS.map((rel) => join(...rel)),
 ];
 
 // Reads a KIT_VERSION file (a kit's own, or the app's bundled payload's --

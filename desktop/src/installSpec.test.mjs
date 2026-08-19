@@ -220,7 +220,11 @@ test("models step skips models whose marker exists", async () => {
     const dir = argv[dirIdx];
     mkdirSync(dir, { recursive: true });
     if (dir.includes("whisper")) writeFileSync(join(dir, "model.bin"), "");
-    if (dir.includes("qwen3-tts")) writeFileSync(join(dir, "config.json"), "");
+    if (dir.includes("qwen3-tts")) {
+      mkdirSync(join(dir, "speech_tokenizer"), { recursive: true });
+      writeFileSync(join(dir, "model.safetensors"), "");
+      writeFileSync(join(dir, "speech_tokenizer", "model.safetensors"), "");
+    }
   };
   const step = byId(ctx).models;
   assert.equal(await step.isDone(), false);
@@ -228,6 +232,50 @@ test("models step skips models whose marker exists", async () => {
   assert.equal(hfCalls.length, 2, "demucs must be skipped");
   assert.ok(hfCalls.every((a) => !a.join(" ").includes("HTDemucs")));
   assert.equal(await step.isDone(), true);
+});
+
+// The TTS model's only marker used to be config.json -- 4.5 KB that lands
+// seconds into a 4.3 GB download. An install killed just after it left the
+// step "done" forever: this isDone skipped the model on every later run, and
+// engineCheck (which never looked at model files) reported the kit installed,
+// so boot went straight to a sidecar with no weights and failed every time.
+test("models step is not done until every model's weight file exists", () => {
+  const ctx = freshCtx();
+  const put = (...rel) => {
+    mkdirSync(join(ctx.kitDir, ...rel.slice(0, -1)), { recursive: true });
+    writeFileSync(join(ctx.kitDir, ...rel), "");
+  };
+  put("models", "demucs", "HTDemucs", "955717e8.safetensors");
+  put("models", "whisper", "faster-whisper-large-v3", "model.bin");
+  put("models", "qwen3-tts", "config.json");
+  assert.equal(byId(ctx).models.isDone(), false, "config.json alone is not the model");
+  put("models", "qwen3-tts", "model.safetensors");
+  assert.equal(byId(ctx).models.isDone(), false, "speech_tokenizer weights still missing");
+  put("models", "qwen3-tts", "speech_tokenizer", "model.safetensors");
+  assert.equal(byId(ctx).models.isDone(), true);
+});
+
+test("models step re-downloads the TTS model when only its config landed", async () => {
+  const ctx = freshCtx();
+  const put = (...rel) => {
+    mkdirSync(join(ctx.kitDir, ...rel.slice(0, -1)), { recursive: true });
+    writeFileSync(join(ctx.kitDir, ...rel), "");
+  };
+  put("models", "demucs", "HTDemucs", "955717e8.safetensors");
+  put("models", "whisper", "faster-whisper-large-v3", "model.bin");
+  put("models", "qwen3-tts", "config.json");
+  const hfCalls = [];
+  ctx.run = async (argv) => {
+    hfCalls.push(argv);
+    const dir = argv[argv.indexOf("--local-dir") + 1];
+    mkdirSync(join(dir, "speech_tokenizer"), { recursive: true });
+    writeFileSync(join(dir, "model.safetensors"), "");
+    writeFileSync(join(dir, "speech_tokenizer", "model.safetensors"), "");
+  };
+  await byId(ctx).models.run(() => {});
+  assert.equal(hfCalls.length, 1, "only the TTS model is re-downloaded");
+  assert.ok(hfCalls[0].join(" ").includes("Qwen/Qwen3-TTS"), hfCalls[0].join(" "));
+  assert.equal(byId(ctx).models.isDone(), true);
 });
 
 // A missing "base" model means every laugh/breath in a dub gets silently

@@ -66,6 +66,17 @@ test("kit missing the pulled Gemma model is not installed", () => {
   assert.deepEqual(res.missing, [manifest]);
 });
 
+// The TTS weights sat outside this check too, so the half-finished install
+// above (installSpec's config.json marker) also passed boot: no model, no
+// working sidecar, and no way back to the installer short of a reinstall.
+test("kit missing the TTS weights is not installed", () => {
+  const weights = join("models", "qwen3-tts", "model.safetensors");
+  const dir = makeKit(REQUIRED.filter((p) => p !== weights), { version: "1.0.0+abc1234" });
+  const res = checkKit(dir, "1.0.0+abc1234");
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.missing, [weights]);
+});
+
 test("nonexistent kitDir reports everything missing", () => {
   const res = checkKit("/nonexistent/kit", "1.0.0+abc1234");
   assert.equal(res.ok, false);
