@@ -341,16 +341,14 @@ the check off entirely.
 
 ### Usage counts
 
-PersoDub reports four events — app launch, dub finished, dub failed, install failed — so
-the project can tell how many installs actually finish a dub. Each report carries the app
-version, your operating system, a random install ID, and for a failure one short code off
-a fixed list. It never sends video, audio, subtitles, filenames, paths, or the text of an
-error. IP addresses are not stored.
+PersoDub reports four events — app launch, dub finished, dub failed, install failed —
+to see how many installs finish a dub. Each carries the app version, your operating
+system, a random install ID, and on a failure one short code off a fixed list. Never
+your video, audio, subtitles, filenames, paths or error text; no IP address is stored.
 
-A launch counts once a day; every dub counts. Turn it off with the switch in
-**Settings → Privacy**, or by setting `PERSODUB_NO_ANALYTICS=1` in the kit's `kit.env` —
-either way it applies to the next event, with no restart. To see exactly what would be
-sent without sending it, set `PERSODUB_ANALYTICS_DEBUG=1`.
+A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
+with `PERSODUB_NO_ANALYTICS=1` in the kit's `kit.env`; it applies to the next event, no
+restart. `PERSODUB_ANALYTICS_DEBUG=1` prints what would be sent instead of sending it.
 
 ## Responsible use
 
