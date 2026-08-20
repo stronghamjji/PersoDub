@@ -264,21 +264,6 @@
     font-size: 0.8rem; font-weight: 600; cursor: pointer;
     background: var(--background); color: var(--foreground); }
 
-  /* One-time usage-counts notice. Every existing install was made on a README
-     that said "no telemetry" and an auto-update changes that quietly, so this
-     is what stops the change from being silent. A line, not a modal: it must
-     not stand between anyone and their work. */
-  .notice-banner { position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
-    display: none; align-items: center; gap: 10px; padding: 10px 16px;
-    background: var(--foreground); color: var(--background); border-radius: 999px;
-    font-size: 0.82rem; box-shadow: 0 4px 14px rgba(0,0,0,0.25); z-index: 60; }
-  .notice-banner.shown { display: flex; }
-  .notice-banner button { border: none; border-radius: 999px; padding: 6px 12px;
-    font-size: 0.8rem; font-weight: 600; cursor: pointer;
-    background: var(--background); color: var(--foreground); }
-  .notice-banner .close { background: transparent; color: var(--background);
-    padding: 6px 6px; font-size: 1rem; line-height: 1; }
-
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 0.84rem; font-weight: 600; cursor: pointer; font-family: inherit; }
   .btn-primary { background: var(--primary); color: var(--primary-foreground); }
   .btn-primary:hover { box-shadow: var(--focus-ring); }
@@ -372,15 +357,6 @@
   .save-note { font-size: 0.76rem; color: var(--success); margin-right: auto; align-self: center; visibility: hidden; }
   .save-note.shown { visibility: visible; }
 </style>
-
-<!-- Shown by the desktop shell on the first run that actually reports; a
-     machine with counts already off is never shown it (see analytics.js). -->
-<div class="notice-banner" id="usageNotice">
-  <span id="usageNoticeText">PersoDub now sends anonymous usage counts.</span>
-  <button type="button" id="usageNoticeDetails">Details</button>
-  <button type="button" id="usageNoticeOff">Turn off</button>
-  <button type="button" class="close" id="usageNoticeClose" aria-label="Dismiss">&times;</button>
-</div>
 
 <div class="app">
   <!-- ============ Rail ============ -->
@@ -1131,21 +1107,6 @@ if (window.persodubShell?.onUpdateReady) {
     el.querySelector("span").textContent =
       `Version ${info.version || "update"} is ready.`;
     el.classList.add("shown");
-  });
-}
-
-// ---------------- One-time usage-counts notice (desktop shell only) ----------------
-// The shell decides whether this is due and remembers that it was shown, so
-// the page only has to display it and act on the buttons.
-if (window.persodubShell?.onUsageNotice) {
-  const hide = () => $("usageNotice").classList.remove("shown");
-  window.persodubShell.onUsageNotice(() => $("usageNotice").classList.add("shown"));
-  $("usageNoticeClose").addEventListener("click", hide);
-  $("usageNoticeDetails").addEventListener("click", () => { hide(); openSettings(); });
-  $("usageNoticeOff").addEventListener("click", async () => {
-    if (await setUsageCounts(false)) { hide(); return; }
-    // A failed save must not look like a successful one.
-    $("usageNoticeText").textContent = "Could not turn it off -- try Settings.";
   });
 }
 

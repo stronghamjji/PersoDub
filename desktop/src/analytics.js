@@ -119,42 +119,6 @@ export function saveState(file, { device, lastDay = null }) {
 }
 
 /**
- * The one-time notice. Every existing install was made on a README that said
- * "no telemetry", and an auto-update changes that without anyone reading
- * anything -- this is what stops the change from being silent.
- *
- * It is shown only on a run that actually reports. On a machine that has
- * already turned counts off, and on a debug run that only prints them, the
- * sentence the notice states would simply not be true.
- */
-export function shouldShowNotice({ mode, seen }) {
-  return mode === "on" && !seen;
-}
-
-/**
- * Whether this install has been shown the notice. Unreadable counts as not
- * shown: repeating a notice is a nuisance, never showing it is the failure
- * that matters.
- */
-export function noticeSeen(file) {
-  try {
-    return JSON.parse(readFileSync(file, "utf8"))?.usageCounts === true;
-  } catch {
-    return false;
-  }
-}
-
-/** Remember it was shown. A failure here costs the mark, not the launch. */
-export function markNoticeSeen(file) {
-  try {
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({ usageCounts: true }));
-  } catch {
-    // Same bargain as saveState: a read-only or full disk is not worth a word.
-  }
-}
-
-/**
  * The single call the app makes. Everything a caller could get wrong -- the off
  * switches, the once-a-day rule, persistence, timeouts, failure -- is settled
  * here so a call site is one line that cannot misbehave.

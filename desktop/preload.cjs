@@ -16,7 +16,4 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // because it cannot classify it -- main.js turns that into one published
   // word and drops the text. Nothing here reaches the network.
   countDub: (status, detail) => ipcRenderer.send("shell:count-dub", { status, detail }),
-  // The one-time notice that counting started. The shell decides whether it is
-  // due (it owns the mark that makes it once-only); the page only shows it.
-  onUsageNotice: (cb) => ipcRenderer.on("shell:usage-notice", () => cb()),
 });
