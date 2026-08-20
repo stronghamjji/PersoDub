@@ -14,7 +14,8 @@ import { run } from "./src/exec.js";
 import { pullOllamaModel } from "./src/ollamaPull.js";
 import { resolveUpdateMode, resolveFeed } from "./src/updater.js";
 import { findForeignLockers } from "./src/lockCheck.js";
-import { resolveAnalyticsMode, countEvent, classifyError } from "./src/analytics.js";
+import { resolveAnalyticsMode, countEvent, classifyError,
+         shouldShowNotice, noticeSeen, markNoticeSeen } from "./src/analytics.js";
 import { IS_WIN } from "./src/platform.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -29,17 +30,24 @@ let bootedKitDir = null;   // for the dub counts, which arrive long after boot
 // endpoint or a full disk costs a number and nothing else.
 const COUNT_ENDPOINT = "https://persodub-count.persodub.workers.dev";
 
+// Read fresh every time: the Settings switch writes PERSODUB_NO_ANALYTICS into
+// this same file, so turning counts off takes effect on the very next event
+// instead of waiting for a restart.
+function analyticsMode(kitDir) {
+  // The off switch lives in the kit's kit.env beside the user's other
+  // settings, the same place the update check reads its own -- a GUI app's
+  // process.env never carries it.
+  let env = process.env;
+  const kitEnvPath = kitDir ? join(kitDir, KIT_ENV) : null;
+  if (kitEnvPath && existsSync(kitEnvPath)) {
+    env = { ...process.env, ...parseEnvFile(readFileSync(kitEnvPath, "utf8")) };
+  }
+  return resolveAnalyticsMode({ isPackaged: app.isPackaged, env });
+}
+
 function countUsage(event, kitDir, errorCode) {
   try {
-    // The off switch lives in the kit's kit.env beside the user's other
-    // settings, the same place the update check reads its own -- a GUI app's
-    // process.env never carries it.
-    let env = process.env;
-    const kitEnvPath = kitDir ? join(kitDir, KIT_ENV) : null;
-    if (kitEnvPath && existsSync(kitEnvPath)) {
-      env = { ...process.env, ...parseEnvFile(readFileSync(kitEnvPath, "utf8")) };
-    }
-    const mode = resolveAnalyticsMode({ isPackaged: app.isPackaged, env });
+    const mode = analyticsMode(kitDir);
     if (mode === "off") return;
     void countEvent(event, {
       mode,
@@ -50,6 +58,18 @@ function countUsage(event, kitDir, errorCode) {
       errorCode,
     });
   } catch { /* a count is never worth interrupting a launch for */ }
+}
+
+// Tell this machine, once, that counting started. Marked as shown the moment
+// it is sent: the notice blocks nothing, so ignoring it is an answer, and a
+// line that keeps coming back would be the nag this is designed not to be.
+function showUsageNotice(win, kitDir) {
+  try {
+    const file = join(app.getPath("userData"), "notices.json");
+    if (!shouldShowNotice({ mode: analyticsMode(kitDir), seen: noticeSeen(file) })) return;
+    markNoticeSeen(file);
+    win.webContents.send("shell:usage-notice");
+  } catch { /* the same bargain as the counts: never worth interrupting a launch */ }
 }
 
 // Auto-update (packaged builds only -- see src/updater.js for the decision
@@ -205,6 +225,7 @@ async function boot(win) {
     console.log(`PERSODUB_READY ${engines.url}`);
     bootedKitDir = cfg.kitDir;
     countUsage("app_launch", cfg.kitDir);
+    showUsageNotice(win, cfg.kitDir);
     startUpdater(win, cfg.kitDir); // deliberately not awaited: boot never waits on the network
   } catch (err) {
     // The kit installed fine and the app still cannot run. Such a machine fires

@@ -29,7 +29,8 @@ from app.engines_status import (
 from app.jobs import JobStore
 from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
 from app.pipeline import run_dub
-from app.settings_env import read_key_status, read_value, write_keys
+from app.settings_env import (read_analytics_off, read_key_status, read_value,
+                              write_analytics_off, write_keys)
 from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
 from app.translate import get_translator
 
@@ -152,6 +153,7 @@ class SettingsRequest(BaseModel):
     gemini_api_key: Optional[str] = None
     perso_api_key: Optional[str] = None
     perso_space_seq: Optional[str] = None
+    analytics_off: Optional[bool] = None
 
 
 @app.get("/api/settings")
@@ -174,6 +176,7 @@ def settings_get():
             "perso_api_key": read_value("PERSO_API_KEY"),
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
             "perso_signup_link": SIGNUP_LINK,
+            "analytics_off": read_analytics_off(),
             "app_version": APP_VERSION}
 
 
@@ -202,6 +205,10 @@ def settings_post(body: SettingsRequest):
         raise HTTPException(503, "Settings need a desktop install (no kit.env found)")
     except ValueError as e:
         raise HTTPException(422, str(e))
+    # Unlike the keys, this one needs no restart: the desktop shell re-reads
+    # kit.env before every count, so the next event already obeys the switch.
+    if body.analytics_off is not None:
+        write_analytics_off(body.analytics_off)
     return {"gemini_key_set": status["GEMINI_API_KEY"], "perso_key_set": status["PERSO_API_KEY"],
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
             "restart_required": True}

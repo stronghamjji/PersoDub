@@ -59,7 +59,7 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     assert body.pop("app_version") == perso_client.APP_VERSION
     assert body == {"gemini_key_set": False, "perso_key_set": False,
                     "gemini_api_key": None, "perso_api_key": None,
-                    "perso_space_seq": None}
+                    "perso_space_seq": None, "analytics_off": False}
 
 
 def test_get_carries_the_utm_tagged_signup_link(tmp_path, monkeypatch):
@@ -247,3 +247,38 @@ def test_update_replaces_every_matching_line():
     out = update_env_text(text, {"GEMINI_API_KEY": "new"})
     assert "old" not in out
     assert out.count("GEMINI_API_KEY=new") == 2
+
+
+# --- the usage-counts switch -----------------------------------------------
+
+def test_get_reports_counts_on_when_nothing_says_otherwise(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE)
+    assert client.get("/api/settings").json()["analytics_off"] is False
+
+
+def test_get_reflects_a_switch_that_was_turned_off(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
+    assert client.get("/api/settings").json()["analytics_off"] is True
+
+
+def test_the_switch_writes_the_line_the_desktop_shell_already_reads(tmp_path, monkeypatch):
+    # The Settings switch and PERSODUB_NO_ANALYTICS are not two switches. The
+    # shell reads this one line out of kit.env before every count, so writing
+    # it here is what turns reporting off -- there is no second place that
+    # could disagree with it.
+    kit = _kit(tmp_path, monkeypatch, BASE)
+    r = client.post("/api/settings", json={"analytics_off": True})
+    assert r.status_code == 200
+    assert "PERSODUB_NO_ANALYTICS=1" in (kit / "kit.env").read_text(encoding="utf-8")
+
+
+def test_the_switch_can_be_turned_back_on(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_ANALYTICS=1\n")
+    client.post("/api/settings", json={"analytics_off": False})
+    assert client.get("/api/settings").json()["analytics_off"] is False
+
+
+def test_saving_only_the_switch_leaves_the_saved_keys_alone(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
+    client.post("/api/settings", json={"analytics_off": True})
+    assert "GEMINI_API_KEY=gvalue" in (kit / "kit.env").read_text(encoding="utf-8")
