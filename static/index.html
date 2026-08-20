@@ -151,31 +151,43 @@
 
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
-  .step-header { flex: 0 0 auto; padding: 12px 22px 10px; border-bottom: 1px solid var(--border); }
+  .step-header { flex: 0 0 auto; padding: 16px 22px 16px; border-bottom: 1px solid var(--border); }
 
   .step-header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 
   .step-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); }
 
 
-  .stage-track { display: flex; align-items: flex-start; justify-content: space-between; position: relative; max-width: 760px; }
+  .stage-track { margin-top: 16px; display: flex; align-items: flex-start; justify-content: space-between; position: relative; max-width: 760px; }
   .stage-track::before { content: ""; position: absolute; top: 13px; left: 18px; right: 18px; height: 2px; background: var(--border); z-index: 0; }
   .stage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 1; text-align: center; }
   .stage-dot { width: 25px; height: 25px; border-radius: 50%; background: var(--background); border: 2px solid var(--border); color: var(--muted-foreground); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; }
   .stage.done .stage-dot { background: var(--success); border-color: var(--success); color: #fff; }
   .stage.active .stage-dot { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--focus-ring); }
+  /* Only while a job runs: a dot left pulsing after the dub finished would
+     say "still working" about a job that is over. */
+  @keyframes stage-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.45); }
+    70%  { box-shadow: 0 0 0 8px rgba(124, 58, 237, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
+  }
+  .stage-track.running .stage.active .stage-dot { animation: stage-pulse 1.8s ease-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .stage-track.running .stage.active .stage-dot { animation: none; }
+  }
+  /* The bar used to carry the failure colour; the dot that stopped does now. */
+  .stage.failed .stage-dot { background: var(--destructive); border-color: var(--destructive); color: #fff; box-shadow: none; }
+  .stage.failed .stage-label { color: var(--destructive); font-weight: 700; }
   .stage-label { font-size: 0.64rem; color: var(--muted-foreground); }
   .stage.active .stage-label, .stage.done .stage-label { color: var(--foreground); font-weight: 600; }
 
-  .progress-bar-track { margin-top: 10px; height: 22px; border-radius: 999px; background: var(--secondary); overflow: hidden; position: relative; }
-  .progress-bar-fill { height: 100%; width: 0%; background: var(--primary); border-radius: 999px; transition: width 0.3s ease; }
-  .progress-bar-fill.failed { background: var(--destructive); }
-  .progress-bar-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    font-size: 0.74rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--foreground); pointer-events: none; }
-  .progress-bar-pct.over-fill { color: #fff; }
+  /* The only number that moves inside a long stage -- the dots say which
+     step, this says how far into it. */
+  .stage-pct { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--muted-foreground); }
   .stage-status.failed { color: var(--destructive); font-weight: 700; font-size: 0.98rem; }
 
-  .stage-status-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .stage-status-row { display: flex; align-items: center; gap: 10px; margin-top: 16px; max-width: 760px; }
   .stage-status { font-size: 0.82rem; color: var(--primary); }
   .btn-cancel { margin-left: auto; }
 
@@ -380,22 +392,11 @@
         <div class="step-title">Dubbing progress</div>
         <button class="btn btn-secondary" id="newJobBtn" type="button" style="display:none">New job</button>
       </div>
-      <div class="progress-bar-track">
-        <div class="progress-bar-fill" id="progressBarFill"></div>
-        <span class="progress-bar-pct" id="progressPct"></span>
-      </div>
-      <div class="stage-status-row">
-        <div class="stage-status" id="stageStatus">Add a video to get started.</div>
-        <button class="btn btn-secondary btn-cancel" id="cancelBtn" type="button" style="display:none">Cancel</button>
-      </div>
-      <div class="job-notice" id="jobNotice" style="display:none"></div>
 
-      <!-- Developer-only: the detailed 6-stage tracker + raw pipeline log.
-           Hidden by default (user feedback: too technical) -- end users
-           only see the plain progress bar + status line above. Shown when
-           Settings > Developer details is switched on (persisted in
-           localStorage, see applyDevDetailsVisibility() below). -->
-      <div class="stage-track" id="stageTrack" style="display:none">
+      <!-- The 6-stage tracker is the progress display now: the filling bar
+           that used to sit above it said the same thing a second time, and
+           the two together read as clutter. The active dot pulses. -->
+      <div class="stage-track" id="stageTrack">
         <div class="stage" data-stage="1"><div class="stage-dot">1</div><div class="stage-label">Separate</div></div>
         <div class="stage" data-stage="2"><div class="stage-dot">2</div><div class="stage-label">Speakers</div></div>
         <div class="stage" data-stage="3"><div class="stage-dot">3</div><div class="stage-label">Transcribe</div></div>
@@ -403,7 +404,13 @@
         <div class="stage" data-stage="5"><div class="stage-dot">5</div><div class="stage-label">Voice</div></div>
         <div class="stage" data-stage="6"><div class="stage-dot">6</div><div class="stage-label">Build</div></div>
       </div>
-      <details class="raw-log" id="rawLogDetails" style="display:none">
+      <div class="stage-status-row">
+        <div class="stage-status" id="stageStatus">Add a video to get started.</div>
+        <span class="stage-pct" id="stagePct"></span>
+        <button class="btn btn-secondary btn-cancel" id="cancelBtn" type="button" style="display:none">Cancel</button>
+      </div>
+      <div class="job-notice" id="jobNotice" style="display:none"></div>
+      <details class="raw-log" id="rawLogDetails">
         <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
         <div class="log-box" id="logBox"></div>
       </details>
@@ -609,13 +616,18 @@
       </div>
 
       <div class="settings-section">
-        <h3>Developer</h3>
+        <h3>Privacy</h3>
         <div class="settings-row">
-          <label for="devDetailsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
-            <span>Developer details</span>
-            <input type="checkbox" id="devDetailsToggle">
+          <label for="analyticsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+            <span>Send anonymous usage counts</span>
+            <input type="checkbox" id="analyticsToggle">
           </label>
-          <div class="settings-hint">Shows the detailed stage tracker and raw pipeline log (internal stage names, timing) while a dub runs. Off by default -- most people only need the progress bar.</div>
+          <!-- Saves on the spot rather than on Save: the shell re-reads the
+               file before every count, so promising a restart would be wrong. -->
+          <div class="settings-hint" id="analyticsHint">Four counts only -- app launch, dub
+            finished, dub failed, install failed -- with the app version, your operating system
+            and a random install ID. Never your video, audio, subtitles, filenames or paths.
+            Takes effect immediately; no restart needed.</div>
         </div>
       </div>
 
@@ -708,7 +720,6 @@ const $ = (id) => document.getElementById(id);
 // see app/main.py. Everything in this block is client-side only.) ----------
 const SETTINGS_KEY = "persodub_settings";
 const HISTORY_KEY = "persodub_job_history";
-const DEV_DETAILS_KEY = "persodub_dev_details";
 
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; }
@@ -725,16 +736,6 @@ function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
 // (The Defaults section is gone: the Upload form always opens on the shipped
 // defaults, so the stored defaultTranslateEngine/defaultQualityMode values --
 // and the migrateStoredSettings pass that guarded them -- no longer apply.)
-
-// ---------------- Developer details toggle (raw log + detailed stage
-// tracker, off by default -- too technical for end users) ----------
-function isDevDetailsEnabled() { return localStorage.getItem(DEV_DETAILS_KEY) === "1"; }
-function setDevDetailsEnabled(on) { localStorage.setItem(DEV_DETAILS_KEY, on ? "1" : "0"); }
-function applyDevDetailsVisibility() {
-  const on = isDevDetailsEnabled();
-  $("stageTrack").style.display = on ? "" : "none";
-  $("rawLogDetails").style.display = on ? "" : "none";
-}
 
 function loadHistory() {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
@@ -852,10 +853,10 @@ async function openSettings() {
     loadPersoSpaces(persoSpaceInitial); // async on purpose -- the modal opens without waiting on Perso
     if (st.perso_signup_link) $("persoSignupLink").href = st.perso_signup_link;
     if (st.app_version) $("aboutVersion").textContent = `PersoDub v${st.app_version}`;
+    $("analyticsToggle").checked = !st.analytics_off;
   } catch {
     $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
   }
-  $("devDetailsToggle").checked = isDevDetailsEnabled();
   $("settingsSaveNote").classList.remove("shown");
   $("settingsOverlay").classList.add("open");
 }
@@ -951,12 +952,27 @@ $("showKeysToggle").addEventListener("change", () => {
   $("persoKeyInput").type = $("geminiKeyInput").type = type;
 });
 
-$("devDetailsToggle").addEventListener("change", () => {
-  setDevDetailsEnabled($("devDetailsToggle").checked);
-  applyDevDetailsVisibility();
+// Usage counts. kit.env is where the desktop shell looks before every count,
+// so this POST is the whole off switch -- there is no second copy to disagree
+// with it, and the next event already obeys it.
+async function setUsageCounts(on) {
+  try {
+    const r = await fetch("/api/settings", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analytics_off: !on }),
+    });
+    return r.ok;
+  } catch { return false; }
+}
+
+$("analyticsToggle").addEventListener("change", async () => {
+  const on = $("analyticsToggle").checked;
+  if (await setUsageCounts(on)) return;
+  // Nothing was saved, so the switch must not sit there claiming otherwise.
+  $("analyticsToggle").checked = !on;
+  $("analyticsHint").textContent = "Could not save that. Is the engine running?";
 });
 
-applyDevDetailsVisibility();
 
 // ---------------- Engine availability (progressive enhancement) ----------------
 // GET /api/engines reports which translate/STT engines actually work on this
@@ -1184,25 +1200,27 @@ $("linkInput").addEventListener("input", () => {
 
 // ---------------- Progress rendering ----------------
 function renderProgress(progress) {
-  // Developer-only detailed dots (see applyDevDetailsVisibility) -- harmless
-  // to keep updated even while hidden, so it's ready the moment it's shown.
+  const status = state.job ? state.job.status : null;
+  const failed = status === "error";
+  const running = status === "running" || status === "cancelling";
+
   document.querySelectorAll(".stage").forEach((el) => {
     const n = Number(el.dataset.stage);
+    const current = n === progress.stage;
     el.classList.toggle("done", n < progress.stage);
-    el.classList.toggle("active", n === progress.stage);
+    el.classList.toggle("active", current);
+    // The stage that stopped wears the failure, since no bar carries it now.
+    el.classList.toggle("failed", current && failed);
     el.querySelector(".stage-dot").innerHTML = n < progress.stage
       ? '<svg class="icon icon-sm" viewBox="0 0 24 24" style="stroke:#fff"><path d="M4 12l5 5L20 6"/></svg>'
       : String(n);
   });
+  // Pulse only while there is something to wait for.
+  $("stageTrack").classList.toggle("running", running);
 
-  const status = state.job ? state.job.status : null;
-  const failed = status === "error";
-  const fill = $("progressBarFill");
-  fill.style.width = failed ? "100%" : `${progress.percent}%`;
-  fill.classList.toggle("failed", failed);
-  const pct = $("progressPct");
-  pct.textContent = failed ? "FAILED" : (progress.percent > 0 ? `${progress.percent}%` : "");
-  pct.classList.toggle("over-fill", failed || progress.percent >= 55);
+  // Inside one long stage the dots do not move, so this is the only thing
+  // that tells a waiting user the machine is still getting somewhere.
+  $("stagePct").textContent = (running && progress.percent > 0) ? `${progress.percent}%` : "";
 
   const plain = progress.plainLabel || progress.label;
   let text;
@@ -1228,9 +1246,12 @@ function resetForNewJob() {
   state.job = null;
   videoInput.value = ""; // otherwise re-picking the same file fires no change event
   setVideoFile(null);
-  $("progressBarFill").style.width = "0%";
-  $("progressBarFill").classList.remove("failed");
-  $("progressPct").textContent = "";
+  $("stagePct").textContent = "";
+  $("stageTrack").classList.remove("running");
+  document.querySelectorAll(".stage").forEach((el, i) => {
+    el.classList.remove("done", "active", "failed");
+    el.querySelector(".stage-dot").textContent = String(i + 1);
+  });
   $("stageStatus").textContent = "Add a video to get started.";
   $("stageStatus").classList.remove("failed");
   $("newJobBtn").style.display = "none";
@@ -1246,7 +1267,7 @@ function renderLog(job) {
   $("logBox").textContent = (job.logs || []).join("\n");
 }
 
-// The single reason line under the progress bar. On a failed job it carries
+// The single reason line under the progress steps. On a failed job it carries
 // THE explanation (job.error, with the notice's clickable Recharge link when
 // the backend attached one); on a running job it shows the latest notice.
 // Everything else stays short so this one message actually gets read --
@@ -1492,6 +1513,10 @@ async function handleJobUpdate(job) {
   entry.metaText = job.status === "done" ? "Done" : job.status === "cancelled" ? "Cancelled" : "Failed";
   upsertHistory(entry);
 
+  // Desktop only: in a plain browser persodubShell is undefined and nothing is
+  // counted, which is the intended behaviour -- the counts describe app installs.
+  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(-6).join("\n"));
+
   if (job.status === "done") {
     await renderExport(job);
   } else {
@@ -1573,10 +1598,10 @@ function renderExportError(job) {
   const cancelled = job.status === "cancelled";
   const logsTail = (job.logs || []).slice(-6).join("\n");
   // No second red box here: the failure story lives in ONE place, under the
-  // progress bar (stageStatus headline + renderNotices reason).
+  // progress steps (stageStatus headline + renderNotices reason).
   el.innerHTML = `
-    <div class="export-empty">${cancelled ? "This dubbing job was cancelled." : "Dubbing didn't finish. The reason is under the progress bar."}</div>
-    ${isDevDetailsEnabled() ? `<div class="log-box">${escapeHtml(logsTail)}</div>` : ""}`;
+    <div class="export-empty">${cancelled ? "This dubbing job was cancelled." : "Dubbing didn't finish. The reason is under the progress steps."}</div>
+    <div class="log-box">${escapeHtml(logsTail)}</div>`;
 }
 
 renderHistory();

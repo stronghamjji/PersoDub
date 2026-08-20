@@ -14,10 +14,50 @@ import { run } from "./src/exec.js";
 import { pullOllamaModel } from "./src/ollamaPull.js";
 import { resolveUpdateMode, resolveFeed } from "./src/updater.js";
 import { findForeignLockers } from "./src/lockCheck.js";
+import { resolveAnalyticsMode, countEvent, classifyError } from "./src/analytics.js";
+import { IS_WIN } from "./src/platform.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
 let updateDownloaded = false;
+let bootedKitDir = null;   // for the dub counts, which arrive long after boot
+
+
+// Usage counts. What leaves, and the switches that stop it, are decided in
+// src/analytics.js; this is only the wiring. Every call is fire-and-forget:
+// a count must never delay a launch, and countEvent never rejects, so a dead
+// endpoint or a full disk costs a number and nothing else.
+const COUNT_ENDPOINT = "https://persodub-count.persodub.workers.dev";
+
+// Read fresh every time: the Settings switch writes PERSODUB_NO_ANALYTICS into
+// this same file, so turning counts off takes effect on the very next event
+// instead of waiting for a restart.
+function analyticsMode(kitDir) {
+  // The off switch lives in the kit's kit.env beside the user's other
+  // settings, the same place the update check reads its own -- a GUI app's
+  // process.env never carries it.
+  let env = process.env;
+  const kitEnvPath = kitDir ? join(kitDir, KIT_ENV) : null;
+  if (kitEnvPath && existsSync(kitEnvPath)) {
+    env = { ...process.env, ...parseEnvFile(readFileSync(kitEnvPath, "utf8")) };
+  }
+  return resolveAnalyticsMode({ isPackaged: app.isPackaged, env });
+}
+
+function countUsage(event, kitDir, errorCode) {
+  try {
+    const mode = analyticsMode(kitDir);
+    if (mode === "off") return;
+    void countEvent(event, {
+      mode,
+      stateFile: join(app.getPath("userData"), "analytics.json"),
+      url: COUNT_ENDPOINT,
+      os: IS_WIN ? "windows" : "mac",
+      version: app.getVersion(),
+      errorCode,
+    });
+  } catch { /* a count is never worth interrupting a launch for */ }
+}
 
 // Auto-update (packaged builds only -- see src/updater.js for the decision
 // rules). Checks GitHub Releases after the window is up, downloads in the
@@ -139,6 +179,7 @@ async function boot(win) {
       // file-not-found nobody can act on.
       const tooLong = kitPathTooLong(cfg.kitDir);
       if (tooLong) {
+        countUsage("install_failure", cfg.kitDir, "path-too-long");
         await win.loadFile(join(HERE, "screens", "error.html"), {
           query: { message: tooLong, logDir: cfg.kitDir },
         });
@@ -151,6 +192,7 @@ async function boot(win) {
           onProgress: (p) => win.webContents.send("shell:install-progress", p),
         });
       } catch (err) {
+        countUsage("install_failure", cfg.kitDir, classifyError(String((err && err.message) || err)));
         await win.loadFile(join(HERE, "screens", "error.html"), {
           query: { message: String((err && err.message) || err), logDir: cfg.kitDir },
         });
@@ -168,8 +210,14 @@ async function boot(win) {
     });
     await win.loadURL(engines.url);
     console.log(`PERSODUB_READY ${engines.url}`);
+    bootedKitDir = cfg.kitDir;
+    countUsage("app_launch", cfg.kitDir);
     startUpdater(win, cfg.kitDir); // deliberately not awaited: boot never waits on the network
   } catch (err) {
+    // The kit installed fine and the app still cannot run. Such a machine fires
+    // no other event -- install_failure's other codes do not apply and
+    // PERSODUB_READY was never reached -- so without this it is invisible.
+    countUsage("install_failure", cfg.kitDir, "engine-start");
     await win.loadFile(join(HERE, "screens", "error.html"), {
       query: { message: String((err && err.message) || err), logDir: String((err && err.logDir) || "") },
     });
@@ -221,6 +269,20 @@ app.whenReady().then(() => {
     bootInFlight = true;
     try { await boot(win); } finally { bootInFlight = false; }
   };
+  // A dub finished. The page cannot be trusted to name the outcome or the
+  // reason -- it is a web page served over http -- so the status is checked
+  // against the two that count and the detail is reduced to one published
+  // word here. A cancel is not a failure and is deliberately not counted.
+  ipcMain.on("shell:count-dub", (_e, msg) => {
+    const status = msg && msg.status;
+    if (status !== "done" && status !== "error") return;
+    countUsage(
+      status === "done" ? "dub_success" : "dub_failure",
+      bootedKitDir,
+      status === "error" ? classifyError(String((msg && msg.detail) || "")) : undefined,
+    );
+  });
+
   ipcMain.on("shell:retry", guardedBoot);
   // app.quit() (not app.exit()) so will-quit still runs and stops the child
   // engines before the fresh instance starts -- exit() would orphan them.

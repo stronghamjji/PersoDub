@@ -3,13 +3,13 @@
 **PersoDub - 100% Locally on Your Desktop: Dub Videos in Your Own Voice**
 
 PersoDub re-voices a video into another language in the speaker's own cloned voice,
-entirely on your desktop. No cloud, no account, no uploads, no telemetry: your footage
-never leaves your computer.
+entirely on your desktop. No cloud, no account, no uploads: your footage never leaves
+your computer.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
-[![Version](https://img.shields.io/badge/version-0.3.2-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
-[![Privacy](https://img.shields.io/badge/privacy-100%25%20local%20by%20default-brightgreen.svg)](#data-and-privacy)
+[![Version](https://img.shields.io/badge/version-0.3.5-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
+[![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
 
 <p>
   <a href="https://github.com/stronghamjji/PersoDub/releases/latest"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
@@ -41,7 +41,7 @@ original soundtrack. With the default settings, every one of those steps runs lo
 <img src="docs/images/advanced-options.png" width="100%"
      alt="PersoDub main window with Advanced options expanded: a drop zone for the video, pickers for speech-to-text, original language, target language and voice quality, and below them the translation engine, the text-to-speech engine, and the number of speakers.">
 
-> **Status: early release (v0.3.2).** PersoDub is usable today and is under active
+> **Status: early release (v0.3.5).** PersoDub is usable today and is under active
 > development. macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
 > Interfaces and defaults may change. Please report problems through
 > [Issues](https://github.com/stronghamjji/PersoDub/issues).
@@ -183,12 +183,12 @@ On Windows, launch **PersoDub** from the Start menu.
 
 ## Why PersoDub
 
-**Your data stays yours — 100% local by default.** Separation, transcription,
-diarization, translation and speech synthesis all run on your machine, offline after
-the one-time model download. No account, no API key, no telemetry, no uploads. If you
+**Your footage stays yours — processing is 100% local by default.** Separation,
+transcription, diarization, translation and speech synthesis all run on your machine,
+offline after the one-time model download. No account, no API key, no uploads. If you
 dub confidential, unreleased or personal footage, nothing about it ever touches a
-server — cloud engines are available but strictly opt-in, see
-[Data and privacy](#data-and-privacy).
+server — cloud engines are available but strictly opt-in. They and the usage counts are
+both covered in [Data and privacy](#data-and-privacy).
 
 **No time-stretching.** Most dubbing tools speed the audio up when a translation runs
 longer than the original line. That is the main reason dubs sound rushed and artificial.
@@ -329,15 +329,26 @@ Enabling an optional cloud engine changes that, so it is worth being precise:
 
 Clearing the key in **Settings** returns PersoDub to fully local processing.
 
-PersoDub contains no analytics, telemetry, or usage reporting. When a Perso key is
-configured, requests to Perso carry a header identifying the application name, version,
-and operating system family so the vendor can attribute API usage.
+When a Perso key is configured, requests to Perso carry a header identifying the
+application name, version, and operating system family so the vendor can attribute API
+usage.
 
 The desktop app checks GitHub Releases once at launch to learn whether a newer
 version exists, and downloads it in the background when there is one. The request
 carries no personal data — it is the same anonymous read anyone makes opening the
 releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `kit.env` to turn
-the check off entirely; the app then makes no network requests of its own at all.
+the check off entirely.
+
+### Usage counts
+
+PersoDub reports four events — app launch, dub finished, dub failed, install failed —
+to see how many installs finish a dub. Each carries the app version, your operating
+system, a random install ID, and on a failure one short code off a fixed list. Never
+your video, audio, subtitles, filenames, paths or error text; no IP address is stored.
+
+A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
+with `PERSODUB_NO_ANALYTICS=1` in the kit's `kit.env`; it applies to the next event, no
+restart. `PERSODUB_ANALYTICS_DEBUG=1` prints what would be sent instead of sending it.
 
 ## Responsible use
 

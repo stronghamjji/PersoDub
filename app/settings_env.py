@@ -14,6 +14,12 @@ from typing import Dict, Optional
 
 MANAGED_KEYS = ("GEMINI_API_KEY", "PERSO_API_KEY", "PERSO_SPACE_SEQ")
 
+# Not an API key, so not in MANAGED_KEYS: it is the same line the desktop shell
+# reads out of kit.env before every usage count (see desktop/src/analytics.js).
+# The Settings switch writes here so the switch and the environment variable
+# are one value rather than two that could disagree.
+ANALYTICS_OFF_KEY = "PERSODUB_NO_ANALYTICS"
+
 KIT_ENV = "kit.env"
 # The file was mac.env before Windows existed. The desktop shell renames it on
 # startup (kitEnv.js migrateKitEnv), but this module also runs where that shell
@@ -95,15 +101,14 @@ def read_value(key: str) -> Optional[str]:
     return value
 
 
-def write_keys(values: Dict[str, Optional[str]]) -> Dict[str, bool]:
-    """Write values into kit.env (with a .bak backup) and return the resulting
-    set/unset status. None leaves a key untouched; an empty string CLEARS it
-    (writes `KEY=`) -- without this, a mistyped key or a stale workspace pin
-    could never be removed from the app. Raises FileNotFoundError without a kit."""
+def _write_env(to_set: Dict[str, str]) -> None:
+    """Write KEY=value lines into kit.env, backing it up first.
+
+    Raises FileNotFoundError without a kit, even when there is nothing to
+    write: a caller that thinks it saved something must not be told it did."""
     path = env_path()
     if not path or not os.path.exists(path):
         raise FileNotFoundError("kit.env not found -- not a desktop install")
-    to_set = {k: v for k, v in values.items() if k in MANAGED_KEYS and v is not None}
     for v in to_set.values():
         # A newline would inject arbitrary KEY=value lines into the engine env.
         if any(ch in v for ch in "\r\n") or not v.isprintable():
@@ -117,4 +122,23 @@ def write_keys(values: Dict[str, Optional[str]]) -> Dict[str, bool]:
         # Keys live here now -- keep both files owner-only.
         os.chmod(path, 0o600)
         os.chmod(path + ".bak", 0o600)
+
+
+def write_keys(values: Dict[str, Optional[str]]) -> Dict[str, bool]:
+    """Write values into kit.env (with a .bak backup) and return the resulting
+    set/unset status. None leaves a key untouched; an empty string CLEARS it
+    (writes `KEY=`) -- without this, a mistyped key or a stale workspace pin
+    could never be removed from the app. Raises FileNotFoundError without a kit."""
+    _write_env({k: v for k, v in values.items() if k in MANAGED_KEYS and v is not None})
     return read_key_status() or {}
+
+
+def read_analytics_off() -> bool:
+    """Whether the user turned usage counts off. Absent means on."""
+    return read_value(ANALYTICS_OFF_KEY) == "1"
+
+
+def write_analytics_off(off: bool) -> None:
+    """Turn usage counts off, or back on. Takes effect on the next count --
+    the shell re-reads kit.env every time, so nothing waits for a restart."""
+    _write_env({ANALYTICS_OFF_KEY: "1" if off else "0"})
