@@ -526,26 +526,30 @@ def dub_result(jid: str):
     if not out or not os.path.exists(out):
         raise HTTPException(status_code=404, detail="Result file not found")
     return FileResponse(out, media_type="video/mp4",
-                        filename=f"dubbed_{_target_code(j)}.mp4")
+                        filename=f"dub_{_target_code(j)}.mp4")
 
 
 @app.get("/api/dub/result/{jid}/original")
 def dub_result_original(jid: str):
-    """Return the source video the job worked from.
+    """Return the source video a link job downloaded.
 
-    Same file for both entry paths: an upload is copied to input.mp4 and a
-    fetched link is written to input.mp4, so this needs no special case.
+    Only offered for link jobs. A file the user uploaded is already on their
+    machine, so handing it back is pure noise; a video pulled from a link is
+    the only original they cannot otherwise get.
     """
     j = job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if not j.get("from_link"):
+        raise HTTPException(status_code=404,
+                            detail="This job started from a file you already have")
     out = (j.get("result") or {}).get("out_path")
     if not out:
         raise HTTPException(status_code=404, detail="Result file not found")
     original = os.path.join(os.path.dirname(out), "input.mp4")
     if not os.path.exists(original):
         raise HTTPException(status_code=404, detail="Original file not found")
-    return FileResponse(original, media_type="video/mp4", filename="original.mp4")
+    return FileResponse(original, media_type="video/mp4", filename="org.mp4")
 
 
 @app.get("/api/dub/result/{jid}/srt")
@@ -574,7 +578,7 @@ def dub_result_srt(jid: str, download: int = 0):
             headers = None
             if download:
                 headers = {"Content-Disposition":
-                           f'attachment; filename="dubbed_{_target_code(j)}.srt"'}
+                           f'attachment; filename="dub_{_target_code(j)}.srt"'}
             return Response(content=text,
                             media_type="text/plain; charset=utf-8",
                             headers=headers)

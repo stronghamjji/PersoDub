@@ -85,3 +85,40 @@ def test_job_dir_falls_back_to_a_random_name(tmp_path, monkeypatch):
     assert main.os.path.isdir(made)
     assert "2026-08-21" in made
     assert main.os.path.basename(made) not in ("_en", "")
+
+
+def _finished_job(tmp_path, **extra):
+    """A job record shaped like a finished dub, with its files on disk."""
+    work = tmp_path / "job"
+    work.mkdir()
+    (work / "dubbed.mp4").write_bytes(b"vid")
+    (work / "input.mp4").write_bytes(b"src")
+    job = {"id": "abc123", "status": "done", "language_code": "en",
+           "result": {"out_path": str(work / "dubbed.mp4")}}
+    job.update(extra)
+    return job
+
+
+def test_download_names_are_short_and_say_the_language(tmp_path, monkeypatch):
+    from app import main
+
+    job = _finished_job(tmp_path, from_link=True)
+    monkeypatch.setattr(main.job_store, "get", lambda jid: job)
+
+    assert main.dub_result("abc123").filename == "dub_en.mp4"
+    assert main.dub_result_original("abc123").filename == "org.mp4"
+
+
+def test_original_is_refused_for_an_uploaded_file(tmp_path, monkeypatch):
+    # The user already has the file they uploaded; only a link job has an
+    # original they cannot otherwise get.
+    import pytest
+    from fastapi import HTTPException
+    from app import main
+
+    job = _finished_job(tmp_path, from_link=False)
+    monkeypatch.setattr(main.job_store, "get", lambda jid: job)
+
+    with pytest.raises(HTTPException) as e:
+        main.dub_result_original("abc123")
+    assert e.value.status_code == 404

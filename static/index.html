@@ -1588,9 +1588,9 @@ async function renderExport(job) {
         <video controls src="${url}"></video>
         ${langLine}
         <div class="result-actions">
-          <a class="btn btn-primary" href="${url}" download="dubbed_${target}.mp4">Download dubbed video</a>
-          <a class="btn btn-secondary" href="/api/dub/result/${job.id}/original" download="original.mp4">Download original</a>
-          ${srtText ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/srt?download=1" download="dubbed_${target}.srt">Download subtitles (.srt)</a>` : ""}
+          <a class="btn btn-primary" href="${url}" download="dub_${target}.mp4">Download dubbed video</a>
+          ${job.from_link ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/original" download="org.mp4">Download original</a>` : ""}
+          ${srtText ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/srt?download=1" download="dub_${target}.srt">Download subtitles (.srt)</a>` : ""}
         </div>
       </div>
       <div class="srt-list">${srtRows}</div>
