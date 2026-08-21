@@ -146,6 +146,15 @@
   .job-dot.error { background: var(--destructive); }
   .job-dot.cancelled { background: var(--muted-foreground); }
   .job-row .job-info { min-width: 0; }
+  /* The row itself is a <button>, so the delete control sits beside it rather
+     than inside. It stays hidden until the row is hovered or it has focus --
+     an always-visible delete next to every job invites the wrong click. */
+  .job-line { display: flex; align-items: center; }
+  .job-line .job-row { flex: 1; min-width: 0; }
+  .job-del { border: none; background: none; cursor: pointer; padding: 6px 10px; color: var(--muted-foreground); font: inherit; font-size: 0.78rem; opacity: 0; flex-shrink: 0; }
+  .job-line:hover .job-del, .job-del:focus-visible { opacity: 1; }
+  .job-del:hover { color: var(--destructive); }
+  .job-del.confirming { opacity: 1; color: var(--destructive); font-weight: 700; }
   .job-name { font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .job-meta { font-size: 0.7rem; color: var(--muted-foreground); }
 
@@ -1386,6 +1395,17 @@ function upsertHistory(entry) {
   renderHistory();
 }
 
+function removeHistory(jobId) {
+  saveHistory(loadHistory().filter((j) => j.jobId !== jobId));
+  // The open Export tab would be showing files that are gone now.
+  if (state.jobId === jobId) {
+    state.jobId = null;
+    state.pollGeneration += 1;
+    switchTab("upload");
+  }
+  renderHistory();
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -1409,7 +1429,45 @@ function renderHistory() {
     row.innerHTML = `<span class="job-dot ${dotClass}"></span>
       <div class="job-info"><div class="job-name">${escapeHtml(entry.fileName)}</div><div class="job-meta">${escapeHtml(entry.metaText || "")}</div></div>`;
     row.addEventListener("click", () => resumeJob(entry.jobId));
-    container.appendChild(row);
+
+    // Deleting a job's folder cannot be undone, so the button asks once by
+    // turning into "Sure?" -- not window.confirm(), which freezes every event
+    // in the Electron shell until it is dismissed.
+    const del = document.createElement("button");
+    del.className = "job-del";
+    del.type = "button";
+    del.title = "Delete this job's files";
+    del.textContent = "Delete";
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!del.classList.contains("confirming")) {
+        del.classList.add("confirming");
+        del.textContent = "Sure?";
+        setTimeout(() => {
+          del.classList.remove("confirming");
+          del.textContent = "Delete";
+        }, 4000);
+        return;
+      }
+      del.disabled = true;
+      del.textContent = "Deleting…";
+      try {
+        const r = await fetch(`/api/dub/jobs/${entry.jobId}/workspace`, { method: "DELETE" });
+        if (!r.ok) throw new Error((await r.json()).detail || "Could not delete this job");
+        removeHistory(entry.jobId);
+      } catch (err) {
+        del.disabled = false;
+        del.classList.remove("confirming");
+        del.textContent = "Delete";
+        del.title = err.message;
+      }
+    });
+
+    const line = document.createElement("div");
+    line.className = "job-line";
+    line.appendChild(row);
+    line.appendChild(del);
+    container.appendChild(line);
   }
 }
 
