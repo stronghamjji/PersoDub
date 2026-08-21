@@ -1564,6 +1564,9 @@ function langName(code) {
 // ---------------- Export tab ----------------
 async function renderExport(job) {
   const el = $("exportContent");
+  // Tell the shell where this job's downloads belong. It has to be handed over
+  // before any button is clicked, because will-download cannot ask for it.
+  window.persodubShell?.rememberJob?.({ id: job.id, project: job.project, day: job.day });
   const url = resultUrl(job.id);
   const target = job.language_code || "out";
   const srtText = await fetchResultSrt(job.id).catch(() => null);

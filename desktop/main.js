@@ -1,6 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 import { join, dirname } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong } from "./src/config.js";
@@ -9,6 +9,7 @@ import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps } from "./src/installSpec.js";
 import { runInstall } from "./src/installer.js";
 import { download } from "./src/download.js";
+import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
 import { run } from "./src/exec.js";
 import { pullOllamaModel } from "./src/ollamaPull.js";
@@ -224,10 +225,38 @@ async function boot(win) {
   }
 }
 
+// Filled by the screen when it renders a finished job, read back synchronously
+// inside will-download (which cannot await a fetch).
+const jobFolders = new Map();
+ipcMain.on("shell:remember-job", (_e, job) => {
+  if (job && job.id && job.project && job.day) {
+    jobFolders.set(job.id, { project: job.project, day: job.day });
+  }
+});
+
 app.whenReady().then(() => {
   // One greppable line naming the running version -- the e2e update test (and
   // any future bug report) reads it instead of guessing from filenames.
   console.log(`PERSODUB_VERSION ${app.getVersion()}`);
+
+  // The app server names the file (dub_en.mp4); the folder comes from the job's
+  // date and project, so three episodes do not collapse into "dub_en (1).mp4".
+  // Nothing here is fatal: on any failure Electron picks the path the way it
+  // always did -- which is also what happens when the UI runs in a plain
+  // browser and never sent us the job.
+  session.defaultSession.on("will-download", (_event, item) => {
+    try {
+      const jid = new URL(item.getURL()).pathname.split("/")[4];
+      const folder = jid && jobFolders.get(jid);
+      if (!folder) return;
+      const dir = join(app.getPath("downloads"), folder.day, folder.project);
+      mkdirSync(dir, { recursive: true });
+      const name = uniqueName(item.getFilename(), (n) => existsSync(join(dir, n)));
+      if (name) item.setSavePath(join(dir, name));
+    } catch {
+      /* fall through to Electron's default naming */
+    }
+  });
   const win = new BrowserWindow({
     width: 1200,
     height: 800,

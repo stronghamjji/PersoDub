@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("persodubShell", {
   retry: () => ipcRenderer.send("shell:retry"),
+  // Downloads land in <Downloads>/<day>/<project>/, which only the page knows.
+  // Handed over when a finished job is rendered, so will-download (a synchronous
+  // callback that cannot await a fetch) can read it back.
+  rememberJob: (job) => ipcRenderer.send("shell:remember-job", job),
   // Settings' "Restart now" button. Keys/workspace only apply on the next
   // start, and asking a non-technical user to quit and reopen by hand was
   // the step that silently didn't happen.
