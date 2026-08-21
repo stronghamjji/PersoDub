@@ -54,3 +54,34 @@ def test_next_free_gives_up_after_three_digits():
     # the caller's random-name path rather than growing a fourth digit.
     taken = ["x"] + ["x_%03d" % i for i in range(1, 1000)]
     assert next_free("x", taken) is None
+
+
+def test_job_dir_uses_date_project_and_language(tmp_path, monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path))
+    monkeypatch.setattr(main, "_today", lambda: "2026-08-21")
+
+    first = main._job_dir("참교육1화", "en")
+    assert first.endswith("2026-08-21/참교육1화_en")
+    assert main.os.path.isdir(first)
+
+    # a second English run of the same title on the same day counts up
+    assert main._job_dir("참교육1화", "en").endswith("2026-08-21/참교육1화_en_001")
+
+    # a different language is a different folder, not a collision
+    assert main._job_dir("참교육1화", "ja").endswith("2026-08-21/참교육1화_ja")
+
+
+def test_job_dir_falls_back_to_a_random_name(tmp_path, monkeypatch):
+    # A title that survives sanitizing as "" must not fail the job -- the old
+    # random-name behaviour (app/main.py:374) is the safety net.
+    from app import main
+
+    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path))
+    monkeypatch.setattr(main, "_today", lambda: "2026-08-21")
+
+    made = main._job_dir("///", "en")
+    assert main.os.path.isdir(made)
+    assert "2026-08-21" in made
+    assert main.os.path.basename(made) not in ("_en", "")

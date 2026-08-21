@@ -1,6 +1,7 @@
 import os
 import shutil
 import uuid
+from datetime import date
 from typing import List, Optional
 from urllib.parse import urlparse
 
@@ -29,6 +30,7 @@ from app.engines_status import (
 from app.jobs import JobStore
 from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
 from app.pipeline import run_dub
+from app.text.naming import next_free, safe_name
 from app.settings_env import (read_analytics_off, read_key_status, read_value,
                               write_analytics_off, write_keys)
 from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
@@ -309,6 +311,7 @@ def dub_start(
     stt_engine: Optional[str] = Form(None),
     n_takes: Optional[int] = Form(None),
     source_language_code: Optional[str] = Form(None),
+    project: Optional[str] = Form(None),
 ):
     """Start dubbing by uploading a video (+ optional subtitles) from the screen.
 
@@ -371,8 +374,16 @@ def dub_start(
                 "Select a Perso workspace in Settings.",
             )
 
-    work = os.path.join(WORKSPACE, uuid.uuid4().hex[:8])
-    os.makedirs(work, exist_ok=True)
+    # Names the job's folder. The caller may pass a title it already knows (the
+    # screen probes a link before starting, and app/source_fetch.py's fetch()
+    # returns nothing, so the server never learns it otherwise). Without one,
+    # fall back to the uploaded filename or the URL.
+    project = safe_name(project or "")
+    if not project:
+        project = safe_name(
+            os.path.splitext(video.filename or "")[0] if has_upload else (source_url or "")
+        )
+    work = _job_dir(project, language_code)
     video_path = os.path.join(work, "input.mp4")
     if has_upload:
         with open(video_path, "wb") as f:
@@ -393,7 +404,14 @@ def dub_start(
     jid = job_store.create()
     # The download filenames are built from this; the job record is the only
     # place the result endpoints can read the user's choice back from.
-    job_store._update(jid, language_code=language_code)
+    # project/day/from_link are read back by the download endpoints and by the
+    # desktop shell, which builds the save folder from them. `day` is stamped
+    # here rather than recomputed later: a job started at 23:59 must not land in
+    # tomorrow's folder when it finishes.
+    job_store._update(jid, language_code=language_code,
+                      project=project or os.path.basename(work),
+                      day=_today(),
+                      from_link=bool(source_url))
     # First log line names the source -- log files are job-<id>.log, so without
     # this there is no way to tell which video a log belongs to.
     job_store.append_log(jid, f"🎬 {source_url or video.filename or 'video'}")
@@ -459,6 +477,37 @@ def translate_api(body: TranslateRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Translation failed: {e}")
     return {"translations": out}
+
+
+def _today():
+    # type: () -> str
+    """Today as YYYY-MM-DD. Split out so tests can pin the date."""
+    return date.today().isoformat()
+
+
+def _job_dir(title, lang_code):
+    # type: (str, str) -> str
+    """Create and return this job's workspace folder.
+
+    Named <date>/<title>_<lang> so the folder says what it holds -- the old
+    random hex said nothing. The language is part of the name because each
+    language is a separate job with its own video, script and voice pieces;
+    sharing one folder would overwrite them.
+
+    Falls back to the old random name whenever a usable title cannot be built
+    (unusable characters, empty title, or 999 runs of the same name today).
+    """
+    day = os.path.join(WORKSPACE, _today())
+    os.makedirs(day, exist_ok=True)
+
+    base = safe_name(title)
+    name = next_free("%s_%s" % (base, lang_code), os.listdir(day)) if base else None
+    if name is None:
+        name = uuid.uuid4().hex[:8]
+
+    work = os.path.join(day, name)
+    os.makedirs(work, exist_ok=True)
+    return work
 
 
 def _target_code(job: dict) -> str:

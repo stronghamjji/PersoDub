@@ -1454,6 +1454,10 @@ function readOptions() {
     qualityMode: $("qualitySelect").value,
     numSpeakers: $("numSpeakers").value ? Number($("numSpeakers").value) : undefined,
     translateEngine: $("translateSelect").value,
+    // A link's title is only known here -- the probe already fetched it, while
+    // the server learns nothing from downloading the video. Names the job's
+    // folder, so send it along with the job.
+    project: state.source === "link" ? (state.linkProbe || {}).title : undefined,
   };
 }
 

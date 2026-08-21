@@ -126,6 +126,11 @@ export function buildDubFormData(opts) {
   }
   if (opts.srt) fd.append("srt", opts.srt);
   if (opts.sourceSrt) fd.append("source_srt", opts.sourceSrt);
+  // Names the job's folder and the download folder. Sent from here because the
+  // screen already knows a link's title from its own probe, while the server
+  // only learns it after the download (app/source_fetch.py's fetch returns
+  // nothing). Omitted, the server falls back to the filename or the URL.
+  if (opts.project) fd.append("project", opts.project);
 
   return fd;
 }
