@@ -5,7 +5,9 @@ Pure logic over files only -- no container, no network, no TTS (docs/development
 """
 import pytest
 
-from app.dub_script import DUB_NAME, EDITED_NAME, ORIGINAL_NAME, load_lines, script_path
+from app.dub_script import (
+    DUB_NAME, EDITED_NAME, ORIGINAL_NAME, edit_line, export_srt, load_lines, script_path,
+)
 from app.text.srt import build_srt
 
 
@@ -79,3 +81,59 @@ def test_edited_file_wins_over_the_dubbed_one(tmp_path):
 def test_missing_script_raises_a_clear_error(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_lines(str(tmp_path), "ko")
+
+
+def test_edit_writes_to_edited_and_leaves_the_dub_alone(tmp_path):
+    # translated.srt is the record of what the dub actually read -- without it there is
+    # nothing to compare an edit against, so edits go to edited.srt instead.
+    write(tmp_path / ORIGINAL_NAME, [(0.0, 2.0, "Stay with me.")])
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "나와 함께 있어주세요 제발")])  # 2.50s, overshoots
+
+    line = edit_line(str(tmp_path), 1, "정신 차려요 지금 당장", "ko")  # 2.05s, inside [1.70, 2.30]
+
+    assert line["line"] == 1
+    assert line["text"] == "정신 차려요 지금 당장"
+    assert line["fits"] is True
+    assert (tmp_path / EDITED_NAME).exists()
+    assert "나와 함께 있어주세요 제발" in (tmp_path / DUB_NAME).read_text(encoding="utf-8")
+
+
+def test_second_edit_builds_on_the_first(tmp_path):
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "첫째 줄"), (2.0, 4.0, "둘째 줄")])
+
+    edit_line(str(tmp_path), 1, "고친 첫째", "ko")
+    edit_line(str(tmp_path), 2, "고친 둘째", "ko")
+
+    assert [ln["text"] for ln in load_lines(str(tmp_path), "ko")] == ["고친 첫째", "고친 둘째"]
+
+
+def test_edit_keeps_the_timing(tmp_path):
+    # Only the words change. Shifting a line's timing would pull the voice out of sync.
+    write(tmp_path / DUB_NAME, [(1.5, 3.25, "옛날 번역")])
+
+    line = edit_line(str(tmp_path), 1, "새 번역", "ko")
+
+    assert line["start"] == 1.5
+    assert line["end"] == 3.25
+
+
+def test_edit_rejects_a_line_number_out_of_range(tmp_path):
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "한 줄뿐")])
+
+    with pytest.raises(ValueError) as e:
+        edit_line(str(tmp_path), 7, "아무거나", "ko")
+    assert "7" in str(e.value)
+    assert "1" in str(e.value)  # says how many lines there actually are
+
+
+def test_export_writes_the_current_script(tmp_path):
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "옛날 번역")])
+    out = tmp_path / "exported.srt"
+
+    export_srt(str(tmp_path), str(out))
+    assert "옛날 번역" in out.read_text(encoding="utf-8")
+
+    edit_line(str(tmp_path), 1, "고친 번역", "ko")
+    export_srt(str(tmp_path), str(out))
+    assert "고친 번역" in out.read_text(encoding="utf-8")
+    assert "옛날 번역" not in out.read_text(encoding="utf-8")

@@ -16,7 +16,7 @@ from typing import List, Optional
 
 from app.text.cues import match_cue_index
 from app.text.length_fit import in_window
-from app.text.srt import Cue, estimate_seconds, parse_srt
+from app.text.srt import Cue, build_srt, estimate_seconds, parse_srt
 
 ORIGINAL_NAME = "original.srt"
 DUB_NAME = "translated.srt"
@@ -71,3 +71,41 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
             "fits": in_window(estimated, slot),
         })
     return lines
+
+
+def edit_line(work_dir: str, line: int, text: str, lang: str) -> dict:
+    """Rewrite line number `line` (1-based) as `text`, and report that line back.
+
+    Always writes to edited.srt. translated.srt is the record of what the dub actually
+    read -- overwrite it and there is nothing left to compare an edit against.
+    Timing is never touched: shifting a line pulls the voice out of sync with the mouth.
+    """
+    cues = _read_cues(script_path(work_dir))
+    if not cues:
+        raise FileNotFoundError("this job has no script: %s" % work_dir)
+    if not 1 <= line <= len(cues):
+        raise ValueError(
+            "there is no line %d -- this script runs from line 1 to %d" % (line, len(cues))
+        )
+
+    cues[line - 1]["text"] = text
+    with open(os.path.join(work_dir, EDITED_NAME), "w", encoding="utf-8") as f:
+        f.write(build_srt(cues))
+
+    return load_lines(work_dir, lang)[line - 1]
+
+
+def export_srt(work_dir: str, out_path: str) -> str:
+    """Copy the script that currently counts to out_path, and return that path.
+
+    Feeding this file back in as a ready-made translated SRT (app/main.py:303) skips
+    transcription and translation, so only the voices are made again.
+    """
+    src = script_path(work_dir)
+    if not os.path.exists(src):
+        raise FileNotFoundError("this job has no script: %s" % work_dir)
+    with open(src, encoding="utf-8-sig") as f:
+        body = f.read()
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(body)
+    return out_path
