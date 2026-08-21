@@ -264,6 +264,32 @@ def dub_job_cancel(jid: str):
     return {"job_id": jid, "status": status}
 
 
+@app.delete("/api/dub/jobs/{jid}/workspace")
+def dub_job_delete_workspace(jid: str):
+    """Delete a job's whole folder. Irreversible, so the screen asks first.
+
+    Automatic cleanup (app/pipeline.py's cleanup_intermediates) only drops the
+    audio a finished job no longer needs; deleting the results themselves is
+    always the user's own call.
+    """
+    j = job_store.get(jid)
+    if j is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if j["status"] == "running":
+        raise HTTPException(status_code=409, detail="Job is still running")
+    out = (j.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=404, detail="Nothing to delete")
+    work = os.path.abspath(os.path.dirname(out))
+    root = os.path.abspath(WORKSPACE)
+    # A job record is the only thing naming this path; refuse anything that
+    # somehow points outside the workspace rather than trusting it.
+    if os.path.commonpath([work, root]) != root or work == root:
+        raise HTTPException(status_code=400, detail="Refusing to delete outside the workspace")
+    shutil.rmtree(work, ignore_errors=True)
+    return {"job_id": jid, "deleted": True}
+
+
 @app.get("/api/engines")
 def engines_status():
     """Which translation/transcription engines actually work on this machine right now.
