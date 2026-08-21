@@ -229,6 +229,13 @@ def _auto_translate_srt(
     if still_bad:
         log(f"   ⚠️ {len(still_bad)} lines still not in the target language — output needs review")
 
+    # Keep the source script before the next line overwrites it in place -- past this
+    # point the source is gone, and app/dub_script.py needs it to show a line's source
+    # next to its translation. Named original.srt, not source.srt: source.srt already
+    # belongs to a caller-uploaded source script (app/main.py:388).
+    with open(os.path.join(work_dir, "original.srt"), "w", encoding="utf-8") as f:
+        f.write(build_srt(cues))
+
     for c, tr in zip(cues, translated):
         c["text"] = tr
     # Split translated blocks into sentences to fine-tune dubbing timing
