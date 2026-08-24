@@ -501,3 +501,26 @@ def test_dub_start_source_language_hint_absent_is_none(monkeypatch):
             break
         time.sleep(0.02)
     assert captured["source_language_code"] is None
+
+
+def test_dub_start_rejects_a_language_code_that_is_not_one():
+    """language_code is pasted into the job's folder name (app/main.py _job_dir).
+    It reached the path unchecked while every sibling field was validated, so a
+    code carrying "../.." walked the job out of the workspace. Refuse it here,
+    the way stt_engine is refused, rather than quietly renaming it.
+    """
+    for hostile in ["../../../../tmp/PWNED", "..", "a/b", "a\\b", "ko ko", "k" * 17]:
+        r = client.post(
+            "/api/dub/start",
+            files={"video": ("v.mp4", b"vid", "video/mp4")},
+            data={"language": "Korean", "language_code": hostile},
+        )
+        assert r.status_code == 422, f"{hostile!r} was accepted"
+
+
+def test_dub_start_still_takes_the_language_codes_people_use():
+    # The guard must not turn away real codes -- BCP-47 tags carry hyphens.
+    from app.main import _valid_language_code
+
+    for good in ["ko", "en", "ja", "zh-CN", "pt_BR", "es-419"]:
+        assert _valid_language_code(good), good

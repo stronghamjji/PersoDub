@@ -1629,7 +1629,11 @@ async function renderExport(job) {
   const target = job.language_code || "out";
   const srtText = await fetchResultSrt(job.id).catch(() => null);
   const srtRows = srtText
-    ? parseSrt(srtText).map((c) => `<div class="srt-row"><span class="srt-time">${c.start}–${c.end}</span><span class="srt-text">${escapeHtml(c.text)}</span></div>`).join("")
+    // Escape the timecodes too, not just the text. The .srt served back is the
+    // file the user handed us, verbatim -- parseSrt takes whatever sits before
+    // "-->" as the start time without checking it is a timecode, so a crafted
+    // subtitle put markup straight into innerHTML here.
+    ? parseSrt(srtText).map((c) => `<div class="srt-row"><span class="srt-time">${escapeHtml(c.start)}–${escapeHtml(c.end)}</span><span class="srt-text">${escapeHtml(c.text)}</span></div>`).join("")
     : '<div class="srt-empty">No subtitle file was recorded for this job.</div>';
 
   // The four things a finished job can hand back: original + dub, and the two

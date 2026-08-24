@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import uuid
 from datetime import date
@@ -365,6 +366,8 @@ def dub_start(
     stt_engine = (stt_engine or "").strip().lower() or None
     if stt_engine not in (None, "local", "perso"):
         raise HTTPException(422, f"Unknown stt_engine: {stt_engine}")
+    if not _valid_language_code(language_code):
+        raise HTTPException(422, f"Unknown language_code: {language_code}")
     effective_translate_engine = (translate_engine or TRANSLATE_ENGINE or "").lower()
     if effective_translate_engine == "gemma":
         status = gemma_status()
@@ -511,6 +514,16 @@ def _today():
     return date.today().isoformat()
 
 
+# A language code, not a path fragment: letters, then optionally a region after
+# a hyphen or underscore ("ko", "zh-CN", "pt_BR", "es-419"). Nothing else gets
+# in, because _job_dir pastes this straight into the job's folder name.
+_LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2,8}([-_][A-Za-z0-9]{2,8})?$")
+
+
+def _valid_language_code(code: str) -> bool:
+    return bool(_LANGUAGE_CODE.match(code or ""))
+
+
 def _job_dir(title, lang_code):
     # type: (str, str) -> str
     """Create and return this job's workspace folder.
@@ -527,7 +540,12 @@ def _job_dir(title, lang_code):
     os.makedirs(day, exist_ok=True)
 
     base = safe_name(title)
-    name = next_free("%s_%s" % (base, lang_code), os.listdir(day)) if base else None
+    # The language half is caller-supplied too, and went in unchecked while the
+    # title half was sanitized -- so "../.." in it walked the job out of the
+    # workspace and wrote input.mp4 over whatever lived there. dub_start
+    # rejects a malformed code outright; this keeps every other caller safe.
+    lang = safe_name(lang_code) or "out"
+    name = next_free("%s_%s" % (base, lang), os.listdir(day)) if base else None
     if name is None:
         name = uuid.uuid4().hex[:8]
 

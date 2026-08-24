@@ -122,3 +122,21 @@ def test_original_is_refused_for_an_uploaded_file(tmp_path, monkeypatch):
     with pytest.raises(HTTPException) as e:
         main.dub_result_original("abc123")
     assert e.value.status_code == 404
+
+
+def test_job_dir_cannot_be_walked_out_of_the_workspace(tmp_path, monkeypatch):
+    """The language half of the folder name is caller-supplied and was pasted
+    into the path unchecked, so "../../.." in it escaped the workspace and the
+    job then wrote input.mp4 over whatever lived there. The title half was
+    already run through safe_name; this is the half that was not.
+    """
+    from app import main
+
+    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path))
+    monkeypatch.setattr(main, "_today", lambda: "2026-08-21")
+
+    for hostile in ["../../../../tmp/PWNED", "..", "a/b", "a\\b", "ko\x00"]:
+        work = main._job_dir("myvideo", hostile)
+        real = main.os.path.realpath(work)
+        root = main.os.path.realpath(str(tmp_path))
+        assert real.startswith(root + main.os.sep), f"{hostile!r} escaped to {real}"
