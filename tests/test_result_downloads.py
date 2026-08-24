@@ -47,15 +47,27 @@ def test_dub_download_is_named_for_the_target_language(monkeypatch):
     jid = _finished_job(monkeypatch, target="ko")
     r = client.get(f"/api/dub/result/{jid}")
     assert r.status_code == 200
-    assert 'filename="dubbed_ko.mp4"' in r.headers["content-disposition"]
+    assert 'filename="dub_ko.mp4"' in r.headers["content-disposition"]
 
 
-def test_original_is_downloadable(monkeypatch):
+def test_original_is_downloadable_for_a_link_job(monkeypatch):
+    # _finished_job posts an uploaded file; stamping from_link makes the job
+    # look like one that pulled its video from a URL, which is the only case
+    # where the original is handed back.
+    from app.main import job_store
     jid = _finished_job(monkeypatch)
+    job_store._update(jid, from_link=True)
+
     r = client.get(f"/api/dub/result/{jid}/original")
     assert r.status_code == 200
     assert r.content == b"FAKEMP4"
-    assert 'filename="original.mp4"' in r.headers["content-disposition"]
+    assert 'filename="org.mp4"' in r.headers["content-disposition"]
+
+
+def test_original_is_refused_for_an_uploaded_file(monkeypatch):
+    # The user already has the file they uploaded -- handing it back is noise.
+    jid = _finished_job(monkeypatch)
+    assert client.get(f"/api/dub/result/{jid}/original").status_code == 404
 
 
 def test_original_404s_when_the_job_is_unknown():
@@ -66,7 +78,7 @@ def test_srt_download_has_a_filename(monkeypatch):
     jid = _finished_job(monkeypatch, target="ja")
     r = client.get(f"/api/dub/result/{jid}/srt?download=1")
     assert r.status_code == 200
-    assert 'filename="dubbed_ja.srt"' in r.headers["content-disposition"]
+    assert 'filename="dub_ja.srt"' in r.headers["content-disposition"]
 
 
 def test_srt_viewer_response_is_unchanged(monkeypatch):

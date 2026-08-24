@@ -217,6 +217,30 @@ def test_line_still_in_the_wrong_language_after_two_rounds_is_kept_and_warned(tm
     assert any("1 lines still not in the target language" in m for m in logs)
 
 
+def test_original_srt_is_written_before_translation_overwrites(tmp_path):
+    # app/pipeline.py:232 -- `c["text"] = tr` overwrites the source text in place, so the
+    # source is gone the moment translation lands. app/dub_script.py needs it to show a
+    # line's source next to its translation, so it is written out first.
+    # The name is original.srt, not source.srt: source.srt already belongs to a
+    # caller-uploaded source script (app/main.py:388).
+    src = [
+        {"start": 0.0, "end": 2.0, "text": "Hello there, nice to meet you."},
+        {"start": 3.0, "end": 5.0, "text": "The weather is lovely today."},
+    ]
+    eng = UnparseableTranslator(
+        translate_responses=[["안녕하세요 반갑습니다", "오늘 날씨가 좋네요"]]
+    )
+
+    pipeline._auto_translate_srt(src, "ko", eng, str(tmp_path), source_lang="en")
+
+    original = tmp_path / "original.srt"
+    assert original.exists(), "original.srt was not written"
+    assert [c["text"] for c in read_cues(str(original))] == [
+        "Hello there, nice to meet you.",
+        "The weather is lovely today.",
+    ]
+    assert (tmp_path / "translated.srt").exists()  # the existing output is untouched
+
 # --- _carry_speaker_labels -------------------------------------------------------
 
 

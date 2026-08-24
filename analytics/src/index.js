@@ -9,8 +9,16 @@ const EVENTS = new Set(["app_launch", "dub_success", "dub_failure", "install_fai
 const PLATFORMS = new Set(["mac", "windows"]);
 const ERROR_CODES = new Set([
   "path-too-long", "disk-full", "network", "permission", "engine-start",
-  "out-of-memory", "unsupported-format", "engine-crash",
+  "out-of-memory", "unsupported-format", "engine-crash", "step-failed",
   "unknown",
+]);
+
+// The ten install steps, exactly as desktop/src/installSpec.js names them. An
+// install failure says which one it died in; "engine-crash" alone meant
+// "somewhere in ten steps" and could not be acted on.
+const STEPS = new Set([
+  "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
+  "models", "gemma", "nonverbal-weights", "kit-env",
 ]);
 
 const DEVICE = /^[0-9a-f]{32}$/;
@@ -44,9 +52,17 @@ export default {
     // should not land rows in the wrong bucket for everyone else.
     const day = new Date().toISOString().slice(0, 10);
 
+    // Only install failures carry a step, and only a published id -- an
+    // unrecognized value becomes "unknown" rather than reaching the table, the
+    // same rule the error code follows. Versions before 0.3.6 send none at all,
+    // which stores NULL: the column has to stay optional for them.
+    const step = (event === "install_failure" && body.step !== undefined)
+      ? (STEPS.has(body.step) ? body.step : "unknown")
+      : null;
+
     await env.persodub_count
-      .prepare("INSERT INTO events (day, event, os, version, device, error_code) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(day, event, os, version, device, code)
+      .prepare("INSERT INTO events (day, event, os, version, device, error_code, step) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(day, event, os, version, device, code, step)
       .run();
 
     return new Response(null, { status: 204 });

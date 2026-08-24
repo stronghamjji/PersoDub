@@ -6,3 +6,4 @@ google-auth
 python-multipart
 pytest
 yt-dlp
+mcp

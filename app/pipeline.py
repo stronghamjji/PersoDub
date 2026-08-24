@@ -6,6 +6,7 @@ Every stage runs locally or through our own Qwen3-TTS sidecar -- no third-party
 container anywhere in this app.
 """
 import os
+import re
 import subprocess
 import tempfile
 import uuid
@@ -228,6 +229,13 @@ def _auto_translate_srt(
     still_bad = [i for i, t2 in enumerate(translated) if not script_ok(t2, target_lang)]
     if still_bad:
         log(f"   ⚠️ {len(still_bad)} lines still not in the target language — output needs review")
+
+    # Keep the source script before the next line overwrites it in place -- past this
+    # point the source is gone, and app/dub_script.py needs it to show a line's source
+    # next to its translation. Named original.srt, not source.srt: source.srt already
+    # belongs to a caller-uploaded source script (app/main.py:388).
+    with open(os.path.join(work_dir, "original.srt"), "w", encoding="utf-8") as f:
+        f.write(build_srt(cues))
 
     for c, tr in zip(cues, translated):
         c["text"] = tr
@@ -550,6 +558,7 @@ def run_dub(
     # candidates that were kept for a possible reassembly pass (see
     # qwen_pipeline.synth_lines / cleanup_takes).
     cleanup_takes(work_dir, log)
+    cleanup_intermediates(work_dir, log)
     log("✅ Done!")
     return {
         "job_id": job_id,
@@ -558,3 +567,30 @@ def run_dub(
         "auto_translated": auto_translated,
         "detected_source_language": detected_language["code"],
     }
+
+
+_INTERMEDIATE = re.compile(
+    r"^(vocals|background|qwen_dub_48k|qwen_line_\d+|qwen_ref_.*)\.wav$"
+)
+
+
+def cleanup_intermediates(work_dir, log=None):
+    # type: (str, Optional[Callable[[str], None]]) -> int
+    """Delete the audio a finished job no longer needs. Returns how many went.
+
+    Call ONLY after the job succeeded -- a failed or cancelled job keeps
+    everything, because that is what tells us what went wrong. Measured on a
+    real job (2026-08-21): about 61% of a 31MB folder. The dubbed video, the
+    source video and every .srt are never touched.
+    """
+    log = log or (lambda m: None)
+    if not os.path.isdir(work_dir):
+        return 0
+    removed = 0
+    for name in os.listdir(work_dir):
+        if _INTERMEDIATE.match(name):
+            os.remove(os.path.join(work_dir, name))
+            removed += 1
+    if removed:
+        log("   cleaned up %d intermediate audio file(s)" % removed)
+    return removed

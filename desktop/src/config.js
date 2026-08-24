@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
+import { statfs } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -52,6 +53,49 @@ export function kitPathTooLong(kitDir, platform = process.platform) {
     + `Windows cannot open files deeper than ${WINDOWS_PATH_LIMIT} characters, and the kit `
     + `needs about ${KIT_DEEPEST_RELATIVE} more than the folder you pick. `
     + `Choose somewhere shorter, such as C:\\PersoDub.`;
+}
+
+const GB = 1024 ** 3;
+const gb = (bytes) => (bytes / GB).toFixed(1);
+
+/** A sentence to show the user, or null when there is room.
+ *
+ * Counted against what is still MISSING, not the whole kit: a machine that
+ * downloaded 15 GB and ran out at the end needs the remainder, and demanding
+ * the full size again would lock out the very people this exists to help.
+ */
+export function notEnoughSpace(neededBytes, freeBytes) {
+  // A null reading means the check could not run -- see freeSpaceAt.
+  if (freeBytes === null || freeBytes >= neededBytes) return null;
+  // No "not enough space" sentence here: the screen's heading says that, and
+  // repeating it pushed the two figures -- the only part that tells you what
+  // to do -- further down.
+  return `  Needs:  ${gb(neededBytes)} GB\n`
+    + `  Free:   ${gb(freeBytes)} GB\n\n`
+    // Both numbers, not just "not enough space": without them the usual
+    // outcome is clearing a little, retrying, and failing again.
+    + `Free up about ${gb(neededBytes - freeBytes)} GB and start again.`;
+}
+
+/** Bytes free on the volume the kit will live on, or null if unreadable.
+ *
+ * Walks up to the nearest folder that exists: on a first install the kit
+ * directory has not been created yet, and asking about it directly throws.
+ * Returning null rather than throwing is deliberate -- a preflight that cannot
+ * read the disk must not become the reason someone cannot install.
+ */
+export async function freeSpaceAt(dir, statfsImpl = statfs) {
+  let at = dir;
+  for (;;) {
+    try {
+      const fs = await statfsImpl(at);
+      return fs.bavail * fs.bsize;
+    } catch {
+      const up = dirname(at);
+      if (up === at) return null;  // reached the root without an answer
+      at = up;
+    }
+  }
 }
 
 export const DEFAULTS = {

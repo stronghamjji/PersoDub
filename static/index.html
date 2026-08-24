@@ -146,6 +146,15 @@
   .job-dot.error { background: var(--destructive); }
   .job-dot.cancelled { background: var(--muted-foreground); }
   .job-row .job-info { min-width: 0; }
+  /* The row itself is a <button>, so the delete control sits beside it rather
+     than inside. It stays hidden until the row is hovered or it has focus --
+     an always-visible delete next to every job invites the wrong click. */
+  .job-line { display: flex; align-items: center; }
+  .job-line .job-row { flex: 1; min-width: 0; }
+  .job-del { border: none; background: none; cursor: pointer; padding: 6px 10px; color: var(--muted-foreground); font: inherit; font-size: 0.78rem; opacity: 0; flex-shrink: 0; }
+  .job-line:hover .job-del, .job-del:focus-visible { opacity: 1; }
+  .job-del:hover { color: var(--destructive); }
+  .job-del.confirming { opacity: 1; color: var(--destructive); font-weight: 700; }
   .job-name { font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .job-meta { font-size: 0.7rem; color: var(--muted-foreground); }
 
@@ -1386,6 +1395,17 @@ function upsertHistory(entry) {
   renderHistory();
 }
 
+function removeHistory(jobId) {
+  saveHistory(loadHistory().filter((j) => j.jobId !== jobId));
+  // The open Export tab would be showing files that are gone now.
+  if (state.jobId === jobId) {
+    state.jobId = null;
+    state.pollGeneration += 1;
+    switchTab("upload");
+  }
+  renderHistory();
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -1409,7 +1429,45 @@ function renderHistory() {
     row.innerHTML = `<span class="job-dot ${dotClass}"></span>
       <div class="job-info"><div class="job-name">${escapeHtml(entry.fileName)}</div><div class="job-meta">${escapeHtml(entry.metaText || "")}</div></div>`;
     row.addEventListener("click", () => resumeJob(entry.jobId));
-    container.appendChild(row);
+
+    // Deleting a job's folder cannot be undone, so the button asks once by
+    // turning into "Sure?" -- not window.confirm(), which freezes every event
+    // in the Electron shell until it is dismissed.
+    const del = document.createElement("button");
+    del.className = "job-del";
+    del.type = "button";
+    del.title = "Delete this job's files";
+    del.textContent = "Delete";
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!del.classList.contains("confirming")) {
+        del.classList.add("confirming");
+        del.textContent = "Sure?";
+        setTimeout(() => {
+          del.classList.remove("confirming");
+          del.textContent = "Delete";
+        }, 4000);
+        return;
+      }
+      del.disabled = true;
+      del.textContent = "Deleting…";
+      try {
+        const r = await fetch(`/api/dub/jobs/${entry.jobId}/workspace`, { method: "DELETE" });
+        if (!r.ok) throw new Error((await r.json()).detail || "Could not delete this job");
+        removeHistory(entry.jobId);
+      } catch (err) {
+        del.disabled = false;
+        del.classList.remove("confirming");
+        del.textContent = "Delete";
+        del.title = err.message;
+      }
+    });
+
+    const line = document.createElement("div");
+    line.className = "job-line";
+    line.appendChild(row);
+    line.appendChild(del);
+    container.appendChild(line);
   }
 }
 
@@ -1454,6 +1512,10 @@ function readOptions() {
     qualityMode: $("qualitySelect").value,
     numSpeakers: $("numSpeakers").value ? Number($("numSpeakers").value) : undefined,
     translateEngine: $("translateSelect").value,
+    // A link's title is only known here -- the probe already fetched it, while
+    // the server learns nothing from downloading the video. Names the job's
+    // folder, so send it along with the job.
+    project: state.source === "link" ? (state.linkProbe || {}).title : undefined,
   };
 }
 
@@ -1560,11 +1622,18 @@ function langName(code) {
 // ---------------- Export tab ----------------
 async function renderExport(job) {
   const el = $("exportContent");
+  // Tell the shell where this job's downloads belong. It has to be handed over
+  // before any button is clicked, because will-download cannot ask for it.
+  window.persodubShell?.rememberJob?.({ id: job.id, project: job.project, day: job.day });
   const url = resultUrl(job.id);
   const target = job.language_code || "out";
   const srtText = await fetchResultSrt(job.id).catch(() => null);
   const srtRows = srtText
-    ? parseSrt(srtText).map((c) => `<div class="srt-row"><span class="srt-time">${c.start}–${c.end}</span><span class="srt-text">${escapeHtml(c.text)}</span></div>`).join("")
+    // Escape the timecodes too, not just the text. The .srt served back is the
+    // file the user handed us, verbatim -- parseSrt takes whatever sits before
+    // "-->" as the start time without checking it is a timecode, so a crafted
+    // subtitle put markup straight into innerHTML here.
+    ? parseSrt(srtText).map((c) => `<div class="srt-row"><span class="srt-time">${escapeHtml(c.start)}–${escapeHtml(c.end)}</span><span class="srt-text">${escapeHtml(c.text)}</span></div>`).join("")
     : '<div class="srt-empty">No subtitle file was recorded for this job.</div>';
 
   // The four things a finished job can hand back: original + dub, and the two
@@ -1584,9 +1653,9 @@ async function renderExport(job) {
         <video controls src="${url}"></video>
         ${langLine}
         <div class="result-actions">
-          <a class="btn btn-primary" href="${url}" download="dubbed_${target}.mp4">Download dubbed video</a>
-          <a class="btn btn-secondary" href="/api/dub/result/${job.id}/original" download="original.mp4">Download original</a>
-          ${srtText ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/srt?download=1" download="dubbed_${target}.srt">Download subtitles (.srt)</a>` : ""}
+          <a class="btn btn-primary" href="${url}" download="dub_${target}.mp4">Download dubbed video</a>
+          ${job.from_link ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/original" download="org.mp4">Download original</a>` : ""}
+          ${srtText ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/srt?download=1" download="dub_${target}.srt">Download subtitles (.srt)</a>` : ""}
         </div>
       </div>
       <div class="srt-list">${srtRows}</div>

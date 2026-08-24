@@ -1,14 +1,15 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 import { join, dirname } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
-import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong } from "./src/config.js";
+import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
-import { buildSteps } from "./src/installSpec.js";
+import { buildSteps, bytesStillNeeded } from "./src/installSpec.js";
 import { runInstall } from "./src/installer.js";
 import { download } from "./src/download.js";
+import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
 import { run } from "./src/exec.js";
 import { pullOllamaModel } from "./src/ollamaPull.js";
@@ -44,7 +45,7 @@ function analyticsMode(kitDir) {
   return resolveAnalyticsMode({ isPackaged: app.isPackaged, env });
 }
 
-function countUsage(event, kitDir, errorCode) {
+function countUsage(event, kitDir, errorCode, step) {
   try {
     const mode = analyticsMode(kitDir);
     if (mode === "off") return;
@@ -55,6 +56,7 @@ function countUsage(event, kitDir, errorCode) {
       os: IS_WIN ? "windows" : "mac",
       version: app.getVersion(),
       errorCode,
+      step,
     });
   } catch { /* a count is never worth interrupting a launch for */ }
 }
@@ -181,20 +183,46 @@ async function boot(win) {
       if (tooLong) {
         countUsage("install_failure", cfg.kitDir, "path-too-long");
         await win.loadFile(join(HERE, "screens", "error.html"), {
-          query: { message: tooLong, logDir: cfg.kitDir },
+          // No logDir: this stopped before a byte was written, so there is no
+          // log to point at.
+          query: { title: "Choose a shorter install location", message: tooLong },
+        });
+        return;
+      }
+      const ctx = { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run, pullOllama: pullOllamaModel };
+      const steps = buildSteps(ctx);
+      // The other preflight, and for the same reason: five machines reported a
+      // disk-full from deep inside a step, after gigabytes had already been
+      // downloaded. Only the steps still missing are counted, so a half-done
+      // install asks for the remainder rather than the whole kit again.
+      const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(cfg.kitDir));
+      if (noRoom) {
+        countUsage("install_failure", cfg.kitDir, "disk-full");
+        await win.loadFile(join(HERE, "screens", "error.html"), {
+          query: { title: "Not enough space to install", message: noRoom },
         });
         return;
       }
       await win.loadFile(join(HERE, "screens", "installing.html"));
-      const ctx = { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run, pullOllama: pullOllamaModel };
+      // runInstall already reports which step failed; without keeping it the
+      // count says only "somewhere in ten steps", which is what made the first
+      // four real install failures unactionable.
+      let failedStep;
       try {
-        await runInstall(buildSteps(ctx), {
-          onProgress: (p) => win.webContents.send("shell:install-progress", p),
+        await runInstall(steps, {
+          onProgress: (p) => {
+            if (p.state === "error") failedStep = p.stepId;
+            win.webContents.send("shell:install-progress", p);
+          },
         });
       } catch (err) {
-        countUsage("install_failure", cfg.kitDir, classifyError(String((err && err.message) || err)));
+        countUsage("install_failure", cfg.kitDir, classifyError(String((err && err.message) || err), { install: true }), failedStep);
         await win.loadFile(join(HERE, "screens", "error.html"), {
-          query: { message: String((err && err.message) || err), logDir: cfg.kitDir },
+          query: {
+            title: "The install could not finish",
+            message: String((err && err.message) || err),
+            logDir: cfg.kitDir,
+          },
         });
         return;
       }
@@ -224,10 +252,38 @@ async function boot(win) {
   }
 }
 
+// Filled by the screen when it renders a finished job, read back synchronously
+// inside will-download (which cannot await a fetch).
+const jobFolders = new Map();
+ipcMain.on("shell:remember-job", (_e, job) => {
+  if (job && job.id && job.project && job.day) {
+    jobFolders.set(job.id, { project: job.project, day: job.day });
+  }
+});
+
 app.whenReady().then(() => {
   // One greppable line naming the running version -- the e2e update test (and
   // any future bug report) reads it instead of guessing from filenames.
   console.log(`PERSODUB_VERSION ${app.getVersion()}`);
+
+  // The app server names the file (dub_en.mp4); the folder comes from the job's
+  // date and project, so three episodes do not collapse into "dub_en (1).mp4".
+  // Nothing here is fatal: on any failure Electron picks the path the way it
+  // always did -- which is also what happens when the UI runs in a plain
+  // browser and never sent us the job.
+  session.defaultSession.on("will-download", (_event, item) => {
+    try {
+      const jid = new URL(item.getURL()).pathname.split("/")[4];
+      const folder = jid && jobFolders.get(jid);
+      if (!folder) return;
+      const dir = join(app.getPath("downloads"), folder.day, folder.project);
+      mkdirSync(dir, { recursive: true });
+      const name = uniqueName(item.getFilename(), (n) => existsSync(join(dir, n)));
+      if (name) item.setSavePath(join(dir, name));
+    } catch {
+      /* fall through to Electron's default naming */
+    }
+  });
   const win = new BrowserWindow({
     width: 1200,
     height: 800,

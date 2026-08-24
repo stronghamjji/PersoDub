@@ -5,12 +5,23 @@
   button { font-size: 15px; padding: 8px 20px; border-radius: 6px; border: 1px solid #4a7dff;
            background: #4a7dff; color: white; cursor: pointer; }
 </style>
-<h2>The engines failed to start</h2>
+<h2 id="title"></h2>
 <pre id="message"></pre>
-<p>Logs: <code id="logDir"></code></p>
+<p id="logs">Logs: <code id="logDir"></code></p>
 <button onclick="window.persodubShell.retry()">Try again</button>
 <script>
   const q = new URLSearchParams(location.search);
+  // Each failure names itself. One fixed heading meant a preflight that
+  // stopped before anything started still announced that the engines had
+  // failed to start, which contradicted the sentence right below it.
+  const heading = q.get("title") || "The engines failed to start";
+  document.getElementById("title").textContent = heading;
+  document.title = `PersoDub: ${heading}`;  // the window title, which said
+                                            // "Startup failed" either way
   document.getElementById("message").textContent = q.get("message") || "(no details)";
-  document.getElementById("logDir").textContent = q.get("logDir") || "(unknown)";
+  // A preflight has no log to point at -- it stopped before a byte was written.
+  // An empty path under "Logs:" reads like something went missing.
+  const dir = q.get("logDir");
+  if (dir) document.getElementById("logDir").textContent = dir;
+  else document.getElementById("logs").remove();
 </script>

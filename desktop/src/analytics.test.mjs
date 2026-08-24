@@ -89,6 +89,66 @@ test("a listed error code leaves as itself", () => {
   assert.equal(p.error_code, "path-too-long");
 });
 
+test("an install step that merely exited nonzero is not called an engine crash", () => {
+  // "engine-crash" means a running engine died, which is a dub-time event. A
+  // pip install or an hf download that exits 1 is not that -- and calling it
+  // that is what made the first four real install failures unreadable.
+  assert.equal(classifyError("Command failed: pip install ... exit 1", { install: true }), "step-failed");
+});
+
+test("a dub-time engine death keeps the name it was made for", () => {
+  assert.equal(classifyError("worker exit 1"), "engine-crash");
+  assert.equal(classifyError("sidecar did not become ready"), "engine-crash");
+});
+
+test("every other cause reads the same during an install", () => {
+  // Only the catch-all changes. A real disk-full or permission error is
+  // already named correctly and must not be relabelled.
+  for (const [msg, code] of [["ENOSPC", "disk-full"], ["EACCES", "permission"],
+                             ["ETIMEDOUT", "network"], ["ENOMEM", "out-of-memory"]]) {
+    assert.equal(classifyError(msg, { install: true }), code, msg);
+  }
+});
+
+test("step-failed is on the published list and travels as itself", () => {
+  const p = buildPayload({
+    event: "install_failure", os: "windows", version: "0.3.6", device: "a".repeat(32),
+    errorCode: "step-failed", step: "models",
+  });
+  assert.equal(p.error_code, "step-failed");
+});
+
+test("an install failure records which step it died in", () => {
+  // "engine-crash" on its own means "somewhere in ten steps" -- four real
+  // failures arrived that way and none of them could be acted on. The step is
+  // what turns a count into something fixable.
+  const p = buildPayload({
+    event: "install_failure", os: "windows", version: "0.3.5", device: "a".repeat(32),
+    errorCode: "disk-full", step: "gemma",
+  });
+  assert.equal(p.step, "gemma");
+});
+
+test("an unlisted step leaves as unknown", () => {
+  // Same rule as error codes: only the published list travels, so a path or a
+  // message can never reach the table through this field.
+  const p = buildPayload({
+    event: "install_failure", os: "mac", version: "0.3.5", device: "a".repeat(32),
+    errorCode: "disk-full", step: "C:\\Users\\someone\\video.mp4",
+  });
+  assert.equal(p.step, "unknown");
+});
+
+test("only install failures carry a step", () => {
+  for (const event of ["app_launch", "dub_success", "dub_failure"]) {
+    const p = buildPayload({
+      event, os: "mac", version: "0.3.5", device: "a".repeat(32),
+      errorCode: "out-of-memory", step: "gemma",
+    });
+    assert.equal(p.step, undefined, event);
+  }
+});
+
 test("a success carries no error code and no extra fields", () => {
   const p = buildPayload({
     event: "dub_success", os: "mac", version: "0.3.2", device: "a".repeat(32),
@@ -374,3 +434,14 @@ test("an install that finished but whose engines never started is its own code",
   assert.equal(p.error_code, "engine-start");
 });
 
+
+test("the failing step travels all the way to the wire", async () => {
+  const { sent, fetchImpl } = recorder();
+  await countEvent("install_failure", {
+    ...BASE, mode: "on", stateFile: tempStateFile(), fetchImpl,
+    errorCode: "disk-full", step: "gemma",
+  });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].step, "gemma");
+  assert.equal(sent[0].error_code, "disk-full");
+});

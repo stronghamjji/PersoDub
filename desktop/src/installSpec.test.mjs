@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   buildSteps, writeKitEnv, PYTHON_URL, PYTHON_SHA256, CAMPPLUS_SHA256,
-  OLLAMA_TGZ_SHA256, GEMMA_MODEL, GEMMA_MANIFEST,
+  OLLAMA_TGZ_SHA256, GEMMA_MODEL, GEMMA_MANIFEST, bytesStillNeeded,
 } from "./installSpec.js";
 import { IS_WIN, venvBin, exeName, TTS_DEVICE } from "./platform.js";
 
@@ -416,4 +416,38 @@ test("writeKitEnv includes the leakage-gate and worker-timeout additions", () =>
   assert.ok(s.includes("PERSODUB_SCORER_ASR_TIMEOUT=60"));
   assert.ok(s.includes("PERSODUB_TTS_TIMEOUT=900"));
   assert.ok(s.includes("PERSODUB_DIAR_TIMEOUT=1800"));
+});
+
+// --- how much room the remaining steps need -------------------------------
+
+test("every step declares how much room it takes", () => {
+  // The free-space preflight sums these. A step with no figure would silently
+  // count as free and let an install start that cannot finish.
+  for (const s of buildSteps(freshCtx())) {
+    assert.equal(typeof s.bytes, "number", `${s.id} has no bytes`);
+    assert.ok(s.bytes >= 0, `${s.id} is negative`);
+  }
+});
+
+test("the whole kit adds up to roughly what the installing screen promises", () => {
+  // Measured 2026-08-24 on a real mac install: 18.4 GB. The screen says
+  // "about 19 GB". If this drifts, one of the two is now lying to the user.
+  const total = buildSteps(freshCtx()).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
+  assert.ok(total > 15 && total < 30, `total is ${total.toFixed(1)} GB`);
+});
+
+test("only the steps still missing are counted", async () => {
+  // The whole point: a machine that already has most of the kit needs the
+  // remainder, not the full download again.
+  const steps = [
+    { id: "a", bytes: 5, isDone: () => true },
+    { id: "b", bytes: 7, isDone: () => false },
+    { id: "c", bytes: 11, isDone: async () => false },
+  ];
+  assert.equal(await bytesStillNeeded(steps), 18);
+});
+
+test("nothing is needed once every step is done", async () => {
+  const steps = [{ id: "a", bytes: 5, isDone: () => true }];
+  assert.equal(await bytesStillNeeded(steps), 0);
 });

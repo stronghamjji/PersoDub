@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, KIT_DEEPEST_RELATIVE, WINDOWS_PATH_LIMIT } from "./config.js";
+import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt, KIT_DEEPEST_RELATIVE, WINDOWS_PATH_LIMIT } from "./config.js";
+
+const GB = 1024 ** 3;
 
 // --- where the kit goes when nothing overrides it -------------------------
 
@@ -78,6 +80,32 @@ test("the preflight only applies to Windows", () => {
   assert.equal(kitPathTooLong("/" + "x".repeat(room), "darwin"), null);
 });
 
+// --- free-space preflight -------------------------------------------------
+
+test("an install with less room than it needs is stopped before the first byte", () => {
+  // Reported by five machines: the install starts, downloads several
+  // gigabytes, and dies as a disk-full deep inside a step. Nothing checked
+  // first -- the "about 19 GB" on the installing screen was a sentence, not a
+  // test.
+  const msg = notEnoughSpace(19 * GB, 4 * GB);
+  assert.ok(msg, "expected a message");
+  assert.match(msg, /19\.0 GB/, msg); // what it needs
+  assert.match(msg, /4\.0 GB/, msg);  // what is there
+  assert.match(msg, /15\.0 GB/, msg); // how much more to free
+});
+
+test("an install that fits passes the preflight", () => {
+  assert.equal(notEnoughSpace(19 * GB, 25 * GB), null);
+});
+
+test("free space is only counted against what is still missing", () => {
+  // A machine that already downloaded most of the kit and ran out at the end
+  // needs the remainder, not the whole thing again. Demanding the full size
+  // would lock out exactly the people this check exists to help -- one of the
+  // five tried five times.
+  assert.equal(notEnoughSpace(2 * GB, 4 * GB), null);
+});
+
 test("defaults apply when no config file exists", () => {
   const cfg = loadConfig({ configPath: "/nonexistent/config.json", env: {} });
   assert.equal(cfg.sidecarPort, 3901);
@@ -106,4 +134,21 @@ test("empty kitDir in config file is ignored", () => {
   const p = join(dir, "config.json");
   writeFileSync(p, JSON.stringify({ kitDir: "" }));
   assert.equal(loadConfig({ configPath: p, env: {} }).kitDir, DEFAULTS.kitDir);
+});
+
+test("free space is read from the nearest folder that exists", async () => {
+  // The kit directory does not exist yet on a first install -- asking the
+  // filesystem about it directly throws, so the check has to walk up.
+  const missing = join(tmpdir(), "odspace-does-not-exist", "kit", "deeper");
+  const free = await freeSpaceAt(missing);
+  assert.equal(typeof free, "number");
+  assert.ok(free > 0, `expected a real figure, got ${free}`);
+});
+
+test("a filesystem that will not answer never blocks the install", async () => {
+  // Fail open. A preflight that cannot read the disk must not be the reason
+  // someone cannot install -- it exists to explain a failure, not to cause one.
+  const free = await freeSpaceAt("/anywhere", async () => { throw new Error("nope"); });
+  assert.equal(free, null);
+  assert.equal(notEnoughSpace(19 * GB, null), null);
 });

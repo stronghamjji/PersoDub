@@ -343,7 +343,8 @@ the check off entirely.
 
 PersoDub reports four events — app launch, dub finished, dub failed, install failed —
 to see how many installs finish a dub. Each carries the app version, your operating
-system, a random install ID, and on a failure one short code off a fixed list. Never
+system, a random install ID, and on a failure one short code off a fixed list. A failed
+install also names which of its ten steps it stopped at, again off a fixed list. Never
 your video, audio, subtitles, filenames, paths or error text; no IP address is stored.
 
 A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
