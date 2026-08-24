@@ -111,6 +111,32 @@ The source files live in [docs/demo](docs/demo).
 
 ---
 
+## Why PersoDub
+
+- **Your footage stays yours.** Processing is 100% local by default — no account, no
+  API key, no uploads. Cloud engines are opt-in only. See
+  [Data and privacy](#data-and-privacy).
+- **No time-stretching.** Most dubbing tools speed the audio up when a translation runs
+  longer than the original line — that's why dubs often sound rushed. PersoDub never
+  resamples the dubbed audio; the constraint is enforced in code, not convention.
+  Details in [Where PersoDub fits](docs/comparison.md).
+- **Voice cloning, not narration.** Each speaker's timbre is cloned from the source
+  audio, so the dub sounds like that person speaking another language, not a generic
+  synthetic narrator.
+- **Everything else is preserved.** Music and effects stay untouched; only speech is
+  replaced. Translated subtitles (`.srt`) are exported alongside the dubbed video.
+
+## Requirements
+
+| | |
+|---|---|
+| **Hardware** | Apple Silicon Mac (M1 or newer), or a 64-bit PC. Intel Macs are not supported. |
+| **OS** | macOS 11 (Big Sur) or later, or Windows 10 (21H2) / Windows 11. Linux is [planned](docs/roadmap.md). |
+| **Graphics (Windows)** | An NVIDIA GPU is strongly recommended — AMD and Intel graphics are not accelerated. Everything works without one, just slower; see [Speed without a GPU](docs/faq.md#speed-without-a-gpu). |
+| **Memory** | 24 GB recommended, 16 GB minimum |
+| **Disk** | 30 GB free on macOS, 45 GB on Windows. The first launch downloads the AI models and runtimes once — roughly 19 GB on macOS, 34 GB on Windows. |
+| **Network** | Required for the first-run download. Afterwards PersoDub runs offline unless you enable a cloud engine. |
+
 ## Installation
 
 Both platforms install the same way: **go to the
@@ -122,170 +148,34 @@ download the file for your computer.
 | Mac with Apple Silicon (M1 or newer) | `PersoDub-<version>-arm64.dmg` |
 | Windows 10 (21H2+) / 11, 64-bit | `PersoDub-Setup-<version>.exe` |
 
-### macOS
+**macOS** — Open the `.dmg` and drag **PersoDub** into Applications. It's signed and
+notarized, so it opens with a normal double-click, and it checks for updates on launch.
+Building from source: [INSTALL.md](INSTALL.md#macos--install-from-source-for-developers).
 
-Open the downloaded `.dmg` and drag **PersoDub** into your Applications folder. The
-app is signed and notarized, so it opens with a normal double-click, and it keeps
-itself up to date: on launch it checks for a newer release and offers to install it.
-
-Developers who prefer to build from source can follow
-[INSTALL.md](INSTALL.md#macos--install-from-source-for-developers).
-
-### Windows (beta)
-
-Run the downloaded **`PersoDub-Setup-<version>.exe`**.
-It installs for your user account only, into `%LOCALAPPDATA%\Programs\PersoDub`, so no
-administrator rights are needed.
-
-The Windows build is not code-signed yet, so SmartScreen shows **"Windows protected your
-PC"** the first time you run the installer. Click **More info**, then **Run anyway**.
+**Windows (beta)** — Run `PersoDub-Setup-<version>.exe`. It installs for your user
+account only (no admin rights needed). The build isn't code-signed yet, so SmartScreen
+shows "Windows protected your PC" the first time — click **More info**, then
+**Run anyway**.
 
 On either platform, the first launch downloads the AI models and runtimes — roughly
-19 GB on macOS, about 34 GB on Windows, where the kit carries the CUDA build of PyTorch
-(see [Requirements](#requirements)). On Windows the download took about 27 minutes on a
-fast connection. It happens once; [docs/usage.md](docs/usage.md#first-launch) shows what
-that screen looks like. On Windows the kit is stored in `%LOCALAPPDATA%\PersoDub`.
-
-Already installed? On macOS, launch **PersoDub** from your Applications folder, or from
-Terminal:
-
-```bash
-open -a PersoDub
-```
-
-On Windows, launch **PersoDub** from the Start menu.
-
-## Table of contents
-
-- [What is PersoDub?](#what-is-persodub)
-- [Hear the difference](#hear-the-difference)
-- [Installation](#installation)
-- [Why PersoDub](#why-persodub)
-- [Where PersoDub fits](#where-persodub-fits)
-- [How it works](#how-it-works)
-- [Requirements](#requirements)
-- [Usage](#usage)
-- [Supported languages](#supported-languages)
-- [Configuration](#configuration)
-- [Data and privacy](#data-and-privacy)
-- [Responsible use](#responsible-use)
-- [Known limitations](#known-limitations)
-- [Roadmap](#roadmap)
-- [Troubleshooting](#troubleshooting)
-- [FAQ](#faq)
-- [Development](#development)
-- [Contributing](#contributing)
-- [Security](#security)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
-
----
-
-## Why PersoDub
-
-**Your footage stays yours — processing is 100% local by default.** Separation,
-transcription, diarization, translation and speech synthesis all run on your machine,
-offline after the one-time model download. No account, no API key, no uploads. If you
-dub confidential, unreleased or personal footage, nothing about it ever touches a
-server — cloud engines are available but strictly opt-in. They and the usage counts are
-both covered in [Data and privacy](#data-and-privacy).
-
-**No time-stretching.** Most dubbing tools speed the audio up when a translation runs
-longer than the original line. That is the main reason dubs sound rushed and artificial.
-PersoDub never resamples the dubbed audio. Instead the constraint is moved upstream: each
-line is translated to land within ±15% of its subtitle slot, and the assembly stage
-carries a watchdog that measures every placed line and flags any deviation from 1.000×
-playback speed in the job log. The rule is enforced in code, not by convention.
-
-**Voice cloning, not narration.** Each speaker's timbre is cloned from the source audio,
-so the dub sounds like that person speaking another language rather than a generic
-synthetic narrator.
-
-**Everything else is preserved.** Music and effects stay untouched; only speech is
-replaced. Translated subtitles (`.srt`) are exported alongside the dubbed video.
-
-## Where PersoDub fits
-
-Open-source video dubbing has good options, and they solve different problems. If
-PersoDub is not the right fit, one of these probably is:
-
-| Project | License | Shape |
-|---|---|---|
-| [VideoLingo](https://github.com/Huanshere/VideoLingo) | Apache-2.0 | Subtitle-first pipeline with dubbing, web UI |
-| [KrillinAI](https://github.com/krillinai/KrillinAI) | GPL-3.0 | Translation and dubbing with scriptable stages and a CLI |
-| [Voice-Pro](https://github.com/abus-aikorea/voice-pro) | GPL-3.0 | Broad voice toolkit — transcription, cloning, separation |
-| [VoiceStudio](https://github.com/debpalash/VoiceStudio) | AGPL-3.0 | Local voice cloning and voice design across many languages |
-
-**What PersoDub does differently: it refuses to time-stretch.** Every other approach
-absorbs a length mismatch in the audio. PersoDub absorbs it in the translation instead,
-and backs that with a watchdog that verifies, line by line, that no resampling took
-place. If you have ever noticed a dub subtly sped up to fit its slot, that specific
-artifact is what this project exists to eliminate.
-
-**On licensing:** PersoDub is Apache-2.0, so it can be used inside a commercial or
-closed-source product without the copyleft obligations that GPL-3.0 and AGPL-3.0 carry.
-
-## How it works
-
-```
-video ──► source separation ──► transcription ──► speaker diarization
-             (Demucs)         (faster-whisper)        (CAM++)
-                                                          │
-        finished video ◄── mix & mux ◄── speech synthesis ◄── translation
-             (.mp4 + .srt)     (FFmpeg)      (Qwen3-TTS)    (Gemma via Ollama)
-```
-
-The app itself is a thin orchestrator. Each heavy stage runs as an isolated
-subprocess with its own Python environment, so a failure in one stage cannot take
-down the others. Architecture details are in [docs/development.md](docs/development.md).
-
-## Requirements
-
-| | |
-|---|---|
-| **Hardware** | Apple Silicon Mac (M1 or newer), or a 64-bit PC. Intel Macs are not supported. |
-| **OS** | macOS 11 (Big Sur) or later, or Windows 10 (21H2) / Windows 11. Linux is [planned](#roadmap). |
-| **Graphics (Windows)** | An NVIDIA GPU is strongly recommended. Everything works without one, but see [Speed without a GPU](#speed-without-a-gpu). AMD and Intel graphics are not accelerated. |
-| **Memory** | 24 GB recommended, 16 GB minimum |
-| **Disk** | 30 GB free on macOS, 45 GB on Windows. The first launch downloads the AI models and runtimes once — roughly 19 GB on macOS, 34 GB on Windows, which additionally carries the CUDA build of PyTorch. |
-| **Network** | Required for the first-run download. Afterwards PersoDub runs offline unless you enable a cloud engine. |
-
-<a id="speed-without-a-gpu"></a>
-
-### Speed without a GPU
-
-PersoDub runs entirely on the processor when no supported GPU is present. Nothing
-breaks and no step is skipped — but two of the six stages, translation and voice
-synthesis, get **much** slower, and the gap grows with the length of the video.
-
-Measured on one desktop (Core i9-13900K, RTX 3080), same clip and settings, with the
-GPU available and then hidden:
-
-| | With GPU | Processor only |
-|---|---|---|
-| 10-second clip | about 1 minute | about 2 minutes |
-| Per line of dialogue: translation | about 1 second | about 30 seconds |
-| Per line of dialogue: voice synthesis | about 2 seconds | about 19 seconds |
-
-A short clip stays comfortable because half the work — separating the background and
-transcribing — never used the GPU anyway. A minute of dense dialogue is a different
-story: the same work that takes a few minutes on a GPU can take the better part of an
-hour without one, and a laptop processor is slower again than the desktop measured here.
-
-**Without a GPU, stick to short clips.** Long videos are best left to a machine that
-has one.
+19 GB on macOS, about 34 GB on Windows (see [Requirements](#requirements)). It happens
+once; [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks like.
 
 ## Usage
 
-1. Launch **PersoDub** — from your Applications folder on macOS, or the Start menu on
-   Windows.
-2. Drag a video file onto the window.
-3. Choose the language to dub into.
-4. Start the job. Progress is shown stage by stage.
-5. When it finishes, download the dubbed video and the translated `.srt`.
+1. Launch **PersoDub**. On first run it downloads its models (see
+   [Requirements](#requirements)); after that it opens straight to the **Upload** tab.
+2. Drop your video onto the upload area, click it to browse, or paste a video link —
+   MP4 or MOV, up to 2 GB.
+3. Pick the language to dub into from the **Target language** menu — 10 are supported
+   (see [Supported languages](#supported-languages) below).
+4. Click **Start dubbing**. A progress bar at the top tracks each stage as it runs.
+5. When it finishes, the **Export** tab unlocks — download the dubbed video and the
+   translated `.srt` there.
 
-Engine choices (transcription, translation, quality) live under **Advanced options**.
-The defaults are the fully local, free path and are a good starting point.
+Engine choices (transcription, translation, quality) live under the **Advanced
+options** toggle, collapsed by default — see [Configuration](#configuration) for what
+each default is and how to switch a step to a cloud engine.
 
 A screen-by-screen walkthrough, with screenshots of every option, is in
 **[docs/usage.md](docs/usage.md)**.
@@ -297,17 +187,16 @@ Russian · Spanish
 
 ## Configuration
 
-PersoDub works with no configuration. The settings below are **optional** and are
-entered in the app's **Settings** screen
-([screenshot](docs/usage.md#settings)).
+PersoDub works with no configuration: by default, transcription and speaker-labeling
+run on local Whisper + CAM++, and translation runs on local Gemma via Ollama.
 
-| Setting | Default behavior | With a key |
+Want better quality? Add an API key in the app's **Settings** screen
+([screenshot](docs/usage.md#settings)) to switch that one step to a cloud engine:
+
+| Add this key | Improves | Get it from |
 |---|---|---|
-| **Perso API key** | Transcription and diarization run on local Whisper + CAM++ | Higher transcription and speaker-labeling accuracy (cloud) |
-| **Google Gemini key** | Translation runs on local Gemma via Ollama | Higher translation quality (cloud) |
-
-- **Perso key** — available from [Perso Dubbing](https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=readme), including a free allowance. The Settings screen links to the same page.
-- **Gemini key** — available from [Google AI Studio](https://aistudio.google.com/app/apikey).
+| **Perso API key** | Transcription and speaker-labeling accuracy | [Perso Dubbing](https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=readme) — includes a free allowance |
+| **Google Gemini key** | Translation quality | [Google AI Studio](https://aistudio.google.com/app/apikey) |
 
 Keys are stored on your machine and take effect after you **restart the app**.
 
@@ -317,39 +206,14 @@ Keys are stored on your machine and take effect after you **restart the app**.
 
 ## Data and privacy
 
-**With the default engines, nothing leaves your machine.** Separation, transcription,
-diarization, translation and speech synthesis all run locally.
+**With the default engines, nothing leaves your machine.** Enabling an optional cloud
+engine sends only what that engine needs — a Perso key uploads the video for
+transcription, a Gemini key sends transcript text only, never the video or audio.
+PersoDub also reports a few anonymous usage counts (never your video, audio, or file
+content), which you can turn off in **Settings → Privacy**.
 
-Enabling an optional cloud engine changes that, so it is worth being precise:
-
-| If you add | What is sent | Where |
-|---|---|---|
-| **Perso API key** | **The video file itself** is uploaded for transcription. Perso also becomes the default transcription engine for subsequent jobs. | Perso |
-| **Google Gemini key** | **The transcript text only** — not the video, not the audio. | Google |
-
-Clearing the key in **Settings** returns PersoDub to fully local processing.
-
-When a Perso key is configured, requests to Perso carry a header identifying the
-application name, version, and operating system family so the vendor can attribute API
-usage.
-
-The desktop app checks GitHub Releases once at launch to learn whether a newer
-version exists, and downloads it in the background when there is one. The request
-carries no personal data — it is the same anonymous read anyone makes opening the
-releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `kit.env` to turn
-the check off entirely.
-
-### Usage counts
-
-PersoDub reports four events — app launch, dub finished, dub failed, install failed —
-to see how many installs finish a dub. Each carries the app version, your operating
-system, a random install ID, and on a failure one short code off a fixed list. A failed
-install also names which of its ten steps it stopped at, again off a fixed list. Never
-your video, audio, subtitles, filenames, paths or error text; no IP address is stored.
-
-A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
-with `PERSODUB_NO_ANALYTICS=1` in the kit's `kit.env`; it applies to the next event, no
-restart. `PERSODUB_ANALYTICS_DEBUG=1` prints what would be sent instead of sending it.
+Full breakdown — exactly what's sent, what's tracked, and how to opt out of
+everything — is in **[docs/privacy.md](docs/privacy.md)**.
 
 ## Responsible use
 
@@ -361,91 +225,33 @@ PersoDub clones the voices of real people. Please use it accordingly.
 - You are responsible for holding the rights to your source material and for complying
   with the laws and regulations that apply where you are.
 
-**Dubbing from a link.** Link fetching is powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-(released under the [Unlicense](https://github.com/yt-dlp/yt-dlp/blob/master/LICENSE)),
-installed from PyPI on your machine at install time; PersoDub does not bundle or
-redistribute its code. The fetched video is saved locally and dubbed locally, like any
-dropped file. Only dub videos you hold the rights to — downloading content may be
-restricted by the source platform's terms of service, and that responsibility is yours.
+Dubbing from a pasted link fetches the video locally via yt-dlp — see
+[docs/privacy.md](docs/privacy.md#dubbing-from-a-link) for how that works and your
+responsibilities there.
 
-## Known limitations
+## How it works
 
-- **Emotional delivery is weaker than the original.** Timbre is cloned faithfully, but
-  intense emotional performance does not fully carry over.
-- **Diarization can slip when speakers sound alike.** Similar voices may be merged or
-  swapped, particularly in crowded scenes.
-- **Without a GPU, long videos are impractical.** Everything still runs, but translation
-  and voice synthesis fall back to the processor and slow down sharply — see
-  [Speed without a GPU](#speed-without-a-gpu). Short clips remain fine.
-- **Linux is not supported yet.** macOS (Apple Silicon) and Windows are; see
-  [Roadmap](#roadmap).
-- **The voice-leak check reports, it does not correct.** It measures whether original
-  speech bleeds through beneath the dub and surfaces the result; it does not modify the mix.
+```mermaid
+flowchart LR
+    A["Video"] --> B["Source separation<br/>(Demucs)"]
+    B --> C["Transcription<br/>(faster-whisper)"]
+    C --> D["Speaker diarization<br/>(CAM++)"]
+    D --> E["Translation<br/>(Gemma via Ollama)"]
+    E --> F["Speech synthesis<br/>(Qwen3-TTS)"]
+    F --> G["Mix &amp; mux<br/>(FFmpeg)"]
+    G --> H["Finished video<br/>(.mp4 + .srt)"]
+```
 
-## Roadmap
+The app itself is a thin orchestrator. Each heavy stage runs as an isolated
+subprocess with its own Python environment, so a failure in one stage cannot take
+down the others. Architecture details are in [docs/development.md](docs/development.md).
 
-Planned, in no committed order:
+## Learn more
 
-- **Additional platforms** — a Linux desktop build
-- Stronger emotional delivery in synthesized speech
-- More reliable diarization when speakers sound alike
-
-Have a use case that is not covered? Open an
-[issue](https://github.com/stronghamjji/PersoDub/issues) — it helps set priorities.
-
-## Troubleshooting
-
-**The first launch seems to take forever.** It is downloading the models and runtimes —
-roughly 19 GB on macOS, about 34 GB on Windows. This happens once; later launches start
-immediately.
-
-**A cloud engine is greyed out in the dropdown.** Save the corresponding API key in
-Settings, then restart the app. Engine availability is evaluated at startup.
-
-**I saved a key but nothing changed.** Keys are read when the engines start. Restart the
-app to apply them.
-
-**A job failed and mentioned an engine by name.** The message names the stage that
-failed. Switching that stage to its local option (Whisper for transcription, Gemma for
-translation) is usually the fastest way to confirm whether the problem is the cloud
-service or the input file.
-
-## FAQ
-
-**Does my video leave my computer?**
-Not with the default settings — every stage runs locally. It leaves only if you add a
-Perso key, which uploads the video for transcription. See
-[Data and privacy](#data-and-privacy).
-
-**Can I use PersoDub commercially?**
-Yes. It is Apache-2.0. You remain responsible for holding the rights to the material you
-dub, and for the terms of any optional cloud service you enable.
-
-**Why are Intel Macs not supported?**
-The Mac build targets Apple Silicon, whose built-in acceleration the pipeline relies on;
-an Intel Mac has no equivalent path and would run every stage on the processor. Linux is
-on the [roadmap](#roadmap) but has no date.
-
-**Why is the first-run download so large?**
-PersoDub ships no AI models. On first launch it downloads the separation, recognition,
-diarization, translation and speech-synthesis models — roughly 19 GB on macOS, about
-34 GB on Windows, which also carries the CUDA build of PyTorch — so that everything can
-run offline afterwards. It happens once.
-
-**Do I need a GPU?**
-On a Mac, no — PersoDub uses the acceleration built into Apple Silicon. On Windows, an
-NVIDIA GPU is used when one is present; AMD and Intel graphics are not accelerated.
-Everything still runs on the processor without a supported GPU, just much slower — see
-[Speed without a GPU](#speed-without-a-gpu). Memory matters too; 24 GB is comfortable.
-
-**Is the dubbed audio watermarked?**
-No. Please disclose AI-dubbed audio as synthetic wherever you publish it — see
-[Responsible use](#responsible-use).
-
-**How is this different from subtitle translators?**
-Subtitles leave the original voice in place. PersoDub replaces the speech with a cloned
-version of the same speaker's voice, so the result sounds like that person speaking the
-target language.
+- [Where PersoDub fits](docs/comparison.md) — how it compares to other open-source dubbing tools
+- [Known limitations & roadmap](docs/roadmap.md)
+- [Troubleshooting & FAQ](docs/faq.md)
+- [Data and privacy, in detail](docs/privacy.md)
 
 ## Development
 

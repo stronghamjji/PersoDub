@@ -20,8 +20,8 @@ Nothing else is needed while this runs. When it completes, the app opens on the
 <img src="images/main-window.png" width="100%"
      alt="PersoDub main window: a drop zone for the video, with pickers for speech-to-text, original language, target language, and voice quality.">
 
-1. **Add your video.** Drop a file onto the upload area, or click it to browse. MP4 and
-   MOV are accepted, up to 2 GB.
+1. **Add your video.** Drop a file onto the upload area, click it to browse, or paste a
+   video link. MP4 and MOV are accepted, up to 2 GB.
 
 2. **Speech-to-text** — turns the speech in your video into text.
 
