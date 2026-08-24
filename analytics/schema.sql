@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS events (
   os         TEXT NOT NULL,  -- mac | windows
   version    TEXT NOT NULL,  -- e.g. 0.3.2
   device     TEXT NOT NULL,  -- random install id, 32 hex chars
-  error_code TEXT            -- failure events only; NULL otherwise
+  error_code TEXT,           -- failure events only; NULL otherwise
+  step       TEXT            -- install failures only; NULL before app 0.3.6
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_day    ON events (day);

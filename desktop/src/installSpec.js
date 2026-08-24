@@ -182,6 +182,28 @@ function withMissingKitEnvKeys(text) {
   return text + sep + missing.flatMap((a) => [a.comment, a.line]).join("\n") + "\n";
 }
 
+const GB = 1024 ** 3;
+
+// What each step leaves on disk, so the free-space preflight can add up the
+// steps that have not run yet. Measured 2026-08-24 on a finished mac install
+// (18.4 GB total, matching the "about 19 GB" the installing screen promises).
+//
+// Windows is larger and is NOT measured: torch there comes from the CUDA index
+// (see torchCuda below) and lands in both venvs, where macOS gets the much
+// smaller MPS wheel. The two venv figures below are the wheel sizes, not a
+// reading off a real machine -- worth re-measuring once a Windows kit is at
+// hand, since six of the eight install failures so far were Windows.
+const VENV_TORCH = IS_WIN ? 3.5 * GB : 1.5 * GB;
+
+/** How much room the steps that have not run yet still need. */
+export async function bytesStillNeeded(steps) {
+  let total = 0;
+  for (const s of steps) {
+    if (!(await s.isDone())) total += s.bytes;
+  }
+  return total;
+}
+
 export function buildSteps(ctx) {
   const k = (...p) => join(ctx.kitDir, ...p);
   const modelDone = (m) => m.markers.every((rel) => existsSync(k(...rel)));
@@ -202,9 +224,10 @@ export function buildSteps(ctx) {
     writeFileSync(okPath(id), "");
   };
 
-  const venvStep = (id, title, venvName, pipInstalls) => ({
+  const venvStep = (id, title, bytes, venvName, pipInstalls) => ({
     id,
     title,
+    bytes,
     isDone: () => existsSync(okPath(id)),
     run: async (report) => {
       const venvDir = k(venvName);
@@ -228,6 +251,7 @@ export function buildSteps(ctx) {
     {
       id: "payload",
       title: "Copying bundled files",
+      bytes: 0.3 * GB,
       // Done only when the kit's KIT_VERSION matches the app's own bundled
       // payload -- so an app update always re-copies app code + KIT_VERSION,
       // instead of a stale .ok marker skipping this step forever (venv/model
@@ -262,6 +286,7 @@ export function buildSteps(ctx) {
     {
       id: "python",
       title: "Downloading Python runtime (~50 MB)",
+      bytes: 0.2 * GB,
       isDone: () => existsSync(okPath("python")),
       run: async (report) => {
         mkdirSync(k("downloads"), { recursive: true });
@@ -275,8 +300,8 @@ export function buildSteps(ctx) {
         markOk("python");
       },
     },
-    venvStep("venv-app", "Installing app environment", "app_venv", [["-r", k("app", "requirements.txt")]]),
-    venvStep("venv-engines", "Installing AI engines (~3 GB)", "engines_venv", [
+    venvStep("venv-app", "Installing app environment", 0.2 * GB, "app_venv", [["-r", k("app", "requirements.txt")]]),
+    venvStep("venv-engines", "Installing AI engines (~3 GB)", VENV_TORCH, "engines_venv", [
       ...torchCuda,
       ["-r", k(reqEngines)],
       ["static-ffmpeg"],
@@ -284,6 +309,7 @@ export function buildSteps(ctx) {
     {
       id: "ffmpeg",
       title: "Setting up ffmpeg",
+      bytes: 0.2 * GB,
       isDone: () => existsSync(k("bin", exeName("ffmpeg"))) && existsSync(k("bin", exeName("ffprobe"))),
       run: async (report) => {
         report(null, "Fetching ffmpeg binaries");
@@ -309,7 +335,7 @@ export function buildSteps(ctx) {
         }
       },
     },
-    venvStep("venv-qwen", "Installing voice engine", "qwen_venv", [
+    venvStep("venv-qwen", "Installing voice engine", VENV_TORCH, "qwen_venv", [
       ...torchCuda,
       ["-r", k(reqQwen)],
       // The hf CLI (used by the models step) landed in 0.34, but transformers
@@ -319,6 +345,7 @@ export function buildSteps(ctx) {
     {
       id: "models",
       title: "Downloading AI models (~7 GB)",
+      bytes: 7.3 * GB,
       isDone: () => MODELS.every(modelDone),
       run: async (report) => {
         const hf = venvBin(k("qwen_venv"), "hf");
@@ -335,6 +362,7 @@ export function buildSteps(ctx) {
     {
       id: "gemma",
       title: "Downloading translation model Gemma (~8 GB)",
+      bytes: 8.1 * GB,
       // Both artifacts this step produces: engineCheck requires the ollama
       // binary too, so a manifest-only check marked a boot-failing install
       // "done" and never repaired it.
@@ -366,6 +394,7 @@ export function buildSteps(ctx) {
       // fails the install loudly instead, same as any other step here.
       id: "nonverbal-weights",
       title: "Downloading nonverbal-detection model (~140 MB)",
+      bytes: 0.2 * GB,
       isDone: () => existsSync(whisperCachePath()),
       run: async (report) => {
         report(null, "Downloading nonverbal-detection model");
@@ -375,6 +404,7 @@ export function buildSteps(ctx) {
     {
       id: "kit-env",
       title: "Writing configuration",
+      bytes: 0,
       // Must also check the managed additions, not just the original sniff
       // key -- otherwise a kit installed before they existed would satisfy
       // this forever and never receive them (see run, below).

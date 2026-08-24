@@ -13,9 +13,17 @@ const FAILURE_EVENTS = new Set(["dub_failure", "install_failure"]);
 // The published list. An error code that is not on it becomes "unknown" rather
 // than travelling verbatim -- that is what keeps a stray path or message, which
 // is what real error text is full of, out of the request.
+// The install steps, in order, exactly as installSpec.js names them. Kept here
+// rather than imported so a rename there cannot quietly start sending a value
+// the table has never heard of.
+export const INSTALL_STEPS = new Set([
+  "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
+  "models", "gemma", "nonverbal-weights", "kit-env",
+]);
+
 export const ERROR_CODES = new Set([
   "path-too-long", "disk-full", "network", "permission", "engine-start",
-  "out-of-memory", "unsupported-format", "engine-crash",
+  "out-of-memory", "unsupported-format", "engine-crash", "step-failed",
   "unknown",
 ]);
 
@@ -49,10 +57,16 @@ export function shouldReport({ event, lastDay, today }) {
 }
 
 /** The whole message. A field not named here cannot leave. */
-export function buildPayload({ event, os, version, device, errorCode }) {
+export function buildPayload({ event, os, version, device, errorCode, step }) {
   const payload = { event, os, version, device };
   if (FAILURE_EVENTS.has(event)) {
     payload.error_code = ERROR_CODES.has(errorCode) ? errorCode : "unknown";
+  }
+  // Which of the ten steps died. Only install failures have one, and only a
+  // published id travels -- the same rule as error codes, for the same reason.
+  // A failure before any step has run (a path or space preflight) carries none.
+  if (event === "install_failure" && step !== undefined) {
+    payload.step = INSTALL_STEPS.has(step) ? step : "unknown";
   }
   return payload;
 }
@@ -127,7 +141,7 @@ export function saveState(file, { device, lastDay = null }) {
  * not. It never throws: a count must never be able to break a launch or a dub.
  */
 export async function countEvent(event, {
-  mode, stateFile, url, os, version, errorCode,
+  mode, stateFile, url, os, version, errorCode, step,
   today = new Date().toISOString().slice(0, 10),
   timeoutMs, fetchImpl, log = console.log,
 }) {
@@ -138,7 +152,7 @@ export async function countEvent(event, {
   const state = loadState(stateFile);
   if (!shouldReport({ event, lastDay: state.lastDay, today })) return false;
 
-  const payload = buildPayload({ event, os, version, device: state.device, errorCode });
+  const payload = buildPayload({ event, os, version, device: state.device, errorCode, step });
 
   if (mode === "debug") {
     log(`[persodub-analytics] would send: ${JSON.stringify(payload)}`);
@@ -172,11 +186,19 @@ const ERROR_PATTERNS = [
   [/did not become ready|exit \d+/i,                 "engine-crash"],
 ];
 
-/** One published word for a whole error message. Never the message itself. */
-export function classifyError(message) {
+/** One published word for a whole error message. Never the message itself.
+ *
+ * `install` splits the catch-all in two. "engine-crash" was written for a
+ * running engine dying mid-dub, but its pattern (a nonzero exit) also matches
+ * every pip install and model download that fails during setup -- so install
+ * failures arrived claiming an engine had crashed when none had started yet.
+ */
+export function classifyError(message, { install = false } = {}) {
   if (typeof message !== "string" || message === "") return "unknown";
   for (const [pattern, code] of ERROR_PATTERNS) {
-    if (pattern.test(message)) return code;
+    if (pattern.test(message)) {
+      return install && code === "engine-crash" ? "step-failed" : code;
+    }
   }
   return "unknown";
 }
