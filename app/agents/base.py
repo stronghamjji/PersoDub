@@ -84,6 +84,9 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         proc = subprocess.Popen(
             [binary] + args,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            # Closed, not inherited: a CLI that reads stdin when it is open
+            # would sit there waiting on whatever terminal started the app.
+            stdin=subprocess.DEVNULL,
             cwd=cwd, text=True, encoding="utf-8", bufsize=1,
         )
     except OSError as e:

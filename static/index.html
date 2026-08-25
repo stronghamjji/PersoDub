@@ -1288,6 +1288,10 @@
   .menu-item[disabled] { color: var(--agent-muted); cursor: default; }
   .menu-item[disabled]:hover { background: none; }
   .menu-item .tick { color: var(--primary); }
+  /* A name, and under it the reason that name cannot be picked. */
+  .menu-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .menu-name em { font-style: normal; font-size: 0.7rem; line-height: 1.35;
+    color: var(--agent-muted); white-space: normal; }
 
   /* What the user said is the only thing with a shape around it; everything the
      assistant says is plain text on the strip, the way a terminal answers. */
@@ -3416,12 +3420,14 @@ new MutationObserver(paintChoice)
 // vendor's models. One flat list of every model from every vendor is a wall.
 let menuLevel = "";
 
-function menuRow(label, { note = "", tick = false, disabled = false, chevron = false } = {}) {
+function menuRow(label, { note = "", sub = "", tick = false, disabled = false, chevron = false } = {}) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "menu-item";
   b.disabled = disabled;
-  b.innerHTML = `<span>${label}</span><span>${
+  // `sub` is the reason a row is greyed out. It goes under the name rather than
+  // beside it: a sentence in the right-hand column would squeeze the name away.
+  b.innerHTML = `<span class="menu-name">${label}${sub ? `<em>${sub}</em>` : ""}</span><span>${
     tick ? '<span class="tick">✓</span>' : chevron ? "›" : note}</span>`;
   return b;
 }
@@ -3437,11 +3443,19 @@ function buildMenu() {
     for (const a of agentList) {
       const usable = a.installed && a.supported;
       const row = menuRow(a.name, {
-        note: !a.installed ? "not installed" : !a.supported ? "coming soon" : "",
+        note: !a.installed ? "not installed" : "",
+        // Why this one cannot be picked, said where the picking happens.
+        sub: a.installed && !a.supported ? (a.reason || "not supported") : "",
         chevron: usable,
         disabled: !usable,
       });
-      if (usable) row.addEventListener("click", () => { menuLevel = a.id; buildMenu(); });
+      // Stopped here, because buildMenu() takes this very button off the page:
+      // the click would then reach the document, which puts away any menu the
+      // click landed outside of -- and a detached button is outside of it. That
+      // is what closed the picker instead of opening the vendor's models.
+      if (usable) row.addEventListener("click", (e) => {
+        e.stopPropagation(); menuLevel = a.id; buildMenu();
+      });
       menu.appendChild(row);
     }
     return;
@@ -3452,7 +3466,7 @@ function buildMenu() {
   back.className = "menu-group";
   back.innerHTML = `<span>‹ ${a ? a.name : ""}</span>`;
   back.style.cursor = "pointer";
-  back.addEventListener("click", () => { menuLevel = ""; buildMenu(); });
+  back.addEventListener("click", (e) => { e.stopPropagation(); menuLevel = ""; buildMenu(); });
   menu.appendChild(back);
 
   for (const m of (a && a.models && a.models.length ? a.models : [""])) {

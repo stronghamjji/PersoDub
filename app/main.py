@@ -18,6 +18,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
+from app.agents import codex as codex_agent
 from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
                         TRANSLATE_ENGINE, default_stt_engine)
 from app.dub_script import (
@@ -982,9 +983,16 @@ def dub_result_srt(jid: str, download: int = 0):
 # ---------------------------------------------------------------------------
 
 AGENTS = {
-    "claude": {"binary": "claude", "name": "Claude", "vendor": "Anthropic"},
-    "codex": {"binary": "codex", "name": "Codex", "vendor": "OpenAI"},
-    "gemini": {"binary": "gemini", "name": "Gemini", "vendor": "Google"},
+    "claude": {"binary": "claude", "name": "Claude", "vendor": "Anthropic",
+               "driver": claude_agent},
+    "codex": {"binary": "codex", "name": "Codex", "vendor": "OpenAI",
+              "driver": codex_agent},
+    # No driver: Google stopped serving this CLI on a personal Gemini account
+    # (measured 2026-08-26 -- the CLI never reaches a model, so there is no
+    # output format to translate). The picker greys it out and says why.
+    "gemini": {"binary": "gemini", "name": "Gemini", "vendor": "Google",
+               "driver": None,
+               "reason": "Google no longer serves this CLI on a personal account"},
 }
 
 # Where the assistant's own files live. Never the user's global CLI config:
@@ -1020,13 +1028,17 @@ def agent_status():
     out = []
     for key, meta in AGENTS.items():
         path = agent_base.find_cli(meta["binary"])
+        driver = meta["driver"]
         out.append({
             "id": key,
             "name": meta["name"],
             "vendor": meta["vendor"],
             "installed": bool(path),
-            "supported": key == "claude",  # the other two translators come next
-            "models": claude_agent.MODELS if key == "claude" else [],
+            "supported": driver is not None,
+            # Why it is greyed out, in the picker's own words. Empty when the
+            # assistant is usable, and "not installed" is the panel's line.
+            "reason": "" if driver else meta.get("reason", ""),
+            "models": driver.MODELS if driver else [],
         })
     return {"agents": out}
 
@@ -1041,9 +1053,10 @@ def agent_chat(body: AgentChatRequest, request: Request):
     meta = AGENTS.get(body.agent)
     if meta is None:
         raise HTTPException(status_code=422, detail="Unknown assistant: %s" % body.agent)
-    if body.agent != "claude":
-        raise HTTPException(status_code=501,
-                            detail="%s is not wired up yet." % meta["name"])
+    driver = meta["driver"]
+    if driver is None:
+        raise HTTPException(status_code=501, detail="%s: %s"
+                            % (meta["name"], meta.get("reason", "not wired up yet")))
 
     binary = agent_base.find_cli(meta["binary"])
     if not binary:
@@ -1053,11 +1066,11 @@ def agent_chat(body: AgentChatRequest, request: Request):
     api_url = str(request.base_url).rstrip("/")
     mcp_config = agent_base.write_mcp_config(AGENT_DIR, api_url)
     work_dir = os.path.dirname(mcp_config)
-    args = claude_agent.command(_with_job(body.message, body.job_id),
-                                mcp_config, body.resume, body.model)
+    args = driver.command(_with_job(body.message, body.job_id),
+                          mcp_config, body.resume, body.model)
 
     def stream():
-        for event in agent_base.run(binary, args, claude_agent.translate,
+        for event in agent_base.run(binary, args, driver.translate,
                                     cwd=work_dir):
             yield json.dumps(event, ensure_ascii=False) + "\n"
 
