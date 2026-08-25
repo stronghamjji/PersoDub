@@ -445,7 +445,7 @@ def dub_job_redub(jid: str):
 
     new_jid = job_store.create()
     job_store._update(new_jid, language_code=language_code, project=project,
-                      day=_today(), from_link=False)
+                      day=_today(), from_link=False, work_dir=work)
     edited = os.path.exists(os.path.join(work_dir, EDITED_NAME))
     job_store.append_log(new_jid, "🎬 %s (대본 %s으로 다시 만들기)"
                          % (project, "고친 것" if edited else "그대로"))
@@ -664,6 +664,10 @@ def dub_start(
     job_store._update(jid, language_code=language_code,
                       project=project or os.path.basename(work),
                       day=_today(),
+                      # Where input.mp4 lives. Stamped here because the running
+                      # screen asks for the original while the job is still
+                      # going, when there is no result to find the folder from.
+                      work_dir=work,
                       # Kept so a later redub of this job can pass the same
                       # language name back into run_dub.
                       language=language,
@@ -801,24 +805,27 @@ def dub_result(jid: str):
 
 
 @app.get("/api/dub/result/{jid}/original")
-def dub_result_original(jid: str):
-    """Return the source video a link job downloaded.
+def dub_result_original(jid: str, download: int = 0):
+    """Return this job's source video.
 
-    Only offered for link jobs. A file the user uploaded is already on their
-    machine, so handing it back is pure noise; a video pulled from a link is
-    the only original they cannot otherwise get.
+    Served for every job, running or finished: the running screen plays it
+    blurred behind the progress card, and the finished screen puts it beside
+    the dub. Read from the job's own workspace folder, which exists from the
+    moment the job starts -- long before there is any result to look next to.
+
+    ?download=1 (the "Download original" button) stays link-only: a file the
+    user uploaded is already on their machine, so offering it back is noise;
+    a video pulled from a link is the only original they cannot otherwise get.
     """
     j = job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if not j.get("from_link"):
+    if download and not j.get("from_link"):
         raise HTTPException(status_code=404,
                             detail="This job started from a file you already have")
-    out = (j.get("result") or {}).get("out_path")
-    if not out:
-        raise HTTPException(status_code=404, detail="Result file not found")
-    original = os.path.join(os.path.dirname(out), "input.mp4")
-    if not os.path.exists(original):
+    work_dir = j.get("work_dir") or os.path.dirname((j.get("result") or {}).get("out_path") or "")
+    original = os.path.join(work_dir, "input.mp4") if work_dir else ""
+    if not original or not os.path.exists(original):
         raise HTTPException(status_code=404, detail="Original file not found")
     return FileResponse(original, media_type="video/mp4", filename="org.mp4")
 

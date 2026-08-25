@@ -332,6 +332,72 @@ def test_dub_result_srt_404_when_missing():
     assert r.status_code == 404
 
 
+# --- GET /api/dub/result/{id}/original -------------------------------------
+
+def _start_upload_job(monkeypatch):
+    """Start a dub from an uploaded file and wait for it to settle.
+
+    run_dub is faked so no real dubbing runs; it writes its result where the
+    real pipeline does (the job's own workspace folder, beside the input.mp4
+    dub_start has already saved the upload as).
+    """
+    def fake_run_dub(**kw):
+        with open(kw["out_path"], "wb") as f:
+            f.write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")})
+    jid = r.json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
+    return jid
+
+
+def test_original_video_is_served_for_upload_jobs(monkeypatch):
+    # An uploaded job can show its original too (only link jobs could before).
+    jid = _start_upload_job(monkeypatch)
+    r = client.get(f"/api/dub/result/{jid}/original")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("video/")
+
+
+def test_original_video_is_served_while_the_job_still_runs(monkeypatch):
+    # The running screen plays the source video blurred behind the progress
+    # card, so the original has to be reachable long before there is a result.
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_run_dub(**kw):
+        started.set()
+        release.wait(5)
+        with open(kw["out_path"], "wb") as f:
+            f.write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")})
+    jid = r.json()["job_id"]
+    assert started.wait(2), "fake job never started"
+    try:
+        assert client.get(f"/api/dub/jobs/{jid}").json()["status"] == "running"
+        rr = client.get(f"/api/dub/result/{jid}/original")
+        assert rr.status_code == 200
+        assert rr.content == b"vid"
+    finally:
+        release.set()
+
+
+def test_original_download_stays_link_only(monkeypatch):
+    # The "Download original" button is only offered for link jobs -- a file
+    # the user uploaded is already on their machine.
+    jid = _start_upload_job(monkeypatch)
+    r = client.get(f"/api/dub/result/{jid}/original?download=1")
+    assert r.status_code == 404
+
+
 # --- POST /api/dub/jobs/{id}/cancel ----------------------------------------
 
 def test_dub_cancel_unknown_job_404():

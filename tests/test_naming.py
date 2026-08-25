@@ -115,9 +115,9 @@ def test_download_names_are_short_and_say_the_language(tmp_path, monkeypatch):
     assert main.dub_result_original("abc123").filename == "org.mp4"
 
 
-def test_original_is_refused_for_an_uploaded_file(tmp_path, monkeypatch):
-    # The user already has the file they uploaded; only a link job has an
-    # original they cannot otherwise get.
+def test_original_download_is_refused_for_an_uploaded_file(tmp_path, monkeypatch):
+    # Playing it is fine (the screens do), but the download button is link-only:
+    # the user already has the file they uploaded.
     import pytest
     from fastapi import HTTPException
     from app import main
@@ -125,8 +125,9 @@ def test_original_is_refused_for_an_uploaded_file(tmp_path, monkeypatch):
     job = _finished_job(tmp_path, from_link=False)
     monkeypatch.setattr(main.job_store, "get", lambda jid: job)
 
+    assert main.dub_result_original("abc123").filename == "org.mp4"
     with pytest.raises(HTTPException) as e:
-        main.dub_result_original("abc123")
+        main.dub_result_original("abc123", download=1)
     assert e.value.status_code == 404
 
 

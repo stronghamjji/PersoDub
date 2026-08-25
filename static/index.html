@@ -73,6 +73,10 @@
        it. Dark on purpose in both cases -- a frame can be any colour. */
     --thumb-bg: #111111;
     --thumb-badge: rgba(0, 0, 0, 0.6);
+    /* Text and the spinner ring that sit on top of that dark frame. */
+    --thumb-foreground: #fafafa;
+    --thumb-foreground-dim: rgba(255, 255, 255, 0.75);
+    --thumb-ring: rgba(255, 255, 255, 0.28);
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
@@ -203,9 +207,9 @@
   .topbar-version { font-size: 11.5px; color: var(--muted-foreground); }
 
   /* The one job-wide message line (a credit warning, or why a dub failed).
-     It hangs under the top bar rather than inside a screen, so the reason is
-     readable whichever screen is showing. */
-  #jobNotice { margin-top: 0; padding: 6px 22px; }
+     It sits in the progress card, right under the four steps -- the place the
+     eye already is while a job runs. */
+  #jobNotice { margin-top: 0; }
 
   .job-notice { font-size: 0.82rem; color: var(--warning); margin-top: 6px; }
   /* Red, not amber: amber blended into the surrounding hint text and the
@@ -237,6 +241,64 @@
      below taking the rest of the height and scrolling on its own. */
   #screen-done { display: flex; flex-direction: column; }
   #exportContent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* ---------------- Running: blurred original + progress card ---------------- */
+  /* The two halves are one centred group: the source video on the left, out of
+     focus and locked behind a veil, and the progress card on the right stretched
+     to whatever height that video block ends up. Showing the real video (rather
+     than a placeholder box) is what makes the wait feel like it belongs to THIS
+     job. It never carries a time estimate -- see renderRunning(). */
+
+  #screen-running { display: flex; align-items: center; justify-content: center; }
+  .running { display: flex; gap: 28px; align-items: stretch; }
+  /* min-height keeps the card's shape while the video is still loading -- and
+     if the file never loads, the veil still has something to sit on. */
+  .running-video { position: relative; flex: 0 0 560px; min-height: 315px;
+    border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg); }
+  /* scale(1.04) crops away the transparent fringe blur() leaves at the edges. */
+  .running-video video { display: block; width: 100%; height: auto;
+    filter: blur(4px) brightness(.55); transform: scale(1.04); }
+  .running-veil { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; padding: 0 20px;
+    text-align: center; color: var(--thumb-foreground); }
+  .running-veil b { font-size: 14px; font-weight: 600; }
+  .running-veil > span:not(.spinner) { font-size: 12px; color: var(--thumb-foreground-dim); }
+
+  .spinner { width: 48px; height: 48px; border-radius: 50%;
+    border: 4px solid var(--thumb-ring); border-top-color: var(--primary-line);
+    animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .progress-card { flex: 0 0 420px; display: flex; flex-direction: column; gap: 16px;
+    padding: 22px 24px; background: var(--background);
+    border: 1px solid var(--border); border-radius: var(--radius-lg); }
+  .progress-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .progress-head b { font-size: 15px; font-weight: 600; }
+  .progress-head span { font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .progress-bar { height: 6px; border-radius: 3px; background: var(--primary-soft); overflow: hidden; }
+  .progress-bar > div { height: 100%; width: 0; border-radius: 3px; background: var(--primary); transition: width 0.4s ease; }
+
+  .progress-steps { list-style: none; margin: 0; padding: 4px 0 0;
+    display: flex; flex-direction: column; gap: 12px; }
+  .progress-steps li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--muted-foreground); }
+  .progress-steps li.current { color: var(--foreground); font-weight: 600; }
+  .step-mark { flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .step-mark.done { background: var(--success); color: var(--primary-foreground); }
+  .step-mark.done .icon { width: 10px; height: 10px; stroke-width: 3; }
+  .step-mark.current { border: 2px solid var(--primary); border-top-color: transparent;
+    animation: spin 0.9s linear infinite; }
+  .step-mark.todo { border: 2px solid var(--border); }
+  .step-note { font-weight: 400; color: var(--muted-foreground); }
+
+  /* Pushed to the foot of the card, under a rule, so the steps stay the thing
+     you read first. */
+  .progress-card .raw-log { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner, .step-mark.current { animation: none; }
+    .progress-bar > div { transition: none; }
+  }
 
   h2 { margin: 0 0 3px; font-size: 0.98rem; }
   .panel-desc { margin: 0 0 14px; color: var(--muted-foreground); font-size: 0.8rem; }
@@ -518,7 +580,6 @@
       <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>Export</button>
     </div>
-    <div class="job-notice" id="jobNotice" style="display:none"></div>
 
     <main class="work" id="work">
       <!-- ============ HOME ============ -->
@@ -544,13 +605,29 @@
       </section>
 
       <!-- ============ RUNNING ============ -->
-      <!-- The progress card lands here in a later step; for now the running
-           job's raw log is all this screen carries. -->
+      <!-- The job's own video, blurred and locked, next to a card that says
+           which of the four stages it is on. renderRunning() fills both. -->
       <section class="screen" id="screen-running" hidden>
-        <details class="raw-log" id="rawLogDetails">
-          <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
-          <div class="log-box" id="logBox"></div>
-        </details>
+        <div class="running">
+          <div class="running-video">
+            <video id="runningVideo" muted playsinline></video>
+            <div class="running-veil">
+              <span class="spinner"></span>
+              <b>Dubbing this video…</b>
+              <span>The player unlocks when it is done</span>
+            </div>
+          </div>
+          <div class="progress-card">
+            <div class="progress-head"><b id="progressTitle">Separating audio</b><span id="progressPct">0%</span></div>
+            <div class="progress-bar"><div id="progressFill"></div></div>
+            <ol class="progress-steps" id="progressSteps"></ol>
+            <div class="job-notice" id="jobNotice" hidden></div>
+            <details class="raw-log" id="rawLogDetails">
+              <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
+              <div class="log-box" id="logBox"></div>
+            </details>
+          </div>
+        </div>
       </section>
 
       <!-- ============ DONE ============ -->
@@ -1526,10 +1603,12 @@ function jobStatusLine(job, progress) {
   if (job.status === "cancelled") return "Cancelled";
   if (job.status === "error") return "Dubbing failed";
   if (job.status !== "running") return "Done";
-  const plain = progress.plainLabel || progress.label;
+  // While it runs the top bar says exactly what the progress card says --
+  // which stage, how far in. Never how long is left: the stages are too
+  // uneven for a guess to be anything but a broken promise.
   return progress.stage > 0
-    ? `Step ${progress.stage} of ${progress.total}: ${plain}…`
-    : `${plain}…`;
+    ? `${progress.label} · ${progress.percent}%`
+    : "Starting…";
 }
 
 // --- #10: reset everything for a fresh job without restarting the app ---
@@ -1545,7 +1624,8 @@ function resetForNewJob() {
   // be emptied too -- otherwise the last job's link is still sitting there.
   $("linkInput").value = "";
   clearLink();
-  $("jobNotice").style.display = "none";
+  $("jobNotice").hidden = true;
+  $("jobNotice").classList.remove("danger");
   $("formError").textContent = "";
   $("exportContent").innerHTML = '<div class="export-empty">Nothing to export yet.</div>';
   updateCancelButton();
@@ -1557,6 +1637,41 @@ $("topbarBack").addEventListener("click", resetForNewJob);
 
 function renderLog(job) {
   $("logBox").textContent = (job.logs || []).join("\n");
+}
+
+// ---------------- Running screen ----------------
+// The four stages, in the order parseProgress numbers them (dubApi.mjs).
+const STAGE_NAMES = ["Separating audio", "Transcribing", "Translating", "Dubbing"];
+const CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+// The blurred original plus the progress card, redrawn on every poll.
+// NO time estimate, ever: the four stages take wildly different times on
+// different machines, so any "about N minutes left" we showed would be a
+// promise we break.
+function renderRunning(job, progress) {
+  // Every job's source video is readable from the moment it starts
+  // (app/main.py:dub_result_original). Set once -- assigning src on every
+  // poll would restart the download three seconds in, forever.
+  const video = $("runningVideo");
+  const src = `/api/dub/result/${job.id}/original`;
+  if (video.getAttribute("src") !== src) video.setAttribute("src", src);
+
+  $("progressTitle").textContent = progress.label;
+  $("progressPct").textContent = `${progress.percent}%`;
+  $("progressFill").style.width = `${progress.percent}%`;
+
+  $("progressSteps").innerHTML = STAGE_NAMES.map((name, i) => {
+    const n = i + 1;
+    const state = n < progress.stage ? "done" : n === progress.stage ? "current" : "todo";
+    // Only the voice stage counts lines, and only once the pipeline has
+    // logged how many there are.
+    const counted = state === "current" && n === 4 && progress.voiceTotal;
+    const note = counted
+      ? ` <span class="step-note">· voice ${Math.min(progress.voiceDone, progress.voiceTotal)} of ${progress.voiceTotal}</span>`
+      : "";
+    const mark = state === "done" ? CHECK_ICON : "";
+    return `<li class="${state}"><span class="step-mark ${state}">${mark}</span>${escapeHtml(name)}${note}</li>`;
+  }).join("");
 }
 
 // The single reason line under the progress steps. On a failed job it carries
@@ -1572,8 +1687,11 @@ function renderNotices(job) {
   const message = failed
     ? (job.error || (n && n.message) || "Something went wrong. Try again, or use a shorter clip.")
     : (n && n.message);
-  if (!message) { el.style.display = "none"; el.innerHTML = ""; return; }
-  el.style.display = "";
+  // "danger" only ever comes from the poll loop's own failure below; a real
+  // notice replaces that message, so it drops the red with it.
+  el.classList.remove("danger");
+  if (!message) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
   const linkText = n && CREDIT_MODALS[n.type] ? CREDIT_MODALS[n.type].button : "Recharge";
   el.innerHTML = (n && n.link && linkText)
     ? `${escapeHtml(message)} <a href="${escapeHtml(n.link)}" target="_blank" rel="noopener">${linkText}</a>`
@@ -1863,6 +1981,15 @@ function runPollLoop(jobId, myGeneration) {
   pollDubJob(jobId, {
     onUpdate: (job) => { if (myGeneration === state.pollGeneration) handleJobUpdate(job); },
     shouldStop: () => myGeneration !== state.pollGeneration,
+  }).catch((e) => {
+    // The server stopped answering (app quit, machine slept). Without this the
+    // steps just freeze with no word of why. The job itself may well still be
+    // running back there, so Cancel is left exactly as it was.
+    if (myGeneration !== state.pollGeneration) return;
+    const el = $("jobNotice");
+    el.textContent = `Could not reach the app server: ${errorText(e)}`;
+    el.classList.add("danger");
+    el.hidden = false;
   });
 }
 
@@ -1890,6 +2017,7 @@ async function handleJobUpdate(job) {
   updateCancelButton();
 
   if (running) {
+    renderRunning(job, progress);
     renderExportRunning(progress);
     return;
   }
@@ -1982,7 +2110,7 @@ async function renderExport(job) {
       <div class="srt-list" id="scriptBox">${srtRows}</div>
       <div class="result-actions">
         <a class="btn btn-primary" href="${url}" download="dub_${target}.mp4">Download dubbed video</a>
-        ${job.from_link ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/original" download="org.mp4">Download original</a>` : ""}
+        ${job.from_link ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/original?download=1" download="org.mp4">Download original</a>` : ""}
         ${srtText ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/srt?download=1" download="dub_${target}.srt">Download subtitles (.srt)</a>` : ""}
       </div>
     </div>`;
@@ -2219,10 +2347,13 @@ function renderExportError(job) {
   const el = $("exportContent");
   const cancelled = job.status === "cancelled";
   const logsTail = (job.logs || []).slice(-6).join("\n");
-  // No second red box here: the failure story lives in ONE place, at the top
-  // of the screen (the top bar's status line + the renderNotices reason).
+  // Still one failure story, but it has to be told here: the notice line moved
+  // into the progress card, which is on the screen this one replaced.
+  const why = cancelled
+    ? "This dubbing job was cancelled."
+    : `Dubbing didn't finish. ${job.error || "Try again, or use a shorter clip."}`;
   el.innerHTML = `
-    <div class="export-empty">${cancelled ? "This dubbing job was cancelled." : "Dubbing didn't finish. The reason is at the top of the screen."}</div>
+    <div class="export-empty">${escapeHtml(why)}</div>
     <div class="log-box">${escapeHtml(logsTail)}</div>`;
 }
 
