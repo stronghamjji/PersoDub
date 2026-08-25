@@ -590,10 +590,18 @@
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
   .tl-blk:hover { box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.35); }
-  /* The line the video is on right now -- the table's .sc-now, said here. */
-  .tl-blk.tl-now { box-shadow: 0 0 0 2px var(--foreground); }
+  /* The line the video is on right now -- the table's .sc-now, said here.
+     Drawn as a ring of its own on top (z-index 3) rather than as a shadow on
+     the bar: a shadow belongs to the bar, so an over-time bar lying across it
+     (z-index 2) would cut it, and raising the whole bar instead would hide the
+     very overshoot that bar exists to show. The ring is empty in the middle, so
+     it can sit above the red without covering any of it. */
+  .tl-blk.tl-now::after { content: ""; position: absolute; inset: 0; z-index: 3;
+    border: 2px solid var(--foreground); border-radius: 5px; pointer-events: none; }
 
-  .tl-playhead { position: absolute; top: 0; bottom: 0; width: 0;
+  /* Above every bar, over-time ones included: a 2px line that hides nothing,
+     and the one mark that would read as a rendering fault if it broke. */
+  .tl-playhead { position: absolute; top: 0; bottom: 0; width: 0; z-index: 4;
     border-left: 2px solid var(--foreground); pointer-events: none; }
   .tl-playhead i { position: absolute; top: 0; left: -7px; width: 0; height: 0;
     border-left: 6px solid transparent; border-right: 6px solid transparent;
