@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -48,7 +49,26 @@ from app.settings_env import (read_analytics_off, read_key_status, read_value,
 from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
 from app.translate import get_translator
 
-app = FastAPI(title="PersoDub", version=APP_VERSION)
+
+@asynccontextmanager
+async def lifespan(_app):
+    """Jobs from before this launch.
+
+    The job store is a dictionary, so quitting the app used to lose every
+    record even though the folders were all still there. Reading the job.json
+    files back is what lets Projects reopen yesterday's work.
+
+    On startup rather than at import: WORKSPACE is read when the server
+    actually starts, so a test that redirects it (tests/conftest.py) is not
+    racing an import that already scanned the real one. Best-effort by design
+    -- a workspace that isn't there yet simply restores nothing, and one bad
+    file is skipped rather than taking the app down.
+    """
+    job_store.restore(WORKSPACE)
+    yield
+
+
+app = FastAPI(title="PersoDub", version=APP_VERSION, lifespan=lifespan)
 # GET /api/settings returns saved API key values (single-user desktop app, the
 # user owns the file they live in). That makes DNS rebinding the one remote
 # read path -- a hostile page whose domain re-resolves to 127.0.0.1 becomes
@@ -458,6 +478,9 @@ def dub_job_redub(jid: str):
                       day=_today(), from_link=False, work_dir=work,
                       # The remake is the same video in the same two languages.
                       source_lang=job.get("source_lang"))
+    # Same reason as in dub_start: quit the app mid-remake and this folder is
+    # nameless without a file in it, so Projects could never show or clear it.
+    job_store.persist(new_jid, work)
     edited = os.path.exists(os.path.join(work_dir, EDITED_NAME))
     job_store.append_log(new_jid, "🎬 %s (대본 %s으로 다시 만들기)"
                          % (project, "고친 것" if edited else "그대로"))
@@ -1039,12 +1062,3 @@ def agent_chat(body: AgentChatRequest, request: Request):
             yield json.dumps(event, ensure_ascii=False) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
-
-
-# ---------------- Jobs from before this launch ----------------
-# The job store is a dictionary, so quitting the app used to lose every record
-# even though the folders were all still there. Reading the job.json files back
-# at import time is what lets Projects reopen yesterday's work. Best-effort by
-# design: a workspace that isn't there yet (a fresh install, a test run) simply
-# restores nothing, and one bad file is skipped rather than taking the app down.
-job_store.restore(WORKSPACE)

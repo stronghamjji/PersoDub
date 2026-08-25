@@ -664,13 +664,16 @@ def test_jobs_list_carries_the_finished_job_without_its_logs(monkeypatch):
         time.sleep(0.02)
 
     rows = client.get("/api/dub/jobs").json()["jobs"]
-    row = next(r for r in rows if r["id"] == jid)
+    # Newest first, and this is the only job this test started.
+    row = rows[0]
+    assert row["id"] == jid
     assert row["status"] == "done"
     assert row["project"] == "listme"
     assert row["language_code"] == "ko"
     assert "logs" not in row
-    # Newest first: this job just ran, so nothing older may sit above it.
-    assert rows.index(row) == 0
+    # Nor the absolute paths: the sidebar addresses a job by id, so shipping
+    # the user's home directory in every row would be for nothing.
+    assert "work_dir" not in row and "result" not in row
 
 
 def test_a_finished_job_writes_job_json_next_to_the_video(monkeypatch):

@@ -226,15 +226,16 @@ def test_restore_finds_old_folders_that_have_no_job_json(tmp_path):
     (work / "dubbed.mp4").write_bytes(b"x")
     store = JobStore(log_dir=str(tmp_path))
     store.restore(str(tmp_path))
-    jobs = [j for j in store.all() if j["work_dir"] == str(work)]
+    jobs = store.all()
     assert len(jobs) == 1
     assert jobs[0]["status"] == "done"
     assert jobs[0]["project"] == "my clip"
     assert jobs[0]["language_code"] == "ko"
     assert jobs[0]["day"] == "2026-08-26"
+    assert store.get(jobs[0]["id"])["work_dir"] == str(work)
     # Restoring twice must not double the list.
     store.restore(str(tmp_path))
-    assert len([j for j in store.all() if j["work_dir"] == str(work)]) == 1
+    assert len(store.all()) == 1
 
 
 def test_all_lists_the_newest_job_first(tmp_path):
@@ -244,3 +245,47 @@ def test_all_lists_the_newest_job_first(tmp_path):
     new = store.create()
     store._update(new, created="2026-08-26T09:00:00")
     assert [j["id"] for j in store.all()][:2] == [new, old]
+
+
+def test_a_damaged_job_json_does_not_hide_a_finished_dub(tmp_path):
+    # The file is written beside the video, so a machine switched off mid-write
+    # could leave half of one. That folder must still reach Projects: the
+    # rebuild-from-the-folder-name path is exactly the fallback for it, and a
+    # broken file used to block it -- the finished dub then had no way back
+    # inside the app at all.
+    work = tmp_path / "2026-08-26" / "halfwritten_ko"
+    work.mkdir(parents=True)
+    (work / "dubbed.mp4").write_bytes(b"x")
+    (work / "job.json").write_text('{"id": "abc", "status": "do', encoding="utf-8")
+    store = JobStore(log_dir=str(tmp_path))
+    store.restore(str(tmp_path))
+    jobs = store.all()
+    assert len(jobs) == 1
+    assert jobs[0]["status"] == "done"
+    assert jobs[0]["project"] == "halfwritten"
+
+
+def test_persist_never_leaves_a_half_written_file(tmp_path):
+    # Written to a scratch name and swapped in, so the file on disk is always
+    # either the whole old record or the whole new one.
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="done", project="a")
+    store.persist(jid, str(tmp_path / "x"))
+    store.persist(jid, str(tmp_path / "x"))
+    assert not (tmp_path / "x" / "job.json.tmp").exists()
+    with open(str(tmp_path / "x" / "job.json"), encoding="utf-8") as f:
+        assert json.load(f)["project"] == "a"
+
+
+def test_the_jobs_list_keeps_the_file_paths_to_itself(tmp_path):
+    # The sidebar names a job and addresses everything else by id, so there is
+    # no reason to send the user's home directory out in every row.
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="done", work_dir=str(tmp_path / "x"),
+                  result={"out_path": str(tmp_path / "x" / "dubbed.mp4")})
+    row = store.all()[0]
+    assert "work_dir" not in row and "result" not in row
+    # The full record still has both -- the download endpoints read them.
+    assert store.get(jid)["work_dir"] == str(tmp_path / "x")
