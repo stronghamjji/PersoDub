@@ -68,8 +68,8 @@ test("parseProgress reads the real '1/6 ... 6/6' log lines app/pipeline.py emits
   ];
   const p = parseProgress(logs);
   assert.equal(p.stage, 2);
-  assert.equal(p.total, 6);
-  assert.equal(p.percent, 33);
+  assert.equal(p.total, 4);
+  assert.equal(p.percent, 18);
 });
 
 test("parseProgress: furthest stage wins even if an indented detail line follows", () => {
@@ -82,8 +82,8 @@ test("parseProgress: furthest stage wins even if an indented detail line follows
     "✅ Done!",
   ];
   const p = parseProgress(logs);
-  assert.equal(p.stage, 6);
-  assert.equal(p.percent, 100);
+  assert.equal(p.stage, 4);
+  assert.equal(p.percent, 95);
 });
 
 test("parseProgress on an empty/just-started job", () => {
@@ -93,14 +93,42 @@ test("parseProgress on an empty/just-started job", () => {
   assert.equal(p.label, "Waiting to start");
 });
 
-test("parseProgress: plainLabel is jargon-free (no model names) for the default end-user view", () => {
+test("parseProgress labels are the plain global stage names, not internal jargon", () => {
   const logs = ["1/6 Separating background audio locally (Demucs)…"];
   const p = parseProgress(logs);
-  assert.equal(p.plainLabel, "Preparing audio");
-  assert.doesNotMatch(p.plainLabel, /Demucs|Whisper|Qwen/);
+  assert.equal(p.label, "Separating audio");
+  assert.doesNotMatch(p.label, /Demucs|Whisper|Qwen/);
 
   const logs4 = [...logs, "4/6 Cloning & synthesizing voices (Qwen3-TTS)…"];
-  assert.equal(parseProgress(logs4).plainLabel, "Generating voices");
+  assert.equal(parseProgress(logs4).label, "Dubbing");
+});
+
+test("parseProgress folds the six pipeline stages into four and reads voice progress", () => {
+  const logs = ["1/6 Separating…", "2/6 Transcribing…", "3/6 Translating…",
+    "4/6 Cloning & synthesizing voices (Qwen3-TTS — fast)…", "   line 0: chose take 0", "   line 1: chose take 0"];
+  const p = parseProgress(logs, { lineCount: 4 });
+  assert.equal(p.stage, 4); assert.equal(p.total, 4);
+  assert.equal(p.label, "Dubbing");
+  assert.equal(p.voiceDone, 2); assert.equal(p.voiceTotal, 4);
+  assert.ok(p.percent > 55 && p.percent < 80, String(p.percent));
+  assert.equal(parseProgress(["6/6 Building the finished file…"]).stage, 4);
+});
+
+// A job in progress can't be asked its lineCount (the script API answers 409
+// until the job finishes -- see app/main.py), so when the caller has no
+// lineCount, parseProgress falls back to reading it from the pipeline's own
+// "N dialogue lines prepared" log line (app/pipeline.py:512). An explicit
+// lineCount still wins when both are available.
+test("parseProgress reads voiceTotal from the 'dialogue lines prepared' log line when lineCount isn't passed", () => {
+  const logs = ["4/6 Cloning & synthesizing voices (Qwen3-TTS — fast)…", "   4 dialogue lines prepared",
+    "   line 0: chose take 0", "   line 1: chose take 0", "   line 2: chose take 0"];
+  const p = parseProgress(logs);
+  assert.equal(p.voiceTotal, 4);
+  assert.equal(p.voiceDone, 3);
+  assert.equal(p.percent, 89);
+
+  const withExplicitCount = parseProgress(logs, { lineCount: 10 });
+  assert.equal(withExplicitCount.voiceTotal, 10); // explicit lineCount wins over the log line
 });
 
 test("pollDubJob keeps polling through a 'cancelling' status and stops once it resolves to 'cancelled'", async () => {

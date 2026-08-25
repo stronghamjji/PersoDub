@@ -9,34 +9,6 @@
 // no matter which frontend framework (or no framework) the approved visual
 // design ends up using.
 
-// English labels for each pipeline stage, keyed by the "N" in "N/6 ..." log
-// lines (the product's UI language is English -- design decision, spec v2). Stage 5
-// never appears in the backend's own logs (the pipeline jumps 4/6 -> 6/6),
-// so a label is still defined for it in case that changes, and the progress
-// bar treats "furthest stage seen" as the current stage either way.
-const STAGE_LABELS = {
-  1: "Separating background audio",
-  2: "Transcribing & detecting speakers",
-  3: "Preparing translated subtitles",
-  4: "Cloning & synthesizing voices",
-  5: "Finishing touches",
-  6: "Building the final file",
-};
-const TOTAL_STAGES = 6;
-
-// Plain-language phrases for the DEFAULT (end-user) progress view -- no model
-// names or internal stage jargon (the raw log is hidden by default for end
-// users). The full STAGE_LABELS above are still used in the developer-details
-// raw log.
-const PLAIN_STAGE_LABELS = {
-  1: "Preparing audio",
-  2: "Transcribing",
-  3: "Translating",
-  4: "Generating voices",
-  5: "Finishing",
-  6: "Finishing",
-};
-
 // The 10 languages the bundled Qwen3-TTS model supports -- read from the
 // model's own config.json (codec_language_id). English/Korean first (product
 // order), the rest alphabetical.
@@ -252,27 +224,43 @@ export async function fetchResultSrt(jobId, { baseUrl = "" } = {}) {
   return res.text();
 }
 
+// The pipeline logs six "N/6 ..." stages, but the UI shows four: stages 4-6
+// (voice synthesis, the skipped leakage check, and file-building) all read
+// as "Dubbing" to the user.
+const STAGE_OF = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 4, 6: 4 };
+const STAGE_LABELS4 = { 1: "Separating audio", 2: "Transcribing", 3: "Translating", 4: "Dubbing" };
+const STAGE_WEIGHT = { 1: 10, 2: 25, 3: 20, 4: 45 }; // sums to 100
+
 /**
- * Parse a job's log lines and find the furthest "N/6 ..." stage reached.
- * Returns { stage, total, label, plainLabel, percent }. stage=0 means nothing
- * logged yet. label is the detailed (developer-view) phrase; plainLabel is
- * the jargon-free phrase for the default end-user progress bar.
+ * Parse a job's log lines and find the furthest "N/6 ..." stage reached,
+ * folded into the four stages the UI shows. Returns
+ * { stage, total: 4, label, percent, voiceDone, voiceTotal }. stage=0 means
+ * nothing logged yet.
+ *
+ * During stage 4 (voice synthesis), percent also tracks per-line progress
+ * from the "line N: chose take" log lines (app/qwen_pipeline.py:472) against
+ * voiceTotal -- opts.lineCount if the caller has it, else read from the
+ * pipeline's own "N dialogue lines prepared" log line (app/pipeline.py:512),
+ * since a running job's script can't be fetched (the script API 409s until
+ * the job finishes). An explicit lineCount wins when both are available.
  */
-export function parseProgress(logs) {
-  let stage = 0;
-  let label = "Waiting to start";
-  let plainLabel = "Waiting to start";
-  for (const raw of logs || []) {
-    const m = /^(\d)\/6\s+(.*)$/.exec(String(raw).trim());
-    if (!m) continue;
-    const n = parseInt(m[1], 10);
-    if (n >= stage) {
-      stage = n;
-      label = STAGE_LABELS[n] || m[2];
-      plainLabel = PLAIN_STAGE_LABELS[n] || label;
-    }
+export function parseProgress(logs, { lineCount = null } = {}) {
+  let raw = 0, voiceDone = 0, loggedTotal = null;
+  for (const line of logs || []) {
+    const m = /^(\d)\/6\s/.exec(String(line).trim());
+    if (m) raw = Math.max(raw, parseInt(m[1], 10));
+    if (/^\s*line \d+: chose take/.test(line)) voiceDone += 1;
+    const t = /^\s*(\d+) dialogue lines prepared/.exec(line);
+    if (t) loggedTotal = parseInt(t[1], 10);
   }
-  return { stage, total: TOTAL_STAGES, label, plainLabel, percent: Math.round((stage / TOTAL_STAGES) * 100) };
+  const stage = STAGE_OF[raw] || 0;
+  const voiceTotal = lineCount ?? loggedTotal;
+  let percent = 0;
+  for (let s = 1; s < stage; s++) percent += STAGE_WEIGHT[s];
+  if (stage === 4 && voiceTotal) percent += Math.round(STAGE_WEIGHT[4] * Math.min(voiceDone, voiceTotal) / voiceTotal);
+  else if (stage >= 1) percent += Math.round(STAGE_WEIGHT[stage] * 0.3);
+  if (raw === 6) percent = 95;
+  return { stage, total: 4, label: STAGE_LABELS4[stage] || "Waiting to start", percent, voiceDone, voiceTotal, raw };
 }
 
 /**
@@ -317,5 +305,3 @@ export async function cancelDubJob(jobId, { baseUrl = "" } = {}) {
   const data = await res.json();
   return data.status;
 }
-
-export const TOTAL_DUB_STAGES = TOTAL_STAGES;
