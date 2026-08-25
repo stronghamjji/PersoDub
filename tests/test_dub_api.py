@@ -1,3 +1,5 @@
+import json
+import os
 import threading
 import time
 
@@ -641,3 +643,54 @@ def test_result_srt_answers_head(monkeypatch, tmp_path):
         time.sleep(0.02)
 
     assert client.head(f"/api/dub/result/{jid}/srt").status_code == 200
+
+
+def test_jobs_list_carries_the_finished_job_without_its_logs(monkeypatch):
+    # What the Projects sidebar is built from: one row per job, newest first,
+    # with just enough to name it -- never the log, which is thousands of lines.
+    def fake_run_dub(**kw):
+        open(kw["out_path"], "wb").write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "project": "listme"},
+    ).json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
+
+    rows = client.get("/api/dub/jobs").json()["jobs"]
+    row = next(r for r in rows if r["id"] == jid)
+    assert row["status"] == "done"
+    assert row["project"] == "listme"
+    assert row["language_code"] == "ko"
+    assert "logs" not in row
+    # Newest first: this job just ran, so nothing older may sit above it.
+    assert rows.index(row) == 0
+
+
+def test_a_finished_job_writes_job_json_next_to_the_video(monkeypatch):
+    def fake_run_dub(**kw):
+        open(kw["out_path"], "wb").write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "project": "onfile"},
+    ).json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
+
+    work = client.get(f"/api/dub/jobs/{jid}").json()["work_dir"]
+    with open(os.path.join(work, "job.json"), encoding="utf-8") as f:
+        saved = json.load(f)
+    assert saved["id"] == jid and saved["status"] == "done"
+    assert saved["result"]["out_path"].endswith("dubbed.mp4")

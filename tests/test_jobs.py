@@ -1,3 +1,4 @@
+import json
 import threading
 import time
 
@@ -164,3 +165,82 @@ def test_log_dir_override_applies_to_stores_created_earlier(tmp_path, monkeypatc
     jid = store.create()
     store.append_log(jid, "redirected line")
     assert (tmp_path / "redir" / ("job-%s.log" % jid)).exists()
+
+
+# ---------------- job.json: a job outlives the process that ran it ----------
+# Before this, the whole job list lived in memory: quitting the app lost every
+# record, so yesterday's finished dub could not be reopened even though its
+# folder was still sitting there.
+
+
+def test_job_store_survives_a_restart(tmp_path):
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="done", project="a", day="2026-08-26", language_code="ko", result={"out_path": str(tmp_path / "x" / "dubbed.mp4")})
+    store.persist(jid, str(tmp_path / "x"))
+    store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
+    assert store2.get(jid)["status"] == "done"
+
+
+def test_job_json_leaves_out_the_noisy_fields(tmp_path):
+    # logs can run to thousands of lines and notices/cancel_requested only mean
+    # anything while the job is running -- none of them belong in the file the
+    # Projects list is built from.
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store.append_log(jid, "a line")
+    store._update(jid, status="done", project="a")
+    store.persist(jid, str(tmp_path / "x"))
+    with open(str(tmp_path / "x" / "job.json"), encoding="utf-8") as f:
+        saved = json.load(f)
+    assert "logs" not in saved and "notices" not in saved
+    assert "cancel_requested" not in saved
+    assert saved["created"]
+
+
+def test_a_job_that_was_running_comes_back_as_interrupted(tmp_path):
+    # The thread died with the process; nothing will ever finish this job, so
+    # showing it as still running would be a lie the screen never recovers from.
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store.persist(jid, str(tmp_path / "x"))
+    store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
+    j = store2.get(jid)
+    assert j["status"] == "error" and j["error"] == "interrupted"
+    # The screen reads these on every job it draws.
+    assert j["logs"] == [] and j["notices"] == []
+
+
+def test_restore_skips_a_broken_job_json(tmp_path):
+    (tmp_path / "day" / "job").mkdir(parents=True)
+    (tmp_path / "day" / "job" / "job.json").write_text("{ not json", encoding="utf-8")
+    store = JobStore(log_dir=str(tmp_path))
+    store.restore(str(tmp_path))  # must not raise
+
+
+def test_restore_finds_old_folders_that_have_no_job_json(tmp_path):
+    # Every folder made before job.json existed. They still hold a dubbed.mp4,
+    # so rebuild just enough of a record for the Projects list to reopen them.
+    work = tmp_path / "2026-08-26" / "my clip_ko_001"
+    work.mkdir(parents=True)
+    (work / "dubbed.mp4").write_bytes(b"x")
+    store = JobStore(log_dir=str(tmp_path))
+    store.restore(str(tmp_path))
+    jobs = [j for j in store.all() if j["work_dir"] == str(work)]
+    assert len(jobs) == 1
+    assert jobs[0]["status"] == "done"
+    assert jobs[0]["project"] == "my clip"
+    assert jobs[0]["language_code"] == "ko"
+    assert jobs[0]["day"] == "2026-08-26"
+    # Restoring twice must not double the list.
+    store.restore(str(tmp_path))
+    assert len([j for j in store.all() if j["work_dir"] == str(work)]) == 1
+
+
+def test_all_lists_the_newest_job_first(tmp_path):
+    store = JobStore(log_dir=str(tmp_path))
+    old = store.create()
+    store._update(old, created="2026-08-01T09:00:00")
+    new = store.create()
+    store._update(new, created="2026-08-26T09:00:00")
+    assert [j["id"] for j in store.all()][:2] == [new, old]

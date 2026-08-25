@@ -248,6 +248,16 @@ def perso_spaces():
     return {"spaces": spaces}
 
 
+@app.get("/api/dub/jobs")
+def dub_jobs():
+    """Every job this app knows about, newest first -- the Projects sidebar.
+
+    No logs: a row needs a name, a language and a status dot, and the logs of a
+    few dozen jobs would be megabytes of JSON for a list nobody reads them in.
+    """
+    return {"jobs": job_store.all()}
+
+
 @app.get("/api/dub/jobs/{jid}")
 def dub_job(jid: str):
     """Query the progress of a dubbing job."""
@@ -503,16 +513,22 @@ def dub_job_delete_workspace(jid: str):
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if j["status"] == "running":
         raise HTTPException(status_code=409, detail="Job is still running")
-    out = (j.get("result") or {}).get("out_path")
+    # work_dir is stamped the moment the folder is made, so a job that failed
+    # before it produced anything can be cleared out too -- Projects lists
+    # those now, and a row nothing can remove is a row that never goes away.
+    out = j.get("work_dir") or os.path.dirname((j.get("result") or {}).get("out_path") or "")
     if not out:
         raise HTTPException(status_code=404, detail="Nothing to delete")
-    work = os.path.abspath(os.path.dirname(out))
+    work = os.path.abspath(out)
     root = os.path.abspath(WORKSPACE)
     # A job record is the only thing naming this path; refuse anything that
     # somehow points outside the workspace rather than trusting it.
     if os.path.commonpath([work, root]) != root or work == root:
         raise HTTPException(status_code=400, detail="Refusing to delete outside the workspace")
     shutil.rmtree(work, ignore_errors=True)
+    # The folder is gone, so its job.json is gone -- but the in-memory record
+    # would still put the job in the list until the next restart.
+    job_store.forget(jid)
     return {"job_id": jid, "deleted": True}
 
 
@@ -729,7 +745,14 @@ def dub_start(
                       # nothing was forced), so without this the screen has no way
                       # to name the source column of a job that was told.
                       source_lang=source_language_code or None,
+                      # The seconds the user kept, or None for the whole video.
+                      trim=({"start": trim_start, "end": trim_end}
+                            if trim_start is not None else None),
                       from_link=bool(source_url))
+    # Written now, not just at the end: a job the user quits the app in the
+    # middle of still has a folder, and without a file in it that folder is
+    # nameless -- Projects would have nothing to show for it.
+    job_store.persist(jid, work)
     # First log line names the source -- log files are job-<id>.log, so without
     # this there is no way to tell which video a log belongs to.
     job_store.append_log(jid, f"🎬 {source_url or video.filename or 'video'}")
@@ -1016,3 +1039,12 @@ def agent_chat(body: AgentChatRequest, request: Request):
             yield json.dumps(event, ensure_ascii=False) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
+# ---------------- Jobs from before this launch ----------------
+# The job store is a dictionary, so quitting the app used to lose every record
+# even though the folders were all still there. Reading the job.json files back
+# at import time is what lets Projects reopen yesterday's work. Best-effort by
+# design: a workspace that isn't there yet (a fresh install, a test run) simply
+# restores nothing, and one bad file is skipped rather than taking the app down.
+job_store.restore(WORKSPACE)
