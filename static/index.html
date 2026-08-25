@@ -1442,6 +1442,19 @@ function playRange(video, start, end) {
   return video.play();
 }
 
+// The other half of playRange: forget a range that was never played to its end
+// (the dialog closed, a new file was dropped, the viewer took the controls
+// back). Without this the old stop-listener stays armed and pauses the next,
+// unrelated playback at the abandoned range's end.
+function cancelRange(video) {
+  const stop = rangeStoppers.get(video);
+  if (stop) {
+    video.removeEventListener("timeupdate", stop);
+    rangeStoppers.delete(video);
+  }
+  video.pause();
+}
+
 // The shortest part worth dubbing; also what keeps the two handles from
 // crossing over each other.
 const TRIM_MIN_SPAN = 0.5;
@@ -1492,13 +1505,17 @@ function renderTrim(duration) {
     $("trimHatchEnd").style.left = at(end);
     $("trimSel").style.left = at(start);
     $("trimSel").style.width = `calc((100% - 10px) * ${(end - start) / duration})`;
-    $("trimRead").textContent =
-      `${fmtClockTenths(start)} – ${fmtClockTenths(end)} · ${(end - start).toFixed(1)}s of ${duration.toFixed(1)}s`;
     // Both handles parked at the ends is not a trim -- send no range at all,
     // so the server keeps the file exactly as uploaded. Within one step of the
     // end counts as the end: a slider snaps to its 0.1 s grid, so a length like
     // 22.08s can only ever be dragged back to 22.0.
     const whole = start <= 0 && end >= duration - TRIM_STEP;
+    // Which is also why the readout counts a full range against the real
+    // length: otherwise an untrimmed 22.085s video reads "22.0s of 22.1s", as
+    // if a tenth had been shaved off it.
+    const shownEnd = whole ? duration : end;
+    $("trimRead").textContent =
+      `${fmtClockTenths(start)} – ${fmtClockTenths(shownEnd)} · ${(shownEnd - start).toFixed(1)}s of ${duration.toFixed(1)}s`;
     if (state.newProject) state.newProject.trim = whole ? null : { start, end };
   }
 
@@ -1529,7 +1546,13 @@ function renderTrim(duration) {
 let projectObjectUrl = null;
 function releaseProjectVideo() {
   const v = $("projectVideo");
-  v.pause();
+  cancelRange(v);
+  // The trim box goes with the video, so its play/pause listeners go too --
+  // otherwise they keep toggling a class on a button that has left the page.
+  if (trimPlayState) {
+    for (const e of ["play", "pause", "ended"]) v.removeEventListener(e, trimPlayState);
+    trimPlayState = null;
+  }
   v.removeAttribute("src");
   v.load();
   if (projectObjectUrl) { URL.revokeObjectURL(projectObjectUrl); projectObjectUrl = null; }
@@ -2291,9 +2314,12 @@ async function renderExport(job) {
 
 let scriptJobId = null;
 
+// m:ss.d for the script table's narrow time column -- the same tenths as every
+// other timecode, with the hours dropped where there are none. Derived rather
+// than counted again: two hand-rolled tenth-of-a-second formatters is one too
+// many, and this one used to print "0:60.0" for 59.97s.
 function fmtTime(s) {
-  const t = Math.max(0, Number(s) || 0);
-  return `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+  return fmtClockTenths(s).replace(/^00:0?/, "");
 }
 
 function scriptRow(l) {

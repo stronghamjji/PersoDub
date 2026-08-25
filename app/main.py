@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 import shutil
@@ -553,12 +554,19 @@ def _cut_video(path: str, start: float, end: float) -> None:
     """Keep only [start, end] of the video, in place. Re-encodes so the cut is
     exact (a copy-cut lands on the nearest keyframe, seconds away)."""
     tmp = path + ".cut.mp4"
-    r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
-                        "-i", path, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", tmp],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError("Could not trim the video: " + r.stderr[-200:])
-    os.replace(tmp, path)
+    try:
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+                            "-i", path, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", tmp],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError("Could not trim the video: " + r.stderr[-200:])
+        os.replace(tmp, path)
+    finally:
+        # A cut that died with the output already open (out of disk, a killed
+        # encoder) would otherwise leave a half-written .cut.mp4 beside a good
+        # input.mp4, in a folder the pipeline later walks.
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 @app.post("/api/dub/start")
@@ -595,10 +603,19 @@ def dub_start(
     """
     # Half a range means nothing, and a backwards one would produce an empty
     # video minutes later -- both are caught here, before anything is saved.
+    # isfinite keeps out inf and nan, which would otherwise reach ffmpeg as
+    # "-to inf"; the half-second floor is the same one the screen's handles
+    # enforce, so both sides agree on what counts as a trim.
     if (trim_start is None) != (trim_end is None):
         raise HTTPException(400, "Send both trim_start and trim_end, or neither.")
-    if trim_start is not None and not (0 <= trim_start < trim_end):
-        raise HTTPException(400, "The trim must start at 0 seconds or later and end after it starts.")
+    if trim_start is not None and not (
+        math.isfinite(trim_start) and math.isfinite(trim_end)
+        and 0 <= trim_start and trim_end - trim_start >= 0.5
+    ):
+        raise HTTPException(
+            400,
+            "The trim must start at 0 seconds or later and keep at least half a second of video.",
+        )
     # Exactly one source. Accepting both would silently pick a winner, and the
     # user would watch the wrong video get dubbed.
     source_url = (source_url or "").strip() or None
@@ -668,7 +685,14 @@ def dub_start(
         # screen's original) only ever sees the part the user picked. A link
         # has nothing to cut yet -- that happens after the download, below.
         if trim_start is not None:
-            _cut_video(video_path, trim_start, trim_end)
+            try:
+                _cut_video(video_path, trim_start, trim_end)
+            except RuntimeError as e:
+                # No job record exists yet, so nothing would ever come back to
+                # reap this folder -- and the next try would land in _001.
+                # _job_dir always makes a fresh folder, so it is ours to drop.
+                shutil.rmtree(work, ignore_errors=True)
+                raise HTTPException(400, str(e))
 
     srt_path = None
     if srt is not None and srt.filename:
