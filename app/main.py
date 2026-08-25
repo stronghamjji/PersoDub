@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shutil
@@ -6,13 +7,18 @@ from datetime import date
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.config import OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, TRANSLATE_ENGINE, default_stt_engine
+from app.agents import base as agent_base
+from app.agents import claude as claude_agent
+from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
+                        TRANSLATE_ENGINE, default_stt_engine)
+from app.dub_script import DUB_NAME, EDITED_NAME, edit_line, load_lines, script_path
+from app.text.srt import parse_srt
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -31,6 +37,7 @@ from app.engines_status import (
 from app.jobs import JobStore
 from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
 from app.pipeline import run_dub
+from app.qwen_pipeline import rebuild_dub, resynth_one_line
 from app.text.naming import next_free, safe_name
 from app.settings_env import (read_analytics_off, read_key_status, read_value,
                               write_analytics_off, write_keys)
@@ -246,6 +253,222 @@ def dub_job(jid: str):
     return j
 
 
+@app.get("/api/dub/jobs/{jid}/script")
+def dub_job_script(jid: str):
+    """This job's script, line by line, with the source line beside each one.
+
+    The same reading app/mcp_server.py's get_script hands the assistant. Until
+    now only the assistant could see it: the page had no route to ask for the
+    original-language lines, so the export screen could only list the finished
+    subtitles with nothing to compare them against.
+    """
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    out = (job.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=409,
+                            detail="This job has no finished script yet.")
+    work_dir = os.path.dirname(out)
+    try:
+        lines = load_lines(work_dir, job.get("language_code") or "en")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="No script was recorded for this job.")
+    # Mark which lines differ from what the translation produced, so the page can
+    # badge them and offer to put them back.
+    for line, original in zip(lines, _dubbed_texts(work_dir)):
+        line["was"] = original
+        line["edited"] = original is not None and original != line["text"]
+    return {"lines": lines,
+            "edited": any(l.get("edited") for l in lines)}
+
+
+def _dubbed_texts(work_dir: str) -> List[Optional[str]]:
+    """What the translation wrote, line by line, before anything was rewritten.
+
+    edit_line only ever changes a line's words, never the count or the timings,
+    so line N here is line N there.
+    """
+    path = os.path.join(work_dir, DUB_NAME)
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8-sig") as f:
+        return [c["text"] for c in parse_srt(f.read())]
+
+
+# A dub keeps its per-line voices now (app/pipeline.py), which is what makes
+# redoing a single line possible -- and what makes a job need room. Measured on
+# a real job 2026-08-21: the intermediates were about 61% of the folder.
+FREE_SPACE_FLOOR = 3 * 1024 ** 3  # 3 GB
+
+
+def free_bytes(path: str) -> int:
+    """Free space on the disk holding path (its nearest existing parent)."""
+    while path and not os.path.exists(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            break
+        path = parent
+    return shutil.disk_usage(path or "/").free
+
+
+def check_space(path: str) -> None:
+    """Refuse to start when there is not enough room, and say what to do.
+
+    Failing here beats failing three stages in: a dub that runs out of disk
+    halfway leaves a half-written folder and no dub.
+    """
+    free = free_bytes(path)
+    if free >= FREE_SPACE_FLOOR:
+        return
+    raise HTTPException(
+        status_code=507,
+        detail=("저장 공간이 부족합니다 (남은 공간 %.1f GB). "
+                "지난 작업 폴더를 지우면 공간이 생깁니다 — "
+                "왼쪽 작업 목록에서 오래된 작업을 지워주세요."
+                % (free / 1024 ** 3)),
+    )
+
+
+class ScriptLineRequest(BaseModel):
+    text: str
+
+
+def _script_work_dir(jid: str) -> tuple:
+    """The job and its folder, or the right HTTP error."""
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    out = (job.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=409, detail="This job has no finished script yet.")
+    return job, os.path.dirname(out)
+
+
+@app.post("/api/dub/jobs/{jid}/script/{line}")
+def dub_job_script_edit(jid: str, line: int, body: ScriptLineRequest):
+    """Rewrite one line. Same path the assistant takes -- edited.srt only."""
+    job, work_dir = _script_work_dir(jid)
+    try:
+        return edit_line(work_dir, line, body.text, job.get("language_code") or "en")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="No script was recorded for this job.")
+
+
+@app.get("/api/dub/jobs/{jid}/script/{line}/audio")
+def dub_job_line_audio(jid: str, line: int):
+    """The voice that was made for one line, on its own.
+
+    Script lines are numbered from 1; the synthesizer writes them from 0
+    (app/qwen_pipeline.py: qwen_line_<i>.wav), so line N is file N-1.
+    """
+    _job, work_dir = _script_work_dir(jid)
+    path = os.path.join(work_dir, "qwen_line_%d.wav" % (line - 1))
+    if not os.path.exists(path):
+        raise HTTPException(
+            status_code=404,
+            detail=("이 작업에는 줄별 음성이 없습니다. "
+                    "줄별 음성을 남기기 시작한 것은 2026-08-24부터라, "
+                    "그 전에 만든 작업은 다시 더빙해야 들을 수 있습니다."))
+    return FileResponse(path, media_type="audio/wav")
+
+
+@app.post("/api/dub/jobs/{jid}/script/{line}/voice")
+def dub_job_line_voice(jid: str, line: int):
+    """Speak ONE line again and rebuild the dub around it.
+
+    Everything else is reused: the other lines' audio, the background bed and
+    the speaker's cloned voice all stay on disk after a job (app/pipeline.py).
+    Rewriting two lines of ten should not cost a whole synthesis pass.
+    """
+    job, work_dir = _script_work_dir(jid)
+    manifest = os.path.join(work_dir, "lines.json")
+    if not os.path.exists(manifest):
+        raise HTTPException(status_code=409, detail=(
+            "이 작업은 줄별로 다시 만들 수 없습니다. 2026-08-24 이전에 만든 작업이라 "
+            "줄 정보가 없습니다 — 통째로 다시 만들어 주세요."))
+    with open(manifest, encoding="utf-8") as f:
+        data = json.load(f)
+    lines = data.get("lines") or []
+    if not 1 <= line <= len(lines):
+        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+
+    entry = lines[line - 1]
+    text = load_lines(work_dir, job.get("language_code") or "en")[line - 1]["text"]
+    try:
+        new_path = resynth_one_line(work_dir, entry, text, data.get("language") or "English")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if new_path is None:
+        raise HTTPException(status_code=502, detail="목소리를 만들지 못했습니다.")
+
+    rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
+                (job.get("result") or {}).get("out_path"))
+    return {"line": line, "ok": True}
+
+
+@app.post("/api/dub/jobs/{jid}/script/{line}/revert")
+def dub_job_script_revert(jid: str, line: int):
+    """Put one line back to what the translation wrote."""
+    job, work_dir = _script_work_dir(jid)
+    texts = _dubbed_texts(work_dir)
+    if not 1 <= line <= len(texts):
+        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+    return edit_line(work_dir, line, texts[line - 1], job.get("language_code") or "en")
+
+
+@app.post("/api/dub/jobs/{jid}/redub")
+def dub_job_redub(jid: str):
+    """Make the voices again from this job's script, as it now stands.
+
+    Transcription and translation are skipped: the script is handed in whole, the
+    way a user-supplied subtitle file is (run_dub's srt_path). The old job is left
+    untouched in its own folder so a rewrite that turns out worse can be compared
+    against what came before.
+    """
+    job, work_dir = _script_work_dir(jid)
+    source_video = os.path.join(work_dir, "input.mp4")
+    if not os.path.exists(source_video):
+        raise HTTPException(status_code=409, detail="This job's video is no longer on disk.")
+
+    language_code = job.get("language_code") or "en"
+    project = job.get("project") or os.path.basename(work_dir)
+    check_space(WORKSPACE)
+    work = _job_dir(project, language_code)
+    video_path = os.path.join(work, "input.mp4")
+    shutil.copyfile(source_video, video_path)
+    srt_path = os.path.join(work, "sub.srt")
+    shutil.copyfile(script_path(work_dir), srt_path)
+    out_path = os.path.join(work, "dubbed.mp4")
+
+    new_jid = job_store.create()
+    job_store._update(new_jid, language_code=language_code, project=project,
+                      day=_today(), from_link=False)
+    edited = os.path.exists(os.path.join(work_dir, EDITED_NAME))
+    job_store.append_log(new_jid, "🎬 %s (대본 %s으로 다시 만들기)"
+                         % (project, "고친 것" if edited else "그대로"))
+
+    def _target(log):
+        return run_dub(
+            video_path=video_path,
+            srt_path=srt_path,
+            out_path=out_path,
+            language=job.get("language") or language_code,
+            language_code=language_code,
+            cancel_check=lambda: job_store.is_cancel_requested(new_jid),
+            on_notice=lambda n: job_store.append_notice(new_jid, n),
+            log=log,
+        )
+
+    job_store.start(new_jid, _target)
+    # Stamped on the OLD job so the screen showing it can follow along when the
+    # assistant, not the user, is the one who pressed go.
+    job_store._update(jid, remade_as=new_jid)
+    return {"job_id": new_jid}
+
+
 @app.post("/api/dub/jobs/{jid}/cancel")
 def dub_job_cancel(jid: str):
     """Cancel a running dubbing job.
@@ -412,6 +635,7 @@ def dub_start(
         project = safe_name(
             os.path.splitext(video.filename or "")[0] if has_upload else (source_url or "")
         )
+    check_space(WORKSPACE)
     work = _job_dir(project, language_code)
     video_path = os.path.join(work, "input.mp4")
     if has_upload:
@@ -440,6 +664,9 @@ def dub_start(
     job_store._update(jid, language_code=language_code,
                       project=project or os.path.basename(work),
                       day=_today(),
+                      # Kept so a later redub of this job can pass the same
+                      # language name back into run_dub.
+                      language=language,
                       from_link=bool(source_url))
     # First log line names the source -- log files are job-<id>.log, so without
     # this there is no way to tell which video a log belongs to.
@@ -627,3 +854,93 @@ def dub_result_srt(jid: str, download: int = 0):
                             media_type="text/plain; charset=utf-8",
                             headers=headers)
     raise HTTPException(status_code=404, detail="Subtitle file not found")
+
+
+# ---------------------------------------------------------------------------
+# The script assistant: a chat panel driving whichever CLI agent the user
+# already subscribes to. It reaches the script through the same five MCP tools
+# a terminal agent uses -- see app/mcp_server.py. Starting or cancelling a dub
+# is deliberately not among them.
+# ---------------------------------------------------------------------------
+
+AGENTS = {
+    "claude": {"binary": "claude", "name": "Claude", "vendor": "Anthropic"},
+    "codex": {"binary": "codex", "name": "Codex", "vendor": "OpenAI"},
+    "gemini": {"binary": "gemini", "name": "Gemini", "vendor": "Google"},
+}
+
+# Where the assistant's own files live. Never the user's global CLI config:
+# their everyday setup has to keep working exactly as it did.
+AGENT_DIR = os.path.join(PERSODUB_LOG_DIR, "agent")
+
+
+class AgentChatRequest(BaseModel):
+    message: str
+    agent: str = "claude"
+    resume: bool = True
+    # "" keeps whatever the CLI is set up to use.
+    model: str = ""
+    # The job the user is looking at. Every script tool needs one, and the user
+    # has no way of knowing the id -- the panel reads it off the page instead.
+    job_id: Optional[str] = None
+
+
+def _with_job(message: str, job_id: Optional[str]) -> str:
+    """Tell the assistant which job is on screen before it reads the question."""
+    if not job_id:
+        return message
+    return "(지금 화면에 열려 있는 작업 번호: %s)\n\n%s" % (job_id, message)
+
+
+@app.get("/api/agent/status")
+def agent_status():
+    """Which assistants are installed on this machine, and which are ready.
+
+    Only one of them is needed -- whichever the user subscribes to. The panel
+    greys out the rest rather than asking anyone to install all three.
+    """
+    out = []
+    for key, meta in AGENTS.items():
+        path = agent_base.find_cli(meta["binary"])
+        out.append({
+            "id": key,
+            "name": meta["name"],
+            "vendor": meta["vendor"],
+            "installed": bool(path),
+            "supported": key == "claude",  # the other two translators come next
+            "models": claude_agent.MODELS if key == "claude" else [],
+        })
+    return {"agents": out}
+
+
+@app.post("/api/agent/chat")
+def agent_chat(body: AgentChatRequest, request: Request):
+    """One turn with the assistant, streamed back a line of JSON at a time.
+
+    Streaming is the point: a turn takes seconds, and a panel that sits blank
+    that whole time reads as broken. Each line is one of our five events.
+    """
+    meta = AGENTS.get(body.agent)
+    if meta is None:
+        raise HTTPException(status_code=422, detail="Unknown assistant: %s" % body.agent)
+    if body.agent != "claude":
+        raise HTTPException(status_code=501,
+                            detail="%s is not wired up yet." % meta["name"])
+
+    binary = agent_base.find_cli(meta["binary"])
+    if not binary:
+        raise HTTPException(status_code=503,
+                            detail="%s is not installed." % meta["name"])
+
+    api_url = str(request.base_url).rstrip("/")
+    mcp_config = agent_base.write_mcp_config(AGENT_DIR, api_url)
+    work_dir = os.path.dirname(mcp_config)
+    args = claude_agent.command(_with_job(body.message, body.job_id),
+                                mcp_config, body.resume, body.model)
+
+    def stream():
+        for event in agent_base.run(binary, args, claude_agent.translate,
+                                    cwd=work_dir):
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")

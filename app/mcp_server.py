@@ -128,5 +128,45 @@ def get_job_status(job_id: str) -> dict:
     }
 
 
+@mcp.tool()
+def remake_voices(job_id: str) -> dict:
+    """Make this job's voices again from the script as it now stands.
+
+    Transcription and translation are skipped -- only the speaking is redone.
+    Returns the new job's id; poll it with get_job_status.
+
+    This is the one thing here that spends real GPU time, and it is deliberately
+    narrow: it can only redo THIS job's voices from THIS job's script. Starting a
+    new dub, cancelling one, or changing any setting is still not reachable.
+
+    Added 2026-08-24, reversing the 2026-08-20 rule that every GPU-spending
+    action stays behind a button. A user put it plainly: an assistant that
+    rewrites a line and then asks the user to go press a button themselves is
+    doing nothing they could not do alone.
+    """
+    r = httpx.post("%s/api/dub/jobs/%s/redub" % (API, job_id), timeout=30.0)
+    if r.status_code == 404:
+        raise ValueError("no such job: %s" % job_id)
+    if r.status_code == 409:
+        raise ValueError(r.json().get("detail", "this job cannot be remade"))
+    r.raise_for_status()
+    return r.json()
+
+
+@mcp.tool()
+def remake_line_voice(job_id: str, line: int) -> dict:
+    """Speak ONE line again, in the same voice, and rebuild the dub around it.
+
+    Use this after rewriting a line or two -- it costs seconds. remake_voices
+    redoes every line and costs minutes; reach for that only when most of the
+    script changed.
+    """
+    r = httpx.post("%s/api/dub/jobs/%s/script/%d/voice" % (API, job_id, line), timeout=600.0)
+    if r.status_code in (404, 409, 422):
+        raise ValueError(r.json().get("detail", "cannot remake line %d" % line))
+    r.raise_for_status()
+    return r.json()
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

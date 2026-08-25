@@ -558,7 +558,14 @@ def run_dub(
     # candidates that were kept for a possible reassembly pass (see
     # qwen_pipeline.synth_lines / cleanup_takes).
     cleanup_takes(work_dir, log)
-    cleanup_intermediates(work_dir, log)
+    # The per-line voices, the background bed and the speaker references stay.
+    # Rewriting one line and re-speaking only that line needs all three, and a
+    # rewrite is the normal thing to do after watching the dub back (user
+    # decision 2026-08-24, reversing the 0.3.6 cleanup). They cost disk, so
+    # app/main.py warns before a job that would not fit and points at the
+    # per-job delete button. cleanup_intermediates() is still here and is what
+    # that warning tells the user to reach for.
+    log("   keeping the per-line audio so single lines can be redone")
     log("✅ Done!")
     return {
         "job_id": job_id,
