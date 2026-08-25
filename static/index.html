@@ -671,6 +671,7 @@
   /* As wide as its words: stretched across the whole column it read as the
      screen's main action rather than the way out of a dead end. */
   #doneRetry { align-self: center; }
+  #doneRetryError { text-align: center; }
   .done-fail .raw-log { margin: 0; }
 
   /* ---------------- Export dialog ---------------- */
@@ -924,6 +925,10 @@
                  failed is nearly always retried with one option changed, and
                  hunting the file down again was the whole cost of that. -->
             <button class="btn btn-primary" id="doneRetry" type="button">Try again</button>
+            <!-- Only if the retry itself cannot start (the folder was deleted
+                 since). Kept apart from the reason above, which it must not
+                 write over. -->
+            <p class="delete-error" id="doneRetryError"></p>
           </div>
         </div>
       </section>
@@ -1400,7 +1405,7 @@ $("historyToggle").addEventListener("click", () => {
   const opening = $("historySidebar").classList.toggle("collapsed") === false;
   // Ask the server again on the way open: a job may have finished, or another
   // window may have started one, since the list was last drawn.
-  if (opening) renderHistory();
+  if (opening) renderHistory().catch(() => {});
 });
 
 // ---------------- Settings modal ----------------
@@ -2163,12 +2168,19 @@ $("runningVideo").addEventListener("error", (e) => e.target.removeAttribute("src
 // It is written into both screens, because a job crosses from one to the other
 // and the reason has to survive the crossing: #jobNotice under the progress
 // steps while it runs, #doneNotice above the script once it is finished.
+// Failures the server records as a token rather than a sentence, because the
+// token is what the code elsewhere tests. Said in plain words here, where the
+// only audience is the person reading the screen.
+const ERROR_SENTENCES = {
+  interrupted: "The app was closed before this dub finished.",
+};
+
 function renderNotices(job) {
   const notices = job.notices || [];
   const n = notices.length ? notices[notices.length - 1] : null;
   const failed = job.status === "error";
   const message = failed
-    ? (job.error || (n && n.message) || "Something went wrong. Try again, or use a shorter clip.")
+    ? (ERROR_SENTENCES[job.error] || job.error || (n && n.message) || "Something went wrong. Try again, or use a shorter clip.")
     : (n && n.message);
   const linkText = n && CREDIT_MODALS[n.type] ? CREDIT_MODALS[n.type].button : "Recharge";
   const html = (n && n.link && linkText)
@@ -2347,6 +2359,15 @@ function closeDelete() {
 }
 $("deleteCloseX").addEventListener("click", closeDelete);
 $("deleteCancelBtn").addEventListener("click", closeDelete);
+// Backdrop and Escape, the same way out the other dialogs give. Especially
+// Escape: backing out is the reflex in front of a destructive question, and
+// nothing is lost by leaving too easily -- the deleting is the deliberate act.
+$("deleteOverlay").addEventListener("click", (e) => {
+  if (e.target === $("deleteOverlay")) closeDelete();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("deleteOverlay").classList.contains("open")) closeDelete();
+});
 $("deleteConfirmBtn").addEventListener("click", async () => {
   const job = pendingDelete;
   if (!job) return;
@@ -2362,7 +2383,7 @@ $("deleteConfirmBtn").addEventListener("click", async () => {
       state.pollGeneration += 1;
       showHome();
     }
-    renderHistory();
+    renderHistory().catch(() => {});
   } catch (err) {
     $("deleteError").textContent = err.message;
   } finally {
@@ -2449,7 +2470,7 @@ async function startDubbing() {
     const label = np.file ? np.file.name : np.probe.title;
     // The server has the job on file already, so the sidebar only has to ask
     // again -- the new row comes back with it.
-    renderHistory();
+    renderHistory().catch(() => {});
     // The video is on its way to the server now; the dialog's copy of it can go.
     $("projectOverlay").classList.remove("open");
     releaseProjectVideo();
@@ -2532,7 +2553,7 @@ async function handleJobUpdate(job) {
   }
 
   // The job is over, so its row's status dot has changed colour.
-  renderHistory();
+  renderHistory().catch(() => {});
 
   // Desktop only: in a plain browser persodubShell is undefined and nothing is
   // counted, which is the intended behaviour -- the counts describe app installs.
@@ -2598,11 +2619,14 @@ async function renderDone(job) {
     $("doneFailWhy").textContent = job.status === "cancelled"
       ? "This dubbing job was cancelled."
       : "Dubbing didn't finish.";
+    // Appended in the order they should read -- why it stopped, what to do
+    // about it, and the log last. moveInto leaves a borrowed element where it
+    // already is, which put the log above the button the second time round.
     moveInto($("doneNotice"), $("doneFailBody"));
-    // Under the reason, not above it: the button is what to do about the
-    // sentence the user just read.
     $("doneFailBody").appendChild($("doneRetry"));
-    moveInto($("rawLogDetails"), $("doneFailBody"));
+    $("doneFailBody").appendChild($("doneRetryError"));
+    $("doneRetryError").textContent = "";
+    $("doneFailBody").appendChild($("rawLogDetails"));
     $("doneRetry").disabled = false;
     return;
   }
@@ -2627,13 +2651,20 @@ $("doneRetry").addEventListener("click", async () => {
   const job = state.job;
   if (!job) return;
   $("doneRetry").disabled = true;
+  $("doneRetryError").textContent = "";
   try {
     const r = await fetch(`/api/dub/result/${job.id}/original`);
     if (!r.ok) throw new Error("The video this job started from is no longer on this machine.");
     const blob = await r.blob();
     openNewProject({ file: new File([blob], `${job.project || "video"}.mp4`, { type: "video/mp4" }) });
   } catch (e) {
-    $("doneFailWhy").textContent = errorText(e);
+    // Under the button, not over the headline: why the job failed is the
+    // card's whole reason for being, and there is no way back to that
+    // sentence once it has been written over.
+    $("doneRetryError").textContent = errorText(e);
+  } finally {
+    // Closing the New project dialog does not redraw this card, so a button
+    // left disabled on the way out stays dead until the user navigates away.
     $("doneRetry").disabled = false;
   }
 });
@@ -3299,7 +3330,7 @@ window.addEventListener("persodub:voices-remade", async () => {
   }
 });
 
-renderHistory();
+renderHistory().catch(() => {});
 showHome();
 </script>
 
