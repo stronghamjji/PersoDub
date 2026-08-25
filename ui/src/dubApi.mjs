@@ -230,12 +230,19 @@ export async function fetchResultSrt(jobId, { baseUrl = "" } = {}) {
 const STAGE_OF = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 4, 6: 4 };
 const STAGE_LABELS4 = { 1: "Separating audio", 2: "Transcribing", 3: "Translating", 4: "Dubbing" };
 const STAGE_WEIGHT = { 1: 10, 2: 25, 3: 20, 4: 45 }; // sums to 100
+// The voice-line math only ever fills 40 of Dubbing's 45 points (not the full
+// 45) so that raw 5 (Check) and raw 6 (Build) -- which land after every voice
+// line is already done -- still have room to nudge percent up (96, then 97)
+// instead of ever having to snap it back down. 100 is reserved for the UI to
+// set once the job's status is actually "done".
+const VOICE_CAP = 40;
 
 /**
  * Parse a job's log lines and find the furthest "N/6 ..." stage reached,
  * folded into the four stages the UI shows. Returns
  * { stage, total: 4, label, percent, voiceDone, voiceTotal }. stage=0 means
- * nothing logged yet.
+ * nothing logged yet. percent never decreases as logs grow -- callers can
+ * feed it a job's logs on every poll and just render whatever comes back.
  *
  * During stage 4 (voice synthesis), percent also tracks per-line progress
  * from the "line N: chose take" log lines (app/qwen_pipeline.py:472) against
@@ -257,9 +264,9 @@ export function parseProgress(logs, { lineCount = null } = {}) {
   const voiceTotal = lineCount ?? loggedTotal;
   let percent = 0;
   for (let s = 1; s < stage; s++) percent += STAGE_WEIGHT[s];
-  if (stage === 4 && voiceTotal) percent += Math.round(STAGE_WEIGHT[4] * Math.min(voiceDone, voiceTotal) / voiceTotal);
+  if (stage === 4 && voiceTotal) percent += Math.round(VOICE_CAP * Math.min(voiceDone, voiceTotal) / voiceTotal);
   else if (stage >= 1) percent += Math.round(STAGE_WEIGHT[stage] * 0.3);
-  if (raw === 6) percent = 95;
+  if (raw >= 5) percent = Math.max(percent, raw === 6 ? 97 : 96);
   return { stage, total: 4, label: STAGE_LABELS4[stage] || "Waiting to start", percent, voiceDone, voiceTotal, raw };
 }
 

@@ -83,7 +83,10 @@ test("parseProgress: furthest stage wins even if an indented detail line follows
   ];
   const p = parseProgress(logs);
   assert.equal(p.stage, 4);
-  assert.equal(p.percent, 95);
+  // raw reaches 6 ("6/6 Building..."), which floors percent at 97 (see the
+  // percent-never-regresses test below) -- there's no voiceTotal here, so
+  // the voice-line math alone would only reach 69.
+  assert.equal(p.percent, 97);
 });
 
 test("parseProgress on an empty/just-started job", () => {
@@ -125,10 +128,33 @@ test("parseProgress reads voiceTotal from the 'dialogue lines prepared' log line
   const p = parseProgress(logs);
   assert.equal(p.voiceTotal, 4);
   assert.equal(p.voiceDone, 3);
-  assert.equal(p.percent, 89);
+  assert.equal(p.percent, 85); // 55 (stages 1-3) + round(40 * 3/4)
 
   const withExplicitCount = parseProgress(logs, { lineCount: 10 });
   assert.equal(withExplicitCount.voiceTotal, 10); // explicit lineCount wins over the log line
+});
+
+// Controller ruling: percent must never decrease as logs grow, even right at
+// the finish line. Before this fix, voices finishing (55 + 45 = 100) then the
+// "6/6 Building..." line arriving forced percent back down to 95 -- a visible
+// backward jump. The voice math is now capped at 40 (95 max) and raw 5/6 use
+// a floor (96/97) instead of an override, so it only ever goes up.
+test("parseProgress: percent never regresses as voices finish and the pipeline reaches Check/Build", () => {
+  const lines = [
+    "4/6 Cloning & synthesizing voices (Qwen3-TTS — fast)…",
+    "   line 0: chose take 0",
+    "   line 1: chose take 0",
+    "5/6 Checking for original-voice leakage…",
+    "6/6 Building the finished file…",
+  ];
+  const percents = [];
+  for (let i = 1; i <= lines.length; i++) {
+    percents.push(parseProgress(lines.slice(0, i), { lineCount: 2 }).percent);
+  }
+  for (let i = 1; i < percents.length; i++) {
+    assert.ok(percents[i] >= percents[i - 1], `percent regressed: ${percents.join(", ")}`);
+  }
+  assert.equal(percents[percents.length - 1], 97);
 });
 
 test("pollDubJob keeps polling through a 'cancelling' status and stops once it resolves to 'cancelled'", async () => {
