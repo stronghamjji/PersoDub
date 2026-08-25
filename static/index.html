@@ -249,8 +249,11 @@
      than a placeholder box) is what makes the wait feel like it belongs to THIS
      job. It never carries a time estimate -- see renderRunning(). */
 
-  #screen-running { display: flex; align-items: center; justify-content: center; }
-  .running { display: flex; gap: 28px; align-items: stretch; }
+  /* margin:auto rather than justify/align-content: centred flex content that
+     overflows its scroll container cannot be scrolled back to its start edge,
+     so on a narrow window the left of the video would be cut off for good. */
+  #screen-running { display: flex; }
+  .running { margin: auto; display: flex; gap: 28px; align-items: stretch; }
   /* min-height keeps the card's shape while the video is still loading -- and
      if the file never loads, the veil still has something to sit on. */
   .running-video { position: relative; flex: 0 0 560px; min-height: 315px;
@@ -619,7 +622,7 @@
           </div>
           <div class="progress-card">
             <div class="progress-head"><b id="progressTitle">Separating audio</b><span id="progressPct">0%</span></div>
-            <div class="progress-bar"><div id="progressFill"></div></div>
+            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
             <ol class="progress-steps" id="progressSteps"></ol>
             <div class="job-notice" id="jobNotice" hidden></div>
             <details class="raw-log" id="rawLogDetails">
@@ -1649,9 +1652,12 @@ const CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4
 // different machines, so any "about N minutes left" we showed would be a
 // promise we break.
 function renderRunning(job, progress) {
-  // Every job's source video is readable from the moment it starts
-  // (app/main.py:dub_result_original). Set once -- assigning src on every
-  // poll would restart the download three seconds in, forever.
+  // Set once -- assigning src on every poll would restart the download three
+  // seconds in, forever. A link job has no input.mp4 yet when it starts (the
+  // video is downloaded inside the job thread, app/main.py:dub_start), so that
+  // first request 404s; the error handler below drops the src again and this
+  // guard re-arms it on the next poll. Once a load succeeds no error fires, so
+  // the src stays put and the request is not repeated.
   const video = $("runningVideo");
   const src = `/api/dub/result/${job.id}/original`;
   if (video.getAttribute("src") !== src) video.setAttribute("src", src);
@@ -1659,20 +1665,27 @@ function renderRunning(job, progress) {
   $("progressTitle").textContent = progress.label;
   $("progressPct").textContent = `${progress.percent}%`;
   $("progressFill").style.width = `${progress.percent}%`;
+  $("progressFill").parentElement.setAttribute("aria-valuenow", String(progress.percent));
 
   $("progressSteps").innerHTML = STAGE_NAMES.map((name, i) => {
     const n = i + 1;
-    const state = n < progress.stage ? "done" : n === progress.stage ? "current" : "todo";
+    const stepState = n < progress.stage ? "done" : n === progress.stage ? "current" : "todo";
     // Only the voice stage counts lines, and only once the pipeline has
     // logged how many there are.
-    const counted = state === "current" && n === 4 && progress.voiceTotal;
+    const counted = stepState === "current" && n === 4 && progress.voiceTotal;
     const note = counted
       ? ` <span class="step-note">· voice ${Math.min(progress.voiceDone, progress.voiceTotal)} of ${progress.voiceTotal}</span>`
       : "";
-    const mark = state === "done" ? CHECK_ICON : "";
-    return `<li class="${state}"><span class="step-mark ${state}">${mark}</span>${escapeHtml(name)}${note}</li>`;
+    const mark = stepState === "done" ? CHECK_ICON : "";
+    return `<li class="${stepState}"><span class="step-mark ${stepState}">${mark}</span>${escapeHtml(name)}${note}</li>`;
   }).join("");
 }
+
+// Removing the attribute does not itself start a load, so this cannot loop:
+// it only puts the element back to "no source", which renderRunning notices on
+// the next poll (three seconds later) and tries again -- until the download
+// lands, after which there is no error and nothing to re-arm.
+$("runningVideo").addEventListener("error", (e) => e.target.removeAttribute("src"));
 
 // The single reason line under the progress steps. On a failed job it carries
 // THE explanation (job.error, with the notice's clickable Recharge link when
@@ -1777,6 +1790,10 @@ $("cancelBtn").addEventListener("click", async () => {
     // The job may already have finished between the confirm dialog and this
     // call (backend returns 409) -- not fatal, the next poll shows the truth.
     console.warn(e.message);
+    // Unless there is no next poll: if the server is unreachable the poll loop
+    // has already given up, so put the button back by hand rather than leaving
+    // it stuck on a disabled "Cancelling…".
+    updateCancelButton();
   }
 });
 
