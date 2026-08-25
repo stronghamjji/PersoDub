@@ -100,6 +100,11 @@
     --agent-border: #3f3f46;
     --agent-fg: #e4e4e7;
     --agent-muted: #6b6b75;
+    /* The user's own message, and the tick on a finished step. Translucent
+       white rather than a colour: it has to sit on the strip's own dark. */
+    --agent-me-bg: rgba(255, 255, 255, 0.14);
+    --agent-me-border: rgba(255, 255, 255, 0.16);
+    --agent-ok: #5ee07a;
   }
 
   * { box-sizing: border-box; }
@@ -862,6 +867,29 @@
         </div>
       </section>
     </main>
+
+    <!-- ============ AGENT STRIP ============ -->
+    <!-- The Dub Agent, along the bottom of the work area rather than beside it:
+         a side panel took width from the script it was talking about and its
+         own button sat on top of the top bar's. Styles are in the block near
+         the bottom of this file, next to the script that drives it. -->
+    <footer class="agent" id="agentStrip">
+      <div class="assistant-log" id="assistantLog"></div>
+      <button class="agent-fold" id="assistantFold" type="button" aria-label="Collapse Dub Agent">Collapse
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="assistant-foot">
+        <textarea class="assistant-input" id="assistantInput" rows="1"
+                  placeholder="Message"></textarea>
+        <div class="assistant-modelwrap">
+          <button class="assistant-modelbtn" id="assistantModelBtn" type="button">
+            <span id="assistantModelLabel">Model</span>
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="assistant-menu" id="assistantMenu" hidden></div>
+        </div>
+      </div>
+    </footer>
   </div>
 </div>
 
@@ -1098,161 +1126,110 @@
   </div>
 </div>
 
-<!-- ============ AGENT STRIP (still a right-side panel until it moves) =====
-     A chat panel over whichever CLI agent the user already subscribes to.
+<!-- ============ AGENT STRIP ============================================
+     A chat strip over whichever CLI agent the user already subscribes to.
      Deliberately bolted on beside the app rather than woven through it: delete
-     this block and the script tag below it, and the app is exactly what it was.
+     this style block, the <footer> in the main column and the script at the
+     bottom, and the app is exactly what it was.
      The assistant can only read and rewrite the script (app/mcp_server.py) --
      starting or cancelling a dub stays behind a button a person presses. -->
 <style>
-  /* Width lives in a variable so the drag handle and the page margin move
-     together, and it is remembered per browser -- 380px was too narrow to read
-     a rewritten line in. */
-  /* The panel is always docked; the arrow slides it away instead of a separate
-     button elsewhere on the page opening it. Wider than before -- a rewritten
-     line and the reason for it need room to be read. */
-  :root { --assistant-w: 680px; }
-  /* The name, and nothing else. An icon here said nothing about what it opened,
-     so the button reads as an offer rather than a puzzle. */
-  .chat-open { position: fixed; top: 16px; right: 18px; z-index: 43;
-    display: flex; align-items: center;
-    height: 42px; padding: 0 18px; border: none; border-radius: 11px; cursor: pointer;
-    background: var(--primary); color: #fff;
-    font: inherit; font-size: 0.85rem; font-weight: 600; white-space: nowrap;
-    box-shadow: 0 5px 16px rgba(var(--primary-rgb), .40);
-    transition: transform .12s ease, box-shadow .12s ease; }
-  .chat-open:hover { transform: translateY(-1px);
-    box-shadow: 0 10px 26px rgba(var(--primary-rgb), .52); }
-  body:not(.assistant-collapsed) .chat-open { display: none; }
-  .assistant { position: fixed; top: 0; right: 0; bottom: 0; width: var(--assistant-w);
-    background: var(--background); border-left: 1px solid var(--border);
-    display: flex; flex-direction: column; z-index: 40;
-    transition: width .16s ease; }
-  .main { margin-right: var(--assistant-w); }
-  body.assistant-collapsed .assistant { width: var(--assistant-rail); }
-  body.assistant-collapsed .assistant-log,
-  body.assistant-collapsed .assistant-foot,
-  body.assistant-collapsed .assistant-title,
-  body.assistant-collapsed .assistant-modelwrap,
-  body.assistant-collapsed #assistantClose { display: none; }
-  /* Closed means gone, the way a browser side panel is: the rail icon on the
-     left is what opens it. A half-open strip down the edge kept reading as a
-     different control from the panel it belonged to. */
-  body.assistant-collapsed .assistant { width: 0; border-left: none; overflow: hidden; }
-  body.assistant-collapsed .main { margin-right: 0; }
-  body.assistant-collapsed .assistant-icon { color: #fff; width: 22px; }
-  body.assistant-collapsed .assistant-icon:hover { background: rgba(255,255,255,.18); }
-  body.assistant-collapsed .assistant-grip { display: none; }
-  .assistant-railtext { display: none; }
-  .assistant-grip { position: absolute; left: -3px; top: 0; bottom: 0; width: 7px;
-    cursor: col-resize; z-index: 42; }
-  .assistant-grip:hover, body.assistant-resizing .assistant-grip {
-    background: var(--primary); opacity: .35; }
-  body.assistant-resizing { user-select: none; cursor: col-resize; }
-  .assistant-head { display: flex; align-items: center; justify-content: space-between;
-    gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
-  .assistant-icon { border: none; background: none; color: var(--muted-foreground);
-    border-radius: 7px; width: 30px; height: 30px; display: flex; align-items: center;
-    justify-content: center; cursor: pointer; flex-shrink: 0; }
-  .assistant-icon:hover { color: var(--foreground); background: var(--muted, #f1f1f4); }
-  .assistant-title { font-size: 1rem; font-weight: 600; color: var(--foreground);
-    flex: 1; white-space: nowrap; }
+  /* The strip is the last row of the main column, so it can never sit on top
+     of the work above it -- the old right-side panel covered the top bar's
+     own buttons, and the timeline now ends exactly where the strip begins. */
+  .agent { position: relative; flex: 0 0 auto; display: flex; flex-direction: column;
+    background: var(--agent-bg); border-top: 2px solid var(--primary);
+    color: var(--agent-fg); }
+  /* Nothing to talk about before there is a job. */
+  body[data-screen="home"] .agent { display: none; }
+  /* While the dub runs there is no script to fix yet, so the row is on show
+     but out of reach; the placeholder says why. */
+  body[data-screen="running"] .assistant-input { pointer-events: none; opacity: .6; }
+
+  /* Collapsed is one input row; open adds the conversation above it. The height
+     is a plain number rather than a slice of the window: Task 10 makes this
+     edge draggable, and viewport maths would fight the drag. */
+  .assistant-log { display: none; flex-direction: column; gap: 8px;
+    height: 300px; overflow-y: auto; padding: 30px 14px 0; }
+  body.agent-open .assistant-log { display: flex; }
+  /* A column of flex items shrinks to fit before it scrolls, and a squeezed
+     bubble spills its own text over the one below it. Nothing here shrinks. */
+  .assistant-log > * { flex-shrink: 0; }
+
+  /* Only shown while the conversation is, in its top-right corner. The way back
+     in is the input row itself -- clicking it opens the strip. */
+  .agent-fold { display: none; position: absolute; right: 14px; top: 6px; z-index: 2;
+    align-items: center; gap: 4px; border: none; cursor: pointer;
+    color: var(--agent-muted); font: inherit; font-size: 0.75rem;
+    /* The strip's own colour, so the conversation scrolls away behind it
+       instead of through it. */
+    background: var(--agent-bg); border-radius: 6px; padding: 4px 6px; }
+  body.agent-open .agent-fold { display: inline-flex; }
+  .agent-fold:hover { color: var(--agent-fg); }
+
+  .assistant-foot { display: flex; align-items: center; gap: 12px;
+    margin: 6px 14px; padding: 6px 6px 6px 16px; min-height: 48px;
+    border: 1px solid var(--agent-border); border-radius: 14px;
+    background: var(--agent-box); }
+  .assistant-input { flex: 1; resize: none; border: none; background: none;
+    padding: 0; outline: none; font: inherit; font-size: 0.875rem;
+    color: var(--agent-fg); max-height: 120px; }
+  .assistant-input::placeholder { color: var(--agent-muted); }
+
   .assistant-modelwrap { position: relative; flex-shrink: 0; }
-  .assistant-modelbtn { display: flex; align-items: center; gap: 5px; cursor: pointer;
-    border: 1px solid var(--border); background: var(--background); color: var(--foreground);
-    border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 0.82rem; }
-  .assistant-modelbtn:hover { border-color: var(--primary); }
-  .assistant-menu { position: absolute; top: 36px; right: 0; z-index: 50; width: 216px;
-    background: var(--background); border: 1px solid var(--border); border-radius: 10px;
-    box-shadow: 0 10px 28px rgba(0,0,0,.18); padding: 6px; max-height: 60vh; overflow-y: auto; }
-  .menu-group { font-size: 0.68rem; color: var(--muted-foreground); letter-spacing: .05em;
+  .assistant-modelbtn { display: inline-flex; align-items: center; gap: 5px;
+    cursor: pointer; border: none; background: none; color: var(--agent-fg);
+    padding: 5px 8px; font: inherit; font-size: 0.8125rem; white-space: nowrap; }
+  .assistant-modelbtn:hover { color: var(--agent-muted); }
+  /* Upwards: the button that opens it is at the bottom of the window. */
+  .assistant-menu { position: absolute; bottom: 36px; right: 0; z-index: 50; width: 216px;
+    background: var(--agent-box); border: 1px solid var(--agent-border); border-radius: 10px;
+    box-shadow: 0 -10px 28px rgba(0,0,0,.34); padding: 6px; max-height: 60vh; overflow-y: auto; }
+  .menu-group { font-size: 0.68rem; color: var(--agent-muted); letter-spacing: .05em;
     text-transform: uppercase; padding: 8px 9px 4px; display: flex; justify-content: space-between; }
   .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 7px 9px; border-radius: 7px; cursor: pointer; font-size: 0.86rem;
-    color: var(--foreground); border: none; background: none; width: 100%; text-align: left;
+    color: var(--agent-fg); border: none; background: none; width: 100%; text-align: left;
     font-family: inherit; }
-  .menu-item:hover { background: var(--muted, #f1f1f4); }
-  .menu-item[disabled] { color: var(--muted-foreground); cursor: default; }
+  .menu-item:hover { background: var(--agent-bg); }
+  .menu-item[disabled] { color: var(--agent-muted); cursor: default; }
   .menu-item[disabled]:hover { background: none; }
   .menu-item .tick { color: var(--primary); }
-  .assistant-pick { font-size: 0.76rem; padding: 3px 8px; border: 1px solid var(--border);
-    border-radius: 6px; background: var(--background); color: var(--foreground); }
-  .assistant-log { flex: 1; overflow-y: auto; padding: 16px; display: flex;
-    flex-direction: column; gap: 10px; }
-  .bubble { max-width: 88%; padding: 9px 12px; border-radius: 12px; font-size: 0.86rem;
-    line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-  .bubble.me { align-self: flex-end; background: var(--primary); color: #fff;
-    border-bottom-right-radius: 3px; }
-  .bubble.ai { align-self: flex-start; background: var(--muted, #f1f1f4);
-    color: var(--foreground); border-bottom-left-radius: 3px; }
-  /* Which model actually answered. The assistant cannot tell on its own (asked,
-     it says "check the app's settings"), so the app says it for it. */
-  .bubble-tag { align-self: flex-start; margin-top: -6px; padding-left: 4px;
-    font-size: 0.7rem; color: var(--muted-foreground); }
-  /* A tool call is a status chip, never raw JSON: the user should never see the
-     wire format of whichever CLI is behind the panel. */
-  .chip { align-self: stretch; display: flex; align-items: center; gap: 8px;
-    padding: 8px 11px; border-radius: 9px; background: var(--muted, #f1f1f4);
-    font-size: 0.78rem; color: var(--muted-foreground); }
-  .chip.done { color: var(--foreground); }
+
+  /* What the user said is the only thing with a shape around it; everything the
+     assistant says is plain text on the strip, the way a terminal answers. */
+  .bubble { max-width: 88%; font-size: 0.84rem; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word; }
+  .bubble.me { align-self: flex-end; padding: 9px 12px; border-radius: 12px;
+    border-bottom-right-radius: 3px; background: var(--agent-me-bg);
+    border: 1px solid var(--agent-me-border); color: var(--agent-fg); }
+  .bubble.ai { align-self: flex-start; max-width: 640px; padding: 4px 2px;
+    color: var(--agent-fg); }
+  /* A tool call is a status line, never raw JSON: the user should never see the
+     wire format of whichever CLI is behind the strip. */
+  .chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px;
+    padding: 2px 2px; font-size: 0.78rem; color: var(--agent-muted); }
+  /* "chip-done", not "done": the finished screen's own layout class is .done,
+     and a chip that matched it inherited that column layout. */
+  .chip.chip-done { color: var(--agent-fg); }
   .chip-mark { font-size: 0.8rem; }
+  .chip.chip-done .chip-mark { color: var(--agent-ok); }
   /* Something has to move the moment a message is sent. A turn takes seconds,
-     and a panel that sits blank that whole time reads as broken -- it did. */
+     and a strip that sits blank that whole time reads as broken -- it did. */
   .thinking { align-self: flex-start; display: flex; align-items: center; gap: 5px;
-    padding: 10px 13px; border-radius: 12px; background: var(--muted, #f1f1f4);
-    border-bottom-left-radius: 3px; }
+    padding: 4px 2px; }
   .thinking i { width: 6px; height: 6px; border-radius: 50%;
-    background: var(--muted-foreground); display: inline-block;
+    background: var(--agent-muted); display: inline-block;
     animation: think 1.3s ease-in-out infinite; }
   .thinking i:nth-child(2) { animation-delay: .18s; }
   .thinking i:nth-child(3) { animation-delay: .36s; }
   @keyframes think { 0%, 60%, 100% { opacity: .28; transform: translateY(0); }
                      30% { opacity: 1; transform: translateY(-3px); } }
   @media (prefers-reduced-motion: reduce) { .thinking i { animation: none; opacity: .6; } }
-  .thinking span { font-size: 0.78rem; color: var(--muted-foreground); margin-left: 4px; }
+  .thinking span { font-size: 0.78rem; color: var(--agent-muted); margin-left: 4px; }
   .assistant-err { align-self: stretch; padding: 9px 11px; border-radius: 9px;
     font-size: 0.8rem; color: var(--destructive); border: 1px solid var(--destructive); }
-  .assistant-foot { border-top: 1px solid var(--border); padding: 12px 14px;
-    display: flex; gap: 8px; align-items: flex-end; }
-  .assistant-input { flex: 1; resize: none; border: 1px solid var(--border);
-    border-radius: 9px; padding: 9px 11px; font: inherit; font-size: 0.86rem;
-    max-height: 120px; background: var(--background); color: var(--foreground); }
-  .assistant-send { border: none; background: var(--primary); color: #fff;
-    border-radius: 9px; width: 34px; height: 34px; cursor: pointer; font-size: 1rem; }
-  .assistant-send:disabled { opacity: .45; cursor: default; }
-
 </style>
-
-<!-- One obvious way in. A thin rail and a half-open strip were both tried and
-     both were easy to walk past; this is meant to be seen. It hides itself while
-     the panel is open, because the panel already carries its own close. -->
-<button class="chat-open" id="chatRailBtn" type="button" aria-label="Open Dub Agent">Dub Agent</button>
-
-<aside class="assistant" id="assistantPanel">
-  <div class="assistant-grip" id="assistantGrip" title="Drag to resize"></div>
-  <div class="assistant-head">
-    <button class="assistant-icon" id="assistantFold" type="button" title="Collapse" aria-label="Collapse Dub Agent">
-      <svg class="icon icon-sm" id="foldIcon" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-    </button>
-    <span class="assistant-title">Dub Agent</span>
-    <div class="assistant-modelwrap">
-      <button class="assistant-modelbtn" id="assistantModelBtn" type="button">
-        <span id="assistantModelLabel">Model</span>
-        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <div class="assistant-menu" id="assistantMenu" hidden></div>
-    </div>
-    <button class="assistant-icon" id="assistantClose" type="button" title="Collapse" aria-label="Collapse Dub Agent">
-      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
-    </button>
-  </div>
-  <div class="assistant-log" id="assistantLog"></div>
-  <div class="assistant-foot">
-    <textarea class="assistant-input" id="assistantInput" rows="1"
-              placeholder="Message"></textarea>
-    <button class="assistant-send" id="assistantSend" type="button" aria-label="보내기">↑</button>
-  </div>
-</aside>
 
 <script type="module">
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource } from "/js/dubApi.mjs";
@@ -3051,8 +3028,7 @@ showHome();
      events the server sends: start, progress, text, done, error. -->
 <script type="module">
 const el = (id) => document.getElementById(id);
-const panel = el("assistantPanel"), log = el("assistantLog");
-const input = el("assistantInput"), send = el("assistantSend");
+const log = el("assistantLog"), input = el("assistantInput");
 const modelBtn = el("assistantModelBtn"), modelLabel = el("assistantModelLabel");
 const menu = el("assistantMenu");
 
@@ -3086,11 +3062,23 @@ function labelFor() {
 
 function paintChoice() {
   modelLabel.textContent = labelFor();
-  // Nothing picked means nothing to send to: say so on the button rather than
-  // letting a message fail somewhere the user cannot see.
-  send.disabled = !chosen.agent || busy;
-  input.placeholder = chosen.agent ? "Message" : "Pick a model first";
+  // The one line the strip has to say what it is waiting for: a job to finish,
+  // a model to be picked, or the user.
+  if (document.body.dataset.screen === "running") {
+    input.placeholder = "The Dub Agent joins when the dub is ready";
+  } else if (!chosen.agent) {
+    input.placeholder = "Pick a model first";
+  } else if (document.body.classList.contains("agent-open")) {
+    input.placeholder = "Message";
+  } else {
+    input.placeholder = 'Ask for a fix -- e.g. "Shorten line 4 so it fits, then remake its voice"';
+  }
 }
+
+// The app's screens live in another module; the strip follows them through the
+// one thing both can see.
+new MutationObserver(paintChoice)
+  .observe(document.body, { attributeFilter: ["data-screen"] });
 
 // Two steps, the way the reference does it: the vendor first, then that
 // vendor's models. One flat list of every model from every vendor is a wall.
@@ -3202,9 +3190,9 @@ function chip(label) {
 // Only one chip is ever "in progress": the previous step is finished the moment
 // the next one starts, so ticking it off keeps the column honest.
 function settlePrevious() {
-  const chips = log.querySelectorAll(".chip:not(.done)");
+  const chips = log.querySelectorAll(".chip:not(.chip-done)");
   chips.forEach((c) => {
-    c.classList.add("done");
+    c.classList.add("chip-done");
     const mark = c.querySelector(".chip-mark");
     if (mark) mark.textContent = "✓";
   });
@@ -3226,10 +3214,8 @@ let busy = false;
 
 async function ask(message) {
   busy = true;
-  send.disabled = true;
   bubble("me", message);
   let answer = null;
-  let model = "";
   let touchedScript = false;
   let dots = thinking("Thinking…");
   const clearDots = () => { if (dots) { dots.remove(); dots = null; } };
@@ -3270,9 +3256,7 @@ async function ask(message) {
         if (!line.trim()) continue;
         let ev;
         try { ev = JSON.parse(line); } catch { continue; }
-        if (ev.kind === "start") {
-          model = ev.model || "";
-        } else if (ev.kind === "progress") {
+        if (ev.kind === "progress") {
           clearDots(); settlePrevious(); chip(ev.label);
           // The assistant just rewrote a line. Tell the script table so the
           // change shows up where the user is looking, without a refresh.
@@ -3305,12 +3289,6 @@ async function ask(message) {
           settlePrevious();
           if (!answer && ev.text) bubble("ai", ev.text);
           else if (!answer) bubble("ai", "(empty answer)");
-          if (model) {
-            const t = document.createElement("div");
-            t.className = "bubble-tag";
-            t.textContent = model;
-            log.appendChild(t);
-          }
         }
       }
     }
@@ -3341,10 +3319,10 @@ function submit() {
   if (!chosen.agent) { menu.hidden = false; return; }
   input.value = "";
   input.style.height = "auto";
+  setCollapsed(false);
   ask(message);
 }
 
-send.addEventListener("click", submit);
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
 });
@@ -3353,59 +3331,21 @@ input.addEventListener("input", () => {
   input.style.height = Math.min(input.scrollHeight, 120) + "px";
 });
 
-// One arrow, two directions: pointing right pushes the panel away, pointing
-// left pulls it back. Collapsed on launch so the app opens looking as it did.
+// Open means the conversation is on show above the input row; closed is the
+// input row alone. Clicking the row is the way back in, so the mockup's single
+// Collapse control is the only chrome the strip carries.
 function setCollapsed(collapsed) {
-  document.body.classList.toggle("assistant-collapsed", collapsed);
-  el("chatRailBtn").classList.toggle("active", !collapsed);
-  el("foldIcon").innerHTML = collapsed ? '<path d="M15 6l-6 6 6 6"/>' : '<path d="M9 6l6 6-6 6"/>';
-  el("assistantFold").title = collapsed ? "Open Dub Agent" : "Collapse";
-  if (!collapsed) {
-    if (!agentList.length) { loadChoice(); loadAgents(); }
-    input.focus();
-  }
+  document.body.classList.toggle("agent-open", !collapsed);
+  paintChoice();
+  if (!collapsed) input.focus();
 }
 
-el("assistantFold").addEventListener("click", () => {
-  setCollapsed(!document.body.classList.contains("assistant-collapsed"));
-});
+el("assistantFold").addEventListener("click", () => setCollapsed(true));
+input.addEventListener("focus", () => setCollapsed(false));
 
-el("assistantClose").addEventListener("click", () => setCollapsed(true));
-
-// The rail icon is the way in, the way a browser side panel works.
-el("chatRailBtn").addEventListener("click", () => {
-  setCollapsed(!document.body.classList.contains("assistant-collapsed"));
-});
-
-// Open on launch: the agent is the point of this screen, not a thing to go
-// looking for. The hamburger puts it away for anyone who wants the width back.
-setCollapsed(false);
-
-// Drag the left edge to resize. Remembered per browser: someone who widens it
-// once should not have to do it again every launch.
-const MIN_W = 320, MAX_W = 900;
-
-function setWidth(px) {
-  const w = Math.max(MIN_W, Math.min(MAX_W, Math.round(px)));
-  document.documentElement.style.setProperty("--assistant-w", w + "px");
-  try { localStorage.setItem("persodub.assistantWidth", String(w)); } catch { /* private window */ }
-}
-
-try {
-  const saved = parseInt(localStorage.getItem("persodub.assistantWidth") || "", 10);
-  if (saved) setWidth(saved);
-} catch { /* private window */ }
-
-el("assistantGrip").addEventListener("mousedown", (e) => {
-  e.preventDefault();
-  document.body.classList.add("assistant-resizing");
-  const move = (m) => setWidth(window.innerWidth - m.clientX);
-  const up = () => {
-    document.body.classList.remove("assistant-resizing");
-    window.removeEventListener("mousemove", move);
-    window.removeEventListener("mouseup", up);
-  };
-  window.addEventListener("mousemove", move);
-  window.addEventListener("mouseup", up);
-});
+// Closed on launch, the way the mockup opens: one row under the timeline. The
+// model list loads now regardless -- the picker is on show even when closed.
+loadChoice();
+loadAgents();
+setCollapsed(true);
 </script>
