@@ -69,6 +69,10 @@
     --success: #11ad32;
     --warning: #dfa11a;
     --destructive: #C96A6A;
+    /* The letterbox behind a video still, and the badges that sit on top of
+       it. Dark on purpose in both cases -- a frame can be any colour. */
+    --thumb-bg: #111111;
+    --thumb-badge: rgba(0, 0, 0, 0.6);
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
@@ -430,6 +434,34 @@
   .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); position: sticky; bottom: 0; background: var(--background); }
   .save-note { font-size: 0.76rem; color: var(--success); margin-right: auto; align-self: center; visibility: hidden; }
   .save-note.shown { visibility: visible; }
+
+  /* ---------------- New project dialog ---------------- */
+  /* Narrower than Settings: one short list of decisions, not a whole panel. */
+  .project-modal { width: min(520px, 92vw); }
+  .project-modal .modal-body { display: flex; flex-direction: column; gap: 14px; }
+  /* A link has no local file to play, so its still arrives as a background
+     image and the (source-less) <video> is hidden instead. */
+  .project-thumb { position: relative; border-radius: var(--radius); overflow: hidden;
+    background: var(--thumb-bg) center / cover no-repeat; min-height: 150px; }
+  .project-thumb video { display: block; width: 100%; max-height: 260px; object-fit: contain; }
+  .project-dur { position: absolute; right: 8px; bottom: 8px; padding: 2px 7px;
+    background: var(--thumb-badge); color: var(--primary-foreground);
+    border-radius: var(--radius-sm); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+  .project-replace { position: absolute; left: 8px; top: 8px; padding: 3px 8px; border: none;
+    background: var(--thumb-badge); color: var(--primary-foreground);
+    border-radius: var(--radius-sm); font-family: inherit; font-size: 0.72rem;
+    text-decoration: underline; cursor: pointer; }
+  /* Filled in by the trim step; an empty box must not leave a gap behind. */
+  .trim:empty { display: none; }
+  .option-grid.two { grid-template-columns: 1fr 1fr; }
+  /* A whole-width bordered row rather than a link, so it reads as the lid on
+     everything the user does not normally have to open. */
+  .advanced-btn { width: 100%; height: 42px; padding: 0 12px; justify-content: space-between;
+    background: var(--background); border: 1px solid var(--border); font-weight: 500; }
+  .advanced-btn > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
+  .advanced-btn .chev { color: var(--muted-foreground); }
+  .advanced-btn.open, .advanced-btn.open .chev { border-color: var(--primary); color: var(--primary); }
+  .start-btn { width: 100%; height: 44px; font-size: 0.92rem; }
 </style>
 
 <div class="app">
@@ -531,8 +563,37 @@
 </div>
 
 <!-- ============ NEW-PROJECT DIALOG ============ -->
-<!-- Empty for now: the dialog that opens once a video or link is ready lands
-     here in a later step. -->
+<!-- Opens the moment a video or a link is ready. Everything the first screen
+     stopped asking for lives here: what it looks like, which languages, and
+     (behind Advanced) the engines. -->
+<div class="modal-overlay" id="projectOverlay">
+  <div class="modal project-modal">
+    <div class="modal-head"><h2>New project</h2><button class="modal-close" id="projectClose" type="button" aria-label="Close">✕</button></div>
+    <div class="modal-body">
+      <div class="project-thumb" id="projectThumb"><video id="projectVideo" muted playsinline></video><span class="project-dur" id="projectDur"></span><button class="project-replace" id="projectReplace" type="button">Replace</button></div>
+      <div class="trim" id="trimBox"></div>
+      <div class="option-grid two">
+        <div class="field"><label for="sourceLangSelect">Original language</label><select id="sourceLangSelect"><option value="" selected>Auto-detect</option></select></div>
+        <div class="field"><label for="targetLangSelect">Target language</label><select id="targetLangSelect"></select></div>
+      </div>
+      <button class="btn btn-secondary advanced-btn" id="advancedBtn" type="button" aria-expanded="false">
+        <span><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Advanced options</span><span class="chev">▾</span>
+      </button>
+      <div class="advanced-body" id="advancedBody" hidden>
+        <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint">Turns the speech in your video into text.</div><div class="settings-hint">Want higher quality? Choose Perso API.</div></div>
+        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="gemma" selected>Gemma</option><option value="gemini">Gemini API</option></select><div class="settings-hint">Translates that text into the new language.</div><div class="settings-hint">Want higher quality? Choose Gemini API.</div></div>
+        <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint">Speaks the translated lines in a generated voice.</div></div>
+        <div class="field"><label for="qualitySelect">Voice quality</label><select id="qualitySelect"><option value="fast" selected>Fast</option><option value="high">High quality</option></select><div class="settings-hint" id="qualityHint"></div></div>
+        <div class="field"><label for="numSpeakers">Number of speakers</label><input type="number" id="numSpeakers" min="1" placeholder="Auto-detect"><div class="settings-hint">Auto-detect assumes at least 2. Set 1 for a single-speaker video.</div></div>
+        <button type="button" class="keys-link" id="advancedKeysLink">Perso and Gemini need an API key. Add it in Settings</button>
+      </div>
+      <!-- Start's own error line: the first screen's #formError sits behind the
+           dimmed overlay, where a failed start would never be read. -->
+      <div class="form-error" id="projectError"></div>
+      <button class="btn btn-primary start-btn" id="startBtn" type="button">Start dubbing</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============ SETTINGS ============ -->
 <div class="modal-overlay" id="settingsOverlay">
@@ -913,15 +974,23 @@ function saveHistory(list) { localStorage.setItem(HISTORY_KEY, JSON.stringify(li
 // targetLangSelect defaults to English: the app's own use is Korean source
 // material dubbed outward. Neither default is remembered between launches --
 // every launch starts here.
-// The two dropdowns live in the New project dialog, which is built in a later
-// step -- until then they are simply absent, so skip rather than throw.
+// The two dropdowns live in the New project dialog.
+// The flags are the app's one deliberate use of emoji: where the dub is headed
+// is the single most-glanced-at line in the dialog, and a flag says it faster
+// than a word. The Original dropdown stays plain -- its default is not a
+// country at all ("Auto-detect"), so a half-flagged list would only look broken.
+const LANG_FLAGS = {
+  en: "🇺🇸", ko: "🇰🇷", zh: "🇨🇳", fr: "🇫🇷", de: "🇩🇪",
+  it: "🇮🇹", ja: "🇯🇵", pt: "🇵🇹", ru: "🇷🇺", es: "🇪🇸",
+};
 function fillLanguageSelects() {
-  for (const [selId, defCode] of [["sourceLangSelect", null], ["targetLangSelect", "en"]]) {
+  for (const [selId, defCode, withFlag] of [["sourceLangSelect", null, false], ["targetLangSelect", "en", true]]) {
     const sel = document.getElementById(selId);
     if (!sel) continue;
     for (const l of LANGUAGES) {
       const o = document.createElement("option");
-      o.value = l.code; o.textContent = l.name;
+      o.value = l.code;
+      o.textContent = withFlag && LANG_FLAGS[l.code] ? `${LANG_FLAGS[l.code]} ${l.name}` : l.name;
       if (l.code === defCode) o.selected = true;
       sel.appendChild(o);
     }
@@ -931,7 +1000,6 @@ fillLanguageSelects();
 
 // ---------------- App state ----------------
 const state = {
-  source: "upload",   // "upload" | "link"
   videoFile: null,
   linkProbe: null,    // {url, title, duration_sec, thumbnail_url} once a link probes OK
   newProject: null,   // {file, probe, trim} -- what the New project dialog is working on
@@ -1031,8 +1099,8 @@ async function openSettings() {
 function closeSettings() { $("settingsOverlay").classList.remove("open"); }
 
 $("settingsBtn").addEventListener("click", openSettings);
-// Lives in the New project dialog, which a later step builds -- absent for now.
-$("advancedKeysLink")?.addEventListener("click", openSettings);
+// The way out of a greyed-out "needs API key" option, inside Advanced options.
+$("advancedKeysLink").addEventListener("click", openSettings);
 $("settingsRestartBtn").addEventListener("click", () => {
   if (window.persodubShell && window.persodubShell.relaunch) window.persodubShell.relaunch();
 });
@@ -1159,11 +1227,10 @@ function setOptionDisabledLabel(option, disabled, suffix) {
 }
 
 async function applyEngineAvailabilityToForm() {
-  // The dropdowns this greys out live in the New project dialog, which a later
-  // step builds; with nothing on screen to grey out there is nothing to do.
+  // The dropdowns this greys out live in Advanced options, inside the New
+  // project dialog.
   const translateSel = $("translateSelect");
   const sttSel = $("sttSelect");
-  if (!translateSel || !sttSel) return;
 
   let av;
   try {
@@ -1219,13 +1286,73 @@ function showHome() {
   setTopbar({ title: "PersoDub", subtitle: "Local dubbing" });
 }
 
-// ---------------- New project ----------------
-// Called the moment a video or a link is ready. The dialog that asks for the
-// languages and trims the clip is built in a later step; for now this only
-// records what the user handed over.
+// ---------------- New project dialog ----------------
+// Opens the moment a video or a link is ready, and is the only place a job can
+// be started from. Everything the first screen stopped asking for is in here.
+
+// 00:00:10 -- hours, minutes, seconds, two digits each.
+function fmtClock(sec) {
+  const t = Math.max(0, Math.floor(Number(sec) || 0));
+  return [Math.floor(t / 3600), Math.floor((t % 3600) / 60), t % 60]
+    .map((n) => String(n).padStart(2, "0")).join(":");
+}
+
+// The trim bar is drawn in a later step; the metadata handler below calls this
+// as soon as a video's length is known, so it has to exist from now on.
+function renderTrim() {}
+
+// A dropped file is played straight from memory, which costs an object URL --
+// released whenever the dialog lets go of that file.
+let projectObjectUrl = null;
+function releaseProjectVideo() {
+  const v = $("projectVideo");
+  v.pause();
+  v.removeAttribute("src");
+  v.load();
+  if (projectObjectUrl) { URL.revokeObjectURL(projectObjectUrl); projectObjectUrl = null; }
+}
+
 function openNewProject(source) {
   state.newProject = { file: source.file || null, probe: source.probe || null, trim: null };
+  releaseProjectVideo();
+  const v = $("projectVideo");
+  // A local file can be played and scrubbed; a link only ever has a still.
+  v.hidden = !source.file;
+  $("projectThumb").style.backgroundImage = "";
+  if (source.file) {
+    projectObjectUrl = URL.createObjectURL(source.file);
+    v.src = projectObjectUrl;
+  } else if (source.probe && source.probe.thumbnail_url) {
+    $("projectThumb").style.backgroundImage = `url(${source.probe.thumbnail_url})`;
+  }
+  $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
+  v.addEventListener("loadedmetadata", () => {
+    $("projectDur").textContent = fmtClock(v.duration);
+    renderTrim(v.duration);
+  }, { once: true });
+  $("projectError").textContent = "";
+  $("projectOverlay").classList.add("open");
 }
+
+// Closing throws the pending video away: the dialog IS the confirmation that a
+// video was accepted, so leaving one half-chosen behind would be a lie.
+function closeNewProject() {
+  $("projectOverlay").classList.remove("open");
+  releaseProjectVideo();
+  state.newProject = null;
+  setVideoFile(null);
+  videoInput.value = "";  // otherwise re-picking the same file fires no change event
+  clearLink();
+}
+$("projectClose").addEventListener("click", closeNewProject);
+$("projectReplace").addEventListener("click", () => { closeNewProject(); videoInput.click(); });
+$("advancedBtn").addEventListener("click", () => {
+  const open = $("advancedBody").hidden;
+  $("advancedBody").hidden = !open;
+  $("advancedBtn").setAttribute("aria-expanded", String(open));
+  $("advancedBtn").classList.toggle("open", open);
+  $("advancedBtn").querySelector(".chev").textContent = open ? "▴" : "▾";
+});
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
@@ -1255,10 +1382,7 @@ function setVideoFile(file) {
     file = null;
   }
   state.videoFile = file;
-  if (file) {
-    state.source = "upload";
-    openNewProject({ file });
-  }
+  if (file) openNewProject({ file });
 }
 
 uploadZone.addEventListener("click", () => videoInput.click());
@@ -1365,7 +1489,6 @@ $("linkInput").addEventListener("input", () => {
       const info = await probeSource(url);
       if (mySeq !== probeSeq) return;   // a newer edit already superseded this
       state.linkProbe = { url, ...info };
-      state.source = "link";
       renderLinkCard(info);
       openNewProject({ probe: state.linkProbe });
     } catch (e) {
@@ -1408,6 +1531,7 @@ function resetForNewJob() {
   delete document.body.dataset.jobId;
   videoInput.value = ""; // otherwise re-picking the same file fires no change event
   setVideoFile(null);
+  state.newProject = null;
   // Both ways in are on the first screen at once now, so the link field has to
   // be emptied too -- otherwise the last job's link is still sitting there.
   $("linkInput").value = "";
@@ -1637,20 +1761,19 @@ const QUALITY_HINTS = {
   fast: "Each line is voiced once and used as is. Quickest way to preview a dub.",
   high: "Each line is voiced 4 times and the best take is kept. Noticeably better voices, but the voice stage takes about 4× longer.",
 };
-// Both elements live in the New project dialog, built in a later step.
 function updateQualityHint() {
-  const sel = $("qualitySelect");
-  if (!sel || !$("qualityHint")) return;
-  $("qualityHint").textContent = QUALITY_HINTS[sel.value] || "";
+  $("qualityHint").textContent = QUALITY_HINTS[$("qualitySelect").value] || "";
 }
-$("qualitySelect")?.addEventListener("change", updateQualityHint);
+$("qualitySelect").addEventListener("change", updateQualityHint);
 updateQualityHint();
 
 // ---------------- Start dubbing ----------------
 function readOptions() {
+  // The dialog owns the source now: either a dropped file or a probed link.
+  const np = state.newProject || {};
   return {
-    video: state.source === "upload" ? state.videoFile : null,
-    sourceUrl: state.source === "link" && state.linkProbe ? state.linkProbe.url : null,
+    video: np.file || null,
+    sourceUrl: np.probe ? np.probe.url : null,
     sourceLang: $("sourceLangSelect").value,
     targetLang: $("targetLangSelect").value,
     sttEngine: $("sttSelect").value,
@@ -1660,19 +1783,24 @@ function readOptions() {
     // A link's title is only known here -- the probe already fetched it, while
     // the server learns nothing from downloading the video. Names the job's
     // folder, so send it along with the job.
-    project: state.source === "link" ? (state.linkProbe || {}).title : undefined,
+    project: np.probe ? np.probe.title : undefined,
   };
 }
 
-// The Start button moves into the New project dialog in a later step, so this
-// is a named function the dialog can wire up rather than an inline handler.
+// The one line under the job's name while it runs: which way the dub is going.
+function langsLabel() {
+  const src = $("sourceLangSelect");
+  // Plain names only -- the flag belongs to the dropdown, not the top bar.
+  return `${langName(src.value) || "Auto-detect"} → ${langName($("targetLangSelect").value)}`;
+}
+
+// Lives in the New project dialog, which is where the whole start-a-job
+// decision now sits.
 async function startDubbing() {
-  $("formError").textContent = "";
-  if (state.source === "upload" && !state.videoFile) {
-    $("formError").textContent = "Choose a video first."; return;
-  }
-  if (state.source === "link" && !state.linkProbe) {
-    $("formError").textContent = "Paste a link that loads a video first."; return;
+  $("projectError").textContent = "";
+  const np = state.newProject;
+  if (!np || (!np.file && !np.probe)) {
+    $("projectError").textContent = "Choose a video first."; return;
   }
 
   $("startBtn").disabled = true;
@@ -1683,18 +1811,21 @@ async function startDubbing() {
     state.pollGeneration += 1;
     const myGeneration = state.pollGeneration;
 
-    const label = state.source === "link" ? state.linkProbe.title : state.videoFile.name;
+    const label = np.file ? np.file.name : np.probe.title;
     upsertHistory({ jobId, fileName: label, lastStatus: "running", metaText: "Processing…" });
+    // The video is on its way to the server now; the dialog's copy of it can go.
+    $("projectOverlay").classList.remove("open");
+    releaseProjectVideo();
     showScreen("running");
-    setTopbar({ title: label, subtitle: "Starting…", running: true });
+    setTopbar({ title: label, subtitle: `Working · ${langsLabel()}`, running: true, back: true });
     runPollLoop(jobId, myGeneration);
   } catch (e) {
-    if (!showIfOutOfSpace(e)) $("formError").textContent = errorText(e);
+    if (!showIfOutOfSpace(e)) $("projectError").textContent = errorText(e);
   } finally {
     $("startBtn").disabled = false;
   }
 }
-$("startBtn")?.addEventListener("click", startDubbing);
+$("startBtn").addEventListener("click", startDubbing);
 
 // Server errors arrive as the raw response body, so a FastAPI detail shows up
 // as JSON unless it is unwrapped here.
