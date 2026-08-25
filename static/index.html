@@ -425,15 +425,18 @@
 
   .done { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .done-main { flex: 1; min-height: 0; display: flex; }
-  .script-pane { flex: 1; min-width: 0; display: flex; flex-direction: column;
-    border-right: 1px solid var(--border); }
+  .script-pane { position: relative; flex: 1; min-width: 0; display: flex;
+    flex-direction: column; border-right: 1px solid var(--border); }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
     border-bottom: 1px solid var(--border); }
   #scriptBox { flex: 1; min-height: 0; overflow: auto; }
-  .script-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
-    padding: 8px 14px; border-top: 1px solid var(--border); }
-  .script-head-note { font-size: 0.74rem; color: var(--muted-foreground); }
-  .script-saving { font-size: 0.72rem; color: var(--primary); margin-left: auto; }
+  /* Floating rather than a bar of its own: a saving message must not push the
+     table down a line, and there is nothing to see when nothing is happening. */
+  .script-status { position: absolute; right: 16px; bottom: 14px; z-index: 2;
+    padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--background); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    font-size: 0.74rem; color: var(--primary); }
+  .script-status:empty { display: none; }
   .script-empty { padding: 30px 14px; text-align: center;
     color: var(--muted-foreground); font-size: 0.84rem; }
 
@@ -531,9 +534,16 @@
     font-variant-numeric: tabular-nums; }
 
   /* A job that failed or was cancelled has no script and no video -- only the
-     reason, in the middle of the screen it would have filled. */
+     reason, in the middle of the screen it would have filled, with the notice
+     that came with it and the log to read underneath. */
   .done-fail { flex: 1; display: flex; align-items: center; justify-content: center;
-    padding: 30px; text-align: center; color: var(--muted-foreground); font-size: 0.9rem; }
+    padding: 30px; }
+  .done-fail-body { width: min(560px, 100%); display: flex; flex-direction: column;
+    gap: 12px; }
+  .done-fail-why { margin: 0; text-align: center; color: var(--foreground);
+    font-size: 0.9rem; }
+  .done-fail .job-notice { margin: 0; text-align: center; }
+  .done-fail .raw-log { margin: 0; }
 
   /* ---------------- Export dialog ---------------- */
 
@@ -720,7 +730,7 @@
               <span>The player unlocks when it is done</span>
             </div>
           </div>
-          <div class="progress-card">
+          <div class="progress-card" id="progressCard">
             <div class="progress-head"><b id="progressTitle">Separating audio</b><span id="progressPct">0%</span></div>
             <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
             <ol class="progress-steps" id="progressSteps"></ol>
@@ -740,16 +750,15 @@
       <section class="screen" id="screen-done" hidden>
         <div class="done" id="doneLayout" hidden>
           <div class="done-main" id="doneMain">
-            <div class="script-pane">
+            <div class="script-pane" id="scriptPane">
               <!-- The same notice line the running screen carries, on the
-                   screen that replaced it. Hidden unless there is one. -->
+                   screen that replaced it. Hidden unless there is one, and
+                   moved into the failure block when the job failed. -->
               <div class="job-notice" id="doneNotice" hidden></div>
               <div id="scriptBox"></div>
-              <div class="script-foot">
-                <span class="script-head-note" id="scriptCount"></span>
-                <span class="script-saving" id="scriptSaving"></span>
-                <button class="btn btn-secondary" id="redubBtn" type="button">Make voices again</button>
-              </div>
+              <!-- Saving, remaking, and anything that went wrong while doing
+                   either. Empty -- and so invisible -- the rest of the time. -->
+              <div class="script-status" id="scriptSaving"></div>
             </div>
             <div class="video-pane" id="videoPane">
               <div class="video-tabs">
@@ -769,7 +778,14 @@
           </div>
           <div class="timeline" id="timeline"></div>
         </div>
-        <div class="done-fail" id="doneFail" hidden></div>
+        <!-- A job that failed or was cancelled: why it stopped, whatever notice
+             came with it (a Recharge link, say), and the raw log -- both of
+             which are moved in here from the screens that normally hold them. -->
+        <div class="done-fail" id="doneFail" hidden>
+          <div class="done-fail-body" id="doneFailBody">
+            <p class="done-fail-why" id="doneFailWhy"></p>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -1165,7 +1181,7 @@
 </aside>
 
 <script type="module">
-import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, fetchResultSrt, parseProgress, applyEngineAvailability, probeSource } from "/js/dubApi.mjs";
+import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource } from "/js/dubApi.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -1914,9 +1930,8 @@ function resetForNewJob() {
   $("formError").textContent = "";
   releaseDoneVideo();
   $("scriptBox").innerHTML = "";
-  $("scriptCount").textContent = "";
+  scriptSaving("");
   scriptJobId = null;
-  remadeLines.clear();
   updateCancelButton();
   showHome();
 }
@@ -2359,9 +2374,24 @@ function langName(code) {
 const doneVideo = $("doneVideo");
 // Which of the two files the player is showing. The tabs swap it in place.
 let doneSource = "dubbed";
+// Bumped when a remade line changes the finished video under the player, so the
+// next src is a different string and the browser fetches it again. The URL is
+// otherwise stable, which is what lets renderDone tell "same video" from "new".
+let doneVersion = 0;
 
 function doneVideoSrc(job, which) {
-  return which === "original" ? `/api/dub/result/${job.id}/original` : resultUrl(job.id);
+  const mark = doneVersion ? `?v=${doneVersion}` : "";
+  return which === "original"
+    ? `/api/dub/result/${job.id}/original${mark}`
+    : `${resultUrl(job.id)}${mark}`;
+}
+
+// The notice line and the raw log exist once each. A failed job needs both, and
+// both normally live on screens it never shows, so they are moved rather than
+// printed a second time.
+function moveInto(el, parent, first = false) {
+  if (el.parentElement === parent) return;
+  if (first) parent.prepend(el); else parent.appendChild(el);
 }
 
 async function renderDone(job) {
@@ -2371,12 +2401,15 @@ async function renderDone(job) {
   if (!finished) {
     // Cancelled and failed are two different stories, and neither has a screen
     // of its own: the back chevron in the top bar is the way out of both.
-    const why = job.status === "cancelled"
+    $("doneFailWhy").textContent = job.status === "cancelled"
       ? "This dubbing job was cancelled."
       : `Dubbing didn't finish. ${job.error || "Try again, or use a shorter clip."}`;
-    $("doneFail").textContent = why;
+    moveInto($("doneNotice"), $("doneFailBody"));
+    moveInto($("rawLogDetails"), $("doneFailBody"));
     return;
   }
+  moveInto($("doneNotice"), $("scriptPane"), true);
+  moveInto($("rawLogDetails"), $("progressCard"));
   // Tell the shell where this job's downloads belong. It has to be handed over
   // before any button is clicked, because will-download cannot ask for it.
   window.persodubShell?.rememberJob?.({ id: job.id, project: job.project, day: job.day });
@@ -2386,13 +2419,18 @@ async function renderDone(job) {
   await renderScript(job.id);
 }
 
-// The big round button in the middle of the frame: there are no player controls
-// (the timeline under the script is the scrubber), so this is play/pause.
-$("bigPlay").addEventListener("click", () => {
-  // Whatever line range was playing is over -- from here the video runs on.
+// The frame is the whole transport: there are no player controls, so the big
+// round button and the picture itself both start and stop it.
+function toggleDonePlay() {
+  if (!doneVideo.paused) { doneVideo.pause(); return; }
+  // Playing on from here means the line's stopping point no longer applies.
   cancelRange(doneVideo);
   doneVideo.play().catch(() => {});
-});
+}
+$("bigPlay").addEventListener("click", toggleDonePlay);
+doneVideo.addEventListener("click", toggleDonePlay);
+// The button is the "it is stopped" sign as much as it is the control, so it
+// comes back the moment the video stops, however it stopped.
 for (const e of ["play", "playing"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = true; });
 for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = false; });
 for (const e of ["timeupdate", "loadedmetadata", "seeked"]) doneVideo.addEventListener(e, paintPlayhead);
@@ -2444,16 +2482,27 @@ function releaseDoneVideo() {
 }
 
 // The finished video changed under the player (a line was made again), so it
-// has to be fetched afresh -- from the same moment the viewer was watching.
+// has to be fetched afresh -- from the same moment the viewer was watching. The
+// version mark is what makes the browser go back for it.
 function reloadDoneVideo() {
   const at = doneVideo.currentTime;
+  doneVersion += 1;
+  if (state.job) doneVideo.setAttribute("src", doneVideoSrc(state.job, doneSource));
   doneVideo.load();
   doneVideo.addEventListener("loadeddata", () => { doneVideo.currentTime = at; }, { once: true });
 }
 
 // ---------------- Export dialog ----------------
 $("exportBtn").addEventListener("click", openExport);
-$("exportCloseX").addEventListener("click", () => $("exportOverlay").classList.remove("open"));
+function closeExport() { $("exportOverlay").classList.remove("open"); }
+$("exportCloseX").addEventListener("click", closeExport);
+// Backdrop and Escape, the same way out the other dialogs give.
+$("exportOverlay").addEventListener("click", (e) => {
+  if (e.target === $("exportOverlay")) closeExport();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("exportOverlay").classList.contains("open")) closeExport();
+});
 
 const DOWNLOAD_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 4v12"/><path d="M7.5 11.5L12 16l4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>';
 
@@ -2461,9 +2510,11 @@ async function openExport() {
   const job = state.job;
   if (!job) return;
   const target = escapeHtml(job.language_code || "out");
-  // The subtitles are only offered when there are some: a job given a
-  // ready-made SRT keeps one, an older job may not.
-  const hasSrt = (await fetchResultSrt(job.id).catch(() => null)) !== null;
+  // The subtitles are only offered when there are some (an older job may have
+  // none). Asked with HEAD: whether the file exists is the whole question, and
+  // fetching it to find out downloaded the subtitles nobody had asked for yet.
+  const hasSrt = await fetch(`/api/dub/result/${job.id}/srt`, { method: "HEAD" })
+    .then((r) => r.ok).catch(() => false);
   const item = (href, name, label) =>
     `<a href="${href}" download="${name}">${DOWNLOAD_ICON}${label}</a>`;
   $("exportList").innerHTML = [
@@ -2489,10 +2540,25 @@ async function openExport() {
 
 let scriptJobId = null;
 
-// Which lines have had their voice made again since they were last rewritten,
-// and the words it was made from. A line whose words have moved on since is
-// still waiting for its voice, and its button says so.
-const remadeLines = new Map();
+// A hair over the slot is not "too long" -- the assembly step lets a line spill
+// that much into the silence after it.
+const OVER_TOLERANCE = 0.05;
+
+// How long a line actually takes to say: the voice that was made for it if that
+// is still on disk, otherwise the estimate from its characters.
+function lineLength(l) {
+  return l.audio_sec != null ? l.audio_sec : l.estimated;
+}
+
+// By how much a line runs past its slot, or 0 when it does not -- the one rule
+// for "too long" wherever the screen says so. With no voice on disk there is no
+// overshoot to measure, so the server's own verdict stands: its window forgives
+// a small overrun (and also fails lines that are too SHORT, which is not this).
+function lineOverBy(l) {
+  if (l.audio_sec == null && l.fits) return 0;
+  const over = lineLength(l) - l.slot;
+  return over > OVER_TOLERANCE ? over : 0;
+}
 
 const PLAY_ICON = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
 // A waveform, the same mark the rail uses for speech: this button makes the
@@ -2515,15 +2581,14 @@ function scriptRow(l, speakers) {
   const n = speakers.get(l.speaker);
   const chip = n
     ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}"><i></i>Speaker ${n}</span>` : "";
-  // What the line actually takes to say: the voice that was made for it if it
-  // is still on disk, otherwise the estimate from its characters.
-  const length = l.audio_sec != null ? l.audio_sec : l.estimated;
-  const over = length - l.slot;
-  const lengthCell = over > 0.05
-    ? `<span class="sc-over">+${escapeHtml(over.toFixed(1))}s</span>`
-    : `${escapeHtml(length.toFixed(1))}s`;
-  // Filled means "the words changed and the voice has not caught up".
-  const stale = l.edited && remadeLines.get(l.line) !== l.text;
+  const over = lineOverBy(l);
+  const lengthCell = over
+    ? `<span class="sc-over">+${over.toFixed(1)}s</span>`
+    : `${lineLength(l).toFixed(1)}s`;
+  // Filled means "the words changed and the voice has not caught up". Both
+  // halves are needed: `edited` is per line, and `voice_stale` (a file older
+  // than the script) is what says the remake has not happened since.
+  const stale = l.edited && l.voice_stale;
   const undo = l.edited
     ? `<button class="sc-undo" data-undo="${l.line}" type="button">revert</button>` : "";
   return `<div class="sc-row" data-start="${l.start}" data-end="${l.end}">
@@ -2536,7 +2601,7 @@ function scriptRow(l, speakers) {
     <div><div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
         data-line="${l.line}">${escapeHtml(l.text)}</div>${undo}</div>
     <div class="sc-len">${lengthCell}</div>
-    <div class="sc-acts"><button class="sc-wave ${stale ? "stale" : ""}" data-voice="${l.line}"
+    <div class="sc-acts"><button class="sc-wave${stale ? " stale" : ""}" data-voice="${l.line}"
       type="button" title="${stale ? "The words changed -- make the voice again" : "Make this line's voice again"}">${WAVE_ICON}</button></div>
   </div>`;
 }
@@ -2544,25 +2609,21 @@ function scriptRow(l, speakers) {
 async function renderScript(jobId) {
   const box = $("scriptBox");
   if (!box) return;
-  if (scriptJobId !== jobId) remadeLines.clear();
   scriptJobId = jobId;
   const data = await fetch(`/api/dub/jobs/${jobId}/script`)
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null);
   if (!data || !data.lines || !data.lines.length) {
     box.innerHTML = '<div class="script-empty">No script was recorded for this job.</div>';
-    $("scriptCount").textContent = "";
     return;
   }
 
-  const over = data.lines.filter((l) => !l.fits).length;
-  $("scriptCount").innerHTML = `${data.lines.length} lines${
-    over ? ` · <span class="sc-over">${over} too long</span>` : ""}`;
-
   // The two language names head their own columns: "Original / Script" said
-  // nothing about which languages were being compared.
+  // nothing about which languages were being compared. The source is whichever
+  // the user chose, or -- when they left it on auto -- whatever was detected.
   const job = state.job || {};
-  const sourceName = langName((job.result || {}).detected_source_language) || "Original";
+  const sourceName = langName(job.source_lang || (job.result || {}).detected_source_language)
+    || "Original";
   const targetName = langName(job.language_code) || "Script";
   const speakers = numberSpeakers(data.lines);
   box.innerHTML = `
@@ -2598,20 +2659,14 @@ async function renderScript(jobId) {
   box.querySelectorAll("[data-play]").forEach((b) => {
     const row = b.closest(".sc-row");
     b.addEventListener("click", () => {
-      playRange(doneVideo, +row.dataset.start, +row.dataset.end)?.catch(() => {});
+      playRange(doneVideo, +row.dataset.start, +row.dataset.end).catch(() => {});
     });
   });
 
   box.querySelectorAll("[data-voice]").forEach((b) => {
-    const row = b.closest(".sc-row");
-    const text = row.querySelector(".sc-dst").textContent;
-    b.addEventListener("click", () => remakeLine(jobId, b.dataset.voice, b, text));
+    b.addEventListener("click", () => remakeLine(jobId, b.dataset.voice, b));
   });
 }
-
-// The button lives outside the table, which is redrawn after every edit -- so
-// it is wired once, to whichever job the table is currently showing.
-$("redubBtn").addEventListener("click", () => { if (scriptJobId) startRedub(scriptJobId); });
 
 function scriptSaving(text) {
   const el = $("scriptSaving");
@@ -2637,15 +2692,13 @@ async function saveLine(jobId, line, text) {
 // Re-speak one line and rebuild the video around it. Everything else -- the
 // other lines' audio, the background, the cloned voice -- is reused, so this
 // costs seconds where a whole remake costs minutes.
-async function remakeLine(jobId, line, btn, text) {
+async function remakeLine(jobId, line, btn) {
   btn.disabled = true;
   scriptSaving(`Remaking line ${line}…`);
   try {
     const r = await fetch(`/api/dub/jobs/${jobId}/script/${line}/voice`, { method: "POST" });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.detail || "Could not remake that line.");
-    // The voice now says these words, so the button stops asking for it.
-    remadeLines.set(+line, text);
     scriptSaving(`Line ${line} done`);
     reloadDoneVideo();
     // The new voice has its own length, and the button its own look.
@@ -2663,22 +2716,6 @@ async function revertLine(jobId, line) {
     .catch(() => null);
   scriptSaving("");
   await renderScript(jobId);
-}
-
-async function startRedub(jobId) {
-  const btn = $("redubBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
-  try {
-    const r = await fetch(`/api/dub/jobs/${jobId}/redub`, { method: "POST" });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || "Could not start the remake.");
-    // Hand it to the same code that follows any other job, so the stage tracker,
-    // the log and the export screen all behave exactly as they normally do.
-    resumeJob(data.job_id);
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = "Make voices again"; }
-    if (!showIfOutOfSpace(e)) scriptSaving(errorText(e));
-  }
 }
 
 // The assistant rewrites lines through its own tools; when it does, the panel

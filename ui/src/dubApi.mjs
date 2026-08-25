@@ -193,9 +193,13 @@ export async function fetchJob(jobId, { baseUrl = "" } = {}) {
   return res.json();
 }
 
-/** URL for GET /api/dub/result/{jobId} (cache-busted). */
+/**
+ * URL for GET /api/dub/result/{jobId} -- stable, so a caller can tell whether
+ * the player is already showing this job. A finished video only changes when a
+ * line is remade, and the caller adds its own marker at that moment.
+ */
 export function resultUrl(jobId, { baseUrl = "" } = {}) {
-  return `${baseUrl}/api/dub/result/${jobId}?t=${Date.now()}`;
+  return `${baseUrl}/api/dub/result/${jobId}`;
 }
 
 /**
