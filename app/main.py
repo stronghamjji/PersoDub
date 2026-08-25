@@ -19,7 +19,9 @@ from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
                         TRANSLATE_ENGINE, default_stt_engine)
-from app.dub_script import DUB_NAME, EDITED_NAME, edit_line, load_lines, script_path
+from app.dub_script import (
+    DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
+)
 from app.text.srt import parse_srt
 from app.engines.base import (
     SynthesisRequest,
@@ -361,13 +363,9 @@ def dub_job_script_edit(jid: str, line: int, body: ScriptLineRequest):
 
 @app.get("/api/dub/jobs/{jid}/script/{line}/audio")
 def dub_job_line_audio(jid: str, line: int):
-    """The voice that was made for one line, on its own.
-
-    Script lines are numbered from 1; the synthesizer writes them from 0
-    (app/qwen_pipeline.py: qwen_line_<i>.wav), so line N is file N-1.
-    """
+    """The voice that was made for one line, on its own."""
     _job, work_dir = _script_work_dir(jid)
-    path = os.path.join(work_dir, "qwen_line_%d.wav" % (line - 1))
+    path = line_wav_path(work_dir, line)
     if not os.path.exists(path):
         raise HTTPException(
             status_code=404,
@@ -447,7 +445,9 @@ def dub_job_redub(jid: str):
 
     new_jid = job_store.create()
     job_store._update(new_jid, language_code=language_code, project=project,
-                      day=_today(), from_link=False, work_dir=work)
+                      day=_today(), from_link=False, work_dir=work,
+                      # The remake is the same video in the same two languages.
+                      source_lang=job.get("source_lang"))
     edited = os.path.exists(os.path.join(work_dir, EDITED_NAME))
     job_store.append_log(new_jid, "🎬 %s (대본 %s으로 다시 만들기)"
                          % (project, "고친 것" if edited else "그대로"))
@@ -723,6 +723,12 @@ def dub_start(
                       # Kept so a later redub of this job can pass the same
                       # language name back into run_dub.
                       language=language,
+                      # The language the user said the video is in, or None for
+                      # auto-detect. Only auto-detect leaves a language behind in
+                      # the result (app/stt_local.py fires on_language solely when
+                      # nothing was forced), so without this the screen has no way
+                      # to name the source column of a job that was told.
+                      source_lang=source_language_code or None,
                       from_link=bool(source_url))
     # First log line names the source -- log files are job-<id>.log, so without
     # this there is no way to tell which video a log belongs to.
@@ -884,10 +890,15 @@ def dub_result_original(jid: str, download: int = 0):
     return FileResponse(original, media_type="video/mp4", filename="org.mp4")
 
 
-@app.get("/api/dub/result/{jid}/srt")
+@app.api_route("/api/dub/result/{jid}/srt", methods=["GET", "HEAD"])
 def dub_result_srt(jid: str, download: int = 0):
-    """Return the translated subtitles used for the dub, as plain text (for the UI's
-    subtitle viewer). run_dub()'s result dict doesn't carry the srt path, but it
+    """Return the translated subtitles used for the dub, as plain text.
+
+    HEAD as well as GET: the Export dialog only needs to know whether this job
+    has subtitles at all, and asking with GET downloaded the whole file to throw
+    it away. FastAPI does not add HEAD to a GET route by itself.
+
+    run_dub()'s result dict doesn't carry the srt path, but it
     always writes/copies it into the same job workspace folder as out_path, under
     one of two fixed names: "translated.srt" (auto-translated) or "sub.srt" (the
     caller's own pre-translated subtitles, see app/main.py:dub_start). Looked up by

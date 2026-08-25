@@ -45,14 +45,22 @@ def _read_speakers(work_dir: str) -> List[dict]:
         return json.load(f)
 
 
-def _audio_seconds(work_dir: str, line: int) -> Optional[float]:
-    """How long the voice made for line `line` runs, or None if there is no file.
+def line_wav_path(work_dir: str, line: int) -> str:
+    """Where the voice made for script line `line` (1-based) lives.
 
     Script lines are numbered from 1 and the synthesizer writes them from 0
-    (app/qwen_pipeline.py: qwen_line_<i>.wav), so line N is file N-1. A wav that
-    is still being written back (a line being remade) has no readable length yet.
+    (app/qwen_pipeline.py: qwen_line_<i>.wav), so line N is file N-1. One place
+    says so, because two copies of an off-by-one rule drift apart.
     """
-    path = os.path.join(work_dir, "qwen_line_%d.wav" % (line - 1))
+    return os.path.join(work_dir, "qwen_line_%d.wav" % (line - 1))
+
+
+def _audio_seconds(path: str) -> Optional[float]:
+    """How long a voice wav runs, or None if it is missing or unreadable.
+
+    A wav that is still being written back (a line being remade) has no
+    readable length yet.
+    """
     if not os.path.exists(path):
         return None
     try:
@@ -60,6 +68,19 @@ def _audio_seconds(work_dir: str, line: int) -> Optional[float]:
             return round(w.getnframes() / float(w.getframerate()), 2)
     except (wave.Error, EOFError):
         return None
+
+
+def _voice_is_older_than(wav_path: str, script: str) -> bool:
+    """True when this line's voice was made before the script was last written.
+
+    The script file is rewritten whole on every edit, so this answers "has
+    anything been rewritten since this voice was made" -- it is the caller's job
+    to ask it only about lines whose words actually changed. Neither file there
+    means there is nothing to compare, which counts as not stale.
+    """
+    if not os.path.exists(wav_path) or not os.path.exists(script):
+        return False
+    return os.path.getmtime(wav_path) < os.path.getmtime(script)
 
 
 def script_path(work_dir: str) -> str:
@@ -78,6 +99,10 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
     line counts. app.text.cues.match_cue_index finds the source line a given line's
     midpoint falls inside -- one source split into two translated lines leaves both
     halves pointing at the same source.
+
+    voice_stale compares file times, and the script file is rewritten whole on
+    every edit -- so it says "made before the last edit of anything", and only
+    means "this line's voice is out of date" for a line whose words changed.
     """
     path = script_path(work_dir)
     if not os.path.exists(path):
@@ -95,6 +120,7 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
         # The speaker spans carry the same timings as the source lines, so they
         # are paired the same way -- by midpoint, not by line number.
         s = match_cue_index(c, speakers) if speakers else None
+        wav = line_wav_path(work_dir, n)
         lines.append({
             "line": n,
             "start": round(c["start"], 2),
@@ -105,7 +131,8 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
             "estimated": estimated,
             "fits": in_window(estimated, slot),
             "speaker": speakers[s]["speaker"] if s is not None else None,
-            "audio_sec": _audio_seconds(work_dir, n),
+            "audio_sec": _audio_seconds(wav),
+            "voice_stale": _voice_is_older_than(wav, path),
         })
     return lines
 

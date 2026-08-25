@@ -68,8 +68,12 @@ def get_script(job_id: str) -> List[dict]:
 
     Each line carries: line (its number), start/end (seconds), slot (the time this
     line has to be spoken in), source (the original-language line), text (the current
-    translation), estimated (how long the translation takes to say), and fits (true
-    when estimated lands inside the slot).
+    translation), estimated (how long the translation takes to say), fits (true
+    when estimated lands inside the slot), speaker (who says it, or null when this
+    job recorded no speakers), audio_sec (how long the voice made for it actually
+    runs, or null when that file is gone), and voice_stale (true when that voice
+    was made before the script was last written -- so a line whose words you
+    changed still sounds like the old ones until remake_line_voice runs).
     """
     job = _job(job_id)
     return load_lines(_work_dir(job), _lang(job))

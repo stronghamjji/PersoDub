@@ -590,3 +590,54 @@ def test_dub_start_still_takes_the_language_codes_people_use():
 
     for good in ["ko", "en", "ja", "zh-CN", "pt_BR", "es-419"]:
         assert _valid_language_code(good), good
+
+
+def test_job_record_keeps_the_chosen_source_language(monkeypatch):
+    # Only auto-detect leaves a language behind in the result, so a job that was
+    # TOLD its source language has to remember what it was told -- the finished
+    # screen names the source column from it.
+    def fake_run_dub(**kw):
+        open(kw["out_path"], "wb").write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+
+    told = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "source_language_code": "en"},
+    ).json()["job_id"]
+    auto = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko"},
+    ).json()["job_id"]
+
+    assert client.get(f"/api/dub/jobs/{told}").json()["source_lang"] == "en"
+    assert client.get(f"/api/dub/jobs/{auto}").json()["source_lang"] is None
+
+
+def test_result_srt_answers_head(monkeypatch, tmp_path):
+    # The Export dialog asks whether this job has subtitles at all. It used to
+    # GET the whole file and throw it away; HEAD answers the same question.
+    work = tmp_path / "job"
+    work.mkdir()
+    (work / "translated.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nhi\n",
+                                         encoding="utf-8")
+
+    def fake_run_dub(**kw):
+        open(kw["out_path"], "wb").write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": str(work / "dubbed.mp4"), "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko"},
+    ).json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
+
+    assert client.head(f"/api/dub/result/{jid}/srt").status_code == 200
