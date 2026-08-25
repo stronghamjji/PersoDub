@@ -184,11 +184,14 @@
 
   .job-row { display: flex; align-items: center; gap: 9px; padding: 9px 14px; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font: inherit; color: inherit; }
   .job-row:hover, .job-row.current { background: var(--accent); }
+  /* dot- prefixed on purpose: a bare .done here is the finished screen's own
+     layout class, which laid the dot out as a flex column and left it 0px wide
+     -- so every finished job used to sit in the list with no dot at all. */
   .job-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .job-dot.running { background: var(--primary); box-shadow: var(--focus-ring); }
-  .job-dot.done { background: var(--success); }
-  .job-dot.error { background: var(--destructive); }
-  .job-dot.cancelled { background: var(--muted-foreground); }
+  .job-dot.dot-running { background: var(--primary); box-shadow: var(--focus-ring); }
+  .job-dot.dot-done { background: var(--success); }
+  .job-dot.dot-error { background: var(--destructive); }
+  .job-dot.dot-cancelled { background: var(--muted-foreground); }
   .job-row .job-info { min-width: 0; }
   /* The row itself is a <button>, so the delete control sits beside it rather
      than inside. It stays hidden until the row is hovered or it has focus --
@@ -198,9 +201,10 @@
   .job-del { border: none; background: none; cursor: pointer; padding: 6px 10px; color: var(--muted-foreground); font: inherit; font-size: 0.78rem; opacity: 0; flex-shrink: 0; }
   .job-line:hover .job-del, .job-del:focus-visible { opacity: 1; }
   .job-del:hover { color: var(--destructive); }
-  .job-del.confirming { opacity: 1; color: var(--destructive); font-weight: 700; }
   .job-name { font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .job-meta { font-size: 0.7rem; color: var(--muted-foreground); }
+  /* One line, clipped: left to wrap it ran to three lines in a 230px sidebar
+     and pushed half the list below the fold. */
+  .job-meta { font-size: 0.7rem; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
@@ -379,6 +383,9 @@
   .btn-outline { background: var(--background); color: var(--foreground); border: 1px solid var(--border); }
   .btn-outline:hover { background: var(--secondary); }
   .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* The one button in the app that destroys something. */
+  .btn-danger { background: var(--destructive); color: var(--primary-foreground); }
+  .delete-error { margin: 10px 0 0; font-size: 0.8rem; color: var(--destructive); }
   .btn-ghost { background: none; border: none; color: var(--muted-foreground); font-size: 0.76rem; cursor: pointer; font-family: inherit; text-decoration: underline; padding: 0; }
 
   .section-gap { margin-top: 16px; }
@@ -661,6 +668,9 @@
   .done-fail-why { margin: 0; text-align: center; color: var(--foreground);
     font-size: 0.9rem; }
   .done-fail .job-notice { margin: 0; text-align: center; }
+  /* As wide as its words: stretched across the whole column it read as the
+     screen's main action rather than the way out of a dead end. */
+  #doneRetry { align-self: center; }
   .done-fail .raw-log { margin: 0; }
 
   /* ---------------- Export dialog ---------------- */
@@ -788,8 +798,8 @@
        needed to start one, and it was eating width from the screen the user is
        actually looking at. The rail icon opens it. -->
   <div class="history-sidebar collapsed" id="historySidebar">
-    <div class="history-head">Recent jobs</div>
-    <div id="historyList"><div class="history-empty">No jobs yet -- drop a video to start one.</div></div>
+    <div class="history-head">Projects</div>
+    <div id="historyList"><div class="history-empty">No projects yet -- drop a video to start one.</div></div>
   </div>
 
   <!-- ============ MAIN ============ -->
@@ -910,6 +920,10 @@
         <div class="done-fail" id="doneFail" hidden>
           <div class="done-fail-body" id="doneFailBody">
             <p class="done-fail-why" id="doneFailWhy"></p>
+            <!-- The same video, back in the New project dialog: a job that
+                 failed is nearly always retried with one option changed, and
+                 hunting the file down again was the whole cost of that. -->
+            <button class="btn btn-primary" id="doneRetry" type="button">Try again</button>
           </div>
         </div>
       </section>
@@ -1154,6 +1168,28 @@
   </div>
 </div>
 
+<!-- Deleting a project takes its whole folder with it, so it is asked here
+     rather than with window.confirm(), which freezes every event in the
+     Electron shell until it is dismissed. -->
+<div class="modal-overlay" id="deleteOverlay">
+  <div class="modal" style="width: min(440px, 92vw)">
+    <div class="modal-head">
+      <h2>Delete this project?</h2>
+      <button class="modal-close" id="deleteCloseX" type="button" aria-label="Close">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="margin: 0" id="deleteMessage"></p>
+      <p class="delete-error" id="deleteError"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" id="deleteCancelBtn" type="button">Keep it</button>
+      <button class="btn btn-danger" id="deleteConfirmBtn" type="button">Delete</button>
+    </div>
+  </div>
+</div>
+
 <!-- A dub now keeps its per-line voices so single lines can be redone, which
      means a job needs room. Refusing up front with a dialog beats failing three
      stages in and leaving a half-written folder. -->
@@ -1312,11 +1348,11 @@ function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
 // defaults, so the stored defaultTranslateEngine/defaultQualityMode values --
 // and the migrateStoredSettings pass that guarded them -- no longer apply.)
 
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
-  catch { return []; }
-}
-function saveHistory(list) { localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 20))); }
+// The job list used to live here too, and so was lost the moment the user
+// opened the app on another day or cleared their browser data. The server now
+// keeps a job.json beside every video, so GET /api/dub/jobs is the list and
+// this key is dead weight -- dropped once, on launch.
+localStorage.removeItem(HISTORY_KEY);
 
 // ---------------- Language dropdowns ----------------
 // Populated from dubApi.LANGUAGES (the model's own supported-language table).
@@ -1352,7 +1388,6 @@ fillLanguageSelects();
 
 // ---------------- App state ----------------
 const state = {
-  videoFile: null,
   linkProbe: null,    // {url, title, duration_sec, thumbnail_url} once a link probes OK
   newProject: null,   // {file, probe, trim} -- what the New project dialog is working on
   jobId: null,
@@ -1362,7 +1397,10 @@ const state = {
 
 // ---------------- Rail: history sidebar toggle ----------------
 $("historyToggle").addEventListener("click", () => {
-  $("historySidebar").classList.toggle("collapsed");
+  const opening = $("historySidebar").classList.toggle("collapsed") === false;
+  // Ask the server again on the way open: a job may have finished, or another
+  // window may have started one, since the list was last drawn.
+  if (opening) renderHistory();
 });
 
 // ---------------- Settings modal ----------------
@@ -1892,7 +1930,6 @@ function setVideoFile(file) {
       `This video is ${formatBytes(file.size)}. The limit is ${MAX_VIDEO_LABEL}. Please use a shorter or smaller file.`;
     file = null;
   }
-  state.videoFile = file;
   if (file) openNewProject({ file });
 }
 
@@ -2013,11 +2050,11 @@ $("linkInput").addEventListener("input", () => {
 // The bar carries the job's name and the one line that says where it is. The
 // step-by-step display of the same thing lives on the running screen.
 
-// What the user called this job: the history row remembers what was dropped
-// in; a job resumed after a restart falls back to the server's folder name.
+// What the user called this job. The server stamps the name onto the job when
+// it starts, so the name is the same one whether the job is minutes or months
+// old -- the browser used to remember it, and forgot on every restart.
 function jobLabel(job) {
-  const entry = loadHistory().find((j) => j.jobId === job.id);
-  return (entry && entry.fileName) || job.project || "Dubbing";
+  return job.project || "Dubbing";
 }
 
 // One short line. The WHY of a failure renders separately (renderNotices) --
@@ -2233,81 +2270,55 @@ $("cancelBtn").addEventListener("click", async () => {
   }
 });
 
-// ---------------- Recent jobs (session history, persisted to localStorage) ----------------
-function upsertHistory(entry) {
-  const list = loadHistory().filter((j) => j.jobId !== entry.jobId);
-  list.unshift(entry);
-  saveHistory(list);
-  renderHistory();
-}
-
-function removeHistory(jobId) {
-  saveHistory(loadHistory().filter((j) => j.jobId !== jobId));
-  // The open Export tab would be showing files that are gone now.
-  if (state.jobId === jobId) {
-    state.jobId = null;
-    state.pollGeneration += 1;
-    showHome();
-  }
-  renderHistory();
-}
+// ---------------- Projects (the job list, read from the server) ----------------
+// Nothing is remembered in the browser any more: every job leaves a job.json
+// beside its video, so GET /api/dub/jobs is the same list tomorrow morning as
+// it is now -- which is what the sidebar is for.
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function renderHistory() {
-  const list = loadHistory();
+// The line under a project's name: which way the dub goes and how long it is.
+// Length is only known for a job the user trimmed -- the record says what was
+// cut, never how long the film was -- so it is left out rather than guessed at.
+function projectMeta(job) {
+  const langs = `${langName(job.source_lang) || "Auto"} → ${langName(job.language_code) || "Script"}`;
+  const length = job.trim ? fmtClock(job.trim.end - job.trim.start) : "";
+  return [langs, length].filter(Boolean).join(" · ");
+}
+
+// Anything that is not finished, failed or cancelled is still going.
+const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled" };
+
+async function renderHistory() {
   const container = $("historyList");
-  if (list.length === 0) {
-    container.innerHTML = '<div class="history-empty">No jobs yet -- drop a video to start one.</div>';
+  let jobs;
+  try {
+    jobs = (await (await fetch("/api/dub/jobs")).json()).jobs || [];
+  } catch {
+    container.innerHTML = '<div class="history-empty">Could not reach the app server.</div>';
+    return;
+  }
+  if (jobs.length === 0) {
+    container.innerHTML = '<div class="history-empty">No projects yet -- drop a video to start one.</div>';
     return;
   }
   container.innerHTML = "";
-  for (const entry of list) {
+  for (const job of jobs) {
     const row = document.createElement("button");
-    row.className = "job-row" + (entry.jobId === state.jobId ? " current" : "");
+    row.className = "job-row" + (job.id === state.jobId ? " current" : "");
     row.type = "button";
-    const dotClass = entry.lastStatus === "done" ? "done"
-      : entry.lastStatus === "error" ? "error"
-      : entry.lastStatus === "cancelled" ? "cancelled"
-      : "running";
-    row.innerHTML = `<span class="job-dot ${dotClass}"></span>
-      <div class="job-info"><div class="job-name">${escapeHtml(entry.fileName)}</div><div class="job-meta">${escapeHtml(entry.metaText || "")}</div></div>`;
-    row.addEventListener("click", () => resumeJob(entry.jobId));
+    row.innerHTML = `<span class="job-dot ${JOB_DOT[job.status] || "dot-running"}"></span>
+      <div class="job-info"><div class="job-name">${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div></div>`;
+    row.addEventListener("click", () => resumeJob(job.id));
 
-    // Deleting a job's folder cannot be undone, so the button asks once by
-    // turning into "Sure?" -- not window.confirm(), which freezes every event
-    // in the Electron shell until it is dismissed.
     const del = document.createElement("button");
     del.className = "job-del";
     del.type = "button";
-    del.title = "Delete this job's files";
+    del.title = "Delete this project's files";
     del.textContent = "Delete";
-    del.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      if (!del.classList.contains("confirming")) {
-        del.classList.add("confirming");
-        del.textContent = "Sure?";
-        setTimeout(() => {
-          del.classList.remove("confirming");
-          del.textContent = "Delete";
-        }, 4000);
-        return;
-      }
-      del.disabled = true;
-      del.textContent = "Deleting…";
-      try {
-        const r = await fetch(`/api/dub/jobs/${entry.jobId}/workspace`, { method: "DELETE" });
-        if (!r.ok) throw new Error((await r.json()).detail || "Could not delete this job");
-        removeHistory(entry.jobId);
-      } catch (err) {
-        del.disabled = false;
-        del.classList.remove("confirming");
-        del.textContent = "Delete";
-        del.title = err.message;
-      }
-    });
+    del.addEventListener("click", (e) => { e.stopPropagation(); askDelete(job); });
 
     const line = document.createElement("div");
     line.className = "job-line";
@@ -2316,6 +2327,48 @@ function renderHistory() {
     container.appendChild(line);
   }
 }
+
+// Deleting a project's folder cannot be undone, so it is asked in a dialog of
+// the app's own -- window.confirm() freezes every event in the Electron shell
+// until it is dismissed.
+let pendingDelete = null;
+
+function askDelete(job) {
+  pendingDelete = job;
+  $("deleteMessage").textContent =
+    `${job.project || "This job"} and everything in its folder -- the dubbed video, the script and the voices -- will be deleted. This cannot be undone.`;
+  $("deleteError").textContent = "";
+  $("deleteOverlay").classList.add("open");
+}
+
+function closeDelete() {
+  $("deleteOverlay").classList.remove("open");
+  pendingDelete = null;
+}
+$("deleteCloseX").addEventListener("click", closeDelete);
+$("deleteCancelBtn").addEventListener("click", closeDelete);
+$("deleteConfirmBtn").addEventListener("click", async () => {
+  const job = pendingDelete;
+  if (!job) return;
+  const btn = $("deleteConfirmBtn");
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/dub/jobs/${job.id}/workspace`, { method: "DELETE" });
+    if (!r.ok) throw new Error((await r.json()).detail || "Could not delete this project");
+    closeDelete();
+    // The open screen would be showing files that are gone now.
+    if (state.jobId === job.id) {
+      state.jobId = null;
+      state.pollGeneration += 1;
+      showHome();
+    }
+    renderHistory();
+  } catch (err) {
+    $("deleteError").textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 async function resumeJob(jobId) {
   state.jobId = jobId;
@@ -2394,7 +2447,9 @@ async function startDubbing() {
     const myGeneration = state.pollGeneration;
 
     const label = np.file ? np.file.name : np.probe.title;
-    upsertHistory({ jobId, fileName: label, lastStatus: "running", metaText: "Processing…" });
+    // The server has the job on file already, so the sidebar only has to ask
+    // again -- the new row comes back with it.
+    renderHistory();
     // The video is on its way to the server now; the dialog's copy of it can go.
     $("projectOverlay").classList.remove("open");
     releaseProjectVideo();
@@ -2476,11 +2531,8 @@ async function handleJobUpdate(job) {
     return;
   }
 
-  const list = loadHistory();
-  const entry = list.find((j) => j.jobId === job.id) || { jobId: job.id, fileName: state.videoFile ? state.videoFile.name : "video" };
-  entry.lastStatus = job.status;
-  entry.metaText = job.status === "done" ? "Done" : job.status === "cancelled" ? "Cancelled" : "Failed";
-  upsertHistory(entry);
+  // The job is over, so its row's status dot has changed colour.
+  renderHistory();
 
   // Desktop only: in a plain browser persodubShell is undefined and nothing is
   // counted, which is the intended behaviour -- the counts describe app installs.
@@ -2547,7 +2599,11 @@ async function renderDone(job) {
       ? "This dubbing job was cancelled."
       : "Dubbing didn't finish.";
     moveInto($("doneNotice"), $("doneFailBody"));
+    // Under the reason, not above it: the button is what to do about the
+    // sentence the user just read.
+    $("doneFailBody").appendChild($("doneRetry"));
     moveInto($("rawLogDetails"), $("doneFailBody"));
+    $("doneRetry").disabled = false;
     return;
   }
   homeNoticeAndLog();
@@ -2562,6 +2618,25 @@ async function renderDone(job) {
   if (doneVideo.getAttribute("src") !== src) doneVideo.setAttribute("src", src);
   await renderScript(job.id);
 }
+
+// The failure card's one way forward: fetch the video this job started from
+// back off the server and hand it to the New project dialog, so the retry is
+// one dropdown away instead of a hunt through the file manager. The folder
+// may have been deleted since, which is the one thing that can stop it.
+$("doneRetry").addEventListener("click", async () => {
+  const job = state.job;
+  if (!job) return;
+  $("doneRetry").disabled = true;
+  try {
+    const r = await fetch(`/api/dub/result/${job.id}/original`);
+    if (!r.ok) throw new Error("The video this job started from is no longer on this machine.");
+    const blob = await r.blob();
+    openNewProject({ file: new File([blob], `${job.project || "video"}.mp4`, { type: "video/mp4" }) });
+  } catch (e) {
+    $("doneFailWhy").textContent = errorText(e);
+    $("doneRetry").disabled = false;
+  }
+});
 
 // The frame is the whole transport: there are no player controls, so the big
 // round button and the picture itself both start and stop it.
