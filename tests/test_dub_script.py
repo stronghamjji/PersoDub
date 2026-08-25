@@ -3,10 +3,14 @@
 
 Pure logic over files only -- no container, no network, no TTS (docs/development.md).
 """
+import json
+import wave
+
 import pytest
 
 from app.dub_script import (
-    DUB_NAME, EDITED_NAME, ORIGINAL_NAME, edit_line, export_srt, load_lines, script_path,
+    DUB_NAME, EDITED_NAME, ORIGINAL_NAME, SPEAKERS_NAME, edit_line, export_srt,
+    load_lines, script_path,
 )
 from app.text.srt import build_srt
 
@@ -17,6 +21,46 @@ def write(path, cues):
         build_srt([{"start": s, "end": e, "text": t} for s, e, t in cues]),
         encoding="utf-8",
     )
+
+
+def write_wav(path, seconds, rate=24000):
+    """Write a silent wav of exactly `seconds` -- only its length is ever read."""
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\x00\x00" * int(rate * seconds))
+
+
+def test_load_lines_reports_speaker_and_audio_length(tmp_path):
+    # Who says a line, and how long the voice that was made for it actually runs:
+    # the finished screen colours a chip by the first and measures the slot with
+    # the second. Both are read off files beside the script, and both are simply
+    # missing on a job that never wrote them.
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "정말")])
+    (tmp_path / SPEAKERS_NAME).write_text(json.dumps([
+        {"start": 0.0, "end": 1.7, "speaker": "SPEAKER_00"},
+        {"start": 2.9, "end": 5.7, "speaker": "SPEAKER_01"},
+    ]), encoding="utf-8")
+    write_wav(tmp_path / "qwen_line_0.wav", seconds=1.36)
+
+    lines = load_lines(str(tmp_path), "ko")
+
+    assert lines[0]["speaker"] == "SPEAKER_00"
+    assert lines[1]["speaker"] == "SPEAKER_01"
+    assert abs(lines[0]["audio_sec"] - 1.36) < 0.02
+    assert lines[1]["audio_sec"] is None
+
+
+def test_load_lines_without_those_files_reports_neither(tmp_path):
+    # Every job made before speakers.json existed, and every job whose per-line
+    # wavs were cleaned up, still has to open.
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가")])
+
+    line = load_lines(str(tmp_path), "ko")[0]
+
+    assert line["speaker"] is None
+    assert line["audio_sec"] is None
 
 
 def test_pairs_translation_with_source_by_time(tmp_path):

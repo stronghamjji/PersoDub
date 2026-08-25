@@ -5,6 +5,7 @@ If no subtitles are provided: transcribe -> Gemini translation -> dub (auto-tran
 Every stage runs locally or through our own Qwen3-TTS sidecar -- no third-party
 container anywhere in this app.
 """
+import json
 import os
 import re
 import subprocess
@@ -236,6 +237,12 @@ def _auto_translate_srt(
     # belongs to a caller-uploaded source script (app/main.py:388).
     with open(os.path.join(work_dir, "original.srt"), "w", encoding="utf-8") as f:
         f.write(build_srt(cues))
+
+    # Who speaks when, beside it: an SRT has nowhere to keep a speaker label, and
+    # the finished screen names each line's speaker from this file.
+    with open(os.path.join(work_dir, "speakers.json"), "w", encoding="utf-8") as f:
+        json.dump([{"start": c["start"], "end": c["end"], "speaker": cue_speaker(c)}
+                   for c in cues], f)
 
     for c, tr in zip(cues, translated):
         c["text"] = tr

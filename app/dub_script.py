@@ -10,8 +10,12 @@ The files this works with, all inside one job's work dir:
                   translation overwrites it in place
   translated.srt  the script the dub actually read. Never edited.
   edited.srt      the edited script. Absent until something is edited.
+  speakers.json   who speaks when, as [{start, end, speaker}], written beside
+                  original.srt. Absent on jobs made before 2026-08-26.
 """
+import json
 import os
+import wave
 from typing import List, Optional
 
 from app.text.cues import match_cue_index
@@ -21,6 +25,7 @@ from app.text.srt import Cue, build_srt, estimate_seconds, parse_srt
 ORIGINAL_NAME = "original.srt"
 DUB_NAME = "translated.srt"
 EDITED_NAME = "edited.srt"
+SPEAKERS_NAME = "speakers.json"
 
 
 def _read_cues(path: str) -> List[Cue]:
@@ -29,6 +34,32 @@ def _read_cues(path: str) -> List[Cue]:
         return []
     with open(path, encoding="utf-8-sig") as f:
         return parse_srt(f.read())
+
+
+def _read_speakers(work_dir: str) -> List[dict]:
+    """The speaker spans, or nothing at all if this job never recorded them."""
+    path = os.path.join(work_dir, SPEAKERS_NAME)
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _audio_seconds(work_dir: str, line: int) -> Optional[float]:
+    """How long the voice made for line `line` runs, or None if there is no file.
+
+    Script lines are numbered from 1 and the synthesizer writes them from 0
+    (app/qwen_pipeline.py: qwen_line_<i>.wav), so line N is file N-1. A wav that
+    is still being written back (a line being remade) has no readable length yet.
+    """
+    path = os.path.join(work_dir, "qwen_line_%d.wav" % (line - 1))
+    if not os.path.exists(path):
+        return None
+    try:
+        with wave.open(path, "rb") as w:
+            return round(w.getnframes() / float(w.getframerate()), 2)
+    except (wave.Error, EOFError):
+        return None
 
 
 def script_path(work_dir: str) -> str:
@@ -54,12 +85,16 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
 
     cues = _read_cues(path)
     originals = _read_cues(os.path.join(work_dir, ORIGINAL_NAME))
+    speakers = _read_speakers(work_dir)
 
     lines = []
     for n, c in enumerate(cues, start=1):
         slot = round(c["end"] - c["start"], 2)
         estimated = round(estimate_seconds(c["text"], lang), 2)
         k = match_cue_index(c, originals) if originals else None
+        # The speaker spans carry the same timings as the source lines, so they
+        # are paired the same way -- by midpoint, not by line number.
+        s = match_cue_index(c, speakers) if speakers else None
         lines.append({
             "line": n,
             "start": round(c["start"], 2),
@@ -69,6 +104,8 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
             "text": c["text"],
             "estimated": estimated,
             "fits": in_window(estimated, slot),
+            "speaker": speakers[s]["speaker"] if s is not None else None,
+            "audio_sec": _audio_seconds(work_dir, n),
         })
     return lines
 
