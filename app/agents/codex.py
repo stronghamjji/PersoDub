@@ -59,18 +59,27 @@ def translate(event: dict) -> List[dict]:
         # A transport complaint, not the end of the turn. Recorded 2026-08-26
         # against an empty CODEX_HOME: a failing run printed eleven of these
         # ("Reconnecting... 2/5 (unexpected status 401 ...)") and then said how
-        # it really ended with turn.failed. Passing them on keeps a turn that
-        # dies quietly from showing "(empty answer)"; ends_turn says they must
-        # not stand in for that ending.
+        # it really ended with turn.failed. Showing them keeps a turn that dies
+        # quietly from reading as "(empty answer)".
         return [_transport_error(event.get("message"))]
 
     return []
 
 
 def _transport_error(message) -> dict:
+    """One of Codex's connection complaints, as a step rather than a failure.
+
+    Grey, never red: a run that reconnects and then answers perfectly well
+    prints several of these, so showing them as errors would put a red line
+    under a good answer. The turn's real ending still comes through turn.failed,
+    which is red. Trimmed because a chip is one line, and these carry a URL and
+    a trace id that say nothing to the person reading them.
+    """
     if not isinstance(message, str) or not message:
         message = "The assistant lost its connection."
-    return {"kind": "error", "message": message, "ends_turn": False}
+    if len(message) > 120:
+        message = message[:119].rstrip() + "…"
+    return {"kind": "progress", "tool": "transport", "label": message}
 
 
 def _item(kind: str, item: dict) -> List[dict]:

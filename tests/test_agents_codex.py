@@ -220,24 +220,44 @@ def test_the_users_own_execpolicy_is_left_alone(tmp_path):
                                            resume=False)
 
 
-def test_retry_chatter_is_shown_but_does_not_end_the_turn():
+def test_retry_chatter_is_a_step_not_a_failure():
     """Recorded 2026-08-26 against an empty CODEX_HOME: a failing run printed
-    eleven of these before saying how it really ended."""
+    eleven of these before saying how it really ended. A run that reconnects
+    and then answers prints them too, so red would be a lie."""
     out = ev('{"type":"error","message":"Reconnecting... 2/5 (unexpected status '
              '401 Unauthorized)"}')
-    assert out[0]["kind"] == "error"
-    assert "Reconnecting" in out[0]["message"]
-    assert out[0]["ends_turn"] is False
+    assert out[0]["kind"] == "progress"
+    assert "Reconnecting" in out[0]["label"]
+
+
+def test_a_long_connection_complaint_is_trimmed_to_fit_a_chip():
+    """The real ones carry a URL and a trace id -- 180 characters of nothing
+    the reader can use."""
+    out = ev('{"type":"error","message":"Reconnecting... 2/5 (unexpected status '
+             '401 Unauthorized: Missing bearer or basic authentication in header, '
+             'url: wss://api.openai.com/v1/responses, cf-ray: a30e73aadc4aea17-ICN)"}')
+    assert len(out[0]["label"]) <= 120
+    assert out[0]["label"].endswith("…")
 
 
 def test_a_transport_error_wrapped_as_an_item_is_shown_once():
     line = ('{"type":"%s","item":{"id":"item_0","type":"error","message":'
             '"Falling back from WebSockets to HTTPS transport."}}')
     out = ev(line % "item.completed")
-    assert out[0]["kind"] == "error"
-    assert out[0]["ends_turn"] is False
+    assert out[0]["kind"] == "progress"
+    assert "Falling back" in out[0]["label"]
     # item.started for the same item would say it twice.
     assert ev(line % "item.started") == []
+
+
+def test_the_red_line_is_kept_for_how_the_turn_actually_ended():
+    """The only error a failing Codex run shows is turn.failed -- which carries
+    the same message the last connection complaint did, in full."""
+    chatter = ev('{"type":"error","message":"unexpected status 401 Unauthorized"}')
+    ending = ev('{"type":"turn.failed","error":{"message":"unexpected status 401 '
+                'Unauthorized"}}')
+    assert chatter[0]["kind"] == "progress"
+    assert ending[0]["kind"] == "error"
 
 
 def test_a_failed_turn_is_how_a_turn_ends():
