@@ -431,7 +431,9 @@
   .done { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   /* min-height, so a short window scrolls the finished screen rather than
      squeezing the table down to no rows at all. */
-  .done-main { flex: 1; min-height: 200px; display: flex; }
+  /* position, so the handle that sits on the line above the timeline can be
+     hung off this pane's bottom edge. */
+  .done-main { position: relative; flex: 1; min-height: 200px; display: flex; }
   .script-pane { position: relative; flex: 1; min-width: 0; display: flex;
     flex-direction: column; border-right: 1px solid var(--border); }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
@@ -544,7 +546,7 @@
   /* The same script as the table, drawn in time instead of in rows: one lane of
      dubbed voices over the slots they have to fit in, one lane of the original
      under it. Read-only -- clicking a bar plays that line, nothing here drags.
-     Fixed height for now; Task 10 turns .timeline into a pane you can resize. */
+     150px is where it starts; the handle on its top line is what changes it. */
 
   .timeline { flex: 0 0 auto; height: 150px; display: flex; flex-direction: column;
     border-top: 1px solid var(--border); background: var(--background); }
@@ -613,6 +615,31 @@
   .tl-playhead i { position: absolute; top: 0; left: -7px; width: 0; height: 0;
     border-left: 6px solid transparent; border-right: 6px solid transparent;
     border-top: 8px solid var(--foreground); }
+
+  /* ---------------- The three drag handles ---------------- */
+  /* A handle is nothing to look at: a 6px strip of hit area laid over the 1px
+     line that already divides two panes. Point at it (or drag it) and it paints
+     a line of its own, in the app's purple, exactly on top of the grey one --
+     so the divider lights up without anything on the screen moving. */
+
+  .grip { position: absolute; z-index: 6; }
+  .grip::after { content: ""; position: absolute; background: var(--primary); opacity: 0; }
+  .grip:hover::after, .grip.dragging::after { opacity: 1; }
+  .grip-x { top: 0; bottom: 0; width: 6px; cursor: col-resize; }
+  .grip-x::after { top: 0; bottom: 0; left: 2.5px; width: 1px; }
+  .grip-y { left: 0; right: 0; height: 6px; cursor: row-resize; }
+  .grip-y::after { left: 0; right: 0; top: 2.5px; height: 1px; }
+
+  /* Script | video, on the script pane's own right border. */
+  #gripPanes { right: -3.5px; }
+  /* The timeline's top border, which runs along .done-main's bottom edge.
+     No strip drawn (an empty timeline collapses) means no line to drag. */
+  #gripTimeline { bottom: -3.5px; }
+  .done-main:has(+ .timeline:empty) #gripTimeline { display: none; }
+  /* The Dub Agent's purple top border. Only while the conversation is open: a
+     collapsed strip is one input row, and has no height to give or take. */
+  #gripAgent { top: -4px; }
+  body:not(.agent-open) #gripAgent { display: none; }
 
   /* A job that failed or was cancelled has no script and no video -- only the
      reason, in the middle of the screen it would have filled, with the notice
@@ -840,6 +867,9 @@
               <!-- Saving, remaking, and anything that went wrong while doing
                    either. Empty -- and so invisible -- the rest of the time. -->
               <div class="script-status" id="scriptSaving"></div>
+              <!-- Drag the line between the table and the video. -->
+              <div class="grip grip-x" id="gripPanes" role="separator"
+                   aria-orientation="vertical" aria-label="Resize the video"></div>
             </div>
             <div class="video-pane" id="videoPane">
               <div class="video-tabs">
@@ -856,6 +886,9 @@
                 <div class="video-time" id="videoTime">00:00:00.0 / 00:00:00.0</div>
               </div>
             </div>
+            <!-- Drag the line between the two panes and the timeline. -->
+            <div class="grip grip-y" id="gripTimeline" role="separator"
+                 aria-orientation="horizontal" aria-label="Resize the timeline"></div>
           </div>
           <div class="timeline" id="timeline"></div>
         </div>
@@ -876,6 +909,9 @@
          own button sat on top of the top bar's. Styles are in the block near
          the bottom of this file, next to the script that drives it. -->
     <footer class="agent" id="agentStrip">
+      <!-- Drag the line between the work above and the conversation. -->
+      <div class="grip grip-y" id="gripAgent" role="separator"
+           aria-orientation="horizontal" aria-label="Resize the conversation"></div>
       <div class="assistant-log" id="assistantLog"></div>
       <button class="agent-fold" id="assistantFold" type="button" aria-label="Collapse Dub Agent">Collapse
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
@@ -979,8 +1015,7 @@
           <select id="persoSpaceSelect" disabled>
             <option value="">Save a Perso API key first</option>
           </select>
-          <div class="settings-hint">The workspace your dubbing jobs run in
-            (and whose credits they use).</div>
+          <div class="settings-hint">Which workspace's credits to use.</div>
           <div class="job-notice danger" id="persoSpaceWarning" style="display:none">
             This workspace has 0 credits left. Perso dubbing will fail until it
             is recharged. Pick another workspace, or use Whisper (free, offline).</div>
@@ -991,9 +1026,8 @@
         </div>
         <label class="settings-hint" style="display:block; cursor:pointer">
           <input type="checkbox" id="showKeysToggle"> Show keys</label>
-        <div class="settings-hint">Without keys, PersoDub uses its free local engines (local Whisper
-          for transcription, local Gemma for translation). Keys are saved into the app's own config
-          file. <b>Restart PersoDub after saving</b> for them to take effect.</div>
+        <div class="settings-hint">No keys? The free local engines are used.
+          <b>Restart after saving.</b></div>
         <div class="restart-banner" id="settingsRestartNote" style="display:none">
           <svg class="icon" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
           <span id="settingsRestartText">Saved. Restart PersoDub to apply your changes.</span>
@@ -1006,11 +1040,10 @@
 
       <div class="settings-section">
         <h3>Storage</h3>
-        <div class="settings-row">
-          <label>Output location</label>
-          <input type="text" value="Managed automatically per job -- download it from the finished job screen." readonly>
-          <div class="settings-hint">A configurable save-to folder isn't available yet -- this field is read-only.</div>
-        </div>
+        <!-- A note, and nothing to press: a storage limit and a way to clear
+             old projects out belong with the install-package work, not here. -->
+        <div class="settings-hint">Every project is kept in the app's own folder, and nothing
+          there is ever deleted by itself.</div>
       </div>
 
       <div class="settings-section">
@@ -1022,10 +1055,8 @@
           </label>
           <!-- Saves on the spot rather than on Save: the shell re-reads the
                file before every count, so promising a restart would be wrong. -->
-          <div class="settings-hint" id="analyticsHint">Four counts only -- app launch, dub
-            finished, dub failed, install failed -- with the app version, your operating system
-            and a random install ID. Never your video, audio, subtitles, filenames or paths.
-            Takes effect immediately; no restart needed.</div>
+          <div class="settings-hint" id="analyticsHint">Four counts only. Never your video
+            or files.</div>
         </div>
       </div>
 
@@ -1403,6 +1434,14 @@ async function openSettings() {
   $("settingsOverlay").classList.add("open");
 }
 function closeSettings() { $("settingsOverlay").classList.remove("open"); }
+
+// The version in the top bar, from the only place the app knows it: the same
+// /api/settings field the About line reads. A plain browser tab with no desktop
+// install behind it gets a 503 there, and the corner simply stays empty.
+fetch("/api/settings")
+  .then((r) => (r.ok ? r.json() : null))
+  .then((st) => { if (st && st.app_version) $("topbarVersion").textContent = `v${st.app_version}`; })
+  .catch(() => {});
 
 $("settingsBtn").addEventListener("click", openSettings);
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
@@ -2471,6 +2510,7 @@ async function renderDone(job) {
   const finished = job.status === "done";
   $("doneLayout").hidden = !finished;
   $("doneFail").hidden = finished;
+  fitLayout();   // the two panes have a width to measure only now they are on show
   if (!finished) {
     // Cancelled and failed are two different stories, and neither has a screen
     // of its own: the back chevron in the top bar is the way out of both. The
@@ -2906,9 +2946,25 @@ function drawTimelineTrack() {
 function paintTimelineAt(t) {
   const head = $("timelinePlayhead");
   if (!head) return;
-  head.style.left = `${(t * timelinePps).toFixed(1)}px`;
+  const x = t * timelinePps;
+  head.style.left = `${x.toFixed(1)}px`;
   for (const blk of $("timeline").querySelectorAll(".tl-voice, .tl-org")) {
     blk.classList.toggle("tl-now", isNowLine(t, blk));
+  }
+  followPlayhead(x);
+}
+
+// A strip longer than the window is a strip the playhead walks off the end of.
+// While the video plays, the moment it leaves the part on show, scroll it back
+// into view a third of the way in -- far enough left that the next stretch of
+// script is what fills the strip. Only while it plays: a paused (or hand-
+// scrolled) strip belongs to whoever is reading it.
+function followPlayhead(x) {
+  const track = $("timelineTrack");
+  if (!track || doneVideo.paused || doneVideo.seeking) return;
+  const room = track.clientWidth;
+  if (x < track.scrollLeft || x > track.scrollLeft + room) {
+    track.scrollLeft = Math.max(0, x - room / 3);
   }
 }
 
@@ -2951,6 +3007,88 @@ new ResizeObserver(() => {
   const track = $("timelineTrack");
   if (track && track.clientWidth && track.clientWidth !== timelineRoom) drawTimelineTrack();
 }).observe($("timeline"));
+
+// ---------------- The three drag handles ----------------
+// Each handle lies on the line between two panes and sizes the one BELOW or
+// RIGHT of it, which is why every drag is `start - moved`: pull the line up (or
+// left) and that pane grows. `read` measures the pane now, `limits` gives its
+// floor and ceiling for the window as it stands this second, and `apply` puts a
+// size on it. The size is remembered in the browser under `key` and put back
+// next time -- clamped, so a size saved on a big window cannot break a small
+// one. Returns the "put it back" step for fitLayout() below.
+function makeGrip({ el, axis, read, limits, apply, key }) {
+  const clamp = (v) => {
+    const range = limits();   // null: nothing on screen to measure yet
+    return range ? Math.round(Math.min(Math.max(v, range[0]), range[1])) : null;
+  };
+  el.addEventListener("pointerdown", (e) => {
+    const start = read();
+    if (clamp(start) === null) return;
+    e.preventDefault();
+    const from = axis === "x" ? e.clientX : e.clientY;
+    el.classList.add("dragging");
+    // The pointer belongs to the handle until it is let go, so a fast drag that
+    // outruns the mouse does not drop the line halfway.
+    el.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const size = clamp(start - ((axis === "x" ? ev.clientX : ev.clientY) - from));
+      if (size === null) return;
+      apply(size);
+      localStorage.setItem(key, String(size));
+    };
+    const up = () => {
+      el.classList.remove("dragging");
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  });
+  return () => {
+    const saved = Number(localStorage.getItem(key));
+    const size = saved > 0 ? clamp(saved) : null;   // nothing saved: the stylesheet's size stands
+    if (size !== null) apply(size);
+  };
+}
+
+const layoutFits = [
+  makeGrip({
+    el: $("gripPanes"), axis: "x", key: "persodub.layout.videoWidth",
+    read: () => $("videoPane").offsetWidth,
+    // The table is the point of the screen, so it keeps the room: the video
+    // only grows while 520px is left for the script beside it.
+    limits: () => {
+      const room = $("doneMain").offsetWidth;
+      return room ? [320, Math.max(320, room - 520)] : null;
+    },
+    apply: (w) => { $("videoPane").style.flex = `0 0 ${w}px`; },
+  }),
+  makeGrip({
+    el: $("gripTimeline"), axis: "y", key: "persodub.layout.timelineHeight",
+    read: () => $("timeline").offsetHeight,
+    limits: () => [110, Math.max(110, window.innerHeight * 0.4)],
+    apply: (h) => { $("timeline").style.height = `${h}px`; },
+  }),
+  makeGrip({
+    el: $("gripAgent"), axis: "y", key: "persodub.layout.agentHeight",
+    read: () => $("assistantLog").offsetHeight,
+    limits: () => [200, Math.max(200, window.innerHeight * 0.5)],
+    // The stylesheet's own max-height still applies on top of this, so on a
+    // short window whichever of the two is smaller wins.
+    apply: (h) => { $("assistantLog").style.height = `${h}px`; },
+  }),
+];
+
+// Remembered sizes: now, again when the finished screen is put on show (a
+// hidden pane has no width to measure, so the script/video one can only be set
+// there), and whenever the window itself changes size -- two of the three
+// ceilings are read off the window, and a size that no longer fits inside it
+// has to come back in.
+function fitLayout() { for (const put of layoutFits) put(); }
+fitLayout();
+window.addEventListener("resize", fitLayout);
 
 function scriptSaving(text) {
   const el = $("scriptSaving");
