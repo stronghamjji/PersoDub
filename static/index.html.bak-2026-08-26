@@ -5,8 +5,8 @@
   PersoDub -- the real app screen (Phase 1).
 
   Design approved after 5 rounds of mockup review:
-  - Skeleton: slim icon rail, collapsible projects sidebar, one top bar, and
-    three screens (home / running / done) swapped by showScreen().
+  - Skeleton: slim icon rail, collapsible recent-jobs sidebar, persistent
+    horizontal step tracker, tabbed workspace.
   - No emojis anywhere: every icon below is a hand-written inline SVG line
     icon (24x24 viewBox, currentColor stroke) -- no icon-font/CDN, so the
     page still works fully offline.
@@ -16,17 +16,18 @@
 
   FUTURE-PROOFING RULE (read this before adding anything to the chrome):
     - A genuinely new major feature (e.g. a batch-processing view, a voice
-      library) gets its OWN SCREEN plus a rail icon. Cap: ~6 rail icons
-      before this needs a rethink (more than that stops being scannable in
-      a slim rail).
+      library) gets its OWN TAB, added to the pill bar below. Cap: ~6 tabs
+      total before this needs a rethink (more than that stops being
+      scannable in a slim sidebar app).
     - A minor option on an existing feature (a new knob on how dubbing
-      runs) joins the option grid on the home screen only if a first-run
-      user needs it; anything rarer stays backend-only (env/mac.env).
+      runs) joins the option grid on the Upload tab only if a first-run
+      user needs it; anything rarer stays backend-only (env/mac.env) --
+      the Advanced settings <details> was removed for the first release.
     - Anything global (API keys, defaults, storage location, about/
       licenses) goes into Settings ONLY. Settings is the single place for
-      app-wide config -- don't scatter global toggles across screens.
-  Nothing else should be added to the rail or the top bar without deciding
-  which of these three buckets it belongs in first.
+      app-wide config -- don't scatter global toggles across tabs.
+  Nothing else should be added to the rail/tab-bar/step-header chrome
+  without deciding which of these three buckets it belongs in first.
 
   Backend contract this file talks to (see app/main.py):
     POST /api/dub/start            (multipart -- see buildDubFormData in dubApi.mjs)
@@ -50,42 +51,24 @@
 <title>PersoDub</title>
 <style>
   :root {
-    --primary: #7B64C8;
-    /* The same purple as plain rgb components, so the translucent glows below
-       stay in step with --primary instead of spelling it out a second time. */
-    --primary-rgb: 123, 100, 200;
-    --primary-soft: #EDE7FF;
-    --primary-line: #C7B9FF;
+    --primary: #7c3aed;
     --primary-foreground: #fafafa;
     --accent: #f7f5fd;
     --secondary: #f5f5f5;
-    /* The page behind the work area -- a shade off white, so cards and the
-       top bar read as sitting on top of it. */
-    --canvas: #fafafa;
     --muted-foreground: #737373;
     --foreground: #0a0a0a;
     --background: #ffffff;
     --border: #e5e5e5;
     --success: #11ad32;
     --warning: #dfa11a;
-    --destructive: #C96A6A;
+    --destructive: #e40014;
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
-    --focus-ring: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
-
-    /* The assistant is dark wherever it sits; these are its only colours. */
-    --agent-bg: #18181b;
-    --agent-box: #27272a;
-    --agent-border: #3f3f46;
-    --agent-fg: #e4e4e7;
-    --agent-muted: #6b6b75;
+    --focus-ring: 0 0 0 3px rgba(124, 58, 237, 0.12);
   }
 
   * { box-sizing: border-box; }
-  /* Plenty of the classes below set a `display`, which would otherwise beat
-     the `hidden` attribute that showScreen() and setTopbar() toggle. */
-  [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; }
 
   body {
@@ -107,38 +90,38 @@
 
   .app { height: 100vh; display: flex; }
 
-  /* ---------------- RAIL ---------------- */
-
   .rail {
     flex: 0 0 60px;
-    background: var(--background);
-    border-right: 1px solid var(--border);
+    background: #241a38;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 12px 0;
-    gap: 6px;
   }
 
   .rail-item {
-    width: 40px; height: 40px;
-    border-radius: 10px;
+    width: 38px; height: 38px;
+    border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
-    color: var(--muted-foreground);
+    color: #ded7f2;
     cursor: pointer;
     user-select: none;
     border: none;
     background: transparent;
+    margin-bottom: 6px;
   }
 
-  /* Bigger and heavier than the 18px/1.8 body icons: these sit alone with no
-     label beside them, and the gear packs twelve strokes into that box. */
-  .rail-item .icon { width: 24px; height: 24px; stroke-width: 2; }
+  /* Bigger and heavier than the 18px/1.8 body icons. These sit alone on a dark
+     bar with no label beside them, and the gear packs twelve strokes into that
+     box -- at body weight it reads as a smudge rather than a control. */
+  .rail-item .icon { width: 21px; height: 21px; stroke-width: 2; }
 
-  .rail-item.active { background: var(--primary); color: var(--primary-foreground); }
-  .rail-item:hover:not(.active) { color: var(--foreground); background: var(--secondary); }
+  .rail-item.active { background: var(--primary); color: #fff; }
+  .rail-item:hover:not(.active) { color: #fff; background: rgba(255, 255, 255, 0.1); }
   .rail-spacer { flex: 1; }
 
+  .step-header-actions { display: flex; align-items: center; gap: 8px; }
+  .step-header-actions .btn { padding: 9px 18px; font-size: 0.9rem; }
   .history-sidebar {
     flex: 0 0 230px;
     border-right: 1px solid var(--border);
@@ -179,29 +162,52 @@
 
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
-  /* ---------------- TOPBAR ---------------- */
+  .step-header { flex: 0 0 auto; padding: 16px 22px 16px; border-bottom: 1px solid var(--border); }
 
-  .topbar {
-    flex: 0 0 auto; height: 52px;
-    display: flex; align-items: center; gap: 12px;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--background);
+  .step-header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+
+  .step-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); }
+
+
+  /* Was capped at 760px, which left a wide window mostly empty while the one
+     thing the user is watching sat small in the corner. It fills the width now,
+     with a ceiling so the dots do not drift absurdly far apart on a huge screen. */
+  .stage-track { margin-top: 16px; display: flex; align-items: flex-start; justify-content: space-between; position: relative; max-width: 1400px; }
+  .stage-dot { flex-shrink: 0; }
+  .stage-label { font-size: 0.78rem; }
+  .stage-track::before { content: ""; position: absolute; top: 17px; left: 22px; right: 22px; height: 2px; background: var(--border); z-index: 0; }
+  .stage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 1; text-align: center; }
+  .stage-dot { width: 34px; height: 34px; border-radius: 50%; background: var(--background); border: 2px solid var(--border); color: var(--muted-foreground); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; }
+  .stage.done .stage-dot { background: var(--success); border-color: var(--success); color: #fff; }
+  .stage.active .stage-dot { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--focus-ring); }
+  /* Only while a job runs: a dot left pulsing after the dub finished would
+     say "still working" about a job that is over. */
+  @keyframes stage-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.45); }
+    70%  { box-shadow: 0 0 0 8px rgba(124, 58, 237, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
   }
-  .topbar-back { border: none; background: none; cursor: pointer; font: inherit;
-    font-size: 1.5rem; line-height: 1; padding: 0 4px; color: var(--muted-foreground); }
-  .topbar-back:hover { color: var(--foreground); }
-  .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-  .topbar-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .topbar-sub { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
-  .topbar-spacer { flex: 1; }
-  .topbar-version { font-size: 11.5px; color: var(--muted-foreground); }
+  .stage-track.running .stage.active .stage-dot { animation: stage-pulse 1.8s ease-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .stage-track.running .stage.active .stage-dot { animation: none; }
+  }
+  /* The bar used to carry the failure colour; the dot that stopped does now. */
+  .stage.failed .stage-dot { background: var(--destructive); border-color: var(--destructive); color: #fff; box-shadow: none; }
+  .stage.failed .stage-label { color: var(--destructive); font-weight: 700; }
+  .stage-label { font-size: 0.64rem; color: var(--muted-foreground); }
+  .stage.active .stage-label, .stage.done .stage-label { color: var(--foreground); font-weight: 600; }
 
-  /* The one job-wide message line (a credit warning, or why a dub failed).
-     It hangs under the top bar rather than inside a screen, so the reason is
-     readable whichever screen is showing. */
-  #jobNotice { margin-top: 0; padding: 6px 22px; }
+  /* The only number that moves inside a long stage -- the dots say which
+     step, this says how far into it. */
+  .stage-pct { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--muted-foreground); }
+  .stage-status.failed { color: var(--destructive); font-weight: 700; font-size: 0.98rem; }
+
+  .stage-status-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; max-width: 1400px; }
+  .stage-status { font-size: 0.95rem; }
+  .stage-row-spacer { flex: 1; }
+  .stage-status { font-size: 0.82rem; color: var(--primary); }
+  .btn-cancel { margin-left: auto; }
 
   .job-notice { font-size: 0.82rem; color: var(--warning); margin-top: 6px; }
   /* Red, not amber: amber blended into the surrounding hint text and the
@@ -223,15 +229,18 @@
   details.raw-log summary { cursor: pointer; font-size: 0.76rem; color: var(--muted-foreground); list-style: none; display: flex; align-items: center; gap: 4px; }
   .log-box { margin-top: 8px; background: var(--secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 0.72rem; color: var(--muted-foreground); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; max-height: 140px; overflow-y: auto; }
 
-  /* ---------------- Screens ---------------- */
-  /* Exactly one of the three is on screen; showScreen() toggles `hidden`. */
+  .jobtabs-wrap { position: relative; flex: 1; min-height: 0; }
 
-  .work { flex: 1; min-height: 0; position: relative; background: var(--canvas); }
-  .screen { position: absolute; inset: 0; overflow-y: auto; padding: 16px 22px 22px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 7px 15px; margin: 10px 0 0 22px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; color: var(--muted-foreground); background: var(--secondary); cursor: pointer; user-select: none; border: none; }
+  .pill.active { background: var(--primary); color: #fff; }
+  .pill.locked { color: #b9b9b9; cursor: default; }
 
-  /* The done screen is a column: the video pinned on top, the script table
-     below taking the rest of the height and scrolling on its own. */
-  #screen-done { display: flex; flex-direction: column; }
+  .tab-panel { position: absolute; top: 46px; left: 0; right: 0; bottom: 0; overflow-y: auto; display: none; padding: 16px 22px 22px; }
+  .tab-panel.active { display: block; }
+  /* Export is a column: the video pinned on top, the script table below taking
+     the rest of the height and scrolling on its own. Three columns (video,
+     script, assistant) left the script too narrow to read (2026-08-25). */
+  #p-export.active { display: flex; flex-direction: column; }
   #exportContent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
   h2 { margin: 0 0 3px; font-size: 0.98rem; }
@@ -417,16 +426,13 @@
 </style>
 
 <div class="app">
-  <!-- ============ RAIL ============ -->
+  <!-- ============ Rail ============ -->
   <div class="rail">
     <button class="rail-item active" title="Dub" type="button" aria-label="Dub">
-      <!-- Speech: a waveform with a pen across it -- what this app does to a
-           video, rather than the microphone every other app uses. -->
-      <svg class="icon" viewBox="0 0 24 24"><path d="M3 12h2"/><path d="M7 8v8"/><path d="M11 5v14"/><path d="M15 9v6"/><path d="M14.5 21l5.5-5.5 1.8 1.8L16.3 22.8H14.5z"/><path d="M18.6 16.9l1.8 1.8"/></svg>
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
     </button>
-    <button class="rail-item" id="historyToggle" title="Projects" type="button" aria-label="Toggle projects">
-      <!-- Projects: a folder -->
-      <svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    <button class="rail-item" id="historyToggle" title="Recent jobs" type="button" aria-label="Toggle recent jobs">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
     </button>
     <div class="rail-spacer"></div>
     <button class="rail-item" id="settingsBtn" title="Settings" type="button" aria-label="Open settings">
@@ -440,36 +446,54 @@
     </button>
   </div>
 
-  <!-- ============ PROJECTS SIDEBAR ============ -->
+  <!-- ============ Recent jobs sidebar ============ -->
   <!-- Collapsed on launch: the list is a way back to an old job, not something
        needed to start one, and it was eating width from the screen the user is
        actually looking at. The rail icon opens it. -->
   <div class="history-sidebar collapsed" id="historySidebar">
     <div class="history-head">Recent jobs</div>
-    <div id="historyList"><div class="history-empty">No jobs yet -- drop a video to start one.</div></div>
+    <div id="historyList"><div class="history-empty">No jobs yet -- start one from the Upload tab.</div></div>
   </div>
 
-  <!-- ============ MAIN ============ -->
+  <!-- ============ Main ============ -->
   <div class="main">
-    <!-- ============ TOPBAR ============ -->
-    <!-- The app's only chrome: who we are (or which job is open), what it is
-         doing, and the one or two buttons that apply right now. -->
-    <div class="topbar" id="topbar">
-      <button class="topbar-back" id="topbarBack" type="button" aria-label="Back" hidden>&lsaquo;</button>
-      <div class="topbar-titles">
-        <span class="topbar-title" id="topbarTitle">PersoDub</span>
-        <span class="topbar-sub" id="topbarSub">Local dubbing</span>
-      </div>
-      <span class="topbar-spacer"></span>
-      <span class="topbar-version" id="topbarVersion"></span>
-      <button class="btn btn-ghost" id="cancelBtn" type="button" hidden>Cancel</button>
-      <button class="btn btn-primary" id="exportBtn" type="button" hidden>Export</button>
-    </div>
-    <div class="job-notice" id="jobNotice" style="display:none"></div>
+    <div class="step-header">
+      <div class="step-header-top">
+        <div class="step-title">Dubbing progress</div>
 
-    <main class="work" id="work">
-      <!-- ============ HOME ============ -->
-      <section class="screen" id="screen-home">
+      </div>
+
+      <!-- The 6-stage tracker is the progress display now: the filling bar
+           that used to sit above it said the same thing a second time, and
+           the two together read as clutter. The active dot pulses. -->
+      <div class="stage-track" id="stageTrack">
+        <div class="stage" data-stage="1"><div class="stage-dot">1</div><div class="stage-label">Separate</div></div>
+        <div class="stage" data-stage="2"><div class="stage-dot">2</div><div class="stage-label">Transcribe</div></div>
+        <div class="stage" data-stage="3"><div class="stage-dot">3</div><div class="stage-label">Translate</div></div>
+        <div class="stage" data-stage="4"><div class="stage-dot">4</div><div class="stage-label">Voice</div></div>
+        <div class="stage" data-stage="5"><div class="stage-dot">5</div><div class="stage-label">Check</div></div>
+        <div class="stage" data-stage="6"><div class="stage-dot">6</div><div class="stage-label">Build</div></div>
+      </div>
+      <div class="stage-status-row">
+        <div class="stage-status" id="stageStatus">Add a video to get started.</div>
+        <span class="stage-pct" id="stagePct"></span>
+        <span class="stage-row-spacer"></span>
+        <button class="btn btn-secondary btn-cancel" id="cancelBtn" type="button" style="display:none">Cancel</button>
+        <button class="btn btn-primary" id="newJobBtn" type="button" style="display:none">New job</button>
+      </div>
+      <div class="job-notice" id="jobNotice" style="display:none"></div>
+      <details class="raw-log" id="rawLogDetails">
+        <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
+        <div class="log-box" id="logBox"></div>
+      </details>
+    </div>
+
+    <div class="jobtabs-wrap">
+      <button class="pill active" data-tab="upload" type="button">1 Upload</button>
+      <button class="pill locked" data-tab="export" type="button" disabled>2 Export</button>
+
+      <!-- ============ Tab 1: Upload ============ -->
+      <div class="tab-panel active" id="p-upload" data-panel="upload">
         <h2>Add your video</h2>
         <p class="panel-desc">Drop a video file, or paste a link, then choose the basics below.</p>
 
@@ -581,35 +605,22 @@
             <button class="btn btn-primary" id="startBtn" type="button">Start dubbing</button>
           </div>
         </div>
-      </section>
+      </div>
 
-      <!-- ============ RUNNING ============ -->
-      <!-- The progress card lands here in a later step; for now the running
-           job's raw log is all this screen carries. -->
-      <section class="screen" id="screen-running" hidden>
-        <details class="raw-log" id="rawLogDetails">
-          <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
-          <div class="log-box" id="logBox"></div>
-        </details>
-      </section>
-
-      <!-- ============ DONE ============ -->
-      <section class="screen" id="screen-done" hidden>
+      <!-- ============ Tab 2: Script ============ -->
+      <!-- ============ Tab 2: Export ============ -->
+      <div class="tab-panel" id="p-export" data-panel="export">
         <h2>Export</h2>
         <p class="panel-desc">Your finished video and subtitles.</p>
         <div id="exportContent">
           <div class="export-empty">Nothing to export yet.</div>
         </div>
-      </section>
-    </main>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- ============ NEW-PROJECT DIALOG ============ -->
-<!-- Empty for now: the dialog that opens once a video or link is ready lands
-     here in a later step. -->
-
-<!-- ============ SETTINGS ============ -->
+<!-- ============ Settings modal ============ -->
 <div class="modal-overlay" id="settingsOverlay">
   <div class="modal">
     <div class="modal-head">
@@ -671,7 +682,7 @@
         <h3>Storage</h3>
         <div class="settings-row">
           <label>Output location</label>
-          <input type="text" value="Managed automatically per job -- download it from the finished job screen." readonly>
+          <input type="text" value="Managed automatically per job -- download from the Export tab when a job finishes." readonly>
           <div class="settings-hint">A configurable save-to folder isn't available yet -- this field is read-only.</div>
         </div>
       </div>
@@ -791,7 +802,7 @@
   </div>
 </div>
 
-<!-- ============ AGENT STRIP (still a right-side panel until it moves) =====
+<!-- ============ Dub Agent panel ============
      A chat panel over whichever CLI agent the user already subscribes to.
      Deliberately bolted on beside the app rather than woven through it: delete
      this block and the script tag below it, and the app is exactly what it was.
@@ -812,10 +823,10 @@
     height: 42px; padding: 0 18px; border: none; border-radius: 11px; cursor: pointer;
     background: var(--primary); color: #fff;
     font: inherit; font-size: 0.85rem; font-weight: 600; white-space: nowrap;
-    box-shadow: 0 5px 16px rgba(var(--primary-rgb), .40);
+    box-shadow: 0 5px 16px rgba(124, 58, 237, .40);
     transition: transform .12s ease, box-shadow .12s ease; }
   .chat-open:hover { transform: translateY(-1px);
-    box-shadow: 0 10px 26px rgba(var(--primary-rgb), .52); }
+    box-shadow: 0 10px 26px rgba(124, 58, 237, .52); }
   body:not(.assistant-collapsed) .chat-open { display: none; }
   .assistant { position: fixed; top: 0; right: 0; bottom: 0; width: var(--assistant-w);
     background: var(--background); border-left: 1px solid var(--border);
@@ -1000,6 +1011,7 @@ for (const [selId, defCode] of [["sourceLangSelect", null], ["targetLangSelect",
 
 // ---------------- App state ----------------
 const state = {
+  tab: "upload",
   source: "upload",   // "upload" | "link"
   videoFile: null,
   linkProbe: null,    // {url, title, duration_sec, thumbnail_url} once a link probes OK
@@ -1253,28 +1265,18 @@ async function applyEngineAvailabilityToForm() {
 }
 applyEngineAvailabilityToForm();
 
-// ---------------- Screens and top bar ----------------
-// Three sections live inside <main class="work"> and exactly one is shown.
-// Everything else in the app changes screens through showScreen() alone.
-function showScreen(name) {
-  for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== `screen-${name}`;
-  document.body.dataset.screen = name;   // the assistant reads this
+// ---------------- Tabs ----------------
+function switchTab(name) {
+  const pill = document.querySelector(`.pill[data-tab="${name}"]`);
+  if (pill && pill.disabled) return;
+  state.tab = name;
+  document.querySelectorAll(".pill").forEach((p) => p.classList.toggle("active", p.dataset.tab === name));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === name));
 }
+document.querySelectorAll(".pill").forEach((p) => p.addEventListener("click", () => switchTab(p.dataset.tab)));
 
-// The top bar carries the whole state of the app: what is open, what it is
-// doing, and the one or two buttons that apply right now.
-function setTopbar({ title, subtitle = "", running = false, done = false, back = false }) {
-  $("topbarTitle").textContent = title;
-  $("topbarSub").textContent = subtitle;
-  $("topbarBack").hidden = !back;
-  $("cancelBtn").hidden = !running;
-  $("exportBtn").hidden = !done;
-}
-
-// The resting state: no job open, the first screen showing.
-function showHome() {
-  showScreen("home");
-  setTopbar({ title: "PersoDub", subtitle: "Local dubbing" });
+function unlockTabs() {
+  document.querySelectorAll(".pill.locked").forEach((p) => { p.disabled = false; p.classList.remove("locked"); });
 }
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
@@ -1311,6 +1313,9 @@ function setVideoFile(file) {
     $("uploadHint").textContent = "Click to choose a different video";
     info.textContent = `${file.name} (${formatBytes(file.size)})`;
     info.classList.add("shown");
+    if (!state.jobId || (state.job && state.job.status !== "running" && state.job.status !== "cancelling")) {
+      $("stageStatus").textContent = "Video loaded. Press Start dubbing when ready.";
+    }
   } else {
     $("uploadTitle").textContent = "Drop your video here";
     $("uploadHint").textContent = DEFAULT_UPLOAD_HINT;
@@ -1441,29 +1446,45 @@ $("linkInput").addEventListener("input", () => {
   }, 400);
 });
 
-// ---------------- The open job in the top bar ----------------
-// The bar carries the job's name and the one line that says where it is. The
-// step-by-step display of the same thing lives on the running screen.
+// ---------------- Progress rendering ----------------
+function renderProgress(progress) {
+  const status = state.job ? state.job.status : null;
+  const failed = status === "error";
+  const running = status === "running" || status === "cancelling";
 
-// What the user called this job: the history row remembers what was dropped
-// in; a job resumed after a restart falls back to the server's folder name.
-function jobLabel(job) {
-  const entry = loadHistory().find((j) => j.jobId === job.id);
-  return (entry && entry.fileName) || job.project || "Dubbing";
-}
+  document.querySelectorAll(".stage").forEach((el) => {
+    const n = Number(el.dataset.stage);
+    const current = n === progress.stage;
+    el.classList.toggle("done", n < progress.stage);
+    el.classList.toggle("active", current);
+    // The stage that stopped wears the failure, since no bar carries it now.
+    el.classList.toggle("failed", current && failed);
+    el.querySelector(".stage-dot").innerHTML = n < progress.stage
+      ? '<svg class="icon icon-sm" viewBox="0 0 24 24" style="stroke:#fff"><path d="M4 12l5 5L20 6"/></svg>'
+      : String(n);
+  });
+  // Pulse only while there is something to wait for.
+  $("stageTrack").classList.toggle("running", running);
 
-// One short line. The WHY of a failure renders separately (renderNotices) --
-// four competing failure messages meant the user read none of them
-// (feedback 2026-08-06).
-function jobStatusLine(job, progress) {
-  if (job.status === "cancelling") return "Cancelling…";
-  if (job.status === "cancelled") return "Cancelled";
-  if (job.status === "error") return "Dubbing failed";
-  if (job.status !== "running") return "Done";
+  // Inside one long stage the dots do not move, so this is the only thing
+  // that tells a waiting user the machine is still getting somewhere.
+  $("stagePct").textContent = (running && progress.percent > 0) ? `${progress.percent}%` : "";
+
   const plain = progress.plainLabel || progress.label;
-  return progress.stage > 0
-    ? `Step ${progress.stage} of ${progress.total}: ${plain}…`
-    : `${plain}…`;
+  let text;
+  if (status === "cancelling") text = "Cancelling…";
+  else if (status === "cancelled") text = "Cancelled";
+  else if (failed) {
+    // One short headline; the WHY renders directly below it (renderNotices).
+    // Step numbers and "see Export" pointers made four competing failure
+    // messages -- the user read none of them (feedback 2026-08-06).
+    text = "❌ Dubbing failed.";
+  }
+  else if (status === "running") text = progress.stage > 0 ? `Step ${progress.stage} of ${progress.total}: ${plain}…` : `${plain}…`;
+  else text = plain;
+  $("stageStatus").textContent = text;
+  $("stageStatus").classList.toggle("failed", failed);
+  $("newJobBtn").style.display = (status && status !== "running" && status !== "cancelling") ? "" : "none";
 }
 
 // --- #10: reset everything for a fresh job without restarting the app ---
@@ -1474,15 +1495,22 @@ function resetForNewJob() {
   delete document.body.dataset.jobId;
   videoInput.value = ""; // otherwise re-picking the same file fires no change event
   setVideoFile(null);
+  $("stagePct").textContent = "";
+  $("stageTrack").classList.remove("running");
+  document.querySelectorAll(".stage").forEach((el, i) => {
+    el.classList.remove("done", "active", "failed");
+    el.querySelector(".stage-dot").textContent = String(i + 1);
+  });
+  $("stageStatus").textContent = "Add a video to get started.";
+  $("stageStatus").classList.remove("failed");
+  $("newJobBtn").style.display = "none";
   $("jobNotice").style.display = "none";
   $("formError").textContent = "";
   $("exportContent").innerHTML = '<div class="export-empty">Nothing to export yet.</div>';
   updateCancelButton();
-  showHome();
+  switchTab("upload");
 }
-// The back arrow is the way out of a finished job -- the same "start another
-// one" the New job button used to be, in the place a back arrow belongs.
-$("topbarBack").addEventListener("click", resetForNewJob);
+$("newJobBtn").addEventListener("click", resetForNewJob);
 
 function renderLog(job) {
   $("logBox").textContent = (job.logs || []).join("\n");
@@ -1572,9 +1600,17 @@ $("creditOverlay").addEventListener("click", (e) => { if (e.target === $("credit
 function updateCancelButton() {
   const btn = $("cancelBtn");
   const status = state.job ? state.job.status : null;
-  btn.hidden = status !== "running" && status !== "cancelling";
-  btn.disabled = status === "cancelling";
-  btn.textContent = status === "cancelling" ? "Cancelling…" : "Cancel";
+  if (status === "running") {
+    btn.style.display = "";
+    btn.disabled = false;
+    btn.textContent = "Cancel";
+  } else if (status === "cancelling") {
+    btn.style.display = "";
+    btn.disabled = true;
+    btn.textContent = "Cancelling…";
+  } else {
+    btn.style.display = "none";
+  }
 }
 
 $("cancelBtn").addEventListener("click", async () => {
@@ -1605,7 +1641,7 @@ function removeHistory(jobId) {
   if (state.jobId === jobId) {
     state.jobId = null;
     state.pollGeneration += 1;
-    showHome();
+    switchTab("upload");
   }
   renderHistory();
 }
@@ -1618,7 +1654,7 @@ function renderHistory() {
   const list = loadHistory();
   const container = $("historyList");
   if (list.length === 0) {
-    container.innerHTML = '<div class="history-empty">No jobs yet -- drop a video to start one.</div>';
+    container.innerHTML = '<div class="history-empty">No jobs yet -- start one from the Upload tab.</div>';
     return;
   }
   container.innerHTML = "";
@@ -1679,6 +1715,8 @@ async function resumeJob(jobId) {
   state.jobId = jobId;
   state.pollGeneration += 1;
   const myGeneration = state.pollGeneration;
+  unlockTabs();
+  switchTab("export");
   try {
     const job = await (await fetch(`/api/dub/jobs/${jobId}`)).json();
     if (job.detail) throw new Error("This job is no longer available (server may have restarted).");
@@ -1687,9 +1725,7 @@ async function resumeJob(jobId) {
       runPollLoop(jobId, myGeneration);
     }
   } catch (e) {
-    // Nothing to show: fall back to the first screen with the reason on it.
-    showHome();
-    $("formError").textContent = e.message;
+    $("stageStatus").textContent = e.message;
   }
 }
 
@@ -1741,9 +1777,9 @@ $("startBtn").addEventListener("click", async () => {
     const myGeneration = state.pollGeneration;
 
     const label = state.source === "link" ? state.linkProbe.title : state.videoFile.name;
+    unlockTabs();
+    switchTab("export");
     upsertHistory({ jobId, fileName: label, lastStatus: "running", metaText: "Processing…" });
-    showScreen("running");
-    setTopbar({ title: label, subtitle: "Starting…", running: true });
     runPollLoop(jobId, myGeneration);
   } catch (e) {
     if (!showIfOutOfSpace(e)) $("formError").textContent = errorText(e);
@@ -1788,23 +1824,13 @@ async function handleJobUpdate(job) {
   // they have no way of knowing.
   document.body.dataset.jobId = job.id;
   const progress = parseProgress(job.logs);
-  const running = job.status === "running" || job.status === "cancelling";
-  showScreen(running ? "running" : "done");
-  setTopbar({
-    title: jobLabel(job),
-    subtitle: jobStatusLine(job, progress),
-    running,
-    done: job.status === "done",
-    // Only once the job is over: going back mid-dub would drop the view of a
-    // job that is still running.
-    back: !running,
-  });
+  renderProgress(progress);
   renderLog(job);
   renderNotices(job);
   maybeShowCreditModal(job);
   updateCancelButton();
 
-  if (running) {
+  if (job.status === "running" || job.status === "cancelling") {
     renderExportRunning(progress);
     return;
   }
@@ -2134,15 +2160,14 @@ function renderExportError(job) {
   const el = $("exportContent");
   const cancelled = job.status === "cancelled";
   const logsTail = (job.logs || []).slice(-6).join("\n");
-  // No second red box here: the failure story lives in ONE place, at the top
-  // of the screen (the top bar's status line + the renderNotices reason).
+  // No second red box here: the failure story lives in ONE place, under the
+  // progress steps (stageStatus headline + renderNotices reason).
   el.innerHTML = `
-    <div class="export-empty">${cancelled ? "This dubbing job was cancelled." : "Dubbing didn't finish. The reason is at the top of the screen."}</div>
+    <div class="export-empty">${cancelled ? "This dubbing job was cancelled." : "Dubbing didn't finish. The reason is under the progress steps."}</div>
     <div class="log-box">${escapeHtml(logsTail)}</div>`;
 }
 
 renderHistory();
-showHome();
 </script>
 
 <!-- The assistant's own script, kept apart from the app's so the whole feature
