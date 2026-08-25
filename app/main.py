@@ -2,6 +2,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import uuid
 from datetime import date
 from typing import List, Optional
@@ -548,6 +549,18 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
     )
 
 
+def _cut_video(path: str, start: float, end: float) -> None:
+    """Keep only [start, end] of the video, in place. Re-encodes so the cut is
+    exact (a copy-cut lands on the nearest keyframe, seconds away)."""
+    tmp = path + ".cut.mp4"
+    r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+                        "-i", path, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", tmp],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError("Could not trim the video: " + r.stderr[-200:])
+    os.replace(tmp, path)
+
+
 @app.post("/api/dub/start")
 def dub_start(
     video: Optional[UploadFile] = File(None),
@@ -562,6 +575,8 @@ def dub_start(
     n_takes: Optional[int] = Form(None),
     source_language_code: Optional[str] = Form(None),
     project: Optional[str] = Form(None),
+    trim_start: Optional[float] = Form(None),
+    trim_end: Optional[float] = Form(None),
 ):
     """Start dubbing by uploading a video (+ optional subtitles) from the screen.
 
@@ -575,7 +590,15 @@ def dub_start(
     PERSO_API_KEY is configured, else local Whisper. A Perso failure FAILS the
     job with an actionable message (no silent local substitute — the engine was
     chosen for a reason); pick Whisper explicitly for the free offline path.
+    trim_start/trim_end = dub only these seconds of the video. Both or neither:
+    the video is cut down to that part and the cut IS this job's original.
     """
+    # Half a range means nothing, and a backwards one would produce an empty
+    # video minutes later -- both are caught here, before anything is saved.
+    if (trim_start is None) != (trim_end is None):
+        raise HTTPException(400, "Send both trim_start and trim_end, or neither.")
+    if trim_start is not None and not (0 <= trim_start < trim_end):
+        raise HTTPException(400, "The trim must start at 0 seconds or later and end after it starts.")
     # Exactly one source. Accepting both would silently pick a winner, and the
     # user would watch the wrong video get dubbed.
     source_url = (source_url or "").strip() or None
@@ -641,6 +664,11 @@ def dub_start(
     if has_upload:
         with open(video_path, "wb") as f:
             shutil.copyfileobj(video.file, f)
+        # Cut before the job starts, so everything downstream (and the running
+        # screen's original) only ever sees the part the user picked. A link
+        # has nothing to cut yet -- that happens after the download, below.
+        if trim_start is not None:
+            _cut_video(video_path, trim_start, trim_end)
 
     srt_path = None
     if srt is not None and srt.filename:
@@ -682,6 +710,8 @@ def dub_start(
                 source_url, video_path, log=log,
                 cancel_check=lambda: job_store.is_cancel_requested(jid),
             )
+            if trim_start is not None:
+                _cut_video(video_path, trim_start, trim_end)
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,

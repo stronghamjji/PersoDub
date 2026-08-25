@@ -259,6 +259,13 @@ test("buildDubFormData: same-language guard does not fire when source is auto (e
   );
 });
 
+test("buildDubFormData sends trim_start/trim_end only when a trim is given", () => {
+  const fd = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", trim: { start: 2, end: 8 } });
+  assert.equal(fd.get("trim_start"), "2"); assert.equal(fd.get("trim_end"), "8");
+  const fd2 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko" });
+  assert.equal(fd2.get("trim_start"), null);
+});
+
 // --- migrateStoredSettings: one-time stale-"fast" default migration -------
 test("migrateStoredSettings: implicit 'fast' (pre-migration) is dropped and the marker is set", () => {
   const out = migrateStoredSettings({ defaultQualityMode: "fast" });

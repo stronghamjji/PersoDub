@@ -57,6 +57,7 @@ export function qualityModeToNTakes(qualityMode) {
  * @param {"auto"|"gemma"|"gemini"} [opts.translateEngine] - advanced: translation engine
  * @param {File|Blob} [opts.srt] - advanced: pre-translated subtitles (used as-is)
  * @param {File|Blob} [opts.sourceSrt] - advanced: source-language script (translated instead of STT)
+ * @param {{start: number, end: number}} [opts.trim] - dub only this part of the video, in seconds
  * @returns {FormData}
  */
 export function buildDubFormData(opts) {
@@ -103,6 +104,12 @@ export function buildDubFormData(opts) {
   // only learns it after the download (app/source_fetch.py's fetch returns
   // nothing). Omitted, the server falls back to the filename or the URL.
   if (opts.project) fd.append("project", opts.project);
+  // A chosen part of the video, in seconds. Both ends or neither: the server
+  // rejects one alone, because half a range has no meaning.
+  if (opts.trim) {
+    fd.append("trim_start", String(opts.trim.start));
+    fd.append("trim_end", String(opts.trim.end));
+  }
 
   return fd;
 }

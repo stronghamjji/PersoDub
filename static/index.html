@@ -77,6 +77,9 @@
     --thumb-foreground: #fafafa;
     --thumb-foreground-dim: rgba(255, 255, 255, 0.75);
     --thumb-ring: rgba(255, 255, 255, 0.28);
+    /* The trim bar's empty track -- a touch darker than --secondary so the
+       hatching over it stays readable. */
+    --trim-track: #f1f1f4;
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
@@ -516,8 +519,38 @@
     background: var(--thumb-badge); color: var(--primary-foreground);
     border-radius: var(--radius-sm); font-family: inherit; font-size: 0.72rem;
     text-decoration: underline; cursor: pointer; }
-  /* Filled in by the trim step; an empty box must not leave a gap behind. */
+  /* Filled in by renderTrim(); a link (no local file to scrub) never gets one,
+     and an empty box must not leave a gap behind. */
   .trim:empty { display: none; }
+  .trim { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
+  .trim-row { display: flex; align-items: center; gap: 10px; font-size: 0.78rem; }
+  .trim-play { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+    border: 1.5px solid var(--primary-line); background: var(--background); color: var(--primary);
+    display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+  /* Purple while that part is actually playing -- the only feedback there is,
+     since the video itself is muted. */
+  .trim-play.playing { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  .trim-play svg { width: 18px; height: 18px; margin-left: 2px; fill: currentColor;
+    stroke: currentColor; stroke-width: 3; stroke-linejoin: round; }
+  .trim-label { font-weight: 600; }
+  .trim-read { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .trim-bar { position: relative; height: 28px; border-radius: var(--radius-sm); background: var(--trim-track); overflow: hidden; }
+  /* Hatched = not being dubbed. */
+  .trim-hatch { position: absolute; top: 0; bottom: 0;
+    background: repeating-linear-gradient(135deg, var(--border) 0 4px, var(--trim-track) 4px 8px); }
+  .trim-sel { position: absolute; top: 0; bottom: 0; border: 2px solid var(--primary);
+    border-radius: var(--radius-sm); background: rgba(var(--primary-rgb), 0.10); }
+  /* Two whole-width sliders stacked on the bar: dragging comes free, and the
+     painted layers above are positioned with the same 10px-thumb maths. Only
+     the thumbs take the mouse, so each handle stays grabbable over the other's
+     track. */
+  .trim-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+    -webkit-appearance: none; appearance: none; background: none; pointer-events: none; }
+  .trim-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; pointer-events: auto;
+    width: 10px; height: 28px; border: none; border-radius: 4px; background: var(--primary); cursor: ew-resize; }
+  .trim-range:focus { outline: none; }
+  .trim-range:focus-visible::-webkit-slider-thumb { box-shadow: var(--focus-ring); }
   .option-grid.two { grid-template-columns: 1fr 1fr; }
   /* A whole-width bordered row rather than a link, so it reads as the lid on
      everything the user does not normally have to open. */
@@ -1380,9 +1413,116 @@ function fmtClock(sec) {
     .map((n) => String(n).padStart(2, "0")).join(":");
 }
 
-// The trim bar is drawn in a later step; the metadata handler below calls this
-// as soon as a video's length is known, so it has to exist from now on.
-function renderTrim() {}
+// 00:00:02.0 -- the same clock plus tenths, which is the unit the trim bar
+// works in (its sliders step by 0.1 s).
+function fmtClockTenths(sec) {
+  // Counted in whole tenths first: 0.3 is really 0.29999... in binary, and
+  // taking the fraction apart by hand would print it as 0.2.
+  const tenths = Math.round(Math.max(0, Number(sec) || 0) * 10);
+  return `${fmtClock(Math.floor(tenths / 10))}.${tenths % 10}`;
+}
+
+// Plays only [start, end] of a video and stops there. Shared: the trim bar
+// previews the chosen part with it, and the finished screen plays one line.
+// One range at a time per video -- a second press replaces the first press's
+// stop-listener instead of racing it.
+const rangeStoppers = new WeakMap();
+function playRange(video, start, end) {
+  const previous = rangeStoppers.get(video);
+  if (previous) video.removeEventListener("timeupdate", previous);
+  const stop = () => {
+    if (video.currentTime < end) return;
+    video.pause();
+    video.removeEventListener("timeupdate", stop);
+    rangeStoppers.delete(video);
+  };
+  rangeStoppers.set(video, stop);
+  video.addEventListener("timeupdate", stop);
+  video.currentTime = start;
+  return video.play();
+}
+
+// The shortest part worth dubbing; also what keeps the two handles from
+// crossing over each other.
+const TRIM_MIN_SPAN = 0.5;
+// What one nudge of a handle is worth -- the sliders' step, in seconds.
+const TRIM_STEP = 0.1;
+// The play button's purple-while-playing state is driven by the video, whose
+// listeners outlive the box; kept here so re-drawing swaps them rather than
+// piling a second set on.
+let trimPlayState = null;
+
+// Draws the trim box: play button, readout, and a bar with a handle at each
+// end. Called once a local file's length is known (a link has none to scrub).
+function renderTrim(duration) {
+  const box = $("trimBox");
+  // No usable length (metadata still loading, or a stream): draw nothing
+  // rather than a bar that lies. The loadedmetadata handler calls back.
+  if (!Number.isFinite(duration) || duration < 1) { box.innerHTML = ""; return; }
+
+  box.innerHTML = `
+    <div class="trim-row">
+      <button class="trim-play" id="trimPlay" type="button" title="Play the selected part" aria-label="Play the selected part">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
+      </button>
+      <span class="trim-label">Trim</span>
+      <span class="trim-read" id="trimRead"></span>
+    </div>
+    <div class="trim-bar">
+      <div class="trim-hatch" id="trimHatchStart" style="left: 0"></div>
+      <div class="trim-hatch" id="trimHatchEnd" style="right: 0"></div>
+      <div class="trim-sel" id="trimSel"></div>
+      <input type="range" class="trim-range" id="trimStart" min="0" step="${TRIM_STEP}" aria-label="Trim start">
+      <input type="range" class="trim-range" id="trimEnd" min="0" step="${TRIM_STEP}" aria-label="Trim end">
+    </div>`;
+
+  const startInput = $("trimStart"), endInput = $("trimEnd");
+  startInput.max = endInput.max = String(duration);
+  startInput.value = "0";
+  endInput.value = String(duration);
+
+  // Where a slider's thumb centre sits: half a thumb in from each edge, which
+  // is exactly how the browser lays a range out. The painted layers use the
+  // same formula so bar and handles never drift apart.
+  const at = (sec) => `calc(5px + (100% - 10px) * ${sec / duration})`;
+
+  function paint() {
+    const start = Number(startInput.value), end = Number(endInput.value);
+    $("trimHatchStart").style.width = at(start);
+    $("trimHatchEnd").style.left = at(end);
+    $("trimSel").style.left = at(start);
+    $("trimSel").style.width = `calc((100% - 10px) * ${(end - start) / duration})`;
+    $("trimRead").textContent =
+      `${fmtClockTenths(start)} – ${fmtClockTenths(end)} · ${(end - start).toFixed(1)}s of ${duration.toFixed(1)}s`;
+    // Both handles parked at the ends is not a trim -- send no range at all,
+    // so the server keeps the file exactly as uploaded. Within one step of the
+    // end counts as the end: a slider snaps to its 0.1 s grid, so a length like
+    // 22.08s can only ever be dragged back to 22.0.
+    const whole = start <= 0 && end >= duration - TRIM_STEP;
+    if (state.newProject) state.newProject.trim = whole ? null : { start, end };
+  }
+
+  startInput.addEventListener("input", () => {
+    startInput.value = String(Math.min(Number(startInput.value), Number(endInput.value) - TRIM_MIN_SPAN));
+    paint();
+  });
+  endInput.addEventListener("input", () => {
+    endInput.value = String(Math.max(Number(endInput.value), Number(startInput.value) + TRIM_MIN_SPAN));
+    paint();
+  });
+
+  const video = $("projectVideo"), playBtn = $("trimPlay");
+  playBtn.addEventListener("click", () => {
+    playRange(video, Number(startInput.value), Number(endInput.value)).catch(() => {});
+  });
+  if (trimPlayState) {
+    for (const e of ["play", "pause", "ended"]) video.removeEventListener(e, trimPlayState);
+  }
+  trimPlayState = () => playBtn.classList.toggle("playing", !video.paused);
+  for (const e of ["play", "pause", "ended"]) video.addEventListener(e, trimPlayState);
+
+  paint();
+}
 
 // A dropped file is played straight from memory, which costs an object URL --
 // released whenever the dialog lets go of that file.
@@ -1402,6 +1542,9 @@ function openNewProject(source) {
   // A local file can be played and scrubbed; a link only ever has a still.
   v.hidden = !source.file;
   $("projectThumb").style.backgroundImage = "";
+  // The previous video's bar would otherwise sit there until this one's
+  // length is known -- and stay for good behind a link, which has no bar.
+  $("trimBox").innerHTML = "";
   if (source.file) {
     projectObjectUrl = URL.createObjectURL(source.file);
     v.src = projectObjectUrl;
@@ -1928,6 +2071,8 @@ function readOptions() {
     // the server learns nothing from downloading the video. Names the job's
     // folder, so send it along with the job.
     project: np.probe ? np.probe.title : undefined,
+    // The part of the video the trim bar has selected, or null for all of it.
+    trim: np.trim || null,
   };
 }
 

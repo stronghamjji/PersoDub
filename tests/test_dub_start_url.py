@@ -88,3 +88,13 @@ def test_fetch_failure_fails_the_job_with_the_human_message(monkeypatch):
     assert _wait_done(jid) == "error"
     job = client.get(f"/api/dub/jobs/{jid}").json()
     assert "region" in str(job).lower()
+
+
+def test_trim_cuts_the_uploaded_video(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(main, "_cut_video", lambda src, start, end: calls.append((start, end)))
+    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
+    r = client.post("/api/dub/start", files={"video": ("a.mp4", b"0" * 10, "video/mp4")},
+                    data={"language_code": "ko", "language": "Korean", "trim_start": "2.0", "trim_end": "8.0"})
+    assert r.status_code == 200
+    assert calls == [(2.0, 8.0)]
