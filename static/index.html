@@ -85,6 +85,15 @@
     --radius-lg: 12px;
     --focus-ring: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
 
+    /* One colour per speaker, cycled after the fourth. Each is a dot colour, the
+       pale background its chip sits on, and the ink that stays readable on that
+       background. Muted on purpose: four saturated chips down a column of text
+       shout louder than the words they label. */
+    --spk-1: #7B64C8; --spk-1-soft: #EDE7FF; --spk-1-ink: #4B3A8F;
+    --spk-2: #0F766E; --spk-2-soft: #CCFBF1; --spk-2-ink: #115E59;
+    --spk-3: #B4791A; --spk-3-soft: #FBEFD5; --spk-3-ink: #7C5211;
+    --spk-4: #C0587F; --spk-4-soft: #FBE4EE; --spk-4-ink: #8D3A58;
+
     /* The assistant is dark wherever it sits; these are its only colours. */
     --agent-bg: #18181b;
     --agent-box: #27272a;
@@ -240,10 +249,10 @@
   .work { flex: 1; min-height: 0; position: relative; background: var(--canvas); }
   .screen { position: absolute; inset: 0; overflow-y: auto; padding: 16px 22px 22px; }
 
-  /* The done screen is a column: the video pinned on top, the script table
-     below taking the rest of the height and scrolling on its own. */
-  #screen-done { display: flex; flex-direction: column; }
-  #exportContent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  /* The done screen runs edge to edge: two panes divided by a line, and the
+     timeline under them. Its own panes carry the padding. */
+  #screen-done { display: flex; flex-direction: column; padding: 0;
+    background: var(--background); }
 
   /* ---------------- Running: blurred original + progress card ---------------- */
   /* The two halves are one centred group: the source video on the left, out of
@@ -307,7 +316,6 @@
   }
 
   h2 { margin: 0 0 3px; font-size: 0.98rem; }
-  .panel-desc { margin: 0 0 14px; color: var(--muted-foreground); font-size: 0.8rem; }
 
   /* ---------------- Home: headline, drop zone, link field ---------------- */
   /* A fixed 640px column so the two ways in (drop a file, paste a link) sit
@@ -343,8 +351,6 @@
   .link-card .lc-msg { font-size: 0.83rem; color: var(--foreground); margin: 0 0 4px; }
   .link-card .lc-sub { font-size: 0.78rem; color: var(--muted-foreground); margin: 0 0 10px; }
   .link-card .lc-loading { font-size: 0.8rem; color: var(--muted-foreground); }
-  .result-langs { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0; font-size: 0.82rem; color: var(--muted-foreground); }
-  .result-langs b { color: var(--foreground); font-weight: 600; }
 
   /* Auto-update banner: appears only in the desktop shell, only after a new
      version finished downloading. Quiet by design -- no modal, no countdown. */
@@ -398,7 +404,6 @@
   /* ---------------- Script tab ---------------- */
 
   .script-placeholder { color: var(--muted-foreground); font-size: 0.84rem; padding: 30px 0; text-align: center; }
-  .script-table { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .script-row { display: grid; grid-template-columns: 100px 1fr; gap: 14px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
   .script-row:last-child { border-bottom: none; }
   .script-row:nth-child(even):not(.head) { background: #fbfaff; }
@@ -412,71 +417,132 @@
   .voice-summary .icon { color: var(--primary); }
   .note-box { margin-top: 14px; background: var(--accent); border-radius: var(--radius); padding: 10px 13px; font-size: 0.78rem; }
 
-  /* ---------------- Export tab ---------------- */
+  /* ---------------- Done: the script beside the video ---------------- */
+  /* The script is the screen. The video is beside it at a fixed width so the
+     table keeps the room it needs, and the two panes' first rows -- the table's
+     header and the video's tabs -- are both 40px, so the line under them runs
+     unbroken across the whole screen. */
 
-  .result-grid { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-  .video-wrap { flex: 0 0 auto; }
-  /* Cap the player height to the window (portrait videos used to fill the
-     whole viewport and push the download buttons below the fold). */
-  /* Size the player to the video's own shape (portrait stays narrow, landscape
-     wide) instead of forcing full column width -- a 9:16 short inside a forced
-     16:9 box grew black side bars that read as "my video got resized". */
-  .video-wrap video { width: auto; max-width: 100%; max-height: 38vh; object-fit: contain; border-radius: var(--radius); background: #111; display: block; margin: 0 auto; }
-  .video-placeholder { background: #111; border-radius: var(--radius); aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; color: #666; }
-  /* Grow with the window instead of a fixed 320px -- show every line that
-     fits; only scroll when the list is genuinely taller than the screen. */
-  /* The script table: source and translation side by side, with the slot each
-     line has to fit inside. The old list showed the translation alone, which
-     left nothing to check it against. */
-  .script-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  .script-table th { position: sticky; top: 0; background: var(--background);
-    text-align: left; font-weight: 600; font-size: 0.68rem; color: var(--muted-foreground);
-    text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px;
+  .done { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .done-main { flex: 1; min-height: 0; display: flex; }
+  .script-pane { flex: 1; min-width: 0; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border); }
+  .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
     border-bottom: 1px solid var(--border); }
-  .script-table td { padding: 8px 10px; border-bottom: 1px solid var(--border);
-    vertical-align: top; line-height: 1.45; }
-  .script-table tr:last-child td { border-bottom: none; }
-  .sc-n { color: var(--muted-foreground); width: 26px; font-variant-numeric: tabular-nums; }
-  .sc-play { width: 30px; }
-  .sc-listen { border: 1px solid var(--border); background: var(--background);
-    color: var(--primary); border-radius: 50%; width: 24px; height: 24px; cursor: pointer;
-    font-size: 0.62rem; line-height: 1; padding: 0; }
-  .sc-listen:hover { border-color: var(--primary); background: var(--muted, #f1f1f4); }
-  .sc-time { color: var(--primary); font-variant-numeric: tabular-nums;
-    font-size: 0.72rem; white-space: nowrap; width: 92px; }
-  .sc-src { color: var(--muted-foreground); width: 38%; }
-  .sc-dst { color: var(--foreground); }
-  .sc-fit { width: 84px; text-align: right; white-space: nowrap; font-size: 0.7rem; }
+  #scriptBox { flex: 1; min-height: 0; overflow: auto; }
+  .script-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px; border-top: 1px solid var(--border); }
+  .script-head-note { font-size: 0.74rem; color: var(--muted-foreground); }
+  .script-saving { font-size: 0.72rem; color: var(--primary); margin-left: auto; }
+  .script-empty { padding: 30px 14px; text-align: center;
+    color: var(--muted-foreground); font-size: 0.84rem; }
+
+  /* One grid row per line, not a table: the columns have to hold their width
+     down the page whatever a cell contains, and every one of them is a
+     different kind of thing (a number, a chip, a clock, two languages, two
+     round buttons). */
+  /* min-width, so a narrow window scrolls the table sideways instead of
+     squeezing the two text columns down to one character a line. */
+  .sc-row { display: grid; grid-template-columns: 28px 100px 168px 1fr 40px 1fr 56px 44px;
+    gap: 12px; align-items: start; padding: 11px 14px; font-size: 0.84rem;
+    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 700px; }
+  .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
+    align-items: center; position: sticky; top: 0; z-index: 1;
+    background: var(--canvas); font-size: 0.69rem; font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
+  /* The line the video is on right now, so the eye can follow the script. */
+  .sc-row.sc-now { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+  .sc-n { color: var(--muted-foreground); font-variant-numeric: tabular-nums; padding-top: 2px; }
+  .sc-time { color: var(--primary); font-size: 0.75rem; font-variant-numeric: tabular-nums;
+    white-space: nowrap; padding-top: 3px; }
+  .sc-src { color: var(--muted-foreground); min-width: 0; overflow-wrap: anywhere; }
+  .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere; }
+  .sc-len { font-size: 0.75rem; color: var(--muted-foreground); text-align: right;
+    white-space: nowrap; padding-top: 3px; }
   .sc-over { color: var(--destructive); font-weight: 600; }
-  .sc-ok { color: var(--muted-foreground); }
-  .sc-edited td { background: color-mix(in srgb, var(--primary) 7%, transparent); }
-  /* The line the video is on right now. */
-  .sc-now td { background: color-mix(in srgb, var(--primary) 14%, transparent); }
-  .sc-badge { display: inline-block; font-size: 0.66rem; color: var(--primary);
-    border: 1px solid var(--primary); border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+  .sc-acts { display: flex; justify-content: flex-end; }
+
+  /* Who is speaking, in that speaker's colour. (Not ".chip" -- the assistant
+     strip already has one of those, and its style block comes after this one.) */
+  .spk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+    border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+  .spk-chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .spk-1 { background: var(--spk-1-soft); color: var(--spk-1-ink); }
+  .spk-1 i { background: var(--spk-1); }
+  .spk-2 { background: var(--spk-2-soft); color: var(--spk-2-ink); }
+  .spk-2 i { background: var(--spk-2); }
+  .spk-3 { background: var(--spk-3-soft); color: var(--spk-3-ink); }
+  .spk-3 i { background: var(--spk-3); }
+  .spk-4 { background: var(--spk-4-soft); color: var(--spk-4-ink); }
+  .spk-4 i { background: var(--spk-4); }
+
+  /* Play this line in the video; filled while it is the line playing. */
+  .sc-listen { width: 32px; height: 32px; border-radius: 50%; padding: 0;
+    border: 1.5px solid var(--primary-line); background: var(--background);
+    color: var(--primary); display: inline-flex; align-items: center;
+    justify-content: center; cursor: pointer; }
+  .sc-listen:hover { border-color: var(--primary); }
+  .sc-row.sc-now .sc-listen { background: var(--primary); border-color: var(--primary);
+    color: var(--primary-foreground); }
+
+  /* Make this line's voice again. Filled means the words were changed and the
+     voice has not caught up with them yet. */
+  .sc-wave { width: 30px; height: 30px; border-radius: 50%; padding: 0;
+    border: 1.5px solid var(--primary); background: var(--background);
+    color: var(--primary); display: inline-flex; align-items: center;
+    justify-content: center; cursor: pointer; }
+  .sc-wave.stale { background: var(--primary); color: var(--primary-foreground);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.22); }
+  .sc-wave:disabled { opacity: 0.5; cursor: progress; }
+
   /* The script cell is the point of the table: a line you can only read is half
      a tool. Editing here writes to edited.srt, the same file the assistant uses. */
   .sc-dst[contenteditable] { outline: none; border-radius: 4px; padding: 2px 4px;
     margin: -2px -4px; cursor: text; }
-  .sc-dst[contenteditable]:hover { background: var(--muted, #f1f1f4); }
+  .sc-dst[contenteditable]:hover { background: var(--trim-track); }
   .sc-dst[contenteditable]:focus { background: var(--background);
     box-shadow: 0 0 0 2px var(--primary); }
-  .sc-undo { border: none; background: none; color: var(--primary); cursor: pointer;
-    font: inherit; font-size: 0.68rem; padding: 0; margin-left: 6px; }
+  .sc-undo { display: block; margin-top: 3px; border: none; background: none;
+    color: var(--primary); cursor: pointer; font: inherit; font-size: 0.68rem; padding: 0; }
   .sc-undo:hover { text-decoration: underline; }
-  .script-head { display: flex; align-items: center; justify-content: space-between;
-    gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-  .script-head-note { font-size: 0.74rem; color: var(--muted-foreground); }
-  .script-saving { font-size: 0.72rem; color: var(--primary); }
-  .srt-list { border: 1px solid var(--border); border-radius: var(--radius); flex: 1; min-height: 0; overflow-y: auto; }
-  .srt-row { display: flex; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
-  .srt-row:last-child { border-bottom: none; }
-  .srt-time { color: var(--primary); font-variant-numeric: tabular-nums; flex-shrink: 0; font-size: 0.76rem; }
-  .srt-text { color: var(--foreground); }
-  .srt-empty { padding: 14px; color: var(--muted-foreground); font-size: 0.8rem; }
-  .result-actions { flex: 0 0 auto; display: flex; gap: 12px; }
-  .result-actions a.btn { text-decoration: none; padding: 9px 20px; font-size: 0.86rem; font-weight: 700; }
-  .export-empty { color: var(--muted-foreground); font-size: 0.84rem; padding: 30px 0; text-align: center; }
+
+  /* ---------------- Done: the video pane ---------------- */
+
+  .video-pane { flex: 0 0 min(520px, 40%); display: flex; flex-direction: column;
+    background: var(--canvas); }
+  .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
+    border-bottom: 1px solid var(--border); }
+  .vtab { flex: 1; border: none; background: none; cursor: pointer;
+    font: inherit; font-size: 0.78rem; color: var(--muted-foreground); }
+  .vtab.active { color: var(--foreground); font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--primary); }
+  .video-body { padding: 14px; display: flex; flex-direction: column; gap: 10px;
+    min-height: 0; }
+  .video-wrap { position: relative; border-radius: var(--radius); overflow: hidden;
+    background: var(--thumb-bg); display: flex; justify-content: center; }
+  .video-wrap video { display: block; max-width: 100%; max-height: 46vh; }
+  .video-bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--thumb-badge); color: var(--thumb-foreground);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
+  .video-bigplay[hidden] { display: none; }
+  .video-time { font-size: 0.78rem; color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums; }
+
+  /* A job that failed or was cancelled has no script and no video -- only the
+     reason, in the middle of the screen it would have filled. */
+  .done-fail { flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 30px; text-align: center; color: var(--muted-foreground); font-size: 0.9rem; }
+
+  /* ---------------- Export dialog ---------------- */
+
+  .export-list { display: flex; flex-direction: column; gap: 8px; }
+  .export-list a { display: flex; align-items: center; gap: 10px; padding: 11px 13px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    text-decoration: none; color: var(--foreground); font-size: 0.86rem; font-weight: 600; }
+  .export-list a:hover { border-color: var(--primary); background: var(--accent); }
+  .export-list .icon { color: var(--primary); }
 
 
   /* ---------------- Settings modal ---------------- */
@@ -614,7 +680,8 @@
       <span class="topbar-spacer"></span>
       <span class="topbar-version" id="topbarVersion"></span>
       <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
-      <button class="btn btn-primary" id="exportBtn" type="button" hidden>Export</button>
+      <button class="btn btn-primary" id="exportBtn" type="button" hidden>
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
     </div>
 
     <main class="work" id="work">
@@ -667,12 +734,42 @@
       </section>
 
       <!-- ============ DONE ============ -->
+      <!-- The script on the left, the video on the right, the timeline under
+           both. renderDone() fills them; a job that failed shows #doneFail
+           instead of the whole layout. -->
       <section class="screen" id="screen-done" hidden>
-        <h2>Export</h2>
-        <p class="panel-desc">Your finished video and subtitles.</p>
-        <div id="exportContent">
-          <div class="export-empty">Nothing to export yet.</div>
+        <div class="done" id="doneLayout" hidden>
+          <div class="done-main" id="doneMain">
+            <div class="script-pane">
+              <!-- The same notice line the running screen carries, on the
+                   screen that replaced it. Hidden unless there is one. -->
+              <div class="job-notice" id="doneNotice" hidden></div>
+              <div id="scriptBox"></div>
+              <div class="script-foot">
+                <span class="script-head-note" id="scriptCount"></span>
+                <span class="script-saving" id="scriptSaving"></span>
+                <button class="btn btn-secondary" id="redubBtn" type="button">Make voices again</button>
+              </div>
+            </div>
+            <div class="video-pane" id="videoPane">
+              <div class="video-tabs">
+                <button class="vtab" data-src="original" type="button">Original</button>
+                <button class="vtab active" data-src="dubbed" type="button">Dubbed</button>
+              </div>
+              <div class="video-body">
+                <div class="video-wrap">
+                  <video id="doneVideo" playsinline></video>
+                  <button class="video-bigplay" id="bigPlay" type="button" aria-label="Play">
+                    <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:4px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
+                  </button>
+                </div>
+                <div class="video-time" id="videoTime">00:00:00.0 / 00:00:00.0</div>
+              </div>
+            </div>
+          </div>
+          <div class="timeline" id="timeline"></div>
         </div>
+        <div class="done-fail" id="doneFail" hidden></div>
       </section>
     </main>
   </div>
@@ -707,6 +804,24 @@
            dimmed overlay, where a failed start would never be read. -->
       <div class="form-error" id="projectError"></div>
       <button class="btn btn-primary start-btn" id="startBtn" type="button">Start dubbing</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ EXPORT DIALOG ============ -->
+<!-- Everything a finished job can hand back. It is a dialog rather than a row
+     of buttons under the video: the screen behind it is the script, and three
+     download buttons have no business taking width from it. -->
+<div class="modal-overlay" id="exportOverlay">
+  <div class="modal" style="width: min(400px, 92vw)">
+    <div class="modal-head">
+      <h2>Export</h2>
+      <button class="modal-close" id="exportCloseX" type="button" aria-label="Close">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="export-list" id="exportList"></div>
     </div>
   </div>
 </div>
@@ -1392,8 +1507,8 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   $("topbarSub").textContent = subtitle;
   $("topbarBack").hidden = !back;
   $("cancelBtn").hidden = !running;
-  // Task 7 attaches the Export dialog and flips this on
-  $("exportBtn").hidden = true;   // `done` is ignored on purpose until then
+  // Only a finished job has anything to hand back.
+  $("exportBtn").hidden = !done;
 }
 
 // The resting state: no job open, the first screen showing.
@@ -1795,8 +1910,13 @@ function resetForNewJob() {
   clearLink();
   $("jobNotice").hidden = true;
   $("jobNotice").classList.remove("danger");
+  $("doneNotice").hidden = true;
   $("formError").textContent = "";
-  $("exportContent").innerHTML = '<div class="export-empty">Nothing to export yet.</div>';
+  releaseDoneVideo();
+  $("scriptBox").innerHTML = "";
+  $("scriptCount").textContent = "";
+  scriptJobId = null;
+  remadeLines.clear();
   updateCancelButton();
   showHome();
 }
@@ -1853,28 +1973,33 @@ function renderRunning(job, progress) {
 // lands, after which there is no error and nothing to re-arm.
 $("runningVideo").addEventListener("error", (e) => e.target.removeAttribute("src"));
 
-// The single reason line under the progress steps. On a failed job it carries
-// THE explanation (job.error, with the notice's clickable Recharge link when
-// the backend attached one); on a running job it shows the latest notice.
-// Everything else stays short so this one message actually gets read --
-// splitting the story across four banners meant none of them did.
+// The single reason line. On a failed job it carries THE explanation
+// (job.error, with the notice's clickable Recharge link when the backend
+// attached one); on a running job it shows the latest notice. Everything else
+// stays short so this one message actually gets read -- splitting the story
+// across four banners meant none of them did.
+// It is written into both screens, because a job crosses from one to the other
+// and the reason has to survive the crossing: #jobNotice under the progress
+// steps while it runs, #doneNotice above the script once it is finished.
 function renderNotices(job) {
-  const el = $("jobNotice");
   const notices = job.notices || [];
   const n = notices.length ? notices[notices.length - 1] : null;
   const failed = job.status === "error";
   const message = failed
     ? (job.error || (n && n.message) || "Something went wrong. Try again, or use a shorter clip.")
     : (n && n.message);
-  // "danger" only ever comes from the poll loop's own failure below; a real
-  // notice replaces that message, so it drops the red with it.
-  el.classList.remove("danger");
-  if (!message) { el.hidden = true; el.innerHTML = ""; return; }
-  el.hidden = false;
   const linkText = n && CREDIT_MODALS[n.type] ? CREDIT_MODALS[n.type].button : "Recharge";
-  el.innerHTML = (n && n.link && linkText)
+  const html = (n && n.link && linkText)
     ? `${escapeHtml(message)} <a href="${escapeHtml(n.link)}" target="_blank" rel="noopener">${linkText}</a>`
-    : escapeHtml(message);
+    : escapeHtml(message || "");
+  for (const id of ["jobNotice", "doneNotice"]) {
+    const el = $(id);
+    // "danger" only ever comes from the poll loop's own failure below; a real
+    // notice replaces that message, so it drops the red with it.
+    el.classList.remove("danger");
+    el.hidden = !message;
+    el.innerHTML = message ? html : "";
+  }
 }
 
 // Out-of-credits / quota popup: pop once per job on the first exhaustion-type
@@ -2203,7 +2328,6 @@ async function handleJobUpdate(job) {
 
   if (running) {
     renderRunning(job, progress);
-    renderExportRunning(progress);
     return;
   }
 
@@ -2217,37 +2341,7 @@ async function handleJobUpdate(job) {
   // counted, which is the intended behaviour -- the counts describe app installs.
   window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(-6).join("\n"));
 
-  if (job.status === "done") {
-    await renderExport(job);
-  } else {
-    renderExportError(job);
-  }
-}
-
-// ---------------- SRT parsing (Export tab) ----------------
-// TODO (backend): there is no endpoint for per-line ORIGINAL-language text,
-// only the final translated subtitles (see GET /api/dub/result/{id}/srt).
-// So this only ever shows the translated line, and only once the job is
-// done -- not a live line-by-line view during processing.
-function parseSrt(text) {
-  const blocks = text.replace(/\r/g, "").split("\n\n").filter(Boolean);
-  const cues = [];
-  for (const block of blocks) {
-    const lines = block.split("\n");
-    const timeLine = lines.find((l) => l.includes("-->"));
-    if (!timeLine) continue;
-    const [start, end] = timeLine.split("-->").map((s) => s.trim().split(",")[0]);
-    const cueText = lines.slice(lines.indexOf(timeLine) + 1).join(" ").trim();
-    cues.push({ start, end, text: cueText });
-  }
-  return cues;
-}
-
-// While a dub runs, the Export tab shows where it is instead of "Nothing to
-// export yet" (the Script/Voice tabs that used to narrate progress are gone).
-function renderExportRunning(progress) {
-  const el = $("exportContent");
-  el.innerHTML = `<div class="export-empty">${escapeHtml(progress.plainLabel || progress.label)}… the finished video appears here when the dub completes.</div>`;
+  await renderDone(job);
 }
 
 // Human name for a language code, falling back to the code itself.
@@ -2257,55 +2351,136 @@ function langName(code) {
   return l ? l.name : code.toUpperCase();
 }
 
-// ---------------- Export tab ----------------
-async function renderExport(job) {
-  const el = $("exportContent");
+// ---------------- The finished screen ----------------
+// The script table on the left, the video on the right, and the top bar's
+// Export button over a small dialog of downloads. A job that failed or was
+// cancelled has neither, so it shows the reason instead.
+
+const doneVideo = $("doneVideo");
+// Which of the two files the player is showing. The tabs swap it in place.
+let doneSource = "dubbed";
+
+function doneVideoSrc(job, which) {
+  return which === "original" ? `/api/dub/result/${job.id}/original` : resultUrl(job.id);
+}
+
+async function renderDone(job) {
+  const finished = job.status === "done";
+  $("doneLayout").hidden = !finished;
+  $("doneFail").hidden = finished;
+  if (!finished) {
+    // Cancelled and failed are two different stories, and neither has a screen
+    // of its own: the back chevron in the top bar is the way out of both.
+    const why = job.status === "cancelled"
+      ? "This dubbing job was cancelled."
+      : `Dubbing didn't finish. ${job.error || "Try again, or use a shorter clip."}`;
+    $("doneFail").textContent = why;
+    return;
+  }
   // Tell the shell where this job's downloads belong. It has to be handed over
   // before any button is clicked, because will-download cannot ask for it.
   window.persodubShell?.rememberJob?.({ id: job.id, project: job.project, day: job.day });
-  const url = resultUrl(job.id);
-  const target = job.language_code || "out";
-  const srtText = await fetchResultSrt(job.id).catch(() => null);
-
-  const srtRows = srtText
-    // Escape the timecodes too, not just the text. The .srt served back is the
-    // file the user handed us, verbatim -- parseSrt takes whatever sits before
-    // "-->" as the start time without checking it is a timecode, so a crafted
-    // subtitle put markup straight into innerHTML here.
-    ? parseSrt(srtText).map((c) => `<div class="srt-row"><span class="srt-time">${escapeHtml(c.start)}–${escapeHtml(c.end)}</span><span class="srt-text">${escapeHtml(c.text)}</span></div>`).join("")
-    : '<div class="srt-empty">No subtitle file was recorded for this job.</div>';
-
-  // The four things a finished job can hand back: original + dub, and the two
-  // languages. Source is only known when local Whisper auto-detected it
-  // (app/pipeline.py) -- otherwise show a dash rather than an empty gap.
-  const sourceName = langName((job.result || {}).detected_source_language) || "—";
-  const targetName = langName(job.language_code) || "—";
-  const langLine = `
-    <div class="result-langs">
-      <span><b>Original language:</b> ${escapeHtml(sourceName)}</span>
-      <span><b>Dubbed into:</b> ${escapeHtml(targetName)}</span>
-    </div>`;
-
-  el.innerHTML = `
-    <div class="result-grid">
-      <div class="video-wrap">
-        <video controls src="${url}"></video>
-        ${langLine}
-      </div>
-      <div class="srt-list" id="scriptBox">${srtRows}</div>
-      <div class="result-actions">
-        <a class="btn btn-primary" href="${url}" download="dub_${target}.mp4">Download dubbed video</a>
-        ${job.from_link ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/original?download=1" download="org.mp4">Download original</a>` : ""}
-        ${srtText ? `<a class="btn btn-secondary" href="/api/dub/result/${job.id}/srt?download=1" download="dub_${target}.srt">Download subtitles (.srt)</a>` : ""}
-      </div>
-    </div>`;
-
-  // The editable script table replaces the plain subtitle list when this job has
-  // a script on disk. Rendered after innerHTML so its handlers survive.
-  renderScript(job.id);
+  const src = doneVideoSrc(job, doneSource);
+  // Assigning src on every poll would restart the download from the top.
+  if (doneVideo.getAttribute("src") !== src) doneVideo.setAttribute("src", src);
+  await renderScript(job.id);
 }
 
-// ---------------- the script table (source | script | does it fit) ----------
+// The big round button in the middle of the frame: there are no player controls
+// (the timeline under the script is the scrubber), so this is play/pause.
+$("bigPlay").addEventListener("click", () => {
+  // Whatever line range was playing is over -- from here the video runs on.
+  cancelRange(doneVideo);
+  doneVideo.play().catch(() => {});
+});
+for (const e of ["play", "playing"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = true; });
+for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = false; });
+for (const e of ["timeupdate", "loadedmetadata", "seeked"]) doneVideo.addEventListener(e, paintPlayhead);
+
+// Where the video is, in the two places that show it: the clock under the
+// player and the row the table highlights.
+function paintPlayhead() {
+  const t = doneVideo.currentTime || 0;
+  const total = Number.isFinite(doneVideo.duration) ? doneVideo.duration : 0;
+  $("videoTime").textContent = `${fmtClockTenths(t)} / ${fmtClockTenths(total)}`;
+  for (const row of $("scriptBox").querySelectorAll(".sc-row[data-start]")) {
+    row.classList.toggle("sc-now", t > +row.dataset.start && t <= +row.dataset.end);
+  }
+}
+
+// Original / Dubbed. The same moment in the same video, so the position and
+// whether it was playing both survive the swap.
+for (const tab of document.querySelectorAll(".vtab")) {
+  tab.addEventListener("click", () => showVideoSource(tab.dataset.src));
+}
+
+function showVideoSource(which) {
+  if (!state.job || which === doneSource) return;
+  const at = doneVideo.currentTime;
+  const wasPlaying = !doneVideo.paused;
+  // The range being played belongs to the file that is leaving.
+  cancelRange(doneVideo);
+  doneSource = which;
+  for (const tab of document.querySelectorAll(".vtab")) {
+    tab.classList.toggle("active", tab.dataset.src === which);
+  }
+  doneVideo.setAttribute("src", doneVideoSrc(state.job, which));
+  doneVideo.addEventListener("loadeddata", () => {
+    doneVideo.currentTime = at;
+    if (wasPlaying) doneVideo.play().catch(() => {});
+  }, { once: true });
+}
+
+// Put the player back to nothing at all: the next job's video has to start from
+// its own first frame, not the last one of the job before it.
+function releaseDoneVideo() {
+  cancelRange(doneVideo);
+  doneSource = "dubbed";
+  for (const tab of document.querySelectorAll(".vtab")) {
+    tab.classList.toggle("active", tab.dataset.src === "dubbed");
+  }
+  doneVideo.removeAttribute("src");
+  doneVideo.load();
+}
+
+// The finished video changed under the player (a line was made again), so it
+// has to be fetched afresh -- from the same moment the viewer was watching.
+function reloadDoneVideo() {
+  const at = doneVideo.currentTime;
+  doneVideo.load();
+  doneVideo.addEventListener("loadeddata", () => { doneVideo.currentTime = at; }, { once: true });
+}
+
+// ---------------- Export dialog ----------------
+$("exportBtn").addEventListener("click", openExport);
+$("exportCloseX").addEventListener("click", () => $("exportOverlay").classList.remove("open"));
+
+const DOWNLOAD_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 4v12"/><path d="M7.5 11.5L12 16l4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>';
+
+async function openExport() {
+  const job = state.job;
+  if (!job) return;
+  const target = escapeHtml(job.language_code || "out");
+  // The subtitles are only offered when there are some: a job given a
+  // ready-made SRT keeps one, an older job may not.
+  const hasSrt = (await fetchResultSrt(job.id).catch(() => null)) !== null;
+  const item = (href, name, label) =>
+    `<a href="${href}" download="${name}">${DOWNLOAD_ICON}${label}</a>`;
+  $("exportList").innerHTML = [
+    item(resultUrl(job.id), `dub_${target}.mp4`, "Download dubbed video (.mp4)"),
+    hasSrt ? item(`/api/dub/result/${job.id}/srt?download=1`, `dub_${target}.srt`,
+                  "Download subtitles (.srt)") : "",
+    // Only a link job has an original worth handing back -- a local file is
+    // already on the machine it would be saved to.
+    job.from_link ? item(`/api/dub/result/${job.id}/original?download=1`, "org.mp4",
+                         "Download original") : "",
+  ].join("");
+  $("exportOverlay").classList.add("open");
+}
+
+// ---------------- the script table ----------------
+// One row per line: number, speaker, time, the source line, play, the line
+// itself (editable), how long its voice runs, and make that voice again.
 //
 // The same reading the assistant works from. Editing a cell writes to
 // edited.srt through /api/dub/jobs/{id}/script/{line} -- the identical path
@@ -2314,84 +2489,89 @@ async function renderExport(job) {
 
 let scriptJobId = null;
 
-// m:ss.d for the script table's narrow time column -- the same tenths as every
-// other timecode, with the hours dropped where there are none. Derived rather
-// than counted again: two hand-rolled tenth-of-a-second formatters is one too
-// many, and this one used to print "0:60.0" for 59.97s.
-function fmtTime(s) {
-  return fmtClockTenths(s).replace(/^00:0?/, "");
+// Which lines have had their voice made again since they were last rewritten,
+// and the words it was made from. A line whose words have moved on since is
+// still waiting for its voice, and its button says so.
+const remadeLines = new Map();
+
+const PLAY_ICON = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+// A waveform, the same mark the rail uses for speech: this button makes the
+// sound of a line again.
+const WAVE_ICON = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round"><path d="M4 12h1"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 9v6"/><path d="M20 11v2"/></svg>';
+
+// Speaker labels are the diarizer's own ("SPEAKER_00"), which mean nothing to a
+// reader. Number them in the order they first speak instead, and give each a
+// colour -- four of them, cycled, because a video with five speakers is rare
+// and five colours down a column of text is a mess.
+function numberSpeakers(lines) {
+  const seen = new Map();
+  for (const l of lines) {
+    if (l.speaker && !seen.has(l.speaker)) seen.set(l.speaker, seen.size + 1);
+  }
+  return seen;
 }
 
-function scriptRow(l) {
-  const fit = l.fits
-    ? `<span class="sc-ok">${escapeHtml(l.estimated.toFixed(1))}s</span>`
-    : `<span class="sc-over">+${escapeHtml((l.estimated - l.slot).toFixed(2))}s</span>`;
+function scriptRow(l, speakers) {
+  const n = speakers.get(l.speaker);
+  const chip = n
+    ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}"><i></i>Speaker ${n}</span>` : "";
+  // What the line actually takes to say: the voice that was made for it if it
+  // is still on disk, otherwise the estimate from its characters.
+  const length = l.audio_sec != null ? l.audio_sec : l.estimated;
+  const over = length - l.slot;
+  const lengthCell = over > 0.05
+    ? `<span class="sc-over">+${escapeHtml(over.toFixed(1))}s</span>`
+    : `${escapeHtml(length.toFixed(1))}s`;
+  // Filled means "the words changed and the voice has not caught up".
+  const stale = l.edited && remadeLines.get(l.line) !== l.text;
   const undo = l.edited
     ? `<button class="sc-undo" data-undo="${l.line}" type="button">revert</button>` : "";
-  const again = `<button class="sc-undo" data-voice="${l.line}" type="button">remake</button>`;
-  return `<tr class="${l.edited ? "sc-edited" : ""}" data-start="${l.start}" data-end="${l.end}">
-    <td class="sc-n">${l.line}</td>
-    <td class="sc-play">
-      <button class="sc-listen" data-play="${l.line}" type="button" title="Play this line in the video">▶</button>
-    </td>
-    <td class="sc-time">${escapeHtml(fmtTime(l.start))}–${escapeHtml(fmtTime(l.end))}</td>
-    <td class="sc-src">${escapeHtml(l.source || "—")}</td>
-    <td class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-        data-line="${l.line}">${escapeHtml(l.text)}</td>
-    <td class="sc-fit">${fit}${undo}${again}</td>
-  </tr>`;
-}
-
-// ▶ plays the line inside the finished video, so the user sees the mouth move
-// with the words. Audio-only playback went with it (2026-08-25): hearing a line
-// on its own cannot tell you whether it lands on the lips.
-let lineStop = null;
-
-function playLine(start, end) {
-  const v = document.querySelector(".video-wrap video");
-  if (!v) return;
-  if (lineStop) v.removeEventListener("timeupdate", lineStop);
-  lineStop = () => {
-    if (v.currentTime >= end) {
-      v.pause();
-      v.removeEventListener("timeupdate", lineStop);
-      lineStop = null;
-      // Land exactly on the line's last frame, not a beat into the next line.
-      v.currentTime = end;
-    }
-  };
-  v.addEventListener("timeupdate", lineStop);
-  v.currentTime = start;
-  v.play().catch(() => {});
+  return `<div class="sc-row" data-start="${l.start}" data-end="${l.end}">
+    <div class="sc-n">${l.line}</div>
+    <div>${chip}</div>
+    <div class="sc-time">${escapeHtml(fmtClockTenths(l.start))} – ${escapeHtml(fmtClockTenths(l.end))}</div>
+    <div class="sc-src">${escapeHtml(l.source || "—")}</div>
+    <div><button class="sc-listen" data-play="${l.line}" type="button"
+      title="Play this line in the video">${PLAY_ICON}</button></div>
+    <div><div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
+        data-line="${l.line}">${escapeHtml(l.text)}</div>${undo}</div>
+    <div class="sc-len">${lengthCell}</div>
+    <div class="sc-acts"><button class="sc-wave ${stale ? "stale" : ""}" data-voice="${l.line}"
+      type="button" title="${stale ? "The words changed -- make the voice again" : "Make this line's voice again"}">${WAVE_ICON}</button></div>
+  </div>`;
 }
 
 async function renderScript(jobId) {
   const box = $("scriptBox");
   if (!box) return;
+  if (scriptJobId !== jobId) remadeLines.clear();
   scriptJobId = jobId;
   const data = await fetch(`/api/dub/jobs/${jobId}/script`)
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null);
-  if (!data || !data.lines || !data.lines.length) return; // keep the fallback list
+  if (!data || !data.lines || !data.lines.length) {
+    box.innerHTML = '<div class="script-empty">No script was recorded for this job.</div>';
+    $("scriptCount").textContent = "";
+    return;
+  }
 
   const over = data.lines.filter((l) => !l.fits).length;
+  $("scriptCount").innerHTML = `${data.lines.length} lines${
+    over ? ` · <span class="sc-over">${over} too long</span>` : ""}`;
+
+  // The two language names head their own columns: "Original / Script" said
+  // nothing about which languages were being compared.
+  const job = state.job || {};
+  const sourceName = langName((job.result || {}).detected_source_language) || "Original";
+  const targetName = langName(job.language_code) || "Script";
+  const speakers = numberSpeakers(data.lines);
   box.innerHTML = `
-    <div class="script-head">
-      <span class="script-head-note">${data.lines.length} lines${
-        over ? ` · <span class="sc-over">${over} too long</span>` : ""}</span>
-      <span>
-        <span class="script-saving" id="scriptSaving"></span>
-        <button class="btn btn-secondary" id="redubBtn" type="button">Make voices again</button>
-      </span>
+    <div class="sc-row head">
+      <div>#</div><div>Speaker</div><div>Time</div><div>${escapeHtml(sourceName)}</div>
+      <div></div><div>${escapeHtml(targetName)}</div><div class="sc-len">Length</div><div></div>
     </div>
-    <table class="script-table">
-      <thead><tr>
-        <th class="sc-n"></th><th class="sc-play"></th><th class="sc-time">Time</th>
-        <th class="sc-src">Original</th><th class="sc-dst">Script</th>
-        <th class="sc-fit">Fits?</th>
-      </tr></thead>
-      <tbody>${data.lines.map(scriptRow).join("")}</tbody>
-    </table>`;
+    ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;
+  paintPlayhead();
 
   box.querySelectorAll(".sc-dst[contenteditable]").forEach((cell) => {
     const before = cell.textContent;
@@ -2412,29 +2592,26 @@ async function renderScript(jobId) {
     b.addEventListener("click", () => revertLine(jobId, b.dataset.undo));
   });
 
+  // ▶ plays the line inside the finished video, so the user sees the mouth move
+  // with the words. Hearing a line on its own cannot tell you whether it lands
+  // on the lips.
   box.querySelectorAll("[data-play]").forEach((b) => {
-    const row = b.closest("tr");
-    b.addEventListener("click", () => playLine(+row.dataset.start, +row.dataset.end));
-  });
-
-  // Tint the row the video is on, so the eye can follow the table while
-  // watching. A property, not addEventListener: the table is redrawn after
-  // every save and the old handlers must not pile up.
-  const video = document.querySelector(".video-wrap video");
-  if (video) video.ontimeupdate = () => {
-    const t = video.currentTime;
-    box.querySelectorAll("tr[data-start]").forEach((tr) => {
-      tr.classList.toggle("sc-now", t > +tr.dataset.start && t <= +tr.dataset.end);
+    const row = b.closest(".sc-row");
+    b.addEventListener("click", () => {
+      playRange(doneVideo, +row.dataset.start, +row.dataset.end)?.catch(() => {});
     });
-  };
+  });
 
   box.querySelectorAll("[data-voice]").forEach((b) => {
-    b.addEventListener("click", () => remakeLine(jobId, b.dataset.voice, b));
+    const row = b.closest(".sc-row");
+    const text = row.querySelector(".sc-dst").textContent;
+    b.addEventListener("click", () => remakeLine(jobId, b.dataset.voice, b, text));
   });
-
-  const redub = $("redubBtn");
-  if (redub) redub.addEventListener("click", () => startRedub(jobId));
 }
+
+// The button lives outside the table, which is redrawn after every edit -- so
+// it is wired once, to whichever job the table is currently showing.
+$("redubBtn").addEventListener("click", () => { if (scriptJobId) startRedub(scriptJobId); });
 
 function scriptSaving(text) {
   const el = $("scriptSaving");
@@ -2460,25 +2637,23 @@ async function saveLine(jobId, line, text) {
 // Re-speak one line and rebuild the video around it. Everything else -- the
 // other lines' audio, the background, the cloned voice -- is reused, so this
 // costs seconds where a whole remake costs minutes.
-async function remakeLine(jobId, line, btn) {
-  const was = btn.textContent;
+async function remakeLine(jobId, line, btn, text) {
   btn.disabled = true;
-  btn.textContent = "Making…";
   scriptSaving(`Remaking line ${line}…`);
   try {
     const r = await fetch(`/api/dub/jobs/${jobId}/script/${line}/voice`, { method: "POST" });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.detail || "Could not remake that line.");
+    // The voice now says these words, so the button stops asking for it.
+    remadeLines.set(+line, text);
     scriptSaving(`Line ${line} done`);
-    // The finished video changed under the player, so make it reload.
-    const v = document.querySelector(".video-wrap video");
-    if (v) { const t = v.currentTime; v.load(); v.currentTime = t; }
+    reloadDoneVideo();
+    // The new voice has its own length, and the button its own look.
+    await renderScript(jobId);
     setTimeout(() => scriptSaving(""), 2000);
   } catch (e) {
     scriptSaving(errorText(e));
-  } finally {
     btn.disabled = false;
-    btn.textContent = was;
   }
 }
 
@@ -2530,20 +2705,6 @@ window.addEventListener("persodub:voices-remade", async () => {
     await new Promise((r) => setTimeout(r, 700));
   }
 });
-
-function renderExportError(job) {
-  const el = $("exportContent");
-  const cancelled = job.status === "cancelled";
-  const logsTail = (job.logs || []).slice(-6).join("\n");
-  // Still one failure story, but it has to be told here: the notice line moved
-  // into the progress card, which is on the screen this one replaced.
-  const why = cancelled
-    ? "This dubbing job was cancelled."
-    : `Dubbing didn't finish. ${job.error || "Try again, or use a shorter clip."}`;
-  el.innerHTML = `
-    <div class="export-empty">${escapeHtml(why)}</div>
-    <div class="log-box">${escapeHtml(logsTail)}</div>`;
-}
 
 renderHistory();
 showHome();
