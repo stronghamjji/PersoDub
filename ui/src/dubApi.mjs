@@ -223,18 +223,6 @@ export async function probeSource(url, { baseUrl = "" } = {}) {
   return res.json();
 }
 
-/**
- * GET /api/dub/result/{jobId}/srt -- the translated subtitles as plain text,
- * for the Export tab's subtitle viewer. Returns null (not an error) if the
- * job has no subtitle file on record, so callers can just hide that section.
- */
-export async function fetchResultSrt(jobId, { baseUrl = "" } = {}) {
-  const res = await fetch(`${baseUrl}/api/dub/result/${jobId}/srt`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Failed to load subtitles (HTTP ${res.status})`);
-  return res.text();
-}
-
 // The pipeline logs six "N/6 ..." stages, but the UI shows four: stages 4-6
 // (voice synthesis, the skipped leakage check, and file-building) all read
 // as "Dubbing" to the user.

@@ -8,7 +8,6 @@ import {
   qualityModeToNTakes,
   buildDubFormData,
   parseProgress,
-  fetchResultSrt,
   pollDubJob,
   cancelDubJob,
   migrateStoredSettings,
@@ -196,27 +195,6 @@ test("cancelDubJob throws the server's detail message on 409 (job already finish
     globalThis.fetch = async () =>
       new Response(JSON.stringify({ detail: "Job already done, nothing to cancel" }), { status: 409 });
     await assert.rejects(() => cancelDubJob("j1"), /nothing to cancel/);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-});
-
-test("fetchResultSrt returns subtitle text, null on 404, throws on other errors", async () => {
-  const realFetch = globalThis.fetch;
-  try {
-    globalThis.fetch = async (url) => {
-      if (url.endsWith("/api/dub/result/ok123/srt")) {
-        return new Response("1\n00:00:00,000 --> 00:00:01,000\nhi\n", { status: 200 });
-      }
-      if (url.endsWith("/api/dub/result/none123/srt")) {
-        return new Response("", { status: 404 });
-      }
-      return new Response("", { status: 500 });
-    };
-
-    assert.match(await fetchResultSrt("ok123"), /hi/);
-    assert.equal(await fetchResultSrt("none123"), null);
-    await assert.rejects(() => fetchResultSrt("boom"));
   } finally {
     globalThis.fetch = realFetch;
   }

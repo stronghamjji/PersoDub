@@ -1929,6 +1929,7 @@ function resetForNewJob() {
   $("doneNotice").hidden = true;
   $("formError").textContent = "";
   releaseDoneVideo();
+  homeNoticeAndLog();
   $("scriptBox").innerHTML = "";
   scriptSaving("");
   scriptJobId = null;
@@ -1953,6 +1954,9 @@ const CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4
 // different machines, so any "about N minutes left" we showed would be a
 // promise we break.
 function renderRunning(job, progress) {
+  // A job that failed took the raw log onto the done screen with it. This job's
+  // log has to be readable here, under this job's steps.
+  homeNoticeAndLog();
   // Set once -- assigning src on every poll would restart the download three
   // seconds in, forever. A link job has no input.mp4 yet when it starts (the
   // video is downloaded inside the job thread, app/main.py:dub_start), so that
@@ -2377,7 +2381,9 @@ let doneSource = "dubbed";
 // Bumped when a remade line changes the finished video under the player, so the
 // next src is a different string and the browser fetches it again. The URL is
 // otherwise stable, which is what lets renderDone tell "same video" from "new".
+// Counted per job -- job B must not inherit job A's marks.
 let doneVersion = 0;
+let doneJobId = null;
 
 function doneVideoSrc(job, which) {
   const mark = doneVersion ? `?v=${doneVersion}` : "";
@@ -2386,12 +2392,19 @@ function doneVideoSrc(job, which) {
     : `${resultUrl(job.id)}${mark}`;
 }
 
-// The notice line and the raw log exist once each. A failed job needs both, and
-// both normally live on screens it never shows, so they are moved rather than
-// printed a second time.
+// The notice line and the raw log exist once each, so a failed job borrows them
+// rather than printing a second copy. Everything else keeps them where they
+// belong: the log in the progress card, the notice above the script.
 function moveInto(el, parent, first = false) {
   if (el.parentElement === parent) return;
   if (first) parent.prepend(el); else parent.appendChild(el);
+}
+
+// Called by every screen that is not the failure one -- a borrowed log left on
+// the done screen is a log the next running job writes into and nobody sees.
+function homeNoticeAndLog() {
+  moveInto($("doneNotice"), $("scriptPane"), true);
+  moveInto($("rawLogDetails"), $("progressCard"));
 }
 
 async function renderDone(job) {
@@ -2400,16 +2413,20 @@ async function renderDone(job) {
   $("doneFail").hidden = finished;
   if (!finished) {
     // Cancelled and failed are two different stories, and neither has a screen
-    // of its own: the back chevron in the top bar is the way out of both.
+    // of its own: the back chevron in the top bar is the way out of both. The
+    // reason itself is the notice line's job -- it is the copy that carries the
+    // Recharge link, and one sentence said twice reads as a bug.
     $("doneFailWhy").textContent = job.status === "cancelled"
       ? "This dubbing job was cancelled."
-      : `Dubbing didn't finish. ${job.error || "Try again, or use a shorter clip."}`;
+      : "Dubbing didn't finish.";
     moveInto($("doneNotice"), $("doneFailBody"));
     moveInto($("rawLogDetails"), $("doneFailBody"));
     return;
   }
-  moveInto($("doneNotice"), $("scriptPane"), true);
-  moveInto($("rawLogDetails"), $("progressCard"));
+  homeNoticeAndLog();
+  // A different job starts its own count of remade-line changes; the URL of a
+  // video nobody has remade carries no mark at all.
+  if (doneJobId !== job.id) { doneJobId = job.id; doneVersion = 0; }
   // Tell the shell where this job's downloads belong. It has to be handed over
   // before any button is clicked, because will-download cannot ask for it.
   window.persodubShell?.rememberJob?.({ id: job.id, project: job.project, day: job.day });
@@ -2474,6 +2491,8 @@ function showVideoSource(which) {
 function releaseDoneVideo() {
   cancelRange(doneVideo);
   doneSource = "dubbed";
+  doneJobId = null;
+  doneVersion = 0;
   for (const tab of document.querySelectorAll(".vtab")) {
     tab.classList.toggle("active", tab.dataset.src === "dubbed");
   }
@@ -2518,7 +2537,9 @@ async function openExport() {
   const item = (href, name, label) =>
     `<a href="${href}" download="${name}">${DOWNLOAD_ICON}${label}</a>`;
   $("exportList").innerHTML = [
-    item(resultUrl(job.id), `dub_${target}.mp4`, "Download dubbed video (.mp4)"),
+    // The same URL the player is on, remake mark and all: without it a download
+    // taken straight after a remake can be served the old video from cache.
+    item(doneVideoSrc(job, "dubbed"), `dub_${target}.mp4`, "Download dubbed video (.mp4)"),
     hasSrt ? item(`/api/dub/result/${job.id}/srt?download=1`, `dub_${target}.srt`,
                   "Download subtitles (.srt)") : "",
     // Only a link job has an original worth handing back -- a local file is
