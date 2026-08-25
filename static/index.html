@@ -189,7 +189,7 @@
     background: var(--background);
   }
   .topbar-back { border: none; background: none; cursor: pointer; font: inherit;
-    font-size: 1.5rem; line-height: 1; padding: 0 4px; color: var(--muted-foreground); }
+    display: inline-flex; align-items: center; padding: 0 2px; color: var(--muted-foreground); }
   .topbar-back:hover { color: var(--foreground); }
   .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   .topbar-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
@@ -237,25 +237,32 @@
   h2 { margin: 0 0 3px; font-size: 0.98rem; }
   .panel-desc { margin: 0 0 14px; color: var(--muted-foreground); font-size: 0.8rem; }
 
-  /* ---------------- Upload ---------------- */
+  /* ---------------- Home: headline, drop zone, link field ---------------- */
+  /* A fixed 640px column so the two ways in (drop a file, paste a link) sit
+     one under the other at a readable width, whatever the window size. */
 
-  .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 30px 20px; text-align: center; color: var(--muted-foreground); background: var(--secondary); cursor: pointer; }
+  .home { width: 640px; margin: 0 auto; padding-top: 12vh; display: flex; flex-direction: column; gap: 16px; }
+  .home-title { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+  .home-sub { margin: -10px 0 6px; font-size: 14px; color: var(--muted-foreground); }
+
+  .upload-zone { height: 200px; border: 1.5px dashed var(--primary-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted-foreground); }
   .upload-zone.drag-over { border-color: var(--primary); background: var(--accent); }
-  .upload-zone .icon-lg { margin: 0 auto 9px; color: var(--primary); background: var(--accent); border-radius: 50%; padding: 9px; box-sizing: content-box; }
-  .upload-title { color: var(--foreground); font-weight: 600; margin-bottom: 3px; font-size: 0.9rem; }
-  .upload-hint { font-size: 0.76rem; }
-  .upload-zone.has-file { border-color: var(--success); background: #f4fcf7; }
-  .upload-zone.has-file .upload-title { color: var(--success); }
-  .upload-file-info { margin-top: 10px; font-size: 0.82rem; color: var(--foreground); display: none; }
-  .upload-file-info.shown { display: block; }
+  .upload-zone .icon-lg { width: 30px; height: 30px; color: var(--primary); }
+  .upload-title { color: var(--foreground); font-weight: 600; font-size: 16px; }
+  .upload-hint { font-size: 13px; }
+  .upload-choose { color: var(--primary); text-decoration: underline; }
 
-  /* Source toggle: choose an uploaded file or a pasted link. */
-  .source-toggle { display: inline-flex; gap: 4px; padding: 3px; margin-bottom: 12px; background: var(--secondary); border-radius: 999px; }
-  .source-tab { border: none; background: transparent; color: var(--muted-foreground); font-size: 0.78rem; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
-  .source-tab.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
-  .link-input { width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.85rem; color: var(--foreground); background: var(--background); }
-  .link-input:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus-ring); }
-  .link-card { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--secondary); }
+  /* A rule either side of the word, so "OR" reads as a divider, not a label. */
+  .home-or { display: flex; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: 11.5px; letter-spacing: 0.06em; }
+  .home-or span { flex: 1; height: 1px; background: var(--border); }
+
+  .link-field { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); cursor: text; color: var(--muted-foreground); }
+  .link-field:focus-within { border-color: var(--primary); box-shadow: var(--focus-ring); }
+  .link-field input { flex: 1; min-width: 0; border: none; background: none; padding: 0; font-family: inherit; font-size: 13.5px; color: var(--foreground); }
+  .link-field input:focus { outline: none; }
+
+  .link-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--secondary); }
   .link-card.error { border-color: var(--destructive); }
   .link-card .lc-row { display: flex; gap: 12px; align-items: flex-start; }
   .link-card img { width: 120px; border-radius: var(--radius-sm); flex: none; }
@@ -312,6 +319,9 @@
 
   .start-row { margin-top: 16px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
   .form-error { color: var(--destructive); font-size: 0.8rem; }
+  /* An empty error line is still a flex item, and would leave a gap under the
+     link field for a message that is not there. */
+  .form-error:empty { display: none; }
 
   /* ---------------- Script tab ---------------- */
 
@@ -425,7 +435,7 @@
 <div class="app">
   <!-- ============ RAIL ============ -->
   <div class="rail">
-    <button class="rail-item active" title="Dub" type="button" aria-label="Dub">
+    <button class="rail-item active" title="Speech" type="button" aria-label="Speech">
       <!-- Speech: a waveform with a pen across it -- what this app does to a
            video, rather than the microphone every other app uses. -->
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 12h2"/><path d="M7 8v8"/><path d="M11 5v14"/><path d="M15 9v6"/><path d="M14.5 21l5.5-5.5 1.8 1.8L16.3 22.8H14.5z"/><path d="M18.6 16.9l1.8 1.8"/></svg>
@@ -461,7 +471,9 @@
     <!-- The app's only chrome: who we are (or which job is open), what it is
          doing, and the one or two buttons that apply right now. -->
     <div class="topbar" id="topbar">
-      <button class="topbar-back" id="topbarBack" type="button" aria-label="Back" hidden>&lsaquo;</button>
+      <button class="topbar-back" id="topbarBack" type="button" aria-label="Back" hidden>
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
       <div class="topbar-titles">
         <span class="topbar-title" id="topbarTitle">PersoDub</span>
         <span class="topbar-sub" id="topbarSub">Local dubbing</span>
@@ -475,117 +487,24 @@
 
     <main class="work" id="work">
       <!-- ============ HOME ============ -->
+      <!-- One question only: which video? Everything else (languages, engines,
+           quality) moved into the New project dialog that opens the moment a
+           video or a link is ready, so this screen stays a single decision. -->
       <section class="screen" id="screen-home">
-        <h2>Add your video</h2>
-        <p class="panel-desc">Drop a video file, or paste a link, then choose the basics below.</p>
-
-        <div class="source-toggle" role="tablist">
-          <button class="source-tab active" id="tabUpload" type="button" data-source="upload">Upload file</button>
-          <button class="source-tab" id="tabLink" type="button" data-source="link">Paste link</button>
-        </div>
-
-        <div class="upload-zone" id="uploadZone" tabindex="0">
-          <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-          <div class="upload-title" id="uploadTitle">Drop your video here</div>
-          <div class="upload-hint" id="uploadHint"></div>
-          <div class="upload-file-info" id="uploadFileInfo"></div>
-          <input type="file" id="videoInput" accept="video/*" style="display:none">
-        </div>
-
-        <div class="link-pane" id="linkPane" hidden>
-          <input class="link-input" id="linkInput" type="url" inputmode="url"
-                 placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
+        <div class="home">
+          <h1 class="home-title">Dubbing your video into another language</h1>
+          <p class="home-sub">Drop a video or paste a link. Everything runs on your desktop.</p>
+          <div class="upload-zone" id="uploadZone" tabindex="0">
+            <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            <div class="upload-title">Drop your video here</div>
+            <div class="upload-hint"><span class="upload-choose">Choose a file</span> · MP4 or MOV, up to 2 GB</div>
+            <input type="file" id="videoInput" accept="video/*" hidden>
+          </div>
+          <div class="home-or"><span></span>OR<span></span></div>
+          <label class="link-field"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+            <input id="linkInput" type="url" placeholder="Paste a YouTube, TikTok or Reels link" autocomplete="off"></label>
           <div class="link-card" id="linkCard" hidden></div>
-        </div>
-
-        <div class="section-gap">
-          <div class="option-grid">
-            <div class="field">
-              <label for="sttSelect">Speech-to-text</label>
-              <select id="sttSelect">
-                <option value="local" selected>Whisper (free, offline)</option>
-                <option value="perso">Perso API (paid, best quality)</option>
-              </select>
-              <div class="settings-hint">Turns the speech in your video into text.</div>
-            </div>
-            <div class="field">
-              <label for="sourceLangSelect">Original language</label>
-              <select id="sourceLangSelect">
-                <option value="" selected>Auto-detect (recommended)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="targetLangSelect">Target language</label>
-              <select id="targetLangSelect"></select>
-            </div>
-            <div class="field">
-              <label for="qualitySelect">Voice quality</label>
-              <select id="qualitySelect">
-                <option value="fast" selected>Fast</option>
-                <option value="high">High quality</option>
-              </select>
-              <div class="settings-hint" id="qualityHint"></div>
-            </div>
-            
-          </div>
-
-          <!-- Stays outside the fold, unlike the engine picker it talks about:
-               it only appears when no translation engine works at all, and a
-               user who cannot dub needs to see that before pressing Start --
-               not after expanding a section they had no reason to open. -->
-          <div class="job-notice" id="engineWarning" style="display:none"></div>
-
-          <!-- Everything below is an engine choice with a working default. A
-               first-time user needs none of it, and seven side-by-side
-               dropdowns read as seven decisions to make -- so only the three
-               above stay out, and these fold away until asked for. -->
-          <details class="advanced">
-            <summary>
-              <svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-              Advanced options
-            </summary>
-            <div class="advanced-body">
-              <div class="field">
-                <label for="translateSelect">Translation</label>
-                <select id="translateSelect">
-                  <option value="gemma" selected>Gemma (free, offline)</option>
-                  <!-- "needs API key" is appended by applyEngineAvailabilityToForm
-                       when no key is saved, so it must not be in the base label too. -->
-                  <option value="gemini">Gemini API (paid, best quality)</option>
-                </select>
-                <div class="settings-hint">Translates that text into the new language.</div>
-              </div>
-              <div class="field">
-                <label for="voiceSelect">Text-to-speech</label>
-                <select id="voiceSelect">
-                  <option value="qwen3" selected>Qwen3-TTS (free, offline)</option>
-                </select>
-                <div class="settings-hint">Speaks the translated lines in a generated voice.</div>
-              </div>
-              <div class="field">
-                <label for="numSpeakers">Number of speakers</label>
-                <input type="number" id="numSpeakers" min="1" placeholder="Auto-detect">
-                <div class="settings-hint">How many people speak in this video. Auto-detect
-                  currently assumes at least 2. Set 1 for a single-speaker video.</div>
-              </div>
-            </div>
-            <!-- The greyed-out options above say a key is needed but a disabled
-                 <option> cannot be clicked, so this is the only way out of that
-                 dead end short of hunting for the gear icon. Shown even with
-                 both keys saved -- it is also the route to replacing one. -->
-            <button type="button" class="keys-link" id="advancedKeysLink">
-              <svg class="icon icon-sm" viewBox="0 0 24 24">
-                <circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H21"/>
-                <path d="M17.5 12v3"/><path d="M20.5 12v2.4"/>
-              </svg>
-              Perso and Gemini need an API key. Add it in Settings
-            </button>
-          </details>
-
-          <div class="start-row">
-            <span class="form-error" id="formError"></span>
-            <button class="btn btn-primary" id="startBtn" type="button">Start dubbing</button>
-          </div>
+          <div class="form-error" id="formError"></div>
         </div>
       </section>
 
@@ -988,27 +907,34 @@ function saveHistory(list) { localStorage.setItem(HISTORY_KEY, JSON.stringify(li
 
 // ---------------- Language dropdowns ----------------
 // Populated from dubApi.LANGUAGES (the model's own supported-language table).
-// sourceLangSelect's default is the literal "Auto-detect" <option> already in
-// the markup above -- defCode null never matches a real LANGUAGES code, so no
+// sourceLangSelect's default is the literal "Auto-detect" <option> written into
+// its markup -- defCode null never matches a real LANGUAGES code, so no
 // appended option overwrites that selection with a specific language.
 // targetLangSelect defaults to English: the app's own use is Korean source
 // material dubbed outward. Neither default is remembered between launches --
 // every launch starts here.
-for (const [selId, defCode] of [["sourceLangSelect", null], ["targetLangSelect", "en"]]) {
-  const sel = document.getElementById(selId);
-  for (const l of LANGUAGES) {
-    const o = document.createElement("option");
-    o.value = l.code; o.textContent = l.name;
-    if (l.code === defCode) o.selected = true;
-    sel.appendChild(o);
+// The two dropdowns live in the New project dialog, which is built in a later
+// step -- until then they are simply absent, so skip rather than throw.
+function fillLanguageSelects() {
+  for (const [selId, defCode] of [["sourceLangSelect", null], ["targetLangSelect", "en"]]) {
+    const sel = document.getElementById(selId);
+    if (!sel) continue;
+    for (const l of LANGUAGES) {
+      const o = document.createElement("option");
+      o.value = l.code; o.textContent = l.name;
+      if (l.code === defCode) o.selected = true;
+      sel.appendChild(o);
+    }
   }
 }
+fillLanguageSelects();
 
 // ---------------- App state ----------------
 const state = {
   source: "upload",   // "upload" | "link"
   videoFile: null,
   linkProbe: null,    // {url, title, duration_sec, thumbnail_url} once a link probes OK
+  newProject: null,   // {file, probe, trim} -- what the New project dialog is working on
   jobId: null,
   job: null,
   pollGeneration: 0, // bumped whenever we switch jobs, so a stale poll loop stops itself
@@ -1105,7 +1031,8 @@ async function openSettings() {
 function closeSettings() { $("settingsOverlay").classList.remove("open"); }
 
 $("settingsBtn").addEventListener("click", openSettings);
-$("advancedKeysLink").addEventListener("click", openSettings);
+// Lives in the New project dialog, which a later step builds -- absent for now.
+$("advancedKeysLink")?.addEventListener("click", openSettings);
 $("settingsRestartBtn").addEventListener("click", () => {
   if (window.persodubShell && window.persodubShell.relaunch) window.persodubShell.relaunch();
 });
@@ -1232,6 +1159,12 @@ function setOptionDisabledLabel(option, disabled, suffix) {
 }
 
 async function applyEngineAvailabilityToForm() {
+  // The dropdowns this greys out live in the New project dialog, which a later
+  // step builds; with nothing on screen to grey out there is nothing to do.
+  const translateSel = $("translateSelect");
+  const sttSel = $("sttSelect");
+  if (!translateSel || !sttSel) return;
+
   let av;
   try {
     const r = await fetch("/api/engines");
@@ -1241,21 +1174,23 @@ async function applyEngineAvailabilityToForm() {
     return;
   }
   const result = applyEngineAvailability(av, {
-    translate: $("translateSelect").value,
-    stt: $("sttSelect").value,
+    translate: translateSel.value,
+    stt: sttSel.value,
   });
 
-  const gemmaOption = $("translateSelect").querySelector('option[value="gemma"]');
+  const gemmaOption = translateSel.querySelector('option[value="gemma"]');
   if (gemmaOption) setOptionDisabledLabel(gemmaOption, result.disable.gemma, " — not available on this machine");
-  const geminiOption = $("translateSelect").querySelector('option[value="gemini"]');
+  const geminiOption = translateSel.querySelector('option[value="gemini"]');
   if (geminiOption) setOptionDisabledLabel(geminiOption, result.disable.gemini, " — needs API key");
-  const persoOption = $("sttSelect").querySelector('option[value="perso"]');
+  const persoOption = sttSel.querySelector('option[value="perso"]');
   if (persoOption) setOptionDisabledLabel(persoOption, result.disable.perso, " — needs API key");
-  $("translateSelect").value = result.translate;
+  translateSel.value = result.translate;
 
   const warnEl = $("engineWarning");
-  warnEl.textContent = result.warning || "";
-  warnEl.style.display = result.warning ? "" : "none";
+  if (warnEl) {
+    warnEl.textContent = result.warning || "";
+    warnEl.style.display = result.warning ? "" : "none";
+  }
 }
 applyEngineAvailabilityToForm();
 
@@ -1284,6 +1219,14 @@ function showHome() {
   setTopbar({ title: "PersoDub", subtitle: "Local dubbing" });
 }
 
+// ---------------- New project ----------------
+// Called the moment a video or a link is ready. The dialog that asks for the
+// languages and trims the clip is built in a later step; for now this only
+// records what the user handed over.
+function openNewProject(source) {
+  state.newProject = { file: source.file || null, probe: source.probe || null, trim: null };
+}
+
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
 const videoInput = $("videoInput");
@@ -1294,12 +1237,13 @@ function formatBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// One constant to change if the allowed size ever moves.
+// One constant to change if the allowed size ever moves. The zone's own hint
+// spells the limit out in the markup -- keep the two in step.
 const MAX_VIDEO_MB = 2048;
 const MAX_VIDEO_LABEL = MAX_VIDEO_MB >= 1024 ? `${MAX_VIDEO_MB / 1024} GB` : `${MAX_VIDEO_MB} MB`;
-const DEFAULT_UPLOAD_HINT = `or click to browse. MP4 or MOV, up to ${MAX_VIDEO_LABEL}`;
-$("uploadHint").textContent = DEFAULT_UPLOAD_HINT;
 
+// The zone itself never reports "video ready" any more: a good file opens the
+// New project dialog straight away, and that dialog is the confirmation.
 function setVideoFile(file) {
   $("formError").textContent = "";
   if (file && !/\.(mp4|mov)$/i.test(file.name)) {
@@ -1311,17 +1255,9 @@ function setVideoFile(file) {
     file = null;
   }
   state.videoFile = file;
-  const info = $("uploadFileInfo");
-  uploadZone.classList.toggle("has-file", !!file);
   if (file) {
-    $("uploadTitle").textContent = `Video ready: ${file.name}`;
-    $("uploadHint").textContent = "Click to choose a different video";
-    info.textContent = `${file.name} (${formatBytes(file.size)})`;
-    info.classList.add("shown");
-  } else {
-    $("uploadTitle").textContent = "Drop your video here";
-    $("uploadHint").textContent = DEFAULT_UPLOAD_HINT;
-    info.classList.remove("shown");
+    state.source = "upload";
+    openNewProject({ file });
   }
 }
 
@@ -1364,19 +1300,8 @@ if (window.persodubShell?.onUpdateReady) {
 // Probing is cheap (seconds, no download), so it runs as soon as a URL looks
 // complete. The card is advisory -- it never blocks the rest of the form, which
 // is why this is inline rather than a modal (see the spec's confirm-card note).
-function setSource(which) {
-  state.source = which;
-  $("tabUpload").classList.toggle("active", which === "upload");
-  $("tabLink").classList.toggle("active", which === "link");
-  $("uploadZone").hidden = which !== "upload";
-  $("linkPane").hidden = which !== "link";
-  // Only one source can be armed at a time -- clear the other so the Start
-  // button never sees both (the server would reject that anyway).
-  if (which === "upload") clearLink();
-  else setVideoFile(null);
-}
-$("tabUpload").addEventListener("click", () => setSource("upload"));
-$("tabLink").addEventListener("click", () => setSource("link"));
+// There is no upload/link toggle any more: both ways in are on screen at once
+// and whichever one produces a video wins.
 
 function secsToClock(sec) {
   if (!sec) return "";
@@ -1423,7 +1348,7 @@ function renderLinkError(message) {
     <p class="lc-msg">${escapeHtml(message)}</p>
     <p class="lc-sub">You can download the video yourself and drop it in.</p>
     <button class="btn btn-secondary" type="button" id="linkToUpload">Upload a file</button>`;
-  $("linkToUpload").addEventListener("click", () => setSource("upload"));
+  $("linkToUpload").addEventListener("click", () => videoInput.click());
 }
 
 let probeTimer = null;
@@ -1440,7 +1365,9 @@ $("linkInput").addEventListener("input", () => {
       const info = await probeSource(url);
       if (mySeq !== probeSeq) return;   // a newer edit already superseded this
       state.linkProbe = { url, ...info };
+      state.source = "link";
       renderLinkCard(info);
+      openNewProject({ probe: state.linkProbe });
     } catch (e) {
       if (mySeq !== probeSeq) return;
       renderLinkError(e.message);
@@ -1481,6 +1408,10 @@ function resetForNewJob() {
   delete document.body.dataset.jobId;
   videoInput.value = ""; // otherwise re-picking the same file fires no change event
   setVideoFile(null);
+  // Both ways in are on the first screen at once now, so the link field has to
+  // be emptied too -- otherwise the last job's link is still sitting there.
+  $("linkInput").value = "";
+  clearLink();
   $("jobNotice").style.display = "none";
   $("formError").textContent = "";
   $("exportContent").innerHTML = '<div class="export-empty">Nothing to export yet.</div>';
@@ -1706,10 +1637,13 @@ const QUALITY_HINTS = {
   fast: "Each line is voiced once and used as is. Quickest way to preview a dub.",
   high: "Each line is voiced 4 times and the best take is kept. Noticeably better voices, but the voice stage takes about 4× longer.",
 };
+// Both elements live in the New project dialog, built in a later step.
 function updateQualityHint() {
-  $("qualityHint").textContent = QUALITY_HINTS[$("qualitySelect").value] || "";
+  const sel = $("qualitySelect");
+  if (!sel || !$("qualityHint")) return;
+  $("qualityHint").textContent = QUALITY_HINTS[sel.value] || "";
 }
-$("qualitySelect").addEventListener("change", updateQualityHint);
+$("qualitySelect")?.addEventListener("change", updateQualityHint);
 updateQualityHint();
 
 // ---------------- Start dubbing ----------------
@@ -1730,7 +1664,9 @@ function readOptions() {
   };
 }
 
-$("startBtn").addEventListener("click", async () => {
+// The Start button moves into the New project dialog in a later step, so this
+// is a named function the dialog can wire up rather than an inline handler.
+async function startDubbing() {
   $("formError").textContent = "";
   if (state.source === "upload" && !state.videoFile) {
     $("formError").textContent = "Choose a video first."; return;
@@ -1757,7 +1693,8 @@ $("startBtn").addEventListener("click", async () => {
   } finally {
     $("startBtn").disabled = false;
   }
-});
+}
+$("startBtn")?.addEventListener("click", startDubbing);
 
 // Server errors arrive as the raw response body, so a FastAPI detail shows up
 // as JSON unless it is unwrapped here.
