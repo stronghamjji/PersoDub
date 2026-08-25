@@ -617,28 +617,38 @@
     border-top: 8px solid var(--foreground); }
 
   /* ---------------- The three drag handles ---------------- */
-  /* A handle is nothing to look at: a 6px strip of hit area laid over the 1px
+  /* A handle is nothing to look at: a 6px strip of hit area starting on the 1px
      line that already divides two panes. Point at it (or drag it) and it paints
      a line of its own, in the app's purple, exactly on top of the grey one --
-     so the divider lights up without anything on the screen moving. */
-
-  .grip { position: absolute; z-index: 6; }
+     so the divider lights up without anything on the screen moving.
+     The 6px lie on the line and then reach into the ONE side that has nothing
+     to click. Straddling it, as they first did, put 3px of handle over the
+     table's sideways scrollbar, the video tabs and the timeline's own
+     scrollbar, and a hit area that eats somebody else's click is worse than a
+     handle that takes a moment longer to find. */
+  .grip { position: absolute; z-index: 6; touch-action: none; }
   .grip::after { content: ""; position: absolute; background: var(--primary); opacity: 0; }
   .grip:hover::after, .grip.dragging::after { opacity: 1; }
-  .grip-x { top: 0; bottom: 0; width: 6px; cursor: col-resize; }
-  .grip-x::after { top: 0; bottom: 0; left: 2.5px; width: 1px; }
+  .grip-x { bottom: 0; width: 6px; cursor: col-resize; }
+  .grip-x::after { top: 0; bottom: 0; left: 0; width: 1px; }
   .grip-y { left: 0; right: 0; height: 6px; cursor: row-resize; }
-  .grip-y::after { left: 0; right: 0; top: 2.5px; height: 1px; }
+  .grip-y::after { left: 0; right: 0; top: 0; height: 1px; }
 
-  /* Script | video, on the script pane's own right border. */
-  #gripPanes { right: -3.5px; }
-  /* The timeline's top border, which runs along .done-main's bottom edge.
+  /* Script | video: the script pane's right border, and the video's own padding
+     to the right of it. Not across the top row, where the table's header ends
+     and the video's tabs begin -- both are 40px, and a tab whose first pixels
+     belong to a handle is a tab that ignores the click aimed at its edge. */
+  #gripPanes { top: 40px; right: -6px; }
+  /* The timeline's top border (which runs along .done-main's bottom edge) and
+     the top of the strip's own heading row, never the table above it.
      No strip drawn (an empty timeline collapses) means no line to drag. */
-  #gripTimeline { bottom: -3.5px; }
+  #gripTimeline { bottom: -6px; }
   .done-main:has(+ .timeline:empty) #gripTimeline { display: none; }
-  /* The Dub Agent's purple top border. Only while the conversation is open: a
-     collapsed strip is one input row, and has no height to give or take. */
-  #gripAgent { top: -4px; }
+  /* The Dub Agent's purple top border and the strip below it, never the
+     timeline above -- that is where the timeline's sideways scrollbar lives.
+     Only while the conversation is open: a collapsed strip is one input row,
+     and has no height to give or take. */
+  #gripAgent { top: -2px; }
   body:not(.agent-open) #gripAgent { display: none; }
 
   /* A job that failed or was cancelled has no script and no video -- only the
@@ -796,7 +806,9 @@
         <span class="topbar-sub" id="topbarSub">Local dubbing</span>
       </div>
       <span class="topbar-spacer"></span>
-      <span class="topbar-version" id="topbarVersion"></span>
+      <!-- Filled in (and unhidden) only when the engine reports a real version;
+           hidden rather than empty, so it takes no gap in the row either. -->
+      <span class="topbar-version" id="topbarVersion" hidden></span>
       <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
@@ -1040,10 +1052,13 @@
 
       <div class="settings-section">
         <h3>Storage</h3>
-        <!-- A note, and nothing to press: a storage limit and a way to clear
-             old projects out belong with the install-package work, not here. -->
-        <div class="settings-hint">Every project is kept in the app's own folder, and nothing
-          there is ever deleted by itself.</div>
+        <!-- A line to read and nothing to press: a storage limit and a way to
+             clear old projects out belong with the install-package work. -->
+        <div class="settings-row">
+          <label>Output location</label>
+          <input type="text" value="~/Library/Application Support/PersoDub/app/workspace" readonly>
+          <div class="settings-hint">Finished videos are never deleted by themselves.</div>
+        </div>
       </div>
 
       <div class="settings-section">
@@ -1425,7 +1440,9 @@ async function openSettings() {
     persoSpaceInitial = st.perso_space_seq || "";
     loadPersoSpaces(persoSpaceInitial); // async on purpose -- the modal opens without waiting on Perso
     if (st.perso_signup_link) $("persoSignupLink").href = st.perso_signup_link;
-    if (st.app_version) $("aboutVersion").textContent = `PersoDub v${st.app_version}`;
+    if (realVersion(st.app_version)) {
+      $("aboutVersion").textContent = `PersoDub v${st.app_version}`;
+    }
     $("analyticsToggle").checked = !st.analytics_off;
   } catch {
     $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
@@ -1435,12 +1452,22 @@ async function openSettings() {
 }
 function closeSettings() { $("settingsOverlay").classList.remove("open"); }
 
+// "0.0.0" is what the engine answers when it is not running inside a packaged
+// build (the real number comes from the desktop shell), and a made-up version in
+// the app's own chrome is worse than none: it gets read out and reported.
+function realVersion(v) { return v && v !== "0.0.0" ? v : ""; }
+
 // The version in the top bar, from the only place the app knows it: the same
 // /api/settings field the About line reads. A plain browser tab with no desktop
-// install behind it gets a 503 there, and the corner simply stays empty.
+// install behind it gets a 503 there, and the corner simply stays out of sight.
 fetch("/api/settings")
   .then((r) => (r.ok ? r.json() : null))
-  .then((st) => { if (st && st.app_version) $("topbarVersion").textContent = `v${st.app_version}`; })
+  .then((st) => {
+    const v = realVersion(st && st.app_version);
+    if (!v) return;
+    $("topbarVersion").textContent = `v${v}`;
+    $("topbarVersion").hidden = false;
+  })
   .catch(() => {});
 
 $("settingsBtn").addEventListener("click", openSettings);
@@ -2957,14 +2984,24 @@ function paintTimelineAt(t) {
 // A strip longer than the window is a strip the playhead walks off the end of.
 // While the video plays, the moment it leaves the part on show, scroll it back
 // into view a third of the way in -- far enough left that the next stretch of
-// script is what fills the strip. Only while it plays: a paused (or hand-
-// scrolled) strip belongs to whoever is reading it.
+// script is what fills the strip. Only while it plays: a paused strip belongs to
+// whoever is reading it.
+// Scroll the strip by hand and following stops for three seconds, so a look back
+// at an earlier line is not yanked away mid-read; after that it only steps in
+// again once the playhead has left the visible part for itself.
+const FOLLOW_PAUSE_MS = 3000;
+let followUntil = 0;      // do not follow before this moment
+let followedTo = -1;      // the last scroll position WE set, so the strip's
+                          // scroll listener can tell our scrolling from theirs
 function followPlayhead(x) {
   const track = $("timelineTrack");
-  if (!track || doneVideo.paused || doneVideo.seeking) return;
+  if (!track || doneVideo.paused || doneVideo.seeking || Date.now() < followUntil) return;
   const room = track.clientWidth;
   if (x < track.scrollLeft || x > track.scrollLeft + room) {
     track.scrollLeft = Math.max(0, x - room / 3);
+    // Read back rather than remembering what was asked for: the browser clamps
+    // it to what the strip actually has room to scroll.
+    followedTo = track.scrollLeft;
   }
 }
 
@@ -2988,6 +3025,9 @@ function paintTimeline(t, total, clock) {
 $("timeline").addEventListener("scroll", (e) => {
   if (e.target.id === "timelineTrack" && timelinePps) {
     timelineAt = e.target.scrollLeft / timelinePps;
+    // Anything that did not come from followPlayhead is the viewer scrolling,
+    // and following gets out of the way for a while.
+    if (Math.abs(e.target.scrollLeft - followedTo) >= 1) followUntil = Date.now() + FOLLOW_PAUSE_MS;
   }
 }, true);
 
@@ -3022,29 +3062,40 @@ function makeGrip({ el, axis, read, limits, apply, key }) {
     return range ? Math.round(Math.min(Math.max(v, range[0]), range[1])) : null;
   };
   el.addEventListener("pointerdown", (e) => {
-    const start = read();
-    if (clamp(start) === null) return;
+    if (!limits()) return;   // nothing on screen to measure yet
     e.preventDefault();
+    const start = read();
     const from = axis === "x" ? e.clientX : e.clientY;
+    let dragged = false;
     el.classList.add("dragging");
-    // The pointer belongs to the handle until it is let go, so a fast drag that
-    // outruns the mouse does not drop the line halfway.
-    el.setPointerCapture(e.pointerId);
     const move = (ev) => {
-      const size = clamp(start - ((axis === "x" ? ev.clientX : ev.clientY) - from));
+      const moved = (axis === "x" ? ev.clientX : ev.clientY) - from;
+      if (!moved) return;   // a press that has not gone anywhere yet
+      const size = clamp(start - moved);
       if (size === null) return;
       apply(size);
-      localStorage.setItem(key, String(size));
+      dragged = true;
     };
     const up = () => {
       el.classList.remove("dragging");
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
+      // Once, at the end, and measured off the box itself: a stylesheet rule can
+      // clamp a pane tighter than `limits` does (the agent strip's max-height
+      // does), and what comes back next time has to be what was on the screen,
+      // not what the pointer asked for. A press that never moved changes
+      // nothing and so remembers nothing; neither does a pane that ended the
+      // drag with no size at all, which means it left the screen halfway.
+      const size = read();
+      if (dragged && size > 0) localStorage.setItem(key, String(size));
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
+    // Last, so a capture that throws (a stale or synthetic pointer id) cannot
+    // leave the handle stuck in its dragging state with nothing to end it.
+    el.setPointerCapture(e.pointerId);
   });
   return () => {
     const saved = Number(localStorage.getItem(key));
@@ -3088,7 +3139,15 @@ const layoutFits = [
 // has to come back in.
 function fitLayout() { for (const put of layoutFits) put(); }
 fitLayout();
-window.addEventListener("resize", fitLayout);
+// A window being dragged sends resize events faster than the screen is redrawn,
+// and every one of them would read three sizes and write three styles. One pass
+// per frame is all a redraw can show.
+let fitQueued = false;
+window.addEventListener("resize", () => {
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(() => { fitQueued = false; fitLayout(); });
+});
 
 function scriptSaving(text) {
   const el = $("scriptSaving");
