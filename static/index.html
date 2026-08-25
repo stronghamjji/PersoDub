@@ -582,7 +582,11 @@
      runs long is seen poking out of it. */
   .tl-slot { border-color: var(--primary-line); border-style: dashed; }
   .tl-voice { background: var(--primary); color: var(--primary-foreground); }
-  .tl-voice.tl-over { background: var(--destructive); }
+  /* Over the top of everything else: a voice that runs long reaches into the
+     NEXT line's ground, and that line's own bar -- drawn after it -- would
+     otherwise cover the overshoot completely, hiding both the red and the
+     click. The one thing this bar exists to show is how far past it goes. */
+  .tl-voice.tl-over { background: var(--destructive); z-index: 2; }
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
   .tl-blk:hover { box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.35); }
@@ -2521,6 +2525,10 @@ function isNowLine(t, el) {
   return t > +el.dataset.start && t <= +el.dataset.end;
 }
 
+// The clock as it was last painted, kept so a part of the screen drawn between
+// two of the video's signals can start out saying the same thing as the rest.
+let doneClock = `${fmtClockTenths(0)} / ${fmtClockTenths(0)}`;
+
 // Where the video is, everywhere that shows it: the clock under the player, the
 // row the table highlights, and (through paintTimeline) the timeline's clock,
 // playhead and bars. The video's own listeners are the only thing that knows
@@ -2529,6 +2537,7 @@ function paintPlayhead() {
   const t = doneVideo.currentTime || 0;
   const total = Number.isFinite(doneVideo.duration) ? doneVideo.duration : 0;
   const clock = `${fmtClockTenths(t)} / ${fmtClockTenths(total)}`;
+  doneClock = clock;
   $("videoTime").textContent = clock;
   for (const row of $("scriptBox").querySelectorAll(".sc-row[data-start]")) {
     row.classList.toggle("sc-now", isNowLine(t, row));
@@ -2795,6 +2804,11 @@ let timelineLines = [];
 let timelineDuration = 0;
 let timelinePps = 0;
 let timelineRoom = 0;
+// How far the track is scrolled, kept in SECONDS rather than pixels: the strip
+// is rebuilt whenever a line changes, and at a new scale when the window is
+// resized, and the viewer should find the same moment at the left edge either
+// way instead of being thrown back to the start.
+let timelineAt = 0;
 
 // Draws the whole strip. Empty lines (or no length yet) leave it blank, which
 // CSS collapses to nothing.
@@ -2804,13 +2818,14 @@ function renderTimeline(lines, duration) {
   timelineDuration = duration > 0 ? duration : 0;
   if (!timelineLines.length || !timelineDuration) {
     box.innerHTML = "";
+    timelineAt = 0;   // the next job starts at its own beginning
     return;
   }
   const { source, target } = scriptLangNames();
   box.innerHTML = `
     <div class="tl-head">
       <span class="tl-title">Timeline</span>
-      <span class="tl-clock" id="timelineClock">${escapeHtml($("videoTime").textContent)}</span>
+      <span class="tl-clock" id="timelineClock">${doneClock}</span>
       <span class="tl-legend">
         <span><i class="tl-sw-voice"></i>Voice length</span>
         <span><i class="tl-sw-slot"></i>Time available</span>
@@ -2831,10 +2846,13 @@ function renderTimeline(lines, duration) {
 // One block: a button, so the keyboard reaches the lines too. Its own start and
 // end are the LINE's, not the block's -- clicking the part of a voice bar that
 // pokes past its slot still plays the line it belongs to.
-function timelineBlock(l, cls, from, to, text) {
+// A line draws up to three blocks and every one of them does the same thing, so
+// only one of them (`stop`) is a tab stop: three per line would bury the rest of
+// the screen behind hundreds of presses of the Tab key.
+function timelineBlock(l, cls, from, to, text, stop = false) {
   const left = from * timelinePps;
   const width = Math.max(3, (to - from) * timelinePps);
-  return `<button type="button" class="tl-blk ${cls}"
+  return `<button type="button" class="tl-blk ${cls}"${stop ? "" : ' tabindex="-1"'}
     data-start="${l.start}" data-end="${l.end}"
     style="left:${left.toFixed(1)}px;width:${width.toFixed(1)}px"
     title="${escapeHtml(text || `Line ${l.line}`)}">${escapeHtml(text)}</button>`;
@@ -2848,33 +2866,43 @@ function drawTimelineTrack() {
   if (!track || !timelineDuration) return;
   timelineRoom = track.clientWidth;
   timelinePps = Math.max(timelineRoom / timelineDuration, TL_MIN_PPS);
+  const width = timelineDuration * timelinePps;
 
+  // One tick every `every` seconds, labelled. Close together, that is every
+  // second; squeezed, the ticks thin out with their labels rather than turning
+  // the ruler into a comb of grey lines nobody can read a time off.
   const every = Math.max(1, Math.ceil(TL_LABEL_PX / timelinePps));
   let ticks = "";
-  for (let s = 0; s <= Math.floor(timelineDuration); s += 1) {
-    const label = s % every === 0 ? `<span>${fmtClock(s)}</span>` : "";
-    ticks += `<div class="tl-tick" style="left:${(s * timelinePps).toFixed(1)}px">${label}</div>`;
+  for (let s = 0; s <= Math.floor(timelineDuration); s += every) {
+    const at = s * timelinePps;
+    // The label hangs to the RIGHT of its tick, so the last one would hang off
+    // the end of the strip and be cut in half. A tick with no room keeps the
+    // line and drops the label.
+    const label = at + TL_LABEL_PX <= width ? `<span>${fmtClock(s)}</span>` : "";
+    ticks += `<div class="tl-tick" style="left:${at.toFixed(1)}px">${label}</div>`;
   }
 
   let voices = "";
   let originals = "";
   for (const l of timelineLines) {
+    const hasVoice = l.audio_sec != null;
     // The slot first, so the voice bar lies on top of it.
-    voices += timelineBlock(l, "tl-slot", l.start, l.end, "");
+    voices += timelineBlock(l, "tl-slot", l.start, l.end, "", !hasVoice);
     // No voice on disk yet: the slot alone is the whole truth about that line.
-    if (l.audio_sec != null) {
+    if (hasVoice) {
       const over = lineOverBy(l) ? " tl-over" : "";
-      voices += timelineBlock(l, `tl-voice${over}`, l.start, l.start + l.audio_sec, l.text);
+      voices += timelineBlock(l, `tl-voice${over}`, l.start, l.start + l.audio_sec, l.text, true);
     }
     originals += timelineBlock(l, "tl-org", l.start, l.end, l.source || "");
   }
 
-  track.innerHTML = `<div class="tl-inner" style="width:${(timelineDuration * timelinePps).toFixed(0)}px">
+  track.innerHTML = `<div class="tl-inner" style="width:${width.toFixed(0)}px">
     <div class="tl-ruler">${ticks}</div>
     <div class="tl-lane">${voices}</div>
     <div class="tl-lane">${originals}</div>
     <div class="tl-playhead" id="timelinePlayhead"><i></i></div>
   </div>`;
+  track.scrollLeft = timelineAt * timelinePps;
   // A brand new strip knows nothing about where the video is, and a paused
   // video sends no event to tell it. Put the moment back on it straight away.
   paintTimelineAt(doneVideo.currentTime || 0);
@@ -2905,6 +2933,15 @@ function paintTimeline(t, total, clock) {
   paintTimelineAt(t);
 }
 
+// Remember where the viewer scrolled to. The track itself is thrown away and
+// built again on every redraw, so the listener sits on the strip around it --
+// and catches the event on the way down, because scrolling does not bubble.
+$("timeline").addEventListener("scroll", (e) => {
+  if (e.target.id === "timelineTrack" && timelinePps) {
+    timelineAt = e.target.scrollLeft / timelinePps;
+  }
+}, true);
+
 // A bar is a way into the video: play the line it stands for.
 $("timeline").addEventListener("click", (e) => {
   const blk = e.target.closest(".tl-blk");
@@ -2915,9 +2952,11 @@ $("timeline").addEventListener("click", (e) => {
 // The scale is measured from the track's width, so a window resized (or, later,
 // a pane dragged) has to be measured again -- otherwise the drawing keeps the
 // old width's scale.
+// A width of zero is not a width: the strip can be measured while it is hidden,
+// and drawing to it would freeze the scale at its floor for good.
 new ResizeObserver(() => {
   const track = $("timelineTrack");
-  if (track && track.clientWidth !== timelineRoom) drawTimelineTrack();
+  if (track && track.clientWidth && track.clientWidth !== timelineRoom) drawTimelineTrack();
 }).observe($("timeline"));
 
 function scriptSaving(text) {
