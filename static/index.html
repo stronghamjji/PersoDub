@@ -3427,8 +3427,20 @@ function menuRow(label, { note = "", sub = "", tick = false, disabled = false, c
   b.disabled = disabled;
   // `sub` is the reason a row is greyed out. It goes under the name rather than
   // beside it: a sentence in the right-hand column would squeeze the name away.
-  b.innerHTML = `<span class="menu-name">${label}${sub ? `<em>${sub}</em>` : ""}</span><span>${
-    tick ? '<span class="tick">✓</span>' : chevron ? "›" : note}</span>`;
+  // Built as text, not markup: the day a reason is quoted from a CLI's own
+  // error message, that sentence must not be able to become a tag.
+  const name = document.createElement("span");
+  name.className = "menu-name";
+  name.appendChild(document.createTextNode(label));
+  if (sub) {
+    const why = document.createElement("em");
+    why.textContent = sub;
+    name.appendChild(why);
+  }
+  const right = document.createElement("span");
+  if (tick) { right.innerHTML = '<span class="tick">✓</span>'; }
+  else { right.textContent = chevron ? "›" : note; }
+  b.append(name, right);
   return b;
 }
 
@@ -3646,6 +3658,12 @@ async function ask(message) {
           if (alias && alias !== servedModel) { servedModel = alias; paintChoice(); }
         } else if (ev.kind === "progress") {
           clearDots(); settlePrevious(); chip(ev.label);
+          // Whatever the assistant says next belongs BELOW this step, not
+          // appended to the paragraph above it. Without this, an assistant
+          // that speaks before its first tool call -- which Codex does every
+          // turn -- ends up with its answer printed above the steps that
+          // produced it.
+          answer = null;
           // The assistant just rewrote a line. Tell the script table so the
           // change shows up where the user is looking, without a refresh.
           // The chip fires when the tool is CALLED, a moment before the line is

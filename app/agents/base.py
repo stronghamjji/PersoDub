@@ -106,7 +106,12 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
             except ValueError:
                 continue  # a banner or a warning, not part of the stream
             for out in translate(event):
-                if out.get("kind") in ("done", "error"):
+                # "How this turn ended". A translator that knows an error came
+                # mid-turn -- a tool refusing the agent, a connection dropping
+                # and coming back -- says so with ends_turn: False, and the
+                # exit-code fallback below still gets its say.
+                if out.get("kind") == "done" or (
+                        out.get("kind") == "error" and out.get("ends_turn", True)):
                     saw_done = True
                 yield out
     finally:

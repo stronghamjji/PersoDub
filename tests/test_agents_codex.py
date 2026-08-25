@@ -72,6 +72,9 @@ def test_a_refused_tool_call_says_so():
     assert out[0]["kind"] == "error"
     assert "get_script" in out[0]["message"]
     assert "requires approval" in out[0]["message"]
+    # The agent usually carries on afterwards, so this is not how the turn
+    # ended -- if it were, a run that then died would lose its exit code.
+    assert out[0]["ends_turn"] is False
 
 
 def test_a_shell_command_is_reported_as_one_step():
@@ -134,7 +137,7 @@ def test_the_command_lets_a_tool_call_through_without_anyone_to_ask(tmp_path):
     joined = " ".join(command("고쳐줘", _mcp_config(tmp_path), resume=False))
     assert 'approvals_reviewer="auto_review"' in joined
     assert 'approval_policy="on-request"' in joined
-    assert 'sandbox_mode="workspace-write"' in joined
+    assert 'sandbox_mode="read-only"' in joined
 
 
 def test_the_command_keeps_the_users_skills_and_the_web_out(tmp_path):
@@ -164,12 +167,15 @@ def test_resuming_continues_the_same_conversation(tmp_path):
     assert args[:4] == ["exec", "resume", "--last", "--json"]
 
 
-def test_a_chosen_model_is_passed_on(tmp_path):
-    from app.agents.codex import command
+def test_no_model_is_ever_asked_for(tmp_path):
+    """Codex names its models by version, so a picker list would go stale. The
+    argument is taken and ignored rather than half-wired: MODELS is empty, so
+    the panel never offers one."""
+    from app.agents.codex import MODELS, command
 
-    args = command("고쳐줘", _mcp_config(tmp_path), resume=False, model="gpt-5.5")
-    assert args[args.index("-m") + 1] == "gpt-5.5"
-    assert "-m" not in command("고쳐줘", _mcp_config(tmp_path), resume=False)
+    assert MODELS == []
+    assert "-m" not in command("고쳐줘", _mcp_config(tmp_path), resume=False,
+                               model="gpt-5.5")
 
 
 def test_a_cli_that_reads_stdin_is_not_left_hanging(monkeypatch):
@@ -203,3 +209,63 @@ def test_the_environment_is_handed_over_as_a_toml_table(tmp_path):
     env = next(a for a in args if a.startswith("mcp_servers.persodub.env="))
     assert '"PERSODUB_API" = "http://127.0.0.1:8765"' in env
     assert '"PERSODUB_API":' not in env  # the JSON form Codex refused
+
+
+def test_the_users_own_execpolicy_is_left_alone(tmp_path):
+    """Dropping --ignore-rules bought nothing -- a real turn rewrote a script
+    with the user's .rules file loaded -- so their own fence stays up."""
+    from app.agents.codex import command
+
+    assert "--ignore-rules" not in command("고쳐줘", _mcp_config(tmp_path),
+                                           resume=False)
+
+
+def test_retry_chatter_is_shown_but_does_not_end_the_turn():
+    """Recorded 2026-08-26 against an empty CODEX_HOME: a failing run printed
+    eleven of these before saying how it really ended."""
+    out = ev('{"type":"error","message":"Reconnecting... 2/5 (unexpected status '
+             '401 Unauthorized)"}')
+    assert out[0]["kind"] == "error"
+    assert "Reconnecting" in out[0]["message"]
+    assert out[0]["ends_turn"] is False
+
+
+def test_a_transport_error_wrapped_as_an_item_is_shown_once():
+    line = ('{"type":"%s","item":{"id":"item_0","type":"error","message":'
+            '"Falling back from WebSockets to HTTPS transport."}}')
+    out = ev(line % "item.completed")
+    assert out[0]["kind"] == "error"
+    assert out[0]["ends_turn"] is False
+    # item.started for the same item would say it twice.
+    assert ev(line % "item.started") == []
+
+
+def test_a_failed_turn_is_how_a_turn_ends():
+    """turn.failed carries the same message the last transport line did, and
+    this one IS the ending -- nothing else should be waited for."""
+    out = ev('{"type":"turn.failed","error":{"message":"unexpected status 401"}}')
+    assert out[0]["kind"] == "error"
+    assert out[0].get("ends_turn", True) is True
+
+
+def test_a_mid_turn_error_leaves_the_exit_code_its_say(monkeypatch):
+    """The point of ends_turn: a tool refusing the agent must not swallow the
+    message base.run writes when the CLI then dies."""
+    from app.agents import base
+
+    monkeypatch.setattr(base, "TIMEOUT_SECONDS", 10.0)
+    events = iter([[{"kind": "error", "message": "tool refused", "ends_turn": False}]])
+    out = list(base.run("/bin/sh", ["-c", "echo {}; exit 3"],
+                        lambda e: next(events, [])))
+    assert [e["kind"] for e in out] == ["error", "error"]
+    assert "3번 오류" in out[1]["message"]
+
+
+def test_an_error_that_ends_the_turn_is_the_last_word(monkeypatch):
+    from app.agents import base
+
+    monkeypatch.setattr(base, "TIMEOUT_SECONDS", 10.0)
+    events = iter([[{"kind": "error", "message": "gave up"}]])
+    out = list(base.run("/bin/sh", ["-c", "echo {}; exit 3"],
+                        lambda e: next(events, [])))
+    assert [e["kind"] for e in out] == ["error"]

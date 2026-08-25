@@ -1066,8 +1066,15 @@ def agent_chat(body: AgentChatRequest, request: Request):
     api_url = str(request.base_url).rstrip("/")
     mcp_config = agent_base.write_mcp_config(AGENT_DIR, api_url)
     work_dir = os.path.dirname(mcp_config)
-    args = driver.command(_with_job(body.message, body.job_id),
-                          mcp_config, body.resume, body.model)
+    try:
+        args = driver.command(_with_job(body.message, body.job_id),
+                              mcp_config, body.resume, body.model)
+    except (OSError, ValueError, KeyError) as e:
+        # Everything else on this path answers with a bubble rather than a
+        # stack trace, and building the command line should not be the one
+        # place that hands the user a 500.
+        raise HTTPException(status_code=500,
+                            detail="도우미 설정을 준비하지 못했습니다: %s" % e)
 
     def stream():
         for event in agent_base.run(binary, args, driver.translate,

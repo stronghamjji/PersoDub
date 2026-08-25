@@ -55,7 +55,22 @@ def translate(event: dict) -> List[dict]:
                    or "The assistant stopped before finishing.")
         return [{"kind": "error", "message": message}]
 
+    if kind == "error":
+        # A transport complaint, not the end of the turn. Recorded 2026-08-26
+        # against an empty CODEX_HOME: a failing run printed eleven of these
+        # ("Reconnecting... 2/5 (unexpected status 401 ...)") and then said how
+        # it really ended with turn.failed. Passing them on keeps a turn that
+        # dies quietly from showing "(empty answer)"; ends_turn says they must
+        # not stand in for that ending.
+        return [_transport_error(event.get("message"))]
+
     return []
+
+
+def _transport_error(message) -> dict:
+    if not isinstance(message, str) or not message:
+        message = "The assistant lost its connection."
+    return {"kind": "error", "message": message, "ends_turn": False}
 
 
 def _item(kind: str, item: dict) -> List[dict]:
@@ -69,7 +84,11 @@ def _item(kind: str, item: dict) -> List[dict]:
                      "label": TOOL_LABELS.get(name, "Running %s" % name)}]
         error = item.get("error") or {}
         if error.get("message"):
-            return [{"kind": "error", "message": "%s failed: %s"
+            # ends_turn: the agent usually carries on after a tool refuses it,
+            # so this must not be mistaken for the end -- otherwise a turn that
+            # then dies loses the exit code and the stderr behind it.
+            return [{"kind": "error", "ends_turn": False,
+                     "message": "%s failed: %s"
                      % (item.get("tool") or "the tool", error["message"])}]
         # A finished call is bookkeeping between the agent and its tools.
         return []
@@ -80,6 +99,13 @@ def _item(kind: str, item: dict) -> List[dict]:
         if kind == "item.started":
             return [{"kind": "progress", "tool": "shell",
                      "label": "Running a command"}]
+        return []
+
+    if what == "error":
+        # The same transport chatter, wrapped as an item ("Falling back from
+        # WebSockets to HTTPS transport."). Only once, on completion.
+        if kind == "item.completed":
+            return [_transport_error(item.get("message"))]
         return []
 
     if what == "agent_message" and kind == "item.completed":
@@ -95,7 +121,8 @@ def _item(kind: str, item: dict) -> List[dict]:
 
 # Codex names its models by version ("gpt-5.5"), and a list of those in the
 # picker would go stale with the next release. Empty means the picker offers the
-# CLI itself and Codex answers with whatever the user set it up to use.
+# CLI itself and Codex answers with whatever the user set it up to use -- so
+# nothing here passes -m, and there is no half-built model path to trip over.
 MODELS: List[str] = []
 
 
@@ -121,18 +148,46 @@ def command(prompt: str, mcp_config: str, resume: bool, model: str = "") -> List
     read back here and handed over as -c overrides. --ignore-user-config is the
     other half of that fence: without it the user's own MCP servers come along
     and the assistant reaches tools this app never offered it.
+
+    What --ignore-user-config does NOT cover: it skips ~/.codex/config.toml and
+    nothing else. $CODEX_HOME/AGENTS.md -- whatever standing instructions the
+    user keeps for their own Codex work -- still rides into every turn, and
+    neither project_doc_max_bytes nor project_doc_fallback_filenames suppresses
+    it. Pointing CODEX_HOME somewhere private would, but the user's login lives
+    there too, so that trade is not ours to make quietly.
+
+    `model` is accepted to match the other drivers and deliberately unused:
+    MODELS is empty, so the picker never offers one and Codex answers with
+    whatever the user set it up to use.
     """
     with open(mcp_config, encoding="utf-8") as f:
         server = json.load(f)["mcpServers"]["persodub"]
 
     settings = [
         # Headless Codex refuses every MCP tool call unless a reviewer is named:
-        # the approval prompt goes to a terminal that is not there, and the call
-        # is cancelled (measured 2026-08-26; openai/codex#24135). These three
-        # are what make the script tools reachable at all.
+        # the approval prompt goes to a terminal that is not there, EOF reads as
+        # "no", and the call is cancelled (measured 2026-08-26; the CLI says
+        # "approval policy is never" -- openai/codex#24135). approval_policy
+        # "never" is therefore not usable here, and these two are what make the
+        # script tools reachable at all.
+        #
+        # Read what they permit, not just what they fix: "on-request" lets the
+        # model ASK to run a command with escalated privileges -- outside the
+        # sandbox -- and "auto_review" hands that request to another model
+        # rather than to the user. Nobody here is asked. The sandbox below is
+        # what keeps that from mattering much, not the approval setting.
         'approvals_reviewer="auto_review"',
         'approval_policy="on-request"',
-        'sandbox_mode="workspace-write"',
+        # Read-only: Codex keeps a shell that no setting takes away, so the
+        # sandbox is the fence. Verified 2026-08-26 that a real turn still
+        # rewrites a script through it -- the MCP server is a separate process
+        # talking HTTP to this app, so nothing the assistant needs is a write
+        # the sandbox can see. Residual risk, and it is not small: read-only
+        # stops writes and stops the shell reaching the network, but Codex can
+        # still READ any file this user can read, and the model's own uplink
+        # can carry it away. Claude's backend denies Read and Bash outright;
+        # this one cannot.
+        'sandbox_mode="read-only"',
         # The user's skills and the web are not this assistant's business. Left
         # on, the first run went off and read a skill file off the disk.
         "skills.include_instructions=false",
@@ -145,20 +200,28 @@ def command(prompt: str, mcp_config: str, resume: bool, model: str = "") -> List
     if resume:
         # --last is filtered by working directory, and ours is the app's own
         # agent folder -- so this cannot pick up the user's own Codex session.
+        # Every turn asks to resume (the panel never sends the field, so the
+        # request default of True stands); with nothing to resume --last starts
+        # a new thread instead of failing, which is what makes the first turn
+        # after an install work.
         args = ["exec", "resume", "--last", "--json"]
     else:
         args = ["exec", "--json"]
     args += [
         # The agent folder is not a git checkout, and the run must not stop for
-        # that or for anything the user wrote into an execpolicy file.
+        # that. The user's own .rules execpolicy is deliberately left in place:
+        # it is a fence they built, and dropping it bought nothing -- a real
+        # turn rewrote a script with the file loaded (2026-08-26).
         "--skip-git-repo-check",
         "--ignore-user-config",
-        "--ignore-rules",
     ]
     for setting in settings:
         args += ["-c", setting]
-    if model:
-        args += ["-m", model]
+    # Everything above is a -c override rather than a flag on purpose:
+    # --approve-for-me does the same as the two approval settings, but it is an
+    # option of `codex exec` alone -- `codex exec resume` does not take it -- so
+    # the -c form is the only one that works on both paths.
+    #
     # Codex has no --system-prompt, so the standing instructions ride in front
     # of the question.
     args.append(SYSTEM_PROMPT + "\n\n" + prompt)
