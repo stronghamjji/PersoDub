@@ -461,6 +461,9 @@
   .advanced-btn > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
   .advanced-btn .chev { color: var(--muted-foreground); }
   .advanced-btn.open, .advanced-btn.open .chev { border-color: var(--primary); color: var(--primary); }
+  /* A sentence, not a field: it belongs under the whole grid rather than in a
+     column beside one. The grid's own gap already spaces it. */
+  #advancedKeysLink { grid-column: 1 / -1; margin-top: 0; }
   .start-btn { width: 100%; height: 44px; font-size: 0.92rem; }
 </style>
 
@@ -1322,14 +1325,17 @@ function openNewProject(source) {
   if (source.file) {
     projectObjectUrl = URL.createObjectURL(source.file);
     v.src = projectObjectUrl;
+    // Only a real file ever fires this, so only a real file may register it --
+    // a once-listener that never fires never detaches, and one per link would
+    // pile up until the next file opened them all at once.
+    v.addEventListener("loadedmetadata", () => {
+      $("projectDur").textContent = fmtClock(v.duration);
+      renderTrim(v.duration);
+    }, { once: true });
   } else if (source.probe && source.probe.thumbnail_url) {
     $("projectThumb").style.backgroundImage = `url(${source.probe.thumbnail_url})`;
   }
   $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
-  v.addEventListener("loadedmetadata", () => {
-    $("projectDur").textContent = fmtClock(v.duration);
-    renderTrim(v.duration);
-  }, { once: true });
   $("projectError").textContent = "";
   $("projectOverlay").classList.add("open");
 }
@@ -1342,6 +1348,9 @@ function closeNewProject() {
   state.newProject = null;
   setVideoFile(null);
   videoInput.value = "";  // otherwise re-picking the same file fires no change event
+  // Same reason for the link field: the probe only runs on an `input` event, so
+  // a URL left sitting there could never open the dialog again.
+  $("linkInput").value = "";
   clearLink();
 }
 $("projectClose").addEventListener("click", closeNewProject);
@@ -1817,7 +1826,8 @@ async function startDubbing() {
     $("projectOverlay").classList.remove("open");
     releaseProjectVideo();
     showScreen("running");
-    setTopbar({ title: label, subtitle: `Working · ${langsLabel()}`, running: true, back: true });
+    // No back arrow while it runs: Cancel is the only way out of a live job.
+    setTopbar({ title: label, subtitle: `Working · ${langsLabel()}`, running: true, back: false });
     runPollLoop(jobId, myGeneration);
   } catch (e) {
     if (!showIfOutOfSpace(e)) $("projectError").textContent = errorText(e);
