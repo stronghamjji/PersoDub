@@ -283,6 +283,12 @@
   .btn-primary:hover { box-shadow: var(--focus-ring); }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
   .btn-secondary { background: var(--secondary); color: var(--foreground); border: 1px solid var(--border); }
+  /* A quiet button that still reads as a button: white, bordered, same box as
+     the rest. (.btn-ghost is a text link -- inside the 52px top bar it read as
+     an underlined footnote beside the solid Export.) */
+  .btn-outline { background: var(--background); color: var(--foreground); border: 1px solid var(--border); }
+  .btn-outline:hover { background: var(--secondary); }
+  .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-ghost { background: none; border: none; color: var(--muted-foreground); font-size: 0.76rem; cursor: pointer; font-family: inherit; text-decoration: underline; padding: 0; }
 
   .section-gap { margin-top: 16px; }
@@ -462,7 +468,7 @@
       </div>
       <span class="topbar-spacer"></span>
       <span class="topbar-version" id="topbarVersion"></span>
-      <button class="btn btn-ghost" id="cancelBtn" type="button" hidden>Cancel</button>
+      <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>Export</button>
     </div>
     <div class="job-notice" id="jobNotice" style="display:none"></div>
@@ -1268,7 +1274,8 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   $("topbarSub").textContent = subtitle;
   $("topbarBack").hidden = !back;
   $("cancelBtn").hidden = !running;
-  $("exportBtn").hidden = !done;
+  // Task 7 attaches the Export dialog and flips this on
+  $("exportBtn").hidden = true;   // `done` is ignored on purpose until then
 }
 
 // The resting state: no job open, the first screen showing.
