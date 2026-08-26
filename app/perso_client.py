@@ -224,13 +224,17 @@ class PersoClient:
         poll_interval: float = 10.0,
         base_url: str = BASE_URL,
     ):
-        self.api_key = api_key or os.environ.get("PERSO_API_KEY")
+        # current_value = kit.env first, process env second: a key or workspace
+        # saved in Settings applies to this client right away, with no restart.
+        from app.settings_env import current_value
+
+        self.api_key = api_key or current_value("PERSO_API_KEY")
         if not self.api_key:
             raise ValueError("PERSO_API_KEY environment variable is not set")
         if space_seq is None:
             # `or None`: PERSO_SPACE_SEQ= (present but empty, e.g. cleared via
             # Settings) must mean "unset", not int("") -> ValueError.
-            space_seq = os.environ.get("PERSO_SPACE_SEQ") or None
+            space_seq = current_value("PERSO_SPACE_SEQ") or None
         if space_seq is None:
             # No pin anywhere: ask Perso which workspace this key belongs to.
             space_seq = _resolve_space_seq(self.api_key, base_url.rstrip("/"))

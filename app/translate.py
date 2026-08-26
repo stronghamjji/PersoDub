@@ -17,7 +17,6 @@ from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import service_account
 
 from app.config import (
-    GEMINI_API_KEY,
     GEMINI_MODEL,
     OLLAMA_GEMMA_MODEL,
     OLLAMA_MODEL,
@@ -180,8 +179,13 @@ class GeminiTranslator(TranslationEngine):
     # one translation attempt per line (2026-07-30 calibration, user decision).
     max_budget_retries = 0
 
-    def __init__(self, api_key: str = GEMINI_API_KEY, model: str = GEMINI_MODEL):
-        self.api_key = api_key
+    def __init__(self, api_key: Optional[str] = None, model: str = GEMINI_MODEL):
+        # Resolved here, not at import time: current_value reads kit.env first,
+        # so a key saved in Settings works on the next dub without a restart.
+        # An explicit api_key (tests, callers) still wins.
+        from app.settings_env import current_value
+
+        self.api_key = api_key if api_key is not None else current_value("GEMINI_API_KEY")
         self.model = model
 
     def _ask(self, prompt: str) -> str:

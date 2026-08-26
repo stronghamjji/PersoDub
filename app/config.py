@@ -10,6 +10,9 @@ QWEN_TTS_URL = os.environ.get("QWEN_TTS_URL", "http://127.0.0.1:3901")
 QWEN_VOICE_MODE = os.environ.get("QWEN_VOICE_MODE", "timbre")
 
 # Gemini (Google AI Studio) translation — consumer API key, NOT Vertex.
+# Kept for back-compat only: it freezes whatever the environment held at import
+# time, so a key saved in Settings would never show up here. Everything that
+# needs the key reads settings_env.current_value("GEMINI_API_KEY") instead.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 
@@ -212,5 +215,11 @@ def default_stt_engine() -> str:
     else "" (local Whisper, optionally + diar_engine="campplus") so the app keeps
     working with zero setup and no paid key. Read live (not cached at import time)
     so tests can monkeypatch the env per case.
+
+    The key comes from current_value (kit.env first, process env second), so a
+    key just saved in Settings picks Perso for the very next dub instead of
+    waiting for a restart.
     """
-    return os.environ.get("STT_ENGINE") or ("perso" if os.environ.get("PERSO_API_KEY") else "")
+    from app.settings_env import current_value
+
+    return os.environ.get("STT_ENGINE") or ("perso" if current_value("PERSO_API_KEY") else "")

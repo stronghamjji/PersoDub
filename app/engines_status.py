@@ -8,11 +8,10 @@ config/env live (not cached at import time) so tests can monkeypatch, and the
 Ollama check is exception-safe -- a down/slow Ollama must never crash the
 caller, so any network problem resolves to False rather than raising.
 """
-import os
-
 import requests
 
 from app import config
+from app.settings_env import current_value
 
 
 def _tag_matches(tags, model: str) -> bool:
@@ -79,7 +78,9 @@ def qwen_status() -> str:
 
 
 def gemini_available() -> bool:
-    return bool(config.GEMINI_API_KEY)
+    # current_value, not config.GEMINI_API_KEY: the constant froze at import
+    # time, so a key saved in Settings kept Gemini greyed out until a restart.
+    return bool(current_value("GEMINI_API_KEY"))
 
 
 def perso_available() -> bool:
@@ -88,4 +89,4 @@ def perso_available() -> bool:
     # media host has a public default. Requiring PERSO_SPACE_SEQ here kept
     # Perso greyed out for everyone who only saved a key in Settings. No
     # network call in this check -- /api/engines runs on every page load.
-    return bool(os.environ.get("PERSO_API_KEY"))
+    return bool(current_value("PERSO_API_KEY"))

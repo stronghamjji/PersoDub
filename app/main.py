@@ -48,7 +48,8 @@ from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
 from app.pipeline import run_dub
 from app.qwen_pipeline import rebuild_dub, resynth_one_line
 from app.text.naming import next_free, safe_name
-from app.settings_env import (read_analytics_off, read_key_status, read_value,
+from app.settings_env import (current_value, read_analytics_off,
+                              read_key_status, read_value,
                               write_analytics_off, write_keys)
 from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
 from app.translate import get_translator
@@ -247,8 +248,10 @@ def settings_post(body: SettingsRequest):
     """Write non-empty API keys (and the picked Perso workspace) into kit.env,
     backing it up first.
 
-    The engines read kit.env once at startup, so a change only applies after
-    the app restarts -- restart_required tells the UI to say so."""
+    Nothing here needs a restart any more: every reader of these three values
+    goes through settings_env.current_value, which reads kit.env at use time,
+    so the next dub already uses what was just saved. restart_required stays in
+    the response as a False for older clients that still look for it."""
     space = None if body.perso_space_seq is None else body.perso_space_seq.strip()
     # The picker only ever posts a seq it got from /api/perso/spaces; anything
     # else is hand-crafted and must not reach the engine env file. isascii +
@@ -273,7 +276,7 @@ def settings_post(body: SettingsRequest):
         write_analytics_off(body.analytics_off)
     return {"gemini_key_set": status["GEMINI_API_KEY"], "perso_key_set": status["PERSO_API_KEY"],
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
-            "restart_required": True}
+            "restart_required": False}
 
 
 @app.get("/api/perso/spaces")
@@ -285,14 +288,52 @@ def perso_spaces():
     otherwise picking a workspace right after saving the key would take two
     restarts. The key itself is used server-side only and never returned.
     """
-    key = read_value("PERSO_API_KEY") or os.environ.get("PERSO_API_KEY")
+    key = current_value("PERSO_API_KEY")
     if not key:
-        raise HTTPException(409, "Save a Perso API key first")
+        raise HTTPException(409, "Enter a Perso API key to see its workspaces")
     try:
         spaces = list_dubbing_spaces(key)
     except Exception as e:
         # Never interpolate str(e): an httpx error can echo request details.
         raise HTTPException(502, f"Could not list Perso workspaces ({type(e).__name__})")
+    return {"spaces": spaces}
+
+
+class PersoSpacesPreviewRequest(BaseModel):
+    api_key: str
+
+
+# Last preview (key, when, spaces), so the typing/blur/paste triggers on the
+# screen can all fire without three calls to Perso for one key. Not a cache with
+# a policy -- just the 5-second window that collapses one burst into one call.
+_preview_last = {"key": "", "at": 0.0, "spaces": None}
+_PREVIEW_WINDOW_SEC = 5.0
+
+
+@app.post("/api/perso/spaces/preview")
+def perso_spaces_preview(body: PersoSpacesPreviewRequest):
+    """Workspaces for a key the user has TYPED but not saved yet.
+
+    This is what removes the second restart: without it the picker could only
+    list workspaces for an already-saved key, so a new key meant save, restart,
+    pick, save, restart. The key arrives in the body, is used server-side only,
+    and is never echoed back -- the response carries workspaces and nothing
+    else, so a key can't leak into logs or the screen through this route.
+    """
+    key = (body.api_key or "").strip()
+    if not key:
+        raise HTTPException(400, "Enter a Perso API key to see its workspaces")
+    now = time.monotonic()
+    if _preview_last["spaces"] is not None and _preview_last["key"] == key \
+            and now - _preview_last["at"] < _PREVIEW_WINDOW_SEC:
+        return {"spaces": _preview_last["spaces"]}
+    try:
+        spaces = list_dubbing_spaces(key)
+    except Exception as e:
+        # Same rule as above: the type name only, never str(e) -- an httpx
+        # error message can carry the request, and the request carries the key.
+        raise HTTPException(502, f"Could not list Perso workspaces ({type(e).__name__})")
+    _preview_last.update(key=key, at=now, spaces=spaces)
     return {"spaces": spaces}
 
 
@@ -924,11 +965,11 @@ def dub_start(
             "Perso transcription needs an API key. Open Settings and save your Perso "
             "API key, or choose Local transcription.",
         )
-    if stt_engine == "perso" and not (read_value("PERSO_SPACE_SEQ") or os.environ.get("PERSO_SPACE_SEQ")):
+    if stt_engine == "perso" and not current_value("PERSO_SPACE_SEQ"):
         # No workspace pinned: a single-workspace account resolves silently in
         # the pipeline, but several would fail AFTER minutes of separation
         # work. Catch that here, before the upload is accepted.
-        key = read_value("PERSO_API_KEY") or os.environ.get("PERSO_API_KEY")
+        key = current_value("PERSO_API_KEY")
         try:
             spaces = list_dubbing_spaces(key)
         except Exception:

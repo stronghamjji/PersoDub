@@ -6,7 +6,8 @@ localStorage, which nothing ever read -- this module makes saving real.
 Saved values are shown back in Settings (single-user desktop app, the user
 owns this file). Localhost-only comes from the 127.0.0.1 bind; main.py's
 TrustedHost middleware only rejects foreign Host headers (DNS rebinding) on
-top of that. A change takes effect on the next app start.
+top of that. A saved key takes effect on the next dub, not the next app start:
+everything that needs one reads it back through current_value() below.
 """
 import os
 import shutil
@@ -99,6 +100,18 @@ def read_value(key: str) -> Optional[str]:
             if k.strip() == key and v.strip():
                 value = v.strip()
     return value
+
+
+def current_value(key: str) -> str:
+    """The value in force right now: kit.env first, process env second, "" if
+    neither has it.
+
+    kit.env wins so a key saved seconds ago is used by the very next dub --
+    the process env only holds what existed when the app started, so reading
+    it first would make every saved key wait for a restart. The env fallback
+    keeps server deployments (no kit.env at all) working unchanged.
+    """
+    return read_value(key) or os.environ.get(key, "") or ""
 
 
 def _write_env(to_set: Dict[str, str]) -> None:

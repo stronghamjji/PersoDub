@@ -9,8 +9,10 @@ import os
 
 from fastapi.testclient import TestClient
 
+from app import config
 from app import main
 from app import perso_client
+from app import translate
 from app.settings_env import update_env_text
 
 client = TestClient(main.app, base_url="http://127.0.0.1")
@@ -132,7 +134,7 @@ def test_post_writes_keys_and_backs_up(tmp_path, monkeypatch):
     r = client.post("/api/settings", json={"gemini_api_key": "g123", "perso_api_key": "p456"})
     assert r.status_code == 200
     assert r.json() == {"gemini_key_set": True, "perso_key_set": True,
-                        "perso_space_seq": None, "restart_required": True}
+                        "perso_space_seq": None, "restart_required": False}
     text = (kit / "kit.env").read_text(encoding="utf-8")
     assert "GEMINI_API_KEY=g123" in text and "PERSO_API_KEY=p456" in text
     assert "PERSODUB_KIT_DIR=/x" in text  # other lines survive
@@ -285,3 +287,100 @@ def test_saving_only_the_switch_leaves_the_saved_keys_alone(tmp_path, monkeypatc
     kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
     client.post("/api/settings", json={"analytics_off": True})
     assert "GEMINI_API_KEY=gvalue" in (kit / "kit.env").read_text(encoding="utf-8")
+
+
+# --- POST /api/perso/spaces/preview (workspaces for a TYPED, unsaved key) ---
+# This is what removes the second restart: the picker can list workspaces for a
+# key the user has only pasted, so key + workspace are saved in one go.
+
+def test_preview_rejects_an_empty_key():
+    r = client.post("/api/perso/spaces/preview", json={"api_key": "   "})
+    assert r.status_code == 400
+
+
+def test_preview_lists_workspaces_for_the_typed_key_without_saving_it(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE)          # nothing saved in kit.env
+    monkeypatch.delenv("PERSO_API_KEY", raising=False)
+    main._preview_last.update(key="", at=0.0, spaces=None)
+    seen = {}
+
+    def fake_list(key):
+        seen["key"] = key
+        return [{"seq": 7, "name": "EST", "tier": "pro", "credits": 10}]
+
+    monkeypatch.setattr(main, "list_dubbing_spaces", fake_list)
+    r = client.post("/api/perso/spaces/preview", json={"api_key": "TYPEDKEY"})
+    assert r.status_code == 200
+    assert r.json() == {"spaces": [{"seq": 7, "name": "EST", "tier": "pro", "credits": 10}]}
+    assert seen["key"] == "TYPEDKEY"
+    # The key is used server-side only -- it must never come back out.
+    assert "TYPEDKEY" not in r.text
+    # ...and it must not have been written to kit.env behind the user's back.
+    assert "TYPEDKEY" not in (tmp_path / "kit" / "kit.env").read_text(encoding="utf-8")
+
+
+def test_preview_upstream_failure_is_502_without_key_leak(monkeypatch):
+    main._preview_last.update(key="", at=0.0, spaces=None)
+
+    def boom(key):
+        raise RuntimeError("connect timeout for TYPEDKEY")
+
+    monkeypatch.setattr(main, "list_dubbing_spaces", boom)
+    r = client.post("/api/perso/spaces/preview", json={"api_key": "TYPEDKEY"})
+    assert r.status_code == 502
+    assert "TYPEDKEY" not in r.text
+
+
+def test_preview_reuses_the_last_answer_for_the_same_key(monkeypatch):
+    # Paste, debounced typing and blur can all fire for one key -- Perso is
+    # asked once, not three times.
+    main._preview_last.update(key="", at=0.0, spaces=None)
+    calls = []
+
+    def fake_list(key):
+        calls.append(key)
+        return [{"seq": 7, "name": "EST", "tier": None, "credits": None}]
+
+    monkeypatch.setattr(main, "list_dubbing_spaces", fake_list)
+    for _ in range(3):
+        assert client.post("/api/perso/spaces/preview", json={"api_key": "SAME"}).status_code == 200
+    assert calls == ["SAME"]
+    # A different key is a different question, so it does go out.
+    client.post("/api/perso/spaces/preview", json={"api_key": "OTHER"})
+    assert calls == ["SAME", "OTHER"]
+
+
+# --- a saved key applies to the next dub, with no restart ------------------
+
+def test_default_stt_engine_picks_perso_from_a_key_saved_after_startup(tmp_path, monkeypatch):
+    # The process env is empty (the key did not exist when the app started) and
+    # kit.env has it -- exactly the state right after Settings saves a key.
+    _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=SAVEDKEY\n")
+    monkeypatch.delenv("PERSO_API_KEY", raising=False)
+    monkeypatch.delenv("STT_ENGINE", raising=False)
+    assert config.default_stt_engine() == "perso"
+
+
+def test_default_stt_engine_stays_local_without_any_key(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE)
+    monkeypatch.delenv("PERSO_API_KEY", raising=False)
+    monkeypatch.delenv("STT_ENGINE", raising=False)
+    assert config.default_stt_engine() == ""
+
+
+def test_perso_client_uses_a_key_and_workspace_saved_after_startup(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch,
+         BASE + "PERSO_API_KEY=SAVEDKEY\nPERSO_SPACE_SEQ=42\n")
+    monkeypatch.delenv("PERSO_API_KEY", raising=False)
+    monkeypatch.delenv("PERSO_SPACE_SEQ", raising=False)
+    pc = perso_client.PersoClient()
+    assert pc.api_key == "SAVEDKEY"
+    assert pc.space_seq == 42
+
+
+def test_gemini_translator_uses_a_key_saved_after_import(tmp_path, monkeypatch):
+    # translate.py froze GEMINI_API_KEY at import time, so a key saved in
+    # Settings could never reach it without restarting the whole app.
+    _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=SAVEDGEM\n")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert translate.GeminiTranslator().api_key == "SAVEDGEM"
