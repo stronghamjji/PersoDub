@@ -24,6 +24,25 @@ carries no personal data — it is the same anonymous read anyone makes opening 
 releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `kit.env` to turn
 the check off entirely.
 
+## The Dub Agent
+
+The Dub Agent on the finished screen is a third way data can leave this machine, and
+it is worth the same precision. It does not run an assistant of ours: it runs a CLI
+you already have installed — **Claude Code** or **Codex** — as a program on your own
+machine, and that CLI talks to its own vendor on your own account.
+
+| Assistant | What it can reach here | Where the conversation goes |
+|---|---|---|
+| **Claude Code** | PersoDub's own script tools only. Reading files and running shell commands are denied, and your own MCP servers are left out. | Anthropic |
+| **Codex** | Runs **read-only by default**, and its shell cannot reach the network. An escalation its own reviewer model approves may write to PersoDub's own agent folder (and the system temp folder) - not to the rest of your files. It can still **read any file on this computer that you can read**. If you keep standing instructions for Codex in your own `AGENTS.md` file, those are read into every turn here too. | OpenAI |
+
+In both cases the script of the job on screen is part of the conversation. With Codex,
+so is anything else it chooses to read. Your video is never uploaded for this.
+
+The conversation carries on from one job to the next, and the thread is kept by that
+assistant's own CLI on your machine — closing PersoDub does not end it. Picking no
+assistant means nothing runs and nothing is sent.
+
 ## Usage counts
 
 PersoDub reports four events — app launch, dub finished, dub failed, install failed —

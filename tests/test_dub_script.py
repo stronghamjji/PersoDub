@@ -3,12 +3,21 @@
 
 Pure logic over files only -- no container, no network, no TTS (docs/development.md).
 """
+import json
+import os
+import wave
+
 import pytest
 
 from app.dub_script import (
     DUB_NAME, EDITED_NAME, ORIGINAL_NAME, edit_line, export_srt, load_lines, script_path,
 )
 from app.text.srt import build_srt
+
+# Spelled out rather than imported from app.dub_script: a test that names the
+# constant the implementation introduces fails at import when the implementation
+# is missing, which tells you nothing about the behaviour it is meant to pin.
+SPEAKERS_NAME = "speakers.json"
 
 
 def write(path, cues):
@@ -17,6 +26,70 @@ def write(path, cues):
         build_srt([{"start": s, "end": e, "text": t} for s, e, t in cues]),
         encoding="utf-8",
     )
+
+
+def write_wav(path, seconds, rate=24000):
+    """Write a silent wav of exactly `seconds` -- only its length is ever read."""
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\x00\x00" * int(rate * seconds))
+
+
+def test_load_lines_reports_speaker_and_audio_length(tmp_path):
+    # Who says a line, and how long the voice that was made for it actually runs:
+    # the finished screen colours a chip by the first and measures the slot with
+    # the second. Both are read off files beside the script, and both are simply
+    # missing on a job that never wrote them.
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "정말")])
+    (tmp_path / SPEAKERS_NAME).write_text(json.dumps([
+        {"start": 0.0, "end": 1.7, "speaker": "SPEAKER_00"},
+        {"start": 2.9, "end": 5.7, "speaker": "SPEAKER_01"},
+    ]), encoding="utf-8")
+    write_wav(tmp_path / "qwen_line_0.wav", seconds=1.36)
+
+    lines = load_lines(str(tmp_path), "ko")
+
+    assert lines[0]["speaker"] == "SPEAKER_00"
+    assert lines[1]["speaker"] == "SPEAKER_01"
+    assert abs(lines[0]["audio_sec"] - 1.36) < 0.02
+    assert lines[1]["audio_sec"] is None
+
+
+def test_load_lines_reports_a_voice_older_than_the_script(tmp_path):
+    # After a line is rewritten, the voice on disk is still saying the old words.
+    # The files themselves say so: the script was written after the wav was.
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "정말")])
+    write_wav(tmp_path / "qwen_line_0.wav", seconds=1.0)
+    write_wav(tmp_path / "qwen_line_1.wav", seconds=1.0)
+    os.utime(tmp_path / "qwen_line_0.wav", (1000, 1000))     # made long ago
+    os.utime(tmp_path / DUB_NAME, (2000, 2000))              # script rewritten since
+    os.utime(tmp_path / "qwen_line_1.wav", (3000, 3000))     # remade after that
+
+    lines = load_lines(str(tmp_path), "ko")
+
+    assert lines[0]["voice_stale"] is True
+    assert lines[1]["voice_stale"] is False
+
+
+def test_load_lines_without_a_voice_file_is_never_stale(tmp_path):
+    # Nothing to compare: a job whose per-line wavs were never kept must not
+    # show every line as waiting for a voice that is not coming.
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가")])
+
+    assert load_lines(str(tmp_path), "ko")[0]["voice_stale"] is False
+
+
+def test_load_lines_without_those_files_reports_neither(tmp_path):
+    # Every job made before speakers.json existed, and every job whose per-line
+    # wavs were cleaned up, still has to open.
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가")])
+
+    line = load_lines(str(tmp_path), "ko")[0]
+
+    assert line["speaker"] is None
+    assert line["audio_sec"] is None
 
 
 def test_pairs_translation_with_source_by_time(tmp_path):
@@ -137,3 +210,65 @@ def test_export_writes_the_current_script(tmp_path):
     export_srt(str(tmp_path), str(out))
     assert "고친 번역" in out.read_text(encoding="utf-8")
     assert "옛날 번역" not in out.read_text(encoding="utf-8")
+
+
+def test_exporting_a_job_with_no_script_says_so_in_words(tmp_path):
+    # The assistant's export_script tool shows the exception to the user, and a
+    # bare FileNotFoundError said nothing about what had gone wrong.
+    with pytest.raises(ValueError) as e:
+        export_srt(str(tmp_path), "script.srt")
+    assert "no script" in str(e.value)
+
+
+def test_a_script_cannot_be_written_outside_its_own_job_folder(tmp_path):
+    """export_script is the one tool that names its own destination, and it
+    runs in the MCP server -- a separate process, so the CLI's sandbox never
+    sees the write. The folder is the fence."""
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+    outside = tmp_path.parent / "escaped.srt"
+
+    for bad in (str(outside), "../escaped.srt", "../../escaped.srt",
+                "/tmp/persodub-escaped.srt"):
+        with pytest.raises(ValueError) as e:
+            export_srt(str(tmp_path), bad)
+        assert "job folder" in str(e.value)
+    assert not outside.exists()
+
+
+def test_the_job_folder_itself_is_not_a_script_file(tmp_path):
+    """An empty name or "." resolves to the folder, which is inside the fence
+    but not a file -- refuse it with a hint instead of crashing on open()."""
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+
+    for bad in ("", ".", str(tmp_path)):
+        with pytest.raises(ValueError) as e:
+            export_srt(str(tmp_path), bad)
+        assert "file name" in str(e.value)
+
+
+def test_a_plain_file_name_lands_in_the_job_folder(tmp_path):
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+
+    out = export_srt(str(tmp_path), "for-the-pipeline.srt")
+    assert out == str((tmp_path / "for-the-pipeline.srt").resolve())
+    assert "번역" in open(out, encoding="utf-8").read()
+
+
+def test_a_subfolder_of_the_job_is_still_inside(tmp_path):
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+    (tmp_path / "out").mkdir()
+
+    out = export_srt(str(tmp_path), "out/script.srt")
+    assert os.path.exists(out)
+
+
+def test_exporting_into_a_folder_that_is_not_there_says_which_folder(tmp_path):
+    # The assistant shows this message to the user. Writing straight into a
+    # missing folder raised a FileNotFoundError that read like a crash and put
+    # the job's whole path on screen.
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+
+    with pytest.raises(ValueError) as e:
+        export_srt(str(tmp_path), "sub/dir/script.srt")
+    assert "sub/dir" in str(e.value)
+    assert str(tmp_path) not in str(e.value)

@@ -1,0 +1,48 @@
+// The app's screens are one big HTML file with its scripts written inline as
+// <script type="module"> blocks. A module that does not parse is not a
+// half-working module -- the browser runs none of it, silently -- which is how
+// a stray apostrophe inside one placeholder string once left the whole Dub
+// Agent strip dead on screen while every other part of the page looked fine.
+// Nothing else in this suite reads that file, so this is the only place such a
+// mistake can be caught before it ships.
+//
+// Run with: node --test ui/src/indexHtml.test.mjs
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const INDEX = fileURLToPath(new URL("../../static/index.html", import.meta.url));
+
+// The line number comes along so a failure says where in the page to look --
+// the block itself starts a couple of thousand lines in.
+function moduleScripts(html) {
+  const blocks = [];
+  for (const m of html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)) {
+    blocks.push({ code: m[1], line: html.slice(0, m.index).split("\n").length });
+  }
+  return blocks;
+}
+
+test("every inline module in static/index.html parses", () => {
+  const blocks = moduleScripts(readFileSync(INDEX, "utf8"));
+  // Were the tag ever written differently, this check would find nothing and
+  // pass on an empty list -- which is the same as not having it at all.
+  assert.ok(blocks.length >= 2, `expected the page's inline modules, found ${blocks.length}`);
+
+  for (const { code, line } of blocks) {
+    try {
+      // Parse only: --check never runs a line of it, so nothing the page does
+      // at load happens here.
+      execFileSync(process.execPath, ["--input-type=module", "--check", "-"], {
+        input: code,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (e) {
+      assert.fail(
+        `the module beginning at line ${line} of static/index.html does not parse:\n${e.stderr}`,
+      );
+    }
+  }
+});

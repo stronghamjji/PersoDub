@@ -66,7 +66,7 @@ def test_still_failing_after_suppression_warns_but_delivers(tmp_path, monkeypatc
     out = pipeline.leakage_gate(str(tmp_path / "mix.wav"), "vocals.wav", None,
                                 str(tmp_path), log=logs.append)
     assert out == str(tmp_path / "dub_leakfix.wav")  # cleaned copy is still the better file
-    assert any("⚠️" in m for m in logs)
+    assert any("Warning:" in m for m in logs)
 
 
 def test_whitelisted_nonverbal_spans_are_excluded(tmp_path, monkeypatch, wav_factory):
@@ -102,7 +102,7 @@ def test_checker_crash_never_kills_the_dub(tmp_path, monkeypatch):
     out = pipeline.leakage_gate(str(tmp_path / "mix.wav"), "vocals.wav", None,
                                 str(tmp_path), log=logs.append)
     assert out == str(tmp_path / "mix.wav")
-    assert any("⚠️" in m for m in logs)
+    assert any("Warning:" in m for m in logs)
 
 
 # --- PERSODUB_LEAKAGE_GATE: staged-rollout mode flag (app/config.py) -- the

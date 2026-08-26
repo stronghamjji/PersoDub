@@ -194,7 +194,7 @@ def test_place_lines_near_collision_under_30ms_warns_instead_of_silent_drop(tmp_
     # all, so it must be dropped WITH a warning, not silently.
     place_lines(str(bg), [str(line_a), str(line_b)], [0.2, 0.21], str(out), log=logs.append)
 
-    warnings = [m for m in logs if "⚠️" in m and "collides" in m]
+    warnings = [m for m in logs if "Warning:" in m and "collides" in m]
     assert len(warnings) == 1
 
 

@@ -63,11 +63,20 @@ def test_original_is_downloadable_for_a_link_job(monkeypatch):
     assert r.content == b"FAKEMP4"
     assert 'filename="org.mp4"' in r.headers["content-disposition"]
 
+    # The URL the Download original button actually points at, so the gate
+    # cannot be inverted without a test noticing.
+    d = client.get(f"/api/dub/result/{jid}/original?download=1")
+    assert d.status_code == 200
+    assert d.content == b"FAKEMP4"
 
-def test_original_is_refused_for_an_uploaded_file(monkeypatch):
-    # The user already has the file they uploaded -- handing it back is noise.
+
+def test_original_download_is_refused_for_an_uploaded_file(monkeypatch):
+    # The screens play an uploaded original freely (the running screen blurs it
+    # behind the progress card), but the Download original button stays link-
+    # only: the user already has the file they uploaded.
     jid = _finished_job(monkeypatch)
-    assert client.get(f"/api/dub/result/{jid}/original").status_code == 404
+    assert client.get(f"/api/dub/result/{jid}/original").status_code == 200
+    assert client.get(f"/api/dub/result/{jid}/original?download=1").status_code == 404
 
 
 def test_original_404s_when_the_job_is_unknown():

@@ -173,12 +173,14 @@ def test_qwen_status_checks_the_configured_ollama_qwen_model(monkeypatch):
 # --- gemini_available / perso_available (config/env, read at call time) -----
 
 def test_gemini_available_true_when_key_configured(monkeypatch):
-    monkeypatch.setattr(config, "GEMINI_API_KEY", "some-key")
+    # The saved key, not the import-time constant: engines_status reads
+    # kit.env at use time so a key saved in Settings needs no restart.
+    monkeypatch.setattr(engines_status, "current_value", lambda k: "some-key")
     assert engines_status.gemini_available() is True
 
 
 def test_gemini_available_false_when_key_empty(monkeypatch):
-    monkeypatch.setattr(config, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(engines_status, "current_value", lambda k: "")
     assert engines_status.gemini_available() is False
 
 

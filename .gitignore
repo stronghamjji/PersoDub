@@ -44,6 +44,8 @@ target/
 
 # ---- Stray local artifacts ----
 _probe_tmp/
+# Dated backup copies of source files (e.g. index.html.bak-2026-08-25)
+*.bak-*
 
 # ---- OS / editor ----
 .DS_Store

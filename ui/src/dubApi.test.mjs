@@ -4,28 +4,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   LANGUAGES,
-  directionToLanguage,
-  qualityModeToNTakes,
   buildDubFormData,
   parseProgress,
-  fetchResultSrt,
   pollDubJob,
   cancelDubJob,
-  migrateStoredSettings,
   applyEngineAvailability,
+  engineChips,
+  startedLabel,
 } from "./dubApi.mjs";
-
-test("directionToLanguage maps ko_to_en / en_to_ko to the API's (language, language_code) pair", () => {
-  assert.deepEqual(directionToLanguage("ko_to_en"), { language: "English", language_code: "en" });
-  assert.deepEqual(directionToLanguage("en_to_ko"), { language: "Korean", language_code: "ko" });
-  assert.throws(() => directionToLanguage("xx"));
-});
-
-test("qualityModeToNTakes: fast=1 take, high=4 takes (matches server QWEN_N_TAKES default)", () => {
-  assert.equal(qualityModeToNTakes("fast"), 1);
-  assert.equal(qualityModeToNTakes("high"), 4);
-  assert.throws(() => qualityModeToNTakes("nope"));
-});
 
 test("buildDubFormData sends exactly the fields app/main.py:dub_start expects", () => {
   const video = new Blob(["fake video bytes"], { type: "video/mp4" });
@@ -56,6 +42,19 @@ test("buildDubFormData: advanced overrides (n_takes, speakers, translate engine,
   assert.equal(fd.get("stt_engine"), "perso");
 });
 
+test("buildDubFormData: high quality is 4 takes, and an unknown mode or direction is refused", () => {
+  // "High quality" is a real choice in the New project dialog, and the number
+  // of takes is the whole of what it means. Asserted through the form because
+  // the mapping itself is not exported.
+  const video = new Blob(["v"], { type: "video/mp4" });
+  const fd = buildDubFormData({ video, direction: "en_to_ko", qualityMode: "high" });
+  assert.equal(fd.get("n_takes"), "4");
+
+  assert.throws(() => buildDubFormData({ video, direction: "en_to_ko", qualityMode: "nope" }),
+                /quality mode/);
+  assert.throws(() => buildDubFormData({ video, direction: "xx" }), /direction/);
+});
+
 test("buildDubFormData requires a video file", () => {
   assert.throws(() => buildDubFormData({ direction: "en_to_ko" }), /video/);
 });
@@ -68,8 +67,8 @@ test("parseProgress reads the real '1/6 ... 6/6' log lines app/pipeline.py emits
   ];
   const p = parseProgress(logs);
   assert.equal(p.stage, 2);
-  assert.equal(p.total, 6);
-  assert.equal(p.percent, 33);
+  assert.equal(p.total, 4);
+  assert.equal(p.percent, 18);
 });
 
 test("parseProgress: furthest stage wins even if an indented detail line follows", () => {
@@ -82,8 +81,11 @@ test("parseProgress: furthest stage wins even if an indented detail line follows
     "✅ Done!",
   ];
   const p = parseProgress(logs);
-  assert.equal(p.stage, 6);
-  assert.equal(p.percent, 100);
+  assert.equal(p.stage, 4);
+  // raw reaches 6 ("6/6 Building..."), which floors percent at 97 (see the
+  // percent-never-regresses test below) -- there's no voiceTotal here, so
+  // the voice-line math alone would only reach 69.
+  assert.equal(p.percent, 97);
 });
 
 test("parseProgress on an empty/just-started job", () => {
@@ -93,14 +95,65 @@ test("parseProgress on an empty/just-started job", () => {
   assert.equal(p.label, "Waiting to start");
 });
 
-test("parseProgress: plainLabel is jargon-free (no model names) for the default end-user view", () => {
+test("parseProgress labels are the plain global stage names, not internal jargon", () => {
   const logs = ["1/6 Separating background audio locally (Demucs)…"];
   const p = parseProgress(logs);
-  assert.equal(p.plainLabel, "Preparing audio");
-  assert.doesNotMatch(p.plainLabel, /Demucs|Whisper|Qwen/);
+  assert.equal(p.label, "Separating audio");
+  assert.doesNotMatch(p.label, /Demucs|Whisper|Qwen/);
 
   const logs4 = [...logs, "4/6 Cloning & synthesizing voices (Qwen3-TTS)…"];
-  assert.equal(parseProgress(logs4).plainLabel, "Generating voices");
+  assert.equal(parseProgress(logs4).label, "Dubbing");
+});
+
+test("parseProgress folds the six pipeline stages into four and reads voice progress", () => {
+  const logs = ["1/6 Separating…", "2/6 Transcribing…", "3/6 Translating…",
+    "4/6 Cloning & synthesizing voices (Qwen3-TTS — fast)…", "   line 0: chose take 0", "   line 1: chose take 0"];
+  const p = parseProgress(logs, { lineCount: 4 });
+  assert.equal(p.stage, 4); assert.equal(p.total, 4);
+  assert.equal(p.label, "Dubbing");
+  assert.equal(p.voiceDone, 2); assert.equal(p.voiceTotal, 4);
+  assert.ok(p.percent > 55 && p.percent < 80, String(p.percent));
+  assert.equal(parseProgress(["6/6 Building the finished file…"]).stage, 4);
+});
+
+// A job in progress can't be asked its lineCount (the script API answers 409
+// until the job finishes -- see app/main.py), so when the caller has no
+// lineCount, parseProgress falls back to reading it from the pipeline's own
+// "N dialogue lines prepared" log line (app/pipeline.py:512). An explicit
+// lineCount still wins when both are available.
+test("parseProgress reads voiceTotal from the 'dialogue lines prepared' log line when lineCount isn't passed", () => {
+  const logs = ["4/6 Cloning & synthesizing voices (Qwen3-TTS — fast)…", "   4 dialogue lines prepared",
+    "   line 0: chose take 0", "   line 1: chose take 0", "   line 2: chose take 0"];
+  const p = parseProgress(logs);
+  assert.equal(p.voiceTotal, 4);
+  assert.equal(p.voiceDone, 3);
+  assert.equal(p.percent, 85); // 55 (stages 1-3) + round(40 * 3/4)
+
+  const withExplicitCount = parseProgress(logs, { lineCount: 10 });
+  assert.equal(withExplicitCount.voiceTotal, 10); // explicit lineCount wins over the log line
+});
+
+// Controller ruling: percent must never decrease as logs grow, even right at
+// the finish line. Before this fix, voices finishing (55 + 45 = 100) then the
+// "6/6 Building..." line arriving forced percent back down to 95 -- a visible
+// backward jump. The voice math is now capped at 40 (95 max) and raw 5/6 use
+// a floor (96/97) instead of an override, so it only ever goes up.
+test("parseProgress: percent never regresses as voices finish and the pipeline reaches Check/Build", () => {
+  const lines = [
+    "4/6 Cloning & synthesizing voices (Qwen3-TTS — fast)…",
+    "   line 0: chose take 0",
+    "   line 1: chose take 0",
+    "5/6 Checking for original-voice leakage…",
+    "6/6 Building the finished file…",
+  ];
+  const percents = [];
+  for (let i = 1; i <= lines.length; i++) {
+    percents.push(parseProgress(lines.slice(0, i), { lineCount: 2 }).percent);
+  }
+  for (let i = 1; i < percents.length; i++) {
+    assert.ok(percents[i] >= percents[i - 1], `percent regressed: ${percents.join(", ")}`);
+  }
+  assert.equal(percents[percents.length - 1], 97);
 });
 
 test("pollDubJob keeps polling through a 'cancelling' status and stops once it resolves to 'cancelled'", async () => {
@@ -117,6 +170,66 @@ test("pollDubJob keeps polling through a 'cancelling' status and stops once it r
     const job = await pollDubJob("j1", { intervalMs: 0, onUpdate: (j) => seen.push(j.status) });
     assert.equal(job.status, "cancelled");
     assert.deepEqual(seen, statuses);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+// The server going quiet says nothing about the dub, which carries on behind
+// it -- so a failed request must only slow the asking down, never end it.
+test("pollDubJob rides out failed requests, tells the caller, and picks the job back up", async () => {
+  const realFetch = globalThis.fetch;
+  let call = 0;
+  try {
+    globalThis.fetch = async () => {
+      call += 1;
+      if (call <= 3) throw new TypeError("Failed to fetch");
+      return new Response(JSON.stringify({ id: "j1", status: "done", logs: [] }), { status: 200 });
+    };
+    const unreachable = [];
+    const job = await pollDubJob("j1", {
+      intervalMs: 0, maxIntervalMs: 0,
+      onUnreachable: (e) => unreachable.push(e.message),
+    });
+    assert.equal(job.status, "done");
+    assert.equal(unreachable.length, 3);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("pollDubJob stops retrying once the caller has left the job", async () => {
+  const realFetch = globalThis.fetch;
+  let call = 0;
+  try {
+    globalThis.fetch = async () => { call += 1; throw new TypeError("Failed to fetch"); };
+    const job = await pollDubJob("j1", {
+      intervalMs: 0, maxIntervalMs: 0, shouldStop: () => call >= 1,
+    });
+    assert.equal(job, null);
+    assert.equal(call, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+// A server that answers "no such job" is not an outage: it is right there, and
+// it will keep saying that. Retrying under "still trying" would never recover.
+test("pollDubJob stops with a readable line when the server says the job is gone", async () => {
+  const realFetch = globalThis.fetch;
+  let call = 0;
+  try {
+    globalThis.fetch = async () => {
+      call += 1;
+      return new Response("", { status: 404 });
+    };
+    const unreachable = [];
+    await assert.rejects(
+      pollDubJob("j1", { intervalMs: 0, maxIntervalMs: 0, onUnreachable: (e) => unreachable.push(e) }),
+      /no longer on the app server/,
+    );
+    assert.equal(call, 1);
+    assert.equal(unreachable.length, 0);
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -142,27 +255,6 @@ test("cancelDubJob throws the server's detail message on 409 (job already finish
     globalThis.fetch = async () =>
       new Response(JSON.stringify({ detail: "Job already done, nothing to cancel" }), { status: 409 });
     await assert.rejects(() => cancelDubJob("j1"), /nothing to cancel/);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-});
-
-test("fetchResultSrt returns subtitle text, null on 404, throws on other errors", async () => {
-  const realFetch = globalThis.fetch;
-  try {
-    globalThis.fetch = async (url) => {
-      if (url.endsWith("/api/dub/result/ok123/srt")) {
-        return new Response("1\n00:00:00,000 --> 00:00:01,000\nhi\n", { status: 200 });
-      }
-      if (url.endsWith("/api/dub/result/none123/srt")) {
-        return new Response("", { status: 404 });
-      }
-      return new Response("", { status: 500 });
-    };
-
-    assert.match(await fetchResultSrt("ok123"), /hi/);
-    assert.equal(await fetchResultSrt("none123"), null);
-    await assert.rejects(() => fetchResultSrt("boom"));
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -205,35 +297,11 @@ test("buildDubFormData: same-language guard does not fire when source is auto (e
   );
 });
 
-// --- migrateStoredSettings: one-time stale-"fast" default migration -------
-test("migrateStoredSettings: implicit 'fast' (pre-migration) is dropped and the marker is set", () => {
-  const out = migrateStoredSettings({ defaultQualityMode: "fast" });
-  assert.equal("defaultQualityMode" in out, false);
-  assert.equal(out.qualityDefaultMigrated, true);
-});
-
-test("migrateStoredSettings: sets the marker even when there is nothing to migrate", () => {
-  const out = migrateStoredSettings({});
-  assert.equal(out.qualityDefaultMigrated, true);
-});
-
-test("migrateStoredSettings: a user's explicit 'fast' choice made AFTER migration is preserved", () => {
-  const alreadyMigrated = { qualityDefaultMigrated: true, defaultQualityMode: "fast" };
-  const out = migrateStoredSettings(alreadyMigrated);
-  assert.equal(out.defaultQualityMode, "fast");
-  assert.equal(out.qualityDefaultMigrated, true);
-});
-
-test("migrateStoredSettings: 'high' is left untouched", () => {
-  const out = migrateStoredSettings({ defaultQualityMode: "high" });
-  assert.equal(out.defaultQualityMode, "high");
-  assert.equal(out.qualityDefaultMigrated, true);
-});
-
-test("migrateStoredSettings: never touches other keys", () => {
-  const out = migrateStoredSettings({ defaultTranslateEngine: "gemini", defaultQualityMode: "fast" });
-  assert.equal(out.defaultTranslateEngine, "gemini");
-  assert.equal("defaultQualityMode" in out, false);
+test("buildDubFormData sends trim_start/trim_end only when a trim is given", () => {
+  const fd = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", trim: { start: 2, end: 8 } });
+  assert.equal(fd.get("trim_start"), "2"); assert.equal(fd.get("trim_end"), "8");
+  const fd2 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko" });
+  assert.equal(fd2.get("trim_start"), null);
 });
 
 // --- applyEngineAvailability: GET /api/engines progressive enhancement ----
@@ -291,4 +359,44 @@ test("applyEngineAvailability: never auto-changes an available current translate
   const av = { ...ALL_AVAILABLE, gemma_available: false };
   const result = applyEngineAvailability(av, { translate: "gemini", stt: "local" });
   assert.equal(result.translate, "gemini"); // already available -- stays, even though gemma (dead) is "first" in order
+});
+
+test("engineChips: the local stack, quality first and every role named", () => {
+  const chips = engineChips(
+    { stt_engine: "whisper", translator: "gemma", tts: "qwen3", quality: 4,
+      source_lang: "es", language_code: "en" },
+  );
+  assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`.trim()),
+    ["High quality mode", "STT Whisper", "Translation Gemma", "TTS Qwen3-TTS"]);
+  assert.deepEqual(chips.map((c) => c.api), [false, false, false, false]);
+});
+
+test("engineChips: the paid engines are marked, and 1 take is Fast mode", () => {
+  const chips = engineChips({ stt_engine: "perso", translator: "gemini", tts: "qwen3", quality: 1 });
+  assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`.trim()),
+    ["Fast mode", "STT Perso", "Translation Gemini", "TTS Qwen3-TTS"]);
+  assert.deepEqual(chips.map((c) => c.api), [false, true, true, false]);
+});
+
+test("engineChips: a sidebar row keeps only what differs between jobs", () => {
+  const chips = engineChips({ stt_engine: "whisper", translator: "gemma", tts: "qwen3", quality: 4,
+                              source_lang: "es", language_code: "en" },
+                            { withQuality: false, withTts: false });
+  assert.deepEqual(chips.map((c) => c.label), ["Whisper", "Gemma"]);
+});
+
+test("engineChips: a job saved before the fields existed shows nothing", () => {
+  assert.deepEqual(engineChips({ project: "old", language_code: "en" }), []);
+  assert.deepEqual(engineChips(null), []);
+});
+
+test("engineChips: an unknown engine is left out, and the rest keep their roles", () => {
+  const chips = engineChips({ stt_engine: "whisper", translator: "made-up", tts: "qwen3", language_code: "ko" });
+  assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`), ["STT Whisper", "TTS Qwen3-TTS"]);
+});
+
+test("startedLabel formats the job's start as local YYYY-MM-DD HH:MM", () => {
+  assert.equal(startedLabel("2026-08-26T13:41:07.123456"), "2026-08-26 13:41");
+  assert.equal(startedLabel(null), "");
+  assert.equal(startedLabel("not a date"), "");
 });

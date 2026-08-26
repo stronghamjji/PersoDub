@@ -9,34 +9,6 @@
 // no matter which frontend framework (or no framework) the approved visual
 // design ends up using.
 
-// English labels for each pipeline stage, keyed by the "N" in "N/6 ..." log
-// lines (the product's UI language is English -- design decision, spec v2). Stage 5
-// never appears in the backend's own logs (the pipeline jumps 4/6 -> 6/6),
-// so a label is still defined for it in case that changes, and the progress
-// bar treats "furthest stage seen" as the current stage either way.
-const STAGE_LABELS = {
-  1: "Separating background audio",
-  2: "Transcribing & detecting speakers",
-  3: "Preparing translated subtitles",
-  4: "Cloning & synthesizing voices",
-  5: "Finishing touches",
-  6: "Building the final file",
-};
-const TOTAL_STAGES = 6;
-
-// Plain-language phrases for the DEFAULT (end-user) progress view -- no model
-// names or internal stage jargon (the raw log is hidden by default for end
-// users). The full STAGE_LABELS above are still used in the developer-details
-// raw log.
-const PLAIN_STAGE_LABELS = {
-  1: "Preparing audio",
-  2: "Transcribing",
-  3: "Translating",
-  4: "Generating voices",
-  5: "Finishing",
-  6: "Finishing",
-};
-
 // The 10 languages the bundled Qwen3-TTS model supports -- read from the
 // model's own config.json (codec_language_id). English/Korean first (product
 // order), the rest alphabetical.
@@ -55,14 +27,17 @@ export const LANGUAGES = [
 
 // Legacy direction -> the (language, language_code) pair the API expects
 // (both name the TARGET language; see app/main.py DubStartRequest / run_dub).
-export function directionToLanguage(direction) {
+// Not exported: buildDubFormData below is the only caller, and its own tests
+// cover both mappings through the form it builds.
+function directionToLanguage(direction) {
   if (direction === "ko_to_en") return { language: "English", language_code: "en" };
   if (direction === "en_to_ko") return { language: "Korean", language_code: "ko" };
   throw new Error(`Unknown dubbing direction: ${direction}`);
 }
 
 // Friendly quality mode -> n_takes (Qwen3-TTS best-of-N selection count).
-export function qualityModeToNTakes(qualityMode) {
+// Not exported, for the same reason as directionToLanguage above.
+function qualityModeToNTakes(qualityMode) {
   if (qualityMode === "fast") return 1;
   if (qualityMode === "high") return 4;
   throw new Error(`Unknown quality mode: ${qualityMode}`);
@@ -85,6 +60,7 @@ export function qualityModeToNTakes(qualityMode) {
  * @param {"auto"|"gemma"|"gemini"} [opts.translateEngine] - advanced: translation engine
  * @param {File|Blob} [opts.srt] - advanced: pre-translated subtitles (used as-is)
  * @param {File|Blob} [opts.sourceSrt] - advanced: source-language script (translated instead of STT)
+ * @param {{start: number, end: number}} [opts.trim] - dub only this part of the video, in seconds
  * @returns {FormData}
  */
 export function buildDubFormData(opts) {
@@ -131,28 +107,14 @@ export function buildDubFormData(opts) {
   // only learns it after the download (app/source_fetch.py's fetch returns
   // nothing). Omitted, the server falls back to the filename or the URL.
   if (opts.project) fd.append("project", opts.project);
+  // A chosen part of the video, in seconds. Both ends or neither: the server
+  // rejects one alone, because half a range has no meaning.
+  if (opts.trim) {
+    fd.append("trim_start", String(opts.trim.start));
+    fd.append("trim_end", String(opts.trim.end));
+  }
 
   return fd;
-}
-
-/**
- * One-time migration for the localStorage-backed settings object: builds
- * before 2026-08-04 persisted "fast" as an implicit default the moment
- * Settings was opened, silently forcing n_takes=1 on every future dub. Runs
- * once per stored object (guarded by the qualityDefaultMigrated marker) so a
- * user's later, deliberate "fast" choice is preserved after the one-time
- * cleanup. Never touches any other key.
- *
- * @param {Object} s - the parsed stored-settings object (may be {})
- * @returns {Object} the migrated settings object
- */
-export function migrateStoredSettings(s) {
-  const out = { ...s };
-  if (!out.qualityDefaultMigrated && out.defaultQualityMode === "fast") {
-    delete out.defaultQualityMode;
-  }
-  out.qualityDefaultMigrated = true;
-  return out;
 }
 
 /**
@@ -210,13 +172,23 @@ export async function startDubJob(formData, { baseUrl = "" } = {}) {
 /** GET /api/dub/jobs/{jobId}: raw job status object. */
 export async function fetchJob(jobId, { baseUrl = "" } = {}) {
   const res = await fetch(`${baseUrl}/api/dub/jobs/${jobId}`);
-  if (!res.ok) throw new Error(`Failed to check job status (HTTP ${res.status})`);
+  if (!res.ok) {
+    const err = new Error(`Failed to check job status (HTTP ${res.status})`);
+    // Carried so a caller can tell an answer from no answer: a server that is
+    // not there throws before this, with no status on it at all.
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 }
 
-/** URL for GET /api/dub/result/{jobId} (cache-busted). */
+/**
+ * URL for GET /api/dub/result/{jobId} -- stable, so a caller can tell whether
+ * the player is already showing this job. A finished video only changes when a
+ * line is remade, and the caller adds its own marker at that moment.
+ */
 export function resultUrl(jobId, { baseUrl = "" } = {}) {
-  return `${baseUrl}/api/dub/result/${jobId}?t=${Date.now()}`;
+  return `${baseUrl}/api/dub/result/${jobId}`;
 }
 
 /**
@@ -240,39 +212,50 @@ export async function probeSource(url, { baseUrl = "" } = {}) {
   return res.json();
 }
 
-/**
- * GET /api/dub/result/{jobId}/srt -- the translated subtitles as plain text,
- * for the Export tab's subtitle viewer. Returns null (not an error) if the
- * job has no subtitle file on record, so callers can just hide that section.
- */
-export async function fetchResultSrt(jobId, { baseUrl = "" } = {}) {
-  const res = await fetch(`${baseUrl}/api/dub/result/${jobId}/srt`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Failed to load subtitles (HTTP ${res.status})`);
-  return res.text();
-}
+// The pipeline logs six "N/6 ..." stages, but the UI shows four: stages 4-6
+// (voice synthesis, the skipped leakage check, and file-building) all read
+// as "Dubbing" to the user.
+const STAGE_OF = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 4, 6: 4 };
+const STAGE_LABELS4 = { 1: "Separating audio", 2: "Transcribing", 3: "Translating", 4: "Dubbing" };
+const STAGE_WEIGHT = { 1: 10, 2: 25, 3: 20, 4: 45 }; // sums to 100
+// The voice-line math only ever fills 40 of Dubbing's 45 points (not the full
+// 45) so that raw 5 (Check) and raw 6 (Build) -- which land after every voice
+// line is already done -- still have room to nudge percent up (96, then 97)
+// instead of ever having to snap it back down. 100 is reserved for the UI to
+// set once the job's status is actually "done".
+const VOICE_CAP = 40;
 
 /**
- * Parse a job's log lines and find the furthest "N/6 ..." stage reached.
- * Returns { stage, total, label, plainLabel, percent }. stage=0 means nothing
- * logged yet. label is the detailed (developer-view) phrase; plainLabel is
- * the jargon-free phrase for the default end-user progress bar.
+ * Parse a job's log lines and find the furthest "N/6 ..." stage reached,
+ * folded into the four stages the UI shows. Returns
+ * { stage, total: 4, label, percent, voiceDone, voiceTotal }. stage=0 means
+ * nothing logged yet. percent never decreases as logs grow -- callers can
+ * feed it a job's logs on every poll and just render whatever comes back.
+ *
+ * During stage 4 (voice synthesis), percent also tracks per-line progress
+ * from the "line N: chose take" log lines (app/qwen_pipeline.py:472) against
+ * voiceTotal -- opts.lineCount if the caller has it, else read from the
+ * pipeline's own "N dialogue lines prepared" log line (app/pipeline.py:512),
+ * since a running job's script can't be fetched (the script API 409s until
+ * the job finishes). An explicit lineCount wins when both are available.
  */
-export function parseProgress(logs) {
-  let stage = 0;
-  let label = "Waiting to start";
-  let plainLabel = "Waiting to start";
-  for (const raw of logs || []) {
-    const m = /^(\d)\/6\s+(.*)$/.exec(String(raw).trim());
-    if (!m) continue;
-    const n = parseInt(m[1], 10);
-    if (n >= stage) {
-      stage = n;
-      label = STAGE_LABELS[n] || m[2];
-      plainLabel = PLAIN_STAGE_LABELS[n] || label;
-    }
+export function parseProgress(logs, { lineCount = null } = {}) {
+  let raw = 0, voiceDone = 0, loggedTotal = null;
+  for (const line of logs || []) {
+    const m = /^(\d)\/6\s/.exec(String(line).trim());
+    if (m) raw = Math.max(raw, parseInt(m[1], 10));
+    if (/^\s*line \d+: chose take/.test(line)) voiceDone += 1;
+    const t = /^\s*(\d+) dialogue lines prepared/.exec(line);
+    if (t) loggedTotal = parseInt(t[1], 10);
   }
-  return { stage, total: TOTAL_STAGES, label, plainLabel, percent: Math.round((stage / TOTAL_STAGES) * 100) };
+  const stage = STAGE_OF[raw] || 0;
+  const voiceTotal = lineCount ?? loggedTotal;
+  let percent = 0;
+  for (let s = 1; s < stage; s++) percent += STAGE_WEIGHT[s];
+  if (stage === 4 && voiceTotal) percent += Math.round(VOICE_CAP * Math.min(voiceDone, voiceTotal) / voiceTotal);
+  else if (stage >= 1) percent += Math.round(STAGE_WEIGHT[stage] * 0.3);
+  if (raw >= 5) percent = Math.max(percent, raw === 6 ? 97 : 96);
+  return { stage, total: 4, label: STAGE_LABELS4[stage] || "Waiting to start", percent, voiceDone, voiceTotal, raw };
 }
 
 /**
@@ -282,21 +265,53 @@ export function parseProgress(logs) {
  * pipeline stops at its next stage boundary, not immediately -- so polling
  * continues through it just like "running".
  *
+ * A failed request does NOT end the loop. The server going quiet for a while
+ * -- a sleeping laptop, a restarting engine -- says nothing about the dub,
+ * which carries on behind it; giving up there froze the running screen at its
+ * last percent with no way back. So a failure only slows the asking down
+ * (intervalMs, doubling up to maxIntervalMs) and tells the caller through
+ * onUnreachable, and the next answer picks the job straight back up. The only
+ * things that end the loop are the job finishing and shouldStop().
+ *
  * @param {string} jobId
  * @param {Object} [options]
  * @param {string} [options.baseUrl]
  * @param {number} [options.intervalMs=3000]
+ * @param {number} [options.maxIntervalMs=10000] - the slowest it backs off to
  * @param {(job: object, progress: object) => void} [options.onUpdate]
+ * @param {(error: Error) => void} [options.onUnreachable] - a request failed; still trying
  * @param {() => boolean} [options.shouldStop] - return true to abort polling early
  */
-export async function pollDubJob(jobId, { baseUrl = "", intervalMs = 3000, onUpdate, shouldStop } = {}) {
+export async function pollDubJob(jobId, {
+  baseUrl = "", intervalMs = 3000, maxIntervalMs = 10000,
+  onUpdate, onUnreachable, shouldStop,
+} = {}) {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  let wait = intervalMs;
   for (;;) {
-    const job = await fetchJob(jobId, { baseUrl });
+    let job;
+    try {
+      job = await fetchJob(jobId, { baseUrl });
+    } catch (e) {
+      if (shouldStop && shouldStop()) return null;
+      // A 404 is an answer, not an outage: the server is right there and says it
+      // has no such job (its workspace was cleared, or the app was pointed at a
+      // different one). Asking again every ten seconds would never bring it
+      // back, and "still trying" would not be true.
+      if (e.status === 404) {
+        throw new Error("This job is no longer on the app server -- it may have been deleted.");
+      }
+      if (onUnreachable) onUnreachable(e);
+      await sleep(wait);
+      wait = Math.min(wait * 2, maxIntervalMs);
+      continue;
+    }
+    wait = intervalMs;   // back in touch -- ask at the normal pace again
     const progress = parseProgress(job.logs);
     if (onUpdate) onUpdate(job, progress);
     if (job.status !== "running" && job.status !== "cancelling") return job;
     if (shouldStop && shouldStop()) return job;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    await sleep(wait);
   }
 }
 
@@ -318,4 +333,75 @@ export async function cancelDubJob(jobId, { baseUrl = "" } = {}) {
   return data.status;
 }
 
-export const TOTAL_DUB_STAGES = TOTAL_STAGES;
+// ---- What a finished job was made with -------------------------------------
+// The server saves the four choices a job was started with on the job record
+// (app/jobs.py SAVED_FIELDS). These turn them into the short human labels the
+// finished screen and the Projects rows show. A job saved before those fields
+// existed has none of them, and gets an empty list -- which is what makes the
+// whole row disappear rather than showing half a sentence.
+// The engine's own name only. Which job it did is said by the role word beside
+// it, which comes from the field the id was read out of -- so "Perso STT" is
+// now the role "STT" and the name "Perso", rather than one run-on label.
+const ENGINE_LABELS = {
+  whisper: { label: "Whisper", api: false },
+  perso: { label: "Perso", api: true },
+  gemma: { label: "Gemma", api: false },
+  qwen: { label: "Qwen", api: false },
+  gemini: { label: "Gemini", api: true },
+  vertex: { label: "Vertex", api: true },
+  qwen3: { label: "Qwen3-TTS", api: false },
+};
+
+// 1 take is the fast path; anything more is the best-of-N selection. The words
+// are the New project dialog's own ("Fast" / "High quality"): a chip that
+// renamed the choice to "Standard" left the user looking for a setting by that
+// name and not finding one. No role word -- "mode" is what this chip is about.
+function qualityChip(quality) {
+  if (quality == null) return null;
+  const takes = Number(quality);
+  if (!Number.isFinite(takes)) return null;
+  return { role: "", label: takes <= 1 ? "Fast mode" : "High quality mode", api: false };
+}
+
+/**
+ * The chips for one job: the quality mode it was run at, then the engine that
+ * did each of the three jobs. Every chip carries the role it played (""
+ * for the quality one) so both screens can print the role in the muted grey
+ * and the engine's own name in the reading colour, inside the one pill.
+ * `api: true` marks a chip that cost money (a cloud engine), which both screens
+ * colour differently. Unknown fields are left out; a record with no engine
+ * fields at all returns [].
+ *
+ * @param {Object} job - a job record (or list row) from the API
+ * @param {{withQuality?: boolean, withTts?: boolean}} [opts]
+ *   What a sidebar row leaves out: the quality chip is long enough to wrap a
+ *   130px column on its own, and it is the finished screen that is about how
+ *   the job was made.
+ */
+export function engineChips(job, { withQuality = true, withTts = true } = {}) {
+  const j = job || {};
+  const chips = [];
+  // The role is the field the id was read out of, which is the only place it
+  // can be known from: "qwen" translates and "qwen3" speaks.
+  for (const [role, key] of [["STT", j.stt_engine], ["Translation", j.translator],
+                             ["TTS", withTts ? j.tts : null]]) {
+    const known = key ? ENGINE_LABELS[String(key).toLowerCase()] : null;
+    if (known) chips.push({ role, ...known });
+  }
+  if (chips.length === 0) return [];   // nothing known -- say nothing at all
+  const quality = withQuality ? qualityChip(j.quality) : null;
+  // Quality leads the row: it is the one choice the user made by hand, where
+  // the three engines below it are mostly whatever the app had installed.
+  if (quality) chips.unshift(quality);
+  return chips;
+}
+
+/** A job's start time as "YYYY-MM-DD HH:MM" in the user's own timezone. */
+export function startedLabel(created) {
+  if (!created) return "";
+  const d = new Date(created);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
+    + `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

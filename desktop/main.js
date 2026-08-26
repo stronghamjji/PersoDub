@@ -1,5 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
-import { join, dirname } from "node:path";
+import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
+import { join, dirname, basename } from "node:path";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
@@ -271,7 +271,21 @@ app.whenReady().then(() => {
   // Nothing here is fatal: on any failure Electron picks the path the way it
   // always did -- which is also what happens when the UI runs in a plain
   // browser and never sent us the job.
-  session.defaultSession.on("will-download", (_event, item) => {
+  session.defaultSession.on("will-download", (_event, item, webContents) => {
+    // The window saves silently, so without a word back the page has nothing to
+    // show and the user, seeing nothing happen, clicks Download again. Attached
+    // before the naming below so a download we did not rename still reports.
+    item.once("done", (_e, state) => {
+      const path = item.getSavePath();
+      if (webContents && !webContents.isDestroyed()) {
+        webContents.send("shell:download-done", {
+          state,
+          path,
+          filename: basename(path),
+          folder: dirname(path),
+        });
+      }
+    });
     try {
       const jid = new URL(item.getURL()).pathname.split("/")[4];
       const folder = jid && jobFolders.get(jid);
@@ -284,9 +298,18 @@ app.whenReady().then(() => {
       /* fall through to Electron's default naming */
     }
   });
+  // The finished screen is a table beside a video with a strip under both, and
+  // it needs 1280 to show the table's full set of columns. Clamped to the screen
+  // the window opens on, so a small laptop gets a window that fits it rather
+  // than one hanging off the bottom. The floor is the narrowest window the
+  // screens are still whole at. Nothing remembers a size between launches, so
+  // this is what every launch opens at.
+  const room = screen.getPrimaryDisplay().workAreaSize;
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: Math.min(1280, room.width),
+    height: Math.min(800, room.height),
+    minWidth: Math.min(960, room.width),
+    minHeight: Math.min(640, room.height),
     webPreferences: {
       preload: join(HERE, "preload.cjs"),
       contextIsolation: true,

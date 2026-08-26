@@ -6,7 +6,8 @@ localStorage, which nothing ever read -- this module makes saving real.
 Saved values are shown back in Settings (single-user desktop app, the user
 owns this file). Localhost-only comes from the 127.0.0.1 bind; main.py's
 TrustedHost middleware only rejects foreign Host headers (DNS rebinding) on
-top of that. A change takes effect on the next app start.
+top of that. A saved key takes effect on the next dub, not the next app start:
+everything that needs one reads it back through current_value() below.
 """
 import os
 import shutil
@@ -99,6 +100,48 @@ def read_value(key: str) -> Optional[str]:
             if k.strip() == key and v.strip():
                 value = v.strip()
     return value
+
+
+def defined_value(key: str) -> Optional[str]:
+    """What kit.env ASSIGNS to `key`: the value, or "" when the line is there
+    but empty, or None when the file has no such line (or there is no kit).
+
+    Unlike read_value, an empty assignment is an answer rather than a miss --
+    that is the whole point. `PERSO_API_KEY=` is what Settings writes when the
+    user deletes a key, and it has to mean "there is no key", not "look
+    somewhere else". Last assignment wins, matching kitEnv.js's parse.
+    """
+    path = env_path()
+    if not path or not os.path.exists(path):
+        return None
+    value = None
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            if k.strip() == key:
+                value = v.strip()
+    return value
+
+
+def current_value(key: str) -> str:
+    """The value in force right now: whatever kit.env says, and only if kit.env
+    says nothing at all, the process environment. "" when neither has it.
+
+    kit.env wins so a key saved seconds ago is used by the very next dub -- the
+    process env only holds what existed when the app started, so reading it
+    first would make every saved key wait for a restart. Crucially, kit.env
+    wins even when it assigns an EMPTY value: a user who deletes their key in
+    Settings must actually lose it, not silently keep dubbing on the key the
+    process happened to start with. The env fallback is for a kit.env that
+    never mentions the key -- server deployments, which have no kit at all.
+    """
+    defined = defined_value(key)
+    if defined is not None:
+        return defined
+    return os.environ.get(key, "") or ""
 
 
 def _write_env(to_set: Dict[str, str]) -> None:

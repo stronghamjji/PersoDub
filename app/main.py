@@ -1,18 +1,35 @@
+import json
+import math
 import os
+import queue
 import re
 import shutil
+import subprocess
+import sys
+import threading
+import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.config import OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, TRANSLATE_ENGINE, default_stt_engine
+from app.agents import base as agent_base
+from app.agents import claude as claude_agent
+from app.agents import codex as codex_agent
+from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
+                        QWEN_N_TAKES, TRANSLATE_ENGINE, default_stt_engine)
+from app.dub_script import (
+    DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
+)
+from app.text.srt import parse_srt
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -31,13 +48,34 @@ from app.engines_status import (
 from app.jobs import JobStore
 from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
 from app.pipeline import run_dub
+from app.qwen_pipeline import rebuild_dub, resynth_one_line
 from app.text.naming import next_free, safe_name
-from app.settings_env import (read_analytics_off, read_key_status, read_value,
+from app.settings_env import (current_value, read_analytics_off,
+                              read_key_status, read_value,
                               write_analytics_off, write_keys)
 from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
 from app.translate import get_translator
 
-app = FastAPI(title="PersoDub", version=APP_VERSION)
+
+@asynccontextmanager
+async def lifespan(_app):
+    """Jobs from before this launch.
+
+    The job store is a dictionary, so quitting the app used to lose every
+    record even though the folders were all still there. Reading the job.json
+    files back is what lets Projects reopen yesterday's work.
+
+    On startup rather than at import: WORKSPACE is read when the server
+    actually starts, so a test that redirects it (tests/conftest.py) is not
+    racing an import that already scanned the real one. Best-effort by design
+    -- a workspace that isn't there yet simply restores nothing, and one bad
+    file is skipped rather than taking the app down.
+    """
+    job_store.restore(WORKSPACE)
+    yield
+
+
+app = FastAPI(title="PersoDub", version=APP_VERSION, lifespan=lifespan)
 # GET /api/settings returns saved API key values (single-user desktop app, the
 # user owns the file they live in). That makes DNS rebinding the one remote
 # read path -- a hostile page whose domain re-resolves to 127.0.0.1 becomes
@@ -72,9 +110,28 @@ translator = get_translator()
 # Store for background dubbing jobs
 job_store = JobStore()
 
+
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKSPACE = os.path.join(APP_DIR, "workspace")
 STATIC_DIR = os.path.join(APP_DIR, "static")
+
+
+def _work_dir_of(job: dict) -> str:
+    """Where this job's folder is -- the one answer, in one place.
+
+    work_dir is stamped the moment the folder is made, so it is there even for a
+    job that failed before it produced anything. dirname(out_path) is the older
+    way of asking the same question, kept as the fallback so a record written
+    before work_dir existed (or hand-built in a test) still resolves.
+
+    Not for the script and subtitle routes: those ask out_path directly, because
+    they say 409 when there is no result at all. In the product the two answers
+    are the same folder -- run_dub always writes the result inside work_dir --
+    so what really pins those routes is two tests whose fake run writes the
+    result somewhere else (tests/test_dub_api.py, fake_run_dub).
+    """
+    return job.get("work_dir") or os.path.dirname((job.get("result") or {}).get("out_path") or "")
+
 
 # Serves the UI's plumbing-layer JS module (ui/src/dubApi.mjs) so static/index.html
 # can import it directly, e.g. <script type="module" src="/js/dubApi.mjs">. Mounted
@@ -161,7 +218,8 @@ class SettingsRequest(BaseModel):
 
 @app.get("/api/settings")
 def settings_get():
-    """The saved keys and workspace from kit.env, values included.
+    """The saved keys and Perso workspace from kit.env, values included, plus
+    the folder this app keeps its jobs in.
 
     Values come back verbatim (user decision 2026-08-06): this is a
     single-user desktop app and the keys live in a file that user owns, so
@@ -180,6 +238,10 @@ def settings_get():
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
             "perso_signup_link": SIGNUP_LINK,
             "analytics_off": read_analytics_off(),
+            # The folder every finished video is saved in. Only the server knows
+            # it -- the desktop shell can point the workspace anywhere -- so the
+            # screen cannot tell the user where their videos are without this.
+            "workspace": WORKSPACE,
             "app_version": APP_VERSION}
 
 
@@ -188,8 +250,10 @@ def settings_post(body: SettingsRequest):
     """Write non-empty API keys (and the picked Perso workspace) into kit.env,
     backing it up first.
 
-    The engines read kit.env once at startup, so a change only applies after
-    the app restarts -- restart_required tells the UI to say so."""
+    Nothing here needs a restart any more: every reader of these three values
+    goes through settings_env.current_value, which reads kit.env at use time,
+    so the next dub already uses what was just saved. restart_required stays in
+    the response as a False for older clients that still look for it."""
     space = None if body.perso_space_seq is None else body.perso_space_seq.strip()
     # The picker only ever posts a seq it got from /api/perso/spaces; anything
     # else is hand-crafted and must not reach the engine env file. isascii +
@@ -214,7 +278,7 @@ def settings_post(body: SettingsRequest):
         write_analytics_off(body.analytics_off)
     return {"gemini_key_set": status["GEMINI_API_KEY"], "perso_key_set": status["PERSO_API_KEY"],
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
-            "restart_required": True}
+            "restart_required": False}
 
 
 @app.get("/api/perso/spaces")
@@ -226,15 +290,63 @@ def perso_spaces():
     otherwise picking a workspace right after saving the key would take two
     restarts. The key itself is used server-side only and never returned.
     """
-    key = read_value("PERSO_API_KEY") or os.environ.get("PERSO_API_KEY")
+    key = current_value("PERSO_API_KEY")
     if not key:
-        raise HTTPException(409, "Save a Perso API key first")
+        raise HTTPException(409, "Enter a Perso API key to see its workspaces")
     try:
         spaces = list_dubbing_spaces(key)
     except Exception as e:
         # Never interpolate str(e): an httpx error can echo request details.
         raise HTTPException(502, f"Could not list Perso workspaces ({type(e).__name__})")
     return {"spaces": spaces}
+
+
+class PersoSpacesPreviewRequest(BaseModel):
+    api_key: str
+
+
+# Last preview (key, when, spaces), so the typing/blur/paste triggers on the
+# screen can all fire without three calls to Perso for one key. Not a cache with
+# a policy -- just the 5-second window that collapses one burst into one call.
+_preview_last = {"key": "", "at": 0.0, "spaces": None}
+_PREVIEW_WINDOW_SEC = 5.0
+
+
+@app.post("/api/perso/spaces/preview")
+def perso_spaces_preview(body: PersoSpacesPreviewRequest):
+    """Workspaces for a key the user has TYPED but not saved yet.
+
+    This is what removes the second restart: without it the picker could only
+    list workspaces for an already-saved key, so a new key meant save, restart,
+    pick, save, restart. The key arrives in the body, is used server-side only,
+    and is never echoed back -- the response carries workspaces and nothing
+    else, so a key can't leak into logs or the screen through this route.
+    """
+    key = (body.api_key or "").strip()
+    if not key:
+        raise HTTPException(400, "Enter a Perso API key to see its workspaces")
+    now = time.monotonic()
+    if _preview_last["spaces"] is not None and _preview_last["key"] == key \
+            and now - _preview_last["at"] < _PREVIEW_WINDOW_SEC:
+        return {"spaces": _preview_last["spaces"]}
+    try:
+        spaces = list_dubbing_spaces(key)
+    except Exception as e:
+        # Same rule as above: the type name only, never str(e) -- an httpx
+        # error message can carry the request, and the request carries the key.
+        raise HTTPException(502, f"Could not list Perso workspaces ({type(e).__name__})")
+    _preview_last.update(key=key, at=now, spaces=spaces)
+    return {"spaces": spaces}
+
+
+@app.get("/api/dub/jobs")
+def dub_jobs():
+    """Every job this app knows about, newest first -- the Projects sidebar.
+
+    No logs: a row needs a name, a language and a status dot, and the logs of a
+    few dozen jobs would be megabytes of JSON for a list nobody reads them in.
+    """
+    return {"jobs": job_store.all()}
 
 
 @app.get("/api/dub/jobs/{jid}")
@@ -244,6 +356,391 @@ def dub_job(jid: str):
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     return j
+
+
+@app.get("/api/dub/jobs/{jid}/script")
+def dub_job_script(jid: str):
+    """This job's script, line by line, with the source line beside each one.
+
+    The same reading app/mcp_server.py's get_script hands the assistant. Until
+    now only the assistant could see it: the page had no route to ask for the
+    original-language lines, so the export screen could only list the finished
+    subtitles with nothing to compare them against.
+    """
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    out = (job.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=409,
+                            detail="This job has no finished script yet.")
+    work_dir = os.path.dirname(out)
+    try:
+        lines = load_lines(work_dir, job.get("language_code") or "en")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="No script was recorded for this job.")
+    # Mark which lines differ from what the translation produced, so the page can
+    # badge them and offer to put them back.
+    for line, original in zip(lines, _dubbed_texts(work_dir)):
+        line["was"] = original
+        line["edited"] = original is not None and original != line["text"]
+    return {"lines": lines,
+            "edited": any(l.get("edited") for l in lines)}
+
+
+def _dubbed_texts(work_dir: str) -> List[Optional[str]]:
+    """What the translation wrote, line by line, before anything was rewritten.
+
+    edit_line only ever changes a line's words, never the count or the timings,
+    so line N here is line N there.
+    """
+    path = os.path.join(work_dir, DUB_NAME)
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8-sig") as f:
+        return [c["text"] for c in parse_srt(f.read())]
+
+
+# A dub keeps its per-line voices now (app/pipeline.py), which is what makes
+# redoing a single line possible -- and what makes a job need room. Measured on
+# a real job 2026-08-21: the intermediates were about 61% of the folder.
+FREE_SPACE_FLOOR = 3 * 1024 ** 3  # 3 GB
+
+
+def free_bytes(path: str) -> int:
+    """Free space on the disk holding path (its nearest existing parent)."""
+    while path and not os.path.exists(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            break
+        path = parent
+    return shutil.disk_usage(path or "/").free
+
+
+def check_space(path: str) -> None:
+    """Refuse to start when there is not enough room, and say what to do.
+
+    Failing here beats failing three stages in: a dub that runs out of disk
+    halfway leaves a half-written folder and no dub.
+    """
+    free = free_bytes(path)
+    if free >= FREE_SPACE_FLOOR:
+        return
+    raise HTTPException(
+        status_code=507,
+        detail=("Not enough disk space (%.1f GB left). "
+                "Delete an old job from the Projects list to free space."
+                % (free / 1024 ** 3)),
+    )
+
+
+class ScriptLineRequest(BaseModel):
+    text: str
+
+
+def _script_work_dir(jid: str) -> tuple:
+    """The job and its folder, or the right HTTP error."""
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    out = (job.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=409, detail="This job has no finished script yet.")
+    return job, os.path.dirname(out)
+
+
+@app.post("/api/dub/jobs/{jid}/script/{line}")
+def dub_job_script_edit(jid: str, line: int, body: ScriptLineRequest):
+    """Rewrite one line. Same path the assistant takes -- edited.srt only."""
+    job, work_dir = _script_work_dir(jid)
+    try:
+        return edit_line(work_dir, line, body.text, job.get("language_code") or "en")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="No script was recorded for this job.")
+
+
+@app.get("/api/dub/jobs/{jid}/script/{line}/audio")
+def dub_job_line_audio(jid: str, line: int):
+    """The voice that was made for one line, on its own."""
+    _job, work_dir = _script_work_dir(jid)
+    path = line_wav_path(work_dir, line)
+    if not os.path.exists(path):
+        raise HTTPException(
+            status_code=404,
+            detail=("This job has no per-line audio. Per-line audio has only "
+                    "been kept since 2026-08-24, so a job made before that "
+                    "has to be dubbed again before you can listen to it."))
+    return FileResponse(path, media_type="audio/wav")
+
+
+def _line_manifest(work_dir: str) -> dict:
+    """What the synthesizer recorded about each line, or the right HTTP error."""
+    manifest = os.path.join(work_dir, "lines.json")
+    if not os.path.exists(manifest):
+        raise HTTPException(status_code=409, detail=(
+            "This job cannot be remade one line at a time. It was made before "
+            "2026-08-24, so it has no line information -- remake the whole job."))
+    with open(manifest, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _remake_one_voice(work_dir: str, data: dict, line: int, text: str) -> None:
+    """Speak one line again, over its own old wav. The video is NOT rebuilt here.
+
+    Rebuilding is the caller's call: one line at a time rebuilds after each one,
+    a sweep of several rebuilds once at the end.
+    """
+    entries = data.get("lines") or []
+    if not 1 <= line <= len(entries):
+        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+    try:
+        new_path = resynth_one_line(work_dir, entries[line - 1], text,
+                                    data.get("language") or "English")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if new_path is None:
+        raise HTTPException(status_code=502, detail="Could not make the voice.")
+
+
+@app.post("/api/dub/jobs/{jid}/script/{line}/voice")
+def dub_job_line_voice(jid: str, line: int):
+    """Speak ONE line again and rebuild the dub around it.
+
+    Everything else is reused: the other lines' audio, the background bed and
+    the speaker's cloned voice all stay on disk after a job (app/pipeline.py).
+    Rewriting two lines of ten should not cost a whole synthesis pass.
+    """
+    job, work_dir = _script_work_dir(jid)
+    data = _line_manifest(work_dir)
+    lines = load_lines(work_dir, job.get("language_code") or "en")
+    if not 1 <= line <= len(lines):
+        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+
+    _remake_one_voice(work_dir, data, line, lines[line - 1]["text"])
+    rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
+                (job.get("result") or {}).get("out_path"))
+    return {"line": line, "ok": True}
+
+
+@app.post("/api/dub/jobs/{jid}/voices/stale")
+def dub_job_stale_voices(jid: str):
+    """Remake only the lines whose words changed since their voice was made.
+
+    Exactly the work the screen's filled wave buttons offer, in one press: each
+    such line is spoken again in place and the video is put back together once
+    at the end, instead of once per line. Nothing else moves -- no new job, no
+    new folder, no status change, and a line nobody rewrote keeps its voice.
+
+    Which lines those are is decided the same way the screen decides it
+    (static/index.html: `l.edited && l.voice_stale`), so one press does the set
+    of lines the buttons were offering and not a line more.
+    """
+    job, work_dir = _script_work_dir(jid)
+    if job.get("status") in ("running", "cancelling"):
+        raise HTTPException(status_code=409, detail="This job is still running.")
+    data = _line_manifest(work_dir)
+    lines = load_lines(work_dir, job.get("language_code") or "en")
+    stale = [
+        line for line, original in zip(lines, _dubbed_texts(work_dir))
+        if original is not None and original != line["text"] and line["voice_stale"]
+    ]
+    if not stale:
+        return {"remade": [], "skipped": len(lines)}
+
+    for line in stale:
+        _remake_one_voice(work_dir, data, line["line"], line["text"])
+    # Once, at the end: the rebuild is the slow half, and laying down five new
+    # lines five times over would spend it five times for the same video.
+    rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
+                (job.get("result") or {}).get("out_path"))
+    return {"remade": [line["line"] for line in stale],
+            "skipped": len(lines) - len(stale)}
+
+
+@app.post("/api/dub/jobs/{jid}/script/{line}/revert")
+def dub_job_script_revert(jid: str, line: int):
+    """Put one line back to what the translation wrote."""
+    job, work_dir = _script_work_dir(jid)
+    texts = _dubbed_texts(work_dir)
+    if not 1 <= line <= len(texts):
+        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+    return edit_line(work_dir, line, texts[line - 1], job.get("language_code") or "en")
+
+
+@app.post("/api/dub/jobs/{jid}/redub")
+def dub_job_redub(jid: str):
+    """Make the voices again from this job's script, as it now stands.
+
+    Transcription and translation are skipped: the script is handed in whole, the
+    way a user-supplied subtitle file is (run_dub's srt_path). The old job is left
+    untouched in its own folder so a rewrite that turns out worse can be compared
+    against what came before.
+    """
+    job, work_dir = _script_work_dir(jid)
+    source_video = os.path.join(work_dir, "input.mp4")
+    if not os.path.exists(source_video):
+        raise HTTPException(status_code=409, detail="This job's video is no longer on disk.")
+
+    language_code = job.get("language_code") or "en"
+    project = job.get("project") or os.path.basename(work_dir)
+    check_space(WORKSPACE)
+    work = _job_dir(project, language_code)
+    video_path = os.path.join(work, "input.mp4")
+    shutil.copyfile(source_video, video_path)
+    srt_path = os.path.join(work, "sub.srt")
+    shutil.copyfile(script_path(work_dir), srt_path)
+    out_path = os.path.join(work, "dubbed.mp4")
+
+    # The same engines the first run was given, not today's defaults: a Perso
+    # job that failed used to come back transcribed by local Whisper (or the
+    # other way round), with nothing on screen to say the choice had changed.
+    # A job saved before these were kept has none of them, so that one still
+    # falls back to what the app is set to now.
+    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality")}
+    if not engines.get("stt_engine"):
+        engines = _engines_used()
+
+    new_jid = job_store.create()
+    job_store._update(new_jid, language_code=language_code, project=project,
+                      day=_today(), from_link=False, work_dir=work,
+                      # The remake is the same video in the same two languages.
+                      source_lang=job.get("source_lang"),
+                      # ...and made with the same engines, so its finished
+                      # screen says what the job it came from said.
+                      **engines)
+    # Same reason as in dub_start: quit the app mid-remake and this folder is
+    # nameless without a file in it, so Projects could never show or clear it.
+    job_store.persist(new_jid, work)
+    edited = os.path.exists(os.path.join(work_dir, EDITED_NAME))
+    job_store.append_log(new_jid, "%s (%s)"
+                         % (project, "voices remade from the edited script" if edited
+                            else "from the script as it was"))
+
+    def _target(log):
+        return run_dub(
+            video_path=video_path,
+            srt_path=srt_path,
+            out_path=out_path,
+            language=job.get("language") or language_code,
+            language_code=language_code,
+            # Only the voices are made again here, so the take count is the one
+            # engine choice that still applies -- the same one the first run had.
+            n_takes=engines["quality"],
+            cancel_check=lambda: job_store.is_cancel_requested(new_jid),
+            on_notice=lambda n: job_store.append_notice(new_jid, n),
+            log=log,
+        )
+
+    job_store.start(new_jid, _target)
+    # Stamped on the OLD job so the screen showing it can follow along when the
+    # assistant, not the user, is the one who pressed go.
+    job_store._update(jid, remade_as=new_jid)
+    return {"job_id": new_jid}
+
+
+@app.post("/api/dub/jobs/{jid}/retry")
+def dub_job_retry(jid: str):
+    """Run this job again from the top -- transcribe, translate, voices, all of it.
+
+    "Try again" on a failed job used to mean downloading the original and
+    uploading it back, which for a link job meant fetching the whole video a
+    second time. The copy in the job's folder is right there, so the new job
+    starts from it with the settings the old one was given.
+
+    Not a redub: that one hands the finished script back in and only makes the
+    voices again (above). A job that failed may never have had a script at all.
+    """
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("status") in ("running", "cancelling"):
+        raise HTTPException(status_code=409, detail="This job is still running.")
+    # work_dir, not the result folder: a job that failed before it produced
+    # anything is exactly the one this endpoint exists for.
+    work_dir = _work_dir_of(job)
+    source_video = os.path.join(work_dir, "input.mp4")
+    if not os.path.exists(source_video):
+        raise HTTPException(status_code=409, detail="This job's video is no longer on disk.")
+
+    language_code = job.get("language_code") or "en"
+    # run_dub wants the language's name. A job saved before that name was kept
+    # in job.json has only its code, so work the name back out of it -- handing
+    # run_dub "ko" would put "ko" in the translation prompt and in what the
+    # voice sidecar is told to speak.
+    language = job.get("language") or _language_name(language_code)
+    project = job.get("project") or os.path.basename(work_dir)
+    check_space(WORKSPACE)
+    work = _job_dir(project, language_code)
+    video_path = os.path.join(work, "input.mp4")
+    shutil.copyfile(source_video, video_path)
+    out_path = os.path.join(work, "dubbed.mp4")
+
+    # A trim that was already made lives in input.mp4, so cutting the copy again
+    # would take the same seconds out of a video that no longer has them -- which
+    # is why this only cuts when the record says the cut is still owed. A link job
+    # that died at (or before) its cut still holds the whole video, and without
+    # this its second run would dub every minute the user cut away.
+    trim = job.get("trim")
+    cut_now = bool(job.get("trim_pending") and trim
+                   and trim.get("start") is not None and trim.get("end") is not None)
+    if cut_now:
+        try:
+            _cut_video(video_path, trim["start"], trim["end"])
+        except RuntimeError as e:
+            # No job record points at this folder yet, so nothing would ever
+            # come back to clear it. _job_dir always makes a fresh one.
+            shutil.rmtree(work, ignore_errors=True)
+            raise HTTPException(400, str(e))
+
+    # The same engines the first run was given, not today's defaults: a Perso
+    # job that failed used to come back transcribed by local Whisper (or the
+    # other way round), with nothing on screen to say the choice had changed.
+    # A job saved before these were kept has none of them, so that one still
+    # falls back to what the app is set to now.
+    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality")}
+    if not engines.get("stt_engine"):
+        engines = _engines_used()
+
+    new_jid = job_store.create()
+    job_store._update(new_jid, language_code=language_code, project=project,
+                      day=_today(), work_dir=work,
+                      language=language,
+                      # Cut just now, or copied from a video already cut: either
+                      # way this job owes no cut.
+                      trim=trim, trim_pending=False,
+                      source_lang=job.get("source_lang"),
+                      # The video is a local copy now, whatever the first job was
+                      # started from -- there is no link to download again.
+                      from_link=False,
+                      **engines)
+    # Same reason as in dub_start: quit the app mid-run and this folder is
+    # nameless without a file in it, so Projects could never show or clear it.
+    job_store.persist(new_jid, work)
+    job_store.append_log(new_jid, "%s (run again)" % project)
+
+    def _target(log):
+        return run_dub(
+            video_path=video_path,
+            out_path=out_path,
+            language=language,
+            language_code=language_code,
+            # The first run's own choices (see `engines` above). Left out,
+            # run_dub falls back to local Whisper and the app's default
+            # translator, so a Perso job came back transcribed by something
+            # else with nothing on screen to say so.
+            stt_engine="perso" if engines["stt_engine"] == "perso" else None,
+            translate_engine=engines["translator"],
+            n_takes=engines["quality"],
+            source_language_code=job.get("source_lang"),
+            cancel_check=lambda: job_store.is_cancel_requested(new_jid),
+            on_notice=lambda n: job_store.append_notice(new_jid, n),
+            log=log,
+        )
+
+    job_store.start(new_jid, _target)
+    return {"job_id": new_jid, "status": "running"}
 
 
 @app.post("/api/dub/jobs/{jid}/cancel")
@@ -276,18 +773,26 @@ def dub_job_delete_workspace(jid: str):
     j = job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if j["status"] == "running":
+    # "cancelling" counts as running: the thread only stops at the next stage
+    # boundary, and until it does it is still writing into this folder.
+    if j["status"] in ("running", "cancelling"):
         raise HTTPException(status_code=409, detail="Job is still running")
-    out = (j.get("result") or {}).get("out_path")
+    # work_dir is stamped the moment the folder is made, so a job that failed
+    # before it produced anything can be cleared out too -- Projects lists
+    # those now, and a row nothing can remove is a row that never goes away.
+    out = _work_dir_of(j)
     if not out:
         raise HTTPException(status_code=404, detail="Nothing to delete")
-    work = os.path.abspath(os.path.dirname(out))
+    work = os.path.abspath(out)
     root = os.path.abspath(WORKSPACE)
     # A job record is the only thing naming this path; refuse anything that
     # somehow points outside the workspace rather than trusting it.
     if os.path.commonpath([work, root]) != root or work == root:
         raise HTTPException(status_code=400, detail="Refusing to delete outside the workspace")
     shutil.rmtree(work, ignore_errors=True)
+    # The folder is gone, so its job.json is gone -- but the in-memory record
+    # would still put the job in the list until the next restart.
+    job_store.forget(jid)
     return {"job_id": jid, "deleted": True}
 
 
@@ -325,6 +830,62 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
     )
 
 
+def _cut_video(path: str, start: float, end: float, on_cut=None) -> None:
+    """Keep only [start, end] of the video, in place. Re-encodes so the cut is
+    exact (a copy-cut lands on the nearest keyframe, seconds away).
+
+    `on_cut` runs the instant the cut file takes the original's place, before
+    anything else can happen. That is where a caller records "this video is cut
+    now": recording it a statement later leaves a window where a force-quit
+    saves a record that still owes a cut over a video that has already had one,
+    and the next run would take the same seconds out twice.
+    """
+    tmp = path + ".cut.mp4"
+    try:
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+                            "-i", path, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", tmp],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            # Only ffmpeg's last line, which is the complaint itself. The lines
+            # before it name the input file, so a tail of the whole thing put the
+            # user's folders on screen (and into a bug report) for nothing.
+            last = ([ln.strip() for ln in (r.stderr or "").splitlines() if ln.strip()] or [""])[-1]
+            # ffmpeg names files by their full path even in that last line, so
+            # each one is cut back to its own name: the user learns which file
+            # upset it without their folders ending up on screen.
+            last = re.sub(r"\S*/(\S+)", r"\1", last)
+            raise RuntimeError(("Could not trim the video: " + last) if last
+                               else "Could not trim the video.")
+        os.replace(tmp, path)
+        if on_cut is not None:
+            on_cut()
+    finally:
+        # A cut that died with the output already open (out of disk, a killed
+        # encoder) would otherwise leave a half-written .cut.mp4 beside a good
+        # input.mp4, in a folder the pipeline later walks.
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def _engines_used(stt_engine=None, translate_engine=None, n_takes=None) -> dict:
+    """The engine choices this job is really being made with, resolved now.
+
+    The form may leave any of them out, in which case the app's own setting
+    decides -- so what is saved on the job is the answer, never the blank. That
+    is what lets the finished screen say "Whisper, Gemma, 4 takes" months later,
+    and what "Try again" repeats instead of whatever the defaults are that day.
+    "whisper" covers both ways of asking for the free local engine (an explicit
+    "local" and no choice at all); qwen3 is the app's only voice engine.
+    """
+    resolved_stt = (stt_engine or default_stt_engine() or "").lower()
+    return {
+        "stt_engine": "perso" if resolved_stt == "perso" else "whisper",
+        "translator": (translate_engine or TRANSLATE_ENGINE or "").lower() or None,
+        "tts": "qwen3",
+        "quality": n_takes if n_takes is not None else QWEN_N_TAKES,
+    }
+
+
 @app.post("/api/dub/start")
 def dub_start(
     video: Optional[UploadFile] = File(None),
@@ -339,6 +900,8 @@ def dub_start(
     n_takes: Optional[int] = Form(None),
     source_language_code: Optional[str] = Form(None),
     project: Optional[str] = Form(None),
+    trim_start: Optional[float] = Form(None),
+    trim_end: Optional[float] = Form(None),
 ):
     """Start dubbing by uploading a video (+ optional subtitles) from the screen.
 
@@ -352,7 +915,24 @@ def dub_start(
     PERSO_API_KEY is configured, else local Whisper. A Perso failure FAILS the
     job with an actionable message (no silent local substitute — the engine was
     chosen for a reason); pick Whisper explicitly for the free offline path.
+    trim_start/trim_end = dub only these seconds of the video. Both or neither:
+    the video is cut down to that part and the cut IS this job's original.
     """
+    # Half a range means nothing, and a backwards one would produce an empty
+    # video minutes later -- both are caught here, before anything is saved.
+    # isfinite keeps out inf and nan, which would otherwise reach ffmpeg as
+    # "-to inf"; the half-second floor is the same one the screen's handles
+    # enforce, so both sides agree on what counts as a trim.
+    if (trim_start is None) != (trim_end is None):
+        raise HTTPException(400, "Send both trim_start and trim_end, or neither.")
+    if trim_start is not None and not (
+        math.isfinite(trim_start) and math.isfinite(trim_end)
+        and 0 <= trim_start and trim_end - trim_start >= 0.5
+    ):
+        raise HTTPException(
+            400,
+            "The trim must start at 0 seconds or later and keep at least half a second of video.",
+        )
     # Exactly one source. Accepting both would silently pick a winner, and the
     # user would watch the wrong video get dubbed.
     source_url = (source_url or "").strip() or None
@@ -387,11 +967,11 @@ def dub_start(
             "Perso transcription needs an API key. Open Settings and save your Perso "
             "API key, or choose Local transcription.",
         )
-    if stt_engine == "perso" and not (read_value("PERSO_SPACE_SEQ") or os.environ.get("PERSO_SPACE_SEQ")):
+    if stt_engine == "perso" and not current_value("PERSO_SPACE_SEQ"):
         # No workspace pinned: a single-workspace account resolves silently in
         # the pipeline, but several would fail AFTER minutes of separation
         # work. Catch that here, before the upload is accepted.
-        key = read_value("PERSO_API_KEY") or os.environ.get("PERSO_API_KEY")
+        key = current_value("PERSO_API_KEY")
         try:
             spaces = list_dubbing_spaces(key)
         except Exception:
@@ -412,11 +992,24 @@ def dub_start(
         project = safe_name(
             os.path.splitext(video.filename or "")[0] if has_upload else (source_url or "")
         )
+    check_space(WORKSPACE)
     work = _job_dir(project, language_code)
     video_path = os.path.join(work, "input.mp4")
     if has_upload:
         with open(video_path, "wb") as f:
             shutil.copyfileobj(video.file, f)
+        # Cut before the job starts, so everything downstream (and the running
+        # screen's original) only ever sees the part the user picked. A link
+        # has nothing to cut yet -- that happens after the download, below.
+        if trim_start is not None:
+            try:
+                _cut_video(video_path, trim_start, trim_end)
+            except RuntimeError as e:
+                # No job record exists yet, so nothing would ever come back to
+                # reap this folder -- and the next try would land in _001.
+                # _job_dir always makes a fresh folder, so it is ours to drop.
+                shutil.rmtree(work, ignore_errors=True)
+                raise HTTPException(400, str(e))
 
     srt_path = None
     if srt is not None and srt.filename:
@@ -440,10 +1033,38 @@ def dub_start(
     job_store._update(jid, language_code=language_code,
                       project=project or os.path.basename(work),
                       day=_today(),
-                      from_link=bool(source_url))
+                      # Where input.mp4 lives. Stamped here because the running
+                      # screen asks for the original while the job is still
+                      # going, when there is no result to find the folder from.
+                      work_dir=work,
+                      # Kept so a later redub of this job can pass the same
+                      # language name back into run_dub.
+                      language=language,
+                      # The language the user said the video is in, or None for
+                      # auto-detect. Only auto-detect leaves a language behind in
+                      # the result (app/stt_local.py fires on_language solely when
+                      # nothing was forced), so without this the screen has no way
+                      # to name the source column of a job that was told.
+                      source_lang=source_language_code or None,
+                      # The seconds the user kept, or None for the whole video.
+                      trim=({"start": trim_start, "end": trim_end}
+                            if trim_start is not None else None),
+                      # An upload was cut just above, before this record existed.
+                      # A link still holds the whole video and is cut in the
+                      # thread below, which clears this the moment it is.
+                      trim_pending=bool(source_url and trim_start is not None),
+                      from_link=bool(source_url),
+                      # What made this job: read back by the finished screen and
+                      # by "Try again", which repeats these rather than today's
+                      # defaults.
+                      **_engines_used(stt_engine, translate_engine, n_takes))
+    # Written now, not just at the end: a job the user quits the app in the
+    # middle of still has a folder, and without a file in it that folder is
+    # nameless -- Projects would have nothing to show for it.
+    job_store.persist(jid, work)
     # First log line names the source -- log files are job-<id>.log, so without
     # this there is no way to tell which video a log belongs to.
-    job_store.append_log(jid, f"🎬 {source_url or video.filename or 'video'}")
+    job_store.append_log(jid, f"{source_url or video.filename or 'video'}")
 
     def _target(log):
         if source_url:
@@ -451,6 +1072,17 @@ def dub_start(
                 source_url, video_path, log=log,
                 cancel_check=lambda: job_store.is_cancel_requested(jid),
             )
+            if trim_start is not None:
+                # Written to job.json the instant the cut lands, not at the end
+                # of the job and not a statement later: quit the app in between
+                # and the record still says a cut is owed over a video that has
+                # already had one, and running it again would take the same
+                # seconds out twice.
+                def _cut_recorded():
+                    job_store._update(jid, trim_pending=False)
+                    job_store.persist(jid, work)
+
+                _cut_video(video_path, trim_start, trim_end, on_cut=_cut_recorded)
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,
@@ -524,6 +1156,24 @@ def _valid_language_code(code: str) -> bool:
     return bool(_LANGUAGE_CODE.match(code or ""))
 
 
+# The ten languages the bundled voice model speaks, by code -- the same table
+# the screen keeps (ui/src/dubApi.mjs LANGUAGES). run_dub is given the NAME,
+# which it pastes into the translation prompt and hands to the voice sidecar,
+# so a job whose saved record predates `language` needs its name worked out
+# from the code rather than the code sent in its place.
+LANGUAGE_NAMES = {
+    "en": "English", "ko": "Korean", "zh": "Chinese", "fr": "French",
+    "de": "German", "it": "Italian", "ja": "Japanese", "pt": "Portuguese",
+    "ru": "Russian", "es": "Spanish",
+}
+
+
+def _language_name(code: str) -> str:
+    """The language's name for a code, or the code itself for one we don't know
+    (a region variant, say) -- which is no worse than what we were given."""
+    return LANGUAGE_NAMES.get((code or "").lower(), code)
+
+
 def _job_dir(title, lang_code):
     # type: (str, str) -> str
     """Create and return this job's workspace folder.
@@ -574,32 +1224,40 @@ def dub_result(jid: str):
 
 
 @app.get("/api/dub/result/{jid}/original")
-def dub_result_original(jid: str):
-    """Return the source video a link job downloaded.
+def dub_result_original(jid: str, download: int = 0):
+    """Return this job's source video.
 
-    Only offered for link jobs. A file the user uploaded is already on their
-    machine, so handing it back is pure noise; a video pulled from a link is
-    the only original they cannot otherwise get.
+    Served for every job, running or finished: the running screen plays it
+    blurred behind the progress card, and the finished screen puts it beside
+    the dub. Read from the job's own workspace folder, which exists from the
+    moment the job starts -- long before there is any result to look next to.
+
+    ?download=1 (the "Download original" button) stays link-only: a file the
+    user uploaded is already on their machine, so offering it back is noise;
+    a video pulled from a link is the only original they cannot otherwise get.
     """
     j = job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if not j.get("from_link"):
+    if download and not j.get("from_link"):
         raise HTTPException(status_code=404,
                             detail="This job started from a file you already have")
-    out = (j.get("result") or {}).get("out_path")
-    if not out:
-        raise HTTPException(status_code=404, detail="Result file not found")
-    original = os.path.join(os.path.dirname(out), "input.mp4")
-    if not os.path.exists(original):
+    work_dir = _work_dir_of(j)
+    original = os.path.join(work_dir, "input.mp4") if work_dir else ""
+    if not original or not os.path.exists(original):
         raise HTTPException(status_code=404, detail="Original file not found")
     return FileResponse(original, media_type="video/mp4", filename="org.mp4")
 
 
-@app.get("/api/dub/result/{jid}/srt")
+@app.api_route("/api/dub/result/{jid}/srt", methods=["GET", "HEAD"])
 def dub_result_srt(jid: str, download: int = 0):
-    """Return the translated subtitles used for the dub, as plain text (for the UI's
-    subtitle viewer). run_dub()'s result dict doesn't carry the srt path, but it
+    """Return the translated subtitles used for the dub, as plain text.
+
+    HEAD as well as GET: the Export dialog only needs to know whether this job
+    has subtitles at all, and asking with GET downloaded the whole file to throw
+    it away. FastAPI does not add HEAD to a GET route by itself.
+
+    run_dub()'s result dict doesn't carry the srt path, but it
     always writes/copies it into the same job workspace folder as out_path, under
     one of two fixed names: "translated.srt" (auto-translated) or "sub.srt" (the
     caller's own pre-translated subtitles, see app/main.py:dub_start). Looked up by
@@ -627,3 +1285,224 @@ def dub_result_srt(jid: str, download: int = 0):
                             media_type="text/plain; charset=utf-8",
                             headers=headers)
     raise HTTPException(status_code=404, detail="Subtitle file not found")
+
+
+# ---------------------------------------------------------------------------
+# The script assistant: a chat panel driving whichever CLI agent the user
+# already subscribes to. It reaches the script through the same five MCP tools
+# a terminal agent uses -- see app/mcp_server.py. Starting or cancelling a dub
+# is deliberately not among them.
+# ---------------------------------------------------------------------------
+
+AGENTS = {
+    # `login` is what the user types in a terminal to sign this CLI in. It is
+    # here rather than in the screen so one place names it: the failure message
+    # and the strip's status line both say the same command.
+    "claude": {"binary": "claude", "name": "Claude", "vendor": "Anthropic",
+               "driver": claude_agent, "login": "claude"},
+    "codex": {"binary": "codex", "name": "Codex", "vendor": "OpenAI",
+              "driver": codex_agent, "login": "codex login"},
+    # An assistant listed with "driver": None and a "reason" is offered but
+    # greyed out, with the reason printed under its name. Nothing is in that
+    # state today -- Gemini was, and was dropped rather than left on the list
+    # as a row nobody could pick -- but the next CLI to be added can be shown
+    # before it is wired up.
+}
+
+# Where the assistant's own files live. Never the user's global CLI config:
+# their everyday setup has to keep working exactly as it did.
+AGENT_DIR = os.path.join(PERSODUB_LOG_DIR, "agent")
+
+# --- Which account each CLI is signed in with -------------------------------
+# Asking costs a process, so the answer is kept for a minute -- and the asking
+# happens on a thread of its own. /api/agent/status answers from what is known
+# this instant: the picker has to open now, not when a CLI feels like replying.
+AGENT_LOGIN_TTL = 60.0
+_login_cache = {}          # agent id -> {"logged_in", "account", "at"}
+_login_busy = set()        # ids with a check already running
+_login_broken = set()      # ids whose check has already been complained about
+_login_lock = threading.Lock()
+
+
+def _login_refresh(key: str, binary: str) -> None:
+    """Ask one CLI, and write down whatever came of it -- including nothing.
+
+    The write and the clearing of the busy marker happen whatever the CLI does:
+    a check that threw used to leave its marker behind, and that assistant then
+    showed "not known" for the life of the app, with nothing on screen to say
+    why and no way back but a restart.
+    """
+    state = {"logged_in": None, "account": ""}
+    try:
+        state = agent_base.login_state(key, binary)
+    except Exception as e:   # noqa: BLE001 -- a CLI can fail in any way at all
+        # Once per assistant per run: this is for whoever reads the log, and a
+        # line every minute would bury the rest of it.
+        if key not in _login_broken:
+            _login_broken.add(key)
+            print("PersoDub: could not check %s's login (%s)" % (key, e), file=sys.stderr)
+    finally:
+        with _login_lock:
+            _login_cache[key] = dict(state, at=time.monotonic())
+            _login_busy.discard(key)
+
+
+def _login_of(key: str, binary: str, ask: bool) -> dict:
+    """What is known about this CLI's login right now, refreshing behind us.
+
+    `ask` is what allows a check to be started at all: every check is a child
+    process, and the first screen -- where the assistant is not even on show --
+    must not start one. The screen asks the first time the strip is visible.
+
+    None for `logged_in` means "we cannot say yet", never "signed out" -- the
+    screen shows nothing rather than an accusation it has not checked.
+    """
+    now = time.monotonic()
+    with _login_lock:
+        row = _login_cache.get(key)
+        stale = row is None or now - row["at"] >= AGENT_LOGIN_TTL
+        start = bool(ask and stale and binary and key not in _login_busy)
+        if start:
+            _login_busy.add(key)
+    if start:
+        threading.Thread(target=_login_refresh, args=(key, binary), daemon=True).start()
+    if row is None:
+        return {"logged_in": None, "account": ""}
+    return {"logged_in": row["logged_in"], "account": row["account"]}
+
+
+class AgentChatRequest(BaseModel):
+    message: str
+    agent: str = "claude"
+    resume: bool = True
+    # "" keeps whatever the CLI is set up to use.
+    model: str = ""
+    # The job the user is looking at. Every script tool needs one, and the user
+    # has no way of knowing the id -- the panel reads it off the page instead.
+    job_id: Optional[str] = None
+
+
+def _with_job(message: str, job_id: Optional[str]) -> str:
+    """Tell the assistant which job is on screen before it reads the question."""
+    if not job_id:
+        return message
+    return "(The job open on screen right now: %s)\n\n%s" % (job_id, message)
+
+
+@app.get("/api/agent/status")
+def agent_status(login: int = 0):
+    """Which assistants are installed on this machine, and which are ready.
+
+    Only one of them is needed -- whichever the user subscribes to. The panel
+    greys out the rest rather than asking anyone to install both.
+    """
+    out = []
+    for key, meta in AGENTS.items():
+        path = agent_base.find_cli(meta["binary"])
+        driver = meta["driver"]
+        # Only asked of a CLI we would actually run, and only when the caller
+        # says the assistant is on screen (?login=1). `logged_in` is None until
+        # the answer lands, and this call never waits for it.
+        state = (_login_of(key, path, ask=bool(login)) if path and driver
+                 else {"logged_in": None, "account": ""})
+        out.append({
+            "id": key,
+            "name": meta["name"],
+            "vendor": meta["vendor"],
+            "installed": bool(path),
+            "supported": driver is not None,
+            # True, False, or None for "not known yet". The account is its KIND
+            # ("ChatGPT", "claude.ai") -- never an address, never a token.
+            "logged_in": state["logged_in"],
+            "account": state["account"],
+            # What to type in a terminal to sign in, said in one place.
+            "login_command": meta.get("login", ""),
+            # Why it is greyed out, in the picker's own words. Empty when the
+            # assistant is usable, and "not installed" is the panel's line.
+            "reason": "" if driver else meta.get("reason", ""),
+            "models": driver.MODELS if driver else [],
+        })
+    return {"agents": out}
+
+
+@app.post("/api/agent/stop")
+def agent_stop():
+    """End the turn on air, leaving the conversation there to carry on.
+
+    The CLI is asked to go rather than shot: it writes its session down on the
+    way out, and that is what the next message resumes from. `stopped` is False
+    when there was no turn running -- pressing Stop twice is not an error.
+    """
+    return {"stopped": agent_base.stop_turn()}
+
+
+@app.post("/api/agent/chat")
+async def agent_chat(body: AgentChatRequest, request: Request):
+    """One turn with the assistant, streamed back a line of JSON at a time.
+
+    Streaming is the point: a turn takes seconds, and a panel that sits blank
+    that whole time reads as broken. Each line is one of our five events.
+    """
+    meta = AGENTS.get(body.agent)
+    if meta is None:
+        raise HTTPException(status_code=422, detail="Unknown assistant: %s" % body.agent)
+    driver = meta["driver"]
+    if driver is None:
+        raise HTTPException(status_code=501, detail="%s: %s"
+                            % (meta["name"], meta.get("reason", "not wired up yet")))
+
+    binary = agent_base.find_cli(meta["binary"])
+    if not binary:
+        raise HTTPException(status_code=503,
+                            detail="%s is not installed." % meta["name"])
+
+    api_url = str(request.base_url).rstrip("/")
+    mcp_config = agent_base.write_mcp_config(AGENT_DIR, api_url)
+    work_dir = os.path.dirname(mcp_config)
+    try:
+        args = driver.command(_with_job(body.message, body.job_id),
+                              mcp_config, body.resume, body.model)
+    except (OSError, ValueError, KeyError) as e:
+        # Everything else on this path answers with a bubble rather than a
+        # stack trace, and building the command line should not be the one
+        # place that hands the user a 500.
+        raise HTTPException(status_code=500,
+                            detail="Could not prepare the assistant: %s" % e)
+
+    async def stream():
+        # The runner blocks -- it reads the CLI's stdout a line at a time -- so
+        # it gets a thread of its own and posts what it reads here. That is what
+        # leaves this side free to notice the browser going away mid-answer: a
+        # closed tab used to leave the CLI running to the end, talking to
+        # nobody, with the next turn queued behind it.
+        events = queue.Queue()
+
+        def pump():
+            try:
+                for event in agent_base.run(binary, args, driver.translate,
+                                            cwd=work_dir, agent_name=meta["name"],
+                                            login_command=meta.get("login", "")):
+                    events.put(event)
+            finally:
+                events.put(None)      # whatever happened, the turn is over
+
+        threading.Thread(target=pump, daemon=True).start()
+        finished = False
+        try:
+            while True:
+                try:
+                    event = await run_in_threadpool(events.get, True, 0.25)
+                except queue.Empty:
+                    if await request.is_disconnected():
+                        break
+                    continue
+                if event is None:
+                    finished = True
+                    break
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        finally:
+            # Stopped, or nobody left to read it. Either way the child goes.
+            if not finished:
+                agent_base.stop_turn()
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")

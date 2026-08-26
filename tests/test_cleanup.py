@@ -76,3 +76,81 @@ def test_delete_workspace_refuses_while_the_job_runs(monkeypatch):
     with pytest.raises(HTTPException) as e:
         main.dub_job_delete_workspace("abc")
     assert e.value.status_code == 409
+
+
+def test_delete_workspace_clears_a_job_that_never_produced_a_video(tmp_path, monkeypatch):
+    # Projects lists failed jobs too, and a job that died in the first stage has
+    # no out_path -- only work_dir. Without that fallback its row could never be
+    # cleared away.
+    from app import main
+
+    work = tmp_path / "job"
+    work.mkdir()
+    (work / "input.mp4").write_bytes(b"vid")
+    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path))
+    monkeypatch.setattr(main.job_store, "get", lambda jid: {
+        "id": jid, "status": "error", "work_dir": str(work), "result": None})
+
+    assert main.dub_job_delete_workspace("abc")["deleted"] is True
+    assert not work.exists()
+
+
+def test_delete_workspace_forgets_the_job(tmp_path, monkeypatch):
+    # The folder is gone, so its job.json is gone -- but the in-memory record
+    # would keep drawing the row until the next restart.
+    from app import main
+
+    work = tmp_path / "job"
+    work.mkdir()
+    (work / "dubbed.mp4").write_bytes(b"vid")
+    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path))
+    jid = main.job_store.create()
+    main.job_store._update(jid, status="done", work_dir=str(work),
+                           result={"out_path": str(work / "dubbed.mp4")})
+
+    main.dub_job_delete_workspace(jid)
+    assert main.job_store.get(jid) is None
+
+
+def test_delete_workspace_refuses_a_work_dir_outside_it(tmp_path, monkeypatch):
+    # work_dir is now the path this endpoint prefers, so it is the one a hostile
+    # or corrupted record would come in on. The guard has to hold on that branch,
+    # not only on the out_path fallback the older test covers.
+    import pytest
+    from fastapi import HTTPException
+    from app import main
+
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "dubbed.mp4").write_bytes(b"vid")
+    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setattr(main.job_store, "get", lambda jid: {
+        "id": jid, "status": "done", "work_dir": str(outside), "result": None})
+
+    with pytest.raises(HTTPException) as e:
+        main.dub_job_delete_workspace("abc")
+    assert e.value.status_code == 400
+    assert outside.exists()
+
+
+def test_delete_workspace_refuses_a_work_dir_that_climbs_out(tmp_path, monkeypatch):
+    # The same guard against a path that stays inside the workspace on the face
+    # of it and walks out with "..".
+    import pytest
+    from fastapi import HTTPException
+    from app import main
+
+    ws = tmp_path / "workspace"
+    (ws / "day" / "job").mkdir(parents=True)
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "keepme.txt").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(main, "WORKSPACE", str(ws))
+    monkeypatch.setattr(main.job_store, "get", lambda jid: {
+        "id": jid, "status": "done", "result": None,
+        "work_dir": str(ws / "day" / ".." / ".." / "elsewhere")})
+
+    with pytest.raises(HTTPException) as e:
+        main.dub_job_delete_workspace("abc")
+    assert e.value.status_code == 400
+    assert (outside / "keepme.txt").exists()

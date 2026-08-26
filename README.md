@@ -8,7 +8,7 @@ your computer.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
-[![Version](https://img.shields.io/badge/version-0.3.6-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
 [![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
 
 <p>
@@ -38,11 +38,18 @@ It separates speech from background audio, transcribes it, works out who spoke w
 translates each line, clones each speaker's voice, and mixes the result back over the
 original soundtrack. With the default settings, every one of those steps runs locally.
 
-<img src="docs/images/advanced-options.png" width="100%"
-     alt="PersoDub main window with Advanced options expanded: a drop zone for the video, pickers for speech-to-text, original language, target language and voice quality, and below them the translation engine, the text-to-speech engine, and the number of speakers.">
+> **Every line is yours.** Edit any translation by hand — or ask the **Dub Agent**.
+> Say *"retranslate line 4 so it fits"* and it retranslates just that line and remakes
+> its voice. The agent is Claude Code or Codex running on your own computer; your video
+> is never sent anywhere for it.
 
-> **Status: early release (v0.3.6).** PersoDub is usable today and is under active
-> development. macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
+<p align="center">
+  <img src="docs/images/dub-agent.png" width="80%"
+       alt="A finished job with the Dub Agent open along the bottom: a request to shorten the lines that run over, the steps the agent took (reading the script, rewriting those lines, remaking the voices), and its reply. Above it the script sits as a table beside the player, with a timeline showing which voices fit.">
+</p>
+
+> **PersoDub is under active development.** It is usable today.
+> macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
 > Interfaces and defaults may change. Please report problems through
 > [Issues](https://github.com/stronghamjji/PersoDub/issues).
 
@@ -164,14 +171,25 @@ once; [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks l
 ## Usage
 
 1. Launch **PersoDub**. On first run it downloads its models (see
-   [Requirements](#requirements)); after that it opens straight to the **Upload** tab.
-2. Drop your video onto the upload area, click it to browse, or paste a video link —
+   [Requirements](#requirements)); after that it opens on its first screen, which asks
+   one thing: which video?
+2. Drop your video on the drop zone, click **Choose a file**, or paste a video link —
    MP4 or MOV, up to 2 GB.
-3. Pick the language to dub into from the **Target language** menu — 10 are supported
-   (see [Supported languages](#supported-languages) below).
-4. Click **Start dubbing**. A progress bar at the top tracks each stage as it runs.
-5. When it finishes, the **Export** tab unlocks — download the dubbed video and the
-   translated `.srt` there.
+3. The **New project** dialog opens. Trim the part you want dubbed, pick the original
+   and target languages (10 are supported — see
+   [Supported languages](#supported-languages)), and open **Advanced options** if you
+   want to change an engine.
+4. Click **Start dubbing**. The running screen ticks off the four stages, and counts
+   the lines as it voices them.
+5. When it finishes, the job opens on the finished screen: the script line by line
+   beside the player, a timeline underneath, and **Export** in the top bar for the
+   dubbed video and the translated `.srt`.
+
+Each line has a play button to hear it alone and a waveform button to remake its voice
+after you edit the words; **Original** and **Dubbed** swap which file the player shows,
+and the **Dub Agent** strip along the bottom can fix lines for you (see
+[What is PersoDub?](#what-is-persodub)). Past jobs are under **Projects**, the folder
+icon on the left.
 
 Engine choices (transcription, translation, quality) live under the **Advanced
 options** toggle, collapsed by default — see [Configuration](#configuration) for what
@@ -198,7 +216,7 @@ Want better quality? Add an API key in the app's **Settings** screen
 | **Perso API key** | Transcription and speaker-labeling accuracy | [Perso Dubbing](https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=readme) — includes a free allowance |
 | **Google Gemini key** | Translation quality | [Google AI Studio](https://aistudio.google.com/app/apikey) |
 
-Keys are stored on your machine and take effect after you **restart the app**.
+Keys are stored on your machine and take effect from your next dub — no restart needed.
 
 > **Note:** PersoDub is an independent open-source project. It integrates with Perso and
 > Google Gemini as optional third-party services and is not affiliated with or endorsed
@@ -214,6 +232,23 @@ content), which you can turn off in **Settings → Privacy**.
 
 Full breakdown — exactly what's sent, what's tracked, and how to opt out of
 everything — is in **[docs/privacy.md](docs/privacy.md)**.
+
+### The Dub Agent and your files
+
+The Dub Agent is an assistant **already installed on your computer** — Claude Code or
+Codex — that PersoDub asks to edit the script. PersoDub has no assistant of its own,
+and your video is never sent anywhere for this. How much each one can see is different:
+
+- **Claude Code** can only use PersoDub's script tools. It cannot read your files or
+  run shell commands. **The safer choice.**
+- **Codex** can also **read any file you can read** on this computer, and whatever it
+  reads goes to OpenAI as part of the chat (including your own `AGENTS.md`, if you keep
+  one). It cannot change your files or use the network. If that matters to you, use
+  Claude Code.
+
+The conversation continues from one job to the next, kept by the assistant's own tool
+on your machine — closing PersoDub doesn't end it. Either one answers on your account
+with that vendor and is billed there.
 
 ## Responsible use
 

@@ -5,6 +5,7 @@ If no subtitles are provided: transcribe -> Gemini translation -> dub (auto-tran
 Every stage runs locally or through our own Qwen3-TTS sidecar -- no third-party
 container anywhere in this app.
 """
+import json
 import os
 import re
 import subprocess
@@ -56,7 +57,7 @@ def _check_cancel(cancel_check: Optional[Callable[[], bool]], log: Callable[[str
     next checkpoint.
     """
     if cancel_check is not None and cancel_check():
-        log("⏹️ Cancelled by user request")
+        log("Cancelled by user request")
         raise JobCancelled("cancelled by user")
 
 
@@ -107,7 +108,7 @@ def _manifest_exclude_spans(manifest_path, mix_wav, log):
         mix_dur = w.getnframes() / float(w.getframerate())
     reason = _validate_manifest_spans(kept, mix_dur, mode=manifest.get("mode"))
     if reason is not None:
-        log(f"   ⚠️ nonverbal manifest rejected ({reason}) — measuring at full strictness")
+        log(f"   Warning: nonverbal manifest rejected ({reason}) — measuring at full strictness")
         return None
     return [(float(k["start"]), float(k["end"])) for k in kept]
 
@@ -147,11 +148,11 @@ def leakage_gate(mix_wav, vocals_path, manifest_path, work_dir, log):
         if r2["pass"]:
             log(f"   leakage gate: PASS after cancelling {n} echo run(s)")
         else:
-            log(f"   ⚠️ leakage gate: still {r2['n_fail']} failing window(s) after "
+            log(f"   Warning: leakage gate: still {r2['n_fail']} failing window(s) after "
                 f"cancellation — delivering the cleaned mix, but listen before shipping")
         return fixed
     except Exception as e:
-        log(f"   ⚠️ leakage gate skipped ({type(e).__name__}: {str(e)[:80]})")
+        log(f"   Warning: leakage gate skipped ({type(e).__name__}: {str(e)[:80]})")
         return mix_wav
 
 
@@ -166,7 +167,7 @@ def ensure_video_length(original_video: str, out_path: str, log: Callable[[str],
         d_orig = _video_duration(original_video)
         d_out = _video_duration(out_path)
     except Exception as e:
-        log(f"   ⚠️ Length check failed ({str(e)[:60]}) — using the export result as is")
+        log(f"   Warning: Length check failed ({str(e)[:60]}) — using the export result as is")
         return
     if abs(d_orig - d_out) <= 0.02:
         return
@@ -176,7 +177,7 @@ def ensure_video_length(original_video: str, out_path: str, log: Callable[[str],
     if r.returncode == 0 and os.path.exists(tmp):
         os.replace(tmp, out_path)
     else:
-        log(f"   ⚠️ Length correction failed — keeping the export result ({r.stderr[-80:]})")
+        log(f"   Warning: Length correction failed — keeping the export result ({r.stderr[-80:]})")
 
 
 def _auto_translate_srt(
@@ -228,7 +229,7 @@ def _auto_translate_srt(
                 translated[i] = t2
     still_bad = [i for i, t2 in enumerate(translated) if not script_ok(t2, target_lang)]
     if still_bad:
-        log(f"   ⚠️ {len(still_bad)} lines still not in the target language — output needs review")
+        log(f"   Warning: {len(still_bad)} lines still not in the target language — output needs review")
 
     # Keep the source script before the next line overwrites it in place -- past this
     # point the source is gone, and app/dub_script.py needs it to show a line's source
@@ -236,6 +237,12 @@ def _auto_translate_srt(
     # belongs to a caller-uploaded source script (app/main.py:388).
     with open(os.path.join(work_dir, "original.srt"), "w", encoding="utf-8") as f:
         f.write(build_srt(cues))
+
+    # Who speaks when, beside it: an SRT has nowhere to keep a speaker label, and
+    # the finished screen names each line's speaker from this file.
+    with open(os.path.join(work_dir, "speakers.json"), "w", encoding="utf-8") as f:
+        json.dump([{"start": c["start"], "end": c["end"], "speaker": cue_speaker(c)}
+                   for c in cues], f)
 
     for c, tr in zip(cues, translated):
         c["text"] = tr
@@ -389,7 +396,7 @@ def run_dub(
             # what happened, the notice's clickable Recharge link says where
             # to go -- the URL text itself stays out of the message.
             msg = "Perso credits are used up. Recharge to continue."
-            log(f"   ❌ {msg} ({e.link})")
+            log(f"   Error: {msg} ({e.link})")
             if on_notice:
                 on_notice({"type": "perso_credit_exhausted", "message": msg, "link": e.link})
             raise RuntimeError(msg) from e
@@ -397,20 +404,20 @@ def run_dub(
             # The fix lives in Settings, so the popup's button opens it (no
             # link in the notice -- the action is inside the app).
             msg = "Perso rejected the API key. Open Settings and check the key."
-            log(f"   ❌ {msg}")
+            log(f"   Error: {msg}")
             if on_notice:
                 on_notice({"type": "perso_invalid_key", "message": msg})
             raise RuntimeError(msg) from e
         except PersoUnavailableError as e:
             msg = "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
-            log(f"   ❌ {msg}")
+            log(f"   Error: {msg}")
             if on_notice:
                 on_notice({"type": "perso_unavailable", "message": msg})
             raise RuntimeError(msg) from e
         except Exception as e:
             msg = (f"Perso STT failed ({str(e)[:80]}). Check Settings, "
                    f"or switch to Whisper (free, offline).")
-            log(f"   ❌ {msg}")
+            log(f"   Error: {msg}")
             raise RuntimeError(msg) from e
 
     # 2. Local Whisper transcription (no container at all) -- skipped if Perso succeeded
@@ -426,7 +433,7 @@ def run_dub(
                 on_language=lambda c: detected_language.__setitem__("code", c),
             )
         except Exception as e:
-            log(f"   ❌ Local STT failed ({str(e)[:120]})")
+            log(f"   Error: Local STT failed ({str(e)[:120]})")
             raise
         # Local Whisper sets no speaker_id -- CAM++ can still label the cues it produced.
         diar_engine = diar_engine or "campplus"
@@ -452,7 +459,7 @@ def run_dub(
             n_spk = len({cue_speaker(c) for c in src_cues if cue_speaker(c)})
             log(f"   CAM++ labeled {len(src_cues)} lines across {n_spk} speakers")
         except Exception as e:
-            log(f"   ⚠️ CAM++ diarization failed ({str(e)[:80]}) — keeping existing labels")
+            log(f"   Warning: CAM++ diarization failed ({str(e)[:80]}) — keeping existing labels")
 
     # If source subtitles (a professional script) exist, their timing & sentences are
     # accurate, good for both translation and voice references. Otherwise use whatever
@@ -493,13 +500,13 @@ def run_dub(
             )
         except GeminiQuotaExhaustedError as e:
             msg = "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset."
-            log(f"   ❌ {msg} ({e.link})")
+            log(f"   Error: {msg} ({e.link})")
             if on_notice:
                 on_notice({"type": "gemini_quota_exhausted", "message": msg, "link": e.link})
             raise RuntimeError(msg) from e
         except GeminiUnavailableError as e:
             msg = "Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again."
-            log(f"   ❌ {msg}")
+            log(f"   Error: {msg}")
             if on_notice:
                 on_notice({"type": "gemini_unavailable", "message": msg})
             raise RuntimeError(msg) from e
@@ -558,8 +565,15 @@ def run_dub(
     # candidates that were kept for a possible reassembly pass (see
     # qwen_pipeline.synth_lines / cleanup_takes).
     cleanup_takes(work_dir, log)
-    cleanup_intermediates(work_dir, log)
-    log("✅ Done!")
+    # The per-line voices, the background bed and the speaker references stay.
+    # Rewriting one line and re-speaking only that line needs all three, and a
+    # rewrite is the normal thing to do after watching the dub back (user
+    # decision 2026-08-24, reversing the 0.3.6 cleanup). They cost disk, so
+    # app/main.py warns before a job that would not fit and points at the
+    # per-job delete button. cleanup_intermediates() is still here and is what
+    # that warning tells the user to reach for.
+    log("   keeping the per-line audio so single lines can be redone")
+    log("Done!")
     return {
         "job_id": job_id,
         "out_path": out_path,

@@ -68,7 +68,7 @@ def peak_guard(mix: bytes, ceiling: float = PEAK_CEILING,
     limit = ceiling * out_full_scale * (1 << (8 * (MIX_WIDTH - SAMPWIDTH)))
     if peak > limit:
         if log is not None:
-            log("   ⚠️ peak guard engaged: summed mix peaked %.2fdB over the "
+            log("   Warning: peak guard engaged: summed mix peaked %.2fdB over the "
                 "%.2f ceiling -- whole mix scaled by %.3fx"
                 % (20 * _log10(peak / limit), ceiling, limit / peak))
         mix = audioop.mul(mix, MIX_WIDTH, limit / peak)

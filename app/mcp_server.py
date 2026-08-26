@@ -68,8 +68,12 @@ def get_script(job_id: str) -> List[dict]:
 
     Each line carries: line (its number), start/end (seconds), slot (the time this
     line has to be spoken in), source (the original-language line), text (the current
-    translation), estimated (how long the translation takes to say), and fits (true
-    when estimated lands inside the slot).
+    translation), estimated (how long the translation takes to say), fits (true
+    when estimated lands inside the slot), speaker (who says it, or null when this
+    job recorded no speakers), audio_sec (how long the voice made for it actually
+    runs, or null when that file is gone), and voice_stale (true when that voice
+    was made before the script was last written -- so a line whose words you
+    changed still sounds like the old ones until remake_line_voice runs).
     """
     job = _job(job_id)
     return load_lines(_work_dir(job), _lang(job))
@@ -109,8 +113,11 @@ def check_fit(job_id: str, line: Optional[int] = None) -> List[dict]:
 def export_script(job_id: str, out_path: str) -> str:
     """Write the current script out to a file and return that path.
 
-    Feeding that file back into PersoDub as a ready-made translated subtitle skips
-    transcription and translation, and makes the voices again from this script.
+    out_path is a file name inside this job's own folder (e.g. "script.srt");
+    paths outside the job folder, and the folder itself, are refused with a
+    ValueError. Feeding that file back into PersoDub as a ready-made translated
+    subtitle skips transcription and translation, and makes the voices again
+    from this script.
     """
     job = _job(job_id)
     return export_srt(_work_dir(job), out_path)
@@ -126,6 +133,58 @@ def get_job_status(job_id: str) -> dict:
         "notices": job.get("notices") or [],
         "logs": (job.get("logs") or [])[-20:],
     }
+
+
+@mcp.tool()
+def remake_voices(job_id: str) -> dict:
+    """Remake the voices of the lines whose words changed, and nothing else.
+
+    Only lines whose text was rewritten since their voice was made are spoken
+    again. Every other line keeps the voice it already has, the timings, the
+    script and the job itself are untouched, and the finished video is rebuilt
+    in place -- no new job and no second copy of the job's folder.
+
+    Returns {"remade": [line numbers], "skipped": how many lines were left
+    alone}; remade is empty when every voice is already up to date. The work is
+    done by the time this answers -- seconds per changed line -- so there is
+    nothing to poll afterwards.
+
+    This is the whole-script version. To remake one particular line, changed or
+    not, call remake_line_voice(job_id, line) instead.
+
+    This and remake_line_voice are the only things here that spend real GPU
+    time, and both are deliberately narrow: they can only respeak THIS job's own
+    lines. Starting a new dub, cancelling one, or changing any setting is still
+    not reachable.
+
+    Added 2026-08-24, reversing the 2026-08-20 rule that every GPU-spending
+    action stays behind a button. A user put it plainly: an assistant that
+    rewrites a line and then asks the user to go press a button themselves is
+    doing nothing they could not do alone.
+    """
+    r = httpx.post("%s/api/dub/jobs/%s/voices/stale" % (API, job_id), timeout=600.0)
+    if r.status_code == 404:
+        raise ValueError("no such job: %s" % job_id)
+    if r.status_code in (409, 422):
+        raise ValueError(r.json().get("detail", "this job's voices cannot be remade"))
+    r.raise_for_status()
+    return r.json()
+
+
+@mcp.tool()
+def remake_line_voice(job_id: str, line: int) -> dict:
+    """Speak ONE line again, in the same voice, and rebuild the dub around it.
+
+    Use this for one named line -- including a line nobody edited, when its
+    voice simply came out wrong. remake_voices does the same thing to every
+    line whose words changed, which is the usual way to catch up after a batch
+    of rewrites.
+    """
+    r = httpx.post("%s/api/dub/jobs/%s/script/%d/voice" % (API, job_id, line), timeout=600.0)
+    if r.status_code in (404, 409, 422):
+        raise ValueError(r.json().get("detail", "cannot remake line %d" % line))
+    r.raise_for_status()
+    return r.json()
 
 
 if __name__ == "__main__":

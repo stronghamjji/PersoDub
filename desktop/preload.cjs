@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // Handed over when a finished job is rendered, so will-download (a synchronous
   // callback that cannot await a fetch) can read it back.
   rememberJob: (job) => ipcRenderer.send("shell:remember-job", job),
+  // A finished (or failed) download. The shell saves without a save dialog, so
+  // the page has no other way to know one landed -- the Export dialog's "where
+  // it goes" line reads this and says where it went.
+  onDownloadDone: (cb) => ipcRenderer.on("shell:download-done", (_e, info) => cb(info)),
   // Settings' "Restart now" button. Keys/workspace only apply on the next
   // start, and asking a non-technical user to quit and reopen by hand was
   // the step that silently didn't happen.

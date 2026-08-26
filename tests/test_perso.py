@@ -158,7 +158,7 @@ class _FakePlanResponse:
 def test_list_dubbing_spaces_carries_name_tier_credits(monkeypatch):
     spaces = [
         {"spaceSeq": 999999, "spaceName": "ACME", "tier": "pro", "serviceType": "video_translator"},
-        {"spaceSeq": 48, "spaceName": "hyejin", "serviceType": "video_translator"},
+        {"spaceSeq": 48, "spaceName": "My Workspace", "serviceType": "video_translator"},
     ]
     credits = {999999: 3400, 48: 120}
 
@@ -172,7 +172,7 @@ def test_list_dubbing_spaces_carries_name_tier_credits(monkeypatch):
     out = perso_client_module.list_dubbing_spaces("dummy")
     assert out == [
         {"seq": 999999, "name": "ACME", "tier": "pro", "credits": 3400},
-        {"seq": 48, "name": "hyejin", "tier": None, "credits": 120},
+        {"seq": 48, "name": "My Workspace", "tier": None, "credits": 120},
     ]
 
 

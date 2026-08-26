@@ -222,7 +222,7 @@ def _synth_one(engine, seg: dict, voice_id: Optional[str], language: str, seed: 
     try:
         res = engine.synthesize(req)
     except Exception as e:
-        log("   %s: Qwen synth failed (%s) -- skipping" % (err_label, str(e)[:80]))
+        log("   %s: Qwen synth failed (%s) - skipping" % (err_label, str(e)[:80]))
         return None
     with open(out_path, "wb") as f:
         f.write(res.audio_bytes)
@@ -260,13 +260,13 @@ def _synth_merged_unit(
         # intermediate wav leaked as well. Degrade instead, so the caller falls
         # back to per-line synthesis: that is what this function's docstring and
         # synth_lines' both promise.
-        log("   ⚠️ merged unit @line %d: unit audio unreadable (%s) -- falling back to "
+        log("   Warning: merged unit @line %d: unit audio unreadable (%s) - falling back to "
             "per-line synthesis" % (i0, str(e)[:80]))
         split_ok = False
     if os.path.exists(tmp_path):
         os.remove(tmp_path)
     if not split_ok:
-        log("   ⚠️ merged unit @line %d: could not split cleanly -- falling back to per-line synthesis" % i0)
+        log("   Warning: merged unit @line %d: could not split cleanly - falling back to per-line synthesis" % i0)
         return False
     log("   line %d: merged with %d ultra-short follower(s), split at the energy valley"
        % (i0, len(unit) - 1))
@@ -451,10 +451,10 @@ def synth_lines(
     winners = _score_and_select(take_paths, segments, seg_speakers, resolved_usable,
                                 speaker_ref_paths, language, work_dir, log)
     if winners is None:
-        msg = ("take scoring UNAVAILABLE -- best-of-%d selection skipped, take 0 used for "
+        msg = ("take scoring UNAVAILABLE - best-of-%d selection skipped, take 0 used for "
                "every line (quality degraded: no speaker-similarity or slot-fit choice). "
                "Check QWEN_SCORER_PYTHON and PERSODUB_CAMPPLUS_MODEL." % n_takes)
-        log("   🚨 " + msg)
+        log("   " + msg)
         if on_notice:
             on_notice({"type": "take_scoring_unavailable", "message": msg})
         winners = {}
@@ -520,7 +520,7 @@ def run_qwen_dub(
         # Every line failed (most commonly: the TTS sidecar isn't running).
         # Failing here beats reporting "done" on a speech-less video.
         raise RuntimeError(
-            "No voice lines could be synthesized (0/%d) -- is the TTS engine "
+            "No voice lines could be synthesized (0/%d) - is the TTS engine "
             "running? See the raw log for per-line errors." % len(segments)
         )
 
@@ -566,6 +566,23 @@ def run_qwen_dub(
             spans.append((s, end))
         return spans
 
+    # What redoing ONE line later needs. starts and gains are computed here and
+    # nowhere else -- without them a freshly spoken line lands at the wrong
+    # moment and at the wrong volume. Written before assembly so a job that dies
+    # in the gates still leaves it behind.
+    with open(os.path.join(work_dir, "lines.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "language": language,
+            "lines": [
+                {"i": i,
+                 "start": starts[i] if i < len(starts) else None,
+                 "gain": gains[i] if gains and i < len(gains) else None,
+                 "speaker": seg_speakers[i] if i < len(seg_speakers) else None,
+                 "text": segments[i].get("text", "")}
+                for i in range(len(segments))
+            ],
+        }, f, ensure_ascii=False, indent=1)
+
     if QWEN_GATE_MODE == "safe":
         # Default: the original vocals track never reaches place_lines, so
         # leaking the original actor's voice is structurally impossible --
@@ -602,3 +619,64 @@ def run_qwen_dub(
         place_lines(background_path, line_paths, starts, out_wav, gains=gains,
                    vocals_path=vocals_path, speech_regions=speech_regions, log=log)
     return out_wav
+
+
+def resynth_one_line(work_dir, entry, text, language):
+    # type: (str, dict, str, str) -> Optional[str]
+    """Speak one line again with the same voice, over the top of its old wav.
+
+    The speaker's reference wav and speaker_refs.json survive a finished job, so
+    the voice can be cloned again rather than approximated.
+    """
+    from app.engines.base import get_engine
+
+    i = int(entry["i"])
+    spk = entry.get("speaker") or DEFAULT_SPEAKER
+    ref_wav = os.path.join(work_dir, "qwen_ref_%s.wav" % _safe_name(spk))
+    refs_path = os.path.join(work_dir, "speaker_refs.json")
+    if not os.path.exists(ref_wav) or not os.path.exists(refs_path):
+        raise FileNotFoundError(
+            "This job has no reference audio for the speaker - remake the whole job.")
+    with open(refs_path, encoding="utf-8") as f:
+        refs = json.load(f)
+    ref_text = (refs.get(spk) or {}).get("ref_text") or ""
+
+    engine = get_engine("qwen3_tts")
+    voice_id = engine.clone(ref_wav, ref_text)
+    out_path = os.path.join(work_dir, "qwen_line_%d.wav" % i)
+    return _synth_one(engine, {"text": text}, voice_id, language, 1000 * i,
+                      out_path, lambda m: None, "line %d" % i)
+
+
+def rebuild_dub(work_dir, data, video_path, out_path):
+    # type: (str, dict, str, Optional[str]) -> str
+    """Lay every line back over the background bed and remake the video.
+
+    Deliberately the plain assembly: the nonverbal/company gates are skipped
+    here because they read the original vocals track, which a finished job no
+    longer keeps. What comes out is the same mix minus those overlays.
+    """
+    from app.pipeline import _mux, _video_duration, ensure_video_length
+
+    lines = data.get("lines") or []
+    line_paths = []
+    for e in lines:
+        p = os.path.join(work_dir, "qwen_line_%d.wav" % int(e["i"]))
+        line_paths.append(p if os.path.exists(p) else None)
+    starts = [e.get("start") for e in lines]
+    gains = [e.get("gain") for e in lines]
+
+    background = os.path.join(work_dir, "background.wav")
+    if not os.path.exists(background):
+        raise FileNotFoundError(
+            "This job has no background audio - remake the whole job.")
+
+    out_wav = os.path.join(work_dir, "qwen_dub_48k.wav")
+    place_lines(background, line_paths, starts, out_wav, gains=gains, log=lambda m: None)
+
+    out_path = out_path or os.path.join(work_dir, "dubbed.mp4")
+    r = _mux(video_path, out_wav, out_path, _video_duration(video_path))
+    if r.returncode != 0:
+        raise RuntimeError("mux failed: %s" % r.stderr[-200:])
+    ensure_video_length(video_path, out_path, lambda m: None)
+    return out_path

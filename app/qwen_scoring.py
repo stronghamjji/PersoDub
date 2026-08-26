@@ -62,10 +62,10 @@ def score_takes(
     timeout = max(timeout, total_takes * _scorer_asr_timeout_per_take() + 900)
     py = QWEN_SCORER_PYTHON
     if not (os.path.exists(py) and os.access(py, os.X_OK)):
-        log("   ⚠️ take scorer interpreter not found (%s) -- skipping take selection" % py)
+        log("   Warning: take scorer interpreter not found (%s) -- skipping take selection" % py)
         return None
     if not os.path.exists(SCRIPT_PATH):
-        log("   ⚠️ take scorer script missing (%s) -- skipping take selection" % SCRIPT_PATH)
+        log("   Warning: take scorer script missing (%s) -- skipping take selection" % SCRIPT_PATH)
         return None
 
     lang_code = "ko" if str(language).lower().startswith("k") else "en"
@@ -81,21 +81,21 @@ def score_takes(
             capture_output=True, text=True, timeout=timeout,
         )
     except Exception as e:
-        log("   ⚠️ take scorer failed to run (%s) -- skipping take selection" % str(e)[:120])
+        log("   Warning: take scorer failed to run (%s) -- skipping take selection" % str(e)[:120])
         return None
 
     if r.returncode != 0 or not os.path.exists(out_path):
-        log("   ⚠️ take scorer exited with an error (%s) -- skipping take selection"
+        log("   Warning: take scorer exited with an error (%s) -- skipping take selection"
             % (r.stderr.strip()[-200:] or "no output produced"))
         return None
     try:
         with open(out_path, encoding="utf-8") as f:
             result = json.load(f)
     except Exception as e:
-        log("   ⚠️ take scorer produced invalid output (%s) -- skipping take selection" % str(e)[:120])
+        log("   Warning: take scorer produced invalid output (%s) -- skipping take selection" % str(e)[:120])
         return None
     if not result.get("ok"):
-        log("   ⚠️ take scorer reported an error (%s) -- skipping take selection"
+        log("   Warning: take scorer reported an error (%s) -- skipping take selection"
             % str(result.get("error"))[:200])
         return None
 

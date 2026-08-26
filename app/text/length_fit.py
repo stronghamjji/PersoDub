@@ -341,13 +341,13 @@ def pick_candidate(candidates, target_lang, duration, index=0, log=None):
     over = [(c, sec) for c, sec in scored if sec > duration]
     if over:
         c, sec = min(over, key=lambda cs: cs[1])
-        log("   ⚠️ WARNING line %d: no candidate fit the ±15%% window — using the shortest "
+        log("   WARNING line %d: no candidate fit the ±15%% window — using the shortest "
             "overshoot (+%.2fs over the %.2fs slot)" % (index, sec - duration, duration))
         return c
     # all candidates are (unusually) shorter than the slot itself and still outside the
     # window's lower edge -- keep the one closest to filling it
     c, _ = max(scored, key=lambda cs: cs[1])
-    log("   ⚠️ WARNING line %d: no candidate fit the ±15%% window — using the fullest "
+    log("   WARNING line %d: no candidate fit the ±15%% window — using the fullest "
         "one available (still short of the %.2fs slot)" % (index, duration))
     return c
 
