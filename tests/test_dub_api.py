@@ -814,8 +814,18 @@ def test_a_finished_job_writes_job_json_next_to_the_video(monkeypatch):
         time.sleep(0.02)
 
     work = client.get(f"/api/dub/jobs/{jid}").json()["work_dir"]
-    with open(os.path.join(work, "job.json"), encoding="utf-8") as f:
-        saved = json.load(f)
+    # job.json is written atomically at the end of the job thread; on a slow
+    # runner the in-memory status can flip to done a beat before the file lands.
+    saved = None
+    for _ in range(100):
+        try:
+            with open(os.path.join(work, "job.json"), encoding="utf-8") as f:
+                saved = json.load(f)
+            if saved["status"] == "done":
+                break
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        time.sleep(0.02)
     assert saved["id"] == jid and saved["status"] == "done"
     assert saved["result"]["out_path"].endswith("dubbed.mp4")
 

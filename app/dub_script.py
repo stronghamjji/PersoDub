@@ -201,7 +201,9 @@ def export_srt(work_dir: str, out_path: str) -> str:
         raise ValueError(
             "there is no %s folder in this job -- give a plain file name, or a "
             "folder that already exists"
-            % os.path.relpath(parent, os.path.realpath(work_dir))
+            # Forward slashes in the message on every OS, so the same words show
+            # on Windows (relpath would otherwise read "sub\dir").
+            % os.path.relpath(parent, os.path.realpath(work_dir)).replace(os.sep, "/")
         )
     src = script_path(work_dir)
     if not os.path.exists(src):

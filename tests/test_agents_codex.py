@@ -216,6 +216,7 @@ def test_a_cli_that_reads_stdin_is_not_left_hanging(monkeypatch):
     is whatever started the app. Measured 2026-08-26: the very first headless
     run printed "Reading additional input from stdin..." and never returned."""
     import subprocess
+    import sys
 
     from app.agents import base
 
@@ -228,7 +229,7 @@ def test_a_cli_that_reads_stdin_is_not_left_hanging(monkeypatch):
 
     monkeypatch.setattr(base.subprocess, "Popen", spy)
     monkeypatch.setattr(base, "TIMEOUT_SECONDS", 10.0)
-    out = list(base.run("/bin/cat", [], lambda e: []))
+    out = list(base.run(sys.executable, ["-c", "import sys; sys.stdin.read()"], lambda e: []))
     assert seen.get("stdin") == subprocess.DEVNULL
     assert [e["kind"] for e in out] == ["done"]
 
@@ -313,11 +314,13 @@ def test_a_failed_turn_is_how_a_turn_ends():
 def test_a_mid_turn_error_leaves_the_exit_code_its_say(monkeypatch):
     """The point of ends_turn: a tool refusing the agent must not swallow the
     message base.run writes when the CLI then dies."""
+    import sys
+
     from app.agents import base
 
     monkeypatch.setattr(base, "TIMEOUT_SECONDS", 10.0)
     events = iter([[{"kind": "error", "message": "tool refused", "ends_turn": False}]])
-    out = list(base.run("/bin/sh", ["-c", "echo {}; exit 3"],
+    out = list(base.run(sys.executable, ["-c", "print('{}'); import sys; sys.exit(3)"],
                         lambda e: next(events, [])))
     assert [e["kind"] for e in out] == ["error", "error"]
     # The exit still gets its say -- as a sentence the user can act on, not as
