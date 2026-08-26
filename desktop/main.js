@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
@@ -271,7 +271,21 @@ app.whenReady().then(() => {
   // Nothing here is fatal: on any failure Electron picks the path the way it
   // always did -- which is also what happens when the UI runs in a plain
   // browser and never sent us the job.
-  session.defaultSession.on("will-download", (_event, item) => {
+  session.defaultSession.on("will-download", (_event, item, webContents) => {
+    // The window saves silently, so without a word back the page has nothing to
+    // show and the user, seeing nothing happen, clicks Download again. Attached
+    // before the naming below so a download we did not rename still reports.
+    item.once("done", (_e, state) => {
+      const path = item.getSavePath();
+      if (webContents && !webContents.isDestroyed()) {
+        webContents.send("shell:download-done", {
+          state,
+          path,
+          filename: basename(path),
+          folder: dirname(path),
+        });
+      }
+    });
     try {
       const jid = new URL(item.getURL()).pathname.split("/")[4];
       const folder = jid && jobFolders.get(jid);

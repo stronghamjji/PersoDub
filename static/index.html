@@ -886,6 +886,10 @@
     text-decoration: none; color: var(--foreground); font-size: 0.86rem; font-weight: 600; }
   .export-list a:hover { border-color: var(--primary); background: var(--accent); }
   .export-list .icon { color: var(--primary); }
+  /* Quiet enough not to compete with the links above it, and it wraps rather
+     than pushing the dialog wider -- a project name can be long. */
+  .export-where { margin: 12px 0 0; font-size: 0.76rem; color: var(--muted-foreground);
+    line-height: 1.45; word-break: break-word; }
 
 
   /* ---------------- Settings modal ---------------- */
@@ -1304,6 +1308,11 @@
     </div>
     <div class="modal-body">
       <div class="export-list" id="exportList"></div>
+      <!-- Where a download lands. The desktop shell saves without a save
+           dialog, so nothing on screen moves when a link is clicked, and the
+           user -- with no sign it worked -- clicks it again. Filled in by
+           openExport. -->
+      <p class="export-where" id="exportWhere"></p>
     </div>
   </div>
 </div>
@@ -3502,8 +3511,37 @@ async function openExport() {
     job.from_link ? item(`/api/dub/result/${job.id}/original?download=1`, "org.mp4",
                          "Download original") : "",
   ].join("");
+  $("exportWhere").textContent = whereDownloadsGo(job);
   $("exportOverlay").classList.add("open");
 }
+
+// The one sentence that says what clicking a link above will do. In the desktop
+// shell the file is saved silently into <Downloads>/<day>/<project>/ -- the
+// folder desktop/main.js builds in its will-download handler, from the day and
+// project this same job carries. A plain browser saves it wherever the browser
+// is set to, which is the browser's business, not ours.
+function whereDownloadsGo(job) {
+  if (!window.persodubShell) return "Saves to your browser's download folder";
+  return job?.day && job?.project
+    ? `Saves to Downloads / ${job.day} / ${job.project}`
+    : "Saves to Downloads";
+}
+
+// A download that has landed. The shell tells the page; the line above stops
+// saying where files will go and says where this one went, so the click has
+// visibly done something. Outside Electron persodubShell is undefined and none
+// of this runs.
+window.persodubShell?.onDownloadDone?.((info) => {
+  const el = $("exportWhere");
+  if (info?.state !== "completed") {
+    el.textContent = "Download failed - try again";
+    return;
+  }
+  const job = state.job;
+  el.textContent = job?.day && job?.project
+    ? `Saved ${info.filename} to Downloads / ${job.day} / ${job.project}`
+    : `Saved ${info.filename} to Downloads`;
+});
 
 // ---------------- the script table ----------------
 // One row per line: number, speaker, time, the source line, play, the line
