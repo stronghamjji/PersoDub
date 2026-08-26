@@ -3528,7 +3528,10 @@ async function loadAgents() {
   if (agentList.length && !still) chosen = { agent: "", model: "" };
   buildMenu();
   paintChoice();
-  if (!agentList.some((a) => a.installed && a.supported)) {
+  // Same reason: a list that never arrived says nothing about what is
+  // installed, and "install one of these three" is the wrong thing to tell
+  // someone who already has one. The fetch's own message stands instead.
+  if (agentList.length && !agentList.some((a) => a.installed && a.supported)) {
     notice = "No assistant is ready -- install Claude Code, Codex or Gemini";
     bubble("ai", "No assistant is ready. Install Claude Code, Codex or Gemini — you only need one.");
     paintChoice();
