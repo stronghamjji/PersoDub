@@ -332,3 +332,69 @@ export async function cancelDubJob(jobId, { baseUrl = "" } = {}) {
   const data = await res.json();
   return data.status;
 }
+
+// ---- What a finished job was made with -------------------------------------
+// The server saves the four choices a job was started with on the job record
+// (app/jobs.py SAVED_FIELDS). These turn them into the short human labels the
+// finished screen and the Projects rows show. A job saved before those fields
+// existed has none of them, and gets an empty list -- which is what makes the
+// whole row disappear rather than showing half a sentence.
+const ENGINE_LABELS = {
+  whisper: { label: "Whisper", api: false },
+  perso: { label: "Perso STT", api: true },
+  gemma: { label: "Gemma", api: false },
+  qwen: { label: "Qwen", api: false },
+  gemini: { label: "Gemini", api: true },
+  vertex: { label: "Vertex", api: true },
+  qwen3: { label: "Qwen3-TTS", api: false },
+};
+
+// 1 take is the fast path; anything more is the best-of-N selection, and the
+// count is worth saying -- it is the whole difference between the two.
+function qualityChip(quality) {
+  if (quality == null) return null;
+  const takes = Number(quality);
+  if (!Number.isFinite(takes)) return null;
+  return { label: takes <= 1 ? "Standard" : `High quality · ${takes} takes`, api: false };
+}
+
+/**
+ * The chips for one job: transcription, translation, voice, quality, languages.
+ * `api: true` marks a chip that cost money (a cloud engine), which both screens
+ * colour differently. Unknown fields are left out; a record with no engine
+ * fields at all returns [].
+ *
+ * @param {Object} job - a job record (or list row) from the API
+ * @param {{withLanguages?: boolean, withQuality?: boolean, withTts?: boolean}} [opts]
+ *   What a sidebar row leaves out. The languages are already on the line above
+ *   it; the quality chip is long enough to wrap a 130px column on its own; and
+ *   the voice engine is the same on every row (qwen3 is the app's only one), so
+ *   in a list it says nothing. The finished screen has the width for all three.
+ */
+export function engineChips(job, { withLanguages = false, withQuality = true, withTts = true } = {}) {
+  const j = job || {};
+  const chips = [];
+  for (const key of [j.stt_engine, j.translator, withTts ? j.tts : null]) {
+    const known = key ? ENGINE_LABELS[String(key).toLowerCase()] : null;
+    if (known) chips.push({ ...known });
+  }
+  if (chips.length === 0) return [];   // nothing known -- say nothing at all
+  const quality = withQuality ? qualityChip(j.quality) : null;
+  if (quality) chips.push(quality);
+  if (withLanguages) {
+    const name = (code) => (LANGUAGES.find((l) => l.code === code) || {}).name || code;
+    const target = j.language_code ? name(j.language_code) : null;
+    if (target) chips.push({ label: `${j.source_lang ? name(j.source_lang) : "Auto"} → ${target}`, api: false });
+  }
+  return chips;
+}
+
+/** A job's start time as "YYYY-MM-DD HH:MM" in the user's own timezone. */
+export function startedLabel(created) {
+  if (!created) return "";
+  const d = new Date(created);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
+    + `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

@@ -245,6 +245,28 @@
   .topbar-spacer { flex: 1; }
   .topbar-version { font-size: 11.5px; color: var(--muted-foreground); }
 
+  /* "Made with ..." -- one muted line under the top bar on a finished job,
+     naming the engines that made it. Indented past the back arrow so it starts
+     under the job's name, not under the arrow. A job saved before the app kept
+     those choices has none to show, and the whole line is hidden instead. */
+  .engine-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap; padding: 7px 16px 9px 60px;
+    border-bottom: 1px solid var(--border); background: var(--background);
+    font-size: 11.5px; color: var(--muted-foreground); }
+  .engine-chip { background: var(--secondary); border-radius: 999px;
+    padding: 2px 9px; color: var(--foreground); white-space: nowrap; }
+  /* A cloud engine, so this job cost money -- worth telling apart at a glance. */
+  .engine-chip.api { background: var(--primary-soft); color: var(--primary); }
+
+  /* The same list again, tiny, as a third line on a Projects row. Outlined
+     rather than filled: three filled chips in a 300px sidebar column read as
+     buttons. */
+  .job-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+  .job-tag { border: 1px solid var(--border); border-radius: 999px;
+    padding: 0 5px; font-size: 0.62rem; line-height: 1.55;
+    color: var(--muted-foreground); white-space: nowrap; }
+  .job-tag.api { border-color: var(--primary); color: var(--primary); }
+
   /* The one job-wide message line (a credit warning, or why a dub failed).
      It sits in the progress card, right under the four steps -- the place the
      eye already is while a job runs. */
@@ -299,14 +321,17 @@
   .running-shot { align-self: center; display: flex; flex-direction: column; gap: 8px; }
   /* A box of a fixed shape, never the video's own: a 9:16 phone clip let the
      block grow past 800px tall and dragged the card -- and the whole screen --
-     up with it. 16:9 at 560px, letterboxing whatever does not match, so the
-     wait always looks the same size. The 500px it gives up is the card beside
-     it plus the gap: on a narrow window the video takes what is left, down to
-     a floor. aspect-ratio holds the shape while the file is still loading, and
+     up with it. 16:9 always, letterboxing whatever does not match, so the wait
+     always looks the same shape. 560px in the window the app opens at, growing
+     with a maximized one (40vw, to 880px) -- at the old fixed size the pair sat
+     as a small island in the middle of a 2000px screen. The 500px in the second
+     half is the card beside it plus the gap: on a narrow window the video takes
+     what is left instead, down to a floor. aspect-ratio holds the shape while the file is still loading, and
      if it never loads the veil still has something to sit on; align-self keeps
      the box at its own height when the card's steps make the row taller. */
   .running-video { position: relative; flex: 0 0 auto; align-self: center;
-    width: clamp(280px, calc(100vw - 500px), 560px); aspect-ratio: 16 / 9;
+    width: min(clamp(560px, 40vw, 880px), max(280px, calc(100vw - 500px)));
+    aspect-ratio: 16 / 9;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg); }
   /* scale(1.04) crops away the transparent fringe blur() leaves at the edges. */
   .running-video video { display: block; width: 100%; height: 100%;
@@ -327,7 +352,9 @@
     animation: spin 0.9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .progress-card { flex: 0 0 420px; display: flex; flex-direction: column; gap: 16px;
+  /* 420px in the window the app opens at, growing with a maximized one so the
+     pair does not sit as a small island in the middle of a wide screen. */
+  .progress-card { flex: 0 0 clamp(420px, 26vw, 520px); display: flex; flex-direction: column; gap: 16px;
     padding: 22px 24px; background: var(--background);
     border: 1px solid var(--border); border-radius: var(--radius-lg); }
   .progress-head { display: flex; align-items: baseline; justify-content: space-between; }
@@ -378,7 +405,7 @@
 
   .home { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto;
     display: flex; flex-direction: column; gap: 16px; }
-  .home-title { margin: 0; font-size: clamp(26px, 1.6vw, 34px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+  .home-title { margin: 0; font-size: clamp(24px, 1.6vw, 30px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
   .home-sub { margin: -10px 0 6px; font-size: 14px; color: var(--muted-foreground); }
 
   .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--primary-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
@@ -956,6 +983,10 @@
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
     </div>
 
+    <!-- What made the job that is open: filled in by renderEngineBar, and
+         hidden on every screen but a finished one. -->
+    <div class="engine-bar" id="engineBar" hidden></div>
+
     <main class="work" id="work">
       <!-- ============ HOME ============ -->
       <!-- One question only: which video? Everything else (languages, engines,
@@ -1527,7 +1558,7 @@
 </style>
 
 <script type="module">
-import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource } from "/js/dubApi.mjs";
+import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips, startedLabel } from "/js/dubApi.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -1905,7 +1936,28 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   $("cancelBtn").hidden = !running;
   // Only a finished job has anything to hand back.
   $("exportBtn").hidden = !done;
+  // Hidden by default and put back by renderEngineBar below, so leaving a job
+  // (or starting another) can never leave the last one's engines on screen.
+  $("engineBar").hidden = true;
   paintForward();
+}
+
+// The "Made with Whisper, Gemma, Qwen3-TTS ..." line under the top bar. Only on
+// a finished job, and only when the record says what made it -- every job from
+// before the app saved those choices simply has no line (app/jobs.py
+// SAVED_FIELDS).
+function renderEngineBar(job) {
+  const bar = $("engineBar");
+  const chips = job.status === "done" ? engineChips(job, { withLanguages: true }) : [];
+  if (chips.length === 0) {
+    bar.hidden = true;
+    return;
+  }
+  const started = startedLabel(job.created);
+  bar.innerHTML = "<span>Made with</span>"
+    + chips.map((c) => `<span class="engine-chip${c.api ? " api" : ""}">${escapeHtml(c.label)}</span>`).join("")
+    + (started ? `<span>· ${escapeHtml(started)}</span>` : "");
+  bar.hidden = false;
 }
 
 // ---- The way back into the job you just left --------------------------------
@@ -2578,6 +2630,19 @@ function projectMeta(job) {
   return [langs, length].filter(Boolean).join(" · ");
 }
 
+// The third line: the engines this job was made with, as tiny outlined tags.
+// Only the two that differ between jobs -- the languages are already on the
+// line above, the quality chip wraps this 130px column on its own, and the
+// voice engine is the same on every row. A job with nothing saved gets no line
+// at all rather than an empty one.
+function projectTags(job) {
+  const chips = engineChips(job, { withQuality: false, withTts: false });
+  if (chips.length === 0) return "";
+  return `<div class="job-tags">${chips
+    .map((c) => `<span class="job-tag${c.api ? " api" : ""}">${escapeHtml(c.label)}</span>`)
+    .join("")}</div>`;
+}
+
 // Anything that is not finished, failed or cancelled is still going.
 const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled" };
 
@@ -2600,7 +2665,7 @@ async function renderHistory() {
     row.className = "job-row" + (job.id === state.jobId ? " current" : "");
     row.type = "button";
     row.innerHTML = `<span class="job-dot ${JOB_DOT[job.status] || "dot-running"}"></span>
-      <div class="job-info"><div class="job-name">${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div></div>`;
+      <div class="job-info"><div class="job-name">${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div>${projectTags(job)}</div>`;
     row.addEventListener("click", () => resumeJob(job.id));
 
     const del = document.createElement("button");
@@ -2844,6 +2909,7 @@ async function handleJobUpdate(job) {
     // job that is still running.
     back: !running,
   });
+  renderEngineBar(job);
   renderLog(job);
   renderNotices(job);
   maybeShowCreditModal(job);
