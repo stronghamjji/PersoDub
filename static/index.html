@@ -3945,11 +3945,20 @@ document.addEventListener("keydown", (e) => {
 
 let recheckedLogin = false;   // see loadAgents: one second look, never a loop
 // Each check is a child process, so none is started until the strip is on
-// screen for the first time. The first screen hides the strip entirely, and
-// somebody who never opens a job never spawns a thing.
+// screen AND there is something to say to it. Home hides the strip entirely
+// and a running dub locks it, so neither is a reason to start one -- and the
+// "agent-open" class outlives the screen that set it, which is why the screen
+// is asked first rather than the class alone.
+function stripInUse() {
+  const screen = document.body.dataset.screen;
+  if (screen === "home" || screen === "running") return false;
+  return screen === "done" || document.body.classList.contains("agent-open");
+}
+
+// Somebody who never opens a job never spawns a thing.
 let loginAsked = false;
 function ensureLoginChecked() {
-  if (loginAsked || document.body.dataset.screen === "home") return;
+  if (loginAsked || !stripInUse()) return;
   loginAsked = true;
   loadAgents({ login: true }).catch(() => {});
 }
@@ -3985,13 +3994,20 @@ async function loadAgents({ login = false } = {}) {
   if (still && chosen.name !== still.name) { chosen.name = still.name; saveChoice(); }
   buildMenu();
   paintChoice();
-  // The server checks the CLIs' logins behind its own answer, so the first list
-  // can arrive before that landed. Look once more, a moment later -- once, not
-  // in a loop: an assistant we cannot ask stays unasked rather than polled.
-  if (arrived && !recheckedLogin
+  // The server checks the CLIs' logins behind its own answer, so a list that DID
+  // ask can arrive before that landed. Look once more, a moment later -- and
+  // look without the flag, because the check it would ask for is already
+  // running: the second look only has to read what it left behind.
+  // Only after a look that asked (a plain load must never arm this -- that is
+  // how the first screen ended up starting the checks 1.2s after every launch),
+  // only while the strip is still in use, and once, never in a loop.
+  if (login && arrived && !recheckedLogin
       && agentList.some((a) => a.installed && a.supported && a.logged_in == null)) {
     recheckedLogin = true;
-    setTimeout(() => { loadAgents({ login: true }).catch(() => {}); }, 1200);
+    setTimeout(() => {
+      if (!stripInUse()) return;   // the user left before the second look
+      loadAgents().catch(() => {});
+    }, 1200);
   }
   // Same reason: a list that never arrived says nothing about what is
   // installed, and "install one of these three" is the wrong thing to tell
@@ -4242,7 +4258,9 @@ el("assistantFold").addEventListener("click", () => setCollapsed(true));
 input.addEventListener("focus", () => setCollapsed(false));
 
 // Closed on launch, the way the mockup opens: one row under the timeline. The
-// model list loads now regardless -- the picker is on show even when closed.
+// model list loads now regardless -- the picker is on show even when closed --
+// but without the flag that lets the server ask each CLI who it is signed in
+// as. That waits for the strip to be in use (ensureLoginChecked above).
 loadChoice();
 loadAgents();
 setCollapsed(true);
