@@ -293,12 +293,20 @@
      so on a narrow window the left of the video would be cut off for good. */
   #screen-running { display: flex; }
   .running { margin: auto; display: flex; gap: 28px; align-items: stretch; }
-  /* min-height keeps the card's shape while the video is still loading -- and
-     if the file never loads, the veil still has something to sit on. */
-  .running-video { position: relative; flex: 0 0 560px; min-height: 315px;
+  /* A box of a fixed shape, never the video's own: a 9:16 phone clip let the
+     block grow past 800px tall and dragged the card -- and the whole screen --
+     up with it. 16:9 at 560px, letterboxing whatever does not match, so the
+     wait always looks the same size. The 500px it gives up is the card beside
+     it plus the gap: on a narrow window the video takes what is left, down to
+     a floor. aspect-ratio holds the shape while the file is still loading, and
+     if it never loads the veil still has something to sit on; align-self keeps
+     the box at its own height when the card's steps make the row taller. */
+  .running-video { position: relative; flex: 0 0 auto; align-self: center;
+    width: clamp(280px, calc(100vw - 500px), 560px); aspect-ratio: 16 / 9;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg); }
   /* scale(1.04) crops away the transparent fringe blur() leaves at the edges. */
-  .running-video video { display: block; width: 100%; height: auto;
+  .running-video video { display: block; width: 100%; height: 100%;
+    object-fit: contain;
     filter: blur(4px) brightness(.55); transform: scale(1.04); }
   .running-veil { position: absolute; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 14px; padding: 0 20px;
@@ -544,7 +552,11 @@
     min-height: 0; }
   .video-wrap { position: relative; border-radius: var(--radius); overflow: hidden;
     background: var(--thumb-bg); display: flex; justify-content: center; }
-  .video-wrap video { display: block; max-width: 100%; max-height: 46vh; }
+  /* Capped in height as well as width: a portrait clip at full height pushed
+     the playhead and the controls under the bottom of the window. What is left
+     over beside it is the pane's own dark ground. */
+  .video-wrap video { display: block; max-width: 100%; max-height: min(45vh, 420px);
+    object-fit: contain; }
   .video-bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
     background: var(--thumb-badge); color: var(--thumb-foreground);
@@ -762,7 +774,9 @@
      image and the (source-less) <video> is hidden instead. */
   .project-thumb { position: relative; border-radius: var(--radius); overflow: hidden;
     background: var(--thumb-bg) center / cover no-repeat; min-height: 150px; }
-  .project-thumb video { display: block; width: 100%; max-height: 260px; object-fit: contain; }
+  /* Same cap, same reason: a portrait clip made the dialog taller than the
+     window, so the Start button fell off the bottom. */
+  .project-thumb video { display: block; width: 100%; max-height: 200px; object-fit: contain; }
   .project-dur { position: absolute; right: 8px; bottom: 8px; padding: 2px 7px;
     background: var(--thumb-badge); color: var(--primary-foreground);
     border-radius: var(--radius-sm); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
@@ -1303,15 +1317,17 @@
   .agent { position: relative; flex: 0 0 auto; display: flex; flex-direction: column;
     background: var(--agent-bg); border-top: 2px solid var(--primary);
     color: var(--agent-fg); }
-  /* Nothing to talk about before there is a job. */
-  body[data-screen="home"] .agent { display: none; }
-  /* While the dub runs there is no script to fix yet, so the row is on show
-     but out of reach; the placeholder says why. The lock itself is the disabled
-     attribute paintChoice() sets -- dimming alone left the box one Tab away. */
-  /* A cancelled or failed job has no script either, so its card locks the
-     strip the same way -- a turn there would be paid for and answered by a
-     script route that can only say 409. */
-  body[data-screen="running"] .assistant-foot,
+  /* Nothing to talk about before there is a job -- and nothing yet while one
+     runs, where the script the assistant would fix does not exist. A greyed-out
+     row there was just a thing that could not be used taking up the bottom of
+     the screen, so both take it off the page instead. */
+  body[data-screen="home"] .agent,
+  body[data-screen="running"] .agent { display: none; }
+  /* A cancelled or failed job has no script either, but its card stays on show
+     with the strip beneath it, so there the row is dimmed and locked -- a turn
+     would be paid for and answered by a script route that can only say 409.
+     The lock itself is the disabled attribute paintChoice() sets -- dimming
+     alone left the box one Tab away. */
   body[data-screen="failed"] .assistant-foot { opacity: .6; }
   .assistant-input:disabled, .assistant-modelbtn:disabled { cursor: default; }
 
@@ -3699,9 +3715,12 @@ const CHEVRON_LEFT = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M15
 // The side panel's remembered width, left behind when the panel became a strip.
 try { localStorage.removeItem("persodub.assistantWidth"); } catch { /* private window */ }
 
-// No default. Which assistant answers, and how good it is, is the user's call --
-// picking one for them hides a choice that changes both the answer and the bill.
-let chosen = { agent: "", model: "" };
+// Where the picker starts before anyone has picked. "Model" named neither what
+// would answer nor the fact that something could, and it is what the strip read
+// on every screen until the list came back. A saved pick is loaded over this,
+// and picking never writes this one down, so the user's own choice still wins.
+const DEFAULT_CHOICE = { agent: "claude", model: "opus", name: "Claude" };
+let chosen = { ...DEFAULT_CHOICE };
 let agentList = [];
 // What the CLI said it actually used, and the one thing worth saying before a
 // message is sent. Both are shown, never saved: the user's pick stands.
@@ -3789,20 +3808,20 @@ function paintChoice() {
   ensureLoginChecked();
   paintState();
   modelLabel.textContent = labelFor();
-  // Dimming alone is a picture of a lock: a dimmed box is still one Tab away,
-  // and a turn started mid-dub would rewrite a script the pipeline is reading.
+  // A dub that stopped early leaves no script behind, so the row is locked
+  // rather than left open: dimming alone is a picture of a lock, and a dimmed
+  // box is still one Tab away. A running dub takes the strip off the page
+  // altogether (see the CSS above); it is locked here as well so that nothing
+  // is live in the moment between one screen going and the next arriving.
   const screen = document.body.dataset.screen;
   const running = screen === "running";
-  // A dub that stopped early leaves no script behind, so the strip is shut
-  // here too -- see the CSS above.
   const failed = screen === "failed";
   input.disabled = running || failed;
   modelBtn.disabled = running || failed;
-  // The one line the strip has to say what it is waiting for: a job to finish,
-  // an assistant to be installed, a model to be picked, or the user.
-  if (running) {
-    input.placeholder = "The Dub Agent joins when the dub is ready";
-  } else if (failed) {
+  // The one line the strip has to say what it is waiting for: an assistant to
+  // be installed, a model to be picked, or the user. A running dub is not on
+  // the list -- the strip is off the page there, so nothing it said was read.
+  if (failed) {
     input.placeholder = "Nothing to fix here -- this dub did not finish";
   } else if (notice) {
     input.placeholder = notice;
@@ -3988,7 +4007,14 @@ async function loadAgents({ login = false } = {}) {
   // that never arrived is no evidence that it isn't, and throwing the pick away
   // there is what left the locked strip saying "Model" mid-dub.
   const still = agentList.find((a) => a.id === chosen.agent && a.installed && a.supported);
-  if (arrived && !still) chosen = { agent: "", model: "" };
+  if (arrived && !still) {
+    // Back to a default rather than to nothing, for the reason above -- but to
+    // one this machine can actually run, which is not always the first choice.
+    const first = agentList.find((a) => a.installed && a.supported);
+    chosen = !first ? { agent: "", model: "" }
+      : first.id === DEFAULT_CHOICE.agent ? { ...DEFAULT_CHOICE }
+      : { agent: first.id, model: first.models[0] || "", name: first.name };
+  }
   // A pick saved before the name was stored would fall back to the raw id and
   // read "claude · Opus". Write the vendor's spelling in the moment we have it.
   if (still && chosen.name !== still.name) { chosen.name = still.name; saveChoice(); }
