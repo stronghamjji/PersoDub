@@ -363,18 +363,29 @@
   h2 { margin: 0 0 3px; font-size: 0.98rem; }
 
   /* ---------------- Home: headline, drop zone, link field ---------------- */
-  /* A fixed 640px column so the two ways in (drop a file, paste a link) sit
-     one under the other at a readable width, whatever the window size. */
+  /* One column, so the two ways in (drop a file, paste a link) sit one under
+     the other at a readable width. It grows with the window rather than staying
+     640px wide inside a maximized screen, which left most of a 2560px window
+     empty -- but only from about 1330px up, so the window the app opens at
+     looks exactly as it did. */
 
-  .home { width: 640px; margin: 0 auto; padding-top: 12vh; display: flex; flex-direction: column; gap: 16px; }
-  .home-title { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+  /* Centred in the work area, with `auto` margins rather than align-items: on a
+     window too short for the block, auto margins give up and let it start at the
+     top and scroll, where centring would cut its head off. The bottom padding is
+     the upward bias -- dead centre reads as low. */
+  #screen-home { display: flex; padding-bottom: max(22px, 8vh); }
+  #screen-home[hidden] { display: none; }
+
+  .home { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto;
+    display: flex; flex-direction: column; gap: 16px; }
+  .home-title { margin: 0; font-size: clamp(26px, 1.6vw, 34px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
   .home-sub { margin: -10px 0 6px; font-size: 14px; color: var(--muted-foreground); }
 
-  .upload-zone { height: 200px; border: 1.5px dashed var(--primary-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
+  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--primary-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted-foreground); }
   .upload-zone.drag-over { border-color: var(--primary); background: var(--accent); }
-  .upload-zone .icon-lg { width: 30px; height: 30px; color: var(--primary); }
-  .upload-title { color: var(--foreground); font-weight: 600; font-size: 16px; }
+  .upload-zone .icon-lg { width: clamp(30px, 2.2vw, 38px); height: clamp(30px, 2.2vw, 38px); color: var(--primary); }
+  .upload-title { color: var(--foreground); font-weight: 600; font-size: clamp(16px, 1vw, 20px); }
   .upload-hint { font-size: 13px; }
   .upload-choose { color: var(--primary); text-decoration: underline; }
 
@@ -455,8 +466,12 @@
   /* position, so the handle that sits on the line above the timeline can be
      hung off this pane's bottom edge. */
   .done-main { position: relative; flex: 1; min-height: 200px; display: flex; }
-  .script-pane { position: relative; flex: 1; min-width: 0; display: flex;
-    flex-direction: column; border-right: 1px solid var(--border); }
+  /* A container, so the table below can pick its own width off THIS pane rather
+     than off the window: the grip between the panes changes it with the window
+     standing still. */
+  .script-pane { position: relative; flex: 1 1 520px; min-width: 0; display: flex;
+    flex-direction: column; border-right: 1px solid var(--border);
+    container: scriptpane / inline-size; }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
     border-bottom: 1px solid var(--border); }
   #scriptBox { flex: 1; min-height: 0; overflow: auto; }
@@ -497,12 +512,44 @@
     white-space: nowrap; padding-top: 3px; }
   .sc-over { color: var(--destructive); font-weight: 600; }
   .sc-acts { display: flex; justify-content: flex-end; }
+  /* Wide only: narrow, the length moves under the translation instead. */
+  .sc-len-in { display: none; }
+
+  /* ---------------- The script table, narrow ---------------- */
+  /* 908px is the row above at its floors, so a pane thinner than that used to
+     grow a sideways scrollbar -- which pushed Length and the waveform button
+     off the right of the screen at the window the app opens at. Under that
+     width the same rows drop what can be read elsewhere: the line number (the
+     timeline and the assistant both name lines, the column only counted them),
+     the speaker's name (its colour dot stays, with the name on hover), and the
+     end of the slot (the start is what finds a line). Length leaves the column
+     it needed 56px for and becomes a small line under the translation it is
+     about. Both buttons stay, at every width. */
+  /* 923 is that 908 plus room for a vertical scrollbar on the systems that draw
+     one inside the box (macOS draws none). */
+  @container scriptpane (max-width: 923px) {
+    .sc-row { grid-template-columns: 12px 64px minmax(110px, 1fr) 36px minmax(110px, 1fr) 34px;
+      gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
+    .sc-n, .sc-h-n, .sc-len { display: none; }
+    /* Kept as a grid item -- removing it would slide every column one place
+       left -- but with nothing drawn: a 12px dot needs no heading. */
+    .sc-h-spk { visibility: hidden; }
+    .spk-chip { padding: 0; background: none; gap: 0; }
+    .spk-chip b { display: none; }
+    .sc-t-b { display: none; }
+    .sc-len-in { display: block; margin-top: 4px; font-size: 0.72rem;
+      color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  }
 
   /* Who is speaking, in that speaker's colour. (Not ".chip" -- the assistant
      strip already has one of those, and its style block comes after this one.) */
   .spk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
     border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
-  .spk-chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .spk-chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+    flex: 0 0 auto; }
+  /* The name is wrapped so the narrow table can leave the dot alone; it must not
+     read heavier than the chip it sits in. */
+  .spk-chip b { font-weight: inherit; }
   .spk-1 { background: var(--spk-1-soft); color: var(--spk-1-ink); }
   .spk-1 i { background: var(--spk-1); }
   .spk-2 { background: var(--spk-2-soft); color: var(--spk-2-ink); }
@@ -548,8 +595,11 @@
      enough room is left beside the video for both language columns to read as
      sentences at 1280px and up. The grip is there for anyone who would rather
      have the bigger picture. */
-  .video-pane { flex: 0 0 clamp(300px, 24%, 460px); display: flex; flex-direction: column;
-    background: var(--canvas); }
+  /* 0 1: the video is the pane that gives way. Down to the window the app opens
+     at there is nothing to give -- it is already at the 320px floor Task 10 set
+     -- and below that the table simply takes whatever is left. */
+  .video-pane { flex: 0 1 clamp(320px, 24%, 460px); min-width: 320px;
+    display: flex; flex-direction: column; background: var(--canvas); }
   .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     border-bottom: 1px solid var(--border); }
   .vtab { flex: 1; border: none; background: none; cursor: pointer;
@@ -1035,14 +1085,20 @@
       <!-- Drag the line between the work above and the conversation. -->
       <div class="grip grip-y" id="gripAgent" role="separator"
            aria-orientation="horizontal" aria-label="Resize the conversation"></div>
-      <!-- Which assistant answers and whether it is signed in. On show whether
-           the conversation is open or collapsed: anyone about to type has to
-           know which one is about to be asked, and whether it can answer. -->
-      <div class="assistant-state" id="assistantState" hidden></div>
+      <!-- The strip's heading row, on show whether the conversation is open or
+           folded away. Left: which assistant answers and whether it is signed in
+           -- anyone about to type has to know which one is about to be asked,
+           and whether it can answer. Right: the fold. A row of its own rather
+           than a control floating in the corner, which the user's own messages
+           ran underneath. -->
+      <div class="agent-head">
+        <div class="assistant-state" id="assistantState" hidden></div>
+        <button class="agent-fold" id="assistantFold" type="button" aria-expanded="false"
+                aria-label="Show the conversation" title="Show the conversation">
+          <svg class="icon chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
       <div class="assistant-log" id="assistantLog"></div>
-      <button class="agent-fold" id="assistantFold" type="button" aria-label="Collapse Dub Agent">Collapse
-        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
       <div class="assistant-foot">
         <textarea class="assistant-input" id="assistantInput" rows="1"
                   placeholder="Message"></textarea>
@@ -1302,7 +1358,7 @@
 <div class="modal-overlay" id="spaceOverlay">
   <div class="modal" style="width: min(440px, 92vw)">
     <div class="modal-head">
-      <h2>저장 공간이 부족합니다</h2>
+      <h2>Not enough disk space</h2>
       <button class="modal-close" id="spaceCloseX" type="button" aria-label="Close">
         <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
       </button>
@@ -1311,7 +1367,7 @@
       <p style="margin: 0" id="spaceMessage"></p>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-primary" id="spaceCloseBtn" type="button">알겠습니다</button>
+      <button class="btn btn-primary" id="spaceCloseBtn" type="button">OK</button>
     </div>
   </div>
 </div>
@@ -1350,22 +1406,30 @@
      for windows too short to give the strip its 240. */
   .assistant-log { display: none; flex-direction: column; gap: 8px;
     height: 240px; max-height: clamp(160px, 40vh, 600px);
-    overflow-y: auto; padding: 30px 14px 0; }
+    overflow-y: auto; padding: 4px 14px 0; }
   body.agent-open .assistant-log { display: flex; }
   /* A column of flex items shrinks to fit before it scrolls, and a squeezed
      bubble spills its own text over the one below it. Nothing here shrinks. */
   .assistant-log > * { flex-shrink: 0; }
 
-  /* Only shown while the conversation is, in its top-right corner. The way back
-     in is the input row itself -- clicking it opens the strip. */
-  .agent-fold { display: none; position: absolute; right: 14px; top: 6px; z-index: 2;
-    align-items: center; gap: 4px; border: none; cursor: pointer;
-    color: var(--agent-muted); font: inherit; font-size: 0.75rem;
-    /* The strip's own colour, so the conversation scrolls away behind it
-       instead of through it. */
-    background: var(--agent-bg); border-radius: 6px; padding: 4px 6px; }
-  body.agent-open .agent-fold { display: inline-flex; }
-  .agent-fold:hover { color: var(--agent-fg); }
+  /* The heading row: it holds the line saying who answers and the fold, and it
+     is on show at both sizes -- folded, it is the whole strip above the input
+     row. Clear of the drag handle along the very top edge. */
+  .agent-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px 3px 16px; min-height: 34px; box-sizing: border-box; }
+
+  /* Folds the conversation away and brings it back. A square big enough to hit
+     rather than two small words, and out of the conversation's own column, so
+     nothing the user wrote can run underneath it. */
+  .agent-fold { flex: 0 0 auto; width: 32px; height: 32px; display: inline-flex;
+    align-items: center; justify-content: center; border: none; cursor: pointer;
+    border-radius: 8px; background: none; color: var(--agent-soft); padding: 0; }
+  .agent-fold:hover { background: var(--agent-box); color: var(--agent-fg); }
+  .agent-fold:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+  /* Points up while the conversation is away (press it to bring it back) and
+     down once it is open (press it to fold it away again). */
+  .agent-fold .chevron { transform: rotate(180deg); }
+  body.agent-open .agent-fold .chevron { transform: rotate(0deg); }
 
   .assistant-foot { display: flex; align-items: center; gap: 12px;
     margin: 6px 14px; padding: 6px 6px 6px 16px; min-height: 48px;
@@ -1449,9 +1513,9 @@
     white-space: pre-wrap; word-break: break-word; max-height: 160px;
     overflow: auto; }
 
-  /* The strip's first row: one line, muted, and never in the way. It keeps its
-     right end clear of the Collapse button that floats over this corner. */
-  .assistant-state { padding: 7px 110px 0 16px; font-size: 0.72rem;
+  /* The left half of the heading row: one line, muted, and never in the way.
+     The fold sits beside it now, so it no longer keeps a corner clear. */
+  .assistant-state { flex: 1; min-width: 0; padding: 0; font-size: 0.72rem;
     /* Not --agent-muted: at this size that grey measures 3.4:1 on the strip's
        own dark, and this is a line the user is meant to read and act on. */
     color: var(--agent-soft); display: flex; align-items: center; gap: 5px;
@@ -2721,7 +2785,11 @@ function errorText(e) {
 
 function showIfOutOfSpace(e) {
   const text = errorText(e);
-  if (!text.includes("저장 공간")) return false;
+  // The sentence itself is the server's, and it has been said in two languages
+  // over this app's life, so both are matched: an out-of-space error that fell
+  // through to the plain red line would tell the user to check a disk they
+  // cannot see from here.
+  if (!/disk space|저장 공간/i.test(text)) return false;
   $("spaceMessage").textContent = text;
   $("spaceOverlay").classList.add("open");
   return true;
@@ -3138,8 +3206,10 @@ function scriptLangNames() {
 
 function scriptRow(l, speakers) {
   const n = speakers.get(l.speaker);
+  // The name is a title as well as words, so the compact table can drop to the
+  // colour dot alone and still say who is speaking on hover.
   const chip = n
-    ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}"><i></i>Speaker ${n}</span>` : "";
+    ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}" title="Speaker ${n}"><i></i><b>Speaker ${n}</b></span>` : "";
   const over = lineOverBy(l);
   const lengthCell = over
     ? `<span class="sc-over">+${over.toFixed(1)}s</span>`
@@ -3153,12 +3223,13 @@ function scriptRow(l, speakers) {
   return `<div class="sc-row" data-start="${l.start}" data-end="${l.end}">
     <div class="sc-n">${l.line}</div>
     <div>${chip}</div>
-    <div class="sc-time">${escapeHtml(fmtClockTenths(l.start))} – ${escapeHtml(fmtClockTenths(l.end))}</div>
+    <div class="sc-time"><span class="sc-t-a">${escapeHtml(fmtClockTenths(l.start))}</span><span
+      class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
     <div class="sc-src">${escapeHtml(l.source || "—")}</div>
     <div><button class="sc-listen" data-play="${l.line}" type="button"
       title="Play this line in the video">${PLAY_ICON}</button></div>
     <div><div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-        data-line="${l.line}">${escapeHtml(l.text)}</div>${undo}</div>
+        data-line="${l.line}">${escapeHtml(l.text)}</div>${undo}<div class="sc-len-in">${lengthCell}</div></div>
     <div class="sc-len">${lengthCell}</div>
     <div class="sc-acts"><button class="sc-wave${stale ? " stale" : ""}" data-voice="${l.line}"
       type="button" title="${stale ? "The words changed -- make the voice again" : "Make this line's voice again"}">${WAVE_ICON}</button></div>
@@ -3194,7 +3265,7 @@ async function renderScript(jobId) {
   const speakers = numberSpeakers(data.lines);
   box.innerHTML = `
     <div class="sc-row head">
-      <div>#</div><div>Speaker</div><div>Time</div><div>${escapeHtml(sourceName)}</div>
+      <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div>Time</div><div>${escapeHtml(sourceName)}</div>
       <div></div><div>${escapeHtml(targetName)}</div><div class="sc-len">Length</div><div></div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;
@@ -3818,9 +3889,9 @@ function loginKnown(a) {
 function loginWords(a) {
   if (!loginKnown(a)) return "";
   if (a.logged_in) {
-    return a.account ? `${a.account} 계정으로 로그인됨` : "로그인됨";
+    return a.account ? `signed in as ${a.account}` : "signed in";
   }
-  return a.login_command ? `로그인 필요 — 터미널에서 ${a.login_command}` : "로그인 필요";
+  return a.login_command ? `not signed in — run ${a.login_command} in Terminal` : "not signed in";
 }
 
 // The chosen assistant, when we know it is signed out. Null otherwise -- which
@@ -3843,12 +3914,13 @@ function paintState() {
     return;
   }
   stateLine.classList.add("warn");
-  stateLine.appendChild(document.createTextNode(`${a.name} · 로그인 필요`));
+  stateLine.appendChild(document.createTextNode(`${a.name} · not signed in`));
   if (a.login_command) {
-    stateLine.appendChild(document.createTextNode(" — 터미널에서"));
+    stateLine.appendChild(document.createTextNode(" — run"));
     const cmd = document.createElement("code");
     cmd.textContent = a.login_command;
     stateLine.appendChild(cmd);
+    stateLine.appendChild(document.createTextNode("in Terminal"));
   }
 }
 
@@ -3880,8 +3952,8 @@ function paintChoice() {
     // thing; this is the one the user is looking at while typing.
     const a = signedOutChoice();
     input.placeholder = a.login_command
-      ? `${a.name}에 로그인이 안 되어 있어요 — 터미널에서 ${a.login_command} 명령을 실행해 주세요`
-      : `${a.name}에 로그인이 안 되어 있어요`;
+      ? `${a.name} is not signed in -- run ${a.login_command} in Terminal`
+      : `${a.name} is not signed in`;
   } else if (document.body.classList.contains("agent-open")) {
     input.placeholder = "Message";
   } else {
@@ -4119,7 +4191,7 @@ function showError(message, detail) {
   if (detail) {
     const fold = document.createElement("details");
     const head = document.createElement("summary");
-    head.textContent = "자세히";
+    head.textContent = "Details";
     const body = document.createElement("pre");
     body.textContent = detail;
     fold.append(head, body);
@@ -4218,7 +4290,7 @@ async function ask(message) {
     });
     if (!res.ok) {
       const detail = await res.json().catch(() => ({}));
-      throw new Error(detail.detail || ("서버가 " + res.status + "로 답했습니다."));
+      throw new Error(detail.detail || ("The app server answered " + res.status + "."));
     }
 
     // The body is one JSON event per line, arriving as the turn runs.
@@ -4329,15 +4401,24 @@ input.addEventListener("input", () => {
 });
 
 // Open means the conversation is on show above the input row; closed is the
-// input row alone. Clicking the row is the way back in, so the mockup's single
-// Collapse control is the only chrome the strip carries.
+// heading row and the input row alone. Clicking the input row is the other way
+// back in; the fold in the heading row goes both ways and says which it is
+// doing -- to a reader, through its arrow, and to a screen reader, through
+// aria-expanded.
 function setCollapsed(collapsed) {
   document.body.classList.toggle("agent-open", !collapsed);
+  const fold = el("assistantFold");
+  const words = collapsed ? "Show the conversation" : "Hide the conversation";
+  fold.setAttribute("aria-expanded", String(!collapsed));
+  fold.setAttribute("aria-label", words);
+  fold.title = words;
   paintChoice();
   if (!collapsed) input.focus();
 }
 
-el("assistantFold").addEventListener("click", () => setCollapsed(true));
+el("assistantFold").addEventListener("click", () => {
+  setCollapsed(document.body.classList.contains("agent-open"));
+});
 input.addEventListener("focus", () => setCollapsed(false));
 
 // Closed on launch, the way the mockup opens: one row under the timeline. The

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname } from "node:path";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
@@ -284,9 +284,18 @@ app.whenReady().then(() => {
       /* fall through to Electron's default naming */
     }
   });
+  // The finished screen is a table beside a video with a strip under both, and
+  // it needs 1280 to show the table's full set of columns. Clamped to the screen
+  // the window opens on, so a small laptop gets a window that fits it rather
+  // than one hanging off the bottom. The floor is the narrowest window the
+  // screens are still whole at. Nothing remembers a size between launches, so
+  // this is what every launch opens at.
+  const room = screen.getPrimaryDisplay().workAreaSize;
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: Math.min(1280, room.width),
+    height: Math.min(800, room.height),
+    minWidth: Math.min(960, room.width),
+    minHeight: Math.min(640, room.height),
     webPreferences: {
       preload: join(HERE, "preload.cjs"),
       contextIsolation: true,
