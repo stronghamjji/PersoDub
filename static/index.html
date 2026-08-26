@@ -3905,6 +3905,26 @@ const stateLine = el("assistantState");
 const modelBtn = el("assistantModelBtn"), modelLabel = el("assistantModelLabel");
 const menu = el("assistantMenu");
 
+// The strip is four parts that do not need each other: the line that says who
+// is signed in, the model picker, the fold, and the input. They used to be set
+// up as one run of statements, so the first one to throw took the other three
+// with it and left a strip that looked finished and answered nothing. Each is
+// wired on its own now, and a part that fails says so in the console.
+const partsFailed = new Set();
+function wire(part, fn) {
+  try {
+    fn();
+  } catch (e) {
+    // Once per part. paintChoice runs on every screen change, and a part that
+    // is broken is broken every time -- a line per repaint would bury the
+    // first one, which is the one that says what actually happened.
+    if (!partsFailed.has(part)) {
+      partsFailed.add(part);
+      console.error(`Dub Agent: the ${part} failed`, e);
+    }
+  }
+}
+
 // Model aliases, not version numbers -- an alias keeps pointing at the current
 // model of that size, so this menu does not go stale.
 const MODEL_LABELS = { fable: "Fable", opus: "Opus", sonnet: "Sonnet", haiku: "Haiku" };
@@ -4013,9 +4033,6 @@ function paintState() {
 }
 
 function paintChoice() {
-  ensureLoginChecked();
-  paintState();
-  modelLabel.textContent = labelFor();
   // A dub that stopped early leaves no script behind, so the row is locked
   // rather than left open: dimming alone is a picture of a lock, and a dimmed
   // box is still one Tab away. A running dub takes the strip off the page
@@ -4024,35 +4041,48 @@ function paintChoice() {
   const screen = document.body.dataset.screen;
   const running = screen === "running";
   const failed = screen === "failed";
-  input.disabled = running || failed;
-  modelBtn.disabled = running || failed;
-  // The one line the strip has to say what it is waiting for: an assistant to
-  // be installed, a model to be picked, or the user. A running dub is not on
-  // the list -- the strip is off the page there, so nothing it said was read.
-  if (failed) {
-    input.placeholder = "Nothing to fix here -- this dub did not finish";
-  } else if (notice) {
-    input.placeholder = notice;
-  } else if (!chosen.agent) {
-    input.placeholder = "Pick a model first";
-  } else if (signedOutChoice()) {
-    // Pickable, but it cannot answer yet. The row that picked it says the same
-    // thing; this is the one the user is looking at while typing.
-    const a = signedOutChoice();
-    input.placeholder = a.login_command
-      ? `${a.name} is not signed in -- run ${a.login_command} in Terminal`
-      : `${a.name} is not signed in`;
-  } else if (document.body.classList.contains("agent-open")) {
-    input.placeholder = "Message";
-  } else {
-    input.placeholder = 'Ask for a fix -- e.g. "Shorten line 4 naturally so it matches the original's length"';
-  }
+  wire("status line", () => {
+    ensureLoginChecked();
+    paintState();
+  });
+  wire("picker", () => {
+    modelLabel.textContent = labelFor();
+    modelBtn.disabled = running || failed;
+  });
+  wire("input", () => {
+    input.disabled = running || failed;
+    // The one line the strip has to say what it is waiting for: an assistant to
+    // be installed, a model to be picked, or the user. A running dub is not on
+    // the list -- the strip is off the page there, so nothing it said was read.
+    if (failed) {
+      input.placeholder = "Nothing to fix here -- this dub did not finish";
+    } else if (notice) {
+      input.placeholder = notice;
+    } else if (!chosen.agent) {
+      input.placeholder = "Pick a model first";
+    } else if (signedOutChoice()) {
+      // Pickable, but it cannot answer yet. The row that picked it says the
+      // same thing; this is the one the user reads while typing.
+      const a = signedOutChoice();
+      input.placeholder = a.login_command
+        ? `${a.name} is not signed in -- run ${a.login_command} in Terminal`
+        : `${a.name} is not signed in`;
+    } else if (document.body.classList.contains("agent-open")) {
+      input.placeholder = "Message";
+    } else {
+      // Backticks, not quotes: the sentence contains both a double quote and an
+      // apostrophe, and a quote of either kind would end the string early.
+      input.placeholder = `Ask for a fix -- e.g. "Shorten line 4 naturally so it matches the original's length"`;
+    }
+  });
 }
 
 // The app's screens live in another module; the strip follows them through the
 // one thing both can see.
-new MutationObserver(paintChoice)
-  .observe(document.body, { attributeFilter: ["data-screen"] });
+wire("screen watch", () => {
+  new MutationObserver(paintChoice)
+    .observe(document.body, { attributeFilter: ["data-screen"] });
+});
 
 // Two steps, the way the reference does it: the vendor first, then that
 // vendor's models. One flat list of every model from every vendor is a wall.
@@ -4148,26 +4178,28 @@ function buildMenu() {
 // The button opens the menu, and the same button closes it again -- that is how
 // someone backs out without picking anything. Always reopen at the top level so
 // the menu never comes back showing one vendor's models out of nowhere.
-modelBtn.addEventListener("click", async () => {
-  if (!menu.hidden) { menu.hidden = true; return; }
-  // The check runs once, at launch. If it failed -- a server still starting up
-  // answers nothing -- the menu is empty and the user cannot change assistant
-  // at all. Opening the picker is the moment to ask again.
-  if (!agentList.length) await loadAgents();
-  menuLevel = "";
-  buildMenu();
-  menu.hidden = false;
-});
+wire("picker", () => {
+  modelBtn.addEventListener("click", async () => {
+    if (!menu.hidden) { menu.hidden = true; return; }
+    // The check runs once, at launch. If it failed -- a server still starting
+    // up answers nothing -- the menu is empty and the user cannot change
+    // assistant at all. Opening the picker is the moment to ask again.
+    if (!agentList.length) await loadAgents();
+    menuLevel = "";
+    buildMenu();
+    menu.hidden = false;
+  });
 
-// It now opens upward, over the timeline, so a click anywhere else has to put
-// it away -- otherwise it parks on top of the bars the user turned to read.
-document.addEventListener("click", (e) => {
-  if (menu.hidden) return;
-  if (menu.contains(e.target) || modelBtn.contains(e.target)) return;
-  menu.hidden = true;
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !menu.hidden) menu.hidden = true;
+  // It now opens upward, over the timeline, so a click anywhere else has to put
+  // it away -- otherwise it parks on top of the bars the user turned to read.
+  document.addEventListener("click", (e) => {
+    if (menu.hidden) return;
+    if (menu.contains(e.target) || modelBtn.contains(e.target)) return;
+    menu.hidden = true;
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) menu.hidden = true;
+  });
 });
 
 let recheckedLogin = false;   // see loadAgents: one second look, never a loop
@@ -4494,26 +4526,34 @@ input.addEventListener("input", () => {
 // doing -- to a reader, through its arrow, and to a screen reader, through
 // aria-expanded.
 function setCollapsed(collapsed) {
+  // The class first, on its own: it is what the CSS folds the strip by, so it
+  // has to land even if the button that says which way it went has gone.
   document.body.classList.toggle("agent-open", !collapsed);
-  const fold = el("assistantFold");
-  const words = collapsed ? "Show the conversation" : "Hide the conversation";
-  fold.setAttribute("aria-expanded", String(!collapsed));
-  fold.setAttribute("aria-label", words);
-  fold.title = words;
+  wire("fold", () => {
+    const fold = el("assistantFold");
+    const words = collapsed ? "Show the conversation" : "Hide the conversation";
+    fold.setAttribute("aria-expanded", String(!collapsed));
+    fold.setAttribute("aria-label", words);
+    fold.title = words;
+  });
   paintChoice();
-  if (!collapsed) input.focus();
+  wire("input", () => { if (!collapsed) input.focus(); });
 }
 
-el("assistantFold").addEventListener("click", () => {
-  setCollapsed(document.body.classList.contains("agent-open"));
+wire("fold", () => {
+  el("assistantFold").addEventListener("click", () => {
+    setCollapsed(document.body.classList.contains("agent-open"));
+  });
 });
-input.addEventListener("focus", () => setCollapsed(false));
+wire("input", () => {
+  input.addEventListener("focus", () => setCollapsed(false));
+});
 
 // Closed on launch, the way the mockup opens: one row under the timeline. The
 // model list loads now regardless -- the picker is on show even when closed --
 // but without the flag that lets the server ask each CLI who it is signed in
 // as. That waits for the strip to be in use (ensureLoginChecked above).
-loadChoice();
-loadAgents();
+wire("saved pick", loadChoice);
+loadAgents().catch((e) => console.error("Dub Agent: the model list failed", e));
 setCollapsed(true);
 </script>
