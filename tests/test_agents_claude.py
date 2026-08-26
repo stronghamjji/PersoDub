@@ -41,10 +41,43 @@ def test_an_unknown_tool_still_reports_progress():
     assert out[0]["tool"] == "Read"
 
 
-def test_tool_results_are_not_shown():
-    """A tool result is bookkeeping. Showing it would dump raw JSON at the user."""
-    out = ev('{"type":"user","message":{"content":[{"type":"tool_result","content":"..."}]}}')
-    assert out == []
+def test_a_tool_result_says_only_that_one_call_landed():
+    """Its content is bookkeeping -- showing it would dump raw JSON at the user.
+    That a call came back is not: the panel counts a run of calls to the same
+    tool ("Rewriting lines 1, 3 · 1 of 2") and ticks the chip when the last one
+    is in."""
+    out = ev('{"type":"user","message":{"content":[{"type":"tool_result",'
+             '"tool_use_id":"toolu_01","content":"{\\"line\\":3}"}]}}')
+    assert out == [{"kind": "progress", "done": True}]
+    # Nothing the tool said comes along.
+    assert "line" not in out[0] and "content" not in out[0]
+
+
+def test_a_line_the_tool_names_rides_with_the_step():
+    """One chip per run of calls to the same tool, listing the lines -- so the
+    line number has to reach the panel. Twenty edits used to make twenty chips
+    all reading 'Rewriting a line'."""
+    out = ev('{"type":"assistant","message":{"content":['
+             '{"type":"tool_use","name":"mcp__persodub__edit_script_line",'
+             '"input":{"job_id":"04caffe7","line":3,"text":"고친 말"}}]}}')
+    assert out == [{"kind": "progress", "tool": "edit_script_line",
+                    "label": "Rewriting a line", "line": 3}]
+
+
+def test_remaking_one_line_names_it_too():
+    out = ev('{"type":"assistant","message":{"content":['
+             '{"type":"tool_use","name":"mcp__persodub__remake_line_voice",'
+             '"input":{"job_id":"04caffe7","line":12}}]}}')
+    assert out[0]["line"] == 12
+
+
+def test_a_tool_that_names_no_line_carries_none():
+    """The chip for these says what it is doing and no numbers at all."""
+    for tool in ("get_script", "remake_voices"):
+        out = ev('{"type":"assistant","message":{"content":['
+                 '{"type":"tool_use","name":"mcp__persodub__%s","input":{"job_id":"a"}}]}}'
+                 % tool)
+        assert "line" not in out[0]
 
 
 def test_result_line_ends_the_turn():

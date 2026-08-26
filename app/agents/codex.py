@@ -22,7 +22,7 @@ from typing import List
 
 # The chat panel's own vocabulary, shared with the other backends: which CLI is
 # behind the strip must not change what a step is called on screen.
-from app.agents.claude import SYSTEM_PROMPT, TOOL_LABELS
+from app.agents.claude import SYSTEM_PROMPT, TOOL_LABELS, line_arg
 
 
 def translate(event: dict) -> List[dict]:
@@ -89,8 +89,12 @@ def _item(kind: str, item: dict) -> List[dict]:
     if what == "mcp_tool_call":
         if kind == "item.started":
             name = item.get("tool") or ""
-            return [{"kind": "progress", "tool": name,
-                     "label": TOOL_LABELS.get(name, "Running %s" % name)}]
+            step = {"kind": "progress", "tool": name,
+                    "label": TOOL_LABELS.get(name, "Running %s" % name)}
+            line = line_arg(item.get("arguments"))
+            if line is not None:
+                step["line"] = line
+            return [step]
         error = item.get("error") or {}
         if error.get("message"):
             # ends_turn: the agent usually carries on after a tool refuses it,
@@ -99,8 +103,10 @@ def _item(kind: str, item: dict) -> List[dict]:
             return [{"kind": "error", "ends_turn": False,
                      "message": "%s failed: %s"
                      % (item.get("tool") or "the tool", error["message"])}]
-        # A finished call is bookkeeping between the agent and its tools.
-        return []
+        # A finished call is bookkeeping between the agent and its tools -- its
+        # result would put the whole script on screen as raw JSON. Only that one
+        # call has landed is said, which is what the chip counts ("· 1 of 2").
+        return [{"kind": "progress", "done": True}]
 
     if what == "command_execution":
         # Codex keeps a shell that no setting takes away, so the honest thing is
@@ -108,7 +114,7 @@ def _item(kind: str, item: dict) -> List[dict]:
         if kind == "item.started":
             return [{"kind": "progress", "tool": "shell",
                      "label": "Running a command"}]
-        return []
+        return [{"kind": "progress", "done": True}]
 
     if what == "error":
         # The same transport chatter, wrapped as an item ("Falling back from

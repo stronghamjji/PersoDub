@@ -52,14 +52,33 @@ def test_a_tool_call_becomes_progress_with_its_label():
                     "label": "Reading the script"}]
 
 
-def test_a_finished_tool_call_is_not_shown():
+def test_a_finished_tool_call_says_only_that_it_landed():
     """The result is bookkeeping between the agent and its tools -- showing it
-    would put the whole script back on screen as raw JSON."""
+    would put the whole script back on screen as raw JSON. That the call came
+    back is what the chip counts ("Rewriting lines 1, 3 · 1 of 2")."""
     out = ev('{"type":"item.completed","item":{"id":"item_1","type":"mcp_tool_call",'
              '"server":"persodub","tool":"get_script","arguments":{"job_id":"04caffe7"},'
              '"result":{"content":[{"type":"text","text":"{...}"}]},"error":null,'
              '"status":"completed"}}')
-    assert out == []
+    assert out == [{"kind": "progress", "done": True}]
+
+
+def test_a_line_the_tool_names_rides_with_the_step():
+    """One chip per run of calls to the same tool, listing the lines -- so the
+    line number has to reach the panel, whichever CLI is behind the strip."""
+    out = ev('{"type":"item.started","item":{"id":"item_3","type":"mcp_tool_call",'
+             '"server":"persodub","tool":"edit_script_line",'
+             '"arguments":{"job_id":"04caffe7","line":3,"text":"고친 말"},'
+             '"result":null,"error":null,"status":"in_progress"}}')
+    assert out == [{"kind": "progress", "tool": "edit_script_line",
+                    "label": "Rewriting a line", "line": 3}]
+
+
+def test_a_tool_that_names_no_line_carries_none():
+    out = ev('{"type":"item.started","item":{"id":"item_1","type":"mcp_tool_call",'
+             '"server":"persodub","tool":"remake_voices","arguments":{"job_id":"a"},'
+             '"result":null,"error":null,"status":"in_progress"}}')
+    assert "line" not in out[0]
 
 
 def test_a_refused_tool_call_says_so():
@@ -85,6 +104,13 @@ def test_a_shell_command_is_reported_as_one_step():
              '"aggregated_output":"","exit_code":null,"status":"in_progress"}}')
     assert out == [{"kind": "progress", "tool": "shell",
                     "label": "Running a command"}]
+
+
+def test_a_finished_command_lands_like_any_other_call():
+    out = ev('{"type":"item.completed","item":{"id":"item_1","type":"command_execution",'
+             '"command":"/bin/zsh -lc true","aggregated_output":"","exit_code":0,'
+             '"status":"completed"}}')
+    assert out == [{"kind": "progress", "done": True}]
 
 
 def test_turn_completed_ends_the_turn():
