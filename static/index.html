@@ -892,8 +892,7 @@
   .export-list a .export-state { margin-left: auto; font-size: 0.78rem; font-weight: 500;
     color: var(--muted-foreground); display: inline-flex; align-items: center; gap: 5px; }
   .export-list a.saved { border-color: var(--success); }
-  .export-list a.saved .export-state { color: var(--success); }
-  .export-list a .export-state .icon { width: 14px; height: 14px; color: var(--success); }
+  .export-list a.saved > .icon { color: var(--success); }
   /* Quiet enough not to compete with the links above it, and it wraps rather
      than pushing the dialog wider -- a project name can be long. */
   .export-where { margin: 12px 0 0; font-size: 0.76rem; color: var(--muted-foreground);
@@ -3525,15 +3524,12 @@ async function openExport() {
   // Only a shell that reports completion can promise a "Saved": an older shell
   // saves the file just the same but never says so, so its row says the
   // download has started and points at the folder instead of waiting forever.
+  // The receipt is the icon itself: the download arrow turns into a green
+  // check the moment the row is clicked (the shell saves the file right then),
+  // and turns back a few seconds later so the row can be used again. No words.
   if (window.persodubShell) {
-    const reports = typeof window.persodubShell.onDownloadDone === "function";
     for (const a of $("exportList").querySelectorAll("a")) {
-      a.addEventListener("click", () => {
-        a.classList.remove("saved");
-        const st = a.querySelector(".export-state");
-        st.textContent = reports ? "Saving\u2026" : "Started - see Downloads";
-        if (!reports) setTimeout(() => { if (a.isConnected) st.textContent = ""; }, 6000);
-      });
+      a.addEventListener("click", () => markExportSaved(a));
     }
   }
   $("exportOverlay").classList.add("open");
@@ -3551,7 +3547,20 @@ function exportRowFor(filename) {
   }
   return null;
 }
-const SAVED_ICON = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>';
+const SAVED_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>';
+const savedTimers = new WeakMap();
+function markExportSaved(a) {
+  const icon = a.querySelector(":scope > .icon");
+  if (icon && !a.classList.contains("saved")) icon.outerHTML = SAVED_ICON;
+  a.classList.add("saved");
+  clearTimeout(savedTimers.get(a));
+  savedTimers.set(a, setTimeout(() => {
+    if (!a.isConnected) return;
+    a.classList.remove("saved");
+    const chk = a.querySelector(":scope > .icon");
+    if (chk) chk.outerHTML = DOWNLOAD_ICON;
+  }, 6000));
+}
 
 // The one sentence that says what clicking a link above will do. In the desktop
 // shell the file is saved silently into <Downloads>/<day>/<project>/ -- the
@@ -3573,7 +3582,6 @@ window.persodubShell?.onDownloadDone?.((info) => {
   const el = $("exportWhere");
   if (info?.state !== "completed") {
     el.textContent = "Download failed - try again";
-    for (const a of $("exportList").querySelectorAll("a")) a.querySelector(".export-state").textContent = "";
     return;
   }
   const job = state.job;
@@ -3581,15 +3589,7 @@ window.persodubShell?.onDownloadDone?.((info) => {
     ? `Saved ${info.filename} to Downloads / ${job.day} / ${job.project}`
     : `Saved ${info.filename} to Downloads`;
   const row = exportRowFor(info.filename);
-  if (row) {
-    row.classList.add("saved");
-    row.querySelector(".export-state").innerHTML = SAVED_ICON + "Saved";
-    setTimeout(() => {
-      if (!row.isConnected) return;
-      row.classList.remove("saved");
-      row.querySelector(".export-state").textContent = "";
-    }, 6000);
-  }
+  if (row) markExportSaved(row);
 });
 
 // ---------------- the script table ----------------
