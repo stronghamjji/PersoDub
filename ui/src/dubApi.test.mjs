@@ -361,21 +361,21 @@ test("applyEngineAvailability: never auto-changes an available current translate
   assert.equal(result.translate, "gemini"); // already available -- stays, even though gemma (dead) is "first" in order
 });
 
-test("engineChips: the local stack, with languages", () => {
+test("engineChips: the local stack, quality first and every role named", () => {
   const chips = engineChips(
     { stt_engine: "whisper", translator: "gemma", tts: "qwen3", quality: 4,
       source_lang: "es", language_code: "en" },
-    { withLanguages: true },
   );
-  assert.deepEqual(chips.map((c) => c.label),
-    ["Whisper", "Gemma", "Qwen3-TTS", "High quality · 4 takes", "Spanish → English"]);
-  assert.deepEqual(chips.map((c) => c.api), [false, false, false, false, false]);
+  assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`.trim()),
+    ["High quality mode", "STT Whisper", "Translation Gemma", "TTS Qwen3-TTS"]);
+  assert.deepEqual(chips.map((c) => c.api), [false, false, false, false]);
 });
 
-test("engineChips: the paid engines are marked, and 1 take is Standard", () => {
+test("engineChips: the paid engines are marked, and 1 take is Fast mode", () => {
   const chips = engineChips({ stt_engine: "perso", translator: "gemini", tts: "qwen3", quality: 1 });
-  assert.deepEqual(chips.map((c) => c.label), ["Perso STT", "Gemini", "Qwen3-TTS", "Standard"]);
-  assert.deepEqual(chips.map((c) => c.api), [true, true, false, false]);
+  assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`.trim()),
+    ["Fast mode", "STT Perso", "Translation Gemini", "TTS Qwen3-TTS"]);
+  assert.deepEqual(chips.map((c) => c.api), [false, true, true, false]);
 });
 
 test("engineChips: a sidebar row keeps only what differs between jobs", () => {
@@ -386,14 +386,13 @@ test("engineChips: a sidebar row keeps only what differs between jobs", () => {
 });
 
 test("engineChips: a job saved before the fields existed shows nothing", () => {
-  assert.deepEqual(engineChips({ project: "old", language_code: "en" }, { withLanguages: true }), []);
+  assert.deepEqual(engineChips({ project: "old", language_code: "en" }), []);
   assert.deepEqual(engineChips(null), []);
 });
 
-test("engineChips: unknown source language reads as Auto, unknown engines are left out", () => {
-  const chips = engineChips({ stt_engine: "whisper", translator: "made-up", tts: "qwen3", language_code: "ko" },
-    { withLanguages: true });
-  assert.deepEqual(chips.map((c) => c.label), ["Whisper", "Qwen3-TTS", "Auto → Korean"]);
+test("engineChips: an unknown engine is left out, and the rest keep their roles", () => {
+  const chips = engineChips({ stt_engine: "whisper", translator: "made-up", tts: "qwen3", language_code: "ko" });
+  assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`), ["STT Whisper", "TTS Qwen3-TTS"]);
 });
 
 test("startedLabel formats the job's start as local YYYY-MM-DD HH:MM", () => {

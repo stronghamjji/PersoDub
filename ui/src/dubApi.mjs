@@ -339,9 +339,12 @@ export async function cancelDubJob(jobId, { baseUrl = "" } = {}) {
 // finished screen and the Projects rows show. A job saved before those fields
 // existed has none of them, and gets an empty list -- which is what makes the
 // whole row disappear rather than showing half a sentence.
+// The engine's own name only. Which job it did is said by the role word beside
+// it, which comes from the field the id was read out of -- so "Perso STT" is
+// now the role "STT" and the name "Perso", rather than one run-on label.
 const ENGINE_LABELS = {
   whisper: { label: "Whisper", api: false },
-  perso: { label: "Perso STT", api: true },
+  perso: { label: "Perso", api: true },
   gemma: { label: "Gemma", api: false },
   qwen: { label: "Qwen", api: false },
   gemini: { label: "Gemini", api: true },
@@ -349,43 +352,47 @@ const ENGINE_LABELS = {
   qwen3: { label: "Qwen3-TTS", api: false },
 };
 
-// 1 take is the fast path; anything more is the best-of-N selection, and the
-// count is worth saying -- it is the whole difference between the two.
+// 1 take is the fast path; anything more is the best-of-N selection. The words
+// are the New project dialog's own ("Fast" / "High quality"): a chip that
+// renamed the choice to "Standard" left the user looking for a setting by that
+// name and not finding one. No role word -- "mode" is what this chip is about.
 function qualityChip(quality) {
   if (quality == null) return null;
   const takes = Number(quality);
   if (!Number.isFinite(takes)) return null;
-  return { label: takes <= 1 ? "Standard" : `High quality · ${takes} takes`, api: false };
+  return { role: "", label: takes <= 1 ? "Fast mode" : "High quality mode", api: false };
 }
 
 /**
- * The chips for one job: transcription, translation, voice, quality, languages.
+ * The chips for one job: the quality mode it was run at, then the engine that
+ * did each of the three jobs. Every chip carries the role it played (""
+ * for the quality one) so both screens can print the role in the muted grey
+ * and the engine's own name in the reading colour, inside the one pill.
  * `api: true` marks a chip that cost money (a cloud engine), which both screens
  * colour differently. Unknown fields are left out; a record with no engine
  * fields at all returns [].
  *
  * @param {Object} job - a job record (or list row) from the API
- * @param {{withLanguages?: boolean, withQuality?: boolean, withTts?: boolean}} [opts]
- *   What a sidebar row leaves out. The languages are already on the line above
- *   it; the quality chip is long enough to wrap a 130px column on its own; and
- *   the voice engine is the same on every row (qwen3 is the app's only one), so
- *   in a list it says nothing. The finished screen has the width for all three.
+ * @param {{withQuality?: boolean, withTts?: boolean}} [opts]
+ *   What a sidebar row leaves out: the quality chip is long enough to wrap a
+ *   130px column on its own, and it is the finished screen that is about how
+ *   the job was made.
  */
-export function engineChips(job, { withLanguages = false, withQuality = true, withTts = true } = {}) {
+export function engineChips(job, { withQuality = true, withTts = true } = {}) {
   const j = job || {};
   const chips = [];
-  for (const key of [j.stt_engine, j.translator, withTts ? j.tts : null]) {
+  // The role is the field the id was read out of, which is the only place it
+  // can be known from: "qwen" translates and "qwen3" speaks.
+  for (const [role, key] of [["STT", j.stt_engine], ["Translation", j.translator],
+                             ["TTS", withTts ? j.tts : null]]) {
     const known = key ? ENGINE_LABELS[String(key).toLowerCase()] : null;
-    if (known) chips.push({ ...known });
+    if (known) chips.push({ role, ...known });
   }
   if (chips.length === 0) return [];   // nothing known -- say nothing at all
   const quality = withQuality ? qualityChip(j.quality) : null;
-  if (quality) chips.push(quality);
-  if (withLanguages) {
-    const name = (code) => (LANGUAGES.find((l) => l.code === code) || {}).name || code;
-    const target = j.language_code ? name(j.language_code) : null;
-    if (target) chips.push({ label: `${j.source_lang ? name(j.source_lang) : "Auto"} → ${target}`, api: false });
-  }
+  // Quality leads the row: it is the one choice the user made by hand, where
+  // the three engines below it are mostly whatever the app had installed.
+  if (quality) chips.unshift(quality);
   return chips;
 }
 

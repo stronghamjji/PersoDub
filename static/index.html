@@ -266,6 +266,12 @@
   .topbar-sub { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
   .topbar-spacer { flex: 1; }
   .topbar-version { font-size: 11.5px; color: var(--muted-foreground); }
+  /* The one filled button up here, sized for the top bar rather than for a
+     dialog: 32px tall like the two arrows beside it, with the same room left
+     and right of what is inside it, and the icon exactly one gap from the
+     word. Its right edge lands on the top bar's own 16px padding -- where the
+     version text and Cancel already end. */
+  #exportBtn { height: 32px; padding: 0 14px; gap: 6px; }
 
   /* "Made with ..." -- one muted line under the top bar on a finished job,
      naming the engines that made it. Indented past the back arrow so it starts
@@ -279,6 +285,15 @@
     padding: 2px 9px; color: var(--foreground); white-space: nowrap; }
   /* A cloud engine, so this job cost money -- worth telling apart at a glance. */
   .engine-chip.api { background: var(--primary-soft); color: var(--primary); }
+  /* The role word inside a chip: which of the three jobs this engine did. Set
+     back from the name, because the name is the answer and the role is only
+     the question it answers. (An <i> that is not italic: one letter of markup
+     for a span, and no class to carry through two render sites.) */
+  .engine-chip i, .job-tag i { font-style: normal; margin-right: 5px;
+    color: var(--muted-foreground); }
+  /* Muted grey on the purple chip would read as a third colour; step the
+     purple back instead. */
+  .engine-chip.api i, .job-tag.api i { color: color-mix(in srgb, var(--primary) 60%, transparent); }
 
   /* The same list again, tiny, as a third line on a Projects row. Outlined
      rather than filled: three filled chips in a 300px sidebar column read as
@@ -286,7 +301,7 @@
   .job-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
   .job-tag { border: 1px solid var(--border); border-radius: 999px;
     padding: 0 5px; font-size: 0.62rem; line-height: 1.55;
-    color: var(--muted-foreground); white-space: nowrap; }
+    color: var(--foreground); white-space: nowrap; }
   .job-tag.api { border-color: var(--primary); color: var(--primary); }
 
   /* The one job-wide message line (a credit warning, or why a dub failed).
@@ -575,8 +590,11 @@
   /* 923 is that 908 plus room for a vertical scrollbar on the systems that draw
      one inside the box (macOS draws none). */
   @container scriptpane (max-width: 923px) {
-    .sc-row { grid-template-columns: 12px 64px minmax(110px, 1fr) 36px minmax(110px, 1fr) 34px;
+    .sc-row { grid-template-columns: 12px 64px minmax(110px, 1fr) 30px minmax(110px, 1fr) 28px;
       gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
+    /* The two button columns are 6px narrower than the wide table's because
+       the buttons themselves are (see the block under .sc-wave, which has to
+       come after the sizes it overrides). Each keeps the 4px of slack it had. */
     .sc-n, .sc-h-n, .sc-len { display: none; }
     /* Kept as a grid item -- removing it would slide every column one place
        left -- but with nothing drawn: a 12px dot needs no heading. */
@@ -611,6 +629,7 @@
     border: 1.5px solid var(--primary-line); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; }
+  .sc-listen svg { width: 18px; height: 18px; }
   .sc-listen:hover { border-color: var(--primary); }
   .sc-row.sc-now .sc-listen { background: var(--primary); border-color: var(--primary);
     color: var(--primary-foreground); }
@@ -621,9 +640,23 @@
     border: 1.5px solid var(--primary); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; }
+  .sc-wave svg { width: 18px; height: 18px; }
   .sc-wave.stale { background: var(--primary); color: var(--primary-foreground);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent); }
   .sc-wave:disabled { opacity: 0.5; cursor: progress; }
+
+  /* Narrow: both round buttons come down a size with the row around them. At
+     32 and 30 they were the biggest thing in a compact row, reading as its
+     point rather than as the two small tools they are. The icons come down
+     with them, so a smaller button is not just a tighter ring round the same
+     mark. This block sits after the sizes it overrides -- the narrow table's
+     own block, further up, comes before them and would lose the cascade. */
+  @container scriptpane (max-width: 923px) {
+    .sc-listen { width: 26px; height: 26px; }
+    .sc-listen svg { width: 15px; height: 15px; }
+    .sc-wave { width: 24px; height: 24px; }
+    .sc-wave svg { width: 14px; height: 14px; }
+  }
 
   /* The script cell is the point of the table: a line you can only read is half
      a tool. Editing here writes to edited.srt, the same file the assistant uses. */
@@ -1591,7 +1624,7 @@
 </style>
 
 <script type="module">
-import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips, startedLabel } from "/js/dubApi.mjs";
+import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips } from "/js/dubApi.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -2027,21 +2060,28 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   paintForward();
 }
 
-// The "Made with Whisper, Gemma, Qwen3-TTS ..." line under the top bar. Only on
-// a finished job, and only when the record says what made it -- every job from
-// before the app saved those choices simply has no line (app/jobs.py
-// SAVED_FIELDS).
+// The row of engines under the top bar. Only on a finished job, and only when
+// the record says what made it -- every job from before the app saved those
+// choices simply has no line (app/jobs.py SAVED_FIELDS).
+// Chips only: the leading "Made with" said nothing the chips did not, the
+// language pair is the script table's two column headings, and the date is on
+// the Projects row this screen was opened from.
+
+// One chip: the role it played in the muted grey, the engine's own name in the
+// reading colour, both inside the one pill. The quality chip has no role.
+function chipInner(c) {
+  return (c.role ? `<i>${escapeHtml(c.role)}</i>` : "") + escapeHtml(c.label);
+}
+
 function renderEngineBar(job) {
   const bar = $("engineBar");
-  const chips = job.status === "done" ? engineChips(job, { withLanguages: true }) : [];
+  const chips = job.status === "done" ? engineChips(job) : [];
   if (chips.length === 0) {
     bar.hidden = true;
     return;
   }
-  const started = startedLabel(job.created);
-  bar.innerHTML = "<span>Made with</span>"
-    + chips.map((c) => `<span class="engine-chip${c.api ? " api" : ""}">${escapeHtml(c.label)}</span>`).join("")
-    + (started ? `<span>· ${escapeHtml(started)}</span>` : "");
+  bar.innerHTML = chips
+    .map((c) => `<span class="engine-chip${c.api ? " api" : ""}">${chipInner(c)}</span>`).join("");
   bar.hidden = false;
 }
 
@@ -2772,7 +2812,7 @@ function projectTags(job) {
   const chips = engineChips(job, { withQuality: false, withTts: true });
   if (chips.length === 0) return "";
   return `<div class="job-tags">${chips
-    .map((c) => `<span class="job-tag${c.api ? " api" : ""}">${escapeHtml(c.label)}</span>`)
+    .map((c) => `<span class="job-tag${c.api ? " api" : ""}">${chipInner(c)}</span>`)
     .join("")}</div>`;
 }
 
@@ -3385,10 +3425,12 @@ function lineOverBy(l) {
   return over > OVER_TOLERANCE ? over : 0;
 }
 
-const PLAY_ICON = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+// Sized by the stylesheet, not here: the narrow table takes both buttons down
+// a size, and an inline width would be the one thing it could not reach.
+const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
 // A waveform, the same mark the rail uses for speech: this button makes the
 // sound of a line again.
-const WAVE_ICON = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round"><path d="M4 12h1"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 9v6"/><path d="M20 11v2"/></svg>';
+const WAVE_ICON = '<svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round"><path d="M4 12h1"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 9v6"/><path d="M20 11v2"/></svg>';
 
 // Speaker labels are the diarizer's own ("SPEAKER_00"), which mean nothing to a
 // reader. Number them in the order they first speak instead, and give each a
@@ -4156,8 +4198,19 @@ function paintState() {
   const a = agentList.find((x) => x.id === chosen.agent);
   stateLine.textContent = "";
   stateLine.classList.remove("warn");
-  stateLine.hidden = !loginKnown(a);
-  if (stateLine.hidden) return;
+  // Nobody has been able to ask who is signed in yet (the server only looks
+  // when the strip is in use, and looking costs a child process). Say which
+  // assistant is about to answer in the meantime: silence about the login is
+  // the rule, but silence about the assistant left the folded heading row as a
+  // chevron and nothing else. The sign-in state replaces this the moment it
+  // lands. With no assistant picked there is nothing to name, so nothing shows.
+  if (!loginKnown(a)) {
+    const naming = labelFor();
+    stateLine.hidden = !chosen.agent || !naming;
+    if (!stateLine.hidden) stateLine.textContent = naming;
+    return;
+  }
+  stateLine.hidden = false;
   if (a.logged_in) {
     stateLine.textContent = `${a.name} · ${loginWords(a)}`;
     return;
