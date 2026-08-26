@@ -8,7 +8,7 @@ your computer.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
-[![Version](https://img.shields.io/badge/version-0.3.6-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
+[![Version](https://img.shields.io/badge/version-0.4.0-green.svg)](https://github.com/stronghamjji/PersoDub/releases)
 [![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
 
 <p>
