@@ -40,6 +40,19 @@ test("buildDubFormData: advanced overrides (n_takes, speakers, translate engine,
   assert.equal(fd.get("stt_engine"), "perso");
 });
 
+test("buildDubFormData: high quality is 4 takes, and an unknown mode or direction is refused", () => {
+  // "High quality" is a real choice in the New project dialog, and the number
+  // of takes is the whole of what it means. Asserted through the form because
+  // the mapping itself is not exported.
+  const video = new Blob(["v"], { type: "video/mp4" });
+  const fd = buildDubFormData({ video, direction: "en_to_ko", qualityMode: "high" });
+  assert.equal(fd.get("n_takes"), "4");
+
+  assert.throws(() => buildDubFormData({ video, direction: "en_to_ko", qualityMode: "nope" }),
+                /quality mode/);
+  assert.throws(() => buildDubFormData({ video, direction: "xx" }), /direction/);
+});
+
 test("buildDubFormData requires a video file", () => {
   assert.throws(() => buildDubFormData({ direction: "en_to_ko" }), /video/);
 });
@@ -193,6 +206,28 @@ test("pollDubJob stops retrying once the caller has left the job", async () => {
     });
     assert.equal(job, null);
     assert.equal(call, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+// A server that answers "no such job" is not an outage: it is right there, and
+// it will keep saying that. Retrying under "still trying" would never recover.
+test("pollDubJob stops with a readable line when the server says the job is gone", async () => {
+  const realFetch = globalThis.fetch;
+  let call = 0;
+  try {
+    globalThis.fetch = async () => {
+      call += 1;
+      return new Response("", { status: 404 });
+    };
+    const unreachable = [];
+    await assert.rejects(
+      pollDubJob("j1", { intervalMs: 0, maxIntervalMs: 0, onUnreachable: (e) => unreachable.push(e) }),
+      /no longer on the app server/,
+    );
+    assert.equal(call, 1);
+    assert.equal(unreachable.length, 0);
   } finally {
     globalThis.fetch = realFetch;
   }

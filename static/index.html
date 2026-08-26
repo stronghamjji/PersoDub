@@ -1290,6 +1290,10 @@
   .menu-item[disabled] { color: var(--agent-muted); cursor: default; }
   .menu-item[disabled]:hover { background: none; }
   .menu-item .tick { color: var(--primary); display: inline-flex; align-items: center; }
+  /* The right-hand column of a row, and the row back to the list of assistants.
+     Both hold a drawn arrow beside words, so both need a line box the arrow can
+     sit in the middle of rather than on the baseline of. */
+  .menu-right, .menu-back { display: inline-flex; align-items: center; gap: 5px; }
   /* A name, and under it the reason that name cannot be picked. */
   .menu-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .menu-name em { font-style: normal; font-size: 0.7rem; line-height: 1.35;
@@ -2551,7 +2555,16 @@ function runPollLoop(jobId, myGeneration) {
       el.classList.add("danger");
       el.hidden = false;
     },
-  }).catch(() => { /* only the shouldStop path settles now, and it says nothing */ });
+  }).catch((e) => {
+    // Leaving the job settles the loop without a word (it resolves, it does not
+    // throw). What lands here is the server answering that this job is gone, and
+    // that has to be said once rather than retried for ever.
+    if (myGeneration !== state.pollGeneration) return;
+    const el = $("jobNotice");
+    el.textContent = errorText(e);
+    el.classList.add("danger");
+    el.hidden = false;
+  });
 }
 
 async function handleJobUpdate(job) {
@@ -2948,10 +2961,12 @@ function scriptRow(l, speakers) {
 // the whole table, and the button the finger was still on no longer existed
 // when the click arrived -- the press hit nothing. Reverting is what the user
 // asked for, so a cell blurred into a revert press simply drops its edit.
-let revertPressed = false;
-// mouseup comes before click, and only blur ever reads the flag, so clearing it
+// The line being reverted, not a plain yes/no: one flag for the whole table
+// dropped the edit on line 3 when the revert being pressed was line 5's.
+let revertPressedLine = null;
+// mouseup comes before click, and only blur ever reads this, so clearing it
 // here covers the press that slid off the button and never became a click.
-document.addEventListener("mouseup", () => { revertPressed = false; });
+document.addEventListener("mouseup", () => { revertPressedLine = null; });
 
 async function renderScript(jobId) {
   const box = $("scriptBox");
@@ -2991,19 +3006,22 @@ async function renderScript(jobId) {
     });
     cell.addEventListener("blur", async () => {
       const text = cell.textContent.trim();
-      if (!text || text === before || revertPressed) { cell.textContent = before; return; }
+      // Only this cell's own revert drops this cell's edit -- a revert pressed
+      // on another line is that line's business, and this one still saves.
+      const reverting = revertPressedLine === cell.dataset.line;
+      if (!text || text === before || reverting) { cell.textContent = before; return; }
       await saveLine(jobId, cell.dataset.line, text);
     });
   });
 
   box.querySelectorAll("[data-undo]").forEach((b) => {
-    b.addEventListener("mousedown", () => { revertPressed = true; });
+    b.addEventListener("mousedown", () => { revertPressedLine = b.dataset.undo; });
     b.addEventListener("click", () => revertLine(jobId, b.dataset.undo));
   });
 
-  // ▶ plays the line inside the finished video, so the user sees the mouth move
-  // with the words. Hearing a line on its own cannot tell you whether it lands
-  // on the lips.
+  // The play button plays the line inside the finished video, so the user sees
+  // the mouth move with the words. Hearing a line on its own cannot tell you
+  // whether it lands on the lips.
   box.querySelectorAll("[data-play]").forEach((b) => {
     const row = b.closest(".sc-row");
     b.addEventListener("click", () => {
@@ -3412,10 +3430,15 @@ const menu = el("assistantMenu");
 // model of that size, so this menu does not go stale.
 const MODEL_LABELS = { fable: "Fable", opus: "Opus", sonnet: "Sonnet", haiku: "Haiku" };
 
-// The picker's "this one is chosen" tick. Drawn, not typed: a text ✓ is a
+// The picker's "this one is chosen" tick. Drawn, not typed: a typed tick is a
 // different shape in every font, and the rest of the app's marks are SVG.
 // This module cannot see the main one (two module blocks share nothing).
 const CHECK_MARK = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+// "there is more behind this row" and "back to the list", drawn for the same
+// reason as the tick above: a typed chevron is a different shape, weight and
+// height in every font, and next to real icons it reads as a stray character.
+const CHEVRON_RIGHT = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
+const CHEVRON_LEFT = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>';
 
 // The side panel's remembered width, left behind when the panel became a strip.
 try { localStorage.removeItem("persodub.assistantWidth"); } catch { /* private window */ }
@@ -3513,8 +3536,12 @@ function menuRow(label, { note = "", sub = "", tick = false, disabled = false, c
     name.appendChild(why);
   }
   const right = document.createElement("span");
+  right.className = "menu-right";
   if (tick) { right.innerHTML = '<span class="tick">' + CHECK_MARK + '</span>'; }
-  else { right.textContent = chevron ? "›" : note; }
+  else if (chevron) { right.innerHTML = CHEVRON_RIGHT; }
+  // Still text, for the reason `sub` is: a note can be quoted from a CLI's own
+  // words, and those must never be able to become a tag.
+  else { right.textContent = note; }
   b.append(name, right);
   return b;
 }
@@ -3551,8 +3578,11 @@ function buildMenu() {
   const a = agentList.find((x) => x.id === menuLevel);
   const back = document.createElement("div");
   back.className = "menu-group";
-  back.appendChild(document.createElement("span"))
-      .textContent = "‹ " + (a ? a.name : "");
+  // The arrow drawn, the name typed: a vendor's name is theirs to spell.
+  const backLabel = back.appendChild(document.createElement("span"));
+  backLabel.className = "menu-back";
+  backLabel.innerHTML = CHEVRON_LEFT;
+  backLabel.appendChild(document.createTextNode(a ? a.name : ""));
   back.style.cursor = "pointer";
   back.addEventListener("click", (e) => { e.stopPropagation(); menuLevel = ""; buildMenu(); });
   menu.appendChild(back);

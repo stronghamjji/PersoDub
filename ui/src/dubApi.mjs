@@ -172,7 +172,13 @@ export async function startDubJob(formData, { baseUrl = "" } = {}) {
 /** GET /api/dub/jobs/{jobId}: raw job status object. */
 export async function fetchJob(jobId, { baseUrl = "" } = {}) {
   const res = await fetch(`${baseUrl}/api/dub/jobs/${jobId}`);
-  if (!res.ok) throw new Error(`Failed to check job status (HTTP ${res.status})`);
+  if (!res.ok) {
+    const err = new Error(`Failed to check job status (HTTP ${res.status})`);
+    // Carried so a caller can tell an answer from no answer: a server that is
+    // not there throws before this, with no status on it at all.
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 }
 
@@ -288,6 +294,13 @@ export async function pollDubJob(jobId, {
       job = await fetchJob(jobId, { baseUrl });
     } catch (e) {
       if (shouldStop && shouldStop()) return null;
+      // A 404 is an answer, not an outage: the server is right there and says it
+      // has no such job (its workspace was cleared, or the app was pointed at a
+      // different one). Asking again every ten seconds would never bring it
+      // back, and "still trying" would not be true.
+      if (e.status === 404) {
+        throw new Error("This job is no longer on the app server -- it may have been deleted.");
+      }
       if (onUnreachable) onUnreachable(e);
       await sleep(wait);
       wait = Math.min(wait * 2, maxIntervalMs);
