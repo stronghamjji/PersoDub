@@ -51,9 +51,6 @@
 <style>
   :root {
     --primary: #7B64C8;
-    /* The same purple as plain rgb components, so the translucent glows below
-       stay in step with --primary instead of spelling it out a second time. */
-    --primary-rgb: 123, 100, 200;
     --primary-soft: #EDE7FF;
     --primary-line: #C7B9FF;
     --primary-foreground: #fafafa;
@@ -68,6 +65,11 @@
     --border: #e5e5e5;
     --success: #11ad32;
     --warning: #dfa11a;
+    /* The Settings restart banner: a pale amber panel with ink dark enough to
+       read on it. --warning itself is the border and the icon, and is far too
+       light to write words in. */
+    --warning-soft: #fff7e6;
+    --warning-ink: #7a5200;
     --destructive: #C96A6A;
     /* The letterbox behind a video still, and the badges that sit on top of
        it. Dark on purpose in both cases -- a frame can be any colour. */
@@ -83,7 +85,7 @@
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
-    --focus-ring: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
 
     /* One colour per speaker, cycled after the fourth. Each is a dot colour, the
        pale background its chip sits on, and the ink that stays readable on that
@@ -242,8 +244,8 @@
      hint was routinely missed, and a user who misses it keeps dubbing on the
      previous key/workspace without knowing. */
   .restart-banner { display: flex; align-items: center; gap: 10px; margin-top: 12px;
-    padding: 12px 14px; background: #fff7e6; border: 1px solid var(--warning);
-    border-radius: var(--radius); color: #7a5200; font-size: 0.9rem; font-weight: 600; }
+    padding: 12px 14px; background: var(--warning-soft); border: 1px solid var(--warning);
+    border-radius: var(--radius); color: var(--warning-ink); font-size: 0.9rem; font-weight: 600; }
   .restart-banner .icon { color: var(--warning); }
   .restart-banner button { margin-left: auto; flex-shrink: 0; }
   .job-notice a { color: var(--warning); font-weight: 600; }
@@ -440,11 +442,14 @@
      down the page whatever a cell contains, and every one of them is a
      different kind of thing (a number, a chip, a clock, two languages, two
      round buttons). */
-  /* min-width, so a narrow window scrolls the table sideways instead of
-     squeezing the two text columns down to one character a line. */
-  .sc-row { display: grid; grid-template-columns: 28px 100px 168px 1fr 40px 1fr 56px 44px;
+  /* The two text columns get a floor of their own (180px is roughly four or
+     five words a line), and the row's min-width is the sum of everything at
+     that floor. Below it the pane scrolls sideways instead of grinding the two
+     languages down to one or two words a line, which is what 1fr alone did. */
+  .sc-row { display: grid;
+    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) 40px minmax(180px, 1fr) 56px 44px;
     gap: 12px; align-items: start; padding: 11px 14px; font-size: 0.84rem;
-    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 700px; }
+    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 908px; }
   .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
     align-items: center; position: sticky; top: 0; z-index: 1;
     background: var(--canvas); font-size: 0.69rem; font-weight: 600;
@@ -491,7 +496,7 @@
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; }
   .sc-wave.stale { background: var(--primary); color: var(--primary-foreground);
-    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.22); }
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent); }
   .sc-wave:disabled { opacity: 0.5; cursor: progress; }
 
   /* The script cell is the point of the table: a line you can only read is half
@@ -507,7 +512,11 @@
 
   /* ---------------- Done: the video pane ---------------- */
 
-  .video-pane { flex: 0 0 min(520px, 40%); display: flex; flex-direction: column;
+  /* The table is the point of this screen, so the default split leans its way:
+     enough room is left beside the video for both language columns to read as
+     sentences at 1280px and up. The grip is there for anyone who would rather
+     have the bigger picture. */
+  .video-pane { flex: 0 0 clamp(300px, 24%, 460px); display: flex; flex-direction: column;
     background: var(--canvas); }
   .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     border-bottom: 1px solid var(--border); }
@@ -585,7 +594,7 @@
   .tl-voice.tl-over { background: var(--destructive); z-index: 2; }
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
-  .tl-blk:hover { box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.35); }
+  .tl-blk:hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent); }
   /* The line the video is on right now -- the table's .sc-now, said here.
      Drawn as a ring of its own on top (z-index 3) rather than as a shadow on
      the bar: a shadow belongs to the bar, so an over-time bar lying across it
@@ -725,7 +734,7 @@
   .trim-hatch { position: absolute; top: 0; bottom: 0;
     background: repeating-linear-gradient(135deg, var(--border) 0 4px, var(--trim-track) 4px 8px); }
   .trim-sel { position: absolute; top: 0; bottom: 0; border: 2px solid var(--primary);
-    border-radius: var(--radius-sm); background: rgba(var(--primary-rgb), 0.10); }
+    border-radius: var(--radius-sm); background: color-mix(in srgb, var(--primary) 10%, transparent); }
   /* Two whole-width sliders stacked on the bar: dragging comes free, and the
      painted layers above are positioned with the same 10px-thumb maths. Only
      the thumbs take the mouse, so each handle stays grabbable over the other's
@@ -742,7 +751,11 @@
   .advanced-btn { width: 100%; height: 42px; padding: 0 12px; justify-content: space-between;
     background: var(--background); border: 1px solid var(--border); font-weight: 500; }
   .advanced-btn > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
-  .advanced-btn .chev { color: var(--muted-foreground); }
+  .advanced-btn .chev { color: var(--muted-foreground); display: inline-flex;
+    transition: transform 0.15s ease; }
+  /* Open turns the chevron over. The arrow is one SVG that points down and is
+     flipped here, rather than two glyphs swapped by hand. */
+  .advanced-btn.open .chev { transform: rotate(180deg); }
   .advanced-btn.open, .advanced-btn.open .chev { border-color: var(--primary); color: var(--primary); }
   /* A sentence, not a field: it belongs under the whole grid rather than in a
      column beside one. The grid's own gap already spaces it. */
@@ -948,7 +961,9 @@
      (behind Advanced) the engines. -->
 <div class="modal-overlay" id="projectOverlay">
   <div class="modal project-modal">
-    <div class="modal-head"><h2>New project</h2><button class="modal-close" id="projectClose" type="button" aria-label="Close">✕</button></div>
+    <div class="modal-head"><h2>New project</h2><button class="modal-close" id="projectClose" type="button" aria-label="Close">
+      <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+    </button></div>
     <div class="modal-body">
       <div class="project-thumb" id="projectThumb"><video id="projectVideo" muted playsinline></video><span class="project-dur" id="projectDur"></span><button class="project-replace" id="projectReplace" type="button">Replace</button></div>
       <div class="trim" id="trimBox"></div>
@@ -957,7 +972,7 @@
         <div class="field"><label for="targetLangSelect">Target language</label><select id="targetLangSelect"></select></div>
       </div>
       <button class="btn btn-secondary advanced-btn" id="advancedBtn" type="button" aria-expanded="false">
-        <span><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Advanced options</span><span class="chev">▾</span>
+        <span><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Advanced options</span><span class="chev"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg></span>
       </button>
       <div class="advanced-body" id="advancedBody" hidden>
         <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint">Turns the speech in your video into text.</div><div class="settings-hint">Want higher quality? Choose Perso API.</div></div>
@@ -1055,7 +1070,10 @@
              clear old projects out belong with the install-package work. -->
         <div class="settings-row">
           <label>Output location</label>
-          <input type="text" value="~/Library/Application Support/PersoDub/app/workspace" readonly>
+          <!-- Filled in by openSettings() from GET /api/settings. Empty here on
+               purpose: a guessed path is the one line in Settings a user would
+               copy, and it differs per machine and per install. -->
+          <input type="text" id="outputLocation" value="" readonly>
           <div class="settings-hint">Finished videos are never deleted by themselves.</div>
         </div>
       </div>
@@ -1214,7 +1232,11 @@
   /* While the dub runs there is no script to fix yet, so the row is on show
      but out of reach; the placeholder says why. The lock itself is the disabled
      attribute paintChoice() sets -- dimming alone left the box one Tab away. */
-  body[data-screen="running"] .assistant-foot { opacity: .6; }
+  /* A cancelled or failed job has no script either, so its card locks the
+     strip the same way -- a turn there would be paid for and answered by a
+     script route that can only say 409. */
+  body[data-screen="running"] .assistant-foot,
+  body[data-screen="failed"] .assistant-foot { opacity: .6; }
   .assistant-input:disabled, .assistant-modelbtn:disabled { cursor: default; }
 
   /* Collapsed is one input row; open adds the conversation above it. 240 + the
@@ -1267,7 +1289,7 @@
   .menu-item:hover { background: var(--agent-bg); }
   .menu-item[disabled] { color: var(--agent-muted); cursor: default; }
   .menu-item[disabled]:hover { background: none; }
-  .menu-item .tick { color: var(--primary); }
+  .menu-item .tick { color: var(--primary); display: inline-flex; align-items: center; }
   /* A name, and under it the reason that name cannot be picked. */
   .menu-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .menu-name em { font-style: normal; font-size: 0.7rem; line-height: 1.35;
@@ -1471,6 +1493,8 @@ async function openSettings() {
       $("aboutVersion").textContent = `PersoDub v${st.app_version}`;
     }
     $("analyticsToggle").checked = !st.analytics_off;
+    // The server's real workspace folder, whatever platform it is on.
+    $("outputLocation").value = st.workspace || "";
   } catch {
     $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
   }
@@ -1525,6 +1549,11 @@ $("restartNowBtn").addEventListener("click", () => window.persodubShell.relaunch
 $("settingsCloseBtn").addEventListener("click", closeSettings);
 $("settingsCancelBtn").addEventListener("click", closeSettings);
 $("settingsOverlay").addEventListener("click", (e) => { if (e.target === $("settingsOverlay")) closeSettings(); });
+// Escape is the reflex way out of a dialog, so every dialog has to answer it --
+// Settings and New project were the two that did not.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("settingsOverlay").classList.contains("open")) closeSettings();
+});
 
 $("settingsSaveBtn").addEventListener("click", async () => {
   // Only actual edits go on the wire -- posting unchanged values would flash
@@ -1663,8 +1692,13 @@ applyEngineAvailabilityToForm();
 // ---------------- Screens and top bar ----------------
 // Three sections live inside <main class="work"> and exactly one is shown.
 // Everything else in the app changes screens through showScreen() alone.
+// "failed" is the done screen under another name: a cancelled or failed job
+// shows its card inside #screen-done, but nothing on it can be fixed, so the
+// agent strip has to be able to tell the two apart.
+const SCREEN_SECTION = { failed: "done" };
 function showScreen(name) {
-  for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== `screen-${name}`;
+  const id = `screen-${SCREEN_SECTION[name] || name}`;
+  for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== id;
   document.body.dataset.screen = name;   // the assistant reads this
 }
 
@@ -1883,13 +1917,15 @@ function closeNewProject() {
   clearLink();
 }
 $("projectClose").addEventListener("click", closeNewProject);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("projectOverlay").classList.contains("open")) closeNewProject();
+});
 $("projectReplace").addEventListener("click", () => { closeNewProject(); videoInput.click(); });
 $("advancedBtn").addEventListener("click", () => {
   const open = $("advancedBody").hidden;
   $("advancedBody").hidden = !open;
   $("advancedBtn").setAttribute("aria-expanded", String(open));
   $("advancedBtn").classList.toggle("open", open);
-  $("advancedBtn").querySelector(".chev").textContent = open ? "▴" : "▾";
 });
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
@@ -1964,13 +2000,6 @@ if (window.persodubShell?.onUpdateReady) {
 // There is no upload/link toggle any more: both ways in are on screen at once
 // and whichever one produces a video wins.
 
-function secsToClock(sec) {
-  if (!sec) return "";
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-  const mm = h ? String(m).padStart(2, "0") : String(m);
-  return (h ? h + ":" : "") + mm + ":" + String(s).padStart(2, "0");
-}
-
 function clearLink() {
   state.linkProbe = null;
   $("linkCard").hidden = true;
@@ -1996,7 +2025,7 @@ function renderLinkCard(info) {
       ${thumb}
       <div>
         <div class="lc-title">${escapeHtml(info.title)}</div>
-        <div class="lc-meta">${secsToClock(info.duration_sec)}</div>
+        <div class="lc-meta">${info.duration_sec ? fmtClock(info.duration_sec) : ""}</div>
       </div>
     </div>`;
 }
@@ -2116,7 +2145,12 @@ function renderRunning(job, progress) {
   // guard re-arms it on the next poll. Once a load succeeds no error fires, so
   // the src stays put and the request is not repeated.
   const video = $("runningVideo");
-  const src = `/api/dub/result/${job.id}/original`;
+  // A link job is downloaded whole inside the job thread and only cut after
+  // that, so the picture above may be the untrimmed download. The first stage
+  // starting is the sign the cut has landed; the mark makes it a different URL
+  // exactly once, so the browser fetches the trimmed file and then settles.
+  const cut = job.from_link && job.trim && progress.stage > 0 ? "?cut=1" : "";
+  const src = `/api/dub/result/${job.id}/original${cut}`;
   if (video.getAttribute("src") !== src) video.setAttribute("src", src);
 
   $("progressTitle").textContent = progress.label;
@@ -2128,8 +2162,11 @@ function renderRunning(job, progress) {
     const n = i + 1;
     const stepState = n < progress.stage ? "done" : n === progress.stage ? "current" : "todo";
     // Only the voice stage counts lines, and only once the pipeline has
-    // logged how many there are.
-    const counted = stepState === "current" && n === 4 && progress.voiceTotal;
+    // logged how many there are AND finished at least one. A standard-quality
+    // run never logs a chosen take, so the counter would sit at "voice 0 of 5"
+    // for the whole stage and read like something stuck.
+    const counted = stepState === "current" && n === 4
+      && progress.voiceTotal && progress.voiceDone > 0;
     const note = counted
       ? ` <span class="step-note">· voice ${Math.min(progress.voiceDone, progress.voiceTotal)} of ${progress.voiceTotal}</span>`
       : "";
@@ -2365,12 +2402,11 @@ $("deleteConfirmBtn").addEventListener("click", async () => {
     const r = await fetch(`/api/dub/jobs/${job.id}/workspace`, { method: "DELETE" });
     if (!r.ok) throw new Error((await r.json()).detail || "Could not delete this project");
     closeDelete();
-    // The open screen would be showing files that are gone now.
-    if (state.jobId === job.id) {
-      state.jobId = null;
-      state.pollGeneration += 1;
-      showHome();
-    }
+    // The open screen would be showing files that are gone now -- and half a
+    // reset is worse than none: the video src, the script rows and state.job
+    // all went on pointing at a job that no longer exists. resetForNewJob()
+    // clears every one of them and ends on the first screen.
+    if (state.jobId === job.id) resetForNewJob();
     renderHistory().catch(() => {});
   } catch (err) {
     $("deleteError").textContent = err.message;
@@ -2392,7 +2428,10 @@ async function resumeJob(jobId) {
     }
   } catch (e) {
     // Nothing to show: fall back to the first screen with the reason on it.
-    showHome();
+    // The same full reset as a delete -- state.jobId was set optimistically at
+    // the top of this function, and leaving it (and the previous job's rows
+    // and video) behind on the home screen is what I-3 was about.
+    resetForNewJob();
     $("formError").textContent = e.message;
   }
 }
@@ -2500,16 +2539,19 @@ function runPollLoop(jobId, myGeneration) {
   pollDubJob(jobId, {
     onUpdate: (job) => { if (myGeneration === state.pollGeneration) handleJobUpdate(job); },
     shouldStop: () => myGeneration !== state.pollGeneration,
-  }).catch((e) => {
-    // The server stopped answering (app quit, machine slept). Without this the
-    // steps just freeze with no word of why. The job itself may well still be
-    // running back there, so Cancel is left exactly as it was.
-    if (myGeneration !== state.pollGeneration) return;
-    const el = $("jobNotice");
-    el.textContent = `Could not reach the app server: ${errorText(e)}`;
-    el.classList.add("danger");
-    el.hidden = false;
-  });
+    // The server stopped answering (app quit, machine slept). Say so, and keep
+    // asking: the dub is very likely still running back there, so Cancel stays
+    // exactly as it was and the loop only ends when the user leaves the job.
+    // The next answer redraws this line through renderNotices, which is what
+    // takes the red away again the moment the server is back.
+    onUnreachable: (e) => {
+      if (myGeneration !== state.pollGeneration) return;
+      const el = $("jobNotice");
+      el.textContent = `Could not reach the app server: ${errorText(e)} -- still trying.`;
+      el.classList.add("danger");
+      el.hidden = false;
+    },
+  }).catch(() => { /* only the shouldStop path settles now, and it says nothing */ });
 }
 
 async function handleJobUpdate(job) {
@@ -2520,7 +2562,7 @@ async function handleJobUpdate(job) {
   document.body.dataset.jobId = job.id;
   const progress = parseProgress(job.logs);
   const running = job.status === "running" || job.status === "cancelling";
-  showScreen(running ? "running" : "done");
+  showScreen(running ? "running" : job.status === "done" ? "done" : "failed");
   setTopbar({
     title: jobLabel(job),
     subtitle: jobStatusLine(job, progress),
@@ -2605,6 +2647,14 @@ async function renderDone(job) {
     doneJobId = job.id;
     doneVersion = 0;
     $("doneRetryError").textContent = "";
+    // The rest of the previous job's transient state, which nothing else
+    // clears: which of the two files the player was showing, how far the
+    // timeline was scrolled, and any "stop at the end of this line" listener
+    // still armed on the player from a line that was never played out.
+    cancelRange(doneVideo);
+    doneSource = "dubbed";
+    paintVideoTabs();
+    timelineAt = 0;
   }
   $("doneLayout").hidden = !finished;
   $("doneFail").hidden = finished;
@@ -2637,28 +2687,34 @@ async function renderDone(job) {
   await renderScript(job.id);
 }
 
-// The failure card's one way forward: fetch the video this job started from
-// back off the server and hand it to the New project dialog, so the retry is
-// one dropdown away instead of a hunt through the file manager. The folder
-// may have been deleted since, which is the one thing that can stop it.
+// The failure card's one way forward: ask the server to start the same job
+// over. The video it began from is already sitting in the old job's folder, so
+// the retry is one request -- it used to pull the whole original down into the
+// page and post it straight back up, which for a 2 GB link job meant two
+// copies in memory and a third on disk. The folder may have been cleared out
+// since, which is the one thing that can stop it.
 $("doneRetry").addEventListener("click", async () => {
   const job = state.job;
   if (!job) return;
   $("doneRetry").disabled = true;
   $("doneRetryError").textContent = "";
   try {
-    const r = await fetch(`/api/dub/result/${job.id}/original`);
-    if (!r.ok) throw new Error("The video this job started from is no longer on this machine.");
-    const blob = await r.blob();
-    openNewProject({ file: new File([blob], `${job.project || "video"}.mp4`, { type: "video/mp4" }) });
+    const r = await fetch(`/api/dub/jobs/${job.id}/retry`, { method: "POST" });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail
+      || "Could not start this job again.");
+    const { job_id } = await r.json();
+    // Straight onto the new job's running screen, sidebar and all -- the same
+    // path Projects takes to open a job.
+    renderHistory().catch(() => {});
+    await resumeJob(job_id);
   } catch (e) {
     // Under the button, not over the headline: why the job failed is the
     // card's whole reason for being, and there is no way back to that
     // sentence once it has been written over.
     $("doneRetryError").textContent = errorText(e);
   } finally {
-    // Closing the New project dialog does not redraw this card, so a button
-    // left disabled on the way out stays dead until the user navigates away.
+    // renderDone only clears this on a change of job, so a button left
+    // disabled after a refused retry stays dead until the user navigates away.
     $("doneRetry").disabled = false;
   }
 });
@@ -2711,6 +2767,14 @@ for (const tab of document.querySelectorAll(".vtab")) {
   tab.addEventListener("click", () => showVideoSource(tab.dataset.src));
 }
 
+// Which of the two tabs is lit. Three places change doneSource, and every one
+// of them has to say so on screen.
+function paintVideoTabs() {
+  for (const tab of document.querySelectorAll(".vtab")) {
+    tab.classList.toggle("active", tab.dataset.src === doneSource);
+  }
+}
+
 function showVideoSource(which) {
   if (!state.job || which === doneSource) return;
   const at = doneVideo.currentTime;
@@ -2718,9 +2782,7 @@ function showVideoSource(which) {
   // The range being played belongs to the file that is leaving.
   cancelRange(doneVideo);
   doneSource = which;
-  for (const tab of document.querySelectorAll(".vtab")) {
-    tab.classList.toggle("active", tab.dataset.src === which);
-  }
+  paintVideoTabs();
   doneVideo.setAttribute("src", doneVideoSrc(state.job, which));
   doneVideo.addEventListener("loadeddata", () => {
     doneVideo.currentTime = at;
@@ -2735,9 +2797,7 @@ function releaseDoneVideo() {
   doneSource = "dubbed";
   doneJobId = null;
   doneVersion = 0;
-  for (const tab of document.querySelectorAll(".vtab")) {
-    tab.classList.toggle("active", tab.dataset.src === "dubbed");
-  }
+  paintVideoTabs();
   doneVideo.removeAttribute("src");
   doneVideo.load();
 }
@@ -2883,6 +2943,16 @@ function scriptRow(l, speakers) {
   </div>`;
 }
 
+// A press on `revert` begins with mousedown, and mousedown lands BEFORE the
+// edited cell's blur. Without this flag blur saved the cell, saveLine redrew
+// the whole table, and the button the finger was still on no longer existed
+// when the click arrived -- the press hit nothing. Reverting is what the user
+// asked for, so a cell blurred into a revert press simply drops its edit.
+let revertPressed = false;
+// mouseup comes before click, and only blur ever reads the flag, so clearing it
+// here covers the press that slid off the button and never became a click.
+document.addEventListener("mouseup", () => { revertPressed = false; });
+
 async function renderScript(jobId) {
   const box = $("scriptBox");
   if (!box) return;
@@ -2921,12 +2991,13 @@ async function renderScript(jobId) {
     });
     cell.addEventListener("blur", async () => {
       const text = cell.textContent.trim();
-      if (!text || text === before) { cell.textContent = before; return; }
+      if (!text || text === before || revertPressed) { cell.textContent = before; return; }
       await saveLine(jobId, cell.dataset.line, text);
     });
   });
 
   box.querySelectorAll("[data-undo]").forEach((b) => {
+    b.addEventListener("mousedown", () => { revertPressed = true; });
     b.addEventListener("click", () => revertLine(jobId, b.dataset.undo));
   });
 
@@ -3341,6 +3412,11 @@ const menu = el("assistantMenu");
 // model of that size, so this menu does not go stale.
 const MODEL_LABELS = { fable: "Fable", opus: "Opus", sonnet: "Sonnet", haiku: "Haiku" };
 
+// The picker's "this one is chosen" tick. Drawn, not typed: a text ✓ is a
+// different shape in every font, and the rest of the app's marks are SVG.
+// This module cannot see the main one (two module blocks share nothing).
+const CHECK_MARK = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
 // The side panel's remembered width, left behind when the panel became a strip.
 try { localStorage.removeItem("persodub.assistantWidth"); } catch { /* private window */ }
 
@@ -3386,13 +3462,19 @@ function paintChoice() {
   modelLabel.textContent = labelFor();
   // Dimming alone is a picture of a lock: a dimmed box is still one Tab away,
   // and a turn started mid-dub would rewrite a script the pipeline is reading.
-  const running = document.body.dataset.screen === "running";
-  input.disabled = running;
-  modelBtn.disabled = running;
+  const screen = document.body.dataset.screen;
+  const running = screen === "running";
+  // A dub that stopped early leaves no script behind, so the strip is shut
+  // here too -- see the CSS above.
+  const failed = screen === "failed";
+  input.disabled = running || failed;
+  modelBtn.disabled = running || failed;
   // The one line the strip has to say what it is waiting for: a job to finish,
   // an assistant to be installed, a model to be picked, or the user.
   if (running) {
     input.placeholder = "The Dub Agent joins when the dub is ready";
+  } else if (failed) {
+    input.placeholder = "Nothing to fix here -- this dub did not finish";
   } else if (notice) {
     input.placeholder = notice;
   } else if (!chosen.agent) {
@@ -3431,7 +3513,7 @@ function menuRow(label, { note = "", sub = "", tick = false, disabled = false, c
     name.appendChild(why);
   }
   const right = document.createElement("span");
-  if (tick) { right.innerHTML = '<span class="tick">✓</span>'; }
+  if (tick) { right.innerHTML = '<span class="tick">' + CHECK_MARK + '</span>'; }
   else { right.textContent = chevron ? "›" : note; }
   b.append(name, right);
   return b;

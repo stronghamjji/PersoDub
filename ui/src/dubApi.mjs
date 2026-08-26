@@ -27,14 +27,17 @@ export const LANGUAGES = [
 
 // Legacy direction -> the (language, language_code) pair the API expects
 // (both name the TARGET language; see app/main.py DubStartRequest / run_dub).
-export function directionToLanguage(direction) {
+// Not exported: buildDubFormData below is the only caller, and its own tests
+// cover both mappings through the form it builds.
+function directionToLanguage(direction) {
   if (direction === "ko_to_en") return { language: "English", language_code: "en" };
   if (direction === "en_to_ko") return { language: "Korean", language_code: "ko" };
   throw new Error(`Unknown dubbing direction: ${direction}`);
 }
 
 // Friendly quality mode -> n_takes (Qwen3-TTS best-of-N selection count).
-export function qualityModeToNTakes(qualityMode) {
+// Not exported, for the same reason as directionToLanguage above.
+function qualityModeToNTakes(qualityMode) {
   if (qualityMode === "fast") return 1;
   if (qualityMode === "high") return 4;
   throw new Error(`Unknown quality mode: ${qualityMode}`);
@@ -112,26 +115,6 @@ export function buildDubFormData(opts) {
   }
 
   return fd;
-}
-
-/**
- * One-time migration for the localStorage-backed settings object: builds
- * before 2026-08-04 persisted "fast" as an implicit default the moment
- * Settings was opened, silently forcing n_takes=1 on every future dub. Runs
- * once per stored object (guarded by the qualityDefaultMigrated marker) so a
- * user's later, deliberate "fast" choice is preserved after the one-time
- * cleanup. Never touches any other key.
- *
- * @param {Object} s - the parsed stored-settings object (may be {})
- * @returns {Object} the migrated settings object
- */
-export function migrateStoredSettings(s) {
-  const out = { ...s };
-  if (!out.qualityDefaultMigrated && out.defaultQualityMode === "fast") {
-    delete out.defaultQualityMode;
-  }
-  out.qualityDefaultMigrated = true;
-  return out;
 }
 
 /**
@@ -276,21 +259,46 @@ export function parseProgress(logs, { lineCount = null } = {}) {
  * pipeline stops at its next stage boundary, not immediately -- so polling
  * continues through it just like "running".
  *
+ * A failed request does NOT end the loop. The server going quiet for a while
+ * -- a sleeping laptop, a restarting engine -- says nothing about the dub,
+ * which carries on behind it; giving up there froze the running screen at its
+ * last percent with no way back. So a failure only slows the asking down
+ * (intervalMs, doubling up to maxIntervalMs) and tells the caller through
+ * onUnreachable, and the next answer picks the job straight back up. The only
+ * things that end the loop are the job finishing and shouldStop().
+ *
  * @param {string} jobId
  * @param {Object} [options]
  * @param {string} [options.baseUrl]
  * @param {number} [options.intervalMs=3000]
+ * @param {number} [options.maxIntervalMs=10000] - the slowest it backs off to
  * @param {(job: object, progress: object) => void} [options.onUpdate]
+ * @param {(error: Error) => void} [options.onUnreachable] - a request failed; still trying
  * @param {() => boolean} [options.shouldStop] - return true to abort polling early
  */
-export async function pollDubJob(jobId, { baseUrl = "", intervalMs = 3000, onUpdate, shouldStop } = {}) {
+export async function pollDubJob(jobId, {
+  baseUrl = "", intervalMs = 3000, maxIntervalMs = 10000,
+  onUpdate, onUnreachable, shouldStop,
+} = {}) {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  let wait = intervalMs;
   for (;;) {
-    const job = await fetchJob(jobId, { baseUrl });
+    let job;
+    try {
+      job = await fetchJob(jobId, { baseUrl });
+    } catch (e) {
+      if (shouldStop && shouldStop()) return null;
+      if (onUnreachable) onUnreachable(e);
+      await sleep(wait);
+      wait = Math.min(wait * 2, maxIntervalMs);
+      continue;
+    }
+    wait = intervalMs;   // back in touch -- ask at the normal pace again
     const progress = parseProgress(job.logs);
     if (onUpdate) onUpdate(job, progress);
     if (job.status !== "running" && job.status !== "cancelling") return job;
     if (shouldStop && shouldStop()) return job;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    await sleep(wait);
   }
 }
 
