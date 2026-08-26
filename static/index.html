@@ -4672,28 +4672,52 @@ function chipText(label, lines) {
   return stem + (lines.length > 1 ? " lines " : " line ") + lines.join(", ");
 }
 
-function chipStep(label, line) {
-  if (run && run.label === label) {
-    // The same step again: this chip grows a number instead of a twin below it.
-    if (typeof line === "number" && !run.lines.includes(line)) {
-      run.lines.push(line);
-      run.lines.sort((a, b) => a - b);
-      run.text.nodeValue = chipText(label, run.lines);
-    }
-    log.scrollTop = log.scrollHeight;
-    return;
+// What the chip on screen says right now, and which mark it wears: spinning
+// while any of its calls is still out, ticked once they are all back.
+function paintRun() {
+  let text = chipText(run.label, run.lines);
+  // "· 1 of 2" -- how far through the run it is. Only worth saying while there
+  // is more than one call in the chip and one of them has yet to land.
+  if (run.calls > 1 && run.finished < run.calls) {
+    text += " · " + run.finished + " of " + run.calls;
   }
-  // A different step. Whatever was running is finished by it starting.
-  settlePrevious();
-  const lines = typeof line === "number" ? [line] : [];
-  const d = document.createElement("div");
-  d.className = "chip";
-  d.innerHTML = '<span class="chip-mark">' + MARK_RUNNING + '</span>';
-  const text = document.createTextNode(chipText(label, lines));
-  d.appendChild(text);
-  log.appendChild(d);
+  run.text.nodeValue = text;
+  const settled = run.finished >= run.calls;
+  const mark = run.node.querySelector(".chip-mark");
+  if (mark) mark.innerHTML = settled ? MARK_DONE : MARK_RUNNING;
+  if (settled) run.node.classList.add("chip-done");
+  else run.node.classList.remove("chip-done");
   log.scrollTop = log.scrollHeight;
-  run = { label, lines, text };
+}
+
+// One more call to a step. The same step as the one on screen grows that chip;
+// a different one starts a new chip and finishes whatever was above it.
+function chipStep(label, line) {
+  if (!run || run.label !== label) {
+    settlePrevious();
+    const d = document.createElement("div");
+    d.className = "chip";
+    d.innerHTML = '<span class="chip-mark">' + MARK_RUNNING + '</span>';
+    const text = document.createTextNode("");
+    d.appendChild(text);
+    log.appendChild(d);
+    run = { label, lines: [], calls: 0, finished: 0, node: d, text };
+  }
+  run.calls += 1;
+  if (typeof line === "number" && !run.lines.includes(line)) {
+    run.lines.push(line);
+    run.lines.sort((a, b) => a - b);
+  }
+  paintRun();
+}
+
+// A call in the chip on screen has landed. Which one it was is not said and
+// does not matter -- the chip is counting its own run, and a call that comes
+// back after the run is closed has nothing left to count.
+function chipFinished() {
+  if (!run) return;
+  run.finished = Math.min(run.finished + 1, run.calls);
+  paintRun();
 }
 
 // Only one chip is ever "in progress": the previous step is finished the moment
@@ -4702,6 +4726,9 @@ function chipStep(label, line) {
 // would join a chip that sits ABOVE what was said in between, and the column
 // would no longer be in the order things happened.
 function settlePrevious() {
+  // The run is over, so its count is over too: a chip left saying "1 of 2"
+  // under a tick would be counting calls nothing is waiting for any more.
+  if (run) { run.finished = run.calls; paintRun(); }
   run = null;
   const chips = log.querySelectorAll(".chip:not(.chip-done)");
   chips.forEach((c) => {
@@ -4811,6 +4838,9 @@ async function ask(message) {
           // repeating the request back; the saved choice is left alone.
           const alias = aliasOf(ev.model);
           if (alias && alias !== servedModel) { servedModel = alias; paintChoice(); }
+        } else if (ev.kind === "progress" && ev.done) {
+          // A call the chip on screen is already counting has come back.
+          chipFinished();
         } else if (ev.kind === "progress") {
           clearDots(); chipStep(ev.label, ev.line);
           // Whatever the assistant says next belongs BELOW this step, not
