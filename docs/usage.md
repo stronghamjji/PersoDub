@@ -151,7 +151,7 @@ config file on your machine. **Restart PersoDub after saving** for them to take 
   credits they use.
 - **Google (Gemini) key** — enables the paid translation path.
 
-**Output location** — where each job's folder is written. Read-only for now; finished
+**Output location** — shows the folder your dubs are saved into. Read-only; finished
 videos are never deleted by themselves.
 
 **Privacy** — *Send anonymous usage counts* is four counts and nothing else, never your

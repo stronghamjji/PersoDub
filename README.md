@@ -244,7 +244,9 @@ and the difference is worth knowing:
   ask to escalate, and another model — not you — decides; an approved escalation gets
   write access to PersoDub's own agent folder, and nowhere else. It can still **read
   any file on this Mac that you can read**, and whatever it reads travels to OpenAI as
-  part of the conversation. If that matters to you, use Claude Code.
+  part of the conversation. If you keep your own standing instructions for Codex in an
+  `AGENTS.md` file, Codex reads those into every turn here too, and they go to OpenAI
+  with your question. If that matters to you, use Claude Code.
 - **Gemini** is listed but greyed out, with the reason on the row: Google no longer
   serves that CLI on a personal account.
 - The conversation carries on from one job to the next — the assistant is told which

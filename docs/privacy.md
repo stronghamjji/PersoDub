@@ -34,7 +34,7 @@ machine, and that CLI talks to its own vendor on your own account.
 | Assistant | What it can reach here | Where the conversation goes |
 |---|---|---|
 | **Claude Code** | PersoDub's own script tools only. Reading files and running shell commands are denied, and your own MCP servers are left out. | Anthropic |
-| **Codex** | Runs **read-only by default**, and its shell cannot reach the network. An escalation its own reviewer model approves may write to PersoDub's own agent folder, and nowhere else. It can still **read any file on this Mac that you can read**. | OpenAI |
+| **Codex** | Runs **read-only by default**, and its shell cannot reach the network. An escalation its own reviewer model approves may write to PersoDub's own agent folder, and nowhere else. It can still **read any file on this Mac that you can read**. If you keep standing instructions for Codex in your own `AGENTS.md` file, those are read into every turn here too. | OpenAI |
 
 In both cases the script of the job on screen is part of the conversation. With Codex,
 so is anything else it chooses to read. Your video is never uploaded for this.
