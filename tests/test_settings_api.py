@@ -7,11 +7,14 @@ returned to the client -- only set/unset booleans.
 """
 import os
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app import config
+from app import engines_status
 from app import main
 from app import perso_client
+from app import settings_env
 from app import translate
 from app.settings_env import update_env_text
 
@@ -384,3 +387,70 @@ def test_gemini_translator_uses_a_key_saved_after_import(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=SAVEDGEM\n")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert translate.GeminiTranslator().api_key == "SAVEDGEM"
+
+
+# --- a DELETED key means no key, even when the process started with one -----
+# The user cleared the Perso field and saved; kit.env then holds "PERSO_API_KEY="
+# and the process env still holds the key the app launched with. kit.env wins.
+
+def test_cleared_key_in_kit_env_beats_the_process_env(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=\n")
+    monkeypatch.setenv("PERSO_API_KEY", "STARTUPKEY")
+    assert settings_env.current_value("PERSO_API_KEY") == ""
+
+
+def test_perso_spaces_is_409_after_the_key_is_cleared(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=\n")
+    monkeypatch.setenv("PERSO_API_KEY", "STARTUPKEY")
+    # The picker must not keep listing the deleted key's workspaces.
+    assert client.get("/api/perso/spaces").status_code == 409
+
+
+def test_default_stt_engine_falls_back_to_whisper_after_the_key_is_cleared(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=\n")
+    monkeypatch.setenv("PERSO_API_KEY", "STARTUPKEY")
+    monkeypatch.delenv("STT_ENGINE", raising=False)
+    assert config.default_stt_engine() == ""
+
+
+def test_perso_unavailable_after_the_key_is_cleared(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=\n")
+    monkeypatch.setenv("PERSO_API_KEY", "STARTUPKEY")
+    assert engines_status.perso_available() is False
+
+
+def test_cleared_gemini_key_in_kit_env_beats_the_process_env(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=\n")
+    monkeypatch.setenv("GEMINI_API_KEY", "STARTUPGEM")
+    assert engines_status.gemini_available() is False
+    assert translate.GeminiTranslator().api_key == ""
+
+
+def test_perso_client_refuses_a_key_cleared_in_settings(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=\n")
+    monkeypatch.setenv("PERSO_API_KEY", "STARTUPKEY")
+    with pytest.raises(ValueError):
+        perso_client.PersoClient()
+
+
+# --- ...but a kit.env that never mentions the key still defers to the env ---
+# Server deployments (and any kit.env predating a setting) keep working.
+
+def test_key_absent_from_kit_env_falls_back_to_the_process_env(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE)       # only a COMMENTED placeholder line
+    monkeypatch.setenv("PERSO_API_KEY", "ENVKEY")
+    monkeypatch.delenv("STT_ENGINE", raising=False)
+    assert settings_env.current_value("PERSO_API_KEY") == "ENVKEY"
+    assert config.default_stt_engine() == "perso"
+    monkeypatch.setattr(main, "list_dubbing_spaces",
+                        lambda key: [{"seq": 1, "name": "solo", "tier": None, "credits": None}])
+    assert client.get("/api/perso/spaces").status_code == 200
+
+
+def test_cleared_workspace_pin_does_not_fall_back_to_the_process_env(tmp_path, monkeypatch):
+    # Same rule for the workspace: clearing the pin must not resurrect the one
+    # the app started with, which could bill a workspace the user moved off.
+    _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=SAVEDKEY\nPERSO_SPACE_SEQ=\n")
+    monkeypatch.setenv("PERSO_SPACE_SEQ", "999")
+    monkeypatch.setattr(perso_client, "_resolve_space_seq", lambda key, base: 42)
+    assert perso_client.PersoClient().space_seq == 42

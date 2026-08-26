@@ -1686,9 +1686,28 @@ async function loadPersoSpaces(savedSeq, typedKey) {
 const PERSO_KEY_MIN_LEN = 20;
 let persoPreviewTimer = null;
 let persoPreviewedKey = "";
+// Back to "no key, so nothing to choose". Used the moment the key field is
+// emptied: without it the picker kept listing the workspaces of the key that
+// was just deleted, and painted an unpickable "Choose a workspace…" red.
+function resetPersoSpaces() {
+  const sel = $("persoSpaceSelect");
+  spacesLoadSeq++;          // any lookup still in flight no longer counts
+  spacesForKey = null;
+  // Forget what was last looked up, so retyping the same key looks it up again
+  // instead of being skipped as a repeat and leaving the picker empty.
+  persoPreviewedKey = "";
+  sel.innerHTML = "";
+  const o = document.createElement("option");
+  o.value = ""; o.textContent = "Enter a Perso API key to see its workspaces";
+  sel.appendChild(o);
+  sel.disabled = true;      // disabled is also what keeps the red styling off
+  updateSpaceWarning();
+}
+
 function previewPersoSpaces() {
   clearTimeout(persoPreviewTimer);
   const key = $("persoKeyInput").value.trim();
+  if (!key) { resetPersoSpaces(); return; }
   if (key.length < PERSO_KEY_MIN_LEN || key === persoPreviewedKey) return;
   persoPreviewedKey = key;
   // The saved pin only preselects when the field still holds the saved key --
@@ -1797,6 +1816,9 @@ $("settingsSaveBtn").addEventListener("click", async () => {
   const per = $("persoKeyInput").value.trim();
   const gemChanged = gem !== keysInitial.gem;
   const perChanged = per !== keysInitial.per;
+  // Saving with an empty field is the user deleting their key -- clear the
+  // picker here too, in case Save was reached without the field ever blurring.
+  if (!per) resetPersoSpaces();
   // A disabled picker means the list never loaded -- its empty value is a
   // load failure, not the user clearing the pin, so it must not post.
   const spaceSel = $("persoSpaceSelect");
