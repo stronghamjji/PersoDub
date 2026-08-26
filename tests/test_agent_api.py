@@ -4,6 +4,8 @@ No CLI is spawned. The runner is replaced, so these say what the two endpoints
 promise the panel -- which assistant is usable, why one is not, and that the
 backend the panel names is the backend that answers.
 """
+import time
+
 from fastapi.testclient import TestClient
 
 import app.main as main
@@ -69,10 +71,14 @@ def _capture(monkeypatch, tmp_path):
     """Run a turn with the CLI replaced, and hand back what was asked of it."""
     seen = {}
 
-    def fake_run(binary, args, translate, cwd=None):
+    def fake_run(binary, args, translate, cwd=None, agent_name="", login_command=""):
         seen["binary"] = binary
         seen["args"] = args
         seen["translate"] = translate
+        # The runner is told which CLI it is running and how that CLI is signed
+        # in, so a failed turn can name both.
+        seen["agent_name"] = agent_name
+        seen["login_command"] = login_command
         yield {"kind": "done", "text": "ok"}
 
     monkeypatch.setattr(main.agent_base, "run", fake_run)
@@ -129,3 +135,52 @@ def test_every_turn_asks_to_carry_on_the_conversation(monkeypatch, tmp_path):
     seen = _capture(monkeypatch, tmp_path)
     client.post("/api/agent/chat", json={"message": "또", "agent": "codex"})
     assert seen["args"][:3] == ["exec", "resume", "--last"]
+
+
+# --- which account each assistant is signed in with -------------------------
+# The strip says this on every screen, so the row has to carry it -- and asking
+# must never be what makes the picker slow to open.
+
+def test_status_says_whether_each_assistant_is_signed_in(monkeypatch):
+    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(main.agent_base, "login_state",
+                        lambda kind, binary: {"logged_in": True, "account": "ChatGPT"})
+    main._login_cache.clear()
+    rows = _rows()
+    for _ in range(200):
+        if rows["codex"]["logged_in"] is not None:
+            break
+        time.sleep(0.02)
+        rows = _rows()
+    assert rows["codex"]["logged_in"] is True
+    assert rows["codex"]["account"] == "ChatGPT"
+    # What to type to sign in, named by the server so one place says it.
+    assert rows["codex"]["login_command"] == "codex login"
+    assert rows["claude"]["login_command"] == "claude"
+
+
+def test_an_assistant_we_cannot_run_is_never_called_signed_out(monkeypatch):
+    """None means "we have not been able to ask". Showing that as "sign in"
+    would send the user off to fix something that is not broken."""
+    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: None)
+    main._login_cache.clear()
+    rows = _rows()
+    assert rows["codex"]["logged_in"] is None
+    assert rows["gemini"]["logged_in"] is None   # no driver: never asked at all
+
+
+def test_status_answers_at_once_even_while_a_cli_is_thinking(monkeypatch):
+    """The check runs on a thread of its own. A CLI that takes seconds to say
+    whether it is signed in must not be what the picker waits for."""
+    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+
+    def slow(kind, binary):
+        time.sleep(1.5)
+        return {"logged_in": True, "account": "ChatGPT"}
+
+    monkeypatch.setattr(main.agent_base, "login_state", slow)
+    main._login_cache.clear()
+    started = time.monotonic()
+    rows = _rows()
+    assert time.monotonic() - started < 0.5
+    assert rows["codex"]["logged_in"] is None    # not known yet, and not waited for

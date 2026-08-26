@@ -73,8 +73,139 @@ def write_mcp_config(dir_path: str, api_url: str) -> str:
     return path
 
 
+# --- What a failed turn means, in words the user can act on -----------------
+# The panel used to print "도우미가 3번 오류로 멈췄습니다" and 300 characters of a
+# CLI's stderr. An exit code is the CLI's business; what the user needs is which
+# of the three things went wrong and what to do about it.
+
+# Said by a CLI that has no login. Kept narrow on purpose: "login" on its own
+# also appears in help text, so it only counts next to a word about failing.
+_NOT_LOGGED_IN = (
+    "not logged in", "not authenticated", "please log in", "please login",
+    "login required", "run `codex login`", "run codex login", "unauthorized",
+    "401", "authentication_error", "authentication failed", "invalid api key",
+    "no credentials", "session expired",
+)
+
+# Said by a CLI that is out of allowance for now.
+_RATE_LIMITED = (
+    "rate limit", "rate_limit", "429", "too many requests", "usage limit",
+    "quota", "out of credit", "insufficient_quota",
+)
+
+# Killed rather than finished: our own timeout kills the process (SIGKILL), and
+# so does the OS when it runs out of room. Both reach us as a negative code.
+_KILLED = (-9, -15, 137, 143)
+
+
+def explain_exit(code: int, output: str, agent_name: str = "도우미",
+                 login_command: str = "") -> dict:
+    """One error event for a turn that ended badly.
+
+    `message` is a sentence and a next step; `detail` is the CLI's own last
+    words, which the panel keeps behind a "자세히" fold rather than in the user's
+    face. Nothing here is a stack trace and nothing is an exit code.
+    """
+    text = (output or "").strip()
+    low = text.lower()
+    tail = text[-1200:]
+
+    if code in _KILLED:
+        return {"kind": "error", "detail": tail,
+                "message": "도우미가 중간에 멈췄습니다. 다시 시도해 주세요."}
+
+    if any(p in low for p in _NOT_LOGGED_IN):
+        how = (" 터미널에서 `%s` 명령을 실행해 주세요." % login_command) if login_command else ""
+        return {"kind": "error", "detail": tail,
+                "message": "%s에 로그인이 안 되어 있어요.%s" % (agent_name, how)}
+
+    if any(p in low for p in _RATE_LIMITED):
+        return {"kind": "error", "detail": tail,
+                "message": "사용량 한도에 닿았습니다. 잠시 뒤 다시 시도하거나 다른 도우미를 골라 주세요."}
+
+    # Nothing we know. One line of what it said, and the rest behind the fold --
+    # a summary the user can read out to somebody who can help.
+    first = next((ln.strip() for ln in reversed(text.splitlines()) if ln.strip()), "")
+    if len(first) > 160:
+        first = first[:157] + "…"
+    said = (" (%s)" % first) if first else ""
+    return {"kind": "error", "detail": tail,
+            "message": "도우미가 답을 끝내지 못했습니다%s. 다시 시도해 주세요." % said}
+
+
+# --- Which account a CLI is signed in with ----------------------------------
+# Only ever the KIND of account ("ChatGPT", "claude.ai"). These commands also
+# print an email address and an organisation id, and neither leaves this file.
+
+LOGIN_TIMEOUT = 8.0
+
+
+def _run_quiet(cmd: List[str]) -> tuple:
+    """(returncode, stdout, stderr) for a short read-only command, or None."""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=LOGIN_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.returncode, r.stdout or "", r.stderr or ""
+
+
+def login_state(kind: str, binary: str) -> dict:
+    """Is this CLI signed in, and with what kind of account?
+
+    `logged_in` is None when we cannot tell -- a CLI with no such command, one
+    that is not installed, one that timed out. None means "say nothing", never
+    "not signed in".
+    """
+    unknown = {"logged_in": None, "account": ""}
+    if not binary:
+        return unknown
+
+    if kind == "codex":
+        # `codex login status` prints "Logged in using ChatGPT" (on stderr, as
+        # measured 2026-08-26) and exits 0; a signed-out CLI says so and exits 1.
+        got = _run_quiet([binary, "login", "status"])
+        if got is None:
+            return unknown
+        code, out, err = got
+        said = (out + "\n" + err).strip()
+        low = said.lower()
+        if "logged in" in low and "not logged in" not in low:
+            # "Logged in using ChatGPT" -> "ChatGPT". Only the word after
+            # "using", so an address on the same line cannot come along.
+            after = said.split("using", 1)[1].strip() if "using" in low else ""
+            account = after.splitlines()[0].strip() if after else ""
+            # An account KIND is one or two words; anything longer is not one.
+            if "@" in account or len(account.split()) > 2:
+                account = ""
+            return {"logged_in": True, "account": account}
+        if "not logged in" in low or code != 0:
+            return {"logged_in": False, "account": ""}
+        return unknown
+
+    if kind == "claude":
+        # `claude auth status` prints JSON: loggedIn, authMethod, and several
+        # keys about the person. Exactly two of them are read.
+        got = _run_quiet([binary, "auth", "status"])
+        if got is None:
+            return unknown
+        _code, out, _err = got
+        try:
+            data = json.loads(out)
+        except ValueError:
+            return unknown
+        if not isinstance(data, dict) or not isinstance(data.get("loggedIn"), bool):
+            return unknown
+        method = data.get("authMethod")
+        account = method if isinstance(method, str) and "@" not in method else ""
+        return {"logged_in": data["loggedIn"], "account": account}
+
+    return unknown
+
+
 def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
-        cwd: Optional[str] = None) -> Iterator[dict]:
+        cwd: Optional[str] = None, agent_name: str = "도우미",
+        login_command: str = "") -> Iterator[dict]:
     """Spawn one turn and yield our events as they arrive.
 
     Yields an error event rather than raising: a failed turn is something the
@@ -122,7 +253,9 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         proc.stderr.close()
 
     if code != 0 and not saw_done:
-        yield {"kind": "error",
-               "message": "도우미가 %d번 오류로 멈췄습니다. %s" % (code, stderr[:300])}
+        # The exit code is the CLI's business. What the user gets is which of
+        # the three usual things went wrong and what to do about it.
+        yield explain_exit(code, stderr, agent_name=agent_name,
+                           login_command=login_command)
     elif not saw_done:
         yield {"kind": "done", "text": ""}

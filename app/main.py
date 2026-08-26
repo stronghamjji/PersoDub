@@ -4,6 +4,8 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
@@ -1149,10 +1151,13 @@ def dub_result_srt(jid: str, download: int = 0):
 # ---------------------------------------------------------------------------
 
 AGENTS = {
+    # `login` is what the user types in a terminal to sign this CLI in. It is
+    # here rather than in the screen so one place names it: the failure message
+    # and the strip's status line both say the same command.
     "claude": {"binary": "claude", "name": "Claude", "vendor": "Anthropic",
-               "driver": claude_agent},
+               "driver": claude_agent, "login": "claude"},
     "codex": {"binary": "codex", "name": "Codex", "vendor": "OpenAI",
-              "driver": codex_agent},
+              "driver": codex_agent, "login": "codex login"},
     # No driver: Google stopped serving this CLI on a personal Gemini account
     # (measured 2026-08-26 -- the CLI never reaches a model, so there is no
     # output format to translate). The picker greys it out and says why.
@@ -1164,6 +1169,42 @@ AGENTS = {
 # Where the assistant's own files live. Never the user's global CLI config:
 # their everyday setup has to keep working exactly as it did.
 AGENT_DIR = os.path.join(PERSODUB_LOG_DIR, "agent")
+
+# --- Which account each CLI is signed in with -------------------------------
+# Asking costs a process, so the answer is kept for a minute -- and the asking
+# happens on a thread of its own. /api/agent/status answers from what is known
+# this instant: the picker has to open now, not when a CLI feels like replying.
+AGENT_LOGIN_TTL = 60.0
+_login_cache = {}          # agent id -> {"logged_in", "account", "at"}
+_login_busy = set()        # ids with a check already running
+_login_lock = threading.Lock()
+
+
+def _login_refresh(key: str, binary: str) -> None:
+    state = agent_base.login_state(key, binary)
+    with _login_lock:
+        _login_cache[key] = dict(state, at=time.monotonic())
+        _login_busy.discard(key)
+
+
+def _login_of(key: str, binary: str) -> dict:
+    """What is known about this CLI's login right now, refreshing behind us.
+
+    None for `logged_in` means "we cannot say yet", never "signed out" -- the
+    screen shows nothing rather than an accusation it has not checked.
+    """
+    now = time.monotonic()
+    with _login_lock:
+        row = _login_cache.get(key)
+        stale = row is None or now - row["at"] >= AGENT_LOGIN_TTL
+        start = stale and binary and key not in _login_busy
+        if start:
+            _login_busy.add(key)
+    if start:
+        threading.Thread(target=_login_refresh, args=(key, binary), daemon=True).start()
+    if row is None:
+        return {"logged_in": None, "account": ""}
+    return {"logged_in": row["logged_in"], "account": row["account"]}
 
 
 class AgentChatRequest(BaseModel):
@@ -1195,12 +1236,22 @@ def agent_status():
     for key, meta in AGENTS.items():
         path = agent_base.find_cli(meta["binary"])
         driver = meta["driver"]
+        # Only asked of a CLI we would actually run. `logged_in` is None until
+        # the answer lands, and this call never waits for it.
+        login = (_login_of(key, path) if path and driver
+                 else {"logged_in": None, "account": ""})
         out.append({
             "id": key,
             "name": meta["name"],
             "vendor": meta["vendor"],
             "installed": bool(path),
             "supported": driver is not None,
+            # True, False, or None for "not known yet". The account is its KIND
+            # ("ChatGPT", "claude.ai") -- never an address, never a token.
+            "logged_in": login["logged_in"],
+            "account": login["account"],
+            # What to type in a terminal to sign in, said in one place.
+            "login_command": meta.get("login", ""),
             # Why it is greyed out, in the picker's own words. Empty when the
             # assistant is usable, and "not installed" is the panel's line.
             "reason": "" if driver else meta.get("reason", ""),
@@ -1244,7 +1295,8 @@ def agent_chat(body: AgentChatRequest, request: Request):
 
     def stream():
         for event in agent_base.run(binary, args, driver.translate,
-                                    cwd=work_dir):
+                                    cwd=work_dir, agent_name=meta["name"],
+                                    login_command=meta.get("login", "")):
             yield json.dumps(event, ensure_ascii=False) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")

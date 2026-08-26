@@ -294,7 +294,10 @@ def test_a_mid_turn_error_leaves_the_exit_code_its_say(monkeypatch):
     out = list(base.run("/bin/sh", ["-c", "echo {}; exit 3"],
                         lambda e: next(events, [])))
     assert [e["kind"] for e in out] == ["error", "error"]
-    assert "3번 오류" in out[1]["message"]
+    # The exit still gets its say -- as a sentence the user can act on, not as
+    # the number 3 (see tests/test_agents_base.py for the whole mapping).
+    assert out[1]["message"].endswith("다시 시도해 주세요.")
+    assert "3" not in out[1]["message"]
 
 
 def test_an_error_that_ends_the_turn_is_the_last_word(monkeypatch):
