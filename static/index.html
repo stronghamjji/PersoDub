@@ -886,6 +886,14 @@
     text-decoration: none; color: var(--foreground); font-size: 0.86rem; font-weight: 600; }
   .export-list a:hover { border-color: var(--primary); background: var(--accent); }
   .export-list .icon { color: var(--primary); }
+  /* The click's own receipt, on the row that was clicked: "Saving..." while the
+     file lands, a green check and "Saved" once it has, gone again a moment
+     later so the row can be used twice. */
+  .export-list a .export-state { margin-left: auto; font-size: 0.78rem; font-weight: 500;
+    color: var(--muted-foreground); display: inline-flex; align-items: center; gap: 5px; }
+  .export-list a.saved { border-color: var(--success); }
+  .export-list a.saved .export-state { color: var(--success); }
+  .export-list a .export-state .icon { width: 14px; height: 14px; color: var(--success); }
   /* Quiet enough not to compete with the links above it, and it wraps rather
      than pushing the dialog wider -- a project name can be long. */
   .export-where { margin: 12px 0 0; font-size: 0.76rem; color: var(--muted-foreground);
@@ -3499,7 +3507,7 @@ async function openExport() {
   const hasSrt = await fetch(`/api/dub/result/${job.id}/srt`, { method: "HEAD" })
     .then((r) => r.ok).catch(() => false);
   const item = (href, name, label) =>
-    `<a href="${href}" download="${name}">${DOWNLOAD_ICON}${label}</a>`;
+    `<a href="${href}" download="${name}" data-name="${name}">${DOWNLOAD_ICON}${label}<span class="export-state"></span></a>`;
   $("exportList").innerHTML = [
     // The same URL the player is on, remake mark and all: without it a download
     // taken straight after a remake can be served the old video from cache.
@@ -3512,8 +3520,32 @@ async function openExport() {
                          "Download original") : "",
   ].join("");
   $("exportWhere").textContent = whereDownloadsGo(job);
+  // In the desktop shell the click is answered by onDownloadDone below; until
+  // then the row says it is working, so a click is never met with silence.
+  if (window.persodubShell) {
+    for (const a of $("exportList").querySelectorAll("a")) {
+      a.addEventListener("click", () => {
+        a.classList.remove("saved");
+        a.querySelector(".export-state").textContent = "Saving\u2026";
+      });
+    }
+  }
   $("exportOverlay").classList.add("open");
 }
+
+// The row a finished download belongs to: the shell reports the file name it
+// wrote (dub_en_002.mp4 for a second copy), which matches the link's own name
+// on the stem before any _NNN and on the extension.
+function exportRowFor(filename) {
+  const m = /^(.*?)(?:_\d{3})?(\.[^.]+)$/.exec(filename || "");
+  if (!m) return null;
+  for (const a of $("exportList").querySelectorAll("a")) {
+    const n = /^(.*?)(\.[^.]+)$/.exec(a.dataset.name || "");
+    if (n && n[1] === m[1] && n[2] === m[2]) return a;
+  }
+  return null;
+}
+const SAVED_ICON = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>';
 
 // The one sentence that says what clicking a link above will do. In the desktop
 // shell the file is saved silently into <Downloads>/<day>/<project>/ -- the
@@ -3535,12 +3567,23 @@ window.persodubShell?.onDownloadDone?.((info) => {
   const el = $("exportWhere");
   if (info?.state !== "completed") {
     el.textContent = "Download failed - try again";
+    for (const a of $("exportList").querySelectorAll("a")) a.querySelector(".export-state").textContent = "";
     return;
   }
   const job = state.job;
   el.textContent = job?.day && job?.project
     ? `Saved ${info.filename} to Downloads / ${job.day} / ${job.project}`
     : `Saved ${info.filename} to Downloads`;
+  const row = exportRowFor(info.filename);
+  if (row) {
+    row.classList.add("saved");
+    row.querySelector(".export-state").innerHTML = SAVED_ICON + "Saved";
+    setTimeout(() => {
+      if (!row.isConnected) return;
+      row.classList.remove("saved");
+      row.querySelector(".export-state").textContent = "";
+    }, 6000);
+  }
 });
 
 // ---------------- the script table ----------------
