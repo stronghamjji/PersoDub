@@ -308,8 +308,10 @@
   .progress-steps li.current { color: var(--foreground); font-weight: 600; }
   .step-mark { flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%;
     display: inline-flex; align-items: center; justify-content: center; }
-  .step-mark.done { background: var(--success); color: var(--primary-foreground); }
-  .step-mark.done .icon { width: 10px; height: 10px; stroke-width: 3; }
+  /* "step-done", not "done": a bare .done is the finished screen's own layout
+     class (a column flexbox), which stacked the tick above the step's name. */
+  .step-mark.step-done { background: var(--success); color: var(--primary-foreground); }
+  .step-mark.step-done .icon { width: 10px; height: 10px; stroke-width: 3; }
   .step-mark.current { border: 2px solid var(--primary); border-top-color: transparent;
     animation: spin 0.9s linear infinite; }
   .step-mark.todo { border: 2px solid var(--border); }
@@ -2154,7 +2156,11 @@ function renderRunning(job, progress) {
       ? ` <span class="step-note">· voice ${Math.min(progress.voiceDone, progress.voiceTotal)} of ${progress.voiceTotal}</span>`
       : "";
     const mark = stepState === "done" ? CHECK_ICON : "";
-    return `<li class="${stepState}"><span class="step-mark ${stepState}">${mark}</span>${escapeHtml(name)}${note}</li>`;
+    // "step-done", not the bare "done": .done is the finished screen's own
+    // layout class, and a step wearing it turned into a column -- tick above
+    // the name instead of beside it.
+    const cls = stepState === "done" ? "step-done" : stepState;
+    return `<li class="${cls}"><span class="step-mark ${cls}">${mark}</span>${escapeHtml(name)}${note}</li>`;
   }).join("");
 }
 
@@ -3378,7 +3384,10 @@ function saveChoice() {
 function labelFor() {
   if (!chosen.agent) return "Model";
   const a = agentList.find((x) => x.id === chosen.agent);
-  const name = a ? a.name : chosen.agent;
+  // chosen.name is the vendor's own spelling, saved with the pick: while a dub
+  // runs the picker is locked and the list may not have come back, and a strip
+  // that forgets which assistant was chosen reads as no choice at all.
+  const name = a ? a.name : (chosen.name || chosen.agent);
   const model = servedModel || chosen.model;
   return model ? `${name} · ${MODEL_LABELS[model] || model}` : name;
 }
@@ -3486,7 +3495,7 @@ function buildMenu() {
     const row = menuRow(MODEL_LABELS[m] || (a ? a.name : m),
                         { tick: chosen.agent === menuLevel && chosen.model === m });
     row.addEventListener("click", () => {
-      chosen = { agent: menuLevel, model: m };
+      chosen = { agent: menuLevel, model: m, name: a ? a.name : menuLevel };
       servedModel = "";
       saveChoice();
       paintChoice();
@@ -3528,9 +3537,11 @@ async function loadAgents() {
     notice = "Could not check which assistants are available.";
     bubble("ai", notice);
   }
-  // A saved choice only stands if that assistant is still usable.
+  // A saved choice only stands if that assistant is still usable -- but a list
+  // that never arrived is no evidence that it isn't, and throwing the pick away
+  // there is what left the locked strip saying "Model" mid-dub.
   const still = agentList.find((a) => a.id === chosen.agent && a.installed && a.supported);
-  if (!still) chosen = { agent: "", model: "" };
+  if (agentList.length && !still) chosen = { agent: "", model: "" };
   buildMenu();
   paintChoice();
   if (!agentList.some((a) => a.installed && a.supported)) {
