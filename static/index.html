@@ -1573,6 +1573,9 @@
   .assistant-go:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   /* A square is a shape, not an outline: it reads at 14px only when filled. */
   .assistant-go .stop-mark { fill: currentColor; stroke: none; }
+  /* The whole button is 32px; the mark inside it should read from across the
+     room, not squint back -- so the icon box is 22px, not the 14px body size. */
+  .assistant-go .icon { width: 22px; height: 22px; stroke-width: 2.2; }
   /* Upwards: the button that opens it is at the bottom of the window. */
   .assistant-menu { position: absolute; bottom: 36px; right: 0; z-index: 50; width: 216px;
     background: var(--agent-box); border: 1px solid var(--agent-border); border-radius: 10px;
@@ -4328,7 +4331,7 @@ function paintState() {
 // The two faces of the button at the end of the input row. Drawn, like every
 // other mark in the strip: a typed arrow is a different shape in every font.
 const GO_SEND = '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>';
-const GO_STOP = '<rect class="stop-mark" x="7" y="7" width="10" height="10" rx="2"/>';
+const GO_STOP = '<rect class="stop-mark" x="5.5" y="5.5" width="13" height="13" rx="2.5"/>';
 
 // Which one it is showing, and whether it can be pressed. While a turn runs it
 // is always pressable -- stopping is the whole point of it being there.
