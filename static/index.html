@@ -107,6 +107,10 @@
     --agent-me-bg: rgba(255, 255, 255, 0.14);
     --agent-me-border: rgba(255, 255, 255, 0.16);
     --agent-ok: #5ee07a;
+    /* "This cannot answer until you do something" -- amber that reads on the
+       strip's own dark, where the app's --warning-ink (drawn for a white
+       background) would be unreadable. */
+    --agent-warn: #f0b429;
   }
 
   * { box-sizing: border-box; }
@@ -1001,6 +1005,10 @@
       <!-- Drag the line between the work above and the conversation. -->
       <div class="grip grip-y" id="gripAgent" role="separator"
            aria-orientation="horizontal" aria-label="Resize the conversation"></div>
+      <!-- Which assistant answers and whether it is signed in. On show whether
+           the conversation is open or collapsed: anyone about to type has to
+           know which one is about to be asked, and whether it can answer. -->
+      <div class="assistant-state" id="assistantState" hidden></div>
       <div class="assistant-log" id="assistantLog"></div>
       <button class="agent-fold" id="assistantFold" type="button" aria-label="Collapse Dub Agent">Collapse
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
@@ -1399,6 +1407,25 @@
   .thinking span { font-size: 0.78rem; color: var(--agent-muted); margin-left: 4px; }
   .assistant-err { align-self: stretch; padding: 9px 11px; border-radius: 9px;
     font-size: 0.8rem; color: var(--destructive); border: 1px solid var(--destructive); }
+  /* The CLI's own last words, folded away. The sentence above is what the user
+     needs; this is for the one time in ten they want to know exactly what a
+     tool said, or to read it out to somebody who can help. */
+  .assistant-err details { margin-top: 6px; }
+  .assistant-err summary { cursor: pointer; color: var(--agent-muted); }
+  .assistant-err pre { margin: 6px 0 0; padding: 8px; border-radius: 6px;
+    background: var(--agent-box); color: var(--agent-fg); font-size: 0.72rem;
+    white-space: pre-wrap; word-break: break-word; max-height: 160px;
+    overflow: auto; }
+
+  /* The strip's first row: one line, muted, and never in the way. It keeps its
+     right end clear of the Collapse button that floats over this corner. */
+  .assistant-state { padding: 7px 110px 0 16px; font-size: 0.72rem;
+    color: var(--agent-muted); display: flex; align-items: center; gap: 5px;
+    flex-wrap: wrap; }
+  .assistant-state[hidden] { display: none; }
+  .assistant-state.warn { color: var(--agent-warn); }
+  .assistant-state code { padding: 1px 5px; border-radius: 4px;
+    background: var(--agent-box); color: var(--agent-fg); }
 </style>
 
 <script type="module">
@@ -3646,6 +3673,7 @@ showHome();
 <script type="module">
 const el = (id) => document.getElementById(id);
 const log = el("assistantLog"), input = el("assistantInput");
+const stateLine = el("assistantState");
 const modelBtn = el("assistantModelBtn"), modelLabel = el("assistantModelLabel");
 const menu = el("assistantMenu");
 
@@ -3704,7 +3732,56 @@ function aliasOf(id) {
   return Object.keys(MODEL_LABELS).find((k) => String(id || "").includes(k)) || "";
 }
 
+// --- Signed in, or not ------------------------------------------------------
+// Said in Korean, like the rest of what the assistant says to the user, while
+// the picker's own labels stay in the app's English.
+
+// null/undefined means the server has not been able to ask yet, and that must
+// read as silence -- never as "you are signed out".
+function loginKnown(a) {
+  return a && a.installed && a.supported && (a.logged_in === true || a.logged_in === false);
+}
+
+// What a row says under its name, and what the strip's first line says.
+function loginWords(a) {
+  if (!loginKnown(a)) return "";
+  if (a.logged_in) {
+    return a.account ? `${a.account} 계정으로 로그인됨` : "로그인됨";
+  }
+  return a.login_command ? `로그인 필요 — 터미널에서 ${a.login_command}` : "로그인 필요";
+}
+
+// The chosen assistant, when we know it is signed out. Null otherwise -- which
+// includes "not asked yet", so an unchecked CLI never nags.
+function signedOutChoice() {
+  const a = agentList.find((x) => x.id === chosen.agent);
+  return loginKnown(a) && !a.logged_in ? a : null;
+}
+
+// The strip's first row. The command is a <code> element built as text, so
+// nothing a server ever sends can become a tag.
+function paintState() {
+  const a = agentList.find((x) => x.id === chosen.agent);
+  stateLine.textContent = "";
+  stateLine.classList.remove("warn");
+  stateLine.hidden = !loginKnown(a);
+  if (stateLine.hidden) return;
+  if (a.logged_in) {
+    stateLine.textContent = `${a.name} · ${loginWords(a)}`;
+    return;
+  }
+  stateLine.classList.add("warn");
+  stateLine.appendChild(document.createTextNode(`${a.name} · 로그인 필요`));
+  if (a.login_command) {
+    stateLine.appendChild(document.createTextNode(" — 터미널에서"));
+    const cmd = document.createElement("code");
+    cmd.textContent = a.login_command;
+    stateLine.appendChild(cmd);
+  }
+}
+
 function paintChoice() {
+  paintState();
   modelLabel.textContent = labelFor();
   // Dimming alone is a picture of a lock: a dimmed box is still one Tab away,
   // and a turn started mid-dub would rewrite a script the pipeline is reading.
@@ -3725,6 +3802,13 @@ function paintChoice() {
     input.placeholder = notice;
   } else if (!chosen.agent) {
     input.placeholder = "Pick a model first";
+  } else if (signedOutChoice()) {
+    // Pickable, but it cannot answer yet. The row that picked it says the same
+    // thing; this is the one the user is looking at while typing.
+    const a = signedOutChoice();
+    input.placeholder = a.login_command
+      ? `${a.name}에 로그인이 안 되어 있어요 — 터미널에서 ${a.login_command} 명령을 실행해 주세요`
+      : `${a.name}에 로그인이 안 되어 있어요`;
   } else if (document.body.classList.contains("agent-open")) {
     input.placeholder = "Message";
   } else {
@@ -3781,8 +3865,10 @@ function buildMenu() {
       const usable = a.installed && a.supported;
       const row = menuRow(a.name, {
         note: !a.installed ? "not installed" : "",
-        // Why this one cannot be picked, said where the picking happens.
-        sub: a.installed && !a.supported ? (a.reason || "not supported") : "",
+        // Why this one cannot be picked, said where the picking happens -- or,
+        // for one that can, whether it is signed in. A signed-out assistant is
+        // still pickable: signing in is a thing the user can go and do.
+        sub: a.installed && !a.supported ? (a.reason || "not supported") : loginWords(a),
         chevron: usable,
         disabled: !usable,
       });
@@ -3851,6 +3937,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !menu.hidden) menu.hidden = true;
 });
 
+let recheckedLogin = false;   // see loadAgents: one second look, never a loop
 const CHECK_FAILED = "Could not check which assistants are available.";
 const NONE_READY = "No assistant is ready -- install Claude Code, Codex or Gemini";
 
@@ -3880,6 +3967,14 @@ async function loadAgents() {
   if (still && chosen.name !== still.name) { chosen.name = still.name; saveChoice(); }
   buildMenu();
   paintChoice();
+  // The server checks the CLIs' logins behind its own answer, so the first list
+  // can arrive before that landed. Look once more, a moment later -- once, not
+  // in a loop: an assistant we cannot ask stays unasked rather than polled.
+  if (arrived && !recheckedLogin
+      && agentList.some((a) => a.installed && a.supported && a.logged_in == null)) {
+    recheckedLogin = true;
+    setTimeout(() => { loadAgents().catch(() => {}); }, 1200);
+  }
   // Same reason: a list that never arrived says nothing about what is
   // installed, and "install one of these three" is the wrong thing to tell
   // someone who already has one. The fetch's own message stands instead.
@@ -3904,6 +3999,27 @@ function renderReply(node, text) {
     .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>")
     .replace(/(?<![\w_])_([^_\n]+)_(?![\w_])/g, "<em>$1</em>");
+}
+
+// A red line the user can act on, and -- only when the server sent one -- the
+// CLI's own last words folded away under it. Built as text throughout: the tail
+// comes from another program's output and must never be able to become a tag.
+function showError(message, detail) {
+  const d = document.createElement("div");
+  d.className = "assistant-err";
+  d.textContent = message;
+  if (detail) {
+    const fold = document.createElement("details");
+    const head = document.createElement("summary");
+    head.textContent = "자세히";
+    const body = document.createElement("pre");
+    body.textContent = detail;
+    fold.append(head, body);
+    d.appendChild(fold);
+  }
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+  return d;
 }
 
 // The three things the log can hold: a message, a step chip, and the dots that
@@ -4047,10 +4163,7 @@ async function ask(message) {
         } else if (ev.kind === "error") {
           clearDots();
           settlePrevious();
-          const d = document.createElement("div");
-          d.className = "assistant-err";
-          d.textContent = ev.message;
-          log.appendChild(d);
+          showError(ev.message, ev.detail);
         } else if (ev.kind === "done") {
           clearDots();
           settlePrevious();
@@ -4062,10 +4175,7 @@ async function ask(message) {
   } catch (e) {
     clearDots();
     settlePrevious();
-    const d = document.createElement("div");
-    d.className = "assistant-err";
-    d.textContent = String(e.message || e);
-    log.appendChild(d);
+    showError(String(e.message || e), "");
   } finally {
     clearTimeout(slow);
     // The writes have certainly landed by the time the turn is over, so this is
