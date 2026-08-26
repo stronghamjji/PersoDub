@@ -1238,6 +1238,15 @@
           </button>
           <div class="assistant-menu" id="assistantMenu" hidden></div>
         </div>
+        <!-- One button, two jobs: an arrow while the user is typing, a square
+             while an answer is coming. Same circle either way, so the row does
+             not move when a turn starts -- and there is one place to look for
+             "make this go" and "make this stop". -->
+        <button class="assistant-go" id="assistantGo" type="button"
+                aria-label="Send" title="Send">
+          <svg class="icon icon-sm" id="assistantGoIcon" viewBox="0 0 24 24"
+               aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+        </button>
       </div>
     </footer>
   </div>
@@ -1550,6 +1559,20 @@
     cursor: pointer; border: none; background: none; color: var(--agent-fg);
     padding: 5px 8px; font: inherit; font-size: 0.8125rem; white-space: nowrap; }
   .assistant-modelbtn:hover { color: var(--agent-muted); }
+
+  /* Send, and stop. 32px to match the picker's height, at the end of the row.
+     Muted with nothing typed: pressable only when there is something to send,
+     and the same button in --primary while a turn runs, which is when it
+     stops that turn instead. */
+  .assistant-go { flex: 0 0 auto; width: 32px; height: 32px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; border-radius: 50%; cursor: pointer;
+    background: var(--primary); color: var(--primary-foreground); }
+  .assistant-go:disabled { background: var(--agent-border);
+    color: var(--agent-muted); cursor: default; }
+  .assistant-go:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  /* A square is a shape, not an outline: it reads at 14px only when filled. */
+  .assistant-go .stop-mark { fill: currentColor; stroke: none; }
   /* Upwards: the button that opens it is at the bottom of the window. */
   .assistant-menu { position: absolute; bottom: 36px; right: 0; z-index: 50; width: 216px;
     background: var(--agent-box); border: 1px solid var(--agent-border); border-radius: 10px;
@@ -1606,6 +1629,10 @@
                      30% { opacity: 1; transform: translateY(-3px); } }
   @media (prefers-reduced-motion: reduce) { .thinking i { animation: none; opacity: .6; } }
   .thinking span { font-size: 0.78rem; color: var(--agent-muted); margin-left: 4px; }
+  /* "You stopped this one." Under whatever the turn had already said, muted:
+     it is a fact about the answer, not a failure and not part of the answer. */
+  .assistant-stopped { align-self: stretch; font-size: 0.78rem;
+    color: var(--agent-muted); }
   .assistant-err { align-self: stretch; padding: 9px 11px; border-radius: 9px;
     font-size: 0.8rem; color: var(--destructive); border: 1px solid var(--destructive); }
   /* The CLI's own last words, folded away. The sentence above is what the user
@@ -4158,6 +4185,7 @@ const log = el("assistantLog"), input = el("assistantInput");
 const stateLine = el("assistantState");
 const modelBtn = el("assistantModelBtn"), modelLabel = el("assistantModelLabel");
 const menu = el("assistantMenu");
+const goBtn = el("assistantGo"), goIcon = el("assistantGoIcon");
 
 // The strip is four parts that do not need each other: the line that says who
 // is signed in, the model picker, the fold, and the input. They used to be set
@@ -4297,6 +4325,25 @@ function paintState() {
   }
 }
 
+// The two faces of the button at the end of the input row. Drawn, like every
+// other mark in the strip: a typed arrow is a different shape in every font.
+const GO_SEND = '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>';
+const GO_STOP = '<rect class="stop-mark" x="7" y="7" width="10" height="10" rx="2"/>';
+
+// Which one it is showing, and whether it can be pressed. While a turn runs it
+// is always pressable -- stopping is the whole point of it being there.
+function paintGo() {
+  wire("send button", () => {
+    const screen = document.body.dataset.screen;
+    const locked = screen === "running" || screen === "failed";
+    const words = busy ? "Stop" : "Send";
+    goIcon.innerHTML = busy ? GO_STOP : GO_SEND;
+    goBtn.disabled = locked || (!busy && !input.value.trim());
+    goBtn.setAttribute("aria-label", words);
+    goBtn.title = words;
+  });
+}
+
 function paintChoice() {
   // A dub that stopped early leaves no script behind, so the row is locked
   // rather than left open: dimming alone is a picture of a lock, and a dimmed
@@ -4340,6 +4387,7 @@ function paintChoice() {
       input.placeholder = `Ask for a fix -- e.g. "Shorten line 4 naturally so it matches the original's length"`;
     }
   });
+  paintGo();
 }
 
 // The app's screens live in another module; the strip follows them through the
@@ -4638,11 +4686,40 @@ function thinking(label) {
   return d;
 }
 
+// "A turn is on air, so the button says Stop and the row will not send." It is
+// put down the moment Stop is pressed rather than when the stream finally ends,
+// because the point of Stop is being able to type the next thing at once.
 let busy = false;
+// Which turn is the current one. A stopped turn's stream runs on for a moment
+// after the next has started, and without this its clean-up would put the new
+// turn's button back to Send.
+let turnToken = 0;
+
+// Press Stop, and the server ends the CLI. The conversation is not lost: the
+// CLI is asked to go rather than shot, so the next message carries on.
+async function stopTurn() {
+  if (!busy) return;
+  busy = false;
+  paintGo();
+  try { await fetch("/api/agent/stop", { method: "POST" }); }
+  catch { /* the turn ends on its own when the server is gone */ }
+}
+
+// The muted line under whatever the turn had already said.
+function stoppedLine() {
+  const d = document.createElement("div");
+  d.className = "assistant-stopped";
+  d.textContent = "Stopped";
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+  return d;
+}
 
 async function ask(message) {
   if (document.body.dataset.screen !== "done") return;
+  const token = ++turnToken;
   busy = true;
+  paintGo();
   bubble("me", message);
   let answer = null;
   // Two jobs, two variables. `answer` is only "which bubble am I appending to",
@@ -4734,7 +4811,11 @@ async function ask(message) {
         } else if (ev.kind === "done") {
           clearDots();
           settlePrevious();
-          if (!saidSomething && ev.text) bubble("ai", ev.text);
+          // Stopped on purpose. Not an empty answer, and not a failure --
+          // whatever it had said stays, with a line under it saying why it
+          // ends there.
+          if (ev.stopped) stoppedLine();
+          else if (!saidSomething && ev.text) bubble("ai", ev.text);
           else if (!saidSomething) bubble("ai", "(empty answer)");
         }
       }
@@ -4758,7 +4839,9 @@ async function ask(message) {
     // A turn that ends having shown nothing at all is the failure that looks
     // exactly like the app being broken. Say so instead.
     if (dots) { clearDots(); bubble("ai", "No answer came back. Try sending that again."); }
-    busy = false;
+    // Only if this is still the turn on air: a stopped one finishing after the
+    // next has started must not say the row is free when it is not.
+    if (token === turnToken) busy = false;
     paintChoice();
     log.scrollTop = log.scrollHeight;
   }
@@ -4775,14 +4858,32 @@ function submit() {
   input.style.height = "auto";
   setCollapsed(false);
   ask(message);
+  paintGo();
 }
 
-input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+// The box stays typeable while an answer is coming, so Enter has to mean
+// something there: stop the answer, then send what was typed -- in that order,
+// and waiting for the stop, so the CLI has gone before the next turn asks it to
+// carry the conversation on.
+input.addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter" || e.shiftKey) return;
+  e.preventDefault();
+  if (busy && input.value.trim()) await stopTurn();
+  submit();
 });
 input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  paintGo();      // pressable only once there is something to send
+});
+
+// Wired once, here, rather than in paintChoice -- that runs on every screen
+// change, and a listener added there would stack up a press per repaint.
+wire("send button", () => {
+  goBtn.addEventListener("click", () => {
+    if (busy) stopTurn();
+    else submit();
+  });
 });
 
 // Open means the conversation is on show above the input row; closed is the
