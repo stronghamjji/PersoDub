@@ -38,15 +38,18 @@ It separates speech from background audio, transcribes it, works out who spoke w
 translates each line, clones each speaker's voice, and mixes the result back over the
 original soundtrack. With the default settings, every one of those steps runs locally.
 
+> **Every line is yours.** Edit any translation by hand — or ask the **Dub Agent**.
+> Say *"retranslate line 4 so it fits"* and it retranslates just that line and remakes
+> its voice. The agent is Claude Code or Codex running on your own computer; your video
+> is never sent anywhere for it.
+
 <p align="center">
-  <img src="docs/images/main-window.png" width="49%"
-       alt="PersoDub's first screen: a drop zone for the video, and under it a field for pasting a video link.">
-  <img src="docs/images/new-project.png" width="49%"
-       alt="The New project dialog: a preview of the video, a trim bar with a ruler under it for choosing the part to dub, the original and target languages, and Advanced options.">
+  <img src="docs/images/dub-agent.png" width="80%"
+       alt="A finished job with the Dub Agent open along the bottom: a request to shorten the lines that run over, the steps the agent took (reading the script, rewriting those lines, remaking the voices), and its reply. Above it the script sits as a table beside the player, with a timeline showing which voices fit.">
 </p>
 
-> **Status: early release (v0.3.6).** PersoDub is usable today and is under active
-> development. macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
+> **PersoDub is under active development.** It is usable today.
+> macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
 > Interfaces and defaults may change. Please report problems through
 > [Issues](https://github.com/stronghamjji/PersoDub/issues).
 
@@ -182,18 +185,11 @@ once; [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks l
    beside the player, a timeline underneath, and **Export** in the top bar for the
    dubbed video and the translated `.srt`.
 
-<p align="center">
-  <img src="docs/images/dub-agent.png" width="72%"
-       alt="A finished job with the Dub Agent strip open along the bottom: the script table and timeline above, and below them a request to shorten two lines, the steps the agent took (reading the script, rewriting lines 1 and 3, remaking the voices), and its reply.">
-</p>
-
-Each line has a play button to hear that line alone, and a waveform button to remake
-its voice after you change the words. **Original** and **Dubbed** swap which file the
-player shows. Past jobs are under **Projects**, the folder icon on the left.
-
-The strip along the bottom is the **Dub Agent** — ask for a fix in plain words and it
-edits the script and remakes the voice for you. What it can reach on your machine is
-spelled out in [The Dub Agent and your files](#the-dub-agent-and-your-files).
+Each line has a play button to hear it alone and a waveform button to remake its voice
+after you edit the words; **Original** and **Dubbed** swap which file the player shows,
+and the **Dub Agent** strip along the bottom can fix lines for you (see
+[What is PersoDub?](#what-is-persodub)). Past jobs are under **Projects**, the folder
+icon on the left.
 
 Engine choices (transcription, translation, quality) live under the **Advanced
 options** toggle, collapsed by default — see [Configuration](#configuration) for what
@@ -220,7 +216,7 @@ Want better quality? Add an API key in the app's **Settings** screen
 | **Perso API key** | Transcription and speaker-labeling accuracy | [Perso Dubbing](https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=readme) — includes a free allowance |
 | **Google Gemini key** | Translation quality | [Google AI Studio](https://aistudio.google.com/app/apikey) |
 
-Keys are stored on your machine and take effect after you **restart the app**.
+Keys are stored on your machine and take effect from your next dub — no restart needed.
 
 > **Note:** PersoDub is an independent open-source project. It integrates with Perso and
 > Google Gemini as optional third-party services and is not affiliated with or endorsed
@@ -239,27 +235,20 @@ everything — is in **[docs/privacy.md](docs/privacy.md)**.
 
 ### The Dub Agent and your files
 
-The Dub Agent runs an assistant that is **already installed on your Mac** — Claude
-Code or Codex — as a program on your own machine. PersoDub has no assistant of its
-own, and your video is never sent anywhere for this. What each one can reach differs,
-and the difference is worth knowing:
+The Dub Agent is an assistant **already installed on your computer** — Claude Code or
+Codex — that PersoDub asks to edit the script. PersoDub has no assistant of its own,
+and your video is never sent anywhere for this. How much each one can see is different:
 
-- **Claude Code** is fenced in to PersoDub's own script tools. Reading files and
-  running shell commands are denied outright, and your own MCP servers are left out.
-- **Codex runs read-only by default**, and its shell cannot reach the network. It can
-  ask to escalate, and another model — not you — decides; an approved escalation gets
-  write access to PersoDub's own agent folder, and nowhere else. It can still **read
-  any file on this Mac that you can read**, and whatever it reads travels to OpenAI as
-  part of the conversation. If you keep your own standing instructions for Codex in an
-  `AGENTS.md` file, Codex reads those into every turn here too, and they go to OpenAI
-  with your question. If that matters to you, use Claude Code.
-- **Gemini** is listed but greyed out, with the reason on the row: Google no longer
-  serves that CLI on a personal account.
-- The conversation carries on from one job to the next — the assistant is told which
-  project is on screen. The thread is kept by that assistant's own CLI on your
-  machine, so closing PersoDub does not end it.
+- **Claude Code** can only use PersoDub's script tools. It cannot read your files or
+  run shell commands. **The safer choice.**
+- **Codex** can also **read any file you can read** on this computer, and whatever it
+  reads goes to OpenAI as part of the chat (including your own `AGENTS.md`, if you keep
+  one). It cannot change your files or use the network. If that matters to you, use
+  Claude Code.
 
-Whichever you pick answers on your own account with that vendor, and is billed there.
+The conversation continues from one job to the next, kept by the assistant's own tool
+on your machine — closing PersoDub doesn't end it. Either one answers on your account
+with that vendor and is billed there.
 
 ## Responsible use
 

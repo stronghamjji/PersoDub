@@ -123,15 +123,20 @@ script and remakes voices through PersoDub's own tools, showing each step as it 
      alt="The Dub Agent strip open over the finished screen: a line along the top saying which assistant is answering, the question underneath it, the steps it took while working, and its answer at the bottom.">
 
 Pick which assistant answers from the button on the right of the strip. It runs a CLI
-that is **already installed on your Mac** — Claude Code or Codex — and is billed to
-your own account with that vendor. Gemini is listed but greyed out, with the reason on
-the row: Google no longer serves that CLI on a personal account.
+that is **already installed on your computer** — Claude Code or Codex — and is billed to
+your own account with that vendor.
+
+**Sign in first, in Terminal.** The Dub Agent uses whichever CLI you have already
+signed into on your own machine — PersoDub does not log in for you. Before your first
+message, open Terminal and run `claude` (and follow the browser sign-in) for Claude
+Code, or `codex login` for Codex. If a CLI is not signed in, its first answer fails
+with a sign-in error; sign in in Terminal and try again.
 
 The strip is locked while a dub is running: a turn started mid-dub would rewrite a
 script the pipeline is still reading.
 
 What each assistant can reach on your machine — and the fact that **Codex can read
-files on this Mac even in its read-only sandbox** — is spelled out in
+files on this computer even in its read-only sandbox** — is spelled out in
 [The Dub Agent and your files](../README.md#the-dub-agent-and-your-files).
 
 ## Projects
