@@ -57,6 +57,9 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     # Both are computed, not stored -- popped so the rest stays an exact shape check.
     assert body.pop("perso_signup_link").startswith(perso_client.PERSO_SIGNUP_URL)
     assert body.pop("app_version") == perso_client.APP_VERSION
+    # Where the finished videos actually are. The screen used to guess at this
+    # path; it comes from the server now, so a moved workspace still reads true.
+    assert body.pop("workspace") == main.WORKSPACE
     assert body == {"gemini_key_set": False, "perso_key_set": False,
                     "gemini_api_key": None, "perso_api_key": None,
                     "perso_space_seq": None, "analytics_off": False}

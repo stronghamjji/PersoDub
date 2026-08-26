@@ -17,10 +17,12 @@ from app.config import PERSODUB_LOG_DIR
 
 # What a job.json holds. Deliberately not the whole record: `logs` runs to
 # thousands of lines, and `notices`/`cancel_requested` only mean anything while
-# the job is still running. `result` is added separately -- only its out_path,
-# because the rest of run_dub's return value is of no use once the job is over.
+# the job is still running. `result` is added separately -- only its out_path
+# and the language it detected, because the rest of run_dub's return value is of
+# no use once the job is over.
 SAVED_FIELDS = ("id", "status", "language_code", "source_lang", "project",
-                "day", "from_link", "created", "work_dir", "trim", "error")
+                "day", "from_link", "created", "work_dir", "trim", "error",
+                "remade_as")
 
 # What GET /api/dub/jobs sends the screen: the same minus the two absolute
 # paths. The sidebar names a job, colours its dot and addresses everything else
@@ -121,8 +123,14 @@ class JobStore:
     @staticmethod
     def _saved(j: dict) -> dict:
         rec = {k: j.get(k) for k in SAVED_FIELDS}
-        out = (j.get("result") or {}).get("out_path")
+        result = j.get("result") or {}
+        out = result.get("out_path")
         rec["result"] = {"out_path": out} if out else None
+        # The done screen reads the source language from here when the job was
+        # left on auto-detect, so it has to be in the file too -- otherwise a
+        # restart empties that column.
+        if rec["result"] and result.get("detected_source_language"):
+            rec["result"]["detected_source_language"] = result["detected_source_language"]
         return rec
 
     def persist(self, jid: str, work_dir: str) -> None:
@@ -132,6 +140,10 @@ class JobStore:
         folder it describes does not -- so the file beside the video is what
         lets Projects reopen a job after a restart. Best-effort, like the log
         mirror: a job must not fail because its bookkeeping could not be saved.
+
+        The folder is never created here. A real job always has one already, and
+        making it would resurrect a folder the user has just deleted -- a ghost
+        row in Projects holding nothing but a job.json.
         """
         j = self.get(jid)
         if j is None:
@@ -145,7 +157,6 @@ class JobStore:
         final = os.path.join(work_dir, "job.json")
         tmp = final + ".tmp"
         try:
-            os.makedirs(work_dir, exist_ok=True)
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self._saved(j), f, ensure_ascii=False, indent=2)
                 f.flush()
@@ -285,12 +296,20 @@ class JobStore:
         def _wrap():
             try:
                 result = target(log)
+                # A job left on auto-detect only learns its source language by
+                # running, and the answer arrives inside the result. Copying it
+                # onto the record is what makes it outlive the process: the file
+                # keeps the record, and the done screen names the source column
+                # from it. A language the user actually chose is never overwritten.
+                detected = result.get("detected_source_language") if isinstance(result, dict) else None
                 with self._lock:
                     if self._jobs[jid]["status"] == "cancelling":
                         self._jobs[jid]["status"] = "cancelled"
                     else:
                         self._jobs[jid]["status"] = "done"
                         self._jobs[jid]["result"] = result
+                        if detected and not self._jobs[jid].get("source_lang"):
+                            self._jobs[jid]["source_lang"] = detected
             except JobCancelled:
                 self._update(jid, status="cancelled")
             except Exception as e:

@@ -160,6 +160,23 @@ def test_a_failed_cut_answers_with_a_sentence_and_leaves_no_job_folder(monkeypat
     assert _job_files() == []
 
 
+def test_a_failed_cut_reports_only_ffmpeg_s_last_line(monkeypatch):
+    """ffmpeg names the input file on its way to the complaint, and the tail of
+    its whole output put the user's folders on screen for nothing."""
+    import subprocess
+
+    class Failed:
+        returncode = 1
+        stderr = ("[in#0 @ 0x7f] Error opening input file "
+                  "/Users/someone/Movies/holiday.mp4.\n"
+                  "Invalid data found when processing input\n")
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: Failed())
+    with pytest.raises(RuntimeError) as e:
+        main._cut_video(str(main.WORKSPACE + "/nothing.mp4"), 1.0, 2.0)
+    assert str(e.value) == "Could not trim the video: Invalid data found when processing input"
+
+
 def test_a_link_is_cut_after_it_is_fetched(monkeypatch):
     """The download has to happen first -- there is nothing to cut before it."""
     order = []

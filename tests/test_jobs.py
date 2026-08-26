@@ -174,6 +174,7 @@ def test_log_dir_override_applies_to_stores_created_earlier(tmp_path, monkeypatc
 
 
 def test_job_store_survives_a_restart(tmp_path):
+    (tmp_path / "x").mkdir()  # persist writes into a job's own folder, never makes one
     store = JobStore(log_dir=str(tmp_path))
     jid = store.create()
     store._update(jid, status="done", project="a", day="2026-08-26", language_code="ko", result={"out_path": str(tmp_path / "x" / "dubbed.mp4")})
@@ -186,6 +187,7 @@ def test_job_json_leaves_out_the_noisy_fields(tmp_path):
     # logs can run to thousands of lines and notices/cancel_requested only mean
     # anything while the job is running -- none of them belong in the file the
     # Projects list is built from.
+    (tmp_path / "x").mkdir()
     store = JobStore(log_dir=str(tmp_path))
     jid = store.create()
     store.append_log(jid, "a line")
@@ -201,6 +203,7 @@ def test_job_json_leaves_out_the_noisy_fields(tmp_path):
 def test_a_job_that_was_running_comes_back_as_interrupted(tmp_path):
     # The thread died with the process; nothing will ever finish this job, so
     # showing it as still running would be a lie the screen never recovers from.
+    (tmp_path / "x").mkdir()
     store = JobStore(log_dir=str(tmp_path))
     jid = store.create()
     store.persist(jid, str(tmp_path / "x"))
@@ -268,6 +271,7 @@ def test_a_damaged_job_json_does_not_hide_a_finished_dub(tmp_path):
 def test_persist_never_leaves_a_half_written_file(tmp_path):
     # Written to a scratch name and swapped in, so the file on disk is always
     # either the whole old record or the whole new one.
+    (tmp_path / "x").mkdir()
     store = JobStore(log_dir=str(tmp_path))
     jid = store.create()
     store._update(jid, status="done", project="a")
@@ -289,3 +293,54 @@ def test_the_jobs_list_keeps_the_file_paths_to_itself(tmp_path):
     assert "work_dir" not in row and "result" not in row
     # The full record still has both -- the download endpoints read them.
     assert store.get(jid)["work_dir"] == str(tmp_path / "x")
+
+
+# --- the language a job detected for itself ---------------------------------
+# Auto-detect only ever said so inside the result, and the file kept just the
+# out_path -- so a restart left the done screen with no source language to name.
+
+
+def test_an_auto_detected_language_is_kept_on_the_job(tmp_path):
+    work = tmp_path / "x"
+    work.mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, work_dir=str(work))
+    store.start(jid, lambda log: {"out_path": str(work / "dubbed.mp4"),
+                                  "detected_source_language": "en"})
+    j = _wait(store, jid)
+
+    assert j["source_lang"] == "en"
+    # The status flips just before the file is written, so give that write a
+    # moment rather than racing it.
+    for _ in range(100):
+        if (work / "job.json").exists():
+            break
+        time.sleep(0.02)
+    with open(str(work / "job.json"), encoding="utf-8") as f:
+        saved = json.load(f)
+    assert saved["source_lang"] == "en"
+    assert saved["result"]["detected_source_language"] == "en"
+
+
+def test_a_language_the_user_chose_is_not_overwritten(tmp_path):
+    work = tmp_path / "x"
+    work.mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, work_dir=str(work), source_lang="ja")
+    store.start(jid, lambda log: {"out_path": str(work / "dubbed.mp4"),
+                                  "detected_source_language": "en"})
+    j = _wait(store, jid)
+
+    assert j["source_lang"] == "ja"
+
+
+def test_persist_does_not_bring_back_a_deleted_folder(tmp_path):
+    # Deleting a job removes its folder; recreating it here would leave a row in
+    # Projects pointing at a folder holding nothing but this file.
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="done")
+    store.persist(jid, str(tmp_path / "gone"))
+    assert not (tmp_path / "gone").exists()

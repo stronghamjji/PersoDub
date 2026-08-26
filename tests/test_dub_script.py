@@ -212,6 +212,14 @@ def test_export_writes_the_current_script(tmp_path):
     assert "옛날 번역" not in out.read_text(encoding="utf-8")
 
 
+def test_exporting_a_job_with_no_script_says_so_in_words(tmp_path):
+    # The assistant's export_script tool shows the exception to the user, and a
+    # bare FileNotFoundError said nothing about what had gone wrong.
+    with pytest.raises(ValueError) as e:
+        export_srt(str(tmp_path), "script.srt")
+    assert "no script" in str(e.value)
+
+
 def test_a_script_cannot_be_written_outside_its_own_job_folder(tmp_path):
     """export_script is the one tool that names its own destination, and it
     runs in the MCP server -- a separate process, so the CLI's sandbox never

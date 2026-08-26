@@ -212,7 +212,8 @@ class SettingsRequest(BaseModel):
 
 @app.get("/api/settings")
 def settings_get():
-    """The saved keys and workspace from kit.env, values included.
+    """The saved keys and Perso workspace from kit.env, values included, plus
+    the folder this app keeps its jobs in.
 
     Values come back verbatim (user decision 2026-08-06): this is a
     single-user desktop app and the keys live in a file that user owns, so
@@ -231,6 +232,10 @@ def settings_get():
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
             "perso_signup_link": SIGNUP_LINK,
             "analytics_off": read_analytics_off(),
+            # The folder every finished video is saved in. Only the server knows
+            # it -- the desktop shell can point the workspace anywhere -- so the
+            # screen cannot tell the user where their videos are without this.
+            "workspace": WORKSPACE,
             "app_version": APP_VERSION}
 
 
@@ -524,6 +529,69 @@ def dub_job_redub(jid: str):
     return {"job_id": new_jid}
 
 
+@app.post("/api/dub/jobs/{jid}/retry")
+def dub_job_retry(jid: str):
+    """Run this job again from the top -- transcribe, translate, voices, all of it.
+
+    "Try again" on a failed job used to mean downloading the original and
+    uploading it back, which for a link job meant fetching the whole video a
+    second time. The copy in the job's folder is right there, so the new job
+    starts from it with the settings the old one was given.
+
+    Not a redub: that one hands the finished script back in and only makes the
+    voices again (above). A job that failed may never have had a script at all.
+    """
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("status") in ("running", "cancelling"):
+        raise HTTPException(status_code=409, detail="This job is still running.")
+    # work_dir, not the result folder: a job that failed before it produced
+    # anything is exactly the one this endpoint exists for.
+    work_dir = _work_dir_of(job)
+    source_video = os.path.join(work_dir, "input.mp4")
+    if not os.path.exists(source_video):
+        raise HTTPException(status_code=409, detail="This job's video is no longer on disk.")
+
+    language_code = job.get("language_code") or "en"
+    project = job.get("project") or os.path.basename(work_dir)
+    check_space(WORKSPACE)
+    work = _job_dir(project, language_code)
+    video_path = os.path.join(work, "input.mp4")
+    shutil.copyfile(source_video, video_path)
+    out_path = os.path.join(work, "dubbed.mp4")
+
+    new_jid = job_store.create()
+    # No trim: input.mp4 is already the cut the first job made, so cutting it
+    # again would take the same seconds out of a video that no longer has them.
+    job_store._update(new_jid, language_code=language_code, project=project,
+                      day=_today(), work_dir=work,
+                      language=job.get("language") or language_code,
+                      source_lang=job.get("source_lang"),
+                      # The video is a local copy now, whatever the first job was
+                      # started from -- there is no link to download again.
+                      from_link=False)
+    # Same reason as in dub_start: quit the app mid-run and this folder is
+    # nameless without a file in it, so Projects could never show or clear it.
+    job_store.persist(new_jid, work)
+    job_store.append_log(new_jid, "🎬 %s (다시 시도)" % project)
+
+    def _target(log):
+        return run_dub(
+            video_path=video_path,
+            out_path=out_path,
+            language=job.get("language") or language_code,
+            language_code=language_code,
+            source_language_code=job.get("source_lang"),
+            cancel_check=lambda: job_store.is_cancel_requested(new_jid),
+            on_notice=lambda n: job_store.append_notice(new_jid, n),
+            log=log,
+        )
+
+    job_store.start(new_jid, _target)
+    return {"job_id": new_jid, "status": "running"}
+
+
 @app.post("/api/dub/jobs/{jid}/cancel")
 def dub_job_cancel(jid: str):
     """Cancel a running dubbing job.
@@ -554,7 +622,9 @@ def dub_job_delete_workspace(jid: str):
     j = job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if j["status"] == "running":
+    # "cancelling" counts as running: the thread only stops at the next stage
+    # boundary, and until it does it is still writing into this folder.
+    if j["status"] in ("running", "cancelling"):
         raise HTTPException(status_code=409, detail="Job is still running")
     # work_dir is stamped the moment the folder is made, so a job that failed
     # before it produced anything can be cleared out too -- Projects lists
@@ -618,7 +688,16 @@ def _cut_video(path: str, start: float, end: float) -> None:
                             "-i", path, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", tmp],
                            capture_output=True, text=True)
         if r.returncode != 0:
-            raise RuntimeError("Could not trim the video: " + r.stderr[-200:])
+            # Only ffmpeg's last line, which is the complaint itself. The lines
+            # before it name the input file, so a tail of the whole thing put the
+            # user's folders on screen (and into a bug report) for nothing.
+            last = ([ln.strip() for ln in (r.stderr or "").splitlines() if ln.strip()] or [""])[-1]
+            # ffmpeg names files by their full path even in that last line, so
+            # each one is cut back to its own name: the user learns which file
+            # upset it without their folders ending up on screen.
+            last = re.sub(r"\S*/(\S+)", r"\1", last)
+            raise RuntimeError(("Could not trim the video: " + last) if last
+                               else "Could not trim the video.")
         os.replace(tmp, path)
     finally:
         # A cut that died with the output already open (out of disk, a killed

@@ -448,6 +448,126 @@ def test_dub_cancel_stops_a_running_job(monkeypatch):
     assert status == "cancelled"
 
 
+# --- POST /api/dub/jobs/{id}/retry -----------------------------------------
+# "Try again" used to mean downloading the original and uploading it back --
+# for a link job, fetching the whole video a second time. The copy in the job's
+# folder is right there.
+
+def test_dub_retry_unknown_job_404():
+    r = client.post("/api/dub/jobs/nope/retry")
+    assert r.status_code == 404
+
+
+def test_dub_retry_starts_a_new_job_from_the_saved_video(monkeypatch):
+    calls = []
+
+    def fake_run_dub(**kw):
+        calls.append(kw)
+        raise RuntimeError("no dub today")
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "project": "again"},
+    ).json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert client.get(f"/api/dub/jobs/{jid}").json()["status"] == "error"
+
+    r = client.post(f"/api/dub/jobs/{jid}/retry")
+    assert r.status_code == 200
+    new_jid = r.json()["job_id"]
+    assert r.json()["status"] == "running"
+    assert new_jid != jid
+
+    new = client.get(f"/api/dub/jobs/{new_jid}").json()
+    assert new["language_code"] == "ko" and new["project"] == "again"
+    assert new["from_link"] is False
+    # Its own folder, holding its own copy of the video -- the first job's
+    # folder is left alone.
+    assert new["work_dir"] != client.get(f"/api/dub/jobs/{jid}").json()["work_dir"]
+    assert open(os.path.join(new["work_dir"], "input.mp4"), "rb").read() == b"vid"
+    # A full re-run, not a redub: nothing is handed in as a ready-made script.
+    for _ in range(100):
+        if len(calls) > 1:
+            break
+        time.sleep(0.02)
+    assert calls[-1].get("srt_path") is None
+    assert calls[-1]["video_path"] == os.path.join(new["work_dir"], "input.mp4")
+
+
+def test_dub_retry_refuses_a_running_job(monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_run_dub(**kw):
+        started.set()
+        release.wait(5)
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko"},
+    ).json()["job_id"]
+    assert started.wait(2), "fake job never started"
+    try:
+        r = client.post(f"/api/dub/jobs/{jid}/retry")
+        assert r.status_code == 409
+        assert r.json()["detail"] == "This job is still running."
+    finally:
+        release.set()
+
+
+def test_dub_retry_says_so_when_the_video_is_gone(monkeypatch):
+    monkeypatch.setattr(main, "run_dub",
+                        lambda **kw: {"job_id": "x", "out_path": kw["out_path"]})
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko"},
+    ).json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
+
+    os.remove(os.path.join(client.get(f"/api/dub/jobs/{jid}").json()["work_dir"], "input.mp4"))
+    r = client.post(f"/api/dub/jobs/{jid}/retry")
+    assert r.status_code == 409
+    assert r.json()["detail"] == "This job's video is no longer on disk."
+
+
+def test_deleting_a_cancelling_job_is_refused(monkeypatch):
+    # The thread only stops at the next stage boundary, so until it does it is
+    # still writing into the folder this would pull out from under it.
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_run_dub(**kw):
+        started.set()
+        release.wait(5)
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko"},
+    ).json()["job_id"]
+    assert started.wait(2), "fake job never started"
+    try:
+        assert client.post(f"/api/dub/jobs/{jid}/cancel").json()["status"] == "cancelling"
+        r = client.delete(f"/api/dub/jobs/{jid}/workspace")
+        assert r.status_code == 409
+    finally:
+        release.set()
+
+
 def test_dub_start_surfaces_perso_credit_notice_in_job_status(monkeypatch):
     # run_dub's on_notice callback must reach the job status JSON (GET /api/dub/jobs/{id})
     # so the UI can show the message + recharge link, even while the job is still running.

@@ -194,7 +194,10 @@ def export_srt(work_dir: str, out_path: str) -> str:
     out_path = _inside_job(work_dir, out_path)
     src = script_path(work_dir)
     if not os.path.exists(src):
-        raise FileNotFoundError("this job has no script: %s" % work_dir)
+        # A ValueError like the two above, because it reaches the same readers:
+        # the assistant's export_script tool showed the bare exception name, and
+        # "FileNotFoundError" tells the user nothing about what to do.
+        raise ValueError("this job has no script yet -- dub it first, then export")
     with open(src, encoding="utf-8-sig") as f:
         body = f.read()
     with open(out_path, "w", encoding="utf-8") as f:
