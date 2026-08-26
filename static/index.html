@@ -939,7 +939,12 @@
   /* Purple while that part is actually playing -- the only feedback there is,
      since the video itself is muted. */
   .trim-play.playing { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
-  .trim-play .ico-pause { display: none; margin-left: 0; }
+  /* A click leaves the ring behind on a button that only ever gets clicked;
+     keyboard focus (:focus-visible) still shows it. */
+  .trim-play:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+  /* The pause glyph is two plain bars -- the shared stroke below would fatten
+     the gap shut and turn them into one blob. */
+  .trim-play .ico-pause { display: none; margin-left: 0; stroke: none; }
   .trim-play.playing .ico-play { display: none; }
   .trim-play.playing .ico-pause { display: block; }
   .trim-play svg { width: 18px; height: 18px; margin-left: 2px; fill: currentColor;
@@ -960,21 +965,24 @@
   .trim-hatch { position: absolute; top: 0; bottom: 0;
     background: repeating-linear-gradient(135deg, var(--border) 0 4px, var(--trim-track) 4px 8px); }
   .trim-sel { position: absolute; top: 0; bottom: 0; border: 2px solid var(--primary);
-    border-radius: var(--radius-sm); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+    border-radius: var(--radius-sm); background: color-mix(in srgb, var(--primary) 10%, transparent);
+    cursor: pointer; }
   /* Two whole-width sliders stacked on the bar: dragging comes free, and the
      painted layers above are positioned with the same 10px-thumb maths. Only
      the thumbs take the mouse, so each handle stays grabbable over the other's
      track. */
-  /* Where the preview is right now: the finished screen's playhead, at dialog
-     size. A 2px line down the bar AND the ruler, centred on the moment it
-     stands for (hence the -1px), that leaves when the preview stops. */
+  /* Where the preview is right now: a 2px line the exact height of the bar and
+     no taller, centred on the moment it stands for (hence the -1px). It lives
+     inside the bar so it never reaches over the ruler. */
   .trim-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
-    background: var(--foreground); pointer-events: none; z-index: 3; }
-  /* The same triangle as .tl-playhead's, drawn as borders, scaled to a 28px
-     bar: 12px across, 8px tall, centred on the line under it. */
-  .trim-head i { position: absolute; top: 0; left: -5px; width: 0; height: 0;
-    border-left: 6px solid transparent; border-right: 6px solid transparent;
-    border-top: 8px solid var(--foreground); }
+    background: var(--foreground); z-index: 3; cursor: ew-resize; touch-action: none; }
+  /* A small cap at the top edge, drawn inside the bar rather than above it,
+     so there is something to take hold of without breaking the 28px line. */
+  .trim-head i { position: absolute; top: 0; left: -2px; width: 6px; height: 4px;
+    background: var(--foreground); border-radius: 0 0 2px 2px; }
+  /* Fingers and mice need more than 2px to grab: an invisible 14px-wide strip
+     over the line, which is what actually takes the pointer. */
+  .trim-head::before { content: ""; position: absolute; top: 0; bottom: 0; left: -6px; right: -6px; }
   .trim-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
     -webkit-appearance: none; appearance: none; background: none; pointer-events: none; }
   .trim-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; pointer-events: auto;
@@ -2206,7 +2214,7 @@ function renderTrim(duration) {
     <div class="trim-row">
       <button class="trim-play" id="trimPlay" type="button" title="Play the selected part" aria-label="Play the selected part">
         <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
-        <svg class="ico-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h3.5v13H7zM13.5 5.5H17v13h-3.5z"/></svg>
+        <svg class="ico-pause" viewBox="0 0 18 18" aria-hidden="true"><rect x="5" y="3" width="3" height="12" rx="1"/><rect x="10" y="3" width="3" height="12" rx="1"/></svg>
       </button>
       <span class="trim-label">Trim</span>
       <span class="trim-read" id="trimRead"></span>
@@ -2218,9 +2226,9 @@ function renderTrim(duration) {
         <div class="trim-sel" id="trimSel"></div>
         <input type="range" class="trim-range" id="trimStart" min="0" step="${TRIM_STEP}" aria-label="Trim start">
         <input type="range" class="trim-range" id="trimEnd" min="0" step="${TRIM_STEP}" aria-label="Trim end">
+        <div class="trim-head" id="trimHead" hidden><i></i></div>
       </div>
       <div class="trim-ruler" id="trimRuler"></div>
-      <div class="trim-head" id="trimHead" hidden><i></i></div>
     </div>`;
 
   const startInput = $("trimStart"), endInput = $("trimEnd");
@@ -2269,6 +2277,12 @@ function renderTrim(duration) {
     $("trimRead").textContent =
       `${fmtClockTenths(start)} – ${fmtClockTenths(shownEnd)} · ${(shownEnd - start).toFixed(1)}s of ${duration.toFixed(1)}s`;
     if (state.newProject) state.newProject.trim = whole ? null : { start, end };
+    // A handle dragged past the playhead leaves it outside the part being
+    // dubbed, where it means nothing: put it away.
+    if (headAt !== null && (headAt < start || headAt > end)) {
+      headAt = null;
+      $("trimHead").hidden = true;
+    }
   }
 
   startInput.addEventListener("input", () => {
@@ -2281,13 +2295,62 @@ function renderTrim(duration) {
   });
 
   const video = $("projectVideo"), playBtn = $("trimPlay");
+  // Where the playhead stands when nothing is playing: null means "nowhere",
+  // and the line is not drawn at all. Set by a drag, a click on the selection,
+  // or by playback stopping partway.
+  let headAt = null;
+  // The reverse of at(): a pointer's x turned back into a second of the video,
+  // never outside the part that is actually going to be dubbed.
+  const secAt = (clientX) => {
+    const box = $("trimSel").parentElement.getBoundingClientRect();
+    const sec = ((clientX - box.left - 5) / Math.max(1, box.width - 10)) * duration;
+    return Math.min(Math.max(sec, Number(startInput.value)), Number(endInput.value));
+  };
+  const head = $("trimHead");
+  // Moving the playhead moves the preview with it: the video seeks, the line
+  // follows the pointer and the badge counts along.
+  function seekTo(sec) {
+    headAt = sec;
+    video.currentTime = sec;
+    head.style.left = at(sec);
+    head.hidden = false;
+    $("projectDur").textContent = fmtClockTenths(sec);
+  }
+
+  // Dragging the head. The video is stopped for the duration of the drag so
+  // playRange's stop-listener cannot fire on a seek, and started again on drop
+  // if it had been playing -- from where it was dropped, still stopping at the
+  // end of the selection.
+  let wasPlaying = false;
+  head.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    head.setPointerCapture(e.pointerId);
+    wasPlaying = !video.paused;
+    if (wasPlaying) cancelRange(video);
+    seekTo(secAt(e.clientX));
+  });
+  head.addEventListener("pointermove", (e) => {
+    if (head.hasPointerCapture(e.pointerId)) seekTo(secAt(e.clientX));
+  });
+  head.addEventListener("pointerup", (e) => {
+    if (!head.hasPointerCapture(e.pointerId)) return;
+    head.releasePointerCapture(e.pointerId);
+    if (wasPlaying) playRange(video, headAt, Number(endInput.value)).catch(() => {});
+    wasPlaying = false;
+  });
+  // A click anywhere on the chosen part puts the playhead there too. The
+  // handles sit on top of their own ends, so they still grab first.
+  $("trimSel").addEventListener("pointerdown", (e) => { seekTo(secAt(e.clientX)); });
+
   // The thumbnail is muted so it can sit quietly; a press on the play
   // button is the user asking to hear the part they picked, so unmute then.
   // A second press pauses -- the same button, the same place.
   playBtn.addEventListener("click", () => {
     if (!video.paused) { cancelRange(video); return; }
     video.muted = false;
-    playRange(video, Number(startInput.value), Number(endInput.value)).catch(() => {});
+    // Play from where the playhead was left standing, not from the start.
+    const from = headAt === null ? Number(startInput.value) : headAt;
+    playRange(video, from, Number(endInput.value)).catch(() => {});
   });
   if (trimPlayState) {
     for (const e of ["play", "pause", "ended", "timeupdate"]) video.removeEventListener(e, trimPlayState);
@@ -2300,12 +2363,20 @@ function renderTrim(duration) {
     playBtn.classList.toggle("playing", playing);
     const label = playing ? "Pause" : "Play the selected part";
     playBtn.title = label; playBtn.setAttribute("aria-label", label);
-    const head = $("trimHead");
     if (playing) {
-      $("projectDur").textContent = fmtClockTenths(video.currentTime);
-      head.style.left = at(video.currentTime);
+      headAt = video.currentTime;
+      $("projectDur").textContent = fmtClockTenths(headAt);
+      head.style.left = at(headAt);
+      head.hidden = false;
+    } else if (headAt !== null && headAt < Number(endInput.value) - TRIM_STEP) {
+      // Stopped partway -- by the pause button or by a drag. The line stays
+      // where it stopped, and the next press picks up from there.
+      $("projectDur").textContent = fmtClockTenths(headAt);
+      head.style.left = at(headAt);
       head.hidden = false;
     } else {
+      // Played to the end of the selection: back to a bare bar and the length.
+      headAt = null;
       $("projectDur").textContent = fmtClock(duration);
       head.hidden = true;
     }
