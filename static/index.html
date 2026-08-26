@@ -1041,7 +1041,7 @@
          project, and is then nowhere to be found. -->
     <div class="history-scroll">
       <div class="history-head">Projects</div>
-      <div id="historyList"><div class="history-empty">No projects yet -- drop a video to start one.</div></div>
+      <div id="historyList"><div class="history-empty">No projects yet - drop a video to start one.</div></div>
     </div>
     <!-- Drag the line between the list and the work beside it. Gone entirely
          while the list is closed, so its 6px cannot sit over the edge of a
@@ -2942,7 +2942,7 @@ async function renderHistory() {
     return;
   }
   if (jobs.length === 0) {
-    container.innerHTML = '<div class="history-empty">No projects yet -- drop a video to start one.</div>';
+    container.innerHTML = '<div class="history-empty">No projects yet - drop a video to start one.</div>';
     return;
   }
   container.innerHTML = "";
@@ -2978,7 +2978,7 @@ let pendingDelete = null;
 function askDelete(job) {
   pendingDelete = job;
   $("deleteMessage").textContent =
-    `${job.project || "This job"} and everything in its folder -- the dubbed video, the script and the voices -- will be deleted. This cannot be undone.`;
+    `Delete "${job.project || "this job"}"? Its dubbed video, script and voices will be removed. This can't be undone.`;
   $("deleteError").textContent = "";
   $("deleteOverlay").classList.add("open");
 }
@@ -3162,7 +3162,7 @@ function runPollLoop(jobId, myGeneration) {
     onUnreachable: (e) => {
       if (myGeneration !== state.pollGeneration) return;
       const el = $("jobNotice");
-      el.textContent = `Could not reach the app server: ${errorText(e)} -- still trying.`;
+      el.textContent = `Could not reach the app server: ${errorText(e)} - still trying.`;
       el.classList.add("danger");
       el.hidden = false;
     },
@@ -3587,7 +3587,7 @@ function scriptRow(l, speakers) {
         data-line="${l.line}">${escapeHtml(l.text)}</div>${undo}<div class="sc-len-in">${lengthCell}</div></div>
     <div class="sc-len">${lengthCell}</div>
     <div class="sc-acts"><button class="sc-wave${stale ? " stale" : ""}" data-voice="${l.line}"
-      type="button" title="${stale ? "The words changed -- make the voice again" : "Make this line's voice again"}">${WAVE_ICON}</button></div>
+      type="button" title="${stale ? "The words changed - make the voice again" : "Make this line's voice again"}">${WAVE_ICON}</button></div>
   </div>`;
 }
 
@@ -4370,7 +4370,7 @@ function paintChoice() {
     // be installed, a model to be picked, or the user. A running dub is not on
     // the list -- the strip is off the page there, so nothing it said was read.
     if (failed) {
-      input.placeholder = "Nothing to fix here -- this dub did not finish";
+      input.placeholder = "Nothing to fix here - this dub did not finish";
     } else if (notice) {
       input.placeholder = notice;
     } else if (!chosen.agent) {
@@ -4380,14 +4380,14 @@ function paintChoice() {
       // same thing; this is the one the user reads while typing.
       const a = signedOutChoice();
       input.placeholder = a.login_command
-        ? `${a.name} is not signed in -- run ${a.login_command} in Terminal`
+        ? `${a.name} is not signed in - run ${a.login_command} in Terminal`
         : `${a.name} is not signed in`;
     } else if (document.body.classList.contains("agent-open")) {
       input.placeholder = "Message";
     } else {
       // Backticks, not quotes: the sentence contains both a double quote and an
       // apostrophe, and a quote of either kind would end the string early.
-      input.placeholder = `Ask for a fix -- e.g. "Shorten line 4 naturally so it matches the original's length"`;
+      input.placeholder = `Ask for a fix - e.g. "Shorten line 4 naturally so it matches the original's length"`;
     }
   });
   paintGo();
@@ -4538,7 +4538,7 @@ function ensureLoginChecked() {
   loadAgents({ login: true }).catch(() => {});
 }
 const CHECK_FAILED = "Could not check which assistants are available.";
-const NONE_READY = "No assistant is ready -- install Claude Code or Codex";
+const NONE_READY = "No assistant is ready - install Claude Code or Codex";
 
 async function loadAgents({ login = false } = {}) {
   // Whether the list arrived, said plainly. An empty list happens to mean the
@@ -4656,19 +4656,53 @@ function bubble(cls, text) {
 const MARK_RUNNING = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg>';
 const MARK_DONE = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
 
-function chip(label) {
+// One chip per RUN of calls to the same step. The assistant calls a tool once
+// per line, so twenty rewritten lines used to be twenty chips all saying
+// "Rewriting a line"; now they are one chip saying which lines.
+// { label, lines, calls, finished, node, text } while a run is open, else null.
+let run = null;
+
+// "Rewriting a line" + [3] -> "Rewriting line 3"; + [1,3] -> "Rewriting lines
+// 1, 3". The label the server sends already ends in the words for one line, so
+// those come off before the numbers go on. A step that names no line at all --
+// reading the script, remaking the voices -- keeps its label as it is.
+function chipText(label, lines) {
+  if (!lines.length) return label;
+  const stem = label.replace(/\s+(?:a|this|the)\s+lines?$/i, "");
+  return stem + (lines.length > 1 ? " lines " : " line ") + lines.join(", ");
+}
+
+function chipStep(label, line) {
+  if (run && run.label === label) {
+    // The same step again: this chip grows a number instead of a twin below it.
+    if (typeof line === "number" && !run.lines.includes(line)) {
+      run.lines.push(line);
+      run.lines.sort((a, b) => a - b);
+      run.text.nodeValue = chipText(label, run.lines);
+    }
+    log.scrollTop = log.scrollHeight;
+    return;
+  }
+  // A different step. Whatever was running is finished by it starting.
+  settlePrevious();
+  const lines = typeof line === "number" ? [line] : [];
   const d = document.createElement("div");
   d.className = "chip";
   d.innerHTML = '<span class="chip-mark">' + MARK_RUNNING + '</span>';
-  d.appendChild(document.createTextNode(label));
+  const text = document.createTextNode(chipText(label, lines));
+  d.appendChild(text);
   log.appendChild(d);
   log.scrollTop = log.scrollHeight;
-  return d;
+  run = { label, lines, text };
 }
 
 // Only one chip is ever "in progress": the previous step is finished the moment
-// the next one starts, so ticking it off keeps the column honest.
+// the next one starts, so ticking it off keeps the column honest. A word from
+// the assistant closes the run too -- otherwise a later call to the same tool
+// would join a chip that sits ABOVE what was said in between, and the column
+// would no longer be in the order things happened.
 function settlePrevious() {
+  run = null;
   const chips = log.querySelectorAll(".chip:not(.chip-done)");
   chips.forEach((c) => {
     c.classList.add("chip-done");
@@ -4778,7 +4812,7 @@ async function ask(message) {
           const alias = aliasOf(ev.model);
           if (alias && alias !== servedModel) { servedModel = alias; paintChoice(); }
         } else if (ev.kind === "progress") {
-          clearDots(); settlePrevious(); chip(ev.label);
+          clearDots(); chipStep(ev.label, ev.line);
           // Whatever the assistant says next belongs BELOW this step, not
           // appended to the paragraph above it. Without this, an assistant
           // that speaks before its first tool call -- which Codex does every
