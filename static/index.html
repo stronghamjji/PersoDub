@@ -65,7 +65,7 @@
     --border: #e5e5e5;
     --success: #11ad32;
     --warning: #dfa11a;
-    /* The Settings restart banner: a pale amber panel with ink dark enough to
+    /* The Settings save-failure panel: pale amber with ink dark enough to
        read on it. --warning itself is the border and the icon, and is far too
        light to write words in. */
     --warning-soft: #fff7e6;
@@ -278,14 +278,12 @@
   .job-notice.danger { color: var(--destructive); font-weight: 600; }
   /* "Choose a workspace…" still unpicked with a Perso key saved */
   #persoSpaceSelect.needs-choice { color: var(--destructive); font-weight: 600; }
-  /* Save/restart banner in Settings. Loud on purpose: the previous one-line
-     hint was routinely missed, and a user who misses it keeps dubbing on the
-     previous key/workspace without knowing. */
-  .restart-banner { display: flex; align-items: center; gap: 10px; margin-top: 12px;
+  /* Settings save failure. Loud on purpose: a save that silently did nothing
+     leaves the user dubbing on the old key without knowing. */
+  .settings-alert { display: flex; align-items: center; gap: 10px; margin-top: 12px;
     padding: 12px 14px; background: var(--warning-soft); border: 1px solid var(--warning);
     border-radius: var(--radius); color: var(--warning-ink); font-size: 0.9rem; font-weight: 600; }
-  .restart-banner .icon { color: var(--warning); }
-  .restart-banner button { margin-left: auto; flex-shrink: 0; }
+  .settings-alert .icon { color: var(--warning); }
   .job-notice a { color: var(--warning); font-weight: 600; }
 
   details.raw-log { margin-top: 8px; }
@@ -1242,15 +1240,13 @@
         </div>
         <label class="settings-hint" style="display:block; cursor:pointer">
           <input type="checkbox" id="showKeysToggle"> Show keys</label>
+        <!-- No restart line any more: the engines read these three values out
+             of kit.env when a dub starts, so a save reaches the next dub. -->
         <div class="settings-hint">No keys? The free local engines are used.
-          <b>Restart after saving.</b></div>
-        <div class="restart-banner" id="settingsRestartNote" style="display:none">
+          <b>Changes apply to the next dub.</b></div>
+        <div class="settings-alert" id="settingsSaveError" style="display:none">
           <svg class="icon" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-          <span id="settingsRestartText">Saved. Restart PersoDub to apply your changes.</span>
-          <!-- Only works inside the desktop shell (window.persodubShell); the
-               button stays hidden in a plain browser tab, and while a dubbing
-               job is running -- a relaunch would kill the job. -->
-          <button class="btn btn-primary" type="button" id="settingsRestartBtn" style="display:none">Restart now</button>
+          <span id="settingsSaveErrorText">Saving the key(s) failed. Is the engine running?</span>
         </div>
       </div>
 
@@ -1315,34 +1311,12 @@
   </div>
 </div>
 
-<!-- ============ Restart dialog ============ -->
-<!-- A proper centered dialog, not an inline note: the one-line hint under the
-     key fields was routinely missed (user report 2026-08-06), and a missed
-     restart means dubbing keeps running on the previous key/workspace. -->
-<div class="modal-overlay" id="restartDialogOverlay">
-  <div class="modal" style="width: min(420px, 92vw)">
-    <div class="modal-head">
-      <h2>Settings saved</h2>
-    </div>
-    <div class="modal-body">
-      <p style="margin: 0">Your changes are saved, but the running engines still
-        use the old settings. <b>Restart PersoDub to apply them.</b></p>
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-secondary" id="restartLaterBtn" type="button">Later</button>
-      <!-- Needs the desktop shell (window.persodubShell) and no running job --
-           a relaunch would kill the dub. Hidden otherwise. -->
-      <button class="btn btn-primary" id="restartNowBtn" type="button" style="display:none">Restart now</button>
-    </div>
-  </div>
-</div>
-
 <!-- ============ Out-of-credits / quota popup ============ -->
 <!-- Opened once per job when an exhaustion-type notice arrives (Perso credits,
      Gemini quota, Gemini servers down -- see maybeShowCreditModal, which fills
-     in the title/message/button per notice type). Same reason as the restart
-     dialog above: the inline notice line alone was missable, and this one
-     costs the user money. -->
+     in the title/message/button per notice type). A dialog, not an inline
+     line: the inline notice alone was missable, and this one costs the user
+     money. -->
 <div class="modal-overlay" id="creditOverlay">
   <div class="modal" style="width: min(420px, 92vw)">
     <div class="modal-head">
@@ -1642,17 +1616,30 @@ $("historyToggle").addEventListener("click", () => {
 // ---------------- Settings modal ----------------
 
 // The saved workspace id at modal-open time, so Save can post only an actual
-// change (posting the unchanged value would flash the restart note for nothing).
+// change (posting the unchanged value would rewrite kit.env for nothing).
 let persoSpaceInitial = "";
 
-// Fill the Perso workspace picker from GET /api/perso/spaces. Options carry
-// "name (plan, credits left)" and never the internal seq -- the same label
-// rule the official plugin follows when it asks this question. One workspace
-// preselects silently; several make the user choose.
-async function loadPersoSpaces(savedSeq) {
+// Which key the picker's current options belong to, so Save knows whether the
+// chosen workspace actually goes with the key in the field. null = the list
+// never loaded (or failed), and no workspace may be posted from it.
+let spacesForKey = null;
+// Bumped per load: a slow answer for an old key must not overwrite a newer one.
+let spacesLoadSeq = 0;
+
+// Fill the Perso workspace picker. With `typedKey` it asks
+// POST /api/perso/spaces/preview about a key the user has only pasted (nothing
+// saved yet); without one it asks GET /api/perso/spaces about the saved key.
+// The preview is what lets key and workspace be chosen together and saved once
+// -- listing only saved keys is what used to cost a second restart.
+// Options carry "name (plan, credits left)" and never the internal seq -- the
+// same label rule the official plugin follows when it asks this question. One
+// workspace preselects silently; several make the user choose.
+async function loadPersoSpaces(savedSeq, typedKey) {
   const sel = $("persoSpaceSelect");
+  const mine = ++spacesLoadSeq;
   sel.disabled = true;
   sel.innerHTML = "";
+  spacesForKey = null;
   const opt = (value, label, credits) => {
     const o = document.createElement("option");
     o.value = value; o.textContent = label;
@@ -1660,10 +1647,19 @@ async function loadPersoSpaces(savedSeq) {
     sel.appendChild(o);
   };
   try {
-    const r = await fetch("/api/perso/spaces");
-    if (r.status === 409) { opt("", "Save a Perso API key first"); return; }
+    const r = typedKey
+      ? await fetch("/api/perso/spaces/preview", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ api_key: typedKey }),
+        })
+      : await fetch("/api/perso/spaces");
+    if (mine !== spacesLoadSeq) return;   // a newer key is being looked up
+    if (r.status === 409 || r.status === 400) {
+      opt("", "Enter a Perso API key to see its workspaces"); return;
+    }
     if (!r.ok) throw new Error();
     const { spaces } = await r.json();
+    if (mine !== spacesLoadSeq) return;
     if (!spaces.length) { opt("", "No workspace available for this key"); return; }
     if (spaces.length > 1) opt("", "Choose a workspace…");
     for (const s of spaces) {
@@ -1675,11 +1671,29 @@ async function loadPersoSpaces(savedSeq) {
       ? String(savedSeq)
       : (spaces.length === 1 ? String(spaces[0].seq) : "");
     sel.disabled = false;
+    spacesForKey = typedKey || keysInitial.per;
   } catch {
+    if (mine !== spacesLoadSeq) return;
     opt("", "Couldn't load workspaces. Check the key or your connection.");
   } finally {
-    updateSpaceWarning();
+    if (mine === spacesLoadSeq) updateSpaceWarning();
   }
+}
+
+// Look up the workspaces of the key currently in the field, before it is saved.
+// Never on every keystroke: the field is debounced below, anything shorter than
+// a key is ignored, and the same key is not asked about twice in a row.
+const PERSO_KEY_MIN_LEN = 20;
+let persoPreviewTimer = null;
+let persoPreviewedKey = "";
+function previewPersoSpaces() {
+  clearTimeout(persoPreviewTimer);
+  const key = $("persoKeyInput").value.trim();
+  if (key.length < PERSO_KEY_MIN_LEN || key === persoPreviewedKey) return;
+  persoPreviewedKey = key;
+  // The saved pin only preselects when the field still holds the saved key --
+  // a pin from another key would silently bill the wrong workspace.
+  loadPersoSpaces(key === keysInitial.per ? persoSpaceInitial : "", key);
 }
 
 // A 0-credit workspace still lists -- Perso refuses mid-job and the job
@@ -1698,6 +1712,17 @@ function updateSpaceWarning() {
 }
 $("persoSpaceSelect").addEventListener("change", updateSpaceWarning);
 
+// Three ways a key lands in the field, one lookup: typing (settled for 600ms),
+// pasting (read on the next tick, when the field actually holds the pasted
+// text) and leaving the field. previewPersoSpaces ignores repeats, so the
+// overlap between them costs nothing.
+$("persoKeyInput").addEventListener("input", () => {
+  clearTimeout(persoPreviewTimer);
+  persoPreviewTimer = setTimeout(previewPersoSpaces, 600);
+});
+$("persoKeyInput").addEventListener("paste", () => setTimeout(previewPersoSpaces, 0));
+$("persoKeyInput").addEventListener("blur", previewPersoSpaces);
+
 // What was saved when the modal opened, so Save only posts actual edits.
 let keysInitial = { gem: "", per: "" };
 
@@ -1712,6 +1737,9 @@ async function openSettings() {
     $("persoKeyInput").value = keysInitial.per;
     $("geminiKeyInput").value = keysInitial.gem;
     persoSpaceInitial = st.perso_space_seq || "";
+    // The saved key's workspaces; a key typed in afterwards triggers a preview.
+    persoPreviewedKey = keysInitial.per;
+    clearTimeout(persoPreviewTimer);
     loadPersoSpaces(persoSpaceInitial); // async on purpose -- the modal opens without waiting on Perso
     if (st.perso_signup_link) $("persoSignupLink").href = st.perso_signup_link;
     if (realVersion(st.app_version)) {
@@ -1749,28 +1777,6 @@ fetch("/api/settings")
 $("settingsBtn").addEventListener("click", openSettings);
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
 $("advancedKeysLink").addEventListener("click", openSettings);
-$("settingsRestartBtn").addEventListener("click", () => {
-  if (window.persodubShell && window.persodubShell.relaunch) window.persodubShell.relaunch();
-});
-
-// ---------------- Restart dialog ----------------
-function canRelaunchNow() {
-  return !!(window.persodubShell && window.persodubShell.relaunch)
-    && !(state.job && state.job.status === "running");
-}
-function openRestartDialog() {
-  const withRestart = canRelaunchNow();
-  $("restartNowBtn").style.display = withRestart ? "" : "none";
-  // "Later" only makes sense as the alternative to "Restart now"; standing
-  // alone, the dismiss button is a plain acknowledgement.
-  $("restartLaterBtn").textContent = withRestart ? "Later" : "OK";
-  $("restartDialogOverlay").classList.add("open");
-}
-$("restartLaterBtn").addEventListener("click", () => $("restartDialogOverlay").classList.remove("open"));
-$("restartDialogOverlay").addEventListener("click", (e) => {
-  if (e.target === $("restartDialogOverlay")) $("restartDialogOverlay").classList.remove("open");
-});
-$("restartNowBtn").addEventListener("click", () => window.persodubShell.relaunch());
 $("settingsCloseBtn").addEventListener("click", closeSettings);
 $("settingsCancelBtn").addEventListener("click", closeSettings);
 $("settingsOverlay").addEventListener("click", (e) => { if (e.target === $("settingsOverlay")) closeSettings(); });
@@ -1781,9 +1787,9 @@ document.addEventListener("keydown", (e) => {
 });
 
 $("settingsSaveBtn").addEventListener("click", async () => {
-  // Only actual edits go on the wire -- posting unchanged values would flash
-  // the restart note for nothing (keysInitial/persoSpaceInitial hold what was
-  // already saved when the modal opened).
+  // Only actual edits go on the wire -- posting unchanged values would rewrite
+  // kit.env for nothing (keysInitial/persoSpaceInitial hold what was already
+  // saved when the modal opened).
   // Compare without a truthiness gate: clearing a field to "" IS a change
   // (posted as "" so the backend removes the saved value -- otherwise a
   // mistyped key or stale workspace pin could never be deleted in-app).
@@ -1796,38 +1802,32 @@ $("settingsSaveBtn").addEventListener("click", async () => {
   const spaceSel = $("persoSpaceSelect");
   const space = spaceSel.value;
   const spaceChanged = !spaceSel.disabled && space !== persoSpaceInitial;
+  // The picker was filled by the preview for the key now in the field, so the
+  // workspace chosen before Save is saved WITH the key -- one save, no restart.
+  // If the list belongs to some other key (it failed, or the field was edited
+  // after), a changed key clears the pin instead: a pin from another key would
+  // auto-select and silently bill the wrong workspace, and the red "Choose a
+  // workspace…" then prompts a fresh, explicit pick.
+  const spaceGoesWithKey = spacesForKey === per && !spaceSel.disabled;
+  const persoSpaceToPost = perChanged ? (spaceGoesWithKey ? space : "")
+                                      : (spaceChanged ? space : null);
   if (gemChanged || perChanged || spaceChanged) {
     try {
       const r = await fetch("/api/settings", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gemini_api_key: gemChanged ? gem : null,
                                perso_api_key: perChanged ? per : null,
-                               // A changed (or cleared) key CLEARS the saved
-                               // workspace pin: a pin from another key would
-                               // auto-select and silently bill the wrong
-                               // workspace. The red "Choose a workspace…"
-                               // then prompts a fresh, explicit pick.
-                               perso_space_seq: perChanged ? "" :
-                                                (spaceChanged ? space : null) }),
+                               perso_space_seq: persoSpaceToPost }),
       });
       if (!r.ok) throw new Error();
       if (gemChanged) keysInitial.gem = gem;
-      if (perChanged) { keysInitial.per = per; persoSpaceInitial = ""; }
+      if (perChanged) { keysInitial.per = per; persoSpaceInitial = persoSpaceToPost; }
       else if (spaceChanged) persoSpaceInitial = space;
-      $("settingsRestartText").textContent = "Saved. Restart PersoDub to apply your changes.";
-      $("settingsRestartNote").style.display = "";
-      $("settingsRestartBtn").style.display = canRelaunchNow() ? "" : "none";
-      // The dialog is the loud part; the banner above stays behind as the
-      // persistent reminder after the dialog is dismissed.
-      openRestartDialog();
-      // A newly saved Perso key makes the workspace list fetchable for the
-      // first time -- refresh the picker (with no stale pin to auto-select)
-      // so choosing doesn't need a restart.
-      if (perChanged) loadPersoSpaces(persoSpaceInitial);
+      $("settingsSaveError").style.display = "none";
+      // No restart prompt: the server reads these three values out of kit.env
+      // when a dub starts, so what was just saved is what the next dub uses.
     } catch {
-      $("settingsRestartNote").style.display = "";
-      $("settingsRestartBtn").style.display = "none";
-      $("settingsRestartText").textContent = "Saving the key(s) failed. Is the engine running?";
+      $("settingsSaveError").style.display = "";
     }
   }
   // A key save may have just changed which engines are usable -- re-check so
