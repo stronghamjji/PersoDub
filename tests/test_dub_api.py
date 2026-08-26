@@ -6,6 +6,7 @@ import time
 from fastapi.testclient import TestClient
 import pytest
 
+from app import jobs
 import app.main as main
 from app.main import app
 
@@ -697,3 +698,26 @@ def test_a_finished_job_writes_job_json_next_to_the_video(monkeypatch):
         saved = json.load(f)
     assert saved["id"] == jid and saved["status"] == "done"
     assert saved["result"]["out_path"].endswith("dubbed.mp4")
+
+
+def test_starting_the_app_restores_yesterdays_jobs(monkeypatch, tmp_path):
+    # The restore hangs off the FastAPI lifespan, not the import: "with
+    # TestClient(app)" is the only thing that runs it. Reading job.json at
+    # import time would scan whichever workspace was current when the module
+    # loaded -- before a test (or the desktop shell) can point WORKSPACE
+    # anywhere else -- and Projects would come up empty for the user.
+    folder = os.path.join(main.WORKSPACE, "2026-08-26", "yesterday_ko")
+    os.makedirs(folder)
+    with open(os.path.join(folder, "job.json"), "w", encoding="utf-8") as f:
+        json.dump({"id": "restored-1", "status": "done", "project": "yesterday",
+                   "day": "2026-08-26", "language_code": "ko",
+                   "created": "2026-08-26T10:00:00"}, f)
+    # A store of its own, so this asserts on what startup read rather than on
+    # jobs other tests in this file left in the shared one.
+    monkeypatch.setattr(main, "job_store", jobs.JobStore(log_dir=str(tmp_path)))
+
+    with TestClient(main.app, base_url="http://127.0.0.1") as c:
+        rows = c.get("/api/dub/jobs").json()["jobs"]
+
+    assert [r["id"] for r in rows] == ["restored-1"]
+    assert rows[0]["project"] == "yesterday" and rows[0]["status"] == "done"

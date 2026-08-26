@@ -2618,6 +2618,16 @@ function homeNoticeAndLog() {
 
 async function renderDone(job) {
   const finished = job.status === "done";
+  // A different job starts its own count of remade-line changes, and its own
+  // clean slate under the Retry button; the URL of a video nobody has remade
+  // carries no mark at all. Only on the change of job: this runs on every poll,
+  // and clearing it each time wiped the retry's own error message a moment
+  // after it was written.
+  if (doneJobId !== job.id) {
+    doneJobId = job.id;
+    doneVersion = 0;
+    $("doneRetryError").textContent = "";
+  }
   $("doneLayout").hidden = !finished;
   $("doneFail").hidden = finished;
   fitLayout();   // the two panes have a width to measure only now they are on show
@@ -2635,15 +2645,11 @@ async function renderDone(job) {
     moveInto($("doneNotice"), $("doneFailBody"));
     $("doneFailBody").appendChild($("doneRetry"));
     $("doneFailBody").appendChild($("doneRetryError"));
-    $("doneRetryError").textContent = "";
     $("doneFailBody").appendChild($("rawLogDetails"));
     $("doneRetry").disabled = false;
     return;
   }
   homeNoticeAndLog();
-  // A different job starts its own count of remade-line changes; the URL of a
-  // video nobody has remade carries no mark at all.
-  if (doneJobId !== job.id) { doneJobId = job.id; doneVersion = 0; }
   // Tell the shell where this job's downloads belong. It has to be handed over
   // before any button is clicked, because will-download cannot ask for it.
   window.persodubShell?.rememberJob?.({ id: job.id, project: job.project, day: job.day });

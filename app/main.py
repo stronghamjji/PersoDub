@@ -104,6 +104,21 @@ translator = get_translator()
 # Store for background dubbing jobs
 job_store = JobStore()
 
+
+def _work_dir_of(job: dict) -> str:
+    """Where this job's folder is -- the one answer, in one place.
+
+    work_dir is stamped the moment the folder is made, so it is there even for a
+    job that failed before it produced anything. dirname(out_path) is the older
+    way of asking the same question, kept as the fallback so a record written
+    before work_dir existed (or hand-built in a test) still resolves.
+
+    Not for the script and subtitle routes: those want the folder the result was
+    actually written into, and say 409 when there is no result at all, so they
+    ask out_path directly.
+    """
+    return job.get("work_dir") or os.path.dirname((job.get("result") or {}).get("out_path") or "")
+
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKSPACE = os.path.join(APP_DIR, "workspace")
 STATIC_DIR = os.path.join(APP_DIR, "static")
@@ -540,7 +555,7 @@ def dub_job_delete_workspace(jid: str):
     # work_dir is stamped the moment the folder is made, so a job that failed
     # before it produced anything can be cleared out too -- Projects lists
     # those now, and a row nothing can remove is a row that never goes away.
-    out = j.get("work_dir") or os.path.dirname((j.get("result") or {}).get("out_path") or "")
+    out = _work_dir_of(j)
     if not out:
         raise HTTPException(status_code=404, detail="Nothing to delete")
     work = os.path.abspath(out)
@@ -930,7 +945,7 @@ def dub_result_original(jid: str, download: int = 0):
     if download and not j.get("from_link"):
         raise HTTPException(status_code=404,
                             detail="This job started from a file you already have")
-    work_dir = j.get("work_dir") or os.path.dirname((j.get("result") or {}).get("out_path") or "")
+    work_dir = _work_dir_of(j)
     original = os.path.join(work_dir, "input.mp4") if work_dir else ""
     if not original or not os.path.exists(original):
         raise HTTPException(status_code=404, detail="Original file not found")
