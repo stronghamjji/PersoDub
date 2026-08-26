@@ -293,6 +293,10 @@
      so on a narrow window the left of the video would be cut off for good. */
   #screen-running { display: flex; }
   .running { margin: auto; display: flex; gap: 28px; align-items: stretch; }
+  /* The box and the line that says which part of the video is being dubbed,
+     one under the other -- what sits beside the card is that column, not the
+     box itself, so the caption lands under the box instead of next to it. */
+  .running-shot { align-self: center; display: flex; flex-direction: column; gap: 8px; }
   /* A box of a fixed shape, never the video's own: a 9:16 phone clip let the
      block grow past 800px tall and dragged the card -- and the whole screen --
      up with it. 16:9 at 560px, letterboxing whatever does not match, so the
@@ -308,6 +312,10 @@
   .running-video video { display: block; width: 100%; height: 100%;
     object-fit: contain;
     filter: blur(4px) brightness(.55); transform: scale(1.04); }
+  /* Nothing to say for a job with no trim, and nothing drawn either. */
+  .running-trim { text-align: center; font-size: 12px; color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums; }
+  .running-trim:empty { display: none; }
   .running-veil { position: absolute; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 14px; padding: 0 20px;
     text-align: center; color: var(--thumb-foreground); }
@@ -926,13 +934,18 @@
            which of the four stages it is on. renderRunning() fills both. -->
       <section class="screen" id="screen-running" hidden>
         <div class="running">
-          <div class="running-video">
-            <video id="runningVideo" muted playsinline></video>
-            <div class="running-veil">
-              <span class="spinner"></span>
-              <b>Dubbing this video…</b>
-              <span>The player unlocks when it is done</span>
+          <div class="running-shot">
+            <div class="running-video">
+              <video id="runningVideo" muted playsinline></video>
+              <div class="running-veil">
+                <span class="spinner"></span>
+                <b>Dubbing this video…</b>
+                <span>The player unlocks when it is done</span>
+              </div>
             </div>
+            <!-- Which part of the video is being dubbed, when the job was
+                 started with a trim. Empty -- and invisible -- otherwise. -->
+            <div class="running-trim" id="runningTrim"></div>
           </div>
           <div class="progress-card" id="progressCard">
             <div class="progress-head"><b id="progressTitle">Separating audio</b><span id="progressPct">0%</span></div>
@@ -2230,6 +2243,20 @@ function jobLabel(job) {
   return job.project || "Dubbing";
 }
 
+// A job started with a Trim dubbed only part of the video, and both screens say
+// which part -- otherwise a ten-second result out of a half-hour video reads as
+// something that stopped early. Empty for a job with no trim, which is what
+// makes the caption disappear on its own. `withLength` adds how much video that
+// range is, which the running screen has the room for and the top bar does not.
+// The source video's own length is not kept on the job (app/jobs.py:
+// SAVED_FIELDS), so it is not part of this line.
+function trimLabel(job, withLength = false) {
+  const trim = (job || {}).trim;
+  if (!trim || trim.start == null || trim.end == null) return "";
+  const range = `Trimmed ${fmtClockTenths(trim.start)} – ${fmtClockTenths(trim.end)}`;
+  return withLength ? `${range} · ${(trim.end - trim.start).toFixed(1)}s` : range;
+}
+
 // One short line. The WHY of a failure renders separately (renderNotices) --
 // four competing failure messages meant the user read none of them
 // (feedback 2026-08-06).
@@ -2237,7 +2264,10 @@ function jobStatusLine(job, progress) {
   if (job.status === "cancelling") return "Cancelling…";
   if (job.status === "cancelled") return "Cancelled";
   if (job.status === "error") return "Dubbing failed";
-  if (job.status !== "running") return "Done";
+  if (job.status !== "running") {
+    const trim = trimLabel(job);
+    return trim ? `Done · ${trim}` : "Done";
+  }
   // While it runs the top bar says exactly what the progress card says --
   // which stage, how far in. Never how long is left: the stages are too
   // uneven for a guess to be anything but a broken promise.
@@ -2309,6 +2339,8 @@ function renderRunning(job, progress) {
   const cut = job.from_link && job.trim && progress.stage > 0 ? "?cut=1" : "";
   const src = `/api/dub/result/${job.id}/original${cut}`;
   if (video.getAttribute("src") !== src) video.setAttribute("src", src);
+
+  $("runningTrim").textContent = trimLabel(job, true);
 
   $("progressTitle").textContent = progress.label;
   $("progressPct").textContent = `${progress.percent}%`;
@@ -3630,6 +3662,18 @@ async function saveLine(jobId, line, text) {
   }
 }
 
+// Everything the screen has to do once a voice has been made again, whoever
+// asked for it -- the wave button here or the assistant below. The video was
+// rebuilt in place, under the same job, so the player is pointed at the same
+// address with a new version mark; the table and the timeline are drawn again
+// from the server's script, which is also what takes the filled "stale" marks
+// off the lines that were re-spoken (`voice_stale` comes back false for them).
+async function refreshAfterVoices(jobId) {
+  reloadDoneVideo();
+  // The new voice has its own length, and the button its own look.
+  await renderScript(jobId);
+}
+
 // Re-speak one line and rebuild the video around it. Everything else -- the
 // other lines' audio, the background, the cloned voice -- is reused, so this
 // costs seconds where a whole remake costs minutes.
@@ -3641,9 +3685,7 @@ async function remakeLine(jobId, line, btn) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.detail || "Could not remake that line.");
     scriptSaving(`Line ${line} done`);
-    reloadDoneVideo();
-    // The new voice has its own length, and the button its own look.
-    await renderScript(jobId);
+    await refreshAfterVoices(jobId);
     setTimeout(() => scriptSaving(""), 2000);
   } catch (e) {
     scriptSaving(errorText(e));
@@ -3670,18 +3712,24 @@ window.addEventListener("persodub:script-changed", () => {
   renderScript(scriptJobId);
 });
 
-// The assistant can also start the remake itself. The chip fires when the tool
-// is called, a moment before the server has stamped the new job onto this one,
-// so give it a few tries before giving up.
+// The assistant can also make the changed voices again. It does that in place:
+// the lines it re-speaks go back into THIS job's video, so there is no new job
+// to follow -- the screen fetches the script again and reloads the player.
+// Fired when the assistant's turn is over, which is the first moment the
+// rebuilt video file is certainly finished being written.
 window.addEventListener("persodub:voices-remade", async () => {
-  const from = scriptJobId;
-  if (!from) return;
-  for (let i = 0; i < 10; i++) {
-    const job = await fetch(`/api/dub/jobs/${from}`)
-      .then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    if (job && job.remade_as) { resumeJob(job.remade_as); return; }
-    await new Promise((r) => setTimeout(r, 700));
-  }
+  const jobId = scriptJobId;
+  if (!jobId) return;
+  // How many lines were waiting for a new voice, counted off the table that is
+  // on screen right now. The marks that are gone after the redraw are the ones
+  // that were remade -- no second way of deciding which lines those are.
+  const staleNow = () => $("scriptBox").querySelectorAll(".sc-wave.stale").length;
+  const before = staleNow();
+  await refreshAfterVoices(jobId);
+  const remade = before - staleNow();
+  if (remade < 1) return;
+  scriptSaving(`${remade} ${remade === 1 ? "line" : "lines"} remade`);
+  setTimeout(() => scriptSaving(""), 2000);
 });
 
 renderHistory().catch(() => {});
@@ -4147,6 +4195,7 @@ async function ask(message) {
   // answer)" under a good reply whose last event happened to be a step.
   let saidSomething = false;
   let touchedScript = false;
+  let remadeVoices = false;
   let dots = thinking("Thinking…");
   const clearDots = () => { if (dots) { dots.remove(); dots = null; } };
   // A slow turn should say so rather than look stuck.
@@ -4208,9 +4257,10 @@ async function ask(message) {
             touchedScript = true;
             window.dispatchEvent(new CustomEvent("persodub:script-changed"));
           }
-          if (ev.tool === "remake_voices") {
-            window.dispatchEvent(new CustomEvent("persodub:voices-remade"));
-          }
+          // The remake is told at the end of the turn instead (below): this
+          // chip fires when the tool is CALLED, and reloading the player then
+          // would fetch the video halfway through being written again.
+          if (ev.tool === "remake_voices") remadeVoices = true;
         }
         else if (ev.kind === "text") {
           clearDots();
@@ -4240,7 +4290,14 @@ async function ask(message) {
     clearTimeout(slow);
     // The writes have certainly landed by the time the turn is over, so this is
     // the redraw that is guaranteed to show the new words.
-    if (touchedScript) window.dispatchEvent(new CustomEvent("persodub:script-changed"));
+    // The remake redraws the table as well, so a turn that did both needs the
+    // one redraw and not two racing each other.
+    if (touchedScript && !remadeVoices) {
+      window.dispatchEvent(new CustomEvent("persodub:script-changed"));
+    }
+    // Same reason, and the player with it: the remake rebuilds the video in
+    // place, and the turn being over is what says the new file is whole.
+    if (remadeVoices) window.dispatchEvent(new CustomEvent("persodub:voices-remade"));
     // A turn that ends having shown nothing at all is the failure that looks
     // exactly like the app being broken. Say so instead.
     if (dots) { clearDots(); bubble("ai", "No answer came back. Try sending that again."); }
