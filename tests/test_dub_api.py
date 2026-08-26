@@ -1041,3 +1041,101 @@ def test_one_line_voice_still_speaks_that_line_and_rebuilds(monkeypatch, tmp_pat
     assert r.status_code == 200 and r.json() == {"line": 2, "ok": True}
     assert [a[2] for a in said] == ["TWO"]
     assert len(built) == 1
+
+
+# --- what a job was made with ----------------------------------------------
+# The four engine choices are saved on the job (app/jobs.py SAVED_FIELDS) so a
+# finished job can say what made it months later, and so "Try again" repeats
+# the same choices instead of whatever the app's defaults are that day.
+
+def _start_and_settle(monkeypatch, **form):
+    # A pinned Perso workspace, so asking for Perso gets past the preflight.
+    monkeypatch.setenv("PERSO_SPACE_SEQ", "1")
+    monkeypatch.setattr(main, "run_dub",
+                        lambda **kw: {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1})
+    data = {"language": "Korean", "language_code": "ko"}
+    data.update(form)
+    r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")}, data=data)
+    assert r.status_code == 200
+    jid = r.json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
+    return jid
+
+
+def test_dub_start_records_the_engines_the_job_was_made_with(monkeypatch, tmp_path):
+    jid = _start_and_settle(monkeypatch, stt_engine="perso", translate_engine="gemini", n_takes="4")
+
+    job = client.get(f"/api/dub/jobs/{jid}").json()
+    assert job["stt_engine"] == "perso"
+    assert job["translator"] == "gemini"
+    assert job["tts"] == "qwen3"
+    assert job["quality"] == 4
+
+    # And they are in the file beside the video, so a restart still knows them.
+    with open(os.path.join(main.job_store.get(jid)["work_dir"], "job.json"), encoding="utf-8") as f:
+        saved = json.load(f)
+    assert saved["stt_engine"] == "perso" and saved["translator"] == "gemini"
+    assert saved["tts"] == "qwen3" and saved["quality"] == 4
+
+
+def test_dub_start_records_what_the_defaults_resolved_to_not_the_blank(monkeypatch):
+    # The form left every choice out, so what is saved has to be the answer the
+    # app gave -- otherwise the finished screen has nothing to show.
+    monkeypatch.setattr(main, "default_stt_engine", lambda: "")
+    jid = _start_and_settle(monkeypatch)
+
+    job = client.get(f"/api/dub/jobs/{jid}").json()
+    assert job["stt_engine"] == "whisper"          # local Whisper, named
+    assert job["translator"] == main.TRANSLATE_ENGINE
+    assert job["quality"] == main.QWEN_N_TAKES
+
+
+def test_dub_start_names_the_local_engine_whisper_however_it_was_asked_for(monkeypatch):
+    jid = _start_and_settle(monkeypatch, stt_engine="local")
+    assert client.get(f"/api/dub/jobs/{jid}").json()["stt_engine"] == "whisper"
+
+
+def test_the_jobs_list_carries_the_engines_too(monkeypatch):
+    # The Projects rows show them, and none of the four is a secret.
+    jid = _start_and_settle(monkeypatch, stt_engine="perso", n_takes="1")
+    row = next(r for r in client.get("/api/dub/jobs").json()["jobs"] if r["id"] == jid)
+    assert row["stt_engine"] == "perso" and row["tts"] == "qwen3" and row["quality"] == 1
+    assert "work_dir" not in row
+
+
+def test_dub_retry_repeats_the_first_runs_engines(monkeypatch, tmp_path):
+    # Not today's defaults: a Perso job that failed used to come back
+    # transcribed by local Whisper with nothing on screen to say the choice
+    # had changed.
+    calls = []
+    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(main, "default_stt_engine", lambda: "")
+    jid = _restored_job(tmp_path, language_code="ko", stt_engine="perso",
+                        translator="gemini", tts="qwen3", quality=4)
+
+    r = client.post(f"/api/dub/jobs/{jid}/retry")
+    assert r.status_code == 200
+    kw = _wait_for(calls)[0]
+    assert kw["stt_engine"] == "perso"
+    assert kw["translate_engine"] == "gemini"
+    assert kw["n_takes"] == 4
+    # ...and the new job carries them, so its own finished screen says the same.
+    new = client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()
+    assert new["stt_engine"] == "perso" and new["translator"] == "gemini" and new["quality"] == 4
+
+
+def test_dub_retry_of_a_job_saved_before_the_engines_were_kept(monkeypatch, tmp_path):
+    # Nothing to inherit, so the app's own setting decides -- and the new job
+    # records what that turned out to be.
+    calls = []
+    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(main, "default_stt_engine", lambda: "perso")
+    jid = _restored_job(tmp_path, language_code="ko")
+
+    r = client.post(f"/api/dub/jobs/{jid}/retry")
+    assert r.status_code == 200
+    assert _wait_for(calls)[0]["stt_engine"] == "perso"
+    assert client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()["stt_engine"] == "perso"

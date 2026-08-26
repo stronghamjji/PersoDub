@@ -23,7 +23,7 @@ from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
 from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
-                        TRANSLATE_ENGINE, default_stt_engine)
+                        QWEN_N_TAKES, TRANSLATE_ENGINE, default_stt_engine)
 from app.dub_script import (
     DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
 )
@@ -550,11 +550,23 @@ def dub_job_redub(jid: str):
     shutil.copyfile(script_path(work_dir), srt_path)
     out_path = os.path.join(work, "dubbed.mp4")
 
+    # The same engines the first run was given, not today's defaults: a Perso
+    # job that failed used to come back transcribed by local Whisper (or the
+    # other way round), with nothing on screen to say the choice had changed.
+    # A job saved before these were kept has none of them, so that one still
+    # falls back to what the app is set to now.
+    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality")}
+    if not engines.get("stt_engine"):
+        engines = _engines_used()
+
     new_jid = job_store.create()
     job_store._update(new_jid, language_code=language_code, project=project,
                       day=_today(), from_link=False, work_dir=work,
                       # The remake is the same video in the same two languages.
-                      source_lang=job.get("source_lang"))
+                      source_lang=job.get("source_lang"),
+                      # ...and made with the same engines, so its finished
+                      # screen says what the job it came from said.
+                      **engines)
     # Same reason as in dub_start: quit the app mid-remake and this folder is
     # nameless without a file in it, so Projects could never show or clear it.
     job_store.persist(new_jid, work)
@@ -570,6 +582,9 @@ def dub_job_redub(jid: str):
             out_path=out_path,
             language=job.get("language") or language_code,
             language_code=language_code,
+            # Only the voices are made again here, so the take count is the one
+            # engine choice that still applies -- the same one the first run had.
+            n_takes=engines["quality"],
             cancel_check=lambda: job_store.is_cancel_requested(new_jid),
             on_notice=lambda n: job_store.append_notice(new_jid, n),
             log=log,
@@ -636,6 +651,15 @@ def dub_job_retry(jid: str):
             shutil.rmtree(work, ignore_errors=True)
             raise HTTPException(400, str(e))
 
+    # The same engines the first run was given, not today's defaults: a Perso
+    # job that failed used to come back transcribed by local Whisper (or the
+    # other way round), with nothing on screen to say the choice had changed.
+    # A job saved before these were kept has none of them, so that one still
+    # falls back to what the app is set to now.
+    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality")}
+    if not engines.get("stt_engine"):
+        engines = _engines_used()
+
     new_jid = job_store.create()
     job_store._update(new_jid, language_code=language_code, project=project,
                       day=_today(), work_dir=work,
@@ -646,7 +670,8 @@ def dub_job_retry(jid: str):
                       source_lang=job.get("source_lang"),
                       # The video is a local copy now, whatever the first job was
                       # started from -- there is no link to download again.
-                      from_link=False)
+                      from_link=False,
+                      **engines)
     # Same reason as in dub_start: quit the app mid-run and this folder is
     # nameless without a file in it, so Projects could never show or clear it.
     job_store.persist(new_jid, work)
@@ -658,11 +683,13 @@ def dub_job_retry(jid: str):
             out_path=out_path,
             language=language,
             language_code=language_code,
-            # The app's own setting, read now, exactly as a job started by hand
-            # reads it (dub_start below). Left out, run_dub falls back to local
-            # Whisper, so a Perso job came back transcribed by something else
-            # with nothing on screen to say so.
-            stt_engine=default_stt_engine() or None,
+            # The first run's own choices (see `engines` above). Left out,
+            # run_dub falls back to local Whisper and the app's default
+            # translator, so a Perso job came back transcribed by something
+            # else with nothing on screen to say so.
+            stt_engine="perso" if engines["stt_engine"] == "perso" else None,
+            translate_engine=engines["translator"],
+            n_takes=engines["quality"],
             source_language_code=job.get("source_lang"),
             cancel_check=lambda: job_store.is_cancel_requested(new_jid),
             on_notice=lambda n: job_store.append_notice(new_jid, n),
@@ -795,6 +822,25 @@ def _cut_video(path: str, start: float, end: float, on_cut=None) -> None:
         # input.mp4, in a folder the pipeline later walks.
         if os.path.exists(tmp):
             os.remove(tmp)
+
+
+def _engines_used(stt_engine=None, translate_engine=None, n_takes=None) -> dict:
+    """The engine choices this job is really being made with, resolved now.
+
+    The form may leave any of them out, in which case the app's own setting
+    decides -- so what is saved on the job is the answer, never the blank. That
+    is what lets the finished screen say "Whisper, Gemma, 4 takes" months later,
+    and what "Try again" repeats instead of whatever the defaults are that day.
+    "whisper" covers both ways of asking for the free local engine (an explicit
+    "local" and no choice at all); qwen3 is the app's only voice engine.
+    """
+    resolved_stt = (stt_engine or default_stt_engine() or "").lower()
+    return {
+        "stt_engine": "perso" if resolved_stt == "perso" else "whisper",
+        "translator": (translate_engine or TRANSLATE_ENGINE or "").lower() or None,
+        "tts": "qwen3",
+        "quality": n_takes if n_takes is not None else QWEN_N_TAKES,
+    }
 
 
 @app.post("/api/dub/start")
@@ -964,7 +1010,11 @@ def dub_start(
                       # A link still holds the whole video and is cut in the
                       # thread below, which clears this the moment it is.
                       trim_pending=bool(source_url and trim_start is not None),
-                      from_link=bool(source_url))
+                      from_link=bool(source_url),
+                      # What made this job: read back by the finished screen and
+                      # by "Try again", which repeats these rather than today's
+                      # defaults.
+                      **_engines_used(stt_engine, translate_engine, n_takes))
     # Written now, not just at the end: a job the user quits the app in the
     # middle of still has a folder, and without a file in it that folder is
     # nameless -- Projects would have nothing to show for it.

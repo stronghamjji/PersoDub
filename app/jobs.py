@@ -26,9 +26,16 @@ from app.config import PERSODUB_LOG_DIR
 # only ever true of a link job between its download and its cut; written that way
 # round so that a job.json from before it existed (no key, so false) is read as
 # "already cut", which is what every job saved until now was.
+# The four engine choices a job was started with (stt_engine "whisper"/"perso",
+# translator "gemma"/"gemini"/..., tts "qwen3", quality = how many takes per line)
+# are saved too, so a finished job can say what made it and "Try again" can
+# repeat the same choices instead of falling back to today's defaults. A job.json
+# written before they existed simply has no such keys -- every reader treats them
+# as unknown and shows nothing.
 SAVED_FIELDS = ("id", "status", "language", "language_code", "source_lang",
                 "project", "day", "from_link", "created", "work_dir", "trim",
-                "trim_pending", "error", "remade_as")
+                "trim_pending", "error", "remade_as",
+                "stt_engine", "translator", "tts", "quality")
 
 # What GET /api/dub/jobs sends the screen: the same minus the two absolute
 # paths. The sidebar names a job, colours its dot and addresses everything else
