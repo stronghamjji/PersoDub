@@ -159,12 +159,34 @@ def edit_line(work_dir: str, line: int, text: str, lang: str) -> dict:
     return load_lines(work_dir, lang)[line - 1]
 
 
+def _inside_job(work_dir: str, out_path: str) -> str:
+    """out_path as an absolute path, refused if it lands outside the job folder.
+
+    This is the one tool the assistant has that names its own destination, and
+    an assistant reaches it through MCP -- a separate process, so nothing the
+    CLI's own sandbox does can see this write. A relative name is taken as
+    relative to the job; an absolute one is allowed only if it is still in
+    there. "../../.zshrc" and "/etc/hosts" are not.
+    """
+    base = os.path.realpath(work_dir)
+    # join leaves an absolute out_path alone, which is what makes the check
+    # cover both spellings.
+    full = os.path.realpath(os.path.join(base, out_path))
+    if full != base and not full.startswith(base + os.sep):
+        raise ValueError(
+            "a script can only be written inside its own job folder, and %s is "
+            "outside it -- give a plain file name instead" % out_path
+        )
+    return full
+
+
 def export_srt(work_dir: str, out_path: str) -> str:
     """Copy the script that currently counts to out_path, and return that path.
 
     Feeding this file back in as a ready-made translated SRT (app/main.py:303) skips
     transcription and translation, so only the voices are made again.
     """
+    out_path = _inside_job(work_dir, out_path)
     src = script_path(work_dir)
     if not os.path.exists(src):
         raise FileNotFoundError("this job has no script: %s" % work_dir)

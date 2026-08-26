@@ -175,16 +175,25 @@ def command(prompt: str, mcp_config: str, resume: bool, model: str = "") -> List
     settings = [
         # Headless Codex refuses every MCP tool call unless a reviewer is named:
         # the approval prompt goes to a terminal that is not there, EOF reads as
-        # "no", and the call is cancelled (measured 2026-08-26; the CLI says
-        # "approval policy is never" -- openai/codex#24135). approval_policy
-        # "never" is therefore not usable here, and these two are what make the
-        # script tools reachable at all.
+        # "no", and the call is cancelled (openai/codex#24135). The CLI says
+        # "approval policy is never" whatever the policy actually is -- measured
+        # 2026-08-26 with approval_policy="on-request" and NO reviewer, which
+        # got that exact refusal and a turn that changed nothing. So it is
+        # `approvals_reviewer`, not the policy, that makes the script tools
+        # reachable, and it cannot simply be dropped.
         #
-        # Read what they permit, not just what they fix: "on-request" lets the
-        # model ASK to run a command with escalated privileges -- outside the
-        # sandbox -- and "auto_review" hands that request to another model
-        # rather than to the user. Nobody here is asked. The sandbox below is
-        # what keeps that from mattering much, not the approval setting.
+        # Read what it permits, not just what it fixes. "on-request" lets the
+        # model ASK to run a command with escalated privileges, and
+        # "auto_review" hands that request to another model rather than to the
+        # user -- nobody here is asked. `codex exec --help` says of its flag
+        # form: "Route approval requests through automatic review using the
+        # workspace-write sandbox". So read-only is the FLOOR, not the ceiling:
+        # an escalation another model approves runs with write access to the
+        # working directory, which is the app's own agent folder. It is not a
+        # way out to the rest of the disk, and it is the same folder the run
+        # could write to before read-only -- but it is a write path, and saying
+        # otherwise here would be the comment talking the next person into
+        # loosening the setting.
         'approvals_reviewer="auto_review"',
         'approval_policy="on-request"',
         # Read-only: Codex keeps a shell that no setting takes away, so the

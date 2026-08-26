@@ -135,9 +135,16 @@ def test_the_command_lets_a_tool_call_through_without_anyone_to_ask(tmp_path):
     from app.agents.codex import command
 
     joined = " ".join(command("고쳐줘", _mcp_config(tmp_path), resume=False))
+    # Measured 2026-08-26: the reviewer is the load-bearing one. A real turn
+    # with approval_policy="on-request" and NO reviewer got the same refusal
+    # ("approval policy is never") and rewrote nothing, so this line cannot be
+    # dropped on the grounds that the policy alone should cover it.
     assert 'approvals_reviewer="auto_review"' in joined
     assert 'approval_policy="on-request"' in joined
+    # The floor the shell runs at. An escalation the reviewer approves gets
+    # workspace-write on the working directory, so this is not the ceiling.
     assert 'sandbox_mode="read-only"' in joined
+    assert 'sandbox_mode="workspace-write"' not in joined
 
 
 def test_the_command_keeps_the_users_skills_and_the_web_out(tmp_path):
@@ -238,6 +245,15 @@ def test_a_long_connection_complaint_is_trimmed_to_fit_a_chip():
              'url: wss://api.openai.com/v1/responses, cf-ray: a30e73aadc4aea17-ICN)"}')
     assert len(out[0]["label"]) <= 120
     assert out[0]["label"].endswith("…")
+
+
+def test_a_connection_complaint_with_nothing_in_it_still_says_something():
+    """The one branch of _transport_error with no recorded line behind it: a
+    chip with a blank label would be a tick beside nothing at all."""
+    out = ev('{"type":"error"}')
+    assert out[0]["kind"] == "progress"
+    assert out[0]["label"] == "The assistant lost its connection."
+    assert ev('{"type":"error","message":""}')[0]["label"] == out[0]["label"]
 
 
 def test_a_transport_error_wrapped_as_an_item_is_shown_once():

@@ -65,7 +65,7 @@ def test_gemini_is_refused_with_the_same_reason_the_picker_shows():
     assert _rows()["gemini"]["reason"] in r.json()["detail"]
 
 
-def _capture(monkeypatch):
+def _capture(monkeypatch, tmp_path):
     """Run a turn with the CLI replaced, and hand back what was asked of it."""
     seen = {}
 
@@ -77,11 +77,16 @@ def _capture(monkeypatch):
 
     monkeypatch.setattr(main.agent_base, "run", fake_run)
     monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    # Without this the tests leave a real persodub-mcp.json in the user's own
+    # log folder. Written where pytest cleans up instead.
+    real_write = main.agent_base.write_mcp_config
+    monkeypatch.setattr(main.agent_base, "write_mcp_config",
+                        lambda d, url: real_write(str(tmp_path), url))
     return seen
 
 
-def test_a_turn_goes_to_the_backend_the_panel_named(monkeypatch):
-    seen = _capture(monkeypatch)
+def test_a_turn_goes_to_the_backend_the_panel_named(monkeypatch, tmp_path):
+    seen = _capture(monkeypatch, tmp_path)
     r = client.post("/api/agent/chat",
                     json={"message": "3번 줄 짧게", "agent": "codex", "job_id": "abc123"})
     assert r.status_code == 200
@@ -92,8 +97,8 @@ def test_a_turn_goes_to_the_backend_the_panel_named(monkeypatch):
     assert "abc123" in seen["args"][-1]        # the job on screen went with it
 
 
-def test_claude_still_gets_claudes_command_line(monkeypatch):
-    seen = _capture(monkeypatch)
+def test_claude_still_gets_claudes_command_line(monkeypatch, tmp_path):
+    seen = _capture(monkeypatch, tmp_path)
     r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "claude"})
     assert r.status_code == 200
     assert seen["binary"].endswith("claude")
@@ -116,3 +121,11 @@ def test_a_damaged_config_comes_back_as_a_message_not_a_stack_trace(monkeypatch)
     r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "codex"})
     assert r.status_code == 500
     assert "도우미 설정" in r.json()["detail"]
+
+
+def test_every_turn_asks_to_carry_on_the_conversation(monkeypatch, tmp_path):
+    """The panel never sends `resume`, so the request default is what reaches
+    the driver -- and that default is what makes a follow-up remember."""
+    seen = _capture(monkeypatch, tmp_path)
+    client.post("/api/agent/chat", json={"message": "또", "agent": "codex"})
+    assert seen["args"][:3] == ["exec", "resume", "--last"]

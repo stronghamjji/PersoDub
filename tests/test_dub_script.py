@@ -210,3 +210,34 @@ def test_export_writes_the_current_script(tmp_path):
     export_srt(str(tmp_path), str(out))
     assert "고친 번역" in out.read_text(encoding="utf-8")
     assert "옛날 번역" not in out.read_text(encoding="utf-8")
+
+
+def test_a_script_cannot_be_written_outside_its_own_job_folder(tmp_path):
+    """export_script is the one tool that names its own destination, and it
+    runs in the MCP server -- a separate process, so the CLI's sandbox never
+    sees the write. The folder is the fence."""
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+    outside = tmp_path.parent / "escaped.srt"
+
+    for bad in (str(outside), "../escaped.srt", "../../escaped.srt",
+                "/tmp/persodub-escaped.srt"):
+        with pytest.raises(ValueError) as e:
+            export_srt(str(tmp_path), bad)
+        assert "job folder" in str(e.value)
+    assert not outside.exists()
+
+
+def test_a_plain_file_name_lands_in_the_job_folder(tmp_path):
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+
+    out = export_srt(str(tmp_path), "for-the-pipeline.srt")
+    assert out == str((tmp_path / "for-the-pipeline.srt").resolve())
+    assert "번역" in open(out, encoding="utf-8").read()
+
+
+def test_a_subfolder_of_the_job_is_still_inside(tmp_path):
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+    (tmp_path / "out").mkdir()
+
+    out = export_srt(str(tmp_path), "out/script.srt")
+    assert os.path.exists(out)

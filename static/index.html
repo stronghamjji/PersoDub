@@ -3476,7 +3476,8 @@ function buildMenu() {
   const a = agentList.find((x) => x.id === menuLevel);
   const back = document.createElement("div");
   back.className = "menu-group";
-  back.innerHTML = `<span>‹ ${a ? a.name : ""}</span>`;
+  back.appendChild(document.createElement("span"))
+      .textContent = "‹ " + (a ? a.name : "");
   back.style.cursor = "pointer";
   back.addEventListener("click", (e) => { e.stopPropagation(); menuLevel = ""; buildMenu(); });
   menu.appendChild(back);
@@ -3611,6 +3612,12 @@ async function ask(message) {
   busy = true;
   bubble("me", message);
   let answer = null;
+  // Two jobs, two variables. `answer` is only "which bubble am I appending to",
+  // and a chip deliberately clears it so the next thing said starts below the
+  // step. `saidSomething` is "did this turn say anything at all", which is what
+  // the end of the turn asks -- reading `answer` for that printed "(empty
+  // answer)" under a good reply whose last event happened to be a step.
+  let saidSomething = false;
   let touchedScript = false;
   let dots = thinking("Thinking…");
   const clearDots = () => { if (dots) { dots.remove(); dots = null; } };
@@ -3681,6 +3688,7 @@ async function ask(message) {
           clearDots();
           settlePrevious();
           if (!answer) answer = bubble("ai", "");
+          saidSomething = true;
           answer.dataset.raw += ev.text;
           renderReply(answer, answer.dataset.raw);
           log.scrollTop = log.scrollHeight;
@@ -3694,8 +3702,8 @@ async function ask(message) {
         } else if (ev.kind === "done") {
           clearDots();
           settlePrevious();
-          if (!answer && ev.text) bubble("ai", ev.text);
-          else if (!answer) bubble("ai", "(empty answer)");
+          if (!saidSomething && ev.text) bubble("ai", ev.text);
+          else if (!saidSomething) bubble("ai", "(empty answer)");
         }
       }
     }
