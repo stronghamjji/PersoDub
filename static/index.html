@@ -380,17 +380,15 @@
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
   .btn-secondary { background: var(--secondary); color: var(--foreground); border: 1px solid var(--border); }
   /* A quiet button that still reads as a button: white, bordered, same box as
-     the rest. (.btn-ghost is a text link -- inside the 52px top bar it read as
-     an underlined footnote beside the solid Export.) */
+     the rest. (A bare text link, inside the 52px top bar, read as an
+     underlined footnote beside the solid Export.) */
   .btn-outline { background: var(--background); color: var(--foreground); border: 1px solid var(--border); }
   .btn-outline:hover { background: var(--secondary); }
   .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
   /* The one button in the app that destroys something. */
   .btn-danger { background: var(--destructive); color: var(--primary-foreground); }
   .delete-error { margin: 10px 0 0; font-size: 0.8rem; color: var(--destructive); }
-  .btn-ghost { background: none; border: none; color: var(--muted-foreground); font-size: 0.76rem; cursor: pointer; font-family: inherit; text-decoration: underline; padding: 0; }
 
-  .section-gap { margin-top: 16px; }
   .option-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
   .field label { display: block; font-size: 0.76rem; font-weight: 600; margin-bottom: 5px; }
   select, input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); font-size: 0.84rem; color: var(--foreground); font-family: inherit; }
@@ -406,30 +404,10 @@
     border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--accent);
     color: var(--primary); font-family: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
   .keys-link:hover { border-color: var(--primary); }
-  .file-field-row { display: flex; align-items: center; gap: 8px; }
-  .file-field-row input[type=text] { flex: 1; }
-
-  .start-row { margin-top: 16px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
   .form-error { color: var(--destructive); font-size: 0.8rem; }
   /* An empty error line is still a flex item, and would leave a gap under the
      link field for a message that is not there. */
   .form-error:empty { display: none; }
-
-  /* ---------------- Script tab ---------------- */
-
-  .script-placeholder { color: var(--muted-foreground); font-size: 0.84rem; padding: 30px 0; text-align: center; }
-  .script-row { display: grid; grid-template-columns: 100px 1fr; gap: 14px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
-  .script-row:last-child { border-bottom: none; }
-  .script-row:nth-child(even):not(.head) { background: #fbfaff; }
-  .script-row.head { background: var(--secondary); font-weight: 600; font-size: 0.68rem; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.03em; }
-  .script-time { color: var(--primary); font-variant-numeric: tabular-nums; font-size: 0.76rem; }
-  .script-text { color: var(--foreground); }
-
-  /* ---------------- Voice tab ---------------- */
-
-  .voice-summary { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; font-size: 0.85rem; }
-  .voice-summary .icon { color: var(--primary); }
-  .note-box { margin-top: 14px; background: var(--accent); border-radius: var(--radius); padding: 10px 13px; font-size: 0.78rem; }
 
   /* ---------------- Done: the script beside the video ---------------- */
   /* The script is the screen. The video is beside it at a fixed width so the
