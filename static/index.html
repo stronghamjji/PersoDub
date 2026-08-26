@@ -2658,7 +2658,7 @@ function projectMeta(job) {
 // voice engine is the same on every row. A job with nothing saved gets no line
 // at all rather than an empty one.
 function projectTags(job) {
-  const chips = engineChips(job, { withQuality: false, withTts: false });
+  const chips = engineChips(job, { withQuality: false, withTts: true });
   if (chips.length === 0) return "";
   return `<div class="job-tags">${chips
     .map((c) => `<span class="job-tag${c.api ? " api" : ""}">${escapeHtml(c.label)}</span>`)
