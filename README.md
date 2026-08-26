@@ -38,8 +38,8 @@ It separates speech from background audio, transcribes it, works out who spoke w
 translates each line, clones each speaker's voice, and mixes the result back over the
 original soundtrack. With the default settings, every one of those steps runs locally.
 
-<img src="docs/images/advanced-options.png" width="100%"
-     alt="PersoDub main window with Advanced options expanded: a drop zone for the video, pickers for speech-to-text, original language, target language and voice quality, and below them the translation engine, the text-to-speech engine, and the number of speakers.">
+<img src="docs/images/main-window.png" width="100%"
+     alt="PersoDub's first screen: a drop zone for the video, and under it a field for pasting a video link.">
 
 > **Status: early release (v0.3.6).** PersoDub is usable today and is under active
 > development. macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
@@ -164,14 +164,30 @@ once; [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks l
 ## Usage
 
 1. Launch **PersoDub**. On first run it downloads its models (see
-   [Requirements](#requirements)); after that it opens straight to the **Upload** tab.
-2. Drop your video onto the upload area, click it to browse, or paste a video link —
+   [Requirements](#requirements)); after that it opens on its first screen, which asks
+   one thing: which video?
+2. Drop your video on the drop zone, click **Choose a file**, or paste a video link —
    MP4 or MOV, up to 2 GB.
-3. Pick the language to dub into from the **Target language** menu — 10 are supported
-   (see [Supported languages](#supported-languages) below).
-4. Click **Start dubbing**. A progress bar at the top tracks each stage as it runs.
-5. When it finishes, the **Export** tab unlocks — download the dubbed video and the
-   translated `.srt` there.
+3. The **New project** dialog opens. Trim the part you want dubbed, pick the original
+   and target languages (10 are supported — see
+   [Supported languages](#supported-languages)), and open **Advanced options** if you
+   want to change an engine.
+4. Click **Start dubbing**. The running screen ticks off the four stages, and counts
+   the lines as it voices them.
+5. When it finishes, the job opens on the finished screen: the script line by line
+   beside the player, a timeline underneath, and **Export** in the top bar for the
+   dubbed video and the translated `.srt`.
+
+<img src="docs/images/done-screen.png" width="100%"
+     alt="A finished job: the script as a table of numbered lines with their time slots, the original line and the translated line side by side, the player beside it on the Dubbed tab, a timeline underneath, and the Dub Agent strip along the bottom.">
+
+Each line has a play button to hear that line alone, and a waveform button to remake
+its voice after you change the words. **Original** and **Dubbed** swap which file the
+player shows. Past jobs are under **Projects**, the folder icon on the left.
+
+The strip along the bottom is the **Dub Agent** — ask for a fix in plain words and it
+edits the script and remakes the voice for you. What it can reach on your machine is
+spelled out in [The Dub Agent and your files](#the-dub-agent-and-your-files).
 
 Engine choices (transcription, translation, quality) live under the **Advanced
 options** toggle, collapsed by default — see [Configuration](#configuration) for what
@@ -214,6 +230,27 @@ content), which you can turn off in **Settings → Privacy**.
 
 Full breakdown — exactly what's sent, what's tracked, and how to opt out of
 everything — is in **[docs/privacy.md](docs/privacy.md)**.
+
+### The Dub Agent and your files
+
+The Dub Agent runs an assistant that is **already installed on your Mac** — Claude
+Code or Codex — as a program on your own machine. PersoDub has no assistant of its
+own, and your video is never sent anywhere for this. What each one can reach differs,
+and the difference is worth knowing:
+
+- **Claude Code** is fenced in to PersoDub's own script tools. Reading files and
+  running shell commands are denied outright, and your own MCP servers are left out.
+- **Codex runs in a read-only sandbox**: it cannot write anywhere, and its shell
+  cannot reach the network. It can still **read any file on this Mac that you can
+  read**, and whatever it reads travels to OpenAI as part of the conversation. If that
+  matters to you, use Claude Code.
+- **Gemini** is listed but greyed out, with the reason on the row: Google no longer
+  serves that CLI on a personal account.
+- The conversation carries on from one job to the next — the assistant is told which
+  project is on screen. The thread is kept by that assistant's own CLI on your
+  machine, so closing PersoDub does not end it.
+
+Whichever you pick answers on your own account with that vendor, and is billed there.
 
 ## Responsible use
 
