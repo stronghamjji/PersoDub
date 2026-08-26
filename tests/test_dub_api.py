@@ -841,3 +841,105 @@ def test_starting_the_app_restores_yesterdays_jobs(monkeypatch):
 
     assert [r["id"] for r in rows] == ["restored-1"]
     assert rows[0]["project"] == "yesterday" and rows[0]["status"] == "done"
+
+
+# --- what a retry runs ON --------------------------------------------------
+# Pressing "Try again" has to mean the same run the user would get by starting
+# the job by hand: the app's own speech-to-text setting, the target language by
+# name, and the same seconds of video.
+
+def _restored_job(tmp_path, **fields):
+    """A job as it comes back from job.json after a restart: its folder with the
+    video still in it, and only the fields job.json keeps."""
+    work = tmp_path / "restored"
+    work.mkdir(exist_ok=True)
+    (work / "input.mp4").write_bytes(b"vid")
+    jid = main.job_store.create()
+    main.job_store._update(jid, status="error", work_dir=str(work),
+                           project="restored", **fields)
+    return jid
+
+
+def _wait_for(calls, n=1, secs=4):
+    for _ in range(int(secs / 0.02)):
+        if len(calls) >= n:
+            return calls
+        time.sleep(0.02)
+    raise AssertionError("run_dub was never called")
+
+
+def test_dub_retry_of_a_restored_job_sends_the_language_name_not_its_code(monkeypatch, tmp_path):
+    # A job saved before the name was kept in job.json has only "ko" left, and
+    # run_dub's language goes into the translation prompt and to the voice
+    # sidecar -- both of which want "Korean".
+    calls = []
+    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
+    jid = _restored_job(tmp_path, language_code="ko")
+
+    assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
+    assert _wait_for(calls)[0]["language"] == "Korean"
+
+
+def test_dub_retry_keeps_the_language_name_the_job_was_saved_with(monkeypatch, tmp_path):
+    # And a name that was saved wins over the one the code maps to.
+    calls = []
+    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
+    jid = _restored_job(tmp_path, language_code="pt", language="Brazilian Portuguese")
+
+    assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
+    assert _wait_for(calls)[0]["language"] == "Brazilian Portuguese"
+
+
+def test_dub_retry_uses_the_apps_own_speech_to_text_setting(monkeypatch, tmp_path):
+    # Left out, run_dub falls back to local Whisper -- so a Perso job came back
+    # transcribed by something else, with nothing on screen to say so.
+    calls = []
+    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(main, "default_stt_engine", lambda: "perso")
+    jid = _restored_job(tmp_path, language_code="ko")
+
+    assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
+    assert _wait_for(calls)[0]["stt_engine"] == "perso"
+
+
+def test_dub_retry_cuts_a_link_job_whose_video_was_never_cut(monkeypatch, tmp_path):
+    # A link is downloaded and cut inside the job thread, so a job that died at
+    # the cut still holds the whole video -- and its second run would dub every
+    # minute the user cut away.
+    cuts = []
+    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(main, "_cut_video", lambda p, s, e: cuts.append((s, e)))
+    jid = _restored_job(tmp_path, language_code="ko", from_link=True,
+                        trim={"start": 5, "end": 20}, trim_pending=True)
+
+    r = client.post(f"/api/dub/jobs/{jid}/retry")
+    assert r.status_code == 200
+    assert cuts == [(5, 20)]
+    # And the new job owes no cut, so retrying IT does not cut a second time.
+    assert client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()["trim_pending"] is False
+
+
+def test_dub_retry_does_not_cut_a_video_that_was_already_cut(monkeypatch, tmp_path):
+    cuts = []
+    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(main, "_cut_video", lambda p, s, e: cuts.append((s, e)))
+    jid = _restored_job(tmp_path, language_code="ko",
+                        trim={"start": 5, "end": 20}, trim_pending=False)
+
+    assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
+    assert cuts == []
+
+
+def test_dub_retry_of_a_job_saved_before_the_marker_existed_does_not_cut(monkeypatch, tmp_path):
+    # Those job.json files have a trim and nothing to say whether it was made.
+    # Every one of them was cut (an upload is cut before its record exists, and
+    # a link job's cut is the same second as its download), and cutting a cut
+    # video again gives the user the wrong seconds -- worse than not cutting.
+    cuts = []
+    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(main, "_cut_video", lambda p, s, e: cuts.append((s, e)))
+    jid = _restored_job(tmp_path, language_code="ko", from_link=True,
+                        trim={"start": 5, "end": 20})   # no trim_pending at all
+
+    assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
+    assert cuts == []

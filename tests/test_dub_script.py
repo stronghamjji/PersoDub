@@ -260,3 +260,15 @@ def test_a_subfolder_of_the_job_is_still_inside(tmp_path):
 
     out = export_srt(str(tmp_path), "out/script.srt")
     assert os.path.exists(out)
+
+
+def test_exporting_into_a_folder_that_is_not_there_says_which_folder(tmp_path):
+    # The assistant shows this message to the user. Writing straight into a
+    # missing folder raised a FileNotFoundError that read like a crash and put
+    # the job's whole path on screen.
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+
+    with pytest.raises(ValueError) as e:
+        export_srt(str(tmp_path), "sub/dir/script.srt")
+    assert "sub/dir" in str(e.value)
+    assert str(tmp_path) not in str(e.value)

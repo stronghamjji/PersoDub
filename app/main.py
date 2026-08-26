@@ -554,6 +554,11 @@ def dub_job_retry(jid: str):
         raise HTTPException(status_code=409, detail="This job's video is no longer on disk.")
 
     language_code = job.get("language_code") or "en"
+    # run_dub wants the language's name. A job saved before that name was kept
+    # in job.json has only its code, so work the name back out of it -- handing
+    # run_dub "ko" would put "ko" in the translation prompt and in what the
+    # voice sidecar is told to speak.
+    language = job.get("language") or _language_name(language_code)
     project = job.get("project") or os.path.basename(work_dir)
     check_space(WORKSPACE)
     work = _job_dir(project, language_code)
@@ -561,12 +566,30 @@ def dub_job_retry(jid: str):
     shutil.copyfile(source_video, video_path)
     out_path = os.path.join(work, "dubbed.mp4")
 
+    # A trim that was already made lives in input.mp4, so cutting the copy again
+    # would take the same seconds out of a video that no longer has them -- which
+    # is why this only cuts when the record says the cut is still owed. A link job
+    # that died at (or before) its cut still holds the whole video, and without
+    # this its second run would dub every minute the user cut away.
+    trim = job.get("trim")
+    cut_now = bool(job.get("trim_pending") and trim
+                   and trim.get("start") is not None and trim.get("end") is not None)
+    if cut_now:
+        try:
+            _cut_video(video_path, trim["start"], trim["end"])
+        except RuntimeError as e:
+            # No job record points at this folder yet, so nothing would ever
+            # come back to clear it. _job_dir always makes a fresh one.
+            shutil.rmtree(work, ignore_errors=True)
+            raise HTTPException(400, str(e))
+
     new_jid = job_store.create()
-    # No trim: input.mp4 is already the cut the first job made, so cutting it
-    # again would take the same seconds out of a video that no longer has them.
     job_store._update(new_jid, language_code=language_code, project=project,
                       day=_today(), work_dir=work,
-                      language=job.get("language") or language_code,
+                      language=language,
+                      # Cut just now, or copied from a video already cut: either
+                      # way this job owes no cut.
+                      trim=trim, trim_pending=False,
                       source_lang=job.get("source_lang"),
                       # The video is a local copy now, whatever the first job was
                       # started from -- there is no link to download again.
@@ -580,8 +603,13 @@ def dub_job_retry(jid: str):
         return run_dub(
             video_path=video_path,
             out_path=out_path,
-            language=job.get("language") or language_code,
+            language=language,
             language_code=language_code,
+            # The app's own setting, read now, exactly as a job started by hand
+            # reads it (dub_start below). Left out, run_dub falls back to local
+            # Whisper, so a Perso job came back transcribed by something else
+            # with nothing on screen to say so.
+            stt_engine=default_stt_engine() or None,
             source_language_code=job.get("source_lang"),
             cancel_check=lambda: job_store.is_cancel_requested(new_jid),
             on_notice=lambda n: job_store.append_notice(new_jid, n),
@@ -870,6 +898,10 @@ def dub_start(
                       # The seconds the user kept, or None for the whole video.
                       trim=({"start": trim_start, "end": trim_end}
                             if trim_start is not None else None),
+                      # An upload was cut just above, before this record existed.
+                      # A link still holds the whole video and is cut in the
+                      # thread below, which clears this the moment it is.
+                      trim_pending=bool(source_url and trim_start is not None),
                       from_link=bool(source_url))
     # Written now, not just at the end: a job the user quits the app in the
     # middle of still has a folder, and without a file in it that folder is
@@ -887,6 +919,12 @@ def dub_start(
             )
             if trim_start is not None:
                 _cut_video(video_path, trim_start, trim_end)
+                # Written to job.json straight away, not just at the end of the
+                # job: quit the app after this line and the record has to say
+                # the cut was made, or running this job again would cut the same
+                # seconds out of a video that no longer has them.
+                job_store._update(jid, trim_pending=False)
+                job_store.persist(jid, work)
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,
@@ -958,6 +996,24 @@ _LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2,8}([-_][A-Za-z0-9]{2,8})?$")
 
 def _valid_language_code(code: str) -> bool:
     return bool(_LANGUAGE_CODE.match(code or ""))
+
+
+# The ten languages the bundled voice model speaks, by code -- the same table
+# the screen keeps (ui/src/dubApi.mjs LANGUAGES). run_dub is given the NAME,
+# which it pastes into the translation prompt and hands to the voice sidecar,
+# so a job whose saved record predates `language` needs its name worked out
+# from the code rather than the code sent in its place.
+LANGUAGE_NAMES = {
+    "en": "English", "ko": "Korean", "zh": "Chinese", "fr": "French",
+    "de": "German", "it": "Italian", "ja": "Japanese", "pt": "Portuguese",
+    "ru": "Russian", "es": "Spanish",
+}
+
+
+def _language_name(code: str) -> str:
+    """The language's name for a code, or the code itself for one we don't know
+    (a region variant, say) -- which is no worse than what we were given."""
+    return LANGUAGE_NAMES.get((code or "").lower(), code)
 
 
 def _job_dir(title, lang_code):

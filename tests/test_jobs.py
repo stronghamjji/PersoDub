@@ -344,3 +344,33 @@ def test_persist_does_not_bring_back_a_deleted_folder(tmp_path):
     store._update(jid, status="done")
     store.persist(jid, str(tmp_path / "gone"))
     assert not (tmp_path / "gone").exists()
+
+
+def test_the_target_language_name_survives_a_restart(tmp_path):
+    # run_dub is given the language's NAME, so a job that comes back from a
+    # file and is run again has to still know it -- with only the code left,
+    # "Korean" turned into "ko" in the translation prompt and in what the voice
+    # sidecar was told to speak.
+    (tmp_path / "x").mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="error", language="Korean", language_code="ko")
+    store.persist(jid, str(tmp_path / "x"))
+
+    store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
+    assert store2.get(jid)["language"] == "Korean"
+
+
+def test_a_cut_still_owed_survives_a_restart(tmp_path):
+    # A link job is cut after its download, inside the job thread. Quit the app
+    # around that moment and the record has to say which side of the cut it is
+    # on, or running it again cuts an already-cut video a second time.
+    (tmp_path / "x").mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="error", trim={"start": 5, "end": 20}, trim_pending=True)
+    store.persist(jid, str(tmp_path / "x"))
+
+    store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
+    assert store2.get(jid)["trim"] == {"start": 5, "end": 20}
+    assert store2.get(jid)["trim_pending"] is True

@@ -20,9 +20,15 @@ from app.config import PERSODUB_LOG_DIR
 # the job is still running. `result` is added separately -- only its out_path
 # and the language it detected, because the rest of run_dub's return value is of
 # no use once the job is over.
-SAVED_FIELDS = ("id", "status", "language_code", "source_lang", "project",
-                "day", "from_link", "created", "work_dir", "trim", "error",
-                "remade_as")
+# `language` is the target language's NAME ("Korean"), which is what run_dub
+# takes -- without it a job restored from a file could only be run again on its
+# code. `trim_pending` says the cut has NOT been made in input.mp4 yet, which is
+# only ever true of a link job between its download and its cut; written that way
+# round so that a job.json from before it existed (no key, so false) is read as
+# "already cut", which is what every job saved until now was.
+SAVED_FIELDS = ("id", "status", "language", "language_code", "source_lang",
+                "project", "day", "from_link", "created", "work_dir", "trim",
+                "trim_pending", "error", "remade_as")
 
 # What GET /api/dub/jobs sends the screen: the same minus the two absolute
 # paths. The sidebar names a job, colours its dot and addresses everything else

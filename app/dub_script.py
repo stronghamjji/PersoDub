@@ -192,6 +192,17 @@ def export_srt(work_dir: str, out_path: str) -> str:
     transcription and translation, so only the voices are made again.
     """
     out_path = _inside_job(work_dir, out_path)
+    # A folder that is not there is not made here: writing into it would raise
+    # a FileNotFoundError whose message reads like a crash and carries the job's
+    # whole path on screen. Name the missing folder the way the job sees it, so
+    # the answer says what to do without printing where the job lives.
+    parent = os.path.dirname(out_path)
+    if not os.path.isdir(parent):
+        raise ValueError(
+            "there is no %s folder in this job -- give a plain file name, or a "
+            "folder that already exists"
+            % os.path.relpath(parent, os.path.realpath(work_dir))
+        )
     src = script_path(work_dir)
     if not os.path.exists(src):
         # A ValueError like the two above, because it reaches the same readers:
