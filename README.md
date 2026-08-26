@@ -179,7 +179,7 @@ once; [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks l
    dubbed video and the translated `.srt`.
 
 <img src="docs/images/done-screen.png" width="100%"
-     alt="A finished job: the script as a table of numbered lines with their time slots, the original line and the translated line side by side, the player beside it on the Dubbed tab, a timeline underneath, and the Dub Agent strip along the bottom.">
+     alt="A finished job: the engines it was made with in a row of chips along the top, the script as a table of lines with their time slots, the original line and the translated line side by side, the player beside it on the Dubbed tab, a timeline underneath, and the Dub Agent strip folded away along the bottom.">
 
 Each line has a play button to hear that line alone, and a waveform button to remake
 its voice after you change the words. **Original** and **Dubbed** swap which file the

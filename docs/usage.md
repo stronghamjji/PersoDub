@@ -83,7 +83,7 @@ times on different machines, so any estimate would be a promise the app breaks.
 When the job finishes, it opens on the screen the app is really about — the script.
 
 <img src="images/done-screen.png" width="100%"
-     alt="A finished job: the script as a table of numbered lines with their time slots, the original line and the translated line side by side, the player beside it on the Dubbed tab, a timeline underneath, and the Dub Agent strip along the bottom.">
+     alt="A finished job: the engines it was made with in a row of chips along the top, the script as a table of lines with their time slots, the original line and the translated line side by side, the player beside it on the Dubbed tab, a timeline underneath, and the Dub Agent strip folded away along the bottom.">
 
 - **The table** is one row per line: its number, who spoke it, its time slot, the
   original line, the translated line, and how long the voice actually runs.
@@ -102,6 +102,17 @@ The **Speaker** column is filled in only when PersoDub worked out who spoke when
 started from subtitles you supplied (an option of the HTTP API, not of the app's own
 screens) skips that step, so the column stays empty for it.
 
+### Export
+
+**Export** in the top bar opens a dialog with a link per file.
+
+<img src="images/export.png" width="100%"
+     alt="The Export dialog over the finished screen: a link for the dubbed video, a link for the subtitles, and a line underneath saying the files are saved to Downloads, then the day, then the project.">
+
+The line under the links says where a click will put the file: the app saves it without
+asking, into `Downloads` / the day the job ran / the project's name. Once a file has
+landed, its row is ticked and says **Saved**, and the line says which file went where.
+
 ## The Dub Agent
 
 The strip along the bottom of the finished screen is the Dub Agent. Ask for a fix in
@@ -109,7 +120,7 @@ plain words — "shorten line 4 so it fits, then remake its voice" — and it ed
 script and remakes voices through PersoDub's own tools, showing each step as it goes.
 
 <img src="images/dub-agent.png" width="100%"
-     alt="The Dub Agent strip open over the finished screen: the question typed at the top, a Reading the script step, and the assistant's answer underneath.">
+     alt="The Dub Agent strip open over the finished screen: a line along the top saying which assistant is answering, the question underneath it, the steps it took while working, and its answer at the bottom.">
 
 Pick which assistant answers from the button on the right of the strip. It runs a CLI
 that is **already installed on your Mac** — Claude Code or Codex — and is billed to
