@@ -906,6 +906,9 @@
   /* Purple while that part is actually playing -- the only feedback there is,
      since the video itself is muted. */
   .trim-play.playing { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  .trim-play .ico-pause { display: none; margin-left: 0; }
+  .trim-play.playing .ico-play { display: none; }
+  .trim-play.playing .ico-pause { display: block; }
   .trim-play svg { width: 18px; height: 18px; margin-left: 2px; fill: currentColor;
     stroke: currentColor; stroke-width: 3; stroke-linejoin: round; }
   .trim-label { font-weight: 600; }
@@ -2140,7 +2143,8 @@ function renderTrim(duration) {
   box.innerHTML = `
     <div class="trim-row">
       <button class="trim-play" id="trimPlay" type="button" title="Play the selected part" aria-label="Play the selected part">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
+        <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
+        <svg class="ico-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5.5h3.5v13H7zM13.5 5.5H17v13h-3.5z"/></svg>
       </button>
       <span class="trim-label">Trim</span>
       <span class="trim-read" id="trimRead"></span>
@@ -2193,13 +2197,23 @@ function renderTrim(duration) {
   });
 
   const video = $("projectVideo"), playBtn = $("trimPlay");
+  // The thumbnail is muted so it can sit quietly; a press on the play
+  // button is the user asking to hear the part they picked, so unmute then.
+  // A second press pauses -- the same button, the same place.
   playBtn.addEventListener("click", () => {
+    if (!video.paused) { cancelRange(video); return; }
+    video.muted = false;
     playRange(video, Number(startInput.value), Number(endInput.value)).catch(() => {});
   });
   if (trimPlayState) {
     for (const e of ["play", "pause", "ended"]) video.removeEventListener(e, trimPlayState);
   }
-  trimPlayState = () => playBtn.classList.toggle("playing", !video.paused);
+  trimPlayState = () => {
+    const playing = !video.paused;
+    playBtn.classList.toggle("playing", playing);
+    const label = playing ? "Pause" : "Play the selected part";
+    playBtn.title = label; playBtn.setAttribute("aria-label", label);
+  };
   for (const e of ["play", "pause", "ended"]) video.addEventListener(e, trimPlayState);
 
   paint();
