@@ -31,6 +31,9 @@ EXTRA_PATHS = [
 
 TIMEOUT_SECONDS = float(os.environ.get("PERSODUB_AGENT_TIMEOUT", "180"))
 
+# How long a stopped CLI is given to go quietly before it is made to.
+STOP_GRACE = 2.0
+
 
 def find_cli(name: str) -> Optional[str]:
     """Where this CLI lives, or None if it is not installed."""
@@ -240,6 +243,71 @@ def login_state(kind: str, binary: str) -> dict:
     return unknown
 
 
+# --- Stopping the turn on air -----------------------------------------------
+# One turn at a time per app, so "stop" needs no id: there is only ever one
+# child to stop. SIGTERM first and SIGKILL only if that is ignored, because a
+# CLI writes its session down on the way out and that saved session is what the
+# next message carries on from -- a turn stopped with SIGKILL would take the
+# conversation with it.
+
+class _Turn:
+    """The turn on air: the child running it, and whether it was stopped."""
+
+    def __init__(self, proc):
+        self.proc = proc
+        self.stopped = False
+
+
+_turn_lock = threading.Lock()
+_turn = None            # the _Turn on air, or None
+
+
+def _end(proc, grace: float = STOP_GRACE) -> None:
+    """Ask this child to go, and insist if it will not."""
+    if proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+    except OSError:
+        return
+    try:
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def _begin(turn: "_Turn") -> None:
+    """This turn is now the one on air; any older one is ended, not left
+    talking to a panel that has moved on."""
+    global _turn
+    with _turn_lock:
+        old, _turn = _turn, turn
+    if old is not None and old is not turn:
+        old.stopped = True
+        _end(old.proc)
+
+
+def _finish(turn: "_Turn") -> None:
+    global _turn
+    with _turn_lock:
+        if _turn is turn:
+            _turn = None
+
+
+def stop_turn(grace: float = STOP_GRACE) -> bool:
+    """End the turn on air. False when there was nothing to stop."""
+    with _turn_lock:
+        turn = _turn
+    if turn is None or turn.proc.poll() is not None:
+        return False
+    turn.stopped = True
+    _end(turn.proc, grace)
+    return True
+
+
 def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         cwd: Optional[str] = None, agent_name: str = "The assistant",
         login_command: str = "") -> Iterator[dict]:
@@ -261,9 +329,12 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         yield {"kind": "error", "message": "Could not run the assistant: %s" % e}
         return
 
+    turn = _Turn(proc)
+    _begin(turn)
     timer = threading.Timer(TIMEOUT_SECONDS, proc.kill)
     timer.start()
     saw_done = False
+    drained = False
     try:
         for line in proc.stdout:
             line = line.strip()
@@ -282,12 +353,26 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
                         out.get("kind") == "error" and out.get("ends_turn", True)):
                     saw_done = True
                 yield out
+        drained = True
     finally:
         timer.cancel()
+        # Nobody is reading any more -- the browser went away mid-answer, or
+        # whoever asked for this gave up. Without this the CLI kept running,
+        # and the wait below sat here for as long as it took.
+        if not drained:
+            turn.stopped = True
+            _end(proc)
         proc.stdout.close()
         code = proc.wait()
         stderr = (proc.stderr.read() or "").strip()
         proc.stderr.close()
+        _finish(turn)
+
+    if turn.stopped:
+        # Asked to stop, not broken: the CLI was let out gracefully, so the
+        # next message carries the same conversation on.
+        yield {"kind": "done", "stopped": True, "text": ""}
+        return
 
     if code != 0 and not saw_done:
         # The exit code is the CLI's business. What the user gets is which of

@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -17,6 +18,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.agents import base as agent_base
@@ -1423,8 +1425,19 @@ def agent_status(login: int = 0):
     return {"agents": out}
 
 
+@app.post("/api/agent/stop")
+def agent_stop():
+    """End the turn on air, leaving the conversation there to carry on.
+
+    The CLI is asked to go rather than shot: it writes its session down on the
+    way out, and that is what the next message resumes from. `stopped` is False
+    when there was no turn running -- pressing Stop twice is not an error.
+    """
+    return {"stopped": agent_base.stop_turn()}
+
+
 @app.post("/api/agent/chat")
-def agent_chat(body: AgentChatRequest, request: Request):
+async def agent_chat(body: AgentChatRequest, request: Request):
     """One turn with the assistant, streamed back a line of JSON at a time.
 
     Streaming is the point: a turn takes seconds, and a panel that sits blank
@@ -1456,10 +1469,40 @@ def agent_chat(body: AgentChatRequest, request: Request):
         raise HTTPException(status_code=500,
                             detail="Could not prepare the assistant: %s" % e)
 
-    def stream():
-        for event in agent_base.run(binary, args, driver.translate,
-                                    cwd=work_dir, agent_name=meta["name"],
-                                    login_command=meta.get("login", "")):
-            yield json.dumps(event, ensure_ascii=False) + "\n"
+    async def stream():
+        # The runner blocks -- it reads the CLI's stdout a line at a time -- so
+        # it gets a thread of its own and posts what it reads here. That is what
+        # leaves this side free to notice the browser going away mid-answer: a
+        # closed tab used to leave the CLI running to the end, talking to
+        # nobody, with the next turn queued behind it.
+        events = queue.Queue()
+
+        def pump():
+            try:
+                for event in agent_base.run(binary, args, driver.translate,
+                                            cwd=work_dir, agent_name=meta["name"],
+                                            login_command=meta.get("login", "")):
+                    events.put(event)
+            finally:
+                events.put(None)      # whatever happened, the turn is over
+
+        threading.Thread(target=pump, daemon=True).start()
+        finished = False
+        try:
+            while True:
+                try:
+                    event = await run_in_threadpool(events.get, True, 0.25)
+                except queue.Empty:
+                    if await request.is_disconnected():
+                        break
+                    continue
+                if event is None:
+                    finished = True
+                    break
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        finally:
+            # Stopped, or nobody left to read it. Either way the child goes.
+            if not finished:
+                agent_base.stop_turn()
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")

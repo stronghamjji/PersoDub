@@ -5,6 +5,8 @@ No CLI is spawned: `explain_exit` is a pure function over what one printed, and
 the login checks are exercised against recorded output.
 """
 import subprocess
+import sys
+import threading
 
 from app.agents import base
 
@@ -180,3 +182,67 @@ def test_a_cli_that_hangs_or_answers_nonsense_says_nothing_either_way(monkeypatc
     assert base.login_state("codex", "")["logged_in"] is None
     # And one we have no check for.
     assert base.login_state("nosuchcli", "/bin/nosuchcli")["logged_in"] is None
+
+
+# --- stopping the turn on air -----------------------------------------------
+# The panel's Stop button ends up here. A stopped turn must end quickly, must
+# say it was stopped rather than that it broke, and must leave the next turn
+# free to run -- the conversation carries on from the CLI's saved session.
+
+# A stand-in CLI: one line of JSON so the runner knows it has started, then it
+# sits there. Long enough that only a stop can end it inside a test.
+SLOW_CLI = ("import sys, time\n"
+            "sys.stdout.write('{\"type\": \"hello\"}\\n')\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(30)\n")
+
+QUICK_CLI = ("import sys\n"
+             "sys.stdout.write('{\"type\": \"bye\"}\\n')\n")
+
+
+def _drain(script, translate, out):
+    """Run one turn to the end on a thread, collecting what it yielded."""
+    t = threading.Thread(
+        target=lambda: out.extend(
+            base.run(sys.executable, ["-c", script], translate)))
+    t.start()
+    return t
+
+
+def test_stop_ends_the_turn_and_says_it_was_stopped():
+    started = threading.Event()
+    out = []
+
+    def translate(event):
+        started.set()
+        return []
+
+    turn = _drain(SLOW_CLI, translate, out)
+    assert started.wait(20), "the stand-in CLI never started"
+    assert base.stop_turn() is True
+    turn.join(20)
+    assert not turn.is_alive(), "the turn was still running after the stop"
+    # Not "the assistant stopped partway. Please try again." -- it did what it
+    # was told, and the panel marks it rather than showing a failure.
+    assert out[-1] == {"kind": "done", "stopped": True, "text": ""}
+    # Nothing is on air any more, so a second press is not an error.
+    assert base.stop_turn() is False
+
+
+def test_the_turn_after_a_stopped_one_runs_normally():
+    started = threading.Event()
+    first = []
+
+    def note(event):
+        started.set()
+        return []
+
+    turn = _drain(SLOW_CLI, note, first)
+    assert started.wait(20)
+    base.stop_turn()
+    turn.join(20)
+
+    second = list(base.run(sys.executable, ["-c", QUICK_CLI],
+                           lambda e: [{"kind": "text", "text": "hi"}]))
+    assert {"kind": "text", "text": "hi"} in second
+    assert not any(e.get("stopped") for e in second)

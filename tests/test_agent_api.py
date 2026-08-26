@@ -245,3 +245,23 @@ def test_a_login_check_that_blows_up_does_not_wedge_that_assistant(monkeypatch):
     monkeypatch.setattr(main.agent_base, "login_state",
                         lambda kind, binary: {"logged_in": True, "account": "ChatGPT"})
     assert _settled("codex")["codex"]["logged_in"] is True
+
+
+# --- stopping a turn --------------------------------------------------------
+
+def test_stop_says_whether_there_was_a_turn_to_stop():
+    """Pressing Stop with nothing running is not an error -- the panel can call
+    it before every send without having to know."""
+    r = client.post("/api/agent/stop")
+    assert r.status_code == 200
+    assert r.json()["stopped"] is False
+
+
+def test_the_message_after_a_stop_carries_the_conversation_on(monkeypatch, tmp_path):
+    """A stopped turn must not cost the user the conversation: the next message
+    still asks the CLI to continue where it left off."""
+    seen = _capture(monkeypatch, tmp_path)
+    client.post("/api/agent/stop")
+    r = client.post("/api/agent/chat", json={"message": "그럼 이렇게", "agent": "claude"})
+    assert r.status_code == 200
+    assert "-c" in seen["args"]          # Claude's "carry on" flag
