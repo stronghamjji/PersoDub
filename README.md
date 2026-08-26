@@ -38,8 +38,12 @@ It separates speech from background audio, transcribes it, works out who spoke w
 translates each line, clones each speaker's voice, and mixes the result back over the
 original soundtrack. With the default settings, every one of those steps runs locally.
 
-<img src="docs/images/main-window.png" width="100%"
-     alt="PersoDub's first screen: a drop zone for the video, and under it a field for pasting a video link.">
+<p align="center">
+  <img src="docs/images/main-window.png" width="49%"
+       alt="PersoDub's first screen: a drop zone for the video, and under it a field for pasting a video link.">
+  <img src="docs/images/new-project.png" width="49%"
+       alt="The New project dialog: a preview of the video, a trim bar with a ruler under it for choosing the part to dub, the original and target languages, and Advanced options.">
+</p>
 
 > **Status: early release (v0.3.6).** PersoDub is usable today and is under active
 > development. macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
@@ -178,8 +182,10 @@ once; [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks l
    beside the player, a timeline underneath, and **Export** in the top bar for the
    dubbed video and the translated `.srt`.
 
-<img src="docs/images/done-screen.png" width="100%"
-     alt="A finished job: the engines it was made with in a row of chips along the top, the script as a table of lines with their time slots, the original line and the translated line side by side, the player beside it on the Dubbed tab, a timeline underneath, and the Dub Agent strip folded away along the bottom.">
+<p align="center">
+  <img src="docs/images/dub-agent.png" width="72%"
+       alt="A finished job with the Dub Agent strip open along the bottom: the script table and timeline above, and below them a request to shorten two lines, the steps the agent took (reading the script, rewriting lines 1 and 3, remaking the voices), and its reply.">
+</p>
 
 Each line has a play button to hear that line alone, and a waveform button to remake
 its voice after you change the words. **Original** and **Dubbed** swap which file the
