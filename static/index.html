@@ -641,8 +641,11 @@
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; }
   .sc-wave svg { width: 18px; height: 18px; }
-  .sc-wave.stale { background: var(--primary); color: var(--primary-foreground);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent); }
+  /* Red, not purple: the words changed and the voice has not caught up --
+     this is the one button on the row that is asking to be pressed. */
+  .sc-wave.stale { background: var(--destructive); color: var(--primary-foreground);
+    border-color: var(--destructive);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 22%, transparent); }
   .sc-wave:disabled { opacity: 0.5; cursor: progress; }
 
   /* Narrow: both round buttons come down a size with the row around them. At
