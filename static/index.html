@@ -3522,11 +3522,17 @@ async function openExport() {
   $("exportWhere").textContent = whereDownloadsGo(job);
   // In the desktop shell the click is answered by onDownloadDone below; until
   // then the row says it is working, so a click is never met with silence.
+  // Only a shell that reports completion can promise a "Saved": an older shell
+  // saves the file just the same but never says so, so its row says the
+  // download has started and points at the folder instead of waiting forever.
   if (window.persodubShell) {
+    const reports = typeof window.persodubShell.onDownloadDone === "function";
     for (const a of $("exportList").querySelectorAll("a")) {
       a.addEventListener("click", () => {
         a.classList.remove("saved");
-        a.querySelector(".export-state").textContent = "Saving\u2026";
+        const st = a.querySelector(".export-state");
+        st.textContent = reports ? "Saving\u2026" : "Started - see Downloads";
+        if (!reports) setTimeout(() => { if (a.isConnected) st.textContent = ""; }, 6000);
       });
     }
   }
