@@ -155,7 +155,7 @@ Open Settings with the gear icon at the bottom left of the window.
 
 **API keys** — both are optional. Without them, PersoDub uses its free local engines
 (Whisper for transcription, Gemma for translation). Keys are saved into the app's own
-config file on your machine. **Restart PersoDub after saving** for them to take effect.
+config file on your machine. Changes apply to the next dub - no restart needed.
 
 - **Perso API key** — enables the paid transcription and diarization path. Once a key is
   saved, **Perso workspace** lets you pick which workspace the jobs run in, and whose
