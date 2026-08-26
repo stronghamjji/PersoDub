@@ -535,6 +535,17 @@
     display: inline-flex; align-items: center; justify-content: center;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
   .video-bigplay[hidden] { display: none; }
+  /* The row under the picture: the small play button and the clock. The big
+     button in the middle of the picture stays -- it is the "this is stopped"
+     sign. This one is the control you reach for without covering the video. */
+  .video-under { display: flex; align-items: center; gap: 10px; }
+  .video-play { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--background);
+    color: var(--foreground); cursor: pointer; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .video-play:hover { border-color: var(--primary); color: var(--primary); }
+  .video-play.playing { background: var(--primary); border-color: var(--primary);
+    color: var(--primary-foreground); }
   .video-time { font-size: 0.78rem; color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; }
 
@@ -558,6 +569,21 @@
   .tl-sw-voice { background: var(--primary); }
   .tl-sw-slot { border: 1px dashed var(--primary-line); }
   .tl-sw-over { background: var(--destructive); }
+  /* Fold the strip away to its heading row. The head keeps its clock, so a
+     folded timeline still says where the video is; only the lanes go.
+     The remembered height is an inline style the drag handle writes, and a
+     folded strip has to be one row tall whatever that says -- hence the
+     !important, the one place in this sheet that needs to win against it. */
+  .tl-fold { margin-left: 12px; border: none; background: none; cursor: pointer;
+    padding: 2px; border-radius: 6px; color: var(--muted-foreground);
+    display: inline-flex; align-items: center; }
+  .tl-fold:hover { color: var(--foreground); background: var(--canvas); }
+  .tl-fold .icon { transition: transform 0.15s ease; }
+  .timeline.folded { height: auto !important; }
+  .timeline.folded .tl-body { display: none; }
+  /* One SVG, pointing down: away is where the strip goes. Folded, it is turned
+     over to point at where the strip comes back from. */
+  .timeline.folded .tl-fold .icon { transform: rotate(180deg); }
 
   .tl-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 110px 1fr; }
   .tl-names { display: flex; flex-direction: column; font-size: 0.72rem;
@@ -570,7 +596,8 @@
   .tl-track { position: relative; overflow-x: auto; overflow-y: hidden; margin: 0 14px; }
   .tl-inner { position: relative; height: 86px; }
 
-  .tl-ruler { position: relative; height: 18px; }
+  /* Also a way into the video: press anywhere on it to go to that moment. */
+  .tl-ruler { position: relative; height: 18px; cursor: pointer; }
   .tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); }
   .tl-tick span { position: absolute; top: 2px; left: 4px; font-size: 0.63rem;
     color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
@@ -606,11 +633,19 @@
 
   /* Above every bar, over-time ones included: a 2px line that hides nothing,
      and the one mark that would read as a rendering fault if it broke. */
-  .tl-playhead { position: absolute; top: 0; bottom: 0; width: 0; z-index: 4;
-    border-left: 2px solid var(--foreground); pointer-events: none; }
-  .tl-playhead i { position: absolute; top: 0; left: -7px; width: 0; height: 0;
-    border-left: 6px solid transparent; border-right: 6px solid transparent;
-    border-top: 8px solid var(--foreground); }
+  .tl-playhead { position: absolute; top: 0; bottom: 0; width: 3px; z-index: 4;
+    margin-left: -1px; background: var(--foreground); pointer-events: none; }
+  /* The head is the handle: a triangle 16px across and 12px tall, which is a
+     big enough thing to catch with a pointer -- the 3px line under it is not.
+     Its own border box takes the press, so nothing invisible is added. */
+  .tl-playhead i { position: absolute; top: 0; left: -6.5px; width: 0; height: 0;
+    border-left: 8px solid transparent; border-right: 8px solid transparent;
+    border-top: 12px solid var(--foreground);
+    pointer-events: auto; cursor: ew-resize; }
+  /* While the head is being dragged nothing under the pointer should light up
+     or start selecting -- the whole strip is one control for that moment. */
+  .timeline.scrubbing { user-select: none; }
+  .timeline.scrubbing .tl-blk:hover { box-shadow: none; }
 
   /* ---------------- The three drag handles ---------------- */
   /* A handle is nothing to look at: a 6px strip of hit area starting on the 1px
@@ -636,10 +671,12 @@
      belong to a handle is a tab that ignores the click aimed at its edge. */
   #gripPanes { top: 40px; right: -6px; }
   /* The timeline's top border (which runs along .done-main's bottom edge) and
-     the top of the strip's own heading row, never the table above it.
-     No strip drawn (an empty timeline collapses) means no line to drag. */
+     the top of the strip's own heading row, never the table above it. */
   #gripTimeline { bottom: -6px; }
-  .done-main:has(+ .timeline:empty) #gripTimeline { display: none; }
+  /* No strip drawn, or one folded away to its heading row: neither has a height
+     to give or take, so the handle is not there to be dragged. */
+  .done-main:has(+ .timeline:empty) #gripTimeline,
+  .done-main:has(+ .timeline.folded) #gripTimeline { display: none; }
   /* The Dub Agent's purple top border and the strip below it, never the
      timeline above -- that is where the timeline's sideways scrollbar lives.
      Only while the conversation is open: a collapsed strip is one input row,
@@ -802,8 +839,11 @@
     <!-- The app's only chrome: who we are (or which job is open), what it is
          doing, and the one or two buttons that apply right now. -->
     <div class="topbar" id="topbar">
-      <button class="topbar-back" id="topbarBack" type="button" aria-label="Back" hidden>
-        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+      <!-- A tailed arrow, not a chevron: this leaves the job for the list of
+           projects, which is a place to go back to rather than a step back. -->
+      <button class="topbar-back" id="topbarBack" type="button"
+              aria-label="Back to projects" title="Back to projects" hidden>
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
       </button>
       <div class="topbar-titles">
         <span class="topbar-title" id="topbarTitle">PersoDub</span>
@@ -813,6 +853,12 @@
       <!-- Filled in (and unhidden) only when the engine reports a real version;
            hidden rather than empty, so it takes no gap in the row either. -->
       <span class="topbar-version" id="topbarVersion" hidden></span>
+      <!-- The way back INTO the job the back arrow above just left. Only on the
+           first screen, and only while there is such a job (see paintForward). -->
+      <button class="topbar-back" id="topbarForward" type="button"
+              aria-label="Back to the project you left" hidden>
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </button>
       <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
@@ -899,7 +945,13 @@
                     <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:4px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
                   </button>
                 </div>
-                <div class="video-time" id="videoTime">00:00:00.0 / 00:00:00.0</div>
+                <div class="video-under">
+                  <!-- Filled in by paintPlayToggle: play or pause, whichever
+                       the video is not doing right now. -->
+                  <button class="video-play" id="playToggle" type="button"
+                          aria-label="Play" title="Play"></button>
+                  <div class="video-time" id="videoTime">00:00:00.0 / 00:00:00.0</div>
+                </div>
               </div>
             </div>
             <!-- Drag the line between the two panes and the timeline. -->
@@ -1715,7 +1767,43 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   $("cancelBtn").hidden = !running;
   // Only a finished job has anything to hand back.
   $("exportBtn").hidden = !done;
+  paintForward();
 }
+
+// ---- The way back into the job you just left --------------------------------
+// The back arrow leaves a job for the list of projects; this is the other half
+// of that step. Held in memory only: a fresh launch has nothing behind it, and
+// an arrow that reopened a job from days ago would be a different promise.
+let lastJobId = null;
+let lastJobName = "";
+
+function rememberLastJob() {
+  if (!state.jobId) return;
+  lastJobId = state.jobId;
+  lastJobName = state.job ? jobLabel(state.job) : "";
+}
+
+// That job is gone (deleted, or the server no longer has it), so the way back
+// to it has to go too -- an arrow that lands on an error is worse than no arrow.
+function forgetLastJob() {
+  lastJobId = null;
+  lastJobName = "";
+  paintForward();
+}
+
+function paintForward() {
+  const btn = $("topbarForward");
+  // Only on the first screen: inside a job the back arrow is the way out, and
+  // an arrow pointing the other way would have nowhere to go.
+  btn.hidden = !lastJobId || document.body.dataset.screen !== "home";
+  const what = lastJobName ? `Back to ${lastJobName}` : "Back to the project you left";
+  btn.setAttribute("aria-label", what);
+  btn.title = what;
+}
+
+$("topbarForward").addEventListener("click", () => {
+  if (lastJobId) resumeJob(lastJobId);
+});
 
 // The resting state: no job open, the first screen showing.
 function showHome() {
@@ -2098,6 +2186,8 @@ function jobStatusLine(job, progress) {
 // --- #10: reset everything for a fresh job without restarting the app ---
 function resetForNewJob() {
   state.pollGeneration += 1; // stops any stale poll loop
+  // Noted before it is cleared: the top bar's other arrow is the way back in.
+  rememberLastJob();
   state.jobId = null;
   state.job = null;
   delete document.body.dataset.jobId;
@@ -2411,6 +2501,9 @@ $("deleteConfirmBtn").addEventListener("click", async () => {
     // all went on pointing at a job that no longer exists. resetForNewJob()
     // clears every one of them and ends on the first screen.
     if (state.jobId === job.id) resetForNewJob();
+    // Deleted, so there is nothing behind the forward arrow any more -- whether
+    // this job was the one on screen or one the user had already left.
+    if (lastJobId === job.id) forgetLastJob();
     renderHistory().catch(() => {});
   } catch (err) {
     $("deleteError").textContent = err.message;
@@ -2436,6 +2529,9 @@ async function resumeJob(jobId) {
     // the top of this function, and leaving it (and the previous job's rows
     // and video) behind on the home screen is what I-3 was about.
     resetForNewJob();
+    // This job could not be opened, so it is not somewhere to go back to either
+    // -- and resetForNewJob has just noted it as exactly that.
+    forgetLastJob();
     $("formError").textContent = e.message;
   }
 }
@@ -2741,11 +2837,29 @@ function toggleDonePlay() {
   doneVideo.play().catch(() => {});
 }
 $("bigPlay").addEventListener("click", toggleDonePlay);
+$("playToggle").addEventListener("click", toggleDonePlay);
 doneVideo.addEventListener("click", toggleDonePlay);
-// The button is the "it is stopped" sign as much as it is the control, so it
-// comes back the moment the video stops, however it stopped.
-for (const e of ["play", "playing"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = true; });
-for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = false; });
+
+// The small button under the picture says what pressing it will do, so it is
+// the pause sign while the video plays and the play sign the rest of the time.
+// Drawn, like every other mark in the app.
+const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:currentColor;stroke:none;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+const SMALL_PAUSE = '<svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:currentColor;stroke:none"><path d="M8 5h3.2v14H8z"/><path d="M12.8 5H16v14h-3.2z"/></svg>';
+function paintPlayToggle() {
+  const btn = $("playToggle");
+  const playing = !doneVideo.paused && !doneVideo.ended;
+  btn.innerHTML = playing ? SMALL_PAUSE : SMALL_PLAY;
+  btn.classList.toggle("playing", playing);
+  btn.setAttribute("aria-label", playing ? "Pause" : "Play");
+  btn.title = playing ? "Pause" : "Play";
+}
+paintPlayToggle();
+
+// The big button is the "it is stopped" sign as much as it is the control, so it
+// comes back the moment the video stops, however it stopped -- and the small one
+// changes face at the same moment.
+for (const e of ["play", "playing"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = true; paintPlayToggle(); });
+for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = false; paintPlayToggle(); });
 for (const e of ["timeupdate", "loadedmetadata", "seeked"]) doneVideo.addEventListener(e, paintPlayhead);
 
 // Is the video inside this line right now? The table's highlighted row and the
@@ -3080,6 +3194,9 @@ function renderTimeline(lines, duration) {
         <span><i class="tl-sw-slot"></i>Time available</span>
         <span><i class="tl-sw-over"></i>Over time</span>
       </span>
+      <button class="tl-fold" id="timelineFold" type="button" aria-label="Fold the timeline">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg>
+      </button>
     </div>
     <div class="tl-body">
       <div class="tl-names">
@@ -3089,7 +3206,41 @@ function renderTimeline(lines, duration) {
       </div>
       <div class="tl-track" id="timelineTrack"></div>
     </div>`;
+  // The head is built fresh here, so the fold button it carries has to be told
+  // again which way it is pointing.
+  paintTimelineFold();
   drawTimelineTrack();
+}
+
+// ---- Folded away to its heading row -----------------------------------------
+// A finished job is mostly read in the table; the strip is for checking timing,
+// and the rest of the time it is 150px of screen the script could have. Folded,
+// the head stays -- so the clock still says where the video is.
+const TIMELINE_OPEN_KEY = "persodub.layout.timelineOpen";
+let timelineOpen = true;
+try { timelineOpen = localStorage.getItem(TIMELINE_OPEN_KEY) !== "0"; } catch { /* private window */ }
+
+function paintTimelineFold() {
+  const box = $("timeline");
+  box.classList.toggle("folded", !timelineOpen);
+  const btn = $("timelineFold");
+  if (btn) {
+    btn.setAttribute("aria-expanded", String(timelineOpen));
+    const what = timelineOpen ? "Fold the timeline away" : "Show the timeline";
+    btn.setAttribute("aria-label", what);
+    btn.title = what;
+  }
+  // The remembered height is left alone: the drag handle writes it as an inline
+  // style, the folded rule overrides it while it applies, and unfolding hands
+  // the strip back the height it had.
+}
+
+function setTimelineOpen(open) {
+  timelineOpen = open;
+  try { localStorage.setItem(TIMELINE_OPEN_KEY, open ? "1" : "0"); } catch { /* private window */ }
+  paintTimelineFold();
+  // The scale is measured off the track's width, and a folded track has none.
+  if (open) drawTimelineTrack();
 }
 
 // One block: a button, so the keyboard reaches the lines too. Its own start and
@@ -3220,11 +3371,64 @@ $("timeline").addEventListener("scroll", (e) => {
   }
 }, true);
 
-// A bar is a way into the video: play the line it stands for.
+// A bar is a way into the video: play the line it stands for. The head's own
+// button folds the strip away.
 $("timeline").addEventListener("click", (e) => {
+  if (e.target.closest(".tl-fold")) { setTimelineOpen(!timelineOpen); return; }
   const blk = e.target.closest(".tl-blk");
   if (!blk) return;
   playRange(doneVideo, +blk.dataset.start, +blk.dataset.end).catch(() => {});
+});
+
+// ---- The playhead as a control ----------------------------------------------
+// Drag the head, or press anywhere on the ruler, and the video goes there. The
+// moment is read off the strip's own scale, so it lands where the pointer is
+// however far the track has been scrolled.
+function timelineTimeAt(clientX) {
+  const inner = $("timeline").querySelector(".tl-inner");
+  if (!inner || !timelinePps) return null;
+  const x = clientX - inner.getBoundingClientRect().left;
+  return Math.min(Math.max(x / timelinePps, 0), timelineDuration);
+}
+
+// Everything that moves is redrawn by paintPlayhead, the one place that reads
+// the video's time -- so the row the table highlights, the strip's clock, its
+// bars and the head itself all come from the same answer.
+function seekDoneVideo(t) {
+  if (t == null || !Number.isFinite(t)) return;
+  cancelRange(doneVideo);   // playing on from here means no stopping point
+  doneVideo.currentTime = t;
+  paintPlayhead();
+}
+
+$("timeline").addEventListener("pointerdown", (e) => {
+  const onHead = e.target.closest(".tl-playhead");
+  if (!onHead && !e.target.closest(".tl-ruler")) return;
+  e.preventDefault();
+  seekDoneVideo(timelineTimeAt(e.clientX));
+  if (!onHead) return;   // a press on the ruler is one jump, not a drag
+
+  // Captured on the strip rather than the head: the head is redrawn as the
+  // video moves, and a capture on an element that goes away ends the drag.
+  const box = $("timeline");
+  const move = (ev) => {
+    // Following would pull the strip out from under the hand that is dragging.
+    followUntil = Date.now() + FOLLOW_PAUSE_MS;
+    seekDoneVideo(timelineTimeAt(ev.clientX));
+  };
+  const up = () => {
+    box.classList.remove("scrubbing");
+    box.removeEventListener("pointermove", move);
+    box.removeEventListener("pointerup", up);
+    box.removeEventListener("pointercancel", up);
+  };
+  box.classList.add("scrubbing");
+  box.addEventListener("pointermove", move);
+  box.addEventListener("pointerup", up);
+  box.addEventListener("pointercancel", up);
+  // Last, so a capture that throws (a stale or synthetic pointer id) cannot
+  // leave the strip stuck mid-drag with nothing to end it.
+  box.setPointerCapture(e.pointerId);
 });
 
 // The scale is measured from the track's width, so a window resized (or, later,
