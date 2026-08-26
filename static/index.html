@@ -3418,8 +3418,12 @@ function paintVideoTabs() {
   }
 }
 
+// Answers when the player is actually showing that file, so a caller that wants
+// to seek straight afterwards can wait: the browser has opened nothing yet the
+// moment the src is set, and a seek into a file that is not there lands nowhere.
+// Already on that source, there is nothing to wait for.
 function showVideoSource(which) {
-  if (!state.job || which === doneSource) return;
+  if (!state.job || which === doneSource) return Promise.resolve();
   const at = doneVideo.currentTime;
   const wasPlaying = !doneVideo.paused;
   // The range being played belongs to the file that is leaving.
@@ -3427,10 +3431,13 @@ function showVideoSource(which) {
   doneSource = which;
   paintVideoTabs();
   doneVideo.setAttribute("src", doneVideoSrc(state.job, which));
-  doneVideo.addEventListener("loadeddata", () => {
-    doneVideo.currentTime = at;
-    if (wasPlaying) doneVideo.play().catch(() => {});
-  }, { once: true });
+  return new Promise((resolve) => {
+    doneVideo.addEventListener("loadeddata", () => {
+      doneVideo.currentTime = at;
+      if (wasPlaying) doneVideo.play().catch(() => {});
+      resolve();
+    }, { once: true });
+  });
 }
 
 // Put the player back to nothing at all: the next job's video has to start from
@@ -3657,10 +3664,17 @@ async function renderScript(jobId) {
   // The play button plays the line inside the finished video, so the user sees
   // the mouth move with the words. Hearing a line on its own cannot tell you
   // whether it lands on the lips.
+  // Always the dub, whatever the player was last left showing -- a bar on the
+  // strip's bottom row can have swapped it to the original since, and this
+  // button's whole point is the dubbed mouth moving with the dubbed words.
   box.querySelectorAll("[data-play]").forEach((b) => {
     const row = b.closest(".sc-row");
     b.addEventListener("click", () => {
-      playRange(doneVideo, +row.dataset.start, +row.dataset.end).catch(() => {});
+      const start = +row.dataset.start;
+      const end = +row.dataset.end;
+      showVideoSource("dubbed")
+        .then(() => playRange(doneVideo, start, end))
+        .catch(() => {});
     });
   });
 
@@ -3892,13 +3906,22 @@ $("timeline").addEventListener("scroll", (e) => {
   }
 }, true);
 
-// A bar is a way into the video: play the line it stands for. The head's own
-// button folds the strip away.
+// A bar is a way into the video: play the line it stands for. Which video is
+// the row's to say -- the bottom row is the film as it came in, so it plays the
+// original, and the top row is the dub. The tabs move with it, because the
+// player is now showing something other than what they said it was. The switch
+// has to finish before the seek, hence the wait.
+// The head's own button folds the strip away.
 $("timeline").addEventListener("click", (e) => {
   if (e.target.closest(".tl-fold")) { setTimelineOpen(!timelineOpen); return; }
   const blk = e.target.closest(".tl-blk");
   if (!blk) return;
-  playRange(doneVideo, +blk.dataset.start, +blk.dataset.end).catch(() => {});
+  const which = blk.classList.contains("tl-org") ? "original" : "dubbed";
+  const start = +blk.dataset.start;
+  const end = +blk.dataset.end;
+  showVideoSource(which)
+    .then(() => playRange(doneVideo, start, end))
+    .catch(() => {});
 });
 
 // ---- The playhead as a control ----------------------------------------------
