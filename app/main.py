@@ -707,9 +707,16 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
     )
 
 
-def _cut_video(path: str, start: float, end: float) -> None:
+def _cut_video(path: str, start: float, end: float, on_cut=None) -> None:
     """Keep only [start, end] of the video, in place. Re-encodes so the cut is
-    exact (a copy-cut lands on the nearest keyframe, seconds away)."""
+    exact (a copy-cut lands on the nearest keyframe, seconds away).
+
+    `on_cut` runs the instant the cut file takes the original's place, before
+    anything else can happen. That is where a caller records "this video is cut
+    now": recording it a statement later leaves a window where a force-quit
+    saves a record that still owes a cut over a video that has already had one,
+    and the next run would take the same seconds out twice.
+    """
     tmp = path + ".cut.mp4"
     try:
         r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
@@ -727,6 +734,8 @@ def _cut_video(path: str, start: float, end: float) -> None:
             raise RuntimeError(("Could not trim the video: " + last) if last
                                else "Could not trim the video.")
         os.replace(tmp, path)
+        if on_cut is not None:
+            on_cut()
     finally:
         # A cut that died with the output already open (out of disk, a killed
         # encoder) would otherwise leave a half-written .cut.mp4 beside a good
@@ -918,13 +927,16 @@ def dub_start(
                 cancel_check=lambda: job_store.is_cancel_requested(jid),
             )
             if trim_start is not None:
-                _cut_video(video_path, trim_start, trim_end)
-                # Written to job.json straight away, not just at the end of the
-                # job: quit the app after this line and the record has to say
-                # the cut was made, or running this job again would cut the same
-                # seconds out of a video that no longer has them.
-                job_store._update(jid, trim_pending=False)
-                job_store.persist(jid, work)
+                # Written to job.json the instant the cut lands, not at the end
+                # of the job and not a statement later: quit the app in between
+                # and the record still says a cut is owed over a video that has
+                # already had one, and running it again would take the same
+                # seconds out twice.
+                def _cut_recorded():
+                    job_store._update(jid, trim_pending=False)
+                    job_store.persist(jid, work)
+
+                _cut_video(video_path, trim_start, trim_end, on_cut=_cut_recorded)
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,

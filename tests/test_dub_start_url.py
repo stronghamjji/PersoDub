@@ -2,6 +2,7 @@
 
 run_dub and source_fetch.fetch are both replaced -- no dubbing, no network.
 """
+import json
 import os
 import time
 
@@ -177,17 +178,37 @@ def test_a_failed_cut_reports_only_ffmpeg_s_last_line(monkeypatch):
     assert str(e.value) == "Could not trim the video: Invalid data found when processing input"
 
 
-def test_a_link_is_cut_after_it_is_fetched(monkeypatch):
-    """The download has to happen first -- there is nothing to cut before it."""
+def _job_json(video_path):
+    """The job.json sitting beside a job's video, read as it stands right now --
+    which is what a force-quit at this instant would leave behind."""
+    with open(os.path.join(os.path.dirname(video_path), "job.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_a_link_is_cut_after_it_is_fetched_and_the_record_says_so_at_once(monkeypatch):
+    """The download has to happen first -- there is nothing to cut before it.
+
+    And the cut has to be recorded the instant it lands: a job.json still saying
+    a cut is owed, over a video that has already had one, is a job that gets the
+    same seconds taken out twice when it is run again.
+    """
     order = []
+    saved = {}
 
     def fake_fetch(url, dest, log=None, cancel_check=None):
         order.append("fetch")
         with open(dest, "wb") as f:
             f.write(b"FAKEVIDEO")
+        saved["before"] = _job_json(dest)
+
+    def fake_cut(path, start, end, on_cut=None):
+        order.append(("cut", start, end))
+        if on_cut:
+            on_cut()   # the real _cut_video calls this the moment os.replace lands
+        saved["after"] = _job_json(path)
 
     monkeypatch.setattr(main, "fetch_source", fake_fetch)
-    monkeypatch.setattr(main, "_cut_video", lambda path, start, end: order.append(("cut", start, end)))
+    monkeypatch.setattr(main, "_cut_video", fake_cut)
     monkeypatch.setattr(main, "run_dub", lambda **kw: order.append("dub"))
 
     r = client.post("/api/dub/start",
@@ -196,3 +217,8 @@ def test_a_link_is_cut_after_it_is_fetched(monkeypatch):
     assert r.status_code == 200
     _wait_done(r.json()["job_id"])
     assert order == ["fetch", ("cut", 2.0, 8.0), "dub"]
+    # Downloaded but not yet cut: the whole video is on disk and the cut is owed.
+    assert saved["before"]["trim_pending"] is True
+    assert saved["before"]["trim"] == {"start": 2.0, "end": 8.0}
+    # Cut: owed no longer, and written before anything else could happen.
+    assert saved["after"]["trim_pending"] is False

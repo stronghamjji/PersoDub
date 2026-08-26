@@ -219,9 +219,18 @@
     border-bottom: 1px solid var(--border);
     background: var(--background);
   }
+  /* Both top-bar arrows. A 32px round target with an 18px arrow inside it: the
+     14px icon in a 18x14 box these were drawn at is under every platform's
+     minimum, and the one on the right sat alone with no label beside it to say
+     it was a button at all. The hover background is the rest of that answer. */
   .topbar-back { border: none; background: none; cursor: pointer; font: inherit;
-    display: inline-flex; align-items: center; padding: 0 2px; color: var(--muted-foreground); }
-  .topbar-back:hover { color: var(--foreground); }
+    width: 32px; height: 32px; flex: 0 0 auto; border-radius: 8px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--foreground); }
+  .topbar-back:hover { background: var(--canvas); }
+  /* Clear of the window's own edge -- the topbar's 16px padding is the gap on
+     the left, and the arrow on the right needs the same room to sit in. */
+  #topbarForward { margin-right: 4px; }
   .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   .topbar-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -641,7 +650,11 @@
   .tl-playhead i { position: absolute; top: 0; left: -6.5px; width: 0; height: 0;
     border-left: 8px solid transparent; border-right: 8px solid transparent;
     border-top: 12px solid var(--foreground);
-    pointer-events: auto; cursor: ew-resize; }
+    pointer-events: auto; cursor: ew-resize;
+    /* The same rule every .grip sets: inside a track that scrolls sideways, a
+       sideways drag on this is claimed as a scroll and arrives as
+       pointercancel, so the drag would die on its first move. */
+    touch-action: none; }
   /* While the head is being dragged nothing under the pointer should light up
      or start selecting -- the whole strip is one control for that moment. */
   .timeline.scrubbing { user-select: none; }
@@ -843,7 +856,7 @@
            projects, which is a place to go back to rather than a step back. -->
       <button class="topbar-back" id="topbarBack" type="button"
               aria-label="Back to projects" title="Back to projects" hidden>
-        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
       </button>
       <div class="topbar-titles">
         <span class="topbar-title" id="topbarTitle">PersoDub</span>
@@ -857,7 +870,7 @@
            first screen, and only while there is such a job (see paintForward). -->
       <button class="topbar-back" id="topbarForward" type="button"
               aria-label="Back to the project you left" hidden>
-        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
       </button>
       <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
@@ -1777,6 +1790,8 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
 let lastJobId = null;
 let lastJobName = "";
 
+// A job that failed counts too, on purpose: the failure card is where "Try
+// again" lives, so the arrow back to it is a way on rather than a dead end.
 function rememberLastJob() {
   if (!state.jobId) return;
   lastJobId = state.jobId;
@@ -2843,8 +2858,8 @@ doneVideo.addEventListener("click", toggleDonePlay);
 // The small button under the picture says what pressing it will do, so it is
 // the pause sign while the video plays and the play sign the rest of the time.
 // Drawn, like every other mark in the app.
-const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:currentColor;stroke:none;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
-const SMALL_PAUSE = '<svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:currentColor;stroke:none"><path d="M8 5h3.2v14H8z"/><path d="M12.8 5H16v14h-3.2z"/></svg>';
+const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+const SMALL_PAUSE = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><path d="M8 5h3.2v14H8z"/><path d="M12.8 5H16v14h-3.2z"/></svg>';
 function paintPlayToggle() {
   const btn = $("playToggle");
   const playing = !doneVideo.paused && !doneVideo.ended;
@@ -3405,6 +3420,10 @@ $("timeline").addEventListener("pointerdown", (e) => {
   const onHead = e.target.closest(".tl-playhead");
   if (!onHead && !e.target.closest(".tl-ruler")) return;
   e.preventDefault();
+  // Before the seek, and before the drag/press fork: a press on the ruler moves
+  // the playing video too, and following it would scroll the strip out from
+  // under the hand that is about to press again.
+  followUntil = Date.now() + FOLLOW_PAUSE_MS;
   seekDoneVideo(timelineTimeAt(e.clientX));
   if (!onHead) return;   // a press on the ruler is one jump, not a drag
 
