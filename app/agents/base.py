@@ -11,6 +11,7 @@ banner or warning, and one stray line must not blank the panel mid-answer.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -78,20 +79,51 @@ def write_mcp_config(dir_path: str, api_url: str) -> str:
 # CLI's stderr. An exit code is the CLI's business; what the user needs is which
 # of the three things went wrong and what to do about it.
 
-# Said by a CLI that has no login. Kept narrow on purpose: "login" on its own
-# also appears in help text, so it only counts next to a word about failing.
+# Said by a CLI that has no login. Whole phrases, and a bare number never
+# counts on its own: matching "401" anywhere in a CLI's stderr told people to
+# sign in when the real trouble was a full disk (/tmp/sess-4014), a stack trace
+# (index.js:401) or a timing (elapsed 2401ms). A number only counts where the
+# CLI put it next to the word that makes it a status.
 _NOT_LOGGED_IN = (
-    "not logged in", "not authenticated", "please log in", "please login",
-    "login required", "run `codex login`", "run codex login", "unauthorized",
-    "401", "authentication_error", "authentication failed", "invalid api key",
-    "no credentials", "session expired",
+    r"\bnot\s+logged\s+in\b",
+    r"\bnot\s+authenticated\b",
+    r"\bplease\s+log\s?in\b",
+    r"\blogin\s+required\b",
+    r"\bunauthorized\b",
+    r"\bauthentication[ _](?:failed|error)\b",
+    r"\binvalid[ _]api[ _]key\b",
+    r"\bno\s+credentials\b",
+    r"\bsession\s+expired\b",
+    # "please run `codex login` to sign in"
+    r"\brun\s+`?[a-z][\w-]*\s+login\b",
+    r"\b401\s+unauthorized\b",
+    r"\b(?:http|https|status|code|error)\s*(?:code)?\s*[:=]?\s*401\b",
 )
 
-# Said by a CLI that is out of allowance for now.
+# Said by a CLI that is out of allowance for now. "quota" alone is not one of
+# them: a disk quota is a full disk, and telling somebody to wait for their
+# allowance to come back would send them the wrong way entirely.
 _RATE_LIMITED = (
-    "rate limit", "rate_limit", "429", "too many requests", "usage limit",
-    "quota", "out of credit", "insufficient_quota",
+    r"\brate[ _-]?limit(?:ed|s|ing)?\b",
+    r"\btoo\s+many\s+requests\b",
+    r"\busage\s+limit\b",
+    r"(?<!disk )\bquota\s+exceeded\b",
+    r"\bexceeded\s+your\s+quota\b",
+    r"\binsufficient[_ ]quota\b",
+    r"\bout\s+of\s+credit",
+    r"\b429\s+too\s+many\s+requests\b",
+    r"\b(?:http|https|status|code|error)\s*(?:code)?\s*[:=]?\s*429\b",
 )
+
+# A key printed inside an error message would otherwise sit in the panel for as
+# long as the conversation does. It never leaves the machine either way, but it
+# does not need to be on the screen.
+_SECRETISH = re.compile(r"\b(sk|xox[abpsr]|ghp|gho|github_pat)[-_][A-Za-z0-9_-]{8,}")
+
+
+def _says(patterns, text: str) -> bool:
+    return any(re.search(p, text, re.IGNORECASE) for p in patterns)
+
 
 # Killed rather than finished: our own timeout kills the process (SIGKILL), and
 # so does the OS when it runs out of room. Both reach us as a negative code.
@@ -107,19 +139,18 @@ def explain_exit(code: int, output: str, agent_name: str = "도우미",
     face. Nothing here is a stack trace and nothing is an exit code.
     """
     text = (output or "").strip()
-    low = text.lower()
-    tail = text[-1200:]
+    tail = _SECRETISH.sub(r"\1-…", text[-1200:])
 
     if code in _KILLED:
         return {"kind": "error", "detail": tail,
                 "message": "도우미가 중간에 멈췄습니다. 다시 시도해 주세요."}
 
-    if any(p in low for p in _NOT_LOGGED_IN):
+    if _says(_NOT_LOGGED_IN, text):
         how = (" 터미널에서 `%s` 명령을 실행해 주세요." % login_command) if login_command else ""
         return {"kind": "error", "detail": tail,
                 "message": "%s에 로그인이 안 되어 있어요.%s" % (agent_name, how)}
 
-    if any(p in low for p in _RATE_LIMITED):
+    if _says(_RATE_LIMITED, text):
         return {"kind": "error", "detail": tail,
                 "message": "사용량 한도에 닿았습니다. 잠시 뒤 다시 시도하거나 다른 도우미를 골라 주세요."}
 
@@ -167,19 +198,25 @@ def login_state(kind: str, binary: str) -> dict:
         got = _run_quiet([binary, "login", "status"])
         if got is None:
             return unknown
-        code, out, err = got
+        _code, out, err = got
         said = (out + "\n" + err).strip()
         low = said.lower()
         if "logged in" in low and "not logged in" not in low:
-            # "Logged in using ChatGPT" -> "ChatGPT". Only the word after
-            # "using", so an address on the same line cannot come along.
-            after = said.split("using", 1)[1].strip() if "using" in low else ""
+            # "Logged in using ChatGPT" -> "ChatGPT". Only what follows "using",
+            # so an address on the same line cannot come along. Split however the
+            # CLI capitalised it, and cope with it not being there at all.
+            parts = re.split(r"using", said, maxsplit=1, flags=re.IGNORECASE)
+            after = parts[1].strip() if len(parts) > 1 else ""
             account = after.splitlines()[0].strip() if after else ""
             # An account KIND is one or two words; anything longer is not one.
             if "@" in account or len(account.split()) > 2:
                 account = ""
             return {"logged_in": True, "account": account}
-        if "not logged in" in low or code != 0:
+        # Only a CLI that says it is signed out counts as signed out. A non-zero
+        # exit on its own means any number of things -- an old CLI with no such
+        # subcommand, an unreachable auth server -- and "cannot say" is the
+        # honest answer to all of them.
+        if re.search(r"not\s+logged\s+in|logged\s+out|no\s+credentials", low):
             return {"logged_in": False, "account": ""}
         return unknown
 

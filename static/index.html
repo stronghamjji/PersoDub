@@ -111,6 +111,9 @@
        strip's own dark, where the app's --warning-ink (drawn for a white
        background) would be unreadable. */
     --agent-warn: #f0b429;
+    /* Quiet, but still readable: 8.2:1 on the strip, where --agent-muted is
+       3.4:1 and belongs on things nobody has to read. */
+    --agent-soft: #a1a1aa;
   }
 
   * { box-sizing: border-box; }
@@ -1420,7 +1423,9 @@
   /* The strip's first row: one line, muted, and never in the way. It keeps its
      right end clear of the Collapse button that floats over this corner. */
   .assistant-state { padding: 7px 110px 0 16px; font-size: 0.72rem;
-    color: var(--agent-muted); display: flex; align-items: center; gap: 5px;
+    /* Not --agent-muted: at this size that grey measures 3.4:1 on the strip's
+       own dark, and this is a line the user is meant to read and act on. */
+    color: var(--agent-soft); display: flex; align-items: center; gap: 5px;
     flex-wrap: wrap; }
   .assistant-state[hidden] { display: none; }
   .assistant-state.warn { color: var(--agent-warn); }
@@ -3781,6 +3786,7 @@ function paintState() {
 }
 
 function paintChoice() {
+  ensureLoginChecked();
   paintState();
   modelLabel.textContent = labelFor();
   // Dimming alone is a picture of a lock: a dimmed box is still one Tab away,
@@ -3938,16 +3944,28 @@ document.addEventListener("keydown", (e) => {
 });
 
 let recheckedLogin = false;   // see loadAgents: one second look, never a loop
+// Each check is a child process, so none is started until the strip is on
+// screen for the first time. The first screen hides the strip entirely, and
+// somebody who never opens a job never spawns a thing.
+let loginAsked = false;
+function ensureLoginChecked() {
+  if (loginAsked || document.body.dataset.screen === "home") return;
+  loginAsked = true;
+  loadAgents({ login: true }).catch(() => {});
+}
 const CHECK_FAILED = "Could not check which assistants are available.";
 const NONE_READY = "No assistant is ready -- install Claude Code, Codex or Gemini";
 
-async function loadAgents() {
+async function loadAgents({ login = false } = {}) {
   // Whether the list arrived, said plainly. An empty list happens to mean the
   // fetch failed today, but only because the server always answers with one
   // row per assistant -- a flag says what is meant and cannot go quietly wrong.
   let arrived = false;
   try {
-    const r = await fetch("/api/agent/status");
+    // ?login=1 is what allows the server to spend a child process on asking
+    // each CLI whether it is signed in. Off by default, so the first screen --
+    // where the assistant is not even on show -- starts nothing.
+    const r = await fetch("/api/agent/status" + (login ? "?login=1" : ""));
     agentList = (await r.json()).agents || [];
     arrived = true;
     notice = "";
@@ -3973,7 +3991,7 @@ async function loadAgents() {
   if (arrived && !recheckedLogin
       && agentList.some((a) => a.installed && a.supported && a.logged_in == null)) {
     recheckedLogin = true;
-    setTimeout(() => { loadAgents().catch(() => {}); }, 1200);
+    setTimeout(() => { loadAgents({ login: true }).catch(() => {}); }, 1200);
   }
   // Same reason: a list that never arrived says nothing about what is
   // installed, and "install one of these three" is the wrong thing to tell

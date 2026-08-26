@@ -14,10 +14,23 @@ from app.main import app
 client = TestClient(app, base_url="http://127.0.0.1")
 
 
-def _rows():
-    r = client.get("/api/agent/status")
+def _rows(login=False):
+    """The status rows. `login` is what the screen sends once the strip is on
+    show: without it the route answers from what it already knows and starts
+    nothing, so opening the app spawns no CLI at all."""
+    r = client.get("/api/agent/status" + ("?login=1" if login else ""))
     assert r.status_code == 200
     return {a["id"]: a for a in r.json()["agents"]}
+
+
+def _settled(key, login=True, secs=4.0):
+    """Poll until that assistant's login answer has landed."""
+    deadline = time.monotonic() + secs
+    rows = _rows(login=login)
+    while rows[key]["logged_in"] is None and time.monotonic() < deadline:
+        time.sleep(0.02)
+        rows = _rows(login=login)
+    return rows
 
 
 def test_status_names_all_three_and_says_which_can_answer():
@@ -146,12 +159,7 @@ def test_status_says_whether_each_assistant_is_signed_in(monkeypatch):
     monkeypatch.setattr(main.agent_base, "login_state",
                         lambda kind, binary: {"logged_in": True, "account": "ChatGPT"})
     main._login_cache.clear()
-    rows = _rows()
-    for _ in range(200):
-        if rows["codex"]["logged_in"] is not None:
-            break
-        time.sleep(0.02)
-        rows = _rows()
+    rows = _settled("codex")
     assert rows["codex"]["logged_in"] is True
     assert rows["codex"]["account"] == "ChatGPT"
     # What to type to sign in, named by the server so one place says it.
@@ -181,6 +189,49 @@ def test_status_answers_at_once_even_while_a_cli_is_thinking(monkeypatch):
     monkeypatch.setattr(main.agent_base, "login_state", slow)
     main._login_cache.clear()
     started = time.monotonic()
-    rows = _rows()
+    rows = _rows(login=True)
     assert time.monotonic() - started < 0.5
     assert rows["codex"]["logged_in"] is None    # not known yet, and not waited for
+
+
+def test_opening_the_app_does_not_start_a_single_cli(monkeypatch):
+    """Every check is a child process. The first screen does not even show the
+    assistant, so the screen asks for these only once the strip is visible."""
+    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+
+    def boom(kind, binary):
+        raise AssertionError("no login check may start without being asked for")
+
+    monkeypatch.setattr(main.agent_base, "login_state", boom)
+    main._login_cache.clear()
+    main._login_busy.clear()
+    rows = _rows()                      # no ?login=1 -- what the app asks at launch
+    assert rows["codex"]["logged_in"] is None
+    time.sleep(0.1)                     # a thread would have run by now
+    assert rows["claude"]["logged_in"] is None
+
+
+def test_a_login_check_that_blows_up_does_not_wedge_that_assistant(monkeypatch):
+    """The check used to leave its "already running" marker behind when it threw,
+    and that assistant then showed nothing for the life of the app."""
+    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(main, "AGENT_LOGIN_TTL", 0.0)   # ask again on the next look
+
+    def boom(kind, binary):
+        raise RuntimeError("the CLI exploded")
+
+    monkeypatch.setattr(main.agent_base, "login_state", boom)
+    main._login_cache.clear()
+    main._login_busy.clear()
+    _rows(login=True)
+    for _ in range(200):                # let the failing thread finish
+        if not main._login_busy:
+            break
+        time.sleep(0.02)
+    assert main._login_busy == set(), "the busy marker outlived the check"
+    assert _rows(login=True)["codex"]["logged_in"] is None
+
+    # And the next check still runs.
+    monkeypatch.setattr(main.agent_base, "login_state",
+                        lambda kind, binary: {"logged_in": True, "account": "ChatGPT"})
+    assert _settled("codex")["codex"]["logged_in"] is True

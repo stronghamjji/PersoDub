@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -1177,18 +1178,39 @@ AGENT_DIR = os.path.join(PERSODUB_LOG_DIR, "agent")
 AGENT_LOGIN_TTL = 60.0
 _login_cache = {}          # agent id -> {"logged_in", "account", "at"}
 _login_busy = set()        # ids with a check already running
+_login_broken = set()      # ids whose check has already been complained about
 _login_lock = threading.Lock()
 
 
 def _login_refresh(key: str, binary: str) -> None:
-    state = agent_base.login_state(key, binary)
-    with _login_lock:
-        _login_cache[key] = dict(state, at=time.monotonic())
-        _login_busy.discard(key)
+    """Ask one CLI, and write down whatever came of it -- including nothing.
+
+    The write and the clearing of the busy marker happen whatever the CLI does:
+    a check that threw used to leave its marker behind, and that assistant then
+    showed "not known" for the life of the app, with nothing on screen to say
+    why and no way back but a restart.
+    """
+    state = {"logged_in": None, "account": ""}
+    try:
+        state = agent_base.login_state(key, binary)
+    except Exception as e:   # noqa: BLE001 -- a CLI can fail in any way at all
+        # Once per assistant per run: this is for whoever reads the log, and a
+        # line every minute would bury the rest of it.
+        if key not in _login_broken:
+            _login_broken.add(key)
+            print("PersoDub: could not check %s's login (%s)" % (key, e), file=sys.stderr)
+    finally:
+        with _login_lock:
+            _login_cache[key] = dict(state, at=time.monotonic())
+            _login_busy.discard(key)
 
 
-def _login_of(key: str, binary: str) -> dict:
+def _login_of(key: str, binary: str, ask: bool) -> dict:
     """What is known about this CLI's login right now, refreshing behind us.
+
+    `ask` is what allows a check to be started at all: every check is a child
+    process, and the first screen -- where the assistant is not even on show --
+    must not start one. The screen asks the first time the strip is visible.
 
     None for `logged_in` means "we cannot say yet", never "signed out" -- the
     screen shows nothing rather than an accusation it has not checked.
@@ -1197,7 +1219,7 @@ def _login_of(key: str, binary: str) -> dict:
     with _login_lock:
         row = _login_cache.get(key)
         stale = row is None or now - row["at"] >= AGENT_LOGIN_TTL
-        start = stale and binary and key not in _login_busy
+        start = bool(ask and stale and binary and key not in _login_busy)
         if start:
             _login_busy.add(key)
     if start:
@@ -1226,7 +1248,7 @@ def _with_job(message: str, job_id: Optional[str]) -> str:
 
 
 @app.get("/api/agent/status")
-def agent_status():
+def agent_status(login: int = 0):
     """Which assistants are installed on this machine, and which are ready.
 
     Only one of them is needed -- whichever the user subscribes to. The panel
@@ -1236,9 +1258,10 @@ def agent_status():
     for key, meta in AGENTS.items():
         path = agent_base.find_cli(meta["binary"])
         driver = meta["driver"]
-        # Only asked of a CLI we would actually run. `logged_in` is None until
+        # Only asked of a CLI we would actually run, and only when the caller
+        # says the assistant is on screen (?login=1). `logged_in` is None until
         # the answer lands, and this call never waits for it.
-        login = (_login_of(key, path) if path and driver
+        state = (_login_of(key, path, ask=bool(login)) if path and driver
                  else {"logged_in": None, "account": ""})
         out.append({
             "id": key,
@@ -1248,8 +1271,8 @@ def agent_status():
             "supported": driver is not None,
             # True, False, or None for "not known yet". The account is its KIND
             # ("ChatGPT", "claude.ai") -- never an address, never a token.
-            "logged_in": login["logged_in"],
-            "account": login["account"],
+            "logged_in": state["logged_in"],
+            "account": state["account"],
             # What to type in a terminal to sign in, said in one place.
             "login_command": meta.get("login", ""),
             # Why it is greyed out, in the picker's own words. Empty when the

@@ -61,6 +61,38 @@ def test_a_failure_with_nothing_said_still_reads_as_a_sentence():
     assert out["detail"] == ""
 
 
+# The other half of the mapping, and the half that was missing: a failure that
+# merely CONTAINS a number must not be read as one. Matching "401" anywhere in a
+# CLI's output sent people off to sign in a CLI that was already signed in while
+# the real fault -- a full disk -- went unmentioned.
+def test_a_number_that_happens_to_look_like_a_status_is_left_alone():
+    for said in (
+        "codex: request failed after 3 retries (elapsed 2401ms)",
+        "Traceback: at /Users/x/node_modules/foo/index.js:401:12",
+        "tokens used: 14012 of 200000",
+        "Error: ENOSPC: no space left on device, write '/tmp/sess-4014'",
+        "fatal: unable to access repo: SSL error at offset 429",
+        "disk quota exceeded while writing cache",
+    ):
+        out = base.explain_exit(1, said, agent_name="Codex", login_command="codex login")
+        assert "로그인" not in out["message"], said
+        assert "한도" not in out["message"], said
+        assert out["message"].endswith("다시 시도해 주세요."), said
+
+
+def test_a_status_next_to_the_word_that_makes_it_one_still_counts():
+    assert "로그인" in base.explain_exit(1, "Error: 401 Unauthorized")["message"]
+    assert "로그인" in base.explain_exit(1, "request failed with status 401")["message"]
+    assert "한도" in base.explain_exit(1, "HTTP 429 Too Many Requests")["message"]
+    assert "한도" in base.explain_exit(1, "openai: status code 429")["message"]
+
+
+def test_a_key_printed_in_an_error_is_not_kept_on_the_screen():
+    out = base.explain_exit(1, "auth failed for token sk-abcdef1234567890")
+    assert "sk-abcdef1234567890" not in out["detail"]
+    assert "sk-" in out["detail"]
+
+
 def test_a_very_long_line_is_cut_rather_than_filling_the_panel():
     out = base.explain_exit(1, "x" * 500)
     assert len(out["message"]) < 220
@@ -94,6 +126,29 @@ def test_codex_signed_in_reports_the_kind_of_account(monkeypatch):
 def test_codex_signed_out_says_so(monkeypatch):
     monkeypatch.setattr(base.subprocess, "run", _Recorded(1, "", "Not logged in\n"))
     assert base.login_state("codex", "/bin/codex") == {"logged_in": False, "account": ""}
+
+
+def test_codex_capitalised_differently_is_still_read_and_never_raises(monkeypatch):
+    """A capitalisation change in somebody else's CLI used to be an IndexError,
+    which left that assistant showing nothing at all for the rest of the run."""
+    monkeypatch.setattr(base.subprocess, "run", _Recorded(0, "", "Logged in Using ChatGPT\n"))
+    assert base.login_state("codex", "/bin/codex") == {"logged_in": True, "account": "ChatGPT"}
+
+    # And "using" not being there at all is a shrug, not a crash.
+    monkeypatch.setattr(base.subprocess, "run", _Recorded(0, "", "Logged in.\n"))
+    assert base.login_state("codex", "/bin/codex")["logged_in"] is True
+
+
+def test_a_codex_that_fails_for_some_other_reason_is_not_called_signed_out(monkeypatch):
+    """An old CLI with no such subcommand, or one that cannot reach its auth
+    server, is "cannot say" -- not an accusation that the user is signed out."""
+    monkeypatch.setattr(base.subprocess, "run",
+                        _Recorded(2, "", "error: unrecognized subcommand 'login'\n"))
+    assert base.login_state("codex", "/bin/codex")["logged_in"] is None
+
+    monkeypatch.setattr(base.subprocess, "run",
+                        _Recorded(1, "", "dns error: failed to lookup address\n"))
+    assert base.login_state("codex", "/bin/codex")["logged_in"] is None
 
 
 def test_claude_reads_only_the_two_keys_it_needs(monkeypatch):
