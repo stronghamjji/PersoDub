@@ -323,7 +323,7 @@ class JobStore:
                 # error is what the UI shows the user under the red bar, and
                 # "RuntimeError:" in front of a plain-language sentence only
                 # made it read like a crash.
-                log(f"❌ Error: {type(e).__name__}: {e}")
+                log(f"Error: {type(e).__name__}: {e}")
                 self._update(jid, status="error", error=str(e) or type(e).__name__)
             # However it ended, the file beside the video now says so -- this is
             # the only moment the final status exists to be written down.

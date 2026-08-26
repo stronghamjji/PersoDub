@@ -296,7 +296,7 @@ def test_a_mid_turn_error_leaves_the_exit_code_its_say(monkeypatch):
     assert [e["kind"] for e in out] == ["error", "error"]
     # The exit still gets its say -- as a sentence the user can act on, not as
     # the number 3 (see tests/test_agents_base.py for the whole mapping).
-    assert out[1]["message"].endswith("다시 시도해 주세요.")
+    assert out[1]["message"].endswith("Please try again.")
     assert "3" not in out[1]["message"]
 
 

@@ -131,7 +131,7 @@ def test_a_job_is_refused_when_the_disk_is_nearly_full(monkeypatch):
         m.check_space("/tmp")
     except HTTPException as e:
         assert e.status_code == 507
-        assert "지난 작업 폴더" in e.detail  # says what to do about it
+        assert "Projects list" in e.detail  # says what to do about it
     else:
         raise AssertionError("a nearly full disk should have been refused")
 

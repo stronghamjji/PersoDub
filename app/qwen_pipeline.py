@@ -260,13 +260,13 @@ def _synth_merged_unit(
         # intermediate wav leaked as well. Degrade instead, so the caller falls
         # back to per-line synthesis: that is what this function's docstring and
         # synth_lines' both promise.
-        log("   ⚠️ merged unit @line %d: unit audio unreadable (%s) -- falling back to "
+        log("   Warning: merged unit @line %d: unit audio unreadable (%s) -- falling back to "
             "per-line synthesis" % (i0, str(e)[:80]))
         split_ok = False
     if os.path.exists(tmp_path):
         os.remove(tmp_path)
     if not split_ok:
-        log("   ⚠️ merged unit @line %d: could not split cleanly -- falling back to per-line synthesis" % i0)
+        log("   Warning: merged unit @line %d: could not split cleanly -- falling back to per-line synthesis" % i0)
         return False
     log("   line %d: merged with %d ultra-short follower(s), split at the energy valley"
        % (i0, len(unit) - 1))
@@ -454,7 +454,7 @@ def synth_lines(
         msg = ("take scoring UNAVAILABLE -- best-of-%d selection skipped, take 0 used for "
                "every line (quality degraded: no speaker-similarity or slot-fit choice). "
                "Check QWEN_SCORER_PYTHON and PERSODUB_CAMPPLUS_MODEL." % n_takes)
-        log("   🚨 " + msg)
+        log("   " + msg)
         if on_notice:
             on_notice({"type": "take_scoring_unavailable", "message": msg})
         winners = {}
@@ -636,7 +636,7 @@ def resynth_one_line(work_dir, entry, text, language):
     refs_path = os.path.join(work_dir, "speaker_refs.json")
     if not os.path.exists(ref_wav) or not os.path.exists(refs_path):
         raise FileNotFoundError(
-            "이 작업에는 화자의 참고 음성이 없습니다 — 통째로 다시 만들어 주세요.")
+            "This job has no reference audio for the speaker -- remake the whole job.")
     with open(refs_path, encoding="utf-8") as f:
         refs = json.load(f)
     ref_text = (refs.get(spk) or {}).get("ref_text") or ""
@@ -669,7 +669,7 @@ def rebuild_dub(work_dir, data, video_path, out_path):
     background = os.path.join(work_dir, "background.wav")
     if not os.path.exists(background):
         raise FileNotFoundError(
-            "이 작업에는 배경음이 없습니다 — 통째로 다시 만들어 주세요.")
+            "This job has no background audio -- remake the whole job.")
 
     out_wav = os.path.join(work_dir, "qwen_dub_48k.wav")
     place_lines(background, line_paths, starts, out_wav, gains=gains, log=lambda m: None)

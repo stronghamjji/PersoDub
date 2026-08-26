@@ -139,7 +139,7 @@ def test_a_damaged_config_comes_back_as_a_message_not_a_stack_trace(monkeypatch)
                         lambda d, url: __import__("os").path.join(d, "missing.json"))
     r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "codex"})
     assert r.status_code == 500
-    assert "도우미 설정" in r.json()["detail"]
+    assert "Could not prepare the assistant" in r.json()["detail"]
 
 
 def test_every_turn_asks_to_carry_on_the_conversation(monkeypatch, tmp_path):

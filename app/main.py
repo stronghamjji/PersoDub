@@ -385,9 +385,8 @@ def check_space(path: str) -> None:
         return
     raise HTTPException(
         status_code=507,
-        detail=("저장 공간이 부족합니다 (남은 공간 %.1f GB). "
-                "지난 작업 폴더를 지우면 공간이 생깁니다 — "
-                "왼쪽 작업 목록에서 오래된 작업을 지워주세요."
+        detail=("Not enough disk space (%.1f GB left). "
+                "Delete an old job from the Projects list to free space."
                 % (free / 1024 ** 3)),
     )
 
@@ -427,9 +426,9 @@ def dub_job_line_audio(jid: str, line: int):
     if not os.path.exists(path):
         raise HTTPException(
             status_code=404,
-            detail=("이 작업에는 줄별 음성이 없습니다. "
-                    "줄별 음성을 남기기 시작한 것은 2026-08-24부터라, "
-                    "그 전에 만든 작업은 다시 더빙해야 들을 수 있습니다."))
+            detail=("This job has no per-line audio. Per-line audio has only "
+                    "been kept since 2026-08-24, so a job made before that "
+                    "has to be dubbed again before you can listen to it."))
     return FileResponse(path, media_type="audio/wav")
 
 
@@ -438,8 +437,8 @@ def _line_manifest(work_dir: str) -> dict:
     manifest = os.path.join(work_dir, "lines.json")
     if not os.path.exists(manifest):
         raise HTTPException(status_code=409, detail=(
-            "이 작업은 줄별로 다시 만들 수 없습니다. 2026-08-24 이전에 만든 작업이라 "
-            "줄 정보가 없습니다 — 통째로 다시 만들어 주세요."))
+            "This job cannot be remade one line at a time. It was made before "
+            "2026-08-24, so it has no line information -- remake the whole job."))
     with open(manifest, encoding="utf-8") as f:
         return json.load(f)
 
@@ -459,7 +458,7 @@ def _remake_one_voice(work_dir: str, data: dict, line: int, text: str) -> None:
     except FileNotFoundError as e:
         raise HTTPException(status_code=409, detail=str(e))
     if new_path is None:
-        raise HTTPException(status_code=502, detail="목소리를 만들지 못했습니다.")
+        raise HTTPException(status_code=502, detail="Could not make the voice.")
 
 
 @app.post("/api/dub/jobs/{jid}/script/{line}/voice")
@@ -560,8 +559,9 @@ def dub_job_redub(jid: str):
     # nameless without a file in it, so Projects could never show or clear it.
     job_store.persist(new_jid, work)
     edited = os.path.exists(os.path.join(work_dir, EDITED_NAME))
-    job_store.append_log(new_jid, "🎬 %s (대본 %s으로 다시 만들기)"
-                         % (project, "고친 것" if edited else "그대로"))
+    job_store.append_log(new_jid, "%s (%s)"
+                         % (project, "voices remade from the edited script" if edited
+                            else "from the script as it was"))
 
     def _target(log):
         return run_dub(
@@ -650,7 +650,7 @@ def dub_job_retry(jid: str):
     # Same reason as in dub_start: quit the app mid-run and this folder is
     # nameless without a file in it, so Projects could never show or clear it.
     job_store.persist(new_jid, work)
-    job_store.append_log(new_jid, "🎬 %s (다시 시도)" % project)
+    job_store.append_log(new_jid, "%s (run again)" % project)
 
     def _target(log):
         return run_dub(
@@ -971,7 +971,7 @@ def dub_start(
     job_store.persist(jid, work)
     # First log line names the source -- log files are job-<id>.log, so without
     # this there is no way to tell which video a log belongs to.
-    job_store.append_log(jid, f"🎬 {source_url or video.filename or 'video'}")
+    job_store.append_log(jid, f"{source_url or video.filename or 'video'}")
 
     def _target(log):
         if source_url:
@@ -1294,7 +1294,7 @@ def _with_job(message: str, job_id: Optional[str]) -> str:
     """Tell the assistant which job is on screen before it reads the question."""
     if not job_id:
         return message
-    return "(지금 화면에 열려 있는 작업 번호: %s)\n\n%s" % (job_id, message)
+    return "(The job open on screen right now: %s)\n\n%s" % (job_id, message)
 
 
 @app.get("/api/agent/status")
@@ -1364,7 +1364,7 @@ def agent_chat(body: AgentChatRequest, request: Request):
         # stack trace, and building the command line should not be the one
         # place that hands the user a 500.
         raise HTTPException(status_code=500,
-                            detail="도우미 설정을 준비하지 못했습니다: %s" % e)
+                            detail="Could not prepare the assistant: %s" % e)
 
     def stream():
         for event in agent_base.run(binary, args, driver.translate,

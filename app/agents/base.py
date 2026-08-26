@@ -130,7 +130,7 @@ def _says(patterns, text: str) -> bool:
 _KILLED = (-9, -15, 137, 143)
 
 
-def explain_exit(code: int, output: str, agent_name: str = "도우미",
+def explain_exit(code: int, output: str, agent_name: str = "The assistant",
                  login_command: str = "") -> dict:
     """One error event for a turn that ended badly.
 
@@ -143,16 +143,16 @@ def explain_exit(code: int, output: str, agent_name: str = "도우미",
 
     if code in _KILLED:
         return {"kind": "error", "detail": tail,
-                "message": "도우미가 중간에 멈췄습니다. 다시 시도해 주세요."}
+                "message": "The assistant stopped partway. Please try again."}
 
     if _says(_NOT_LOGGED_IN, text):
-        how = (" 터미널에서 `%s` 명령을 실행해 주세요." % login_command) if login_command else ""
+        how = (" Run `%s` in Terminal." % login_command) if login_command else ""
         return {"kind": "error", "detail": tail,
-                "message": "%s에 로그인이 안 되어 있어요.%s" % (agent_name, how)}
+                "message": "%s is not signed in.%s" % (agent_name, how)}
 
     if _says(_RATE_LIMITED, text):
         return {"kind": "error", "detail": tail,
-                "message": "사용량 한도에 닿았습니다. 잠시 뒤 다시 시도하거나 다른 도우미를 골라 주세요."}
+                "message": "Usage limit reached. Wait a while or pick another assistant."}
 
     # Nothing we know. One line of what it said, and the rest behind the fold --
     # a summary the user can read out to somebody who can help.
@@ -161,7 +161,7 @@ def explain_exit(code: int, output: str, agent_name: str = "도우미",
         first = first[:157] + "…"
     said = (" (%s)" % first) if first else ""
     return {"kind": "error", "detail": tail,
-            "message": "도우미가 답을 끝내지 못했습니다%s. 다시 시도해 주세요." % said}
+            "message": "The assistant did not finish its answer%s. Please try again." % said}
 
 
 # --- Which account a CLI is signed in with ----------------------------------
@@ -241,7 +241,7 @@ def login_state(kind: str, binary: str) -> dict:
 
 
 def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
-        cwd: Optional[str] = None, agent_name: str = "도우미",
+        cwd: Optional[str] = None, agent_name: str = "The assistant",
         login_command: str = "") -> Iterator[dict]:
     """Spawn one turn and yield our events as they arrive.
 
@@ -258,7 +258,7 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
             cwd=cwd, text=True, encoding="utf-8", bufsize=1,
         )
     except OSError as e:
-        yield {"kind": "error", "message": "도우미를 실행하지 못했습니다: %s" % e}
+        yield {"kind": "error", "message": "Could not run the assistant: %s" % e}
         return
 
     timer = threading.Timer(TIMEOUT_SECONDS, proc.kill)

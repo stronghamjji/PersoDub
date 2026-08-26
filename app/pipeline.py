@@ -57,7 +57,7 @@ def _check_cancel(cancel_check: Optional[Callable[[], bool]], log: Callable[[str
     next checkpoint.
     """
     if cancel_check is not None and cancel_check():
-        log("⏹️ Cancelled by user request")
+        log("Cancelled by user request")
         raise JobCancelled("cancelled by user")
 
 
@@ -108,7 +108,7 @@ def _manifest_exclude_spans(manifest_path, mix_wav, log):
         mix_dur = w.getnframes() / float(w.getframerate())
     reason = _validate_manifest_spans(kept, mix_dur, mode=manifest.get("mode"))
     if reason is not None:
-        log(f"   ⚠️ nonverbal manifest rejected ({reason}) — measuring at full strictness")
+        log(f"   Warning: nonverbal manifest rejected ({reason}) — measuring at full strictness")
         return None
     return [(float(k["start"]), float(k["end"])) for k in kept]
 
@@ -148,11 +148,11 @@ def leakage_gate(mix_wav, vocals_path, manifest_path, work_dir, log):
         if r2["pass"]:
             log(f"   leakage gate: PASS after cancelling {n} echo run(s)")
         else:
-            log(f"   ⚠️ leakage gate: still {r2['n_fail']} failing window(s) after "
+            log(f"   Warning: leakage gate: still {r2['n_fail']} failing window(s) after "
                 f"cancellation — delivering the cleaned mix, but listen before shipping")
         return fixed
     except Exception as e:
-        log(f"   ⚠️ leakage gate skipped ({type(e).__name__}: {str(e)[:80]})")
+        log(f"   Warning: leakage gate skipped ({type(e).__name__}: {str(e)[:80]})")
         return mix_wav
 
 
@@ -167,7 +167,7 @@ def ensure_video_length(original_video: str, out_path: str, log: Callable[[str],
         d_orig = _video_duration(original_video)
         d_out = _video_duration(out_path)
     except Exception as e:
-        log(f"   ⚠️ Length check failed ({str(e)[:60]}) — using the export result as is")
+        log(f"   Warning: Length check failed ({str(e)[:60]}) — using the export result as is")
         return
     if abs(d_orig - d_out) <= 0.02:
         return
@@ -177,7 +177,7 @@ def ensure_video_length(original_video: str, out_path: str, log: Callable[[str],
     if r.returncode == 0 and os.path.exists(tmp):
         os.replace(tmp, out_path)
     else:
-        log(f"   ⚠️ Length correction failed — keeping the export result ({r.stderr[-80:]})")
+        log(f"   Warning: Length correction failed — keeping the export result ({r.stderr[-80:]})")
 
 
 def _auto_translate_srt(
@@ -229,7 +229,7 @@ def _auto_translate_srt(
                 translated[i] = t2
     still_bad = [i for i, t2 in enumerate(translated) if not script_ok(t2, target_lang)]
     if still_bad:
-        log(f"   ⚠️ {len(still_bad)} lines still not in the target language — output needs review")
+        log(f"   Warning: {len(still_bad)} lines still not in the target language — output needs review")
 
     # Keep the source script before the next line overwrites it in place -- past this
     # point the source is gone, and app/dub_script.py needs it to show a line's source
@@ -396,7 +396,7 @@ def run_dub(
             # what happened, the notice's clickable Recharge link says where
             # to go -- the URL text itself stays out of the message.
             msg = "Perso credits are used up. Recharge to continue."
-            log(f"   ❌ {msg} ({e.link})")
+            log(f"   Error: {msg} ({e.link})")
             if on_notice:
                 on_notice({"type": "perso_credit_exhausted", "message": msg, "link": e.link})
             raise RuntimeError(msg) from e
@@ -404,20 +404,20 @@ def run_dub(
             # The fix lives in Settings, so the popup's button opens it (no
             # link in the notice -- the action is inside the app).
             msg = "Perso rejected the API key. Open Settings and check the key."
-            log(f"   ❌ {msg}")
+            log(f"   Error: {msg}")
             if on_notice:
                 on_notice({"type": "perso_invalid_key", "message": msg})
             raise RuntimeError(msg) from e
         except PersoUnavailableError as e:
             msg = "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
-            log(f"   ❌ {msg}")
+            log(f"   Error: {msg}")
             if on_notice:
                 on_notice({"type": "perso_unavailable", "message": msg})
             raise RuntimeError(msg) from e
         except Exception as e:
             msg = (f"Perso STT failed ({str(e)[:80]}). Check Settings, "
                    f"or switch to Whisper (free, offline).")
-            log(f"   ❌ {msg}")
+            log(f"   Error: {msg}")
             raise RuntimeError(msg) from e
 
     # 2. Local Whisper transcription (no container at all) -- skipped if Perso succeeded
@@ -433,7 +433,7 @@ def run_dub(
                 on_language=lambda c: detected_language.__setitem__("code", c),
             )
         except Exception as e:
-            log(f"   ❌ Local STT failed ({str(e)[:120]})")
+            log(f"   Error: Local STT failed ({str(e)[:120]})")
             raise
         # Local Whisper sets no speaker_id -- CAM++ can still label the cues it produced.
         diar_engine = diar_engine or "campplus"
@@ -459,7 +459,7 @@ def run_dub(
             n_spk = len({cue_speaker(c) for c in src_cues if cue_speaker(c)})
             log(f"   CAM++ labeled {len(src_cues)} lines across {n_spk} speakers")
         except Exception as e:
-            log(f"   ⚠️ CAM++ diarization failed ({str(e)[:80]}) — keeping existing labels")
+            log(f"   Warning: CAM++ diarization failed ({str(e)[:80]}) — keeping existing labels")
 
     # If source subtitles (a professional script) exist, their timing & sentences are
     # accurate, good for both translation and voice references. Otherwise use whatever
@@ -500,13 +500,13 @@ def run_dub(
             )
         except GeminiQuotaExhaustedError as e:
             msg = "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset."
-            log(f"   ❌ {msg} ({e.link})")
+            log(f"   Error: {msg} ({e.link})")
             if on_notice:
                 on_notice({"type": "gemini_quota_exhausted", "message": msg, "link": e.link})
             raise RuntimeError(msg) from e
         except GeminiUnavailableError as e:
             msg = "Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again."
-            log(f"   ❌ {msg}")
+            log(f"   Error: {msg}")
             if on_notice:
                 on_notice({"type": "gemini_unavailable", "message": msg})
             raise RuntimeError(msg) from e
@@ -573,7 +573,7 @@ def run_dub(
     # per-job delete button. cleanup_intermediates() is still here and is what
     # that warning tells the user to reach for.
     log("   keeping the per-line audio so single lines can be redone")
-    log("✅ Done!")
+    log("Done!")
     return {
         "job_id": job_id,
         "out_path": out_path,

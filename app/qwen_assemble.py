@@ -732,7 +732,7 @@ def place_lines(background_path: str, line_paths: List[Optional[str]],
                 log("   stretch_rate line %d: %.4f (source %.3fs -> %.3fs)"
                     % (i, stretch_rate, src_dur, placed_dur))
                 if abs(stretch_rate - 1.0) > 0.001:
-                    log("   ⚠️ STRETCH WATCHDOG line %d: stretch_rate=%.4f != 1.000 -- "
+                    log("   Warning: STRETCH WATCHDOG line %d: stretch_rate=%.4f != 1.000 -- "
                         "time-stretch is banned in this app, this should never happen"
                         % (i, stretch_rate))
 
@@ -746,7 +746,7 @@ def place_lines(background_path: str, line_paths: List[Optional[str]],
             limit_frame = int(round(nxt * SR)) - head_frames
             maxlen_frames = limit_frame - pos_frame
             if maxlen_frames <= 0:
-                log("   ⚠️ line %d at %.3fs collides with the next line's start (%.3fs) -- "
+                log("   Warning: line %d at %.3fs collides with the next line's start (%.3fs) -- "
                     "skipped to avoid overlap" % (i, start, nxt))
                 continue
             line_frames = len(line) // bytes_per_frame

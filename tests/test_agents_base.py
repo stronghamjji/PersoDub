@@ -16,7 +16,7 @@ from app.agents import base
 def test_a_killed_turn_says_it_stopped_and_to_try_again():
     for code in (-9, 137):
         out = base.explain_exit(code, "Killed")
-        assert out["message"] == "도우미가 중간에 멈췄습니다. 다시 시도해 주세요."
+        assert out["message"] == "The assistant stopped partway. Please try again."
         assert str(code) not in out["message"]
 
 
@@ -24,14 +24,14 @@ def test_a_signed_out_cli_says_which_command_signs_it_in():
     for said in ("Error: 401 Unauthorized", "You are not logged in.",
                  "authentication_error: invalid api key"):
         out = base.explain_exit(1, said, agent_name="Codex", login_command="codex login")
-        assert "로그인이 안 되어 있어요" in out["message"]
+        assert "is not signed in" in out["message"]
         assert "Codex" in out["message"]
         assert "codex login" in out["message"]
 
 
 def test_the_sign_in_line_names_the_cli_that_was_asked():
     out = base.explain_exit(1, "not logged in", agent_name="Claude", login_command="claude")
-    assert out["message"].startswith("Claude에 로그인이")
+    assert out["message"].startswith("Claude is not signed in")
     assert "`claude`" in out["message"]
 
 
@@ -39,7 +39,7 @@ def test_running_out_of_allowance_says_to_wait_or_pick_another():
     for said in ("rate limit exceeded", "HTTP 429", "You have hit your usage limit"):
         out = base.explain_exit(1, said)
         assert out["message"] == (
-            "사용량 한도에 닿았습니다. 잠시 뒤 다시 시도하거나 다른 도우미를 골라 주세요.")
+            "Usage limit reached. Wait a while or pick another assistant.")
 
 
 def test_anything_else_is_one_line_with_the_rest_kept_behind_it():
@@ -48,16 +48,16 @@ def test_anything_else_is_one_line_with_the_rest_kept_behind_it():
     # One line, and it is the CLI's last word rather than its first.
     assert "TypeError" in out["message"]
     assert "warming up" not in out["message"]
-    assert out["message"].endswith("다시 시도해 주세요.")
+    assert out["message"].endswith("Please try again.")
     # The whole thing is still there for anyone who wants it.
     assert out["detail"] == said
     # Never the exit code: a number is the CLI's business, not the user's.
-    assert "3번" not in out["message"]
+    assert "code 3" not in out["message"]
 
 
 def test_a_failure_with_nothing_said_still_reads_as_a_sentence():
     out = base.explain_exit(1, "")
-    assert out["message"] == "도우미가 답을 끝내지 못했습니다. 다시 시도해 주세요."
+    assert out["message"] == "The assistant did not finish its answer. Please try again."
     assert out["detail"] == ""
 
 
@@ -75,16 +75,16 @@ def test_a_number_that_happens_to_look_like_a_status_is_left_alone():
         "disk quota exceeded while writing cache",
     ):
         out = base.explain_exit(1, said, agent_name="Codex", login_command="codex login")
-        assert "로그인" not in out["message"], said
-        assert "한도" not in out["message"], said
-        assert out["message"].endswith("다시 시도해 주세요."), said
+        assert "signed in" not in out["message"], said
+        assert "Usage limit" not in out["message"], said
+        assert out["message"].endswith("Please try again."), said
 
 
 def test_a_status_next_to_the_word_that_makes_it_one_still_counts():
-    assert "로그인" in base.explain_exit(1, "Error: 401 Unauthorized")["message"]
-    assert "로그인" in base.explain_exit(1, "request failed with status 401")["message"]
-    assert "한도" in base.explain_exit(1, "HTTP 429 Too Many Requests")["message"]
-    assert "한도" in base.explain_exit(1, "openai: status code 429")["message"]
+    assert "signed in" in base.explain_exit(1, "Error: 401 Unauthorized")["message"]
+    assert "signed in" in base.explain_exit(1, "request failed with status 401")["message"]
+    assert "Usage limit" in base.explain_exit(1, "HTTP 429 Too Many Requests")["message"]
+    assert "Usage limit" in base.explain_exit(1, "openai: status code 429")["message"]
 
 
 def test_a_key_printed_in_an_error_is_not_kept_on_the_screen():
