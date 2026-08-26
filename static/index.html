@@ -913,7 +913,16 @@
     stroke: currentColor; stroke-width: 3; stroke-linejoin: round; }
   .trim-label { font-weight: 600; }
   .trim-read { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  /* Bar and ruler are one thing: they share a width, the same 5px inset, and
+     the playhead that walks across both. */
+  .trim-scale { position: relative; display: flex; flex-direction: column; gap: 2px; }
   .trim-bar { position: relative; height: 28px; border-radius: var(--radius-sm); background: var(--trim-track); overflow: hidden; }
+  /* The timeline's ruler, at dialog size: a tick every few seconds with the
+     clock hanging to its right. */
+  .trim-ruler { position: relative; height: 16px; overflow: hidden; }
+  .trim-tick { position: absolute; top: 0; bottom: 4px; border-left: 1px solid var(--border); }
+  .trim-tick span { position: absolute; top: 1px; left: 4px; font-size: 0.63rem;
+    color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
   /* Hatched = not being dubbed. */
   .trim-hatch { position: absolute; top: 0; bottom: 0;
     background: repeating-linear-gradient(135deg, var(--border) 0 4px, var(--trim-track) 4px 8px); }
@@ -923,10 +932,16 @@
      painted layers above are positioned with the same 10px-thumb maths. Only
      the thumbs take the mouse, so each handle stays grabbable over the other's
      track. */
-  /* Where the preview is right now: a thin line that walks the bar while the
-     selected part plays, and leaves when it stops. */
-  .trim-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: 4px;
-    background: var(--primary); pointer-events: none; z-index: 2; }
+  /* Where the preview is right now: the finished screen's playhead, at dialog
+     size. A 2px line down the bar AND the ruler, centred on the moment it
+     stands for (hence the -1px), that leaves when the preview stops. */
+  .trim-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+    background: var(--foreground); pointer-events: none; z-index: 3; }
+  /* The same triangle as .tl-playhead's, drawn as borders, scaled to a 28px
+     bar: 12px across, 8px tall, centred on the line under it. */
+  .trim-head i { position: absolute; top: 0; left: -5px; width: 0; height: 0;
+    border-left: 6px solid transparent; border-right: 6px solid transparent;
+    border-top: 8px solid var(--foreground); }
   .trim-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
     -webkit-appearance: none; appearance: none; background: none; pointer-events: none; }
   .trim-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; pointer-events: auto;
@@ -2131,6 +2146,9 @@ function cancelRange(video) {
 const TRIM_MIN_SPAN = 0.5;
 // What one nudge of a handle is worth -- the sliders' step, in seconds.
 const TRIM_STEP = 0.1;
+// How far apart the ruler's ticks are, and the coarsest they may ever be read
+// in: squeezed, they thin out to 10s, 15s, 20s rather than to 6s or 7s.
+const TRIM_TICK_SEC = 5;
 // The play button's purple-while-playing state is driven by the video, whose
 // listeners outlive the box; kept here so re-drawing swaps them rather than
 // piling a second set on.
@@ -2153,13 +2171,16 @@ function renderTrim(duration) {
       <span class="trim-label">Trim</span>
       <span class="trim-read" id="trimRead"></span>
     </div>
-    <div class="trim-bar">
-      <div class="trim-hatch" id="trimHatchStart" style="left: 0"></div>
-      <div class="trim-hatch" id="trimHatchEnd" style="right: 0"></div>
-      <div class="trim-sel" id="trimSel"></div>
-      <div class="trim-head" id="trimHead" hidden></div>
-      <input type="range" class="trim-range" id="trimStart" min="0" step="${TRIM_STEP}" aria-label="Trim start">
-      <input type="range" class="trim-range" id="trimEnd" min="0" step="${TRIM_STEP}" aria-label="Trim end">
+    <div class="trim-scale" id="trimScale">
+      <div class="trim-bar">
+        <div class="trim-hatch" id="trimHatchStart" style="left: 0"></div>
+        <div class="trim-hatch" id="trimHatchEnd" style="right: 0"></div>
+        <div class="trim-sel" id="trimSel"></div>
+        <input type="range" class="trim-range" id="trimStart" min="0" step="${TRIM_STEP}" aria-label="Trim start">
+        <input type="range" class="trim-range" id="trimEnd" min="0" step="${TRIM_STEP}" aria-label="Trim end">
+      </div>
+      <div class="trim-ruler" id="trimRuler"></div>
+      <div class="trim-head" id="trimHead" hidden><i></i></div>
     </div>`;
 
   const startInput = $("trimStart"), endInput = $("trimEnd");
@@ -2171,6 +2192,24 @@ function renderTrim(duration) {
   // is exactly how the browser lays a range out. The painted layers use the
   // same formula so bar and handles never drift apart.
   const at = (sec) => `calc(5px + (100% - 10px) * ${sec / duration})`;
+
+  // The ruler under the bar, ticked on that same mapping. Every 5 seconds
+  // where they fit; where they do not, the timeline's rule -- a label needs
+  // TL_LABEL_PX of room, so thin the ticks until it has it -- rounded up to
+  // whole fives. Settled once, from the width the bar has now.
+  const room = Math.max(1, $("trimScale").clientWidth - 10);
+  const every = TRIM_TICK_SEC *
+    Math.max(1, Math.ceil((TL_LABEL_PX * duration) / (room * TRIM_TICK_SEC)));
+  let ticks = "";
+  for (let s = 0; s <= Math.floor(duration); s += every) {
+    // The label hangs to the RIGHT of its tick, so the last one would run off
+    // the end and be cut in half. A tick with no room keeps the line and
+    // drops the label.
+    const label = 5 + room * (s / duration) + TL_LABEL_PX <= room + 10
+      ? `<span>${fmtClock(s)}</span>` : "";
+    ticks += `<div class="trim-tick" style="left:${at(s)}">${label}</div>`;
+  }
+  $("trimRuler").innerHTML = ticks;
 
   function paint() {
     const start = Number(startInput.value), end = Number(endInput.value);
