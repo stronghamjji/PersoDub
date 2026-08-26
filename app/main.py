@@ -1300,12 +1300,11 @@ AGENTS = {
                "driver": claude_agent, "login": "claude"},
     "codex": {"binary": "codex", "name": "Codex", "vendor": "OpenAI",
               "driver": codex_agent, "login": "codex login"},
-    # No driver: Google stopped serving this CLI on a personal Gemini account
-    # (measured 2026-08-26 -- the CLI never reaches a model, so there is no
-    # output format to translate). The picker greys it out and says why.
-    "gemini": {"binary": "gemini", "name": "Gemini", "vendor": "Google",
-               "driver": None,
-               "reason": "Google no longer serves this CLI on a personal account"},
+    # An assistant listed with "driver": None and a "reason" is offered but
+    # greyed out, with the reason printed under its name. Nothing is in that
+    # state today -- Gemini was, and was dropped rather than left on the list
+    # as a row nobody could pick -- but the next CLI to be added can be shown
+    # before it is wired up.
 }
 
 # Where the assistant's own files live. Never the user's global CLI config:
@@ -1393,7 +1392,7 @@ def agent_status(login: int = 0):
     """Which assistants are installed on this machine, and which are ready.
 
     Only one of them is needed -- whichever the user subscribes to. The panel
-    greys out the rest rather than asking anyone to install all three.
+    greys out the rest rather than asking anyone to install both.
     """
     out = []
     for key, meta in AGENTS.items():

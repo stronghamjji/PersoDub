@@ -33,19 +33,26 @@ def _settled(key, login=True, secs=4.0):
     return rows
 
 
-def test_status_names_all_three_and_says_which_can_answer():
+def test_status_names_both_and_says_which_can_answer():
     rows = _rows()
-    assert set(rows) == {"claude", "codex", "gemini"}
+    assert set(rows) == {"claude", "codex"}
     assert rows["claude"]["supported"] is True
     assert rows["codex"]["supported"] is True
-    assert rows["gemini"]["supported"] is False
 
 
-def test_an_assistant_that_cannot_answer_says_why():
-    """The picker greys the row out and prints this underneath it, so an empty
-    reason would be a dead end with no explanation."""
+def test_an_assistant_that_cannot_answer_says_why(monkeypatch):
+    """An assistant listed without a driver is offered greyed out, with the
+    reason printed under its name. Nothing is in that state today, so the
+    mechanism is checked against one put there for the test -- an empty reason
+    would be a dead end with no explanation."""
+    monkeypatch.setitem(main.AGENTS, "someday", {
+        "binary": "someday", "name": "Someday", "vendor": "Nobody",
+        "driver": None, "reason": "this one is not wired up yet",
+    })
     rows = _rows()
-    assert len(rows["gemini"]["reason"].split()) > 3  # a sentence, not a label
+    assert rows["someday"]["supported"] is False
+    assert len(rows["someday"]["reason"].split()) > 3  # a sentence, not a label
+    assert rows["someday"]["models"] == []
     # A usable assistant has nothing to excuse.
     assert rows["claude"]["reason"] == ""
     assert rows["codex"]["reason"] == ""
@@ -56,7 +63,6 @@ def test_only_claude_offers_a_choice_of_models():
     rows = _rows()
     assert "fable" in rows["claude"]["models"]
     assert rows["codex"]["models"] == []
-    assert rows["gemini"]["models"] == []
 
 
 def test_status_never_starts_a_cli(monkeypatch):
@@ -74,10 +80,14 @@ def test_an_unknown_assistant_is_refused():
     assert r.status_code == 422
 
 
-def test_gemini_is_refused_with_the_same_reason_the_picker_shows():
-    r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "gemini"})
+def test_an_assistant_without_a_driver_is_refused_with_the_pickers_reason(monkeypatch):
+    monkeypatch.setitem(main.AGENTS, "someday", {
+        "binary": "someday", "name": "Someday", "vendor": "Nobody",
+        "driver": None, "reason": "this one is not wired up yet",
+    })
+    r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "someday"})
     assert r.status_code == 501
-    assert _rows()["gemini"]["reason"] in r.json()["detail"]
+    assert _rows()["someday"]["reason"] in r.json()["detail"]
 
 
 def _capture(monkeypatch, tmp_path):
@@ -174,7 +184,7 @@ def test_an_assistant_we_cannot_run_is_never_called_signed_out(monkeypatch):
     main._login_cache.clear()
     rows = _rows()
     assert rows["codex"]["logged_in"] is None
-    assert rows["gemini"]["logged_in"] is None   # no driver: never asked at all
+    assert rows["claude"]["logged_in"] is None
 
 
 def test_status_answers_at_once_even_while_a_cli_is_thinking(monkeypatch):

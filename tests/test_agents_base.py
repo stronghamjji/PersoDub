@@ -179,4 +179,4 @@ def test_a_cli_that_hangs_or_answers_nonsense_says_nothing_either_way(monkeypatc
     # A CLI that is not installed is not signed out either.
     assert base.login_state("codex", "")["logged_in"] is None
     # And one we have no check for.
-    assert base.login_state("gemini", "/bin/gemini")["logged_in"] is None
+    assert base.login_state("nosuchcli", "/bin/nosuchcli")["logged_in"] is None

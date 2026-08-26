@@ -4293,7 +4293,7 @@ function ensureLoginChecked() {
   loadAgents({ login: true }).catch(() => {});
 }
 const CHECK_FAILED = "Could not check which assistants are available.";
-const NONE_READY = "No assistant is ready -- install Claude Code, Codex or Gemini";
+const NONE_READY = "No assistant is ready -- install Claude Code or Codex";
 
 async function loadAgents({ login = false } = {}) {
   // Whether the list arrived, said plainly. An empty list happens to mean the
@@ -4351,7 +4351,7 @@ async function loadAgents({ login = false } = {}) {
   // someone who already has one. The fetch's own message stands instead.
   if (arrived && !agentList.some((a) => a.installed && a.supported)) {
     if (notice !== NONE_READY) {
-      bubble("ai", "No assistant is ready. Install Claude Code, Codex or Gemini — you only need one.");
+      bubble("ai", "No assistant is ready. Install Claude Code or Codex — you only need one.");
     }
     notice = NONE_READY;
     paintChoice();
