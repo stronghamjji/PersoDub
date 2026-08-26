@@ -923,6 +923,10 @@
      painted layers above are positioned with the same 10px-thumb maths. Only
      the thumbs take the mouse, so each handle stays grabbable over the other's
      track. */
+  /* Where the preview is right now: a thin line that walks the bar while the
+     selected part plays, and leaves when it stops. */
+  .trim-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: 4px;
+    background: var(--primary); pointer-events: none; z-index: 2; }
   .trim-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
     -webkit-appearance: none; appearance: none; background: none; pointer-events: none; }
   .trim-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; pointer-events: auto;
@@ -2153,6 +2157,7 @@ function renderTrim(duration) {
       <div class="trim-hatch" id="trimHatchStart" style="left: 0"></div>
       <div class="trim-hatch" id="trimHatchEnd" style="right: 0"></div>
       <div class="trim-sel" id="trimSel"></div>
+      <div class="trim-head" id="trimHead" hidden></div>
       <input type="range" class="trim-range" id="trimStart" min="0" step="${TRIM_STEP}" aria-label="Trim start">
       <input type="range" class="trim-range" id="trimEnd" min="0" step="${TRIM_STEP}" aria-label="Trim end">
     </div>`;
@@ -2206,15 +2211,27 @@ function renderTrim(duration) {
     playRange(video, Number(startInput.value), Number(endInput.value)).catch(() => {});
   });
   if (trimPlayState) {
-    for (const e of ["play", "pause", "ended"]) video.removeEventListener(e, trimPlayState);
+    for (const e of ["play", "pause", "ended", "timeupdate"]) video.removeEventListener(e, trimPlayState);
   }
+  // One handler for play / pause / ended / timeupdate: the button's look, the
+  // badge on the thumbnail (the running clock while it plays, the length
+  // when it stops) and the playhead line walking the bar.
   trimPlayState = () => {
-    const playing = !video.paused;
+    const playing = !video.paused && !video.ended;
     playBtn.classList.toggle("playing", playing);
     const label = playing ? "Pause" : "Play the selected part";
     playBtn.title = label; playBtn.setAttribute("aria-label", label);
+    const head = $("trimHead");
+    if (playing) {
+      $("projectDur").textContent = fmtClockTenths(video.currentTime);
+      head.style.left = at(video.currentTime);
+      head.hidden = false;
+    } else {
+      $("projectDur").textContent = fmtClock(duration);
+      head.hidden = true;
+    }
   };
-  for (const e of ["play", "pause", "ended"]) video.addEventListener(e, trimPlayState);
+  for (const e of ["play", "pause", "ended", "timeupdate"]) video.addEventListener(e, trimPlayState);
 
   paint();
 }
@@ -2228,7 +2245,7 @@ function releaseProjectVideo() {
   // The trim box goes with the video, so its play/pause listeners go too --
   // otherwise they keep toggling a class on a button that has left the page.
   if (trimPlayState) {
-    for (const e of ["play", "pause", "ended"]) v.removeEventListener(e, trimPlayState);
+    for (const e of ["play", "pause", "ended", "timeupdate"]) v.removeEventListener(e, trimPlayState);
     trimPlayState = null;
   }
   v.removeAttribute("src");
