@@ -173,15 +173,37 @@
   .rail-item:hover:not(.active) { color: var(--foreground); background: var(--secondary); }
   .rail-spacer { flex: 1; }
 
+  /* The width is a variable rather than a number so the handle beside it can
+     set one without an inline style: an inline width would outrank the
+     .collapsed rule below, and the sidebar would no longer close. It is a width
+     of its own rather than the `flex` shorthand's basis, because a variable
+     inside a shorthand is not a value this box's own open/close transition can
+     move between -- it stayed at the closed end and the sidebar opened to
+     nothing. */
   .history-sidebar {
-    flex: 0 0 230px;
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--sidebar-w, 230px);
+    /* The scrolling used to be on this box, and a box that scrolls is allowed
+       to be narrower than the things inside it. The scrolling moved in one
+       level, so without this the widest project name would push the whole
+       sidebar past the width asked for. */
+    min-width: 0;
+    display: flex;
     border-right: 1px solid var(--border);
     background: var(--secondary);
-    overflow-y: auto;
-    transition: flex-basis 0.15s ease, opacity 0.15s ease;
+    transition: width 0.15s ease, opacity 0.15s ease;
   }
+  .history-scroll { flex: 1; min-width: 0; overflow-y: auto; }
 
-  .history-sidebar.collapsed { flex-basis: 0; opacity: 0; overflow: hidden; border-right: none; }
+  /* The 0.15s above is for opening and closing. Under the pointer it is the
+     wrong thing entirely: every step of a drag would ease into place and the
+     edge would trail a sixth of a second behind the hand moving it. */
+  .history-sidebar:has(.grip.dragging) { transition: none; }
+
+  .history-sidebar.collapsed { width: 0; opacity: 0; overflow: hidden; border-right: none; }
+  /* Nothing to drag while there is no list: the handle goes with it. */
+  .history-sidebar.collapsed .grip { display: none; }
 
   .history-head {
     padding: 12px 14px 8px;
@@ -785,6 +807,11 @@
      and the video's tabs begin -- both are 40px, and a tab whose first pixels
      belong to a handle is a tab that ignores the click aimed at its edge. */
   #gripPanes { top: 40px; right: -6px; }
+  /* Outside the sidebar rather than inside it, the same way as the one above:
+     the last 6px inside belong to a row's Delete button, and a handle over
+     those would eat the click aimed at it. The 6px it reaches into instead are
+     the main area's own left padding, where nothing is clickable. */
+  #gripSidebar { top: 0; right: -6px; }
   /* The timeline's top border (which runs along .done-main's bottom edge) and
      the top of the strip's own heading row, never the table above it. */
   #gripTimeline { bottom: -6px; }
@@ -946,8 +973,18 @@
        needed to start one, and it was eating width from the screen the user is
        actually looking at. The rail icon opens it. -->
   <div class="history-sidebar collapsed" id="historySidebar">
-    <div class="history-head">Projects</div>
-    <div id="historyList"><div class="history-empty">No projects yet -- drop a video to start one.</div></div>
+    <!-- The list scrolls in a box of its own so the handle beside it can stay
+         put: a handle inside the scrolling box scrolls away with the tenth
+         project, and is then nowhere to be found. -->
+    <div class="history-scroll">
+      <div class="history-head">Projects</div>
+      <div id="historyList"><div class="history-empty">No projects yet -- drop a video to start one.</div></div>
+    </div>
+    <!-- Drag the line between the list and the work beside it. Gone entirely
+         while the list is closed, so its 6px cannot sit over the edge of a
+         screen that has no sidebar on it. -->
+    <div class="grip grip-x" id="gripSidebar" role="separator"
+         aria-orientation="vertical" aria-label="Resize the projects list"></div>
   </div>
 
   <!-- ============ MAIN ============ -->
@@ -1612,6 +1649,10 @@ $("historyToggle").addEventListener("click", () => {
   // window may have started one, since the list was last drawn.
   if (opening) renderHistory().catch(() => {});
 });
+// The list slides open over 0.15s, so a name measured the moment it is drawn is
+// measured in a column still on its way to full width -- and every name would
+// look cut off. Measure again once the sliding has stopped.
+$("historySidebar").addEventListener("transitionend", markClippedNames);
 
 // ---------------- Settings modal ----------------
 
@@ -2668,6 +2709,18 @@ function projectTags(job) {
 // Anything that is not finished, failed or cancelled is still going.
 const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled" };
 
+// A name too long for the column is cut off with an ellipsis, and hovering it
+// is then the only way to read the rest. Only the names actually cut off get a
+// tooltip: one that repeats a name already fully on show is noise under the
+// pointer. Run again whenever the column changes width, since which names are
+// cut off changes with it.
+function markClippedNames() {
+  for (const name of $("historyList").querySelectorAll(".job-name")) {
+    if (name.scrollWidth > name.clientWidth) name.title = name.textContent;
+    else name.removeAttribute("title");
+  }
+}
+
 async function renderHistory() {
   const container = $("historyList");
   let jobs;
@@ -2703,6 +2756,7 @@ async function renderHistory() {
     line.appendChild(del);
     container.appendChild(line);
   }
+  markClippedNames();
 }
 
 // Deleting a project's folder cannot be undone, so it is asked in a dialog of
@@ -3707,7 +3761,10 @@ new ResizeObserver(() => {
 // size on it. The size is remembered in the browser under `key` and put back
 // next time -- clamped, so a size saved on a big window cannot break a small
 // one. Returns the "put it back" step for fitLayout() below.
-function makeGrip({ el, axis, read, limits, apply, key }) {
+// `before: true` is for a handle that sizes the pane on the OTHER side -- the
+// one above or left of it, as the projects list is. Pulling that line right
+// grows its pane, so its drag counts the other way round.
+function makeGrip({ el, axis, read, limits, apply, key, before = false }) {
   const clamp = (v) => {
     const range = limits();   // null: nothing on screen to measure yet
     return range ? Math.round(Math.min(Math.max(v, range[0]), range[1])) : null;
@@ -3722,7 +3779,7 @@ function makeGrip({ el, axis, read, limits, apply, key }) {
     const move = (ev) => {
       const moved = (axis === "x" ? ev.clientX : ev.clientY) - from;
       if (!moved) return;   // a press that has not gone anywhere yet
-      const size = clamp(start - moved);
+      const size = clamp(before ? start + moved : start - moved);
       if (size === null) return;
       apply(size);
       dragged = true;
@@ -3756,6 +3813,20 @@ function makeGrip({ el, axis, read, limits, apply, key }) {
 }
 
 const layoutFits = [
+  makeGrip({
+    el: $("gripSidebar"), axis: "x", key: "persodub.layout.sidebarW", before: true,
+    read: () => $("historySidebar").offsetWidth,
+    // A plain pair, not read off the window: the list is beside the work rather
+    // than part of it, and 480px of project names is as much as anyone wants.
+    // The floor is the width at which a name still has room to say anything.
+    limits: () => [220, 480],
+    // A variable, not a width: see the stylesheet. Setting a width here would
+    // outrank the rule that closes the sidebar, and it would never close again.
+    apply: (w) => {
+      $("historySidebar").style.setProperty("--sidebar-w", `${w}px`);
+      markClippedNames();
+    },
+  }),
   makeGrip({
     el: $("gripPanes"), axis: "x", key: "persodub.layout.videoWidth",
     read: () => $("videoPane").offsetWidth,
