@@ -105,6 +105,11 @@ translator = get_translator()
 job_store = JobStore()
 
 
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WORKSPACE = os.path.join(APP_DIR, "workspace")
+STATIC_DIR = os.path.join(APP_DIR, "static")
+
+
 def _work_dir_of(job: dict) -> str:
     """Where this job's folder is -- the one answer, in one place.
 
@@ -113,15 +118,14 @@ def _work_dir_of(job: dict) -> str:
     way of asking the same question, kept as the fallback so a record written
     before work_dir existed (or hand-built in a test) still resolves.
 
-    Not for the script and subtitle routes: those want the folder the result was
-    actually written into, and say 409 when there is no result at all, so they
-    ask out_path directly.
+    Not for the script and subtitle routes: those ask out_path directly, because
+    they say 409 when there is no result at all. In the product the two answers
+    are the same folder -- run_dub always writes the result inside work_dir --
+    so what really pins those routes is two tests whose fake run writes the
+    result somewhere else (tests/test_dub_api.py, fake_run_dub).
     """
     return job.get("work_dir") or os.path.dirname((job.get("result") or {}).get("out_path") or "")
 
-APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WORKSPACE = os.path.join(APP_DIR, "workspace")
-STATIC_DIR = os.path.join(APP_DIR, "static")
 
 # Serves the UI's plumbing-layer JS module (ui/src/dubApi.mjs) so static/index.html
 # can import it directly, e.g. <script type="module" src="/js/dubApi.mjs">. Mounted

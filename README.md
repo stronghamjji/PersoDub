@@ -240,10 +240,11 @@ and the difference is worth knowing:
 
 - **Claude Code** is fenced in to PersoDub's own script tools. Reading files and
   running shell commands are denied outright, and your own MCP servers are left out.
-- **Codex runs in a read-only sandbox**: it cannot write anywhere, and its shell
-  cannot reach the network. It can still **read any file on this Mac that you can
-  read**, and whatever it reads travels to OpenAI as part of the conversation. If that
-  matters to you, use Claude Code.
+- **Codex runs read-only by default**, and its shell cannot reach the network. It can
+  ask to escalate, and another model — not you — decides; an approved escalation gets
+  write access to PersoDub's own agent folder, and nowhere else. It can still **read
+  any file on this Mac that you can read**, and whatever it reads travels to OpenAI as
+  part of the conversation. If that matters to you, use Claude Code.
 - **Gemini** is listed but greyed out, with the reason on the row: Google no longer
   serves that CLI on a personal account.
 - The conversation carries on from one job to the next — the assistant is told which

@@ -700,7 +700,7 @@ def test_a_finished_job_writes_job_json_next_to_the_video(monkeypatch):
     assert saved["result"]["out_path"].endswith("dubbed.mp4")
 
 
-def test_starting_the_app_restores_yesterdays_jobs(monkeypatch, tmp_path):
+def test_starting_the_app_restores_yesterdays_jobs(monkeypatch):
     # The restore hangs off the FastAPI lifespan, not the import: "with
     # TestClient(app)" is the only thing that runs it. Reading job.json at
     # import time would scan whichever workspace was current when the module
@@ -714,7 +714,7 @@ def test_starting_the_app_restores_yesterdays_jobs(monkeypatch, tmp_path):
                    "created": "2026-08-26T10:00:00"}, f)
     # A store of its own, so this asserts on what startup read rather than on
     # jobs other tests in this file left in the shared one.
-    monkeypatch.setattr(main, "job_store", jobs.JobStore(log_dir=str(tmp_path)))
+    monkeypatch.setattr(main, "job_store", jobs.JobStore())
 
     with TestClient(main.app, base_url="http://127.0.0.1") as c:
         rows = c.get("/api/dub/jobs").json()["jobs"]

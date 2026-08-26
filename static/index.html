@@ -3494,8 +3494,12 @@ function buildMenu() {
 // The button opens the menu, and the same button closes it again -- that is how
 // someone backs out without picking anything. Always reopen at the top level so
 // the menu never comes back showing one vendor's models out of nowhere.
-modelBtn.addEventListener("click", () => {
+modelBtn.addEventListener("click", async () => {
   if (!menu.hidden) { menu.hidden = true; return; }
+  // The check runs once, at launch. If it failed -- a server still starting up
+  // answers nothing -- the menu is empty and the user cannot change assistant
+  // at all. Opening the picker is the moment to ask again.
+  if (!agentList.length) await loadAgents();
   menuLevel = "";
   buildMenu();
   menu.hidden = false;
@@ -3512,28 +3516,43 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !menu.hidden) menu.hidden = true;
 });
 
+const CHECK_FAILED = "Could not check which assistants are available.";
+const NONE_READY = "No assistant is ready -- install Claude Code, Codex or Gemini";
+
 async function loadAgents() {
+  // Whether the list arrived, said plainly. An empty list happens to mean the
+  // fetch failed today, but only because the server always answers with one
+  // row per assistant -- a flag says what is meant and cannot go quietly wrong.
+  let arrived = false;
   try {
     const r = await fetch("/api/agent/status");
     agentList = (await r.json()).agents || [];
+    arrived = true;
+    notice = "";
   } catch {
     agentList = [];
-    notice = "Could not check which assistants are available.";
-    bubble("ai", notice);
+    // Say it once. A retry that fails again should not stack up bubbles.
+    if (notice !== CHECK_FAILED) bubble("ai", CHECK_FAILED);
+    notice = CHECK_FAILED;
   }
   // A saved choice only stands if that assistant is still usable -- but a list
   // that never arrived is no evidence that it isn't, and throwing the pick away
   // there is what left the locked strip saying "Model" mid-dub.
   const still = agentList.find((a) => a.id === chosen.agent && a.installed && a.supported);
-  if (agentList.length && !still) chosen = { agent: "", model: "" };
+  if (arrived && !still) chosen = { agent: "", model: "" };
+  // A pick saved before the name was stored would fall back to the raw id and
+  // read "claude · Opus". Write the vendor's spelling in the moment we have it.
+  if (still && chosen.name !== still.name) { chosen.name = still.name; saveChoice(); }
   buildMenu();
   paintChoice();
   // Same reason: a list that never arrived says nothing about what is
   // installed, and "install one of these three" is the wrong thing to tell
   // someone who already has one. The fetch's own message stands instead.
-  if (agentList.length && !agentList.some((a) => a.installed && a.supported)) {
-    notice = "No assistant is ready -- install Claude Code, Codex or Gemini";
-    bubble("ai", "No assistant is ready. Install Claude Code, Codex or Gemini — you only need one.");
+  if (arrived && !agentList.some((a) => a.installed && a.supported)) {
+    if (notice !== NONE_READY) {
+      bubble("ai", "No assistant is ready. Install Claude Code, Codex or Gemini — you only need one.");
+    }
+    notice = NONE_READY;
     paintChoice();
   }
 }
