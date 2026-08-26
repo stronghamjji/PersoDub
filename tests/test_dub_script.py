@@ -227,6 +227,17 @@ def test_a_script_cannot_be_written_outside_its_own_job_folder(tmp_path):
     assert not outside.exists()
 
 
+def test_the_job_folder_itself_is_not_a_script_file(tmp_path):
+    """An empty name or "." resolves to the folder, which is inside the fence
+    but not a file -- refuse it with a hint instead of crashing on open()."""
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
+
+    for bad in ("", ".", str(tmp_path)):
+        with pytest.raises(ValueError) as e:
+            export_srt(str(tmp_path), bad)
+        assert "file name" in str(e.value)
+
+
 def test_a_plain_file_name_lands_in_the_job_folder(tmp_path):
     write(tmp_path / DUB_NAME, [(0.0, 2.0, "번역")])
 

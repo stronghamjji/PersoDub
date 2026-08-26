@@ -113,8 +113,11 @@ def check_fit(job_id: str, line: Optional[int] = None) -> List[dict]:
 def export_script(job_id: str, out_path: str) -> str:
     """Write the current script out to a file and return that path.
 
-    Feeding that file back into PersoDub as a ready-made translated subtitle skips
-    transcription and translation, and makes the voices again from this script.
+    out_path is a file name inside this job's own folder (e.g. "script.srt");
+    paths outside the job folder, and the folder itself, are refused with a
+    ValueError. Feeding that file back into PersoDub as a ready-made translated
+    subtitle skips transcription and translation, and makes the voices again
+    from this script.
     """
     job = _job(job_id)
     return export_srt(_work_dir(job), out_path)

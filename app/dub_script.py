@@ -172,7 +172,12 @@ def _inside_job(work_dir: str, out_path: str) -> str:
     # join leaves an absolute out_path alone, which is what makes the check
     # cover both spellings.
     full = os.path.realpath(os.path.join(base, out_path))
-    if full != base and not full.startswith(base + os.sep):
+    if full == base:
+        raise ValueError(
+            "give a file name for the script, such as script.srt -- %r names the "
+            "job folder itself" % out_path
+        )
+    if not full.startswith(base + os.sep):
         raise ValueError(
             "a script can only be written inside its own job folder, and %s is "
             "outside it -- give a plain file name instead" % out_path
