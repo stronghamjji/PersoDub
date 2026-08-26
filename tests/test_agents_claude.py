@@ -118,7 +118,7 @@ def test_remaking_the_voices_is_a_handle_the_assistant_has():
     out = ev('{"type":"assistant","message":{"content":['
              '{"type":"tool_use","name":"mcp__persodub__remake_voices","input":{}}]}}')
     assert out == [{"kind": "progress", "tool": "remake_voices",
-                    "label": "Remaking every voice"}]
+                    "label": "Remaking the changed voices"}]
 
 
 def test_a_job_is_refused_when_the_disk_is_nearly_full(monkeypatch):

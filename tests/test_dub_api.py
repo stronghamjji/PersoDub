@@ -943,3 +943,101 @@ def test_dub_retry_of_a_job_saved_before_the_marker_existed_does_not_cut(monkeyp
 
     assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
     assert cuts == []
+
+
+def _dubbed_job(tmp_path, texts, edits=None, stale=()):
+    """A finished job whose script, line manifest and per-line voices are on disk.
+
+    texts are the lines the translation wrote; edits maps a 1-based line number
+    to what the user rewrote it as, and stale names the lines whose voice is to
+    look older than the script (which is what load_lines reads as "the words
+    moved on without it").
+    """
+    from app.text.srt import build_srt
+
+    work = tmp_path / "dubbed"
+    work.mkdir(exist_ok=True)
+    (work / "input.mp4").write_bytes(b"vid")
+    cues = [{"start": i * 2.0, "end": i * 2.0 + 1.8, "text": t}
+            for i, t in enumerate(texts)]
+    (work / "translated.srt").write_text(build_srt(cues), encoding="utf-8")
+    if edits:
+        edited = [dict(c) for c in cues]
+        for line, text in edits.items():
+            edited[line - 1]["text"] = text
+        (work / "edited.srt").write_text(build_srt(edited), encoding="utf-8")
+    (work / "lines.json").write_text(json.dumps({
+        "language": "Korean",
+        "lines": [{"i": i, "speaker": "SPEAKER_00", "start": c["start"], "gain": 1.0}
+                  for i, c in enumerate(cues)],
+    }), encoding="utf-8")
+
+    script = os.path.getmtime(main.script_path(str(work)))
+    for i in range(len(texts)):
+        wav = work / ("qwen_line_%d.wav" % i)
+        wav.write_bytes(b"")
+        # Older than the script means stale; newer means this line's voice was
+        # made after the last edit and has nothing to catch up on.
+        os.utime(wav, (script, script + (-10 if (i + 1) in stale else 10)))
+
+    jid = main.job_store.create()
+    main.job_store._update(jid, status="done", work_dir=str(work), project="dubbed",
+                           language_code="ko", language="Korean",
+                           result={"out_path": str(work / "dubbed.mp4")})
+    return jid
+
+
+def test_stale_voices_remakes_nothing_when_every_voice_is_current(monkeypatch, tmp_path):
+    said, built = [], []
+    monkeypatch.setattr(main, "resynth_one_line",
+                        lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    jid = _dubbed_job(tmp_path, ["one", "two", "three"])
+
+    r = client.post(f"/api/dub/jobs/{jid}/voices/stale")
+    assert r.status_code == 200
+    assert r.json() == {"remade": [], "skipped": 3}
+    # Nothing was spoken, so there is nothing to rebuild around either.
+    assert said == [] and built == []
+
+
+def test_stale_voices_remakes_only_the_rewritten_lines_and_rebuilds_once(monkeypatch, tmp_path):
+    said, built = [], []
+    monkeypatch.setattr(main, "resynth_one_line",
+                        lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    # Lines 1 and 3 were rewritten and their voices have not caught up; line 2
+    # is untouched, and line 4 was rewritten but already respoken since.
+    jid = _dubbed_job(tmp_path, ["one", "two", "three", "four"],
+                      edits={1: "ONE", 3: "THREE", 4: "FOUR"}, stale=(1, 3))
+
+    r = client.post(f"/api/dub/jobs/{jid}/voices/stale")
+    assert r.status_code == 200
+    assert r.json() == {"remade": [1, 3], "skipped": 2}
+    # The words handed to the synthesizer are the rewritten ones, not the old.
+    assert [a[2] for a in said] == ["ONE", "THREE"]
+    assert [a[1]["i"] for a in said] == [0, 2]
+    assert len(built) == 1
+
+
+def test_stale_voices_refuses_a_job_that_is_still_running(tmp_path):
+    jid = _dubbed_job(tmp_path, ["one"], edits={1: "ONE"}, stale=(1,))
+    main.job_store._update(jid, status="running")
+
+    r = client.post(f"/api/dub/jobs/{jid}/voices/stale")
+    assert r.status_code == 409
+
+
+def test_one_line_voice_still_speaks_that_line_and_rebuilds(monkeypatch, tmp_path):
+    # The sweep above and this share a helper now -- one line still goes
+    # through, words and all.
+    said, built = [], []
+    monkeypatch.setattr(main, "resynth_one_line",
+                        lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    jid = _dubbed_job(tmp_path, ["one", "two"], edits={2: "TWO"})
+
+    r = client.post(f"/api/dub/jobs/{jid}/script/2/voice")
+    assert r.status_code == 200 and r.json() == {"line": 2, "ok": True}
+    assert [a[2] for a in said] == ["TWO"]
+    assert len(built) == 1

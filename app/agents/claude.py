@@ -21,7 +21,7 @@ TOOL_LABELS = {
     "check_fit": "Checking the timing",
     "export_script": "Exporting the script",
     "get_job_status": "Checking progress",
-    "remake_voices": "Remaking every voice",
+    "remake_voices": "Remaking the changed voices",
     "remake_line_voice": "Remaking this line",
 }
 
@@ -105,8 +105,10 @@ SYSTEM_PROMPT = (
     "script -- the lines a synthetic voice will read -- and nothing else. "
     "Every line has a fixed slot of time; a line too long to be spoken inside "
     "it has fits=false. Use only the persodub tools. Never change timings. "
-    "When the user asks for the dub to be remade, call remake_voices yourself; "
-    "do not tell them to press a button. Answer in the user's language, briefly."
+    "When the user asks for the voices to be remade, call remake_voices "
+    "yourself -- it respeaks only the lines whose words changed and rebuilds "
+    "the video in place -- and do not tell them to press a button. Answer in "
+    "the user's language, briefly."
 )
 
 

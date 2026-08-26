@@ -433,6 +433,35 @@ def dub_job_line_audio(jid: str, line: int):
     return FileResponse(path, media_type="audio/wav")
 
 
+def _line_manifest(work_dir: str) -> dict:
+    """What the synthesizer recorded about each line, or the right HTTP error."""
+    manifest = os.path.join(work_dir, "lines.json")
+    if not os.path.exists(manifest):
+        raise HTTPException(status_code=409, detail=(
+            "이 작업은 줄별로 다시 만들 수 없습니다. 2026-08-24 이전에 만든 작업이라 "
+            "줄 정보가 없습니다 — 통째로 다시 만들어 주세요."))
+    with open(manifest, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _remake_one_voice(work_dir: str, data: dict, line: int, text: str) -> None:
+    """Speak one line again, over its own old wav. The video is NOT rebuilt here.
+
+    Rebuilding is the caller's call: one line at a time rebuilds after each one,
+    a sweep of several rebuilds once at the end.
+    """
+    entries = data.get("lines") or []
+    if not 1 <= line <= len(entries):
+        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+    try:
+        new_path = resynth_one_line(work_dir, entries[line - 1], text,
+                                    data.get("language") or "English")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if new_path is None:
+        raise HTTPException(status_code=502, detail="목소리를 만들지 못했습니다.")
+
+
 @app.post("/api/dub/jobs/{jid}/script/{line}/voice")
 def dub_job_line_voice(jid: str, line: int):
     """Speak ONE line again and rebuild the dub around it.
@@ -442,29 +471,50 @@ def dub_job_line_voice(jid: str, line: int):
     Rewriting two lines of ten should not cost a whole synthesis pass.
     """
     job, work_dir = _script_work_dir(jid)
-    manifest = os.path.join(work_dir, "lines.json")
-    if not os.path.exists(manifest):
-        raise HTTPException(status_code=409, detail=(
-            "이 작업은 줄별로 다시 만들 수 없습니다. 2026-08-24 이전에 만든 작업이라 "
-            "줄 정보가 없습니다 — 통째로 다시 만들어 주세요."))
-    with open(manifest, encoding="utf-8") as f:
-        data = json.load(f)
-    lines = data.get("lines") or []
+    data = _line_manifest(work_dir)
+    lines = load_lines(work_dir, job.get("language_code") or "en")
     if not 1 <= line <= len(lines):
         raise HTTPException(status_code=422, detail=f"There is no line {line}.")
 
-    entry = lines[line - 1]
-    text = load_lines(work_dir, job.get("language_code") or "en")[line - 1]["text"]
-    try:
-        new_path = resynth_one_line(work_dir, entry, text, data.get("language") or "English")
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    if new_path is None:
-        raise HTTPException(status_code=502, detail="목소리를 만들지 못했습니다.")
-
+    _remake_one_voice(work_dir, data, line, lines[line - 1]["text"])
     rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
                 (job.get("result") or {}).get("out_path"))
     return {"line": line, "ok": True}
+
+
+@app.post("/api/dub/jobs/{jid}/voices/stale")
+def dub_job_stale_voices(jid: str):
+    """Remake only the lines whose words changed since their voice was made.
+
+    Exactly the work the screen's filled wave buttons offer, in one press: each
+    such line is spoken again in place and the video is put back together once
+    at the end, instead of once per line. Nothing else moves -- no new job, no
+    new folder, no status change, and a line nobody rewrote keeps its voice.
+
+    Which lines those are is decided the same way the screen decides it
+    (static/index.html: `l.edited && l.voice_stale`), so one press does the set
+    of lines the buttons were offering and not a line more.
+    """
+    job, work_dir = _script_work_dir(jid)
+    if job.get("status") in ("running", "cancelling"):
+        raise HTTPException(status_code=409, detail="This job is still running.")
+    data = _line_manifest(work_dir)
+    lines = load_lines(work_dir, job.get("language_code") or "en")
+    stale = [
+        line for line, original in zip(lines, _dubbed_texts(work_dir))
+        if original is not None and original != line["text"] and line["voice_stale"]
+    ]
+    if not stale:
+        return {"remade": [], "skipped": len(lines)}
+
+    for line in stale:
+        _remake_one_voice(work_dir, data, line["line"], line["text"])
+    # Once, at the end: the rebuild is the slow half, and laying down five new
+    # lines five times over would spend it five times for the same video.
+    rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
+                (job.get("result") or {}).get("out_path"))
+    return {"remade": [line["line"] for line in stale],
+            "skipped": len(lines) - len(stale)}
 
 
 @app.post("/api/dub/jobs/{jid}/script/{line}/revert")

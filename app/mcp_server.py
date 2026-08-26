@@ -137,25 +137,36 @@ def get_job_status(job_id: str) -> dict:
 
 @mcp.tool()
 def remake_voices(job_id: str) -> dict:
-    """Make this job's voices again from the script as it now stands.
+    """Remake the voices of the lines whose words changed, and nothing else.
 
-    Transcription and translation are skipped -- only the speaking is redone.
-    Returns the new job's id; poll it with get_job_status.
+    Only lines whose text was rewritten since their voice was made are spoken
+    again. Every other line keeps the voice it already has, the timings, the
+    script and the job itself are untouched, and the finished video is rebuilt
+    in place -- no new job and no second copy of the job's folder.
 
-    This is the one thing here that spends real GPU time, and it is deliberately
-    narrow: it can only redo THIS job's voices from THIS job's script. Starting a
-    new dub, cancelling one, or changing any setting is still not reachable.
+    Returns {"remade": [line numbers], "skipped": how many lines were left
+    alone}; remade is empty when every voice is already up to date. The work is
+    done by the time this answers -- seconds per changed line -- so there is
+    nothing to poll afterwards.
+
+    This is the whole-script version. To remake one particular line, changed or
+    not, call remake_line_voice(job_id, line) instead.
+
+    This and remake_line_voice are the only things here that spend real GPU
+    time, and both are deliberately narrow: they can only respeak THIS job's own
+    lines. Starting a new dub, cancelling one, or changing any setting is still
+    not reachable.
 
     Added 2026-08-24, reversing the 2026-08-20 rule that every GPU-spending
     action stays behind a button. A user put it plainly: an assistant that
     rewrites a line and then asks the user to go press a button themselves is
     doing nothing they could not do alone.
     """
-    r = httpx.post("%s/api/dub/jobs/%s/redub" % (API, job_id), timeout=30.0)
+    r = httpx.post("%s/api/dub/jobs/%s/voices/stale" % (API, job_id), timeout=600.0)
     if r.status_code == 404:
         raise ValueError("no such job: %s" % job_id)
-    if r.status_code == 409:
-        raise ValueError(r.json().get("detail", "this job cannot be remade"))
+    if r.status_code in (409, 422):
+        raise ValueError(r.json().get("detail", "this job's voices cannot be remade"))
     r.raise_for_status()
     return r.json()
 
@@ -164,9 +175,10 @@ def remake_voices(job_id: str) -> dict:
 def remake_line_voice(job_id: str, line: int) -> dict:
     """Speak ONE line again, in the same voice, and rebuild the dub around it.
 
-    Use this after rewriting a line or two -- it costs seconds. remake_voices
-    redoes every line and costs minutes; reach for that only when most of the
-    script changed.
+    Use this for one named line -- including a line nobody edited, when its
+    voice simply came out wrong. remake_voices does the same thing to every
+    line whose words changed, which is the usual way to catch up after a batch
+    of rewrites.
     """
     r = httpx.post("%s/api/dub/jobs/%s/script/%d/voice" % (API, job_id, line), timeout=600.0)
     if r.status_code in (404, 409, 422):
