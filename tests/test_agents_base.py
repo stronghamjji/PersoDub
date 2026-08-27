@@ -195,8 +195,12 @@ def test_a_cli_that_hangs_or_answers_nonsense_says_nothing_either_way(monkeypatc
 # gone (2026-08-27). run() pipes it instead; argv stays newline-free.
 
 def test_the_prompt_is_piped_whole_including_its_newlines():
+    # Bytes, decoded as UTF-8 by hand: run() writes UTF-8, and the real CLIs
+    # read stdin as UTF-8 -- but this stand-in is Python, whose text stdin
+    # follows the locale (cp1252 on CI's Windows, which garbled the Korean).
     echo = ("import json, sys\n"
-            "print(json.dumps({'type': 'echo', 'got': sys.stdin.read()}))\n")
+            "got = sys.stdin.buffer.read().decode('utf-8')\n"
+            "print(json.dumps({'type': 'echo', 'got': got}))\n")
     out = list(base.run(sys.executable, ["-c", echo],
                         lambda e: [{"kind": "text", "text": e["got"]}]
                         if e.get("type") == "echo" else [],

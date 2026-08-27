@@ -397,6 +397,9 @@ def _run_once(binary: str, args: List[str], translate: Callable[[dict], List[dic
 
     if input_text is not None:
         try:
+            # No newline translation: a text-mode pipe turns \n into \r\n on
+            # Windows, and the prompt should reach the CLI exactly as typed.
+            proc.stdin.reconfigure(newline="\n")
             proc.stdin.write(input_text)
             proc.stdin.close()
         except OSError:
