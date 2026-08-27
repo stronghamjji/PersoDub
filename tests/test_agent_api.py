@@ -94,7 +94,8 @@ def _capture(monkeypatch, tmp_path):
     """Run a turn with the CLI replaced, and hand back what was asked of it."""
     seen = {}
 
-    def fake_run(binary, args, translate, cwd=None, agent_name="", login_command=""):
+    def fake_run(binary, args, translate, cwd=None, agent_name="", login_command="",
+                 input_text=None):
         seen["binary"] = binary
         seen["args"] = args
         seen["translate"] = translate
@@ -102,6 +103,7 @@ def _capture(monkeypatch, tmp_path):
         # in, so a failed turn can name both.
         seen["agent_name"] = agent_name
         seen["login_command"] = login_command
+        seen["input_text"] = input_text
         yield {"kind": "done", "text": "ok"}
 
     monkeypatch.setattr(main.agent_base, "run", fake_run)
@@ -123,7 +125,10 @@ def test_a_turn_goes_to_the_backend_the_panel_named(monkeypatch, tmp_path):
     assert seen["binary"].endswith("codex")
     assert seen["args"][0] == "exec"           # Codex's own command line
     assert seen["translate"] is main.codex_agent.translate
-    assert "abc123" in seen["args"][-1]        # the job on screen went with it
+    # The job on screen went with the question -- over stdin, never argv (a
+    # newline in argv is where cmd.exe cut the .cmd shim's command line).
+    assert "abc123" in seen["input_text"]
+    assert not any("abc123" in a for a in seen["args"])
 
 
 def test_claude_still_gets_claudes_command_line(monkeypatch, tmp_path):

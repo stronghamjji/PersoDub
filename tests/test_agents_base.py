@@ -7,6 +7,9 @@ the login checks are exercised against recorded output.
 import subprocess
 import sys
 import threading
+import time
+
+import pytest
 
 from app.agents import base
 
@@ -182,6 +185,109 @@ def test_a_cli_that_hangs_or_answers_nonsense_says_nothing_either_way(monkeypatc
     assert base.login_state("codex", "")["logged_in"] is None
     # And one we have no check for.
     assert base.login_state("nosuchcli", "/bin/nosuchcli")["logged_in"] is None
+
+
+# --- the prompt travels over stdin ------------------------------------------
+# On Windows both CLIs are npm .cmd shims, and cmd.exe cuts a shim's command
+# line at the first newline. The prompt always has one (job context + blank
+# line + question), so passed as an argument it lost the question and every
+# flag after it -- the panel answered "(empty answer)" with the tool fences
+# gone (2026-08-27). run() pipes it instead; argv stays newline-free.
+
+def test_the_prompt_is_piped_whole_including_its_newlines():
+    # Bytes, decoded as UTF-8 by hand: run() writes UTF-8, and the real CLIs
+    # read stdin as UTF-8 -- but this stand-in is Python, whose text stdin
+    # follows the locale (cp1252 on CI's Windows, which garbled the Korean).
+    echo = ("import json, sys\n"
+            "got = sys.stdin.buffer.read().decode('utf-8')\n"
+            "print(json.dumps({'type': 'echo', 'got': got}))\n")
+    out = list(base.run(sys.executable, ["-c", echo],
+                        lambda e: [{"kind": "text", "text": e["got"]}]
+                        if e.get("type") == "echo" else [],
+                        input_text="(job: abc123)\n\n둘째 줄 질문"))
+    assert {"kind": "text", "text": "(job: abc123)\n\n둘째 줄 질문"} in out
+
+
+# --- stop fells the whole process tree --------------------------------------
+# On Windows the CLIs run behind npm .cmd shims, and terminate() only reached
+# the shim (cmd.exe): the CLI itself kept streaming after Stop, and a stopped
+# Codex kept writing its conversation -- which is what "already has an active
+# writer" was (2026-08-27). Stopping must end the children too.
+
+# A stand-in shim: spawns a grandchild that stamps a file forever, then waits
+# on it -- exactly the shape of cmd.exe wrapping node.
+SHIM_CLI = (
+    "import os, subprocess, sys\n"
+    "child = subprocess.Popen([sys.executable, '-c', '''\n"
+    "import os, sys, time\n"
+    "sys.stdout.write('{\"type\": \"hello\"}\\\\n')\n"
+    "sys.stdout.flush()\n"
+    "while True:\n"
+    "    open(os.environ['STAMP'], 'a').write('x')\n"
+    "    time.sleep(0.1)\n"
+    "'''], stdout=sys.stdout)\n"
+    "child.wait()\n")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the shim problem is Windows's")
+def test_stop_ends_the_shims_children_too(tmp_path, monkeypatch):
+    stamp = tmp_path / "stamp"
+    monkeypatch.setenv("STAMP", str(stamp))
+    started = threading.Event()
+    out = []
+    turn = _drain(SHIM_CLI, lambda e: (started.set(), [])[1], out)
+    assert started.wait(20), "the stand-in shim never started"
+    assert base.stop_turn() is True
+    turn.join(20)
+    size = stamp.stat().st_size if stamp.exists() else 0
+    time.sleep(0.6)
+    grown = (stamp.stat().st_size if stamp.exists() else 0) - size
+    assert grown == 0, "the grandchild kept running after the stop"
+
+
+# --- a stale conversation lock is retried, not shown ------------------------
+# Windows cannot end a CLI gracefully (terminate there is a hard kill), so a
+# turn stopped mid-answer leaves Codex's conversation marked "already has an
+# active writer". The very next resume then failed on its face (2026-08-27).
+# The lock clears itself in a moment, so one quiet retry is the whole cure.
+
+# Fails with Codex's lock message until a marker file exists, then answers.
+# The marker doubles as proof that a second spawn actually happened.
+LOCKED_ONCE_CLI = (
+    "import os, sys\n"
+    "flag = os.environ['LOCK_FLAG']\n"
+    "if os.path.exists(flag):\n"
+    "    sys.stdout.write('{\"type\": \"fine\"}\\n')\n"
+    "else:\n"
+    "    open(flag, 'w').close()\n"
+    "    sys.stderr.write('thread/resume failed: thread 01a0 already has an "
+    "active writer (code -32600)\\n')\n"
+    "    sys.exit(1)\n")
+
+
+def test_a_stale_lock_is_retried_quietly(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCK_FLAG", str(tmp_path / "flag"))
+    monkeypatch.setattr(base, "RETRY_DELAY", 0.05)
+    out = list(base.run(sys.executable, ["-c", LOCKED_ONCE_CLI],
+                        lambda e: [{"kind": "text", "text": "ok"}]
+                        if e.get("type") == "fine" else []))
+    assert (tmp_path / "flag").exists(), "the first, failing spawn never ran"
+    assert {"kind": "text", "text": "ok"} in out
+    assert not any(e.get("kind") == "error" for e in out)
+
+
+def test_any_other_failure_is_not_retried(tmp_path, monkeypatch):
+    """Only the stale lock earns a second spawn: retrying a real failure would
+    double every error's wait and, for anything that changes state, its work."""
+    monkeypatch.setenv("RUN_COUNT", str(tmp_path / "runs"))
+    monkeypatch.setattr(base, "RETRY_DELAY", 0.05)
+    broken = ("import os, sys\n"
+              "open(os.environ['RUN_COUNT'], 'a').write('x')\n"
+              "sys.stderr.write('no such model')\n"
+              "sys.exit(1)\n")
+    out = list(base.run(sys.executable, ["-c", broken], lambda e: []))
+    assert any(e.get("kind") == "error" for e in out)
+    assert (tmp_path / "runs").read_text() == "x"
 
 
 # --- stopping the turn on air -----------------------------------------------

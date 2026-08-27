@@ -141,7 +141,7 @@ def _mcp_config(tmp_path):
 def test_the_command_carries_our_mcp_server_and_leaves_the_user_config_alone(tmp_path):
     from app.agents.codex import command
 
-    args = command("고쳐줘", _mcp_config(tmp_path), resume=False)
+    args = command(_mcp_config(tmp_path), resume=False)
     assert args[0] == "exec"
     assert "--json" in args
     # The user's own ~/.codex/config.toml -- and every MCP server in it -- stays
@@ -151,7 +151,6 @@ def test_the_command_carries_our_mcp_server_and_leaves_the_user_config_alone(tmp
     assert "mcp_servers.persodub.command=" in joined
     assert "app.mcp_server" in joined
     assert "PERSODUB_API" in joined
-    assert args[-1].endswith("고쳐줘")
 
 
 def test_the_command_lets_a_tool_call_through_without_anyone_to_ask(tmp_path):
@@ -160,7 +159,7 @@ def test_the_command_lets_a_tool_call_through_without_anyone_to_ask(tmp_path):
     runs, answers, and quietly changes nothing."""
     from app.agents.codex import command
 
-    joined = " ".join(command("고쳐줘", _mcp_config(tmp_path), resume=False))
+    joined = " ".join(command(_mcp_config(tmp_path), resume=False))
     # Measured 2026-08-26: the reviewer is the load-bearing one. A real turn
     # with approval_policy="on-request" and NO reviewer got the same refusal
     # ("approval policy is never") and rewrote nothing, so this line cannot be
@@ -176,19 +175,25 @@ def test_the_command_lets_a_tool_call_through_without_anyone_to_ask(tmp_path):
 def test_the_command_keeps_the_users_skills_and_the_web_out(tmp_path):
     from app.agents.codex import command
 
-    joined = " ".join(command("고쳐줘", _mcp_config(tmp_path), resume=False))
+    joined = " ".join(command(_mcp_config(tmp_path), resume=False))
     assert "skills.include_instructions=false" in joined
     assert "tools.web_search=false" in joined
 
 
 def test_the_assistant_is_told_what_it_is_for(tmp_path):
     """Codex has no --system-prompt, so the standing instructions ride in front
-    of the question instead."""
+    of the question -- over stdin, like the question itself: cmd.exe cuts a
+    .cmd shim's command line at the first newline, and this text is full of
+    them (see test_the_question_never_rides_the_command_line in the claude
+    tests for the Windows failure this prevents)."""
     from app.agents.claude import SYSTEM_PROMPT
-    from app.agents.codex import command
+    from app.agents.codex import command, stdin_text
 
-    args = command("고쳐줘", _mcp_config(tmp_path), resume=False)
-    assert SYSTEM_PROMPT in args[-1]
+    text = stdin_text("고쳐줘")
+    assert SYSTEM_PROMPT in text
+    assert text.endswith("고쳐줘")
+    args = command(_mcp_config(tmp_path), resume=False)
+    assert all("\n" not in a for a in args)
 
 
 def test_resuming_continues_the_same_conversation(tmp_path):
@@ -196,7 +201,7 @@ def test_resuming_continues_the_same_conversation(tmp_path):
     agent folder -- so this can never pick up the user's own Codex session."""
     from app.agents.codex import command
 
-    args = command("또", _mcp_config(tmp_path), resume=True)
+    args = command(_mcp_config(tmp_path), resume=True)
     assert args[:4] == ["exec", "resume", "--last", "--json"]
 
 
@@ -207,7 +212,7 @@ def test_no_model_is_ever_asked_for(tmp_path):
     from app.agents.codex import MODELS, command
 
     assert MODELS == []
-    assert "-m" not in command("고쳐줘", _mcp_config(tmp_path), resume=False,
+    assert "-m" not in command(_mcp_config(tmp_path), resume=False,
                                model="gpt-5.5")
 
 
@@ -239,7 +244,7 @@ def test_the_environment_is_handed_over_as_a_toml_table(tmp_path):
     turn with `expected a map in mcp_servers.persodub.env` (2026-08-26)."""
     from app.agents.codex import command
 
-    args = command("고쳐줘", _mcp_config(tmp_path), resume=False)
+    args = command(_mcp_config(tmp_path), resume=False)
     env = next(a for a in args if a.startswith("mcp_servers.persodub.env="))
     assert '"PERSODUB_API" = "http://127.0.0.1:8765"' in env
     assert '"PERSODUB_API":' not in env  # the JSON form Codex refused
@@ -250,7 +255,7 @@ def test_the_users_own_execpolicy_is_left_alone(tmp_path):
     with the user's .rules file loaded -- so their own fence stays up."""
     from app.agents.codex import command
 
-    assert "--ignore-rules" not in command("고쳐줘", _mcp_config(tmp_path),
+    assert "--ignore-rules" not in command(_mcp_config(tmp_path),
                                            resume=False)
 
 

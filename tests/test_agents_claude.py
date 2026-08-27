@@ -115,7 +115,7 @@ def test_lines_we_do_not_recognise_are_ignored():
 def test_the_command_fences_the_assistant_in():
     from app.agents.claude import command
 
-    args = command("고쳐줘", "/tmp/mcp.json", resume=False)
+    args = command("/tmp/mcp.json", resume=False)
     # Only our own MCP server: without this the user's personal MCP servers
     # would come along and hand the assistant tools this app never offered.
     assert "--strict-mcp-config" in args
@@ -130,7 +130,21 @@ def test_the_command_fences_the_assistant_in():
 def test_resuming_continues_the_same_conversation():
     from app.agents.claude import command
 
-    assert "-c" in command("또", "/tmp/mcp.json", resume=True)
+    assert "-c" in command("/tmp/mcp.json", resume=True)
+
+
+def test_the_question_never_rides_the_command_line():
+    """cmd.exe cuts a .cmd shim's command line at the first newline, and the
+    prompt always has one (job context + question). Passed as an argument on
+    Windows it lost the question AND every flag after it -- the panel answered
+    "(empty answer)" with the tool fences gone (2026-08-27). The prompt goes
+    over stdin instead, so nothing in argv can carry a newline."""
+    from app.agents.claude import command, stdin_text
+
+    args = command("/tmp/mcp.json", resume=False)
+    assert "-p" in args                       # print mode; the prompt arrives on stdin
+    assert all("\n" not in a for a in args)
+    assert stdin_text("첫 줄\n\n둘째 줄") == "첫 줄\n\n둘째 줄"
 
 
 def test_the_job_on_screen_is_handed_to_the_assistant():
@@ -180,11 +194,11 @@ def test_a_chosen_model_is_passed_as_an_alias():
     from app.agents.claude import MODELS, command
 
     assert "fable" in MODELS
-    args = command("고쳐줘", "/tmp/mcp.json", resume=False, model="fable")
+    args = command("/tmp/mcp.json", resume=False, model="fable")
     assert args[args.index("--model") + 1] == "fable"
 
 
 def test_an_unknown_model_is_ignored_rather_than_passed_on():
     from app.agents.claude import command
-    assert "--model" not in command("고쳐줘", "/tmp/mcp.json", resume=False, model="wat")
-    assert "--model" not in command("고쳐줘", "/tmp/mcp.json", resume=False)
+    assert "--model" not in command("/tmp/mcp.json", resume=False, model="wat")
+    assert "--model" not in command("/tmp/mcp.json", resume=False)

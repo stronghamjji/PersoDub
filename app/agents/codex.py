@@ -156,8 +156,21 @@ def _toml(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def command(prompt: str, mcp_config: str, resume: bool, model: str = "") -> List[str]:
-    """The command line to run for one message.
+def stdin_text(prompt: str) -> str:
+    """What run() pipes to the CLI's stdin: standing instructions, then the
+    question. Codex reads its prompt from stdin when the argument is absent.
+
+    Over stdin for the same reason as claude.stdin_text: on Windows the CLI is
+    an npm .cmd shim, and cmd.exe cuts a shim's command line at the first
+    newline -- this text is full of them. Codex has no --system-prompt, so the
+    standing instructions ride in front of the question.
+    """
+    return SYSTEM_PROMPT + "\n\n" + prompt
+
+
+def command(mcp_config: str, resume: bool, model: str = "") -> List[str]:
+    """The command line to run for one message. The prompt itself is not on
+    it -- see stdin_text.
 
     Codex has no --mcp-config, so the server written by base.write_mcp_config is
     read back here and handed over as -c overrides. --ignore-user-config is the
@@ -245,8 +258,4 @@ def command(prompt: str, mcp_config: str, resume: bool, model: str = "") -> List
     # --approve-for-me does the same as the two approval settings, but it is an
     # option of `codex exec` alone -- `codex exec resume` does not take it -- so
     # the -c form is the only one that works on both paths.
-    #
-    # Codex has no --system-prompt, so the standing instructions ride in front
-    # of the question.
-    args.append(SYSTEM_PROMPT + "\n\n" + prompt)
     return args

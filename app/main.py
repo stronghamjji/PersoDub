@@ -1459,9 +1459,12 @@ async def agent_chat(body: AgentChatRequest, request: Request):
     api_url = str(request.base_url).rstrip("/")
     mcp_config = agent_base.write_mcp_config(AGENT_DIR, api_url)
     work_dir = os.path.dirname(mcp_config)
+    # The question goes to the CLI over stdin, never argv: on Windows the CLIs
+    # are npm .cmd shims, and cmd.exe cuts a shim's command line at the first
+    # newline -- which this text always has between job context and question.
+    prompt = driver.stdin_text(_with_job(body.message, body.job_id))
     try:
-        args = driver.command(_with_job(body.message, body.job_id),
-                              mcp_config, body.resume, body.model)
+        args = driver.command(mcp_config, body.resume, body.model)
     except (OSError, ValueError, KeyError) as e:
         # Everything else on this path answers with a bubble rather than a
         # stack trace, and building the command line should not be the one
@@ -1481,7 +1484,8 @@ async def agent_chat(body: AgentChatRequest, request: Request):
             try:
                 for event in agent_base.run(binary, args, driver.translate,
                                             cwd=work_dir, agent_name=meta["name"],
-                                            login_command=meta.get("login", "")):
+                                            login_command=meta.get("login", ""),
+                                            input_text=prompt):
                     events.put(event)
             finally:
                 events.put(None)      # whatever happened, the turn is over
