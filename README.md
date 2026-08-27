@@ -67,7 +67,7 @@ https://github.com/user-attachments/assets/39589651-83fe-4673-91b4-fa078f0e523e
 </td>
 <td width="50%">
 
-### PersoDub
+### PersoDub (Ours)
 
 ---
 
