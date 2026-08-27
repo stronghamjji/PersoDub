@@ -16,16 +16,12 @@ your computer.
   <a href="https://github.com/stronghamjji/PersoDub/releases/latest"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
-<sub><b>macOS:</b> signed and notarized, opens with a double-click. &middot; <b>Windows (beta):</b> not signed yet, so SmartScreen asks first - click <b>More info</b>, then <b>Run anyway</b>. <a href="INSTALL.md#windows-beta">Details</a>.</sub>
+**macOS** — Download the `.dmg`, open it, and drag **PersoDub** into Applications.
+It's signed and notarized, so it opens with a normal double-click.
 
-> [!WARNING]
-> **The only official source for PersoDub is
-> [github.com/stronghamjji/PersoDub](https://github.com/stronghamjji/PersoDub).**
->
-> Downloads, when published, appear only on
-> [this repository's Releases page](https://github.com/stronghamjji/PersoDub/releases).
-> Copies of this project hosted under any other account are not maintained by us --
-> please do not run software you obtained from them.
+**Windows (beta)** — Download and run the `.exe`. It isn't code-signed yet, so
+SmartScreen shows "Windows protected your PC" the first time — click **More info**,
+then **Run anyway**. [Details](INSTALL.md#windows-beta).
 
 ---
 
@@ -44,7 +40,7 @@ original soundtrack. With the default settings, every one of those steps runs lo
 > is never sent anywhere for it.
 
 <p align="center">
-  <img src="docs/images/dub-agent.png" width="80%"
+  <img src="docs/images/dub-agent.png" width="100%"
        alt="A finished job with the Dub Agent open along the bottom: a request to shorten the lines that run over, the steps the agent took (reading the script, rewriting those lines, remaking the voices), and its reply. Above it the script sits as a table beside the player, with a timeline showing which voices fit.">
 </p>
 
@@ -71,7 +67,7 @@ https://github.com/user-attachments/assets/39589651-83fe-4673-91b4-fa078f0e523e
 </td>
 <td width="50%">
 
-### PersoDub
+### PersoDub (Ours)
 
 ---
 
@@ -334,6 +330,14 @@ PersoDub stands on these open-source projects.
 | [Ollama](https://github.com/ollama/ollama) + [Gemma](https://github.com/google-deepmind/gemma) | Local translation model and runtime |
 | [FFmpeg](https://github.com/FFmpeg/FFmpeg) | Video and audio processing |
 | [Electron](https://github.com/electron/electron) | Desktop application framework |
+
+## Official source
+
+The only official source for PersoDub is
+[github.com/stronghamjji/PersoDub](https://github.com/stronghamjji/PersoDub). Downloads
+appear only on [this repository's Releases page](https://github.com/stronghamjji/PersoDub/releases).
+Copies of this project hosted under any other account are not maintained by us — please
+do not run software you obtained from them.
 
 ---
 
