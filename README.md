@@ -40,7 +40,7 @@ original soundtrack. With the default settings, every one of those steps runs lo
 > is never sent anywhere for it.
 
 <p align="center">
-  <img src="docs/images/dub-agent.png" width="80%"
+  <img src="docs/images/dub-agent.png" width="100%"
        alt="A finished job with the Dub Agent open along the bottom: a request to shorten the lines that run over, the steps the agent took (reading the script, rewriting those lines, remaking the voices), and its reply. Above it the script sits as a table beside the player, with a timeline showing which voices fit.">
 </p>
 
