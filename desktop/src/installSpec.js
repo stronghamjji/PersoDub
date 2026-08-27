@@ -3,6 +3,7 @@
 // All external effects (download/extract/run) come from ctx so tests and
 // PERSODUB_FAKE mode can substitute them.
 import { existsSync, mkdirSync, cpSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { KIT_ENV } from "./kitEnv.js";
@@ -219,16 +220,42 @@ export function buildSteps(ctx) {
     ? [["torch==2.8.0", "torchaudio==2.8.0", "--index-url", "https://download.pytorch.org/whl/cu128"]]
     : [];
   const okPath = (id) => k(".install", `${id}.ok`);
-  const markOk = (id) => {
+  const markOk = (id, note = "") => {
     mkdirSync(k(".install"), { recursive: true });
-    writeFileSync(okPath(id), "");
+    writeFileSync(okPath(id), note);
+  };
+
+  // Everything a venv step would install, as one fingerprint. The pip
+  // arguments alone are not enough: ["-r", file] means the FILE's contents,
+  // and an app update rewrites those files (payload step above) while the
+  // arguments stay word-for-word the same. The 0.4.0 update added `mcp` to
+  // requirements.txt and no updated machine ever installed it -- the venv
+  // steps skipped on their bare .ok markers, and the script assistant's tool
+  // server could not start. The marker now records this fingerprint, so a
+  // requirements change is what re-opens the step; an update that changes no
+  // requirements still skips it in full.
+  const pipFingerprint = (pipInstalls) => {
+    const words = [];
+    for (const args of pipInstalls) {
+      for (let i = 0; i < args.length; i++) {
+        words.push(args[i]);
+        if (args[i] === "-r") {
+          // The missing-file marker never matches a recorded hash, so a kit
+          // whose requirements file vanished re-runs rather than skips.
+          words.push(existsSync(args[i + 1]) ? readFileSync(args[i + 1], "utf8") : "(missing)");
+          i++;
+        }
+      }
+    }
+    return createHash("sha256").update(JSON.stringify(words)).digest("hex");
   };
 
   const venvStep = (id, title, bytes, venvName, pipInstalls) => ({
     id,
     title,
     bytes,
-    isDone: () => existsSync(okPath(id)),
+    isDone: () => existsSync(okPath(id))
+      && readFileSync(okPath(id), "utf8").trim() === pipFingerprint(pipInstalls),
     run: async (report) => {
       const venvDir = k(venvName);
       report(null, `Creating ${venvName}`);
@@ -243,7 +270,7 @@ export function buildSteps(ctx) {
       for (const args of pipInstalls) {
         await ctx.run([pip, "install", ...args], { onLine: (l) => report(null, l.slice(0, 120)) });
       }
-      markOk(id);
+      markOk(id, pipFingerprint(pipInstalls));
     },
   });
 

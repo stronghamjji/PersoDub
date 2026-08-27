@@ -181,6 +181,36 @@ test("venv-app runs venv + pip installs and marks done", async () => {
   assert.equal(await step.isDone(), true);
 });
 
+// The 0.4.0 update added `mcp` to requirements.txt and no updated machine ever
+// installed it: the venv steps skipped on a bare .ok marker while the payload
+// step had just replaced the requirements files, and the script assistant's
+// tool server could not start anywhere the app had updated rather than been
+// freshly installed. A venv step is only done when its marker records the same
+// installs it would run today.
+test("venv-app re-runs when its requirements change", async () => {
+  const argvs = [];
+  const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });
+  mkdirSync(join(ctx.kitDir, "app"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, "app", "requirements.txt"), "fastapi\n");
+  const step = byId(ctx)["venv-app"];
+  await step.run(() => {});
+  assert.equal(await step.isDone(), true);
+  const before = argvs.length;
+  // An app update rewrites the requirements file -- the step must come back.
+  writeFileSync(join(ctx.kitDir, "app", "requirements.txt"), "fastapi\nmcp\n");
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+  assert.ok(argvs.length > before, "the second run never installed anything");
+  assert.equal(await step.isDone(), true);
+});
+
+test("a bare marker from before the fingerprint counts as not done", async () => {
+  const ctx = freshCtx({ run: async () => {} });
+  mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, ".install", "venv-app.ok"), "");
+  assert.equal(await byId(ctx)["venv-app"].isDone(), false);
+});
+
 // transformers pins huggingface-hub <1.0; an unbounded -U upgrade pulls 1.x and
 // breaks the sidecar at import time. 0.34 is the first release with the hf CLI.
 test("venv-qwen keeps huggingface_hub below 1.0", async () => {
