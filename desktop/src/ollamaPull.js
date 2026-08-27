@@ -9,7 +9,9 @@ import { getFreePort } from "./freePort.js";
 export async function pullOllamaModel({ bin, modelsDir, model, onLine = () => {} }) {
   const port = await getFreePort();
   const env = { ...process.env, OLLAMA_HOST: `127.0.0.1:${port}`, OLLAMA_MODELS: modelsDir };
-  const server = spawn(bin, ["serve"], { env, stdio: "ignore" });
+  // windowsHide keeps the temporary server from showing a console window for
+  // the whole duration of the pull.
+  const server = spawn(bin, ["serve"], { env, stdio: "ignore", windowsHide: true });
   try {
     await waitReady(bin, env);
     await run([bin, "pull", model], { env, onLine });
