@@ -14,7 +14,10 @@ const PIDS_FILE = "pids.json";
 function forceKillTree(pid) {
   if (!Number.isInteger(pid) || pid <= 1) return;
   if (IS_WIN) {
-    try { spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* gone */ }
+    // windowsHide: taskkill is a console program launched from a GUI process,
+    // so without it every kill flashed a console window on screen -- three per
+    // launch (stale engines) and three more per quit.
+    try { spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }); } catch { /* gone */ }
     return;
   }
   try { process.kill(-pid, "SIGKILL"); } catch { /* group gone */ }
@@ -51,10 +54,13 @@ function substitute(argv, port) {
 
 function launch(argv, { cwd, env, logPath }) {
   const fd = openSync(logPath, "a");
-  // windowsHide keeps detached children from flashing a console window; on
-  // Windows detached also makes the child a new process group so taskkill /T
-  // can later reap its whole tree.
-  return spawn(argv[0], argv.slice(1), { cwd, env, detached: true, windowsHide: true, stdio: ["ignore", fd, fd] });
+  // POSIX detaches so the engine leads a process group stopChild can signal.
+  // Windows must NOT detach: DETACHED_PROCESS strips the console entirely and
+  // makes Windows ignore windowsHide, so every console child an engine spawns
+  // (ollama's gpu probes, ffmpeg) opened its own visible window. windowsHide
+  // alone gives the engine a hidden console the whole tree inherits, and
+  // taskkill /T reaps by PID without needing a process group anyway.
+  return spawn(argv[0], argv.slice(1), { cwd, env, detached: !IS_WIN, windowsHide: true, stdio: ["ignore", fd, fd] });
 }
 
 function stopChild(child) {

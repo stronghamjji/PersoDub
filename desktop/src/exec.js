@@ -8,7 +8,9 @@ const CONTROL_SEQUENCES = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 
 export function run(argv, { cwd, env, onLine = () => {} } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(argv[0], argv.slice(1), { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    // windowsHide: the installer runs console programs (tar, pip, hf...) from
+    // a GUI process, and without it each one opened its own console window.
+    const child = spawn(argv[0], argv.slice(1), { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     const recent = [];
     const feed = (buf) => {
       // Split on \r as well as \n: a progress bar redraws its line with a bare
