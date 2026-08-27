@@ -150,8 +150,23 @@ SYSTEM_PROMPT = (
 MODELS = ["fable", "opus", "sonnet", "haiku"]
 
 
-def command(prompt: str, mcp_config: str, resume: bool, model: str = "") -> List[str]:
-    """The command line to run for one message.
+def stdin_text(prompt: str) -> str:
+    """What run() pipes to the CLI's stdin: the question, verbatim.
+
+    The prompt used to ride argv after -p. On Windows the CLI is an npm .cmd
+    shim, and cmd.exe cuts a shim's command line at the first newline -- which
+    the prompt always has (job context + blank line + question). The question
+    AND every flag after it silently vanished: no --output-format left the
+    output unreadable ("(empty answer)" in the panel), and no tool fences left
+    the assistant running with its default tools. Piped to stdin, the text
+    never touches the command line on any platform.
+    """
+    return prompt
+
+
+def command(mcp_config: str, resume: bool, model: str = "") -> List[str]:
+    """The command line to run for one message. The question itself is not on
+    it -- see stdin_text.
 
     --strict-mcp-config matters as much as the deny list: without it the user's
     own MCP servers come along, so the assistant would reach tools this app
@@ -159,7 +174,7 @@ def command(prompt: str, mcp_config: str, resume: bool, model: str = "") -> List
     """
     tools = ",".join(MCP_PREFIX + name for name in TOOL_LABELS)
     args = [
-        "-p", prompt,
+        "-p",
         "--output-format", "stream-json",
         "--verbose",
         "--include-partial-messages",

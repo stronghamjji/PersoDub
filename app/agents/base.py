@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from typing import Callable, Iterator, List, Optional
 
 # A GUI app does not inherit the login shell's PATH, so `claude` can be on the
@@ -263,13 +264,31 @@ _turn = None            # the _Turn on air, or None
 
 
 def _end(proc, grace: float = STOP_GRACE) -> None:
-    """Ask this child to go, and insist if it will not."""
+    """Ask this child to go, and insist if it will not.
+
+    On Windows the child is an npm .cmd shim, and terminate() only reaches the
+    shim (cmd.exe): the CLI under it kept streaming after Stop, and a stopped
+    Codex kept writing its conversation -- the "already has an active writer"
+    refusal on the very next message (2026-08-27). taskkill /T fells the whole
+    tree; CREATE_NO_WINDOW because taskkill is a console program launched from
+    a GUI app, and without it every stop flashed a console window.
+    """
     if proc.poll() is not None:
         return
-    try:
-        proc.terminate()
-    except OSError:
-        return
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass  # the kill below is the backstop
+    else:
+        try:
+            proc.terminate()
+        except OSError:
+            return
     try:
         proc.wait(timeout=grace)
     except subprocess.TimeoutExpired:
@@ -308,30 +327,86 @@ def stop_turn(grace: float = STOP_GRACE) -> bool:
     return True
 
 
+# Codex marks a conversation "active writer" while a turn writes to it.
+# Windows cannot end a CLI gracefully -- terminate() is a hard kill there --
+# so a turn stopped mid-answer leaves that mark behind, and the very next
+# resume failed on its face with this text (code -32600, seen 2026-08-27).
+# The mark clears itself in a moment; one quiet retry is the whole cure.
+_STALE_LOCK = "already has an active writer"
+RETRY_DELAY = 1.5
+
+
 def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         cwd: Optional[str] = None, agent_name: str = "The assistant",
-        login_command: str = "") -> Iterator[dict]:
+        login_command: str = "",
+        input_text: Optional[str] = None) -> Iterator[dict]:
     """Spawn one turn and yield our events as they arrive.
+
+    `input_text` is the prompt, piped to the CLI's stdin (see the drivers'
+    stdin_text). It must never travel in `args`: on Windows the CLIs are npm
+    .cmd shims, and cmd.exe cuts a shim's command line at the first newline --
+    the prompt always has one, and everything after it was silently lost.
+
+    A turn that dies AT ONCE on Codex's stale conversation lock is respawned
+    once, silently, after a short wait. Only that: an error after anything has
+    already reached the panel is shown, and any other failure is shown the
+    first time -- retrying real errors would double their wait, and double the
+    work of anything that changes state.
 
     Yields an error event rather than raising: a failed turn is something the
     panel shows in a bubble, not a crash.
     """
+    for attempt in (0, 1):
+        yielded = False
+        retry = False
+        for event in _run_once(binary, args, translate, cwd=cwd,
+                               agent_name=agent_name,
+                               login_command=login_command,
+                               input_text=input_text):
+            if (attempt == 0 and not yielded
+                    and event.get("kind") == "error"
+                    and _STALE_LOCK in (event.get("detail") or "")):
+                retry = True
+                break
+            yielded = True
+            yield event
+        if not retry:
+            return
+        time.sleep(RETRY_DELAY)
+
+
+def _run_once(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
+              cwd: Optional[str] = None, agent_name: str = "The assistant",
+              login_command: str = "",
+              input_text: Optional[str] = None) -> Iterator[dict]:
+    """One spawn of the CLI -- run() above decides whether it gets another."""
     try:
         proc = subprocess.Popen(
             [binary] + args,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            # Closed, not inherited: a CLI that reads stdin when it is open
-            # would sit there waiting on whatever terminal started the app.
-            stdin=subprocess.DEVNULL,
+            # With a prompt to send, a pipe that is closed right after it; the
+            # EOF is what tells the CLI the question is complete. Without one,
+            # closed outright -- a CLI that reads an open stdin would sit there
+            # waiting on whatever terminal started the app.
+            stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
             cwd=cwd, text=True, encoding="utf-8", bufsize=1,
         )
     except OSError as e:
         yield {"kind": "error", "message": "Could not run the assistant: %s" % e}
         return
 
+    if input_text is not None:
+        try:
+            proc.stdin.write(input_text)
+            proc.stdin.close()
+        except OSError:
+            pass  # the CLI died before reading; its exit code says so below
+
     turn = _Turn(proc)
     _begin(turn)
-    timer = threading.Timer(TIMEOUT_SECONDS, proc.kill)
+    # _end, not proc.kill: on Windows kill() reaches only the .cmd shim and a
+    # timed-out CLI would keep running underneath it (same story as Stop).
+    timer = threading.Timer(TIMEOUT_SECONDS, _end, args=(proc,))
     timer.start()
     saw_done = False
     drained = False
