@@ -744,7 +744,7 @@
      what. The lane only grows this step when some line needs it. */
   .tl-lane.tl-tall { height: 60px; }
   .tl-spill { position: absolute; top: 33px; height: 22px; box-sizing: border-box;
-    border-radius: 0 5px 5px 0; padding: 0 7px; border: 1.5px dashed var(--destructive);
+    border-radius: 5px; padding: 0 7px; border: 1.5px dashed var(--destructive);
     background: color-mix(in srgb, var(--destructive) 30%, transparent);
     color: var(--destructive); font-size: 0.66rem; font-weight: 600; line-height: 19px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3883,10 +3883,14 @@ function drawTimelineTrack() {
                               over ? l.end : voiceEnd, l.text, true);
       if (over) {
         anyOver = true;
-        const label = `+${over.toFixed(1)}s over`;
+        // The whole voice, from the line's own start, so it lines up under
+        // its bar above and there is no asking whose overrun this is (only
+        // the part past the slot was drawn at first, and with two long lines
+        // in a row nobody could tell them apart -- 2026-08-28).
+        const label = `${l.text} · +${over.toFixed(1)}s over`;
         const tip = `"${l.text}" runs ${over.toFixed(1)}s past its time`;
-        voices += `<span class="tl-spill" style="left:${(l.end * timelinePps).toFixed(1)}px;`
-          + `width:${((voiceEnd - l.end) * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}">`
+        voices += `<span class="tl-spill" style="left:${(l.start * timelinePps).toFixed(1)}px;`
+          + `width:${(l.audio_sec * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}">`
           + `${escapeHtml(label)}</span>`;
       }
     }
