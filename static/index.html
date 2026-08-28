@@ -514,10 +514,14 @@
      five words a line), and the row's min-width is the sum of everything at
      that floor. Below it the pane scrolls sideways instead of grinding the two
      languages down to one or two words a line, which is what 1fr alone did. */
+  /* Five columns (2026-08-28): number, speaker, time, the original, and the
+     translation -- whose cell carries its own tool line (listen, length,
+     revert, remake) above the words. The three columns those tools used to
+     take (play, length, remake) are gone, so a line is read in one place. */
   .sc-row { display: grid;
-    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) 40px minmax(180px, 1fr) 56px 44px;
+    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) minmax(220px, 1.2fr);
     gap: 12px; align-items: start; padding: 11px 14px; font-size: 0.84rem;
-    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 908px; }
+    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 772px; }
   .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
     align-items: center; position: sticky; top: 0; z-index: 1;
     background: var(--canvas); font-size: 0.69rem; font-weight: 600;
@@ -528,43 +532,26 @@
   .sc-time { color: var(--primary); font-size: 0.75rem; font-variant-numeric: tabular-nums;
     white-space: nowrap; padding-top: 3px; }
   .sc-src { color: var(--muted-foreground); min-width: 0; overflow-wrap: anywhere; }
-  .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere; flex: 1; }
-  /* The words and, on an edited line, the revert arrow beside them. */
-  .sc-dst-row { display: flex; align-items: flex-start; gap: 4px; }
-  .sc-len { font-size: 0.75rem; color: var(--muted-foreground); text-align: right;
-    white-space: nowrap; padding-top: 3px; }
+  .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere; }
+  /* The tool line above the words: listen and the length on the left, revert
+     (only on an edited line) and remake on the right. */
+  .sc-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .sc-tools .sc-sp { flex: 1; }
+  .sc-len { font-size: 0.78rem; color: var(--muted-foreground); white-space: nowrap;
+    font-variant-numeric: tabular-nums; }
   .sc-over { color: var(--destructive); font-weight: 600; }
-  .sc-acts { display: flex; justify-content: flex-end; }
-  /* Wide only: narrow, the length moves under the translation instead. */
-  .sc-len-in { display: none; }
 
   /* ---------------- The script table, narrow ---------------- */
-  /* 908px is the row above at its floors, so a pane thinner than that used to
-     grow a sideways scrollbar -- which pushed Length and the waveform button
-     off the right of the screen at the window the app opens at. Under that
-     width the same rows drop what can be read elsewhere: the line number (the
-     timeline and the assistant both name lines, the column only counted them),
-     the speaker's name (its colour dot stays, with the name on hover), and the
-     end of the slot (the start is what finds a line). Length leaves the column
-     it needed 56px for and becomes a small line under the translation it is
-     about. Both buttons stay, at every width. */
-  /* 923 is that 908 plus room for a vertical scrollbar on the systems that draw
-     one inside the box (macOS draws none). */
-  @container scriptpane (max-width: 923px) {
-    .sc-row { grid-template-columns: 12px 64px minmax(110px, 1fr) 30px minmax(110px, 1fr) 28px;
+  /* 772px is the row above at its floors, so a pane thinner than that would
+     grow a sideways scrollbar. Under that width the row keeps its number and
+     speaker (user decision 2026-08-27) and drops only the end of the slot --
+     the start is what finds a line, and the length beside the words says the
+     rest. 787 is 772 plus room for a vertical scrollbar on the systems that
+     draw one inside the box (macOS draws none). */
+  @container scriptpane (max-width: 787px) {
+    .sc-row { grid-template-columns: 28px 100px 90px minmax(120px, 1fr) minmax(160px, 1.2fr);
       gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
-    /* The two button columns are 6px narrower than the wide table's because
-       the buttons themselves are (see the block under .sc-wave, which has to
-       come after the sizes it overrides). Each keeps the 4px of slack it had. */
-    .sc-n, .sc-h-n, .sc-len { display: none; }
-    /* Kept as a grid item -- removing it would slide every column one place
-       left -- but with nothing drawn: a 12px dot needs no heading. */
-    .sc-h-spk { visibility: hidden; }
-    .spk-chip { padding: 0; background: none; gap: 0; }
-    .spk-chip b { display: none; }
     .sc-t-b { display: none; }
-    .sc-len-in { display: block; margin-top: 4px; font-size: 0.72rem;
-      color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
   }
 
   /* Who is speaking, in that speaker's colour. (Not ".chip" -- the assistant
@@ -586,22 +573,22 @@
   .spk-4 i { background: var(--spk-4); }
 
   /* Play this line in the video; filled while it is the line playing. */
-  .sc-listen { width: 32px; height: 32px; border-radius: 50%; padding: 0;
+  .sc-listen { width: 26px; height: 26px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--primary-line); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
-    justify-content: center; cursor: pointer; }
-  .sc-listen svg { width: 18px; height: 18px; }
+    justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .sc-listen svg { width: 15px; height: 15px; }
   .sc-listen:hover { border-color: var(--primary); }
   .sc-row.sc-now .sc-listen { background: var(--primary); border-color: var(--primary);
     color: var(--primary-foreground); }
 
   /* Make this line's voice again. Filled means the words were changed and the
      voice has not caught up with them yet. */
-  .sc-wave { width: 30px; height: 30px; border-radius: 50%; padding: 0;
+  .sc-wave { width: 26px; height: 26px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--primary); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
-    justify-content: center; cursor: pointer; }
-  .sc-wave svg { width: 18px; height: 18px; }
+    justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .sc-wave svg { width: 15px; height: 15px; }
   /* Four states, all in the ring and the mark, never the fill (2026-08-27):
      purple = ready; red = the words changed and the voice has not caught up,
      the one button on the row asking to be pressed; turning = being made;
@@ -614,18 +601,6 @@
   .sc-wave:disabled { cursor: progress; }
   .sc-wave:disabled svg { animation: spin 1s linear infinite; }
 
-  /* Narrow: both round buttons come down a size with the row around them. At
-     32 and 30 they were the biggest thing in a compact row, reading as its
-     point rather than as the two small tools they are. The icons come down
-     with them, so a smaller button is not just a tighter ring round the same
-     mark. This block sits after the sizes it overrides -- the narrow table's
-     own block, further up, comes before them and would lose the cascade. */
-  @container scriptpane (max-width: 923px) {
-    .sc-listen { width: 26px; height: 26px; }
-    .sc-listen svg { width: 15px; height: 15px; }
-    .sc-wave { width: 24px; height: 24px; }
-    .sc-wave svg { width: 14px; height: 14px; }
-  }
 
   /* The script cell is the point of the table: a line you can only read is half
      a tool. Editing here writes to edited.srt, the same file the assistant uses. */
@@ -637,7 +612,7 @@
   /* An icon button beside the edited words, not an underlined "revert" under
      them: a link in a table reads as a web page (2026-08-28). Muted until the
      pointer is on it, so the row stays about the words. */
-  .sc-undo { display: inline-flex; align-items: center; justify-content: center; margin-top: 3px;
+  .sc-undo { display: inline-flex; align-items: center; justify-content: center;
     width: 22px; height: 22px; border: none; border-radius: var(--radius-sm); background: none;
     color: var(--muted-foreground); cursor: pointer; padding: 0; }
   .sc-undo:hover { color: var(--primary); background: var(--secondary); }
@@ -769,8 +744,9 @@
      what. The lane only grows this step when some line needs it. */
   .tl-lane.tl-tall { height: 60px; }
   .tl-spill { position: absolute; top: 33px; height: 22px; box-sizing: border-box;
-    border-radius: 0 5px 5px 0; padding: 0 7px; background: var(--destructive);
-    color: var(--primary-foreground); font-size: 0.66rem; font-weight: 600; line-height: 22px;
+    border-radius: 0 5px 5px 0; padding: 0 7px; border: 1.5px dashed var(--destructive);
+    background: color-mix(in srgb, var(--destructive) 30%, transparent);
+    color: var(--destructive); font-size: 0.66rem; font-weight: 600; line-height: 19px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
@@ -3660,13 +3636,13 @@ function scriptRow(l, speakers) {
     <div class="sc-time"><span class="sc-t-a">${escapeHtml(fmtClockTenths(l.start))}</span><span
       class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
     <div class="sc-src">${escapeHtml(l.source || "—")}</div>
-    <div><button class="sc-listen" data-play="${l.line}" type="button"
-      title="Play this line in the video">${PLAY_ICON}</button></div>
-    <div><div class="sc-dst-row"><div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-        data-line="${l.line}">${escapeHtml(l.text)}</div>${undo}</div><div class="sc-len-in">${lengthCell}</div></div>
-    <div class="sc-len">${lengthCell}</div>
-    <div class="sc-acts"><button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
-      type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
+    <div>
+      <div class="sc-tools"><button class="sc-listen" data-play="${l.line}" type="button"
+          title="Play this line in the video">${PLAY_ICON}</button><span class="sc-len">${lengthCell}</span><span class="sc-sp"></span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
+          type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
+      <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
+        data-line="${l.line}">${escapeHtml(l.text)}</div>
+    </div>
   </div>`;
 }
 
@@ -3700,7 +3676,7 @@ async function renderScript(jobId) {
   box.innerHTML = `
     <div class="sc-row head">
       <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div>Time</div><div>${escapeHtml(sourceName)}</div>
-      <div></div><div>${escapeHtml(targetName)}</div><div class="sc-len">Length</div><div></div>
+      <div>${escapeHtml(targetName)}</div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;
   // The timeline draws the same lines, under the table, to the video's real
