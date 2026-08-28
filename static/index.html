@@ -77,10 +77,8 @@
        it. Dark on purpose in both cases -- a frame can be any colour. */
     --thumb-bg: #111111;
     --thumb-badge: rgba(0, 0, 0, 0.6);
-    /* Text and the spinner ring that sit on top of that dark frame. */
+    /* Text that sits on top of that dark frame. */
     --thumb-foreground: #fafafa;
-    --thumb-foreground-dim: rgba(255, 255, 255, 0.75);
-    --thumb-ring: rgba(255, 255, 255, 0.28);
     /* The trim bar's empty track -- a touch darker than --secondary so the
        hatching over it stays readable. */
     --trim-track: #f1f1f4;
@@ -338,23 +336,11 @@
     width: min(clamp(560px, 40vw, 880px), max(280px, calc(100vw - 500px)));
     aspect-ratio: 16 / 9;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg); }
-  /* scale(1.04) crops away the transparent fringe blur() leaves at the edges. */
-  .running-video video { display: block; width: 100%; height: 100%;
-    object-fit: contain;
-    filter: blur(4px) brightness(.55); transform: scale(1.04); }
+  .running-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
   /* Nothing to say for a job with no trim, and nothing drawn either. */
   .running-trim { text-align: center; font-size: 12px; color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; }
   .running-trim:empty { display: none; }
-  .running-veil { position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 14px; padding: 0 20px;
-    text-align: center; color: var(--thumb-foreground); }
-  .running-veil b { font-size: 14px; font-weight: 600; }
-  .running-veil > span:not(.spinner) { font-size: 12px; color: var(--thumb-foreground-dim); }
-
-  .spinner { width: 48px; height: 48px; border-radius: 50%;
-    border: 4px solid var(--thumb-ring); border-top-color: var(--primary-line);
-    animation: spin 0.9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* 420px in the window the app opens at, growing with a maximized one so the
@@ -388,7 +374,7 @@
   .progress-card .raw-log { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; }
 
   @media (prefers-reduced-motion: reduce) {
-    .spinner, .step-mark.current { animation: none; }
+    .step-mark.current, .sc-wave:disabled svg { animation: none; }
     .progress-bar > div { transition: none; }
   }
 
@@ -616,12 +602,17 @@
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; }
   .sc-wave svg { width: 18px; height: 18px; }
-  /* Red, not purple: the words changed and the voice has not caught up --
-     this is the one button on the row that is asking to be pressed. */
-  .sc-wave.stale { background: var(--destructive); color: var(--primary-foreground);
-    border-color: var(--destructive);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 22%, transparent); }
-  .sc-wave:disabled { opacity: 0.5; cursor: progress; }
+  /* Four states, all in the ring and the mark, never the fill (2026-08-27):
+     purple = ready; red = the words changed and the voice has not caught up,
+     the one button on the row asking to be pressed; turning = being made;
+     green with a tick = made, until the words change again. */
+  .sc-wave.stale { color: var(--destructive); border-color: var(--destructive);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 18%, transparent); }
+  .sc-wave.fresh { color: var(--success); border-color: var(--success);
+    background: color-mix(in srgb, var(--success) 10%, var(--background)); }
+  .sc-wave.fresh svg { stroke: currentColor; }
+  .sc-wave:disabled { cursor: progress; }
+  .sc-wave:disabled svg { animation: spin 1s linear infinite; }
 
   /* Narrow: both round buttons come down a size with the row around them. At
      32 and 30 they were the biggest thing in a compact row, reading as its
@@ -1108,18 +1099,16 @@
       </section>
 
       <!-- ============ RUNNING ============ -->
-      <!-- The job's own video, blurred and locked, next to a card that says
-           which of the four stages it is on. renderRunning() fills both. -->
+      <!-- The job's own video, playable, next to a card that says which of
+           the four stages it is on. renderRunning() fills both. The original
+           used to sit blurred behind a spinner until the dub was done; the
+           file is already on this machine, and the card beside it is the one
+           place that says how far along the dub is (2026-08-28). -->
       <section class="screen" id="screen-running" hidden>
         <div class="running">
           <div class="running-shot">
             <div class="running-video">
-              <video id="runningVideo" muted playsinline></video>
-              <div class="running-veil">
-                <span class="spinner"></span>
-                <b>Dubbing this video…</b>
-                <span>The player unlocks when it is done</span>
-              </div>
+              <video id="runningVideo" controls playsinline></video>
             </div>
             <!-- Which part of the video is being dubbed, when the job was
                  started with a trim. Empty -- and invisible -- otherwise. -->
@@ -3599,7 +3588,13 @@ const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:curr
 const UNDO_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>';
 // A waveform, the same mark the rail uses for speech: this button makes the
 // sound of a line again.
-const WAVE_ICON = '<svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round"><path d="M4 12h1"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 9v6"/><path d="M20 11v2"/></svg>';
+// "Make this line's voice again": a circling arrow, which says "again" the way
+// a waveform never did (user decision 2026-08-27). The same button turns
+// green with a tick once the voice was made -- until the words change again
+// or the app restarts. Which lines those are is kept here, per job and line,
+// because the table is redrawn after every remake.
+const REMAKE_ICON = '<svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>';
+const freshLines = new Set();
 
 // Speaker labels are the diarizer's own ("SPEAKER_00"), which mean nothing to a
 // reader. Number them in the order they first speak instead, and give each a
@@ -3641,6 +3636,7 @@ function scriptRow(l, speakers) {
   // halves are needed: `edited` is per line, and `voice_stale` (a file older
   // than the script) is what says the remake has not happened since.
   const stale = l.edited && l.voice_stale;
+  const fresh = freshLines.has(`${scriptJobId}:${l.line}`);
   const undo = l.edited
     ? `<button class="sc-undo" data-undo="${l.line}" type="button"
          title="Revert to the original translation" aria-label="Revert to the original translation">${UNDO_ICON}</button>` : "";
@@ -3655,8 +3651,8 @@ function scriptRow(l, speakers) {
     <div><div class="sc-dst-row"><div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
         data-line="${l.line}">${escapeHtml(l.text)}</div>${undo}</div><div class="sc-len-in">${lengthCell}</div></div>
     <div class="sc-len">${lengthCell}</div>
-    <div class="sc-acts"><button class="sc-wave${stale ? " stale" : ""}" data-voice="${l.line}"
-      type="button" title="${stale ? "The words changed - make the voice again" : "Make this line's voice again"}">${WAVE_ICON}</button></div>
+    <div class="sc-acts"><button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
+      type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
   </div>`;
 }
 
@@ -4175,6 +4171,7 @@ function scriptSaving(text) {
 }
 
 async function saveLine(jobId, line, text) {
+  freshLines.delete(`${jobId}:${line}`);
   scriptSaving("Saving…");
   try {
     const r = await fetch(`/api/dub/jobs/${jobId}/script/${line}`, {
@@ -4213,6 +4210,7 @@ async function remakeLine(jobId, line, btn) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.detail || "Could not remake that line.");
     scriptSaving(`Line ${line} done`);
+    freshLines.add(`${jobId}:${line}`);
     await refreshAfterVoices(jobId);
     setTimeout(() => scriptSaving(""), 2000);
   } catch (e) {
@@ -4222,6 +4220,7 @@ async function remakeLine(jobId, line, btn) {
 }
 
 async function revertLine(jobId, line) {
+  freshLines.delete(`${jobId}:${line}`);
   scriptSaving("Reverting…");
   await fetch(`/api/dub/jobs/${jobId}/script/${line}/revert`, { method: "POST" })
     .catch(() => null);
