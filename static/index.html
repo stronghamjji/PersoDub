@@ -731,6 +731,10 @@
   .tl-corner { height: 18px; }
   .tl-name { height: 34px; display: flex; align-items: center; padding-left: 14px; }
   .tl-name.strong { font-weight: 600; color: var(--foreground); }
+  /* Grows with the voice lane when an overrun step is on show. */
+  .tl-name.tl-tall { height: 60px; align-items: flex-start; padding-top: 8px; }
+  .timeline.tl-has-over { height: 176px; }
+  .timeline.tl-has-over .tl-inner { height: 112px; }
   /* Only the track scrolls sideways: the two language names have to stay put. */
   .tl-track { position: relative; overflow-x: auto; overflow-y: hidden; margin: 0 14px; }
   .tl-inner { position: relative; height: 86px; }
@@ -760,10 +764,14 @@
      bar sat solid on top, and a long overrun covered the next line completely:
      a line that had just been fixed looked like it was not there at all. */
   .tl-voice.tl-over { background: var(--destructive); }
-  .tl-spill { position: absolute; top: 4px; height: 26px; box-sizing: border-box;
-    border-radius: 0 5px 5px 0; border: 1.5px dashed var(--destructive); border-left: none;
-    background: color-mix(in srgb, var(--destructive) 30%, transparent);
-    z-index: 2; pointer-events: none; }
+  /* The part past the slot, on its own step under the bars so it covers
+     nothing: a red bar that says how far ("+1.5s over") and, on hover, into
+     what. The lane only grows this step when some line needs it. */
+  .tl-lane.tl-tall { height: 60px; }
+  .tl-spill { position: absolute; top: 33px; height: 22px; box-sizing: border-box;
+    border-radius: 0 5px 5px 0; padding: 0 7px; background: var(--destructive);
+    color: var(--primary-foreground); font-size: 0.66rem; font-weight: 600; line-height: 22px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
   .tl-blk:hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent); }
@@ -3883,30 +3891,38 @@ function drawTimelineTrack() {
 
   let voices = "";
   let originals = "";
+  let anyOver = false;
   for (const l of timelineLines) {
     const hasVoice = l.audio_sec != null;
     // The slot first, so the voice bar lies on top of it.
     voices += timelineBlock(l, "tl-slot", l.start, l.end, "", !hasVoice);
     // No voice on disk yet: the slot alone is the whole truth about that line.
     if (hasVoice) {
-      const over = lineOverBy(l) > 0;
+      const over = lineOverBy(l);
       const voiceEnd = l.start + l.audio_sec;
-      // A long voice stops its bar at the slot and carries on as a thin spill
-      // (see .tl-spill): the bar of the next line, drawn after this one, stays
-      // readable, and the spill still says how far past the slot it runs.
+      // A long voice stops its bar at the slot; the part past it goes on the
+      // step below (see .tl-spill), so the next line's bar -- drawn after this
+      // one -- is never covered, and the red still says how far it runs.
       voices += timelineBlock(l, `tl-voice${over ? " tl-over" : ""}`, l.start,
                               over ? l.end : voiceEnd, l.text, true);
       if (over) {
-        voices += `<i class="tl-spill" style="left:${(l.end * timelinePps).toFixed(1)}px;`
-          + `width:${((voiceEnd - l.end) * timelinePps).toFixed(1)}px"></i>`;
+        anyOver = true;
+        const label = `+${over.toFixed(1)}s over`;
+        const tip = `"${l.text}" runs ${over.toFixed(1)}s past its time`;
+        voices += `<span class="tl-spill" style="left:${(l.end * timelinePps).toFixed(1)}px;`
+          + `width:${((voiceEnd - l.end) * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}">`
+          + `${escapeHtml(label)}</span>`;
       }
     }
     originals += timelineBlock(l, "tl-org", l.start, l.end, l.source || "");
   }
 
+  // The strip, and the name beside the lane, have to grow with it.
+  $("timeline").classList.toggle("tl-has-over", anyOver);
+  $("timeline").querySelector(".tl-name.strong")?.classList.toggle("tl-tall", anyOver);
   track.innerHTML = `<div class="tl-inner" style="width:${width.toFixed(0)}px">
     <div class="tl-ruler">${ticks}</div>
-    <div class="tl-lane">${voices}</div>
+    <div class="tl-lane${anyOver ? " tl-tall" : ""}">${voices}</div>
     <div class="tl-lane">${originals}</div>
     <div class="tl-playhead" id="timelinePlayhead"><i></i></div>
   </div>`;
