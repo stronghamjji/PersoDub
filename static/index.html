@@ -753,14 +753,16 @@
      runs long is seen poking out of it. */
   .tl-slot { border-color: var(--primary-line); border-style: dashed; }
   .tl-voice { background: var(--timeline-fit); color: var(--primary-foreground); }
-  /* A voice that runs long: red, but drawn only as far as its slot. The part
-     past the slot is the spill below -- a thin red line along the floor of the
-     lane, above everything else. Before (2026-08-28) the whole red bar sat on
-     top, and a long overrun covered the NEXT line's bar completely: a line
-     that had just been fixed looked like it was not there at all. */
+  /* A voice that runs long: solid red as far as its slot, then red hatching
+     for the part past it, laid over whatever is there. The hatching is what
+     lets the NEXT line's bar -- drawn after this one -- still be read through
+     it. Before (2026-08-28) the whole red bar sat solid on top, and a long
+     overrun covered the next line completely: a line that had just been fixed
+     looked like it was not there at all. */
   .tl-voice.tl-over { background: var(--destructive); }
-  .tl-spill { position: absolute; bottom: 2px; height: 5px; border-radius: 3px;
-    background: var(--destructive); z-index: 2; pointer-events: none; }
+  .tl-spill { position: absolute; top: 4px; height: 26px; border-radius: 0 5px 5px 0;
+    background: repeating-linear-gradient(135deg, var(--destructive) 0 4px, transparent 4px 9px);
+    z-index: 2; pointer-events: none; }
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
   .tl-blk:hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent); }
