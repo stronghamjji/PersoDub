@@ -281,6 +281,31 @@ def settings_post(body: SettingsRequest):
             "restart_required": False}
 
 
+def _open_folder(path: str) -> None:
+    """Show a folder in the desktop's own file browser (Finder, Explorer, or
+    whatever xdg-open answers to). Separate so the endpoint below can be tested
+    without opening windows on the test machine."""
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+    elif sys.platform.startswith("win"):
+        os.startfile(path)  # type: ignore[attr-defined]  # Windows only
+    else:
+        subprocess.Popen(["xdg-open", path])
+
+
+@app.post("/api/settings/reveal-output")
+def settings_reveal_output():
+    """Open the folder finished videos are saved in. Settings used to print the
+    raw path in a read-only field; a button that opens the folder is what a
+    desktop app does instead (2026-08-28), and only the server knows the folder
+    (the desktop shell can point the workspace anywhere)."""
+    try:
+        _open_folder(WORKSPACE)
+    except OSError as e:
+        raise HTTPException(500, f"Could not open the folder: {e}")
+    return {"ok": True}
+
+
 @app.get("/api/perso/spaces")
 def perso_spaces():
     """Workspaces the saved Perso key can dub in, for the Settings picker.
