@@ -753,11 +753,14 @@
      runs long is seen poking out of it. */
   .tl-slot { border-color: var(--primary-line); border-style: dashed; }
   .tl-voice { background: var(--timeline-fit); color: var(--primary-foreground); }
-  /* Over the top of everything else: a voice that runs long reaches into the
-     NEXT line's ground, and that line's own bar -- drawn after it -- would
-     otherwise cover the overshoot completely, hiding both the red and the
-     click. The one thing this bar exists to show is how far past it goes. */
-  .tl-voice.tl-over { background: var(--destructive); z-index: 2; }
+  /* A voice that runs long: red, but drawn only as far as its slot. The part
+     past the slot is the spill below -- a thin red line along the floor of the
+     lane, above everything else. Before (2026-08-28) the whole red bar sat on
+     top, and a long overrun covered the NEXT line's bar completely: a line
+     that had just been fixed looked like it was not there at all. */
+  .tl-voice.tl-over { background: var(--destructive); }
+  .tl-spill { position: absolute; bottom: 2px; height: 5px; border-radius: 3px;
+    background: var(--destructive); z-index: 2; pointer-events: none; }
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
   .tl-blk:hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent); }
@@ -3883,8 +3886,17 @@ function drawTimelineTrack() {
     voices += timelineBlock(l, "tl-slot", l.start, l.end, "", !hasVoice);
     // No voice on disk yet: the slot alone is the whole truth about that line.
     if (hasVoice) {
-      const over = lineOverBy(l) ? " tl-over" : "";
-      voices += timelineBlock(l, `tl-voice${over}`, l.start, l.start + l.audio_sec, l.text, true);
+      const over = lineOverBy(l) > 0;
+      const voiceEnd = l.start + l.audio_sec;
+      // A long voice stops its bar at the slot and carries on as a thin spill
+      // (see .tl-spill): the bar of the next line, drawn after this one, stays
+      // readable, and the spill still says how far past the slot it runs.
+      voices += timelineBlock(l, `tl-voice${over ? " tl-over" : ""}`, l.start,
+                              over ? l.end : voiceEnd, l.text, true);
+      if (over) {
+        voices += `<i class="tl-spill" style="left:${(l.end * timelinePps).toFixed(1)}px;`
+          + `width:${((voiceEnd - l.end) * timelinePps).toFixed(1)}px"></i>`;
+      }
     }
     originals += timelineBlock(l, "tl-org", l.start, l.end, l.source || "");
   }
