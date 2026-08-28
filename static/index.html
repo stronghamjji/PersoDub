@@ -4208,6 +4208,11 @@ async function refreshAfterVoices(jobId) {
 // costs seconds where a whole remake costs minutes.
 async function remakeLine(jobId, line, btn) {
   btn.disabled = true;
+  // Whatever the button showed before (the green tick of a voice already
+  // made, the red ring of changed words), while the voice is being made it
+  // is the arrow that turns -- a spinning tick read as an error.
+  btn.classList.remove("fresh", "stale");
+  btn.innerHTML = REMAKE_ICON;
   scriptSaving(`Remaking line ${line}…`);
   try {
     const r = await fetch(`/api/dub/jobs/${jobId}/script/${line}/voice`, { method: "POST" });
