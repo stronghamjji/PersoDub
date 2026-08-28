@@ -535,11 +535,14 @@
   .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere; }
   /* The tool line above the words: listen and the length on the left, revert
      (only on an edited line) and remake on the right. */
-  .sc-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .sc-tools { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .sc-tools .sc-sp { flex: 1; }
   .sc-len { font-size: 0.78rem; color: var(--muted-foreground); white-space: nowrap;
     font-variant-numeric: tabular-nums; }
+  .sc-len b { font-weight: 600; color: var(--foreground); }
   .sc-over { color: var(--destructive); font-weight: 600; }
+  .sc-under { color: var(--muted-foreground); }
+  .sc-fit { color: var(--success); font-weight: 600; }
 
   /* ---------------- The script table, narrow ---------------- */
   /* 772px is the row above at its floors, so a pane thinner than that would
@@ -706,10 +709,6 @@
   .tl-corner { height: 18px; }
   .tl-name { height: 34px; display: flex; align-items: center; padding-left: 14px; }
   .tl-name.strong { font-weight: 600; color: var(--foreground); }
-  /* Grows with the voice lane when an overrun step is on show. */
-  .tl-name.tl-tall { height: 60px; align-items: flex-start; padding-top: 8px; }
-  .timeline.tl-has-over { height: 176px; }
-  .timeline.tl-has-over .tl-inner { height: 112px; }
   /* Only the track scrolls sideways: the two language names have to stay put. */
   .tl-track { position: relative; overflow-x: auto; overflow-y: hidden; margin: 0 14px; }
   .tl-inner { position: relative; height: 86px; }
@@ -739,15 +738,14 @@
      bar sat solid on top, and a long overrun covered the next line completely:
      a line that had just been fixed looked like it was not there at all. */
   .tl-voice.tl-over { background: var(--destructive); }
-  /* The part past the slot, on its own step under the bars so it covers
-     nothing: a red bar that says how far ("+1.5s over") and, on hover, into
-     what. The lane only grows this step when some line needs it. */
-  .tl-lane.tl-tall { height: 60px; }
-  .tl-spill { position: absolute; top: 33px; height: 22px; box-sizing: border-box;
-    border-radius: 5px; padding: 0 7px; border: 1.5px dashed var(--destructive);
+  /* The part past the slot: a red tint laid over whatever follows, as far as
+     the voice actually runs. A tint, so the next line's bar and words still
+     read through it; no words of its own -- the table says the numbers, and
+     the line is on hover (user decision 2026-08-28). */
+  .tl-spill { position: absolute; top: 4px; height: 26px; box-sizing: border-box;
+    border-radius: 0 5px 5px 0; border: 1.5px dashed var(--destructive); border-left: none;
     background: color-mix(in srgb, var(--destructive) 30%, transparent);
-    color: var(--destructive); font-size: 0.66rem; font-weight: 600; line-height: 19px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    z-index: 2; pointer-events: none; }
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
   .tl-blk:hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent); }
@@ -3619,9 +3617,14 @@ function scriptRow(l, speakers) {
   const chip = n
     ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}" title="Speaker ${n}"><i></i><b>Speaker ${n}</b></span>` : "";
   const over = lineOverBy(l);
-  const lengthCell = over
-    ? `<span class="sc-over">+${over.toFixed(1)}s</span>`
-    : `${lineLength(l).toFixed(1)}s`;
+  // "1.6s / 0.2s · +1.4s": how long the voice is, how long the slot is, and
+  // the difference in one glance -- red when it runs over, grey when it is
+  // well short, green "fits" otherwise (user decision 2026-08-28).
+  const under = l.slot - lineLength(l);
+  const verdict = over ? `<span class="sc-over">+${over.toFixed(1)}s</span>`
+    : under > 0.3 ? `<span class="sc-under">−${under.toFixed(1)}s</span>`
+    : `<span class="sc-fit">fits</span>`;
+  const lengthCell = `<b>${lineLength(l).toFixed(1)}s</b> / ${l.slot.toFixed(1)}s · ${verdict}`;
   // Filled means "the words changed and the voice has not caught up". Both
   // halves are needed: `edited` is per line, and `voice_stale` (a file older
   // than the script) is what says the remake has not happened since.
@@ -3637,11 +3640,11 @@ function scriptRow(l, speakers) {
       class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
     <div class="sc-src">${escapeHtml(l.source || "—")}</div>
     <div>
+      <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
+        data-line="${l.line}">${escapeHtml(l.text)}</div>
       <div class="sc-tools"><button class="sc-listen" data-play="${l.line}" type="button"
           title="Play this line in the video">${PLAY_ICON}</button><span class="sc-len">${lengthCell}</span><span class="sc-sp"></span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
           type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
-      <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-        data-line="${l.line}">${escapeHtml(l.text)}</div>
     </div>
   </div>`;
 }
@@ -3867,7 +3870,6 @@ function drawTimelineTrack() {
 
   let voices = "";
   let originals = "";
-  let anyOver = false;
   for (const l of timelineLines) {
     const hasVoice = l.audio_sec != null;
     // The slot first, so the voice bar lies on top of it.
@@ -3876,36 +3878,24 @@ function drawTimelineTrack() {
     if (hasVoice) {
       const over = lineOverBy(l);
       const voiceEnd = l.start + l.audio_sec;
-      // A long voice stops its bar at the slot; the part past it goes on the
-      // step below (see .tl-spill), so the next line's bar -- drawn after this
-      // one -- is never covered, and the red still says how far it runs.
+      // A long voice stops its solid bar at the slot; the part past it is a
+      // tint (see .tl-spill) over whatever follows, so the next line's bar --
+      // drawn after this one -- still reads, and the red still says how far
+      // the voice runs. (A solid red bar on top used to hide the next line.)
       voices += timelineBlock(l, `tl-voice${over ? " tl-over" : ""}`, l.start,
                               over ? l.end : voiceEnd, l.text, true);
       if (over) {
-        anyOver = true;
-        // The whole voice, from the line's own start, so it lines up under
-        // its bar above and there is no asking whose overrun this is (only
-        // the part past the slot was drawn at first, and with two long lines
-        // in a row nobody could tell them apart -- 2026-08-28).
-        // Named by line number, the way the table, the assistant and the
-        // timeline all name lines: short enough for any bar, where the words
-        // themselves would be cut off. The words are on hover.
-        const label = `#${l.line} · +${over.toFixed(1)}s`;
-        const tip = `Line ${l.line} "${l.text}" runs ${over.toFixed(1)}s past its time`;
-        voices += `<span class="tl-spill" style="left:${(l.start * timelinePps).toFixed(1)}px;`
-          + `width:${(l.audio_sec * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}">`
-          + `${escapeHtml(label)}</span>`;
+        const tip = `Line ${l.line} runs ${over.toFixed(1)}s past its time`;
+        voices += `<span class="tl-spill" style="left:${(l.end * timelinePps).toFixed(1)}px;`
+          + `width:${((voiceEnd - l.end) * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}"></span>`;
       }
     }
     originals += timelineBlock(l, "tl-org", l.start, l.end, l.source || "");
   }
 
-  // The strip, and the name beside the lane, have to grow with it.
-  $("timeline").classList.toggle("tl-has-over", anyOver);
-  $("timeline").querySelector(".tl-name.strong")?.classList.toggle("tl-tall", anyOver);
   track.innerHTML = `<div class="tl-inner" style="width:${width.toFixed(0)}px">
     <div class="tl-ruler">${ticks}</div>
-    <div class="tl-lane${anyOver ? " tl-tall" : ""}">${voices}</div>
+    <div class="tl-lane">${voices}</div>
     <div class="tl-lane">${originals}</div>
     <div class="tl-playhead" id="timelinePlayhead"><i></i></div>
   </div>`;
