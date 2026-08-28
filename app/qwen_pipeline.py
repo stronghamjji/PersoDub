@@ -20,6 +20,7 @@ needs a transcript of the reference span.
 """
 import json
 import os
+import random
 import re
 import shutil
 import wave
@@ -644,7 +645,12 @@ def resynth_one_line(work_dir, entry, text, language):
     engine = get_engine("qwen3_tts")
     voice_id = engine.clone(ref_wav, ref_text)
     out_path = os.path.join(work_dir, "qwen_line_%d.wav" % i)
-    return _synth_one(engine, {"text": text}, voice_id, language, 1000 * i,
+    # A fresh seed every time: a remake is asked for because the voice there
+    # is not wanted, so it has to be able to come out differently. The fixed
+    # per-line seed the first pass uses gave the same voice back for the same
+    # words (user decision 2026-08-28).
+    seed = random.randrange(1, 2**31)
+    return _synth_one(engine, {"text": text}, voice_id, language, seed,
                       out_path, lambda m: None, "line %d" % i)
 
 
