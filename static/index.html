@@ -3887,8 +3887,11 @@ function drawTimelineTrack() {
         // its bar above and there is no asking whose overrun this is (only
         // the part past the slot was drawn at first, and with two long lines
         // in a row nobody could tell them apart -- 2026-08-28).
-        const label = `${l.text} · +${over.toFixed(1)}s over`;
-        const tip = `"${l.text}" runs ${over.toFixed(1)}s past its time`;
+        // Named by line number, the way the table, the assistant and the
+        // timeline all name lines: short enough for any bar, where the words
+        // themselves would be cut off. The words are on hover.
+        const label = `#${l.line} · +${over.toFixed(1)}s`;
+        const tip = `Line ${l.line} "${l.text}" runs ${over.toFixed(1)}s past its time`;
         voices += `<span class="tl-spill" style="left:${(l.start * timelinePps).toFixed(1)}px;`
           + `width:${(l.audio_sec * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}">`
           + `${escapeHtml(label)}</span>`;
