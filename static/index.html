@@ -77,10 +77,8 @@
        it. Dark on purpose in both cases -- a frame can be any colour. */
     --thumb-bg: #111111;
     --thumb-badge: rgba(0, 0, 0, 0.6);
-    /* Text and the spinner ring that sit on top of that dark frame. */
+    /* Text that sits on top of that dark frame. */
     --thumb-foreground: #fafafa;
-    --thumb-foreground-dim: rgba(255, 255, 255, 0.75);
-    --thumb-ring: rgba(255, 255, 255, 0.28);
     /* The trim bar's empty track -- a touch darker than --secondary so the
        hatching over it stays readable. */
     --trim-track: #f1f1f4;
@@ -267,44 +265,12 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topbar-sub { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
   .topbar-spacer { flex: 1; }
-  .topbar-version { font-size: 11.5px; color: var(--muted-foreground); }
   /* The one filled button up here, sized for the top bar rather than for a
      dialog: 32px tall like the two arrows beside it, with the same room left
      and right of what is inside it, and the icon exactly one gap from the
-     word. Its right edge lands on the top bar's own 16px padding -- where the
-     version text and Cancel already end. */
+     word. Its right edge lands on the top bar's own 16px padding -- where
+     Cancel already ends. */
   #exportBtn { height: 32px; padding: 0 14px; gap: 6px; }
-
-  /* "Made with ..." -- one muted line under the top bar on a finished job,
-     naming the engines that made it. Indented past the back arrow so it starts
-     under the job's name, not under the arrow. A job saved before the app kept
-     those choices has none to show, and the whole line is hidden instead. */
-  .engine-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-    flex-wrap: wrap; padding: 7px 16px 9px 60px;
-    border-bottom: 1px solid var(--border); background: var(--background);
-    font-size: 11.5px; color: var(--muted-foreground); }
-  .engine-chip { background: var(--secondary); border-radius: 999px;
-    padding: 2px 9px; color: var(--foreground); white-space: nowrap; }
-  /* A cloud engine, so this job cost money -- worth telling apart at a glance. */
-  .engine-chip.api { background: var(--primary-soft); color: var(--primary); }
-  /* The role word inside a chip: which of the three jobs this engine did. Set
-     back from the name, because the name is the answer and the role is only
-     the question it answers. (An <i> that is not italic: one letter of markup
-     for a span, and no class to carry through two render sites.) */
-  .engine-chip i, .job-tag i { font-style: normal; margin-right: 5px;
-    color: var(--muted-foreground); }
-  /* Muted grey on the purple chip would read as a third colour; step the
-     purple back instead. */
-  .engine-chip.api i, .job-tag.api i { color: color-mix(in srgb, var(--primary) 60%, transparent); }
-
-  /* The same list again, tiny, as a third line on a Projects row. Outlined
-     rather than filled: three filled chips in a 300px sidebar column read as
-     buttons. */
-  .job-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-  .job-tag { border: 1px solid var(--border); border-radius: 999px;
-    padding: 0 5px; font-size: 0.62rem; line-height: 1.55;
-    color: var(--foreground); white-space: nowrap; }
-  .job-tag.api { border-color: var(--primary); color: var(--primary); }
 
   /* The one job-wide message line (a credit warning, or why a dub failed).
      It sits in the progress card, right under the four steps -- the place the
@@ -370,23 +336,11 @@
     width: min(clamp(560px, 40vw, 880px), max(280px, calc(100vw - 500px)));
     aspect-ratio: 16 / 9;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg); }
-  /* scale(1.04) crops away the transparent fringe blur() leaves at the edges. */
-  .running-video video { display: block; width: 100%; height: 100%;
-    object-fit: contain;
-    filter: blur(4px) brightness(.55); transform: scale(1.04); }
+  .running-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
   /* Nothing to say for a job with no trim, and nothing drawn either. */
   .running-trim { text-align: center; font-size: 12px; color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; }
   .running-trim:empty { display: none; }
-  .running-veil { position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 14px; padding: 0 20px;
-    text-align: center; color: var(--thumb-foreground); }
-  .running-veil b { font-size: 14px; font-weight: 600; }
-  .running-veil > span:not(.spinner) { font-size: 12px; color: var(--thumb-foreground-dim); }
-
-  .spinner { width: 48px; height: 48px; border-radius: 50%;
-    border: 4px solid var(--thumb-ring); border-top-color: var(--primary-line);
-    animation: spin 0.9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* 420px in the window the app opens at, growing with a maximized one so the
@@ -420,7 +374,7 @@
   .progress-card .raw-log { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; }
 
   @media (prefers-reduced-motion: reduce) {
-    .spinner, .step-mark.current { animation: none; }
+    .step-mark.current, .sc-wave:disabled svg { animation: none; }
     .progress-bar > div { transition: none; }
   }
 
@@ -450,8 +404,11 @@
   .upload-zone.drag-over { border-color: var(--primary); background: var(--accent); }
   .upload-zone .icon-lg { width: clamp(30px, 2.2vw, 38px); height: clamp(30px, 2.2vw, 38px); color: var(--primary); }
   .upload-title { color: var(--foreground); font-weight: 600; font-size: clamp(16px, 1vw, 20px); }
-  .upload-hint { font-size: 13px; }
-  .upload-choose { color: var(--primary); text-decoration: underline; }
+  /* A button, not an underlined word: a desktop app opens a file picker from a
+     button, and "Choose File…" with the ellipsis is the platform's own wording
+     for one (2026-08-28). */
+  .upload-hint { font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .upload-choose { font-size: 0.84rem; }
 
   /* A rule either side of the word, so "OR" reads as a divider, not a label. */
   .home-or { display: flex; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: 11.5px; letter-spacing: 0.06em; }
@@ -557,10 +514,14 @@
      five words a line), and the row's min-width is the sum of everything at
      that floor. Below it the pane scrolls sideways instead of grinding the two
      languages down to one or two words a line, which is what 1fr alone did. */
+  /* Five columns (2026-08-28): number, speaker, time, the original, and the
+     translation -- whose cell carries its own tool line (listen, length,
+     revert, remake) above the words. The three columns those tools used to
+     take (play, length, remake) are gone, so a line is read in one place. */
   .sc-row { display: grid;
-    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) 40px minmax(180px, 1fr) 56px 44px;
+    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) minmax(220px, 1.2fr);
     gap: 12px; align-items: start; padding: 11px 14px; font-size: 0.84rem;
-    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 908px; }
+    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 772px; }
   .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
     align-items: center; position: sticky; top: 0; z-index: 1;
     background: var(--canvas); font-size: 0.69rem; font-weight: 600;
@@ -572,40 +533,28 @@
     white-space: nowrap; padding-top: 3px; }
   .sc-src { color: var(--muted-foreground); min-width: 0; overflow-wrap: anywhere; }
   .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere; }
-  .sc-len { font-size: 0.75rem; color: var(--muted-foreground); text-align: right;
-    white-space: nowrap; padding-top: 3px; }
+  /* The tool line above the words: listen and the length on the left, revert
+     (only on an edited line) and remake on the right. */
+  .sc-tools { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .sc-tools .sc-sp { flex: 1; }
+  .sc-len { font-size: 0.78rem; color: var(--muted-foreground); white-space: nowrap;
+    font-variant-numeric: tabular-nums; }
+  .sc-len b { font-weight: 600; color: var(--foreground); }
   .sc-over { color: var(--destructive); font-weight: 600; }
-  .sc-acts { display: flex; justify-content: flex-end; }
-  /* Wide only: narrow, the length moves under the translation instead. */
-  .sc-len-in { display: none; }
+  .sc-under { color: var(--muted-foreground); }
+  .sc-fit { color: var(--success); font-weight: 600; }
 
   /* ---------------- The script table, narrow ---------------- */
-  /* 908px is the row above at its floors, so a pane thinner than that used to
-     grow a sideways scrollbar -- which pushed Length and the waveform button
-     off the right of the screen at the window the app opens at. Under that
-     width the same rows drop what can be read elsewhere: the line number (the
-     timeline and the assistant both name lines, the column only counted them),
-     the speaker's name (its colour dot stays, with the name on hover), and the
-     end of the slot (the start is what finds a line). Length leaves the column
-     it needed 56px for and becomes a small line under the translation it is
-     about. Both buttons stay, at every width. */
-  /* 923 is that 908 plus room for a vertical scrollbar on the systems that draw
-     one inside the box (macOS draws none). */
-  @container scriptpane (max-width: 923px) {
-    .sc-row { grid-template-columns: 12px 64px minmax(110px, 1fr) 30px minmax(110px, 1fr) 28px;
+  /* 772px is the row above at its floors, so a pane thinner than that would
+     grow a sideways scrollbar. Under that width the row keeps its number and
+     speaker (user decision 2026-08-27) and drops only the end of the slot --
+     the start is what finds a line, and the length beside the words says the
+     rest. 787 is 772 plus room for a vertical scrollbar on the systems that
+     draw one inside the box (macOS draws none). */
+  @container scriptpane (max-width: 787px) {
+    .sc-row { grid-template-columns: 28px 100px 90px minmax(120px, 1fr) minmax(160px, 1.2fr);
       gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
-    /* The two button columns are 6px narrower than the wide table's because
-       the buttons themselves are (see the block under .sc-wave, which has to
-       come after the sizes it overrides). Each keeps the 4px of slack it had. */
-    .sc-n, .sc-h-n, .sc-len { display: none; }
-    /* Kept as a grid item -- removing it would slide every column one place
-       left -- but with nothing drawn: a 12px dot needs no heading. */
-    .sc-h-spk { visibility: hidden; }
-    .spk-chip { padding: 0; background: none; gap: 0; }
-    .spk-chip b { display: none; }
     .sc-t-b { display: none; }
-    .sc-len-in { display: block; margin-top: 4px; font-size: 0.72rem;
-      color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
   }
 
   /* Who is speaking, in that speaker's colour. (Not ".chip" -- the assistant
@@ -627,41 +576,34 @@
   .spk-4 i { background: var(--spk-4); }
 
   /* Play this line in the video; filled while it is the line playing. */
-  .sc-listen { width: 32px; height: 32px; border-radius: 50%; padding: 0;
+  .sc-listen { width: 26px; height: 26px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--primary-line); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
-    justify-content: center; cursor: pointer; }
-  .sc-listen svg { width: 18px; height: 18px; }
+    justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .sc-listen svg { width: 15px; height: 15px; }
   .sc-listen:hover { border-color: var(--primary); }
   .sc-row.sc-now .sc-listen { background: var(--primary); border-color: var(--primary);
     color: var(--primary-foreground); }
 
   /* Make this line's voice again. Filled means the words were changed and the
      voice has not caught up with them yet. */
-  .sc-wave { width: 30px; height: 30px; border-radius: 50%; padding: 0;
+  .sc-wave { width: 26px; height: 26px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--primary); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
-    justify-content: center; cursor: pointer; }
-  .sc-wave svg { width: 18px; height: 18px; }
-  /* Red, not purple: the words changed and the voice has not caught up --
-     this is the one button on the row that is asking to be pressed. */
-  .sc-wave.stale { background: var(--destructive); color: var(--primary-foreground);
-    border-color: var(--destructive);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 22%, transparent); }
-  .sc-wave:disabled { opacity: 0.5; cursor: progress; }
+    justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .sc-wave svg { width: 15px; height: 15px; }
+  /* Four states, all in the ring and the mark, never the fill (2026-08-27):
+     purple = ready; red = the words changed and the voice has not caught up,
+     the one button on the row asking to be pressed; turning = being made;
+     green with a tick = made, until the words change again. */
+  .sc-wave.stale { color: var(--destructive); border-color: var(--destructive);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 18%, transparent); }
+  .sc-wave.fresh { color: var(--success); border-color: var(--success);
+    background: color-mix(in srgb, var(--success) 10%, var(--background)); }
+  .sc-wave.fresh svg { stroke: currentColor; }
+  .sc-wave:disabled { cursor: progress; }
+  .sc-wave:disabled svg { animation: spin 1s linear infinite; }
 
-  /* Narrow: both round buttons come down a size with the row around them. At
-     32 and 30 they were the biggest thing in a compact row, reading as its
-     point rather than as the two small tools they are. The icons come down
-     with them, so a smaller button is not just a tighter ring round the same
-     mark. This block sits after the sizes it overrides -- the narrow table's
-     own block, further up, comes before them and would lose the cascade. */
-  @container scriptpane (max-width: 923px) {
-    .sc-listen { width: 26px; height: 26px; }
-    .sc-listen svg { width: 15px; height: 15px; }
-    .sc-wave { width: 24px; height: 24px; }
-    .sc-wave svg { width: 14px; height: 14px; }
-  }
 
   /* The script cell is the point of the table: a line you can only read is half
      a tool. Editing here writes to edited.srt, the same file the assistant uses. */
@@ -670,9 +612,13 @@
   .sc-dst[contenteditable]:hover { background: var(--trim-track); }
   .sc-dst[contenteditable]:focus { background: var(--background);
     box-shadow: 0 0 0 2px var(--primary); }
-  .sc-undo { display: block; margin-top: 3px; border: none; background: none;
-    color: var(--primary); cursor: pointer; font: inherit; font-size: 0.68rem; padding: 0; }
-  .sc-undo:hover { text-decoration: underline; }
+  /* An icon button beside the edited words, not an underlined "revert" under
+     them: a link in a table reads as a web page (2026-08-28). Muted until the
+     pointer is on it, so the row stays about the words. */
+  .sc-undo { display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border: none; border-radius: var(--radius-sm); background: none;
+    color: var(--muted-foreground); cursor: pointer; padding: 0; }
+  .sc-undo:hover { color: var(--primary); background: var(--secondary); }
 
   /* ---------------- Done: the video pane ---------------- */
 
@@ -785,11 +731,21 @@
      runs long is seen poking out of it. */
   .tl-slot { border-color: var(--primary-line); border-style: dashed; }
   .tl-voice { background: var(--timeline-fit); color: var(--primary-foreground); }
-  /* Over the top of everything else: a voice that runs long reaches into the
-     NEXT line's ground, and that line's own bar -- drawn after it -- would
-     otherwise cover the overshoot completely, hiding both the red and the
-     click. The one thing this bar exists to show is how far past it goes. */
-  .tl-voice.tl-over { background: var(--destructive); z-index: 2; }
+  /* A voice that runs long: solid red as far as its slot, then a red tint for
+     the part past it, laid over whatever is there. A tint, so the NEXT line's
+     bar and words -- drawn after this one -- still read through it, while the
+     red reach says how far the voice runs. Before (2026-08-28) the whole red
+     bar sat solid on top, and a long overrun covered the next line completely:
+     a line that had just been fixed looked like it was not there at all. */
+  .tl-voice.tl-over { background: var(--destructive); }
+  /* The part past the slot: a red tint laid over whatever follows, as far as
+     the voice actually runs. A tint, so the next line's bar and words still
+     read through it; no words of its own -- the table says the numbers, and
+     the line is on hover (user decision 2026-08-28). */
+  .tl-spill { position: absolute; top: 4px; height: 26px; box-sizing: border-box;
+    border-radius: 0 5px 5px 0; border: 1.5px dashed var(--destructive); border-left: none;
+    background: color-mix(in srgb, var(--destructive) 30%, transparent);
+    z-index: 2; pointer-events: none; }
   .tl-org { background: var(--background); color: var(--foreground);
     border-color: var(--foreground); }
   .tl-blk:hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent); }
@@ -920,10 +876,23 @@
   .license-list { font-size: 0.78rem; color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
   .license-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
   .license-list li:last-child { border-bottom: none; }
-  .about-line { font-size: 0.82rem; color: var(--foreground); margin-bottom: 10px; }
   .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); position: sticky; bottom: 0; background: var(--background); }
-  .save-note { font-size: 0.76rem; color: var(--success); margin-right: auto; align-self: center; visibility: hidden; }
-  .save-note.shown { visibility: visible; }
+  /* Settings, the way a desktop app does it (2026-08-28): a row is a label
+     and one control, links are coloured words rather than underlines, and a
+     yes/no is a switch. Nothing here is a Save button -- edits save on the spot. */
+  .settings-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.84rem; }
+  .settings-link { display: inline-block; margin-top: 6px; padding: 0; border: none; background: none;
+    color: var(--primary); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .settings-link:hover { text-decoration: underline; }
+  .settings-line .settings-link { margin-top: 0; }
+  .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
+  input.switch { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; margin: 0; border-radius: 10px;
+    background: var(--border); position: relative; cursor: pointer; transition: background 0.15s ease; }
+  input.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.25); transition: left 0.15s ease; }
+  input.switch:checked { background: var(--primary); }
+  input.switch:checked::after { left: 18px; }
+  input.switch:focus-visible { box-shadow: var(--focus-ring); }
 
   /* ---------------- New project dialog ---------------- */
   /* Narrower than Settings: one short list of decisions, not a whole panel. */
@@ -1083,9 +1052,6 @@
         <span class="topbar-sub" id="topbarSub">Local dubbing</span>
       </div>
       <span class="topbar-spacer"></span>
-      <!-- Filled in (and unhidden) only when the engine reports a real version;
-           hidden rather than empty, so it takes no gap in the row either. -->
-      <span class="topbar-version" id="topbarVersion" hidden></span>
       <!-- The way back INTO the job the back arrow above just left. Only on the
            first screen, and only while there is such a job (see paintForward). -->
       <button class="topbar-back" id="topbarForward" type="button"
@@ -1096,10 +1062,6 @@
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
     </div>
-
-    <!-- What made the job that is open: filled in by renderEngineBar, and
-         hidden on every screen but a finished one. -->
-    <div class="engine-bar" id="engineBar" hidden></div>
 
     <main class="work" id="work">
       <!-- ============ HOME ============ -->
@@ -1113,7 +1075,7 @@
           <div class="upload-zone" id="uploadZone" tabindex="0">
             <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
             <div class="upload-title">Drop your video here</div>
-            <div class="upload-hint"><span class="upload-choose">Choose a file</span> · MP4 or MOV, up to 2 GB</div>
+            <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose File…</button><span>MP4 or MOV, up to 2 GB</span></div>
             <input type="file" id="videoInput" accept="video/*" hidden>
           </div>
           <div class="home-or"><span></span>OR<span></span></div>
@@ -1125,18 +1087,16 @@
       </section>
 
       <!-- ============ RUNNING ============ -->
-      <!-- The job's own video, blurred and locked, next to a card that says
-           which of the four stages it is on. renderRunning() fills both. -->
+      <!-- The job's own video, playable, next to a card that says which of
+           the four stages it is on. renderRunning() fills both. The original
+           used to sit blurred behind a spinner until the dub was done; the
+           file is already on this machine, and the card beside it is the one
+           place that says how far along the dub is (2026-08-28). -->
       <section class="screen" id="screen-running" hidden>
         <div class="running">
           <div class="running-shot">
             <div class="running-video">
-              <video id="runningVideo" muted playsinline></video>
-              <div class="running-veil">
-                <span class="spinner"></span>
-                <b>Dubbing this video…</b>
-                <span>The player unlocks when it is done</span>
-              </div>
+              <video id="runningVideo" controls playsinline></video>
             </div>
             <!-- Which part of the video is being dubbed, when the job was
                  started with a trim. Empty -- and invisible -- otherwise. -->
@@ -1348,8 +1308,7 @@
           <!-- The only path from this app to a Perso account. href is replaced with the
                UTM-tagged link from /api/settings on open; this plain URL is the fallback
                so the link still works if that request fails. -->
-          <div class="settings-hint">Don't have one?
-            <a id="persoSignupLink" href="https://developers.perso.ai/api-keys" target="_blank" rel="noopener">Get a Perso API key</a></div>
+          <a class="settings-link" id="persoSignupLink" href="https://developers.perso.ai/api-keys" target="_blank" rel="noopener">Get a Perso API key…</a>
         </div>
         <div class="settings-row">
           <label for="persoSpaceSelect">Perso workspace</label>
@@ -1359,7 +1318,6 @@
           <select id="persoSpaceSelect" disabled>
             <option value="">Save a Perso API key first</option>
           </select>
-          <div class="settings-hint">Which workspace's credits to use.</div>
           <div class="job-notice danger" id="persoSpaceWarning" style="display:none">
             This workspace has 0 credits left. Perso dubbing will fail until it
             is recharged. Pick another workspace, or use Whisper (free, offline).</div>
@@ -1368,12 +1326,10 @@
           <label for="geminiKeyInput">Google (Gemini) key</label>
           <input type="password" id="geminiKeyInput" placeholder="Not set" spellcheck="false">
         </div>
-        <label class="settings-hint" style="display:block; cursor:pointer">
-          <input type="checkbox" id="showKeysToggle"> Show keys</label>
-        <!-- No restart line any more: the engines read these three values out
-             of kit.env when a dub starts, so a save reaches the next dub. -->
-        <div class="settings-hint">No keys? The free local engines are used.
-          <b>Changes apply to the next dub.</b></div>
+        <!-- Keys save the moment a field is left (see saveSettingsEdits); there
+             is no Save button and no restart. The engines read these values out
+             of kit.env when a dub starts. -->
+        <button class="settings-link" id="showKeysToggle" type="button">Show keys</button>
         <div class="settings-alert" id="settingsSaveError" style="display:none">
           <svg class="icon" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
           <span id="settingsSaveErrorText">Saving the key(s) failed. Is the engine running?</span>
@@ -1382,16 +1338,16 @@
 
       <div class="settings-section">
         <h3>Storage</h3>
-        <!-- A line to read and nothing to press: a storage limit and a way to
-             clear old projects out belong with the install-package work. -->
-        <div class="settings-row">
-          <label>Output location</label>
-          <!-- Filled in by openSettings() from GET /api/settings. Empty here on
-               purpose: a guessed path is the one line in Settings a user would
-               copy, and it differs per machine and per install. -->
-          <input type="text" id="outputLocation" value="" readonly>
-          <div class="settings-hint">Finished videos are never deleted by themselves.</div>
+        <!-- A button that opens the folder, in place of the raw path in a
+             read-only field (2026-08-28): only the server knows the folder, and
+             POST /api/settings/reveal-output opens it in Finder / Explorer. A
+             storage limit and a way to clear old projects out belong with the
+             install-package work. -->
+        <div class="settings-row settings-line">
+          <span>Finished videos</span>
+          <button class="btn btn-outline btn-sm" id="revealOutputBtn" type="button">Show in Finder</button>
         </div>
+        <div class="settings-hint" id="storageHint"></div>
       </div>
 
       <div class="settings-section">
@@ -1399,12 +1355,12 @@
         <div class="settings-row">
           <label for="analyticsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
             <span>Send anonymous usage counts</span>
-            <input type="checkbox" id="analyticsToggle">
+            <input type="checkbox" class="switch" id="analyticsToggle">
           </label>
-          <!-- Saves on the spot rather than on Save: the shell re-reads the
-               file before every count, so promising a restart would be wrong. -->
-          <div class="settings-hint" id="analyticsHint">Four counts only. Never your video
-            or files.</div>
+          <!-- Saves on the spot: the shell re-reads the file before every
+               count, so promising a restart would be wrong. The hint is empty
+               until a save fails -- the label says what the switch does. -->
+          <div class="settings-hint" id="analyticsHint"></div>
         </div>
       </div>
 
@@ -1418,7 +1374,11 @@
              this list is the pointer to it, not a replacement for it.
              FFmpeg's terms depend on the build the installer fetches, so it
              is labelled the way NOTICE labels it rather than pinned here. -->
-        <div class="about-line" id="aboutVersion">PersoDub</div>
+        <div class="settings-line">
+          <span id="aboutVersion">PersoDub</span>
+          <button class="settings-link" id="ackToggle" type="button" aria-expanded="false">Acknowledgements</button>
+        </div>
+        <div id="ackList" hidden>
         <ul class="license-list">
           <li><span>Qwen3-TTS</span><span>Apache-2.0</span></li>
           <li><span>Demucs</span><span>MIT</span></li>
@@ -1431,12 +1391,8 @@
         </ul>
         <div class="settings-hint">Full notices are in the NOTICE file included
           with the app.</div>
+        </div>
       </div>
-    </div>
-    <div class="modal-foot">
-      <span class="save-note" id="settingsSaveNote">Saved</span>
-      <button class="btn btn-secondary" id="settingsCancelBtn" type="button">Close</button>
-      <button class="btn btn-primary" id="settingsSaveBtn" type="button">Save</button>
     </div>
   </div>
 </div>
@@ -1917,42 +1873,30 @@ async function openSettings() {
     loadPersoSpaces(persoSpaceInitial); // async on purpose -- the modal opens without waiting on Perso
     if (st.perso_signup_link) $("persoSignupLink").href = st.perso_signup_link;
     if (realVersion(st.app_version)) {
-      $("aboutVersion").textContent = `PersoDub v${st.app_version}`;
+      $("aboutVersion").textContent = `PersoDub ${st.app_version}`;
     }
     $("analyticsToggle").checked = !st.analytics_off;
-    // The server's real workspace folder, whatever platform it is on.
-    $("outputLocation").value = st.workspace || "";
   } catch {
     $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
   }
-  $("settingsSaveNote").classList.remove("shown");
   $("settingsOverlay").classList.add("open");
 }
-function closeSettings() { $("settingsOverlay").classList.remove("open"); }
+// Closing saves too: a key typed and then Escape (or the X) never left the
+// field, so its change event never fired.
+function closeSettings() {
+  $("settingsOverlay").classList.remove("open");
+  saveSettingsEdits();
+}
 
 // "0.0.0" is what the engine answers when it is not running inside a packaged
 // build (the real number comes from the desktop shell), and a made-up version in
 // the app's own chrome is worse than none: it gets read out and reported.
 function realVersion(v) { return v && v !== "0.0.0" ? v : ""; }
 
-// The version in the top bar, from the only place the app knows it: the same
-// /api/settings field the About line reads. A plain browser tab with no desktop
-// install behind it gets a 503 there, and the corner simply stays out of sight.
-fetch("/api/settings")
-  .then((r) => (r.ok ? r.json() : null))
-  .then((st) => {
-    const v = realVersion(st && st.app_version);
-    if (!v) return;
-    $("topbarVersion").textContent = `v${v}`;
-    $("topbarVersion").hidden = false;
-  })
-  .catch(() => {});
-
 $("settingsBtn").addEventListener("click", openSettings);
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
 $("advancedKeysLink").addEventListener("click", openSettings);
 $("settingsCloseBtn").addEventListener("click", closeSettings);
-$("settingsCancelBtn").addEventListener("click", closeSettings);
 $("settingsOverlay").addEventListener("click", (e) => { if (e.target === $("settingsOverlay")) closeSettings(); });
 // Escape is the reflex way out of a dialog, so every dialog has to answer it --
 // Settings and New project were the two that did not.
@@ -1960,7 +1904,10 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && $("settingsOverlay").classList.contains("open")) closeSettings();
 });
 
-$("settingsSaveBtn").addEventListener("click", async () => {
+// Saves on the spot -- when a key field is left or a workspace is picked, and
+// again when the dialog closes. There is no Save button (2026-08-28): a
+// desktop app's settings take effect as they are changed.
+async function saveSettingsEdits() {
   // Only actual edits go on the wire -- posting unchanged values would rewrite
   // kit.env for nothing (keysInitial/persoSpaceInitial hold what was already
   // saved when the modal opened).
@@ -2010,13 +1957,41 @@ $("settingsSaveBtn").addEventListener("click", async () => {
   // A key save may have just changed which engines are usable -- re-check so
   // the form doesn't keep a possibly-disabled engine silently selected.
   applyEngineAvailabilityToForm();
-  $("settingsSaveNote").classList.add("shown");
-  setTimeout(() => $("settingsSaveNote").classList.remove("shown"), 1500);
+}
+// "change" fires when a field is left with a different value -- not on every
+// keystroke, so a key is posted once, whole.
+$("persoKeyInput").addEventListener("change", saveSettingsEdits);
+$("geminiKeyInput").addEventListener("change", saveSettingsEdits);
+$("persoSpaceSelect").addEventListener("change", saveSettingsEdits);
+
+$("showKeysToggle").addEventListener("click", () => {
+  const show = $("persoKeyInput").type === "password";
+  $("persoKeyInput").type = $("geminiKeyInput").type = show ? "text" : "password";
+  $("showKeysToggle").textContent = show ? "Hide keys" : "Show keys";
 });
 
-$("showKeysToggle").addEventListener("change", () => {
-  const type = $("showKeysToggle").checked ? "text" : "password";
-  $("persoKeyInput").type = $("geminiKeyInput").type = type;
+// The folder finished videos land in, opened in the desktop's own file
+// browser. Named for the one this machine has; "Show folder" where it is
+// neither Finder nor Explorer.
+$("revealOutputBtn").textContent =
+  /Mac/.test(navigator.platform) ? "Show in Finder"
+  : /Win/.test(navigator.platform) ? "Show in Explorer" : "Show folder";
+$("revealOutputBtn").addEventListener("click", async () => {
+  try {
+    const r = await fetch("/api/settings/reveal-output", { method: "POST" });
+    if (!r.ok) throw new Error();
+    $("storageHint").textContent = "";
+  } catch {
+    $("storageHint").textContent = "Could not open the folder. Is the engine running?";
+  }
+});
+
+// The license list, behind one word: it is there for whoever wants it and in
+// nobody else's way.
+$("ackToggle").addEventListener("click", () => {
+  const open = $("ackList").hidden;
+  $("ackList").hidden = !open;
+  $("ackToggle").setAttribute("aria-expanded", String(open));
 });
 
 // Usage counts. kit.env is where the desktop shell looks before every count,
@@ -2113,35 +2088,7 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   $("cancelBtn").hidden = !running;
   // Only a finished job has anything to hand back.
   $("exportBtn").hidden = !done;
-  // Hidden by default and put back by renderEngineBar below, so leaving a job
-  // (or starting another) can never leave the last one's engines on screen.
-  $("engineBar").hidden = true;
   paintForward();
-}
-
-// The row of engines under the top bar. Only on a finished job, and only when
-// the record says what made it -- every job from before the app saved those
-// choices simply has no line (app/jobs.py SAVED_FIELDS).
-// Chips only: the leading "Made with" said nothing the chips did not, the
-// language pair is the script table's two column headings, and the date is on
-// the Projects row this screen was opened from.
-
-// One chip: the role it played in the muted grey, the engine's own name in the
-// reading colour, both inside the one pill. The quality chip has no role.
-function chipInner(c) {
-  return (c.role ? `<i>${escapeHtml(c.role)}</i>` : "") + escapeHtml(c.label);
-}
-
-function renderEngineBar(job) {
-  const bar = $("engineBar");
-  const chips = job.status === "done" ? engineChips(job) : [];
-  if (chips.length === 0) {
-    bar.hidden = true;
-    return;
-  }
-  bar.innerHTML = chips
-    .map((c) => `<span class="engine-chip${c.api ? " api" : ""}">${chipInner(c)}</span>`).join("");
-  bar.hidden = false;
 }
 
 // ---- The way back into the job you just left --------------------------------
@@ -2538,7 +2485,11 @@ function setVideoFile(file) {
 }
 
 uploadZone.addEventListener("click", () => videoInput.click());
-uploadZone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") videoInput.click(); });
+// Only the zone itself: Enter on the Choose File… button inside it already
+// clicks the button, and that click bubbles up to the handler above.
+uploadZone.addEventListener("keydown", (e) => {
+  if (e.target === uploadZone && (e.key === "Enter" || e.key === " ")) videoInput.click();
+});
 videoInput.addEventListener("change", () => setVideoFile(videoInput.files[0] || null));
 
 ["dragenter", "dragover"].forEach((evt) =>
@@ -2676,8 +2627,12 @@ function jobStatusLine(job, progress) {
   if (job.status === "cancelled") return "Cancelled";
   if (job.status === "error") return "Dubbing failed";
   if (job.status !== "running") {
-    const trim = trimLabel(job);
-    return trim ? `Done · ${trim}` : "Done";
+    // What made it rides on this same line (quality, then the engines), in
+    // place of the chip row that used to sit under the top bar: one muted
+    // line reads as one fact, where a row of pills read as buttons (2026-08-28).
+    // A job saved before the app kept those choices simply has no engine part.
+    const engines = engineChips(job).map((c) => c.label).join(" · ");
+    return ["Done", trimLabel(job), engines].filter(Boolean).join(" · ");
   }
   // While it runs the top bar says exactly what the progress card says --
   // which stage, how far in. Never how long is left: the stages are too
@@ -2925,19 +2880,6 @@ function projectMeta(job) {
   return [langs, length].filter(Boolean).join(" · ");
 }
 
-// The third line: the engines this job was made with, as tiny outlined tags.
-// Only the two that differ between jobs -- the languages are already on the
-// line above, the quality chip wraps this 130px column on its own, and the
-// voice engine is the same on every row. A job with nothing saved gets no line
-// at all rather than an empty one.
-function projectTags(job) {
-  const chips = engineChips(job, { withQuality: false, withTts: true });
-  if (chips.length === 0) return "";
-  return `<div class="job-tags">${chips
-    .map((c) => `<span class="job-tag${c.api ? " api" : ""}">${chipInner(c)}</span>`)
-    .join("")}</div>`;
-}
-
 // Anything that is not finished, failed or cancelled is still going.
 const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled" };
 
@@ -2972,7 +2914,7 @@ async function renderHistory() {
     row.className = "job-row" + (job.id === state.jobId ? " current" : "");
     row.type = "button";
     row.innerHTML = `<span class="job-dot ${JOB_DOT[job.status] || "dot-running"}"></span>
-      <div class="job-info"><div class="job-name">${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div>${projectTags(job)}</div>`;
+      <div class="job-info"><div class="job-name">${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div></div>`;
     row.addEventListener("click", () => resumeJob(job.id));
 
     const del = document.createElement("button");
@@ -3217,7 +3159,6 @@ async function handleJobUpdate(job) {
     // job that is still running.
     back: !running,
   });
-  renderEngineBar(job);
   renderLog(job);
   renderNotices(job);
   maybeShowCreditModal(job);
@@ -3512,13 +3453,15 @@ async function openExport() {
   $("exportList").innerHTML = [
     // The same URL the player is on, remake mark and all: without it a download
     // taken straight after a remake can be served the old video from cache.
-    item(doneVideoSrc(job, "dubbed"), `dub_${target}.mp4`, "Download dubbed video (.mp4)"),
+    // Named by what they are, not "Download …": the dialog is called Export
+    // and every row downloads (2026-08-28).
+    item(doneVideoSrc(job, "dubbed"), `dub_${target}.mp4`, "Dubbed video (.mp4)"),
     hasSrt ? item(`/api/dub/result/${job.id}/srt?download=1`, `dub_${target}.srt`,
-                  "Download subtitles (.srt)") : "",
+                  "Subtitles (.srt)") : "",
     // Only a link job has an original worth handing back -- a local file is
     // already on the machine it would be saved to.
     job.from_link ? item(`/api/dub/result/${job.id}/original?download=1`, "org.mp4",
-                         "Download original") : "",
+                         "Original video (.mp4)") : "",
   ].join("");
   $("exportWhere").textContent = whereDownloadsGo(job);
   // In the desktop shell the click is answered by onDownloadDone below; until
@@ -3570,7 +3513,7 @@ function markExportSaved(a) {
 // project this same job carries. A plain browser saves it wherever the browser
 // is set to, which is the browser's business, not ours.
 function whereDownloadsGo(job) {
-  if (!window.persodubShell) return "Saves to your browser's download folder";
+  if (!window.persodubShell) return "Saves to the Downloads folder";
   return job?.day && job?.project
     ? `Saves to Downloads / ${job.day} / ${job.project}`
     : "Saves to Downloads";
@@ -3628,9 +3571,18 @@ function lineOverBy(l) {
 // Sized by the stylesheet, not here: the narrow table takes both buttons down
 // a size, and an inline width would be the one thing it could not reach.
 const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+// The "revert" arrow beside an edited line (renderScript): a curled-back
+// arrow, drawn like the rest of the app's icons.
+const UNDO_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>';
 // A waveform, the same mark the rail uses for speech: this button makes the
 // sound of a line again.
-const WAVE_ICON = '<svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round"><path d="M4 12h1"/><path d="M8 8v8"/><path d="M12 5v14"/><path d="M16 9v6"/><path d="M20 11v2"/></svg>';
+// "Make this line's voice again": a circling arrow, which says "again" the way
+// a waveform never did (user decision 2026-08-27). The same button turns
+// green with a tick once the voice was made -- until the words change again
+// or the app restarts. Which lines those are is kept here, per job and line,
+// because the table is redrawn after every remake.
+const REMAKE_ICON = '<svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>';
+const freshLines = new Set();
 
 // Speaker labels are the diarizer's own ("SPEAKER_00"), which mean nothing to a
 // reader. Number them in the order they first speak instead, and give each a
@@ -3665,28 +3617,35 @@ function scriptRow(l, speakers) {
   const chip = n
     ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}" title="Speaker ${n}"><i></i><b>Speaker ${n}</b></span>` : "";
   const over = lineOverBy(l);
-  const lengthCell = over
-    ? `<span class="sc-over">+${over.toFixed(1)}s</span>`
-    : `${lineLength(l).toFixed(1)}s`;
+  // "1.6s / 0.2s · +1.4s": how long the voice is, how long the slot is, and
+  // the difference in one glance -- red when it runs over, grey when it is
+  // well short, green "fits" otherwise (user decision 2026-08-28).
+  const under = l.slot - lineLength(l);
+  const verdict = over ? `<span class="sc-over">+${over.toFixed(1)}s</span>`
+    : under > 0.3 ? `<span class="sc-under">−${under.toFixed(1)}s</span>`
+    : `<span class="sc-fit">fits</span>`;
+  const lengthCell = `<b>${lineLength(l).toFixed(1)}s</b> / ${l.slot.toFixed(1)}s · ${verdict}`;
   // Filled means "the words changed and the voice has not caught up". Both
   // halves are needed: `edited` is per line, and `voice_stale` (a file older
   // than the script) is what says the remake has not happened since.
   const stale = l.edited && l.voice_stale;
+  const fresh = freshLines.has(`${scriptJobId}:${l.line}`);
   const undo = l.edited
-    ? `<button class="sc-undo" data-undo="${l.line}" type="button">revert</button>` : "";
+    ? `<button class="sc-undo" data-undo="${l.line}" type="button"
+         title="Revert to the original translation" aria-label="Revert to the original translation">${UNDO_ICON}</button>` : "";
   return `<div class="sc-row" data-start="${l.start}" data-end="${l.end}">
     <div class="sc-n">${l.line}</div>
     <div>${chip}</div>
     <div class="sc-time"><span class="sc-t-a">${escapeHtml(fmtClockTenths(l.start))}</span><span
       class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
     <div class="sc-src">${escapeHtml(l.source || "—")}</div>
-    <div><button class="sc-listen" data-play="${l.line}" type="button"
-      title="Play this line in the video">${PLAY_ICON}</button></div>
-    <div><div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-        data-line="${l.line}">${escapeHtml(l.text)}</div>${undo}<div class="sc-len-in">${lengthCell}</div></div>
-    <div class="sc-len">${lengthCell}</div>
-    <div class="sc-acts"><button class="sc-wave${stale ? " stale" : ""}" data-voice="${l.line}"
-      type="button" title="${stale ? "The words changed - make the voice again" : "Make this line's voice again"}">${WAVE_ICON}</button></div>
+    <div>
+      <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
+        data-line="${l.line}">${escapeHtml(l.text)}</div>
+      <div class="sc-tools"><button class="sc-listen" data-play="${l.line}" type="button"
+          title="Play this line in the video">${PLAY_ICON}</button><span class="sc-len">${lengthCell}</span><span class="sc-sp"></span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
+          type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
+    </div>
   </div>`;
 }
 
@@ -3720,7 +3679,7 @@ async function renderScript(jobId) {
   box.innerHTML = `
     <div class="sc-row head">
       <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div>Time</div><div>${escapeHtml(sourceName)}</div>
-      <div></div><div>${escapeHtml(targetName)}</div><div class="sc-len">Length</div><div></div>
+      <div>${escapeHtml(targetName)}</div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;
   // The timeline draws the same lines, under the table, to the video's real
@@ -3917,8 +3876,19 @@ function drawTimelineTrack() {
     voices += timelineBlock(l, "tl-slot", l.start, l.end, "", !hasVoice);
     // No voice on disk yet: the slot alone is the whole truth about that line.
     if (hasVoice) {
-      const over = lineOverBy(l) ? " tl-over" : "";
-      voices += timelineBlock(l, `tl-voice${over}`, l.start, l.start + l.audio_sec, l.text, true);
+      const over = lineOverBy(l);
+      const voiceEnd = l.start + l.audio_sec;
+      // A long voice stops its solid bar at the slot; the part past it is a
+      // tint (see .tl-spill) over whatever follows, so the next line's bar --
+      // drawn after this one -- still reads, and the red still says how far
+      // the voice runs. (A solid red bar on top used to hide the next line.)
+      voices += timelineBlock(l, `tl-voice${over ? " tl-over" : ""}`, l.start,
+                              over ? l.end : voiceEnd, l.text, true);
+      if (over) {
+        const tip = `Line ${l.line} runs ${over.toFixed(1)}s past its time`;
+        voices += `<span class="tl-spill" style="left:${(l.end * timelinePps).toFixed(1)}px;`
+          + `width:${((voiceEnd - l.end) * timelinePps).toFixed(1)}px" title="${escapeHtml(tip)}"></span>`;
+      }
     }
     originals += timelineBlock(l, "tl-org", l.start, l.end, l.source || "");
   }
@@ -4205,6 +4175,7 @@ function scriptSaving(text) {
 }
 
 async function saveLine(jobId, line, text) {
+  freshLines.delete(`${jobId}:${line}`);
   scriptSaving("Saving…");
   try {
     const r = await fetch(`/api/dub/jobs/${jobId}/script/${line}`, {
@@ -4237,12 +4208,18 @@ async function refreshAfterVoices(jobId) {
 // costs seconds where a whole remake costs minutes.
 async function remakeLine(jobId, line, btn) {
   btn.disabled = true;
+  // Whatever the button showed before (the green tick of a voice already
+  // made, the red ring of changed words), while the voice is being made it
+  // is the arrow that turns -- a spinning tick read as an error.
+  btn.classList.remove("fresh", "stale");
+  btn.innerHTML = REMAKE_ICON;
   scriptSaving(`Remaking line ${line}…`);
   try {
     const r = await fetch(`/api/dub/jobs/${jobId}/script/${line}/voice`, { method: "POST" });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.detail || "Could not remake that line.");
     scriptSaving(`Line ${line} done`);
+    freshLines.add(`${jobId}:${line}`);
     await refreshAfterVoices(jobId);
     setTimeout(() => scriptSaving(""), 2000);
   } catch (e) {
@@ -4252,6 +4229,7 @@ async function remakeLine(jobId, line, btn) {
 }
 
 async function revertLine(jobId, line) {
+  freshLines.delete(`${jobId}:${line}`);
   scriptSaving("Reverting…");
   await fetch(`/api/dub/jobs/${jobId}/script/${line}/revert`, { method: "POST" })
     .catch(() => null);
