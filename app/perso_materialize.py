@@ -55,15 +55,21 @@ def materialize(pc, project_seq: int, work_dir: str, language: str,
         lines.append({"i": n, "start": start, "gain": None, "speaker": spk})
 
         wav = os.path.join(work_dir, "qwen_line_%d.wav" % n)
-        if not os.path.exists(wav) and s.get("audioUrl"):
-            log("Fetching line %d of %d…" % (n + 1, len(sents)))
-            src = os.path.join(work_dir, "perso_line_%d.src" % n)
-            pc.download_media(s["audioUrl"], src)
-            to_wav(src, wav)
-            try:
-                os.remove(src)
-            except OSError:
-                pass
+        if not os.path.exists(wav):
+            if s.get("audioUrl"):
+                log("Fetching line %d of %d…" % (n + 1, len(sents)))
+                src = os.path.join(work_dir, "perso_line_%d.src" % n)
+                pc.download_media(s["audioUrl"], src)
+                to_wav(src, wav)
+                try:
+                    os.remove(src)
+                except OSError:
+                    pass
+            else:
+                # Happens right after a server-side change (e.g. a new
+                # speaker): Perso is still regenerating that sentence.
+                log("Line %d has no audio on Perso yet (still being made) -- "
+                    "run Make it editable again later to fetch it." % (n + 1))
 
     bg = os.path.join(work_dir, "background.wav")
     if not os.path.exists(bg):
@@ -86,22 +92,27 @@ def materialize(pc, project_seq: int, work_dir: str, language: str,
         json.dump({"language": language, "lines": lines}, f, ensure_ascii=False)
 
     # One reference per speaker, for cloning that voice again on a remake:
-    # the speaker's LONGEST line is its clearest sample.
+    # the speaker's LONGEST line whose audio actually landed on disk.
     refs = {}
     best = {}
     for n, s in enumerate(sents):
         idx = s.get("speakerOrderIndex")
         spk = "S%s" % (idx if idx is not None else 0)
+        if not os.path.exists(os.path.join(work_dir, "qwen_line_%d.wav" % n)):
+            continue
         if spk not in best or (s.get("durationMs") or 0) > (sents[best[spk]].get("durationMs") or 0):
             best[spk] = n
     for spk, n in best.items():
         ref = os.path.join(work_dir, "qwen_ref_%s.wav" % spk)
-        line_wav = os.path.join(work_dir, "qwen_line_%d.wav" % n)
-        if not os.path.exists(ref) and os.path.exists(line_wav):
-            shutil.copyfile(line_wav, ref)
+        if not os.path.exists(ref):
+            shutil.copyfile(os.path.join(work_dir, "qwen_line_%d.wav" % n), ref)
         refs[spk] = {"ref_text": sents[n].get("translatedText") or ""}
     with open(os.path.join(work_dir, "speaker_refs.json"), "w", encoding="utf-8") as f:
         json.dump(refs, f, ensure_ascii=False)
 
+    missing = sum(1 for n in range(len(sents))
+                  if not os.path.exists(os.path.join(work_dir, "qwen_line_%d.wav" % n)))
+    if missing:
+        log("%d line(s) are still being made on Perso -- refetch later." % missing)
     log("This dub is editable now.")
-    return {"lines": len(lines), "speakers": len(best)}
+    return {"lines": len(lines), "speakers": len(best), "missing_audio": missing}

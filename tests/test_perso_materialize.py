@@ -89,3 +89,24 @@ def test_materialize_is_idempotent(tmp_path):
                                   to_wav=_fake_to_wav, log=lambda m: None)
     with open(os.path.join(work, "lines.json"), encoding="utf-8") as f:
         assert len(json.load(f)["lines"]) == 2
+
+
+def test_materialize_reports_a_line_perso_is_still_making(tmp_path):
+    class _RegeneratingClient(_FakeClient):
+        def get_project_script(self, seq, space_seq=None):
+            script = super().get_project_script(seq, space_seq)
+            # The second sentence just had its speaker changed: Perso is still
+            # regenerating its audio, so it serves no audioUrl yet.
+            script["sentences"][1]["audioUrl"] = None
+            return script
+
+    work = str(tmp_path)
+    logs = []
+    out = perso_materialize.materialize(_RegeneratingClient(), 409873, work, "en",
+                                        to_wav=_fake_to_wav, log=logs.append)
+    assert out["missing_audio"] == 1
+    assert any("no audio on Perso yet" in l for l in logs)
+    assert not os.path.exists(os.path.join(work, "qwen_line_1.wav"))
+    # the missing line's speaker gets NO fabricated reference
+    with open(os.path.join(work, "speaker_refs.json"), encoding="utf-8") as f:
+        assert "S2" not in json.load(f)
