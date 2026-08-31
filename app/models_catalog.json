@@ -1,0 +1,17 @@
+[
+  {"id": "qwen3-tts", "role": "tts", "name": "Qwen3-TTS", "bytes": 4300000000,
+   "source": {"kind": "hf", "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "rev": "fd4b254389122332181a7c3db7f27e918eec64e3"},
+   "dir": "models/qwen3-tts", "markers": ["model.safetensors", "speech_tokenizer/model.safetensors"]},
+  {"id": "whisper", "role": "stt", "name": "Whisper", "bytes": 2900000000,
+   "source": {"kind": "hf", "repo": "Systran/faster-whisper-large-v3", "rev": "edaa852ec7e145841d8ffdb056a99866b5f0a478"},
+   "dir": "models/whisper/faster-whisper-large-v3", "markers": ["model.bin"]},
+  {"id": "gemma", "role": "translate", "name": "Gemma 3", "bytes": 7600000000,
+   "source": {"kind": "ollama", "tag": "gemma3:12b"},
+   "dir": "models/ollama", "markers": ["manifests/registry.ollama.ai/library/gemma3/12b"]},
+  {"id": "hunyuan", "role": "translate", "name": "Hunyuan", "bytes": 1100000000,
+   "source": {"kind": "ollama", "pull": "hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M", "tag": "hy-mt2:1.8b", "needs_template": true},
+   "dir": "models/ollama", "markers": ["manifests/registry.ollama.ai/library/hy-mt2/1.8b"]},
+  {"id": "demucs", "role": "always", "name": "Sound separation", "bytes": 81000000,
+   "source": {"kind": "hf", "repo": "adefossez/HTDemucs", "rev": "bf35a81b663819a8255c8fefee17f9d812b786b5", "files": ["htdemucs.yaml", "955717e8.safetensors"]},
+   "dir": "models/demucs/HTDemucs", "markers": ["955717e8.safetensors"]}
+]

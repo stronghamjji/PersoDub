@@ -23,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import config
+from app import models as model_store
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
@@ -827,6 +828,22 @@ def dub_job_delete_workspace(jid: str):
     # would still put the job in the list until the next restart.
     job_store.forget(jid)
     return {"job_id": jid, "deleted": True}
+
+
+@app.get("/api/models")
+def models_list():
+    """The model catalog with each model's download state -- what the
+    Settings catalog, the advanced-options status lines and the dub-start
+    warning dialog all render from. Always-installed models stay out: the
+    install itself guarantees them and there is nothing to manage."""
+    kit = model_store.kit_dir()
+    rows = []
+    for m in model_store.load_catalog():
+        if m["role"] == "always":
+            continue
+        rows.append({"id": m["id"], "role": m["role"], "name": m["name"],
+                     "bytes": m["bytes"], "state": model_store.model_state(m, kit)})
+    return {"models": rows}
 
 
 @app.get("/api/engines")
