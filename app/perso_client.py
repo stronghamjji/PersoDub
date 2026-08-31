@@ -371,7 +371,10 @@ class PersoClient:
             r = httpx.get(url, headers={"User-Agent": USER_AGENT,
                                         "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
             _raise_for_status(r)
-            path = os.path.join(out_dir, f"perso_{key}.wav")
+            # The SAME names local Demucs writes (vocals.wav / background.wav):
+            # the per-line voice remake reads work_dir/background.wav by name,
+            # and a perso-separated job must feed it identically.
+            path = os.path.join(out_dir, f"{key}.wav")
             with open(path, "wb") as f:
                 f.write(r.content)
             out[key] = path
