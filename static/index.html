@@ -5297,7 +5297,9 @@ async function ask(message) {
           // The chip fires when the tool is CALLED, a moment before the line is
           // actually written -- redrawing only here showed the old words back.
           // Redraw now for responsiveness, and again when the turn ends.
-          if (ev.tool === "edit_script_line") {
+          // change_speaker belongs here too: it rewrites a Perso dub's
+          // script on the server, and the table must catch up the same way.
+          if (ev.tool === "edit_script_line" || ev.tool === "change_speaker") {
             touchedScript = true;
             window.dispatchEvent(new CustomEvent("persodub:script-changed"));
           }
