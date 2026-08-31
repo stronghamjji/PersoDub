@@ -887,7 +887,6 @@
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
   .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-  #helpOverlay p { font-size: 0.85rem; line-height: 1.65; margin: 6px 0; color: var(--foreground); }
   .license-list { font-size: 0.78rem; color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
   .license-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
   .license-list li:last-child { border-bottom: none; }
@@ -1020,9 +1019,6 @@
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     </button>
     <div class="rail-spacer"></div>
-    <button class="rail-item" id="helpBtn" title="Help" type="button" aria-label="Open help">
-      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.2a2.6 2.6 0 1 1 3.6 2.4c-.8.34-1 1-1 1.7"/><line x1="12" y1="16.6" x2="12" y2="16.72"/></svg>
-    </button>
     <button class="rail-item" id="settingsBtn" title="Settings" type="button" aria-label="Open settings">
       <svg class="icon" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.6"/>
@@ -1269,11 +1265,11 @@
         <span><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Advanced options</span><span class="chev"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg></span>
       </button>
       <div class="advanced-body" id="advancedBody" hidden>
-        <div class="field"><label for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected>On this computer</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint" hidden>Perso&#8217;s servers do everything. About 1 credit per second (paid).</div></div>
-        <div class="field"><label for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint">Perso API is paid (about 0.5 credits per second).</div></div>
-        <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
-        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="gemma" selected>Gemma 3 (12B)</option><option value="gemini">Gemini API</option><option value="hunyuan">Hunyuan (1.8B, fast)</option></select><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
-        <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint model-line" id="voiceModelHint" hidden></div></div>
+        <div class="field"><label for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected>On this device</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint"></div></div>
+        <div class="field"><label for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sepHint"></div></div>
+        <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sttHint"></div><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
+        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="hunyuan">Hunyuan (1.8B)</option><option value="gemma" selected>Gemma 3 (12B)</option><option value="gemini">Gemini API</option></select><div class="settings-hint" id="translateHint"></div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
+        <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint" id="voiceHint"></div><div class="settings-hint model-line" id="voiceModelHint" hidden></div></div>
         <div class="field"><label for="qualitySelect">Voice quality</label><select id="qualitySelect"><option value="fast" selected>Fast</option><option value="high">High quality</option></select><div class="settings-hint" id="qualityHint"></div></div>
         <div class="field"><label for="numSpeakers">Number of speakers</label><input type="number" id="numSpeakers" min="1" placeholder="Auto-detect"><div class="settings-hint">Set 1 for a single-speaker video.</div></div>
         <button type="button" class="keys-link" id="advancedKeysLink">Perso and Gemini need an API key. Add it in Settings</button>
@@ -1310,40 +1306,6 @@
 </div>
 
 <!-- ============ SETTINGS ============ -->
-<div class="modal-overlay" id="helpOverlay">
-  <div class="modal">
-    <div class="modal-head">
-      <h2>Help</h2>
-      <button class="modal-close" id="helpCloseBtn" type="button" aria-label="Close help">
-        <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="settings-section">
-        <h3>How dubbing works</h3>
-        <p>Drop in a video or paste a link. PersoDub writes down the speech, translates it, and speaks it in voices cloned from the original. The finished video comes with its script, so any line can be fixed and revoiced.</p>
-      </div>
-      <div class="settings-section">
-        <h3>The stages</h3>
-        <p><strong>Dubbing</strong>: Free: this computer. Paid: Perso API, about 1 credit per second.</p>
-        <p><strong>Audio separation</strong>: Free: Demucs. Paid: Perso API, about 0.5 credits per second.</p>
-        <p><strong>Speech-to-text</strong>: Free: Whisper. Paid: Perso API, more accurate.</p>
-        <p><strong>Translation</strong>: Free: Gemma 3, Hunyuan. Paid: Gemini API, more accurate.</p>
-        <p><strong>Text-to-speech</strong>: Qwen3-TTS clones each speaker&#8217;s voice. Free.</p>
-        <p><strong>Voice quality</strong>: Fast is one take per line; High quality picks the best of four.</p>
-      </div>
-      <div class="settings-section">
-        <h3>Dub Agent</h3>
-        <p>A finished dub opens with its script and the Dub Agent. Ask it to rewrite a line or remake a voice; only what changed is made again.</p>
-      </div>
-      <div class="settings-section">
-        <h3>Keys and credits</h3>
-        <p>Perso API and Gemini API need a key, saved once in Settings. Everything that runs on this computer is free.</p>
-      </div>
-    </div>
-  </div>
-</div>
-
 <div class="modal-overlay" id="modelsNeededOverlay">
   <div class="modal" style="max-width: 430px">
     <div class="modal-body">
@@ -1982,8 +1944,6 @@ function closeSettings() {
 function realVersion(v) { return v && v !== "0.0.0" ? v : ""; }
 
 $("settingsBtn").addEventListener("click", openSettings);
-$("helpBtn").addEventListener("click", () => $("helpOverlay").classList.add("open"));
-$("helpCloseBtn").addEventListener("click", () => $("helpOverlay").classList.remove("open"));
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
 $("advancedKeysLink").addEventListener("click", openSettings);
 $("settingsCloseBtn").addEventListener("click", closeSettings);
@@ -2347,13 +2307,33 @@ $("topbarDl").addEventListener("click", () => {
 for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
   $(id).addEventListener("change", paintModelUi);
 }
+const ENGINE_HINTS = {
+  dubMode: { local: "Free. You can edit the script after.",
+             perso: "Perso does everything. About 1 credit per second. No script to edit." },
+  sep: { local: "Free, runs here.", perso: "About 0.5 credits per second." },
+  stt: { local: "Free, runs here.", perso: "Most accurate. Uses Perso credits." },
+  translate: { hunyuan: "Fastest and light. Free.", gemma: "Free, runs here.",
+               gemini: "Most accurate. Needs an API key." },
+  voice: { qwen3: "Clones each speaker\u2019s voice. Free." },
+};
+function updateEngineHints() {
+  $("dubModeHint").textContent = ENGINE_HINTS.dubMode[$("dubModeSelect").value] || "";
+  $("sepHint").textContent = ENGINE_HINTS.sep[$("sepSelect").value] || "";
+  $("sttHint").textContent = ENGINE_HINTS.stt[$("sttSelect").value] || "";
+  $("translateHint").textContent = ENGINE_HINTS.translate[$("translateSelect").value] || "";
+  $("voiceHint").textContent = ENGINE_HINTS.voice[$("voiceSelect").value] || "";
+}
+for (const id of ["dubModeSelect", "sepSelect", "sttSelect", "translateSelect", "voiceSelect"]) {
+  $(id).addEventListener("change", updateEngineHints);
+}
+updateEngineHints();
+
 function paintDubMode() {
   const cloud = $("dubModeSelect").value === "perso";
   // numSpeakers stays live: the cloud asks for it too.
   for (const id of ["sepSelect", "sttSelect", "translateSelect", "voiceSelect", "qualitySelect"]) {
     $(id).disabled = cloud;
   }
-  $("dubModeHint").hidden = !cloud;
 }
 $("dubModeSelect").addEventListener("change", () => { paintDubMode(); paintModelUi(); });
 paintDubMode();
