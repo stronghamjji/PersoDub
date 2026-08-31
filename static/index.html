@@ -890,6 +890,7 @@
   /* Above the settings sheet: What's new can be opened FROM Settings, and a
      sibling overlay later in the DOM would otherwise paint over it. */
   #whatsNewOverlay { z-index: 30; }
+  #dubModeHint, #sepHint, #sttHint, #translateHint, #voiceHint { white-space: pre-line; }
   .wn-list { margin: 0; padding-left: 18px; }
   .wn-list li { font-size: 0.85rem; line-height: 1.6; margin: 4px 0; }
   .license-list { font-size: 0.78rem; color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
@@ -2361,24 +2362,26 @@ $("topbarDl").addEventListener("click", () => {
 for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
   $(id).addEventListener("change", paintModelUi);
 }
+// One sentence per line (they read as a wall when joined -- user feedback):
+// the hint slots render these with pre-line whitespace.
 const ENGINE_HINTS = {
-  dubMode: { local: "Runs on your desktop, free. You can edit the script after.",
-             perso: "Perso does it all, start to finish. No choices needed. About 1 credit per second." },
-  sep: { local: "Runs on your desktop, free. For accuracy, use the API.",
-         perso: "Most accurate. Uses Perso credits." },
-  stt: { local: "Runs on your desktop, free. For accuracy, use the API.",
-         perso: "Most accurate. Uses Perso credits." },
-  translate: { hunyuan: "Runs on your desktop, free and fastest. For accuracy, use the API.",
-               gemma: "Runs on your desktop, free. For accuracy, use the API.",
-               gemini: "Most accurate. Needs an API key." },
-  voice: { qwen3: "Runs on your desktop, free. Clones each speaker\u2019s voice." },
+  dubMode: { local: ["Runs on your desktop, free.", "You can edit the script after."],
+             perso: ["Perso dubs it start to finish.", "Uses Perso credits."] },
+  sep: { local: ["Runs on your desktop, free.", "For accuracy, use the API."],
+         perso: ["Most accurate.", "Uses Perso credits."] },
+  stt: { local: ["Runs on your desktop, free.", "For accuracy, use the API."],
+         perso: ["Most accurate.", "Uses Perso credits."] },
+  translate: { hunyuan: ["Runs on your desktop, free and fastest.", "For accuracy, use the API."],
+               gemma: ["Runs on your desktop, free.", "For accuracy, use the API."],
+               gemini: ["Most accurate.", "Needs an API key."] },
+  voice: { qwen3: ["Runs on your desktop, free.", "Clones each speaker\u2019s voice."] },
 };
 function updateEngineHints() {
-  $("dubModeHint").textContent = ENGINE_HINTS.dubMode[$("dubModeSelect").value] || "";
-  $("sepHint").textContent = ENGINE_HINTS.sep[$("sepSelect").value] || "";
-  $("sttHint").textContent = ENGINE_HINTS.stt[$("sttSelect").value] || "";
-  $("translateHint").textContent = ENGINE_HINTS.translate[$("translateSelect").value] || "";
-  $("voiceHint").textContent = ENGINE_HINTS.voice[$("voiceSelect").value] || "";
+  $("dubModeHint").textContent = (ENGINE_HINTS.dubMode[$("dubModeSelect").value] || []).join("\n");
+  $("sepHint").textContent = (ENGINE_HINTS.sep[$("sepSelect").value] || []).join("\n");
+  $("sttHint").textContent = (ENGINE_HINTS.stt[$("sttSelect").value] || []).join("\n");
+  $("translateHint").textContent = (ENGINE_HINTS.translate[$("translateSelect").value] || []).join("\n");
+  $("voiceHint").textContent = (ENGINE_HINTS.voice[$("voiceSelect").value] || []).join("\n");
 }
 for (const id of ["dubModeSelect", "sepSelect", "sttSelect", "translateSelect", "voiceSelect"]) {
   $(id).addEventListener("change", updateEngineHints);
