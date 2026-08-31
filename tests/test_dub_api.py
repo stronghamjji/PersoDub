@@ -1214,3 +1214,95 @@ def test_dub_start_sep_perso_without_key_is_422(monkeypatch):
     )
     assert r.status_code == 422
     assert "Perso separation" in r.json()["detail"]
+
+
+class _FakeCloudClient:
+    """Stands in for PersoClient in cloud-dub tests: writes the "dubbed" file
+    the way the real dub_video does, and records what it was asked."""
+    calls = []
+
+    def __init__(self, *a, **kw):
+        self.cancel_check = None
+
+    def dub_video(self, video_path, out_path, source_code, target_code, num_speakers=None, space_seq=None):
+        _FakeCloudClient.calls.append({
+            "video": video_path, "out": out_path, "source": source_code,
+            "target": target_code, "speakers": num_speakers,
+        })
+        with open(out_path, "wb") as f:
+            f.write(b"CLOUDMP4")
+        return out_path
+
+
+def _wait_done(jid):
+    for _ in range(200):
+        j = client.get(f"/api/dub/jobs/{jid}").json()
+        if j["status"] != "running":
+            return j
+        time.sleep(0.02)
+    return j
+
+
+def test_dub_start_cloud_mode_skips_local_pipeline(monkeypatch):
+    _FakeCloudClient.calls = []
+    monkeypatch.setattr(main, "PersoClient", _FakeCloudClient)
+
+    def never(**kw):
+        raise AssertionError("run_dub must not run in cloud mode")
+
+    monkeypatch.setattr(main, "run_dub", never)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en",
+              "source_language_code": "ko", "dub_mode": "perso", "num_speakers": "2"},
+    )
+    assert r.status_code == 200
+    j = _wait_done(r.json()["job_id"])
+    assert j["status"] == "done"
+    assert j["dub_mode"] == "perso"
+    call = _FakeCloudClient.calls[0]
+    assert call["target"] == "en" and call["source"] == "ko" and call["speakers"] == 2
+    # and the finished file is the cloud one
+    rr = client.get(f"/api/dub/result/{j['id']}")
+    assert rr.content == b"CLOUDMP4"
+
+
+def test_dub_start_cloud_mode_unknown_value_is_422():
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "dub_mode": "banana"},
+    )
+    assert r.status_code == 422
+
+
+def test_dub_start_cloud_mode_without_key_is_422(monkeypatch):
+    monkeypatch.setattr(main, "perso_available", lambda: False)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "dub_mode": "perso"},
+    )
+    assert r.status_code == 422
+    assert "Perso" in r.json()["detail"]
+
+
+def test_dub_start_cloud_mode_credit_exhaustion_fails_with_notice(monkeypatch):
+    from app.perso_client import PersoCreditExhaustedError
+
+    class BrokeClient(_FakeCloudClient):
+        def dub_video(self, *a, **kw):
+            raise PersoCreditExhaustedError()
+
+    monkeypatch.setattr(main, "PersoClient", BrokeClient)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    assert r.status_code == 200
+    j = _wait_done(r.json()["job_id"])
+    assert j["status"] == "error"
+    notices = client.get(f"/api/dub/jobs/{j['id']}").json().get("notices") or []
+    assert any(n.get("type") == "perso_credit_exhausted" for n in notices)

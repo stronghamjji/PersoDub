@@ -35,7 +35,8 @@ from app.config import PERSODUB_LOG_DIR
 SAVED_FIELDS = ("id", "status", "language", "language_code", "source_lang",
                 "project", "day", "from_link", "created", "work_dir", "trim",
                 "trim_pending", "error", "remade_as",
-                "stt_engine", "translator", "tts", "quality", "separation")
+                "stt_engine", "translator", "tts", "quality", "separation",
+                "dub_mode")
 
 # What GET /api/dub/jobs sends the screen: the same minus the two absolute
 # paths. The sidebar names a job, colours its dot and addresses everything else

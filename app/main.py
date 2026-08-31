@@ -51,8 +51,10 @@ from app.engines_status import (
     qwen_available,
     qwen_status,
 )
-from app.jobs import JobStore
-from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
+from app.jobs import JobCancelled, JobStore
+from app.perso_client import (PersoClient, PersoCreditExhaustedError,
+                              PersoInvalidKeyError, PersoUnavailableError,
+                              APP_VERSION, SIGNUP_LINK, list_dubbing_spaces)
 from app.pipeline import run_dub
 from app.qwen_pipeline import rebuild_dub, resynth_one_line
 from app.text.naming import next_free, safe_name
@@ -767,6 +769,10 @@ def dub_job_retry(jid: str):
     job_store.append_log(new_jid, "%s (run again)" % project)
 
     def _target(log):
+        if job.get("dub_mode") == "perso":
+            return _run_cloud_dub(new_jid, video_path, out_path,
+                                  job.get("source_lang"), language_code,
+                                  None, log)
         return run_dub(
             video_path=video_path,
             out_path=out_path,
@@ -1007,6 +1013,44 @@ def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = T
     return missing
 
 
+def _run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speakers, log):
+    """The whole-job Perso path: upload -> cloud dub -> download. Same failure
+    grammar as the Perso STT/separation stages (no silent local fallback)."""
+    log("1/1 Dubbing in the Perso cloud…")
+    pc = PersoClient()
+    pc.cancel_check = lambda: job_store.is_cancel_requested(jid)
+    ws = getattr(pc, "describe_workspace", lambda: None)()
+    if ws:
+        log(f"   Perso workspace: {ws.get('name') or ws.get('seq')} (#{ws.get('seq')})")
+    try:
+        pc.dub_video(video_path, out_path, source_code, target_code, num_speakers=num_speakers)
+    except JobCancelled:
+        raise
+    except PersoCreditExhaustedError as e:
+        msg = "Perso credits are used up. Recharge to continue."
+        log(f"   Error: {msg} ({e.link})")
+        job_store.append_notice(jid, {"type": "perso_credit_exhausted", "message": msg, "link": e.link})
+        raise RuntimeError(msg) from e
+    except PersoInvalidKeyError as e:
+        msg = "Perso rejected the API key. Open Settings and check the key."
+        log(f"   Error: {msg}")
+        job_store.append_notice(jid, {"type": "perso_invalid_key", "message": msg})
+        raise RuntimeError(msg) from e
+    except PersoUnavailableError as e:
+        msg = "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
+        log(f"   Error: {msg}")
+        job_store.append_notice(jid, {"type": "perso_unavailable", "message": msg})
+        raise RuntimeError(msg) from e
+    try:
+        if ws and ws.get("credits") is not None:
+            after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
+            if after is not None:
+                log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
+    except Exception:
+        pass
+    return {"job_id": jid, "out_path": out_path, "num_segments": 0, "dub_mode": "perso"}
+
+
 def _raise_models_needed(missing):
     free = model_store.free_bytes_at(model_store.kit_dir())
     raise HTTPException(409, {
@@ -1028,6 +1072,7 @@ def dub_start(
     translate_engine: Optional[str] = Form(None),
     stt_engine: Optional[str] = Form(None),
     sep_engine: Optional[str] = Form(None),
+    dub_mode: Optional[str] = Form(None),
     n_takes: Optional[int] = Form(None),
     source_language_code: Optional[str] = Form(None),
     project: Optional[str] = Form(None),
@@ -1082,9 +1127,16 @@ def dub_start(
     sep_engine = (sep_engine or "").strip().lower() or None
     if sep_engine not in (None, "local", "demucs", "perso"):
         raise HTTPException(422, f"Unknown sep_engine: {sep_engine}")
+    dub_mode = (dub_mode or "").strip().lower() or "local"
+    if dub_mode not in ("local", "perso"):
+        raise HTTPException(422, f"Unknown dub_mode: {dub_mode}")
+    if dub_mode == "perso":
+        # The cloud does everything -- the per-stage engine choices (and their
+        # preflights, including the local-model 409) do not apply.
+        stt_engine = sep_engine = translate_engine = None
     if not _valid_language_code(language_code):
         raise HTTPException(422, f"Unknown language_code: {language_code}")
-    effective_translate_engine = (translate_engine or TRANSLATE_ENGINE or "").lower()
+    effective_translate_engine = "" if dub_mode == "perso" else (translate_engine or TRANSLATE_ENGINE or "").lower()
     translate_missing_id = None
     if effective_translate_engine == "gemma":
         status = gemma_status()
@@ -1118,7 +1170,13 @@ def dub_start(
             "Perso separation needs an API key. Open Settings and save your Perso "
             "API key, or choose Local separation.",
         )
-    if "perso" in (stt_engine, sep_engine) and not current_value("PERSO_SPACE_SEQ"):
+    if dub_mode == "perso" and not perso_available():
+        raise HTTPException(
+            422,
+            "Perso cloud dubbing needs an API key. Open Settings and save your "
+            "Perso API key, or dub on this computer.",
+        )
+    if (dub_mode == "perso" or "perso" in (stt_engine, sep_engine)) and not current_value("PERSO_SPACE_SEQ"):
         # No workspace pinned: a single-workspace account resolves silently in
         # the pipeline, but several would fail AFTER minutes of separation
         # work. Catch that here, before the upload is accepted.
@@ -1137,10 +1195,11 @@ def dub_start(
     # The models this job still needs -- 409 with the dialog's exact payload
     # instead of dying minutes into the pipeline (permanent rule: the screen
     # asks, downloads, and resubmits; nothing here downloads silently).
-    need_whisper = (stt_engine or default_stt_engine() or "local") != "perso"
-    missing = _missing_models(need_whisper, translate_missing_id)
-    if missing:
-        _raise_models_needed(missing)
+    if dub_mode != "perso":
+        need_whisper = (stt_engine or default_stt_engine() or "local") != "perso"
+        missing = _missing_models(need_whisper, translate_missing_id)
+        if missing:
+            _raise_models_needed(missing)
 
     # Names the job's folder. The caller may pass a title it already knows (the
     # screen probes a link before starting, and app/source_fetch.py's fetch()
@@ -1216,7 +1275,11 @@ def dub_start(
                       # What made this job: read back by the finished screen and
                       # by "Try again", which repeats these rather than today's
                       # defaults.
-                      **_engines_used(stt_engine, translate_engine, n_takes, sep_engine))
+                      # A cloud job records its mode, not local engine choices
+                      # its finished screen would then lie about.
+                      **({"dub_mode": "perso"} if dub_mode == "perso" else
+                         {"dub_mode": "local",
+                          **_engines_used(stt_engine, translate_engine, n_takes, sep_engine)}))
     # Written now, not just at the end: a job the user quits the app in the
     # middle of still has a folder, and without a file in it that folder is
     # nameless -- Projects would have nothing to show for it.
@@ -1242,6 +1305,10 @@ def dub_start(
                     job_store.persist(jid, work)
 
                 _cut_video(video_path, trim_start, trim_end, on_cut=_cut_recorded)
+        if dub_mode == "perso":
+            return _run_cloud_dub(jid, video_path, out_path,
+                                  source_language_code or None, language_code,
+                                  num_speakers, log)
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,

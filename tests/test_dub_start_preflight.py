@@ -106,3 +106,20 @@ def test_hunyuan_model_missing_joins_the_409_list(monkeypatch, _kit):
     r = _start({"translate_engine": "hunyuan"})
     assert r.status_code == 409
     assert [m["id"] for m in r.json()["detail"]["missing"]] == ["hunyuan"]
+
+
+def test_cloud_mode_needs_no_local_models(monkeypatch, _kit):
+    # The whole point of the cloud path: an empty kit can still dub.
+    class FakeClient:
+        def __init__(self, *a, **kw):
+            self.cancel_check = None
+
+        def dub_video(self, video_path, out_path, *a, **kw):
+            with open(out_path, "wb") as f:
+                f.write(b"CLOUDMP4")
+            return out_path
+
+    monkeypatch.setattr(main, "PersoClient", FakeClient)
+    monkeypatch.setattr(main, "current_value", lambda k: "1" if k == "PERSO_SPACE_SEQ" else "x")
+    r = _start({"dub_mode": "perso"})
+    assert r.status_code == 200
