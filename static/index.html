@@ -1438,8 +1438,10 @@
              FFmpeg's terms depend on the build the installer fetches, so it
              is labelled the way NOTICE labels it rather than pinned here. -->
         <div class="settings-line">
-          <span id="aboutVersion">PersoDub</span>
-          <button class="settings-link" id="whatsNewLink" type="button">What&#8217;s new</button>
+          <!-- The version itself opens What's new: one less link on the row
+               (user feedback 2026-09-01), and the version is the natural place
+               to ask what changed. -->
+          <button class="settings-link" id="aboutVersion" type="button" title="What&#8217;s new">PersoDub</button>
           <button class="settings-link" id="ackToggle" type="button" aria-expanded="false">Acknowledgements</button>
         </div>
         <div id="ackList" hidden>
@@ -1994,7 +1996,7 @@ $("wnOk").addEventListener("click", () => {
   try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
   $("whatsNewOverlay").classList.remove("open");
 });
-$("whatsNewLink").addEventListener("click", showWhatsNew);
+$("aboutVersion").addEventListener("click", showWhatsNew);
 checkWhatsNew();
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
 $("advancedKeysLink").addEventListener("click", openSettings);
