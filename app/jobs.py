@@ -317,7 +317,8 @@ class JobStore:
         self.start(jid, target)
         return jid
 
-    def start(self, jid: str, target: Callable[[Callable[[str], None]], Any]) -> None:
+    def start(self, jid: str, target: Callable[[Callable[[str], None]], Any],
+              parallel: bool = False) -> None:
         """Run target(log) now -- or, when another job is on air, queue it.
 
         One dub at a time, whichever door it came in through (a new upload,
@@ -326,7 +327,16 @@ class JobStore:
         before it ends, however that one ends. Used instead of run_async when
         the caller needs the job id before the thread starts (e.g. to build a
         cancel_check closure bound to that id -- see app/main.py).
+
+        `parallel` is for work another machine does (a Perso cloud dub): it
+        starts at once beside whatever is on air, never takes the air, and
+        its ending frees nothing -- waiting in the local line would have
+        idled both machines.
         """
+        if parallel:
+            self._update(jid, status="running")
+            self._launch(jid, target, holds_air=False)
+            return
         with self._lock:
             if self._active is not None:
                 self._jobs[jid]["status"] = "queued"
@@ -366,9 +376,13 @@ class JobStore:
             self._launch(jid, target)
             return
 
-    def _launch(self, jid: str, target: Callable[[Callable[[str], None]], Any]) -> None:
-        """Run target(log) on a background thread. Only ever called with the
-        air clear and self._active already set to jid."""
+    def _launch(self, jid: str, target: Callable[[Callable[[str], None]], Any],
+                holds_air: bool = True) -> None:
+        """Run target(log) on a background thread.
+
+        holds_air: this job owns the one local seat (self._active is jid), so
+        its ending must hand the seat to the next in line. A parallel (cloud)
+        job never held it, and must not hand it to anyone."""
         def log(msg: str):
             self.append_log(jid, msg)
 
@@ -403,7 +417,9 @@ class JobStore:
             work_dir = (self.get(jid) or {}).get("work_dir")
             if work_dir:
                 self.persist(jid, work_dir)
-            # However this one ended, the air is free now.
-            self._dispatch_next()
+            # However this one ended, the air is free now -- unless this job
+            # never held it (a parallel cloud dub beside the local line).
+            if holds_air:
+                self._dispatch_next()
 
         threading.Thread(target=_wrap, daemon=True).start()

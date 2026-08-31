@@ -218,22 +218,30 @@ def change_speaker(job_id: str, line: int, confirm: bool = False) -> dict:
 
 
 @mcp.tool()
-def extract_subtitles(video_path: str, confirm: bool = False) -> dict:
+def extract_subtitles(video_path: str, engine: str = "",
+                      confirm: bool = False) -> dict:
     """Pull the spoken lines out of ANY video file on this computer into a
-    subtitle file (.srt), transcribed by Perso.
+    subtitle file (.srt).
 
     Not tied to a job: video_path is a file the user names (e.g. a video in
     their Downloads folder). The .srt is written next to the video with the
     same name, and an existing file is never written over.
 
-    THIS SPENDS PERSO CREDITS -- about 1 per 5 seconds of video. Called
-    without confirm=true it spends nothing and returns the estimated cost:
-    relay that message to the user as a question, and call again with
+    engine is the user's choice, never yours: "local" (free -- Whisper on
+    this machine) or "perso" (paid -- Perso's cloud STT, better quality,
+    about 1 credit per 5 seconds). When the user has not said which, ask
+    them and call again. "local" runs at once and costs nothing. "perso"
+    called without confirm=true spends nothing and returns the estimated
+    cost: relay that message to the user as a question, and call again with
     confirm=true only after they clearly agree.
     """
-    if not confirm:
+    if engine not in ("local", "perso"):
+        raise ValueError('Ask the user which engine to use first: "local" '
+                         '(free, this machine) or "perso" (paid, better quality).')
+    if engine == "perso" and not confirm:
         r = httpx.get("%s/api/subtitles/estimate" % API,
-                      params={"video_path": video_path}, timeout=60.0)
+                      params={"video_path": video_path, "engine": "perso"},
+                      timeout=60.0)
         if r.status_code in (404, 422):
             raise ValueError(r.json().get("detail", "cannot read that video"))
         r.raise_for_status()
@@ -245,7 +253,8 @@ def extract_subtitles(video_path: str, confirm: bool = False) -> dict:
                       "" if balance is None else " (balance: %s)" % balance))
         return {"needs_confirmation": True, "message": message, "estimate": est}
     r = httpx.post("%s/api/subtitles/extract" % API,
-                   json={"video_path": video_path}, timeout=3600.0)
+                   json={"video_path": video_path, "engine": engine},
+                   timeout=3600.0)
     if r.status_code in (404, 409, 422, 503):
         raise ValueError(r.json().get("detail", "could not extract subtitles"))
     r.raise_for_status()

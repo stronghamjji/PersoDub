@@ -64,6 +64,7 @@ from app.settings_env import (current_value, read_analytics_off,
                               read_key_status, read_value,
                               write_analytics_off, write_keys)
 from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
+from app.stt_local import transcribe_local
 from app.translate import get_translator
 
 
@@ -139,7 +140,8 @@ def _rearm_queued_jobs() -> None:
         try:
             if not job.get("work_dir"):
                 raise RuntimeError("no folder on record")
-            job_store.start(job["id"], _dub_target_for(job))
+            job_store.start(job["id"], _dub_target_for(job),
+                            parallel=(job.get("dub_mode") == "perso"))
         except Exception as e:
             job_store._update(job["id"], status="error", error=str(e))
 
@@ -907,7 +909,7 @@ def dub_job_retry(jid: str):
             log=log,
         )
 
-    job_store.start(new_jid, _target)
+    job_store.start(new_jid, _target, parallel=(job.get("dub_mode") == "perso"))
     return {"job_id": new_jid, "status": job_store.get(new_jid)["status"]}
 
 
@@ -1108,11 +1110,15 @@ def dub_job_perso_speaker(jid: str, body: PersoSpeakerRequest):
 
 class SubtitleExtractRequest(BaseModel):
     video_path: str
+    # "perso" (paid, better quality) or "local" (free Whisper on this machine).
+    engine: str = "perso"
 
 
-def _subtitle_video(video_path: str) -> str:
+def _subtitle_video(video_path: str, engine: str) -> str:
     """The checks both routes share, ending in the file's real path."""
-    if not perso_available():
+    if engine not in ("perso", "local"):
+        raise HTTPException(status_code=422, detail=f"Unknown engine: {engine}")
+    if engine == "perso" and not perso_available():
         raise HTTPException(status_code=422,
                             detail="Perso is not set up. Add the API key in Settings first.")
     path = os.path.expanduser(video_path)
@@ -1132,19 +1138,22 @@ def _free_path(base: str, ext: str) -> str:
 
 
 @app.get("/api/subtitles/estimate")
-def subtitles_estimate(video_path: str):
+def subtitles_estimate(video_path: str, engine: str = "perso"):
     """What extracting this video's subtitles would cost, before spending it.
 
-    About 1 credit per 5 seconds of video -- measured 2026-08-31, 2 credits
-    for a 10s clip. The balance is best-effort: a workspace that will not
-    answer must not block the question.
+    Perso: about 1 credit per 5 seconds of video -- measured 2026-08-31,
+    2 credits for a 10s clip. Local Whisper is free, so its estimate is 0.
+    The balance is best-effort: a workspace that will not answer must not
+    block the question.
     """
-    path = _subtitle_video(video_path)
+    path = _subtitle_video(video_path, engine)
     try:
         seconds = _video_duration(path)
     except Exception:
         raise HTTPException(status_code=422,
                             detail="That file does not look like a video.")
+    if engine == "local":
+        return {"seconds": seconds, "credits_estimate": 0, "credits_balance": None}
     balance = None
     try:
         ws = PersoClient().describe_workspace()
@@ -1164,17 +1173,21 @@ def subtitles_extract(body: SubtitleExtractRequest):
     same needs_confirmation pattern as change_speaker); by the time this route
     is called the user has already said yes.
     """
-    path = _subtitle_video(body.video_path)
-    pc = PersoClient()
+    path = _subtitle_video(body.video_path, body.engine)
     try:
-        cues = perso_to_cues(pc.transcribe(path))
-        if not cues:
-            raise RuntimeError("Perso heard no speech in this video.")
+        if body.engine == "local":
+            cues = transcribe_local(path)
+            if not cues:
+                raise RuntimeError("Whisper heard no speech in this video.")
+        else:
+            cues = perso_to_cues(PersoClient().transcribe(path))
+            if not cues:
+                raise RuntimeError("Perso heard no speech in this video.")
     except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
         raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=503,
-                            detail=f"Perso could not transcribe this video ({str(e)[:80]}).")
+                            detail=f"Could not transcribe this video ({str(e)[:120]}).")
     out = _free_path(os.path.splitext(path)[0], ".srt")
     with open(out, "w", encoding="utf-8") as f:
         f.write(build_srt(cues))
@@ -1704,7 +1717,9 @@ def dub_start(
             log=log,
         )
 
-    job_store.start(jid, _target)
+    # A Perso cloud dub runs on Perso's servers, so it skips the local line
+    # (user decision 2026-09-01): waiting here would idle both machines.
+    job_store.start(jid, _target, parallel=(dub_mode == "perso"))
     # "running", or "queued" when another dub holds the air -- the screen's
     # toast says which.
     return {"job_id": jid, "status": job_store.get(jid)["status"]}

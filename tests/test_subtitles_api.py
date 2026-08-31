@@ -123,3 +123,38 @@ def test_extract_relays_perso_being_out_of_credits(monkeypatch, tmp_path):
     r = client.post("/api/subtitles/extract", json={"video_path": str(video)})
     assert r.status_code == 409
     assert "credit" in r.json()["detail"].lower()
+
+
+def test_local_extraction_is_free_and_needs_no_perso(monkeypatch, tmp_path):
+    _, video = _wire(monkeypatch, tmp_path)
+    monkeypatch.setattr(main, "perso_available", lambda: False)   # no key at all
+    r = client.get("/api/subtitles/estimate",
+                   params={"video_path": str(video), "engine": "local"})
+    assert r.status_code == 200
+    assert r.json()["credits_estimate"] == 0
+
+
+def test_local_extraction_runs_whisper_on_this_machine(monkeypatch, tmp_path):
+    fake, video = _wire(monkeypatch, tmp_path)
+    monkeypatch.setattr(main, "perso_available", lambda: False)
+    heard = []
+
+    def fake_whisper(path, **kw):
+        heard.append(path)
+        return [{"start": 0.5, "end": 2.0, "text": "안녕하세요"}]
+
+    monkeypatch.setattr(main, "transcribe_local", fake_whisper)
+    r = client.post("/api/subtitles/extract",
+                    json={"video_path": str(video), "engine": "local"})
+    assert r.status_code == 200
+    assert heard == [str(video)]
+    assert fake.transcribed == []          # Perso was never asked
+    srt = tmp_path / "쇼츠 3편.srt"
+    assert "안녕하세요" in srt.read_text(encoding="utf-8")
+
+
+def test_extract_rejects_an_unknown_engine(monkeypatch, tmp_path):
+    _, video = _wire(monkeypatch, tmp_path)
+    r = client.post("/api/subtitles/extract",
+                    json={"video_path": str(video), "engine": "cloud9"})
+    assert r.status_code == 422

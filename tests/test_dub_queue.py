@@ -171,3 +171,40 @@ def test_a_restored_queued_job_is_rearmed_from_its_record(monkeypatch, tmp_path)
     assert seen["n_takes"] == 2
     assert seen["num_speakers"] == 3
     assert seen["source_language_code"] == "en"
+
+
+def test_a_perso_cloud_dub_skips_the_local_line(slow_dub, monkeypatch):
+    """Perso does the work on its own servers, so a cloud dub waiting behind a
+    local one would idle both machines. It starts at once, and its ending must
+    not free the seat the local job is still sitting in."""
+    gate, ran = slow_dub
+    monkeypatch.setattr(main, "current_value", lambda k: "1")
+    cloud = []
+
+    def fake_cloud(jid, video_path, out_path, source, language_code, num_speakers, log):
+        cloud.append(jid)
+        return {"out_path": out_path}
+
+    monkeypatch.setattr(main, "_run_cloud_dub", fake_cloud)
+
+    first = _start("로컬.mp4")
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("클라우드.mp4", b"video-bytes", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    assert r.status_code == 200
+    # Never "queued": it starts at once -- so fast here that the fake may
+    # already be done by the time the answer is built.
+    assert r.json()["status"] in ("running", "done")
+    cloud_jid = r.json()["job_id"]
+    assert _wait(cloud_jid, ("done",)) == "done"    # finishes while local still runs
+    assert cloud == [cloud_jid]
+    assert _status(first["job_id"]) == "running"
+
+    # A local job added now still queues -- the cloud job's ending freed nothing.
+    third = _start("줄서는쪽.mp4")
+    assert _status(third["job_id"]) == "queued"
+    gate.set()
+    assert _wait(first["job_id"], ("done",)) == "done"
+    assert _wait(third["job_id"], ("done",)) == "done"
