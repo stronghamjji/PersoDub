@@ -1395,3 +1395,36 @@ def test_perso_speaker_change_maps_the_line_and_verifies(monkeypatch):
     # a local job refuses: only Perso dubs have server-side speakers
     r2 = client.post("/api/dub/jobs/nope/perso/speaker", json={"line": 1})
     assert r2.status_code == 404
+
+
+def test_materialize_turns_a_perso_dub_editable(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "PersoClient", _ScriptedCloudClient)
+
+    def fake_materialize(pc, seq, work_dir, language, **kw):
+        assert seq == 409873
+        with open(os.path.join(work_dir, "translated.srt"), "w", encoding="utf-8") as f:
+            f.write("1\n00:00:00,270 --> 00:00:06,210\nHi there\n")
+        with open(os.path.join(work_dir, "original.srt"), "w", encoding="utf-8") as f:
+            f.write("1\n00:00:00,270 --> 00:00:06,210\n안녕\n")
+        return {"lines": 1, "speakers": 1}
+
+    monkeypatch.setattr(main.perso_materialize, "materialize", fake_materialize)
+
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    j = _wait_done(r.json()["job_id"])
+    # before: the live, read-only mirror
+    assert client.get(f"/api/dub/jobs/{j['id']}/script").json()["readonly"] is True
+
+    rm = client.post(f"/api/dub/jobs/{j['id']}/perso/materialize")
+    assert rm.status_code == 200
+    assert rm.json()["lines"] == 1
+
+    # after: served from the local files, editable like any other job
+    body = client.get(f"/api/dub/jobs/{j['id']}/script").json()
+    assert body.get("readonly") is None
+    assert body["lines"][0]["text"] == "Hi there"
+    assert body["lines"][0]["source"] == "안녕"

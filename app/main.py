@@ -24,6 +24,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import config
 from app import models as model_store
+from app import perso_materialize
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
@@ -403,7 +404,7 @@ def dub_job_script(jid: str):
     job = job_store.get(jid)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if job.get("dub_mode") == "perso":
+    if job.get("dub_mode") == "perso" and not _perso_is_materialized(job):
         # A Perso dub's script lives on Perso's side; read it back live.
         seq = job.get("perso_project_seq")
         if not seq:
@@ -948,6 +949,39 @@ def model_remove(mid: str):
 
 class PersoSpeakerRequest(BaseModel):
     line: int
+
+
+def _perso_is_materialized(job) -> bool:
+    """True once a Perso dub's parts were fetched for local editing -- from
+    then on its script (and every edit tool) runs on the local files."""
+    out = (job.get("result") or {}).get("out_path")
+    return bool(out and os.path.exists(os.path.join(os.path.dirname(out), DUB_NAME)))
+
+
+@app.post("/api/dub/jobs/{jid}/perso/materialize")
+def dub_job_perso_materialize(jid: str):
+    """Fetch a Perso dub's parts (script, per-line audio, background bed) and
+    write the local job files -- after this the dub edits like any other job.
+    Downloads only; no Perso credits are spent."""
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("dub_mode") != "perso" or not job.get("perso_project_seq"):
+        raise HTTPException(status_code=409, detail="Only Perso dubs can be fetched for editing.")
+    out = (job.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=409, detail="This job has no finished video yet.")
+    try:
+        summary = perso_materialize.materialize(
+            PersoClient(), int(job["perso_project_seq"]), os.path.dirname(out),
+            job.get("language") or "English",
+            log=lambda msg: job_store.append_log(jid, msg))
+    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503,
+                            detail=f"Could not fetch this dub from Perso ({str(e)[:80]}).")
+    return summary
 
 
 @app.post("/api/dub/jobs/{jid}/perso/speaker")

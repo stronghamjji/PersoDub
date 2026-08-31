@@ -4034,10 +4034,37 @@ async function renderScript(jobId) {
   paintPlayhead();
 
   if (data.readonly) {
-    // A Perso dub's script is a mirror of the server's for now: no editing,
-    // no per-line remake -- those land with the agent integration.
+    // A Perso dub starts as a read-only mirror of the server's script. The
+    // bar's button fetches its parts (free) and unlocks local editing.
     box.querySelectorAll(".sc-dst").forEach((c) => c.removeAttribute("contenteditable"));
     box.querySelectorAll(".sc-wave, .sc-undo").forEach((b) => b.remove());
+    const bar = document.createElement("div");
+    bar.className = "script-empty";
+    const note = document.createElement("span");
+    note.textContent = "This Perso dub is read-only. ";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "keys-link";
+    btn.textContent = "Make it editable";
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      note.textContent = "Fetching this dub from Perso… ";
+      try {
+        const r = await fetch(`/api/dub/jobs/${jobId}/perso/materialize`, { method: "POST" });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          note.textContent = String(d.detail || "Could not fetch it. ");
+          btn.disabled = false;
+          return;
+        }
+        await renderScript(jobId);
+      } catch {
+        note.textContent = "Could not fetch it. Is the engine running? ";
+        btn.disabled = false;
+      }
+    });
+    bar.append(note, btn);
+    box.prepend(bar);
   }
   box.querySelectorAll(".sc-dst[contenteditable]").forEach((cell) => {
     const before = cell.textContent;

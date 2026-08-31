@@ -834,3 +834,21 @@ def test_add_speaker_from_sentence_posts_the_sentence(monkeypatch):
     url, body = calls[0]
     assert url.endswith("/projects/409873/spaces/999/speakers/from-sentence")
     assert body == {"sourceSentenceSeq": 11056763}
+
+
+def test_download_target_scans_for_the_link_and_saves(monkeypatch, tmp_path):
+    def fake_get(url, params=None, headers=None, timeout=None):
+        if "/download" in url:
+            assert params == {"target": "backgroundAudio"}
+            return _FakeHttpxResponse({"result": {"audioFile": {
+                "backgroundAudioDownloadLink": "/perso-storage/bg.m4a"}}})
+        r = _FakeHttpxResponse({})
+        r.content = b"BG-BYTES"
+        return r
+
+    monkeypatch.setattr(perso_client_module, "MEDIA_HOST", "https://media.example.com")
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    out = tmp_path / "bg.src"
+    client.download_target(409873, "backgroundAudio", str(out))
+    assert out.read_bytes() == b"BG-BYTES"

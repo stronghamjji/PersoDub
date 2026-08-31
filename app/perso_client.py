@@ -494,6 +494,47 @@ class PersoClient:
         _raise_for_status(r)
         return r.json() or {}
 
+    def download_media(self, url: str, out_path: str) -> str:
+        """Fetch one storage file (a sentence's audio, a subtitle) to disk.
+        Identity headers only -- storage links never see the API key."""
+        full = url if url.startswith("http") else MEDIA_HOST + url
+        r = httpx.get(full, headers={"User-Agent": USER_AGENT,
+                                     "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
+        _raise_for_status(r)
+        with open(out_path, "wb") as f:
+            f.write(r.content)
+        return out_path
+
+    def download_target(self, project_seq: int, target: str, out_path: str,
+                        space_seq: Optional[int] = None) -> str:
+        """Download one of a project's named artifacts (e.g. backgroundAudio).
+
+        The link's key varies per target, so the response is scanned for any
+        *DownloadLink value -- the official plugin's own fallback.
+        """
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        r = httpx.get(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/download",
+            params={"target": target}, headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        body = (r.json() or {}).get("result") or {}
+
+        def find_link(o):
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    if isinstance(v, str) and k.endswith("DownloadLink") and v:
+                        return v
+                    hit = find_link(v)
+                    if hit:
+                        return hit
+            return None
+
+        link = find_link(body)
+        if not link:
+            raise RuntimeError(f"Perso served no download link for {target}")
+        return self.download_media(link, out_path)
+
     def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
         """Upload one video to Perso STT and return scriptTimestamps (JSON).
 
