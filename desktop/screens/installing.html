@@ -12,38 +12,27 @@
   p.note { color: #888; font-size: 14px; }
 </style>
 <h2>Setting up PersoDub</h2>
-<p class="note">First launch only. Downloading engines and AI models (about 19 GB).
+<p class="note">One-time setup, about 3.6 GB. AI models download later, when you first use them.
 Keep the app open; if it closes, setup resumes where it left off.</p>
 <ol id="steps"></ol>
 <div id="bar"><div id="fill"></div></div>
 <div id="detail"></div>
 <script>
-  // Titles must match src/installSpec.js step order.
-  const TITLES = {
-    "payload": "Copying bundled files",
-    "python": "Downloading Python runtime (~50 MB)",
-    "venv-app": "Installing app environment",
-    "venv-engines": "Installing AI engines (~3 GB)",
-    "ffmpeg": "Setting up ffmpeg",
-    "venv-qwen": "Installing voice engine",
-    "models": "Downloading AI models (~7 GB)",
-    "gemma": "Downloading translation model (Gemma, ~8 GB)",
-    "nonverbal-weights": "Downloading sound-detection weights (~140 MB)",
-    "mac-env": "Writing configuration",
-  };
+  // The step list is built from the progress events themselves (each carries
+  // its step's title, in order) -- a hard-coded copy of installSpec.js's
+  // titles drifted every time a step changed, down to a stale "mac-env" id.
   const ol = document.getElementById("steps");
   const items = {};
-  for (const [id, title] of Object.entries(TITLES)) {
-    const li = document.createElement("li");
-    li.textContent = title;
-    ol.appendChild(li);
-    items[id] = li;
-  }
   const fill = document.getElementById("fill");
   const detail = document.getElementById("detail");
   window.persodubShell.onInstallProgress((p) => {
+    if (!items[p.stepId]) {
+      const el = document.createElement("li");
+      el.textContent = p.title || p.stepId;
+      ol.appendChild(el);
+      items[p.stepId] = el;
+    }
     const li = items[p.stepId];
-    if (!li) return;
     if (p.state === "start") li.className = "active";
     if (p.state === "skipped" || p.state === "done") { li.className = "done"; fill.style.width = "0%"; }
     if (p.state === "progress") {

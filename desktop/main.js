@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
@@ -12,7 +12,6 @@ import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
 import { run } from "./src/exec.js";
-import { pullOllamaModel } from "./src/ollamaPull.js";
 import { resolveUpdateMode, resolveFeed } from "./src/updater.js";
 import { findForeignLockers } from "./src/lockCheck.js";
 import { resolveAnalyticsMode, countEvent, classifyError } from "./src/analytics.js";
@@ -167,7 +166,24 @@ async function boot(win) {
       // go. defaultKitDir picks the per-user LOCAL application-data directory
       // each platform defines; ignoreLegacy keeps the replacement out of the
       // very folder this branch exists to abandon.
-      cfg = { ...cfg, kitDir: defaultKitDir({ ignoreLegacy: true }) };
+      const freshKitDir = defaultKitDir({ ignoreLegacy: true });
+      // Abandoning the stale kit must not strand its downloaded models: they
+      // are version-independent files the fresh install (and the in-app
+      // catalog) would otherwise re-download in full -- up to ~15 GB. Same
+      // volume, so a rename is instant; on any failure just log and carry on,
+      // a lost move costs a re-download, never the boot.
+      try {
+        const oldModels = join(cfg.kitDir, "models");
+        const newModels = join(freshKitDir, "models");
+        if (freshKitDir !== cfg.kitDir && existsSync(oldModels) && !existsSync(newModels)) {
+          mkdirSync(freshKitDir, { recursive: true });
+          renameSync(oldModels, newModels);
+          console.log(`PERSODUB_KIT moved models from ${oldModels} to ${newModels}`);
+        }
+      } catch (err) {
+        console.warn("PERSODUB_KIT could not carry models over:", String((err && err.message) || err));
+      }
+      cfg = { ...cfg, kitDir: freshKitDir };
     }
     if (!checkKit(cfg.kitDir, kitVersion).ok) {
       if (!payload) {
@@ -189,7 +205,7 @@ async function boot(win) {
         });
         return;
       }
-      const ctx = { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run, pullOllama: pullOllamaModel };
+      const ctx = { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run };
       const steps = buildSteps(ctx);
       // The other preflight, and for the same reason: five machines reported a
       // disk-full from deep inside a step, after gigabytes had already been

@@ -520,3 +520,154 @@ def test_outbound_links_carry_the_running_identity():
         assert "utm_source=%s" % perso_client_module.CLIENT_HOST in link
         assert "utm_content=%s" % kind in link
         assert "utm_term=v%s" % perso_client_module.APP_VERSION in link
+
+
+# ── 7. PersoClient.separate() HTTP flow (mocked httpx, no network) ─────────
+def _install_fake_perso_sep_http(monkeypatch, progress_sequence, download_info="default"):
+    """Fake the separation flow: sas-token -> blob PUT -> register ->
+    create audio-separation project -> poll progress -> project detail
+    (downloadPathInfo) -> track downloads from MEDIA_HOST."""
+    calls = {"get": [], "put": [], "post": []}
+    progress_iter = iter(progress_sequence)
+    monkeypatch.setattr(perso_client_module, "MEDIA_HOST", "https://media.example.com")
+    if download_info == "default":
+        download_info = {
+            "originalVoicePath": "/perso-storage/voice.wav",
+            "originalBackgroundPath": "/perso-storage/background.wav",
+            "originalSubBackgroundPath": "/perso-storage/sub.wav",
+        }
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls["get"].append(url)
+        if url.endswith("/file/api/upload/sas-token"):
+            return _FakeHttpxResponse({"blobSasUrl": "https://blob.example.com/x?sig=abc"})
+        if "/progress" in url:
+            return _FakeHttpxResponse({"result": next(progress_iter)})
+        if url.startswith("https://media.example.com"):
+            r = _FakeHttpxResponse({})
+            r.content = b"RIFF-fake-wav"
+            return r
+        if "/projects/777/spaces/" in url:
+            return _FakeHttpxResponse({"result": {"downloadPathInfo": download_info}})
+        raise AssertionError(f"unexpected GET {url}")
+
+    def fake_put(url, content=None, json=None, headers=None, timeout=None):
+        calls["put"].append(url)
+        if url == "https://blob.example.com/x?sig=abc":
+            return _FakeHttpxResponse({})
+        if url.endswith("/file/api/upload/video"):
+            return _FakeHttpxResponse({"seq": 555})
+        raise AssertionError(f"unexpected PUT {url}")
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls["post"].append(url)
+        if "/audio-separation" in url:
+            return _FakeHttpxResponse({"result": {"startGenerateProjectIdList": [777]}})
+        raise AssertionError(f"unexpected POST {url}")
+
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(perso_client_module.httpx, "put", fake_put)
+    monkeypatch.setattr(perso_client_module.httpx, "post", fake_post)
+    return calls
+
+
+def test_perso_client_separate_happy_path(monkeypatch, tmp_path):
+    calls = _install_fake_perso_sep_http(
+        monkeypatch,
+        progress_sequence=[{"progressReason": "Processing", "hasFailed": False},
+                           {"progressReason": "Completed", "hasFailed": False}],
+    )
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake-video-bytes")
+    out_dir = tmp_path / "work"
+
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    result = client.separate(str(video), str(out_dir))
+
+    # The two tracks the pipeline needs, saved as real files; sub_background ignored.
+    assert set(result) == {"vocals", "background"}
+    for p in result.values():
+        assert os.path.exists(p)
+        with open(p, "rb") as f:
+            assert f.read() == b"RIFF-fake-wav"
+    assert any("/audio-separation" in u for u in calls["post"])
+    # Only voice + background are downloaded from the media host (not sub_background).
+    assert sum(u.startswith("https://media.example.com") for u in calls["get"]) == 2
+
+
+def test_perso_client_separate_raises_without_tracks(monkeypatch, tmp_path):
+    _install_fake_perso_sep_http(
+        monkeypatch,
+        progress_sequence=[{"progressReason": "Completed", "hasFailed": False}],
+        download_info={},
+    )
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    with pytest.raises(RuntimeError):
+        client.separate(str(video), str(tmp_path / "work"))
+
+
+def test_upload_media_is_cached_per_video(monkeypatch, tmp_path):
+    # Separation + Perso STT on the same job must not upload the video twice.
+    calls = _install_fake_perso_sep_http(monkeypatch, progress_sequence=[])
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    first = client._upload_media(str(video), 999)
+    second = client._upload_media(str(video), 999)
+
+    assert first == second == 555
+    assert sum(u.endswith("/file/api/upload/sas-token") for u in calls["get"]) == 1
+
+
+# ── 8. pipeline._separate_with_perso (fake client, no network) ─────────────
+def test_separate_with_perso_uses_client_and_maps_tracks(tmp_path):
+    from app import pipeline as pipeline_module
+
+    class FakeClient:
+        def __init__(self):
+            self.cancel_check = None
+            self.calls = []
+
+        def describe_workspace(self):
+            return {"seq": 9, "name": "My Space", "credits": 100}
+
+        def separate(self, video_path, out_dir):
+            self.calls.append((video_path, out_dir))
+            return {"vocals": "/w/perso_vocals.wav", "background": "/w/perso_background.wav"}
+
+    fake = FakeClient()
+    logs = []
+    sep_paths, pc = pipeline_module._separate_with_perso(
+        "/v/in.mp4", "/w", perso_client=fake,
+        cancel_check=lambda: False, on_notice=None, log=logs.append)
+
+    assert pc is fake
+    assert sep_paths == {"vocals": "/w/perso_vocals.wav", "background": "/w/perso_background.wav"}
+    assert fake.calls == [("/v/in.mp4", "/w")]
+    assert any("My Space" in l for l in logs)
+
+
+def test_separate_with_perso_credit_exhausted_notice():
+    from app import pipeline as pipeline_module
+
+    class FakeClient:
+        cancel_check = None
+
+        def describe_workspace(self):
+            return None
+
+        def separate(self, video_path, out_dir):
+            raise PersoCreditExhaustedError()
+
+    notices = []
+    with pytest.raises(RuntimeError):
+        pipeline_module._separate_with_perso(
+            "/v/in.mp4", "/w", perso_client=FakeClient(),
+            cancel_check=None, on_notice=notices.append, log=lambda m: None)
+    assert notices and notices[0]["type"] == "perso_credit_exhausted"

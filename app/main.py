@@ -14,17 +14,21 @@ from datetime import date
 from typing import List, Optional
 from urllib.parse import urlparse
 
+import requests
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app import config
+from app import models as model_store
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
-from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
+from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL,
+                        OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
                         QWEN_N_TAKES, TRANSLATE_ENGINE, default_stt_engine)
 from app.dub_script import (
     DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
@@ -41,6 +45,8 @@ from app.engines_status import (
     gemini_available,
     gemma_available,
     gemma_status,
+    hunyuan_available,
+    hunyuan_status,
     perso_available,
     qwen_available,
     qwen_status,
@@ -627,6 +633,12 @@ def dub_job_redub(jid: str):
     if not engines.get("stt_engine"):
         engines = _engines_used()
 
+    # Only the voices are made again -- no STT, no translation -- but a voice
+    # model removed in the catalog must resurface as the dialog, not a crash.
+    missing = _missing_models(False, None)
+    if missing:
+        _raise_models_needed(missing)
+
     new_jid = job_store.create()
     job_store._update(new_jid, language_code=language_code, project=project,
                       day=_today(), from_link=False, work_dir=work,
@@ -724,9 +736,18 @@ def dub_job_retry(jid: str):
     # other way round), with nothing on screen to say the choice had changed.
     # A job saved before these were kept has none of them, so that one still
     # falls back to what the app is set to now.
-    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality")}
+    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality", "separation")}
     if not engines.get("stt_engine"):
         engines = _engines_used()
+
+    translate_missing_id = None
+    if engines.get("translator") in ("gemma", "hunyuan"):
+        status = gemma_status() if engines["translator"] == "gemma" else hunyuan_status()
+        if status == "model_missing":
+            translate_missing_id = engines["translator"]
+    missing = _missing_models(engines.get("stt_engine") != "perso", translate_missing_id)
+    if missing:
+        _raise_models_needed(missing)
 
     new_jid = job_store.create()
     job_store._update(new_jid, language_code=language_code, project=project,
@@ -756,6 +777,9 @@ def dub_job_retry(jid: str):
             # translator, so a Perso job came back transcribed by something
             # else with nothing on screen to say so.
             stt_engine="perso" if engines["stt_engine"] == "perso" else None,
+            # Replay the first run's separation choice too. .get: jobs saved
+            # before separation was selectable carry none and fall back local.
+            sep_engine="perso" if engines.get("separation") == "perso" else None,
             translate_engine=engines["translator"],
             n_takes=engines["quality"],
             source_language_code=job.get("source_lang"),
@@ -821,6 +845,53 @@ def dub_job_delete_workspace(jid: str):
     return {"job_id": jid, "deleted": True}
 
 
+@app.get("/api/models")
+def models_list():
+    """The model catalog with each model's download state -- what the
+    Settings catalog, the advanced-options status lines and the dub-start
+    warning dialog all render from. Always-installed models stay out: the
+    install itself guarantees them and there is nothing to manage."""
+    return {"models": model_store.status_rows()}
+
+
+def _model_or_404(mid: str):
+    entry = model_store.find(mid)
+    if entry is None or entry["role"] == "always":
+        raise HTTPException(404, f"Unknown model: {mid}")
+    return entry
+
+
+@app.post("/api/models/{mid}/download")
+def model_download(mid: str):
+    entry = _model_or_404(mid)
+    free = model_store.free_bytes_at(model_store.kit_dir())
+    if free is not None and free < entry["bytes"] * 1.1:
+        raise HTTPException(409, "Not enough space: needs %.1f GB, %.1f GB free"
+                                 % (entry["bytes"] / 1024**3, free / 1024**3))
+    started = model_store.request_download(entry)
+    # 202 for a fresh start, 200 when it was already running -- a double-click
+    # must never error or start a second download.
+    return JSONResponse({"state": "downloading"}, status_code=202 if started == "started" else 200)
+
+
+@app.post("/api/models/{mid}/cancel")
+def model_cancel(mid: str):
+    _model_or_404(mid)
+    model_store.cancel_download(mid)
+    # The pieces stay on disk -- the next GET shows "paused" with Resume.
+    return {"state": "cancelling"}
+
+
+@app.delete("/api/models/{mid}")
+def model_remove(mid: str):
+    entry = _model_or_404(mid)
+    if model_store.dub_in_progress():
+        raise HTTPException(409, "A dub is running right now. Wait for it to finish, then remove the model.")
+    model_store.cancel_download(mid)
+    model_store.remove_model(entry)
+    return {"removed": mid}
+
+
 @app.get("/api/engines")
 def engines_status():
     """Which translation/transcription engines actually work on this machine right now.
@@ -832,6 +903,7 @@ def engines_status():
     return {
         "gemma_available": gemma_available(),
         "qwen_available": qwen_available(),
+        "hunyuan_available": hunyuan_available(),
         "gemini_available": gemini_available(),
         "perso_available": perso_available(),
     }
@@ -892,7 +964,7 @@ def _cut_video(path: str, start: float, end: float, on_cut=None) -> None:
             os.remove(tmp)
 
 
-def _engines_used(stt_engine=None, translate_engine=None, n_takes=None) -> dict:
+def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engine=None) -> dict:
     """The engine choices this job is really being made with, resolved now.
 
     The form may leave any of them out, in which case the app's own setting
@@ -908,7 +980,40 @@ def _engines_used(stt_engine=None, translate_engine=None, n_takes=None) -> dict:
         "translator": (translate_engine or TRANSLATE_ENGINE or "").lower() or None,
         "tts": "qwen3",
         "quality": n_takes if n_takes is not None else QWEN_N_TAKES,
+        "separation": "perso" if (sep_engine or "").lower() == "perso" else "demucs",
     }
+
+
+def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = True):
+    """Catalog entries this job still needs, in catalog order.
+
+    Pure lookups (disk markers via the catalog; the caller already resolved
+    the Ollama-side statuses) so tests can drive it without a network. The
+    409 built from it is what the screen's "Download N GB of AI models to
+    dub?" dialog renders.
+    """
+    kit = model_store.kit_dir()
+    wanted = []
+    if need_whisper:
+        wanted.append("whisper")
+    if need_tts:
+        wanted.append("qwen3-tts")
+    missing = []
+    for m in model_store.load_catalog():
+        if m["id"] in wanted and model_store.model_state(m, kit) != "ready":
+            missing.append({"id": m["id"], "name": m["name"], "bytes": m["bytes"]})
+        if translate_missing_id and m["id"] == translate_missing_id:
+            missing.append({"id": m["id"], "name": m["name"], "bytes": m["bytes"]})
+    return missing
+
+
+def _raise_models_needed(missing):
+    free = model_store.free_bytes_at(model_store.kit_dir())
+    raise HTTPException(409, {
+        "missing": missing,
+        "total_bytes": sum(m["bytes"] for m in missing),
+        "free_bytes": int(free or 0),
+    })
 
 
 @app.post("/api/dub/start")
@@ -922,6 +1027,7 @@ def dub_start(
     num_speakers: Optional[int] = Form(None),
     translate_engine: Optional[str] = Form(None),
     stt_engine: Optional[str] = Form(None),
+    sep_engine: Optional[str] = Form(None),
     n_takes: Optional[int] = Form(None),
     source_language_code: Optional[str] = Form(None),
     project: Optional[str] = Form(None),
@@ -971,17 +1077,31 @@ def dub_start(
     stt_engine = (stt_engine or "").strip().lower() or None
     if stt_engine not in (None, "local", "perso"):
         raise HTTPException(422, f"Unknown stt_engine: {stt_engine}")
+    # Same normalization for the same reason: "Perso" with a capital P must not
+    # silently skip the preflight and run the free local engine instead.
+    sep_engine = (sep_engine or "").strip().lower() or None
+    if sep_engine not in (None, "local", "demucs", "perso"):
+        raise HTTPException(422, f"Unknown sep_engine: {sep_engine}")
     if not _valid_language_code(language_code):
         raise HTTPException(422, f"Unknown language_code: {language_code}")
     effective_translate_engine = (translate_engine or TRANSLATE_ENGINE or "").lower()
+    translate_missing_id = None
     if effective_translate_engine == "gemma":
         status = gemma_status()
-        if status != "available":
+        if status == "unreachable":
             raise HTTPException(422, _ollama_unavailable_message("Gemma", status, OLLAMA_GEMMA_MODEL))
+        if status == "model_missing":
+            translate_missing_id = "gemma"
     if effective_translate_engine == "qwen":
         status = qwen_status()
         if status != "available":
             raise HTTPException(422, _ollama_unavailable_message("Qwen", status, OLLAMA_QWEN_MODEL))
+    if effective_translate_engine == "hunyuan":
+        status = hunyuan_status()
+        if status == "unreachable":
+            raise HTTPException(422, _ollama_unavailable_message("Hunyuan", status, OLLAMA_HUNYUAN_MODEL))
+        if status == "model_missing":
+            translate_missing_id = "hunyuan"
     if effective_translate_engine == "gemini" and not gemini_available():
         raise HTTPException(
             422, "Gemini translation needs an API key. Open Settings and save your Gemini API key first."
@@ -992,7 +1112,13 @@ def dub_start(
             "Perso transcription needs an API key. Open Settings and save your Perso "
             "API key, or choose Local transcription.",
         )
-    if stt_engine == "perso" and not current_value("PERSO_SPACE_SEQ"):
+    if sep_engine == "perso" and not perso_available():
+        raise HTTPException(
+            422,
+            "Perso separation needs an API key. Open Settings and save your Perso "
+            "API key, or choose Local separation.",
+        )
+    if "perso" in (stt_engine, sep_engine) and not current_value("PERSO_SPACE_SEQ"):
         # No workspace pinned: a single-workspace account resolves silently in
         # the pipeline, but several would fail AFTER minutes of separation
         # work. Catch that here, before the upload is accepted.
@@ -1007,6 +1133,14 @@ def dub_start(
                 "This Perso key has no dubbing workspace." if not spaces else
                 "Select a Perso workspace in Settings.",
             )
+
+    # The models this job still needs -- 409 with the dialog's exact payload
+    # instead of dying minutes into the pipeline (permanent rule: the screen
+    # asks, downloads, and resubmits; nothing here downloads silently).
+    need_whisper = (stt_engine or default_stt_engine() or "local") != "perso"
+    missing = _missing_models(need_whisper, translate_missing_id)
+    if missing:
+        _raise_models_needed(missing)
 
     # Names the job's folder. The caller may pass a title it already knows (the
     # screen probes a link before starting, and app/source_fetch.py's fetch()
@@ -1082,7 +1216,7 @@ def dub_start(
                       # What made this job: read back by the finished screen and
                       # by "Try again", which repeats these rather than today's
                       # defaults.
-                      **_engines_used(stt_engine, translate_engine, n_takes))
+                      **_engines_used(stt_engine, translate_engine, n_takes, sep_engine))
     # Written now, not just at the end: a job the user quits the app in the
     # middle of still has a folder, and without a file in it that folder is
     # nameless -- Projects would have nothing to show for it.
@@ -1118,6 +1252,7 @@ def dub_start(
             num_speakers=num_speakers,
             translate_engine=translate_engine,
             stt_engine=stt_engine or default_stt_engine() or None,
+            sep_engine=sep_engine,
             n_takes=n_takes,
             source_language_code=source_language_code,
             cancel_check=lambda: job_store.is_cancel_requested(jid),

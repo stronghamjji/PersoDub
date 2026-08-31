@@ -96,6 +96,10 @@ export function buildDubFormData(opts) {
   const stt = opts.sttEngine ?? "auto";
   if (stt !== "auto") fd.append("stt_engine", stt);
 
+  // Voice/background separation: local Demucs is the server default, so only
+  // the paid Perso choice is worth sending (app/main.py:dub_start sep_engine).
+  if (opts.sepEngine === "perso") fd.append("sep_engine", "perso");
+
   if (opts.numSpeakers != null) fd.append("num_speakers", String(opts.numSpeakers));
   if (opts.translateEngine && opts.translateEngine !== "auto") {
     fd.append("translate_engine", opts.translateEngine);
@@ -120,11 +124,13 @@ export function buildDubFormData(opts) {
 /**
  * Progressive-enhancement decision logic for GET /api/engines: given the
  * engine-availability payload and the Upload form's current translate/STT
- * selections, decides what to disable, whether the translate selection must
- * move off a dead engine, and what warning (if any) to show. Never changes
- * an already-available current selection.
+ * selections, decides what to grey out. Local models (Gemma, Hunyuan) are
+ * never disabled and never switched away from -- a missing one shows its
+ * Download line under the dropdown (the model catalog), and Start dubbing
+ * explains the rest through the 409 dialog. Only key-gated cloud engines
+ * grey out.
  *
- * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, gemini_available, perso_available}
+ * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available}
  * @param {Object} current - {translate, stt} the Upload form's current select values
  * @returns {{disable: {gemma: boolean, gemini: boolean, perso: boolean}, translate: string, warning: (string|null)}}
  */
@@ -133,29 +139,11 @@ export function applyEngineAvailability(av, current) {
   // needs API key)" stayed selectable with no key saved and the user only
   // learned otherwise from dub_start's 422 after pressing Start dubbing.
   const disable = {
-    gemma: !av.gemma_available,
+    gemma: false,
     gemini: !av.gemini_available,
     perso: !av.perso_available,
   };
-
-  const isAvailable = { gemma: av.gemma_available, gemini: av.gemini_available };
-  let translate = current.translate;
-  let warning = null;
-  if (!isAvailable[translate]) {
-    const fallback = ["gemma", "gemini"].find((engine) => isAvailable[engine]);
-    if (fallback) {
-      translate = fallback;
-    } else {
-      // Not "install Ollama": the desktop installer downloads and runs its
-      // own, so a user has nothing to install by hand. Restarting is the
-      // advice that works for both ways this state is reached -- a kit
-      // missing the runtime/model re-enters the installer on boot, and a
-      // complete kit whose Ollama failed to start gets a fresh launch.
-      warning = "No translation engine is ready. Restart PersoDub, or save a Gemini API key in Settings.";
-    }
-  }
-
-  return { disable, translate, warning };
+  return { disable, translate: current.translate, warning: null };
 }
 
 /** POST /api/dub/start and return the new job id. */
@@ -163,7 +151,12 @@ export async function startDubJob(formData, { baseUrl = "" } = {}) {
   const res = await fetch(`${baseUrl}/api/dub/start`, { method: "POST", body: formData });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(text || `Failed to start dubbing (HTTP ${res.status})`);
+    const err = new Error(text || `Failed to start dubbing (HTTP ${res.status})`);
+    // The missing-models 409 carries a structured detail the caller renders
+    // as the download dialog -- hand it over parsed, beside the status.
+    err.status = res.status;
+    try { err.detail = JSON.parse(text).detail; } catch { /* plain text error */ }
+    throw err;
   }
   const data = await res.json();
   return data.job_id;
@@ -345,8 +338,9 @@ export async function cancelDubJob(jobId, { baseUrl = "" } = {}) {
 const ENGINE_LABELS = {
   whisper: { label: "Whisper", api: false },
   perso: { label: "Perso", api: true },
-  gemma: { label: "Gemma", api: false },
+  gemma: { label: "Gemma 3", api: false },
   qwen: { label: "Qwen", api: false },
+  hunyuan: { label: "Hunyuan 1.8B", api: false },
   gemini: { label: "Gemini", api: true },
   vertex: { label: "Vertex", api: true },
   qwen3: { label: "Qwen3-TTS", api: false },
@@ -383,8 +377,8 @@ export function engineChips(job, { withQuality = true, withTts = true } = {}) {
   const chips = [];
   // The role is the field the id was read out of, which is the only place it
   // can be known from: "qwen" translates and "qwen3" speaks.
-  for (const [role, key] of [["STT", j.stt_engine], ["Translation", j.translator],
-                             ["TTS", withTts ? j.tts : null]]) {
+  for (const [role, key] of [["Separation", j.separation], ["STT", j.stt_engine],
+                             ["Translation", j.translator], ["TTS", withTts ? j.tts : null]]) {
     const known = key ? ENGINE_LABELS[String(key).toLowerCase()] : null;
     if (known) chips.push({ role, ...known });
   }

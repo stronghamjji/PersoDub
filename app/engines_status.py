@@ -65,6 +65,10 @@ def qwen_available() -> bool:
     return ollama_model_available(config.OLLAMA_URL, config.OLLAMA_QWEN_MODEL)
 
 
+def hunyuan_available() -> bool:
+    return ollama_model_available(config.OLLAMA_URL, config.OLLAMA_HUNYUAN_MODEL)
+
+
 def gemma_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
     Used by dub_start's preflight (app/main.py) to give an accurate 422."""
@@ -75,6 +79,12 @@ def qwen_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
     Used by dub_start's preflight (app/main.py) to give an accurate 422."""
     return ollama_model_status(config.OLLAMA_URL, config.OLLAMA_QWEN_MODEL)
+
+
+def hunyuan_status() -> str:
+    """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
+    Used by dub_start's preflight (app/main.py) to give an accurate 422."""
+    return ollama_model_status(config.OLLAMA_URL, config.OLLAMA_HUNYUAN_MODEL)
 
 
 def gemini_available() -> bool:

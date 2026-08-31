@@ -246,6 +246,9 @@ class PersoClient:
         # Perso progress polling. An attribute (not a transcribe() kwarg) so
         # existing callers and test fakes keep their signature.
         self.cancel_check = None
+        # mediaSeq per (path, space): a job that uses Perso for BOTH separation
+        # and STT must not upload the same multi-hundred-MB video twice.
+        self._media_seq_cache = {}
 
     @property
     def _headers(self) -> dict:
@@ -284,13 +287,12 @@ class PersoClient:
             pass
         return {"seq": self.space_seq, "name": name, "credits": credits}
 
-    def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
-        """Upload one video to Perso STT and return scriptTimestamps (JSON).
-
-        The return value is a list of segments (each: order/speaker_name/text_original/words).
-        Use perso_to_cues() to convert it into our cue format.
-        """
-        space = int(space_seq) if space_seq is not None else self.space_seq
+    def _upload_media(self, video_path: str, space: int) -> int:
+        """Upload steps (1)-(3), shared by transcribe() and separate():
+        issue a SAS token, PUT the file to Azure Blob, register it -> mediaSeq."""
+        cached = self._media_seq_cache.get((video_path, space))
+        if cached is not None:
+            return cached
         file_name = os.path.basename(video_path)
 
         # (1) Issue SAS token
@@ -321,6 +323,71 @@ class PersoClient:
         )
         _raise_for_status(r)
         media_seq = r.json()["seq"]
+        self._media_seq_cache[(video_path, space)] = media_seq
+        return media_seq
+
+    def separate(self, video_path: str, out_dir: str,
+                 space_seq: Optional[int] = None) -> dict:
+        """Voice/background separation through Perso -> {"vocals", "background"}.
+
+        Mirrors the official plugin's flow (api_adapter.mjs): upload -> POST
+        audio-separation -> poll -> read the project detail's downloadPathInfo.
+        The generic download?target endpoint does NOT serve separation tracks
+        (server gap the plugin verified 2026-07), so the project detail is the
+        only source. sub_background is ignored -- the local pipeline only ever
+        consumes vocals + background (app/separate.py's contract).
+        """
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        media_seq = self._upload_media(video_path, space)
+
+        r = httpx.post(
+            f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/audio-separation",
+            json={"mediaSeq": media_seq, "isVideoProject": True},
+            headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        project_seq = r.json()["result"]["startGenerateProjectIdList"][0]
+
+        self._wait_completed(project_seq, space, what="Perso separation")
+
+        r = httpx.get(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}",
+            headers=self._headers, timeout=60,
+        )
+        _raise_for_status(r)
+        body = r.json() or {}
+        info = (body.get("result") or body).get("downloadPathInfo") or {}
+        tracks = {"vocals": info.get("originalVoicePath"),
+                  "background": info.get("originalBackgroundPath")}
+        if not all(tracks.values()):
+            raise RuntimeError("Perso separation finished but returned no downloadable tracks")
+
+        os.makedirs(out_dir, exist_ok=True)
+        out = {}
+        for key, rel in tracks.items():
+            # Identity only, no API key: these are storage download links, not
+            # the Perso API -- the key must not travel to a different host.
+            url = rel if rel.startswith("http") else MEDIA_HOST + rel
+            r = httpx.get(url, headers={"User-Agent": USER_AGENT,
+                                        "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
+            _raise_for_status(r)
+            # The SAME names local Demucs writes (vocals.wav / background.wav):
+            # the per-line voice remake reads work_dir/background.wav by name,
+            # and a perso-separated job must feed it identically.
+            path = os.path.join(out_dir, f"{key}.wav")
+            with open(path, "wb") as f:
+                f.write(r.content)
+            out[key] = path
+        return out
+
+    def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
+        """Upload one video to Perso STT and return scriptTimestamps (JSON).
+
+        The return value is a list of segments (each: order/speaker_name/text_original/words).
+        Use perso_to_cues() to convert it into our cue format.
+        """
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        media_seq = self._upload_media(video_path, space)
 
         # (4) Create the STT project -> projectSeq
         r = httpx.post(
@@ -337,12 +404,13 @@ class PersoClient:
         # (6) Download scriptTimestamps
         return self._fetch_script_timestamps(project_seq, space)
 
-    def _wait_completed(self, project_seq: int, space: int, timeout_s: int = 3600) -> None:
+    def _wait_completed(self, project_seq: int, space: int, timeout_s: int = 3600,
+                        what: str = "Perso STT") -> None:
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             if self.cancel_check and self.cancel_check():
                 from app.jobs import JobCancelled
-                raise JobCancelled("cancelled while waiting for Perso STT")
+                raise JobCancelled(f"cancelled while waiting for {what}")
             r = httpx.get(
                 f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/space/{space}/progress",
                 headers=self._headers, timeout=60,
@@ -350,11 +418,11 @@ class PersoClient:
             _raise_for_status(r)
             res = r.json().get("result", {})
             if res.get("hasFailed"):
-                raise RuntimeError(f"Perso STT failed: {res.get('progressReason')}")
+                raise RuntimeError(f"{what} failed: {res.get('progressReason')}")
             if res.get("progressReason") == "Completed":
                 return
             time.sleep(self.poll_interval)
-        raise TimeoutError("Perso STT timed out")
+        raise TimeoutError(f"{what} timed out")
 
     def _fetch_script_timestamps(self, project_seq: int, space: int) -> list:
         r = httpx.get(

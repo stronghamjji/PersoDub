@@ -11,17 +11,14 @@ export const REQUIRED = [
   venvBin("qwen_venv", "uvicorn"),
   venvBin("app_venv", "uvicorn"),
   "sidecar/server.py",
-  // Local Gemma translation, the app's default engine. Left out of this list
-  // the install's biggest download (~8 GB) was also its only unverified one:
-  // a kit that lost the pull partway still passed, so boot never re-ran the
-  // installer and no amount of restarting brought local translation back.
-  // Paths mirror installSpec.js's ollama step (binary + GEMMA_MANIFEST).
+  // The Ollama runtime binary, mirroring installSpec.js's ollama-runtime
+  // step. Only the runtime: the big models (Gemma, Whisper, Qwen3-TTS) are
+  // optional now, downloaded in-app through the model catalog, so requiring
+  // any of them here would bounce every light install back to the installer.
   join("ollama", exeName("ollama")),
-  "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b",
-  // The HuggingFace models, taken straight from installSpec's own list rather
-  // than copied: the TTS weights went missing from a half-finished install and
-  // nothing here noticed, so boot kept starting a sidecar with no model and
-  // never sent the user back to the installer that would have finished it.
+  // The always-installed models, taken straight from installSpec's own list
+  // rather than copied -- MODEL_MARKERS now carries only those (Demucs), so
+  // this boot check covers runtime + always-installed models and nothing more.
   ...MODEL_MARKERS.map((rel) => join(...rel)),
 ];
 

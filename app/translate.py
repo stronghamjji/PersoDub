@@ -19,6 +19,7 @@ from google.oauth2 import service_account
 from app.config import (
     GEMINI_MODEL,
     OLLAMA_GEMMA_MODEL,
+    OLLAMA_HUNYUAN_MODEL,
     OLLAMA_MODEL,
     OLLAMA_QWEN_MODEL,
     OLLAMA_URL,
@@ -362,6 +363,8 @@ def get_translator(engine=None):
         return OllamaTranslator(model=OLLAMA_QWEN_MODEL)
     if picked == "gemma":
         return OllamaTranslator(model=OLLAMA_GEMMA_MODEL)
+    if picked == "hunyuan":
+        return OllamaTranslator(model=OLLAMA_HUNYUAN_MODEL)
     return OllamaTranslator()
 
 

@@ -45,12 +45,22 @@ const OLLAMA_SHA256_WIN =
 export const OLLAMA_TGZ_URL = IS_WIN ? OLLAMA_URL_WIN : OLLAMA_URL_MAC;
 export const OLLAMA_TGZ_SHA256 = IS_WIN ? OLLAMA_SHA256_WIN : OLLAMA_SHA256_MAC;
 // Must match app/config.py's OLLAMA_GEMMA_MODEL default -- the backend asks
-// for this exact tag when the user picks Gemma.
+// for this exact tag when the user picks Gemma. The installer no longer pulls
+// it (the pull moved to the in-app model catalog, served by the Python
+// backend); the constant stays exported for the server and engineCheck history.
 export const GEMMA_MODEL = "gemma3:12b";
 // Ollama's registry layout: a pulled model is complete exactly when its
 // manifest file exists (blobs are written before the manifest).
 export const GEMMA_MANIFEST = [
   "models", "ollama", "manifests", "registry.ollama.ai", "library", "gemma3", "12b",
+];
+
+// The ten step ids in install order, exported as the one place they live --
+// analytics.js publishes exactly this list, and a rename here that never
+// reached its copy used to make a failing step travel as "unknown".
+export const STEP_IDS = [
+  "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
+  "models", "ollama-runtime", "nonverbal-weights", "kit-env",
 ];
 
 // Each model is pinned to a HuggingFace commit (--revision) the way the
@@ -60,6 +70,9 @@ export const GEMMA_MANIFEST = [
 // beside them: hf writes each download to a temp name and renames it only
 // once complete, so a weight present at its real path is a finished file --
 // while a config.json arrives seconds in and proves nothing about the rest.
+// Only the always-installed models download here: small enough to ride along
+// with the runtime. The big optional ones (below) moved to the in-app model
+// catalog, downloaded by the Python server when first used.
 const MODELS = [
   {
     name: "Demucs (81 MB)",
@@ -68,6 +81,12 @@ const MODELS = [
     args: ["adefossez/HTDemucs", "htdemucs.yaml", "955717e8.safetensors"],
     revision: "bf35a81b663819a8255c8fefee17f9d812b786b5",
   },
+];
+
+// The optional models the installer used to download (Whisper 2.9 GB,
+// Qwen3-TTS 4.3 GB). Kept so their marker paths stay documented in one place;
+// the server's catalog downloads them into these same kit-relative dirs.
+const OPTIONAL_MODELS = [
   {
     name: "Whisper large-v3 (2.9 GB)",
     dir: ["models", "whisper", "faster-whisper-large-v3"],
@@ -89,8 +108,12 @@ const MODELS = [
 
 // The same paths engineCheck requires at boot -- one list, so "the install is
 // done" and "the kit is usable" can never disagree the way they did when only
-// this file knew about the models.
+// this file knew about the models. Always-installed models only: requiring an
+// optional model here would bounce every light install back to the installer.
 export const MODEL_MARKERS = MODELS.flatMap((m) => m.markers);
+// The optional models' completion markers, exported for tests/documentation
+// (the server judges Ready/Paused/Not-downloaded by these same files).
+export const OPTIONAL_MODEL_MARKERS = OPTIONAL_MODELS.flatMap((m) => m.markers);
 
 // Mirrors openai-whisper's own load_model() default: XDG_CACHE_HOME (if set)
 // joined with "whisper", else ~/.cache/whisper -- verified against the
@@ -371,8 +394,8 @@ export function buildSteps(ctx) {
     ]),
     {
       id: "models",
-      title: "Downloading AI models (~7 GB)",
-      bytes: 7.3 * GB,
+      title: "Downloading sound-separation model (~80 MB)",
+      bytes: 0.1 * GB,
       isDone: () => MODELS.every(modelDone),
       run: async (report) => {
         const hf = venvBin(k("qwen_venv"), "hf");
@@ -387,32 +410,25 @@ export function buildSteps(ctx) {
       },
     },
     {
-      id: "gemma",
-      title: "Downloading translation model Gemma (~8 GB)",
-      bytes: 8.1 * GB,
-      // Both artifacts this step produces: engineCheck requires the ollama
-      // binary too, so a manifest-only check marked a boot-failing install
-      // "done" and never repaired it.
-      isDone: () => existsSync(k(...GEMMA_MANIFEST)) && existsSync(k("ollama", exeName("ollama"))),
+      // Runtime binary only. The Gemma pull that used to follow it moved to
+      // the in-app model catalog (downloaded by the Python server on first
+      // use), which is what makes this a light install.
+      id: "ollama-runtime",
+      title: "Downloading the translation runtime (~120 MB)",
+      bytes: 0.5 * GB,
+      isDone: () => existsSync(k("ollama", exeName("ollama"))),
       run: async (report) => {
-        const bin = k("ollama", exeName("ollama"));
-        if (!existsSync(bin)) {
-          report(null, "Downloading Ollama runtime (~120 MB)");
-          mkdirSync(k("downloads"), { recursive: true });
-          const archive = k("downloads", IS_WIN ? "ollama.zip" : "ollama.tgz");
-          await ctx.download(OLLAMA_TGZ_URL, archive, {
-            sha256: OLLAMA_TGZ_SHA256,
-            onProgress: (p) => report(p.total ? Math.round((100 * p.received) / p.total) : null, "Downloading Ollama runtime"),
-          });
-          report(null, "Extracting Ollama runtime");
-          await ctx.extract(archive, k("ollama"));
-        }
-        report(null, `Downloading ${GEMMA_MODEL}`);
-        mkdirSync(k("models", "ollama"), { recursive: true });
-        await ctx.pullOllama({
-          bin, modelsDir: k("models", "ollama"), model: GEMMA_MODEL,
-          onLine: (l) => report(null, l.slice(0, 120)),
+        // Resume: an already-extracted binary needs no second download.
+        if (existsSync(k("ollama", exeName("ollama")))) return;
+        report(null, "Downloading Ollama runtime (~120 MB)");
+        mkdirSync(k("downloads"), { recursive: true });
+        const archive = k("downloads", IS_WIN ? "ollama.zip" : "ollama.tgz");
+        await ctx.download(OLLAMA_TGZ_URL, archive, {
+          sha256: OLLAMA_TGZ_SHA256,
+          onProgress: (p) => report(p.total ? Math.round((100 * p.received) / p.total) : null, "Downloading Ollama runtime"),
         });
+        report(null, "Extracting Ollama runtime");
+        await ctx.extract(archive, k("ollama"));
       },
     },
     {

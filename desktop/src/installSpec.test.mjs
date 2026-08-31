@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   buildSteps, writeKitEnv, PYTHON_URL, PYTHON_SHA256, CAMPPLUS_SHA256,
-  OLLAMA_TGZ_SHA256, GEMMA_MODEL, GEMMA_MANIFEST, bytesStillNeeded,
+  OLLAMA_TGZ_SHA256, bytesStillNeeded, STEP_IDS, MODEL_MARKERS,
+  OPTIONAL_MODEL_MARKERS,
 } from "./installSpec.js";
 import { IS_WIN, venvBin, exeName, TTS_DEVICE } from "./platform.js";
 
@@ -38,44 +39,41 @@ test("returns the 10 steps in install order", () => {
   const ids = buildSteps(freshCtx()).map((s) => s.id);
   assert.deepEqual(ids, [
     "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
-    "models", "gemma", "nonverbal-weights", "kit-env",
+    "models", "ollama-runtime", "nonverbal-weights", "kit-env",
   ]);
+  // analytics.js publishes exactly these ids -- the export and the real
+  // steps must not drift apart.
+  assert.deepEqual(ids, STEP_IDS);
 });
 
-test("gemma step downloads the runtime once, then only pulls", async () => {
+test("ollama-runtime step downloads and extracts the runtime, never pulls a model", async () => {
+  // The Gemma pull moved to the in-app model catalog (the Python server
+  // downloads it on first use); the installer lays down the runtime only.
   const calls = { download: [], pull: [] };
   const ctx = freshCtx({
     download: async (url, dest, opts) => { calls.download.push([url, opts.sha256]); writeFileSync(dest, "tgz"); },
     extract: async (_file, dest) => { mkdirSync(dest, { recursive: true }); writeFileSync(join(dest, exeName("ollama")), "bin"); },
     pullOllama: async (args) => calls.pull.push(args),
   });
-  const step = byId(ctx).gemma;
+  const step = byId(ctx)["ollama-runtime"];
   assert.equal(step.isDone(), false);
   await step.run(() => {});
   assert.equal(calls.download.length, 1);
   assert.equal(calls.download[0][1], OLLAMA_TGZ_SHA256);
-  assert.equal(calls.pull.length, 1);
-  assert.equal(calls.pull[0].model, GEMMA_MODEL);
-  assert.ok(calls.pull[0].bin.endsWith(exeName("ollama")));
-  assert.ok(calls.pull[0].modelsDir.includes(join("models", "ollama")));
-  // Second run: runtime already extracted -- no re-download, still pulls.
+  assert.equal(calls.pull.length, 0, "the installer must not pull any model");
+  assert.equal(step.isDone(), true);
+  // Second run: runtime already extracted -- no re-download, still no pull.
   await step.run(() => {});
   assert.equal(calls.download.length, 1);
-  assert.equal(calls.pull.length, 2);
+  assert.equal(calls.pull.length, 0);
 });
 
-test("gemma step is done only when BOTH the manifest and the ollama binary exist", () => {
-  // engineCheck requires ollama/ollama at boot, so a manifest-only isDone
-  // marked a boot-failing install "done" and never re-downloaded the binary.
+test("ollama-runtime step is done once the ollama binary exists, no manifest needed", () => {
   const ctx = freshCtx();
-  assert.equal(byId(ctx).gemma.isDone(), false);
-  const manifest = join(ctx.kitDir, ...GEMMA_MANIFEST);
-  mkdirSync(join(manifest, ".."), { recursive: true });
-  writeFileSync(manifest, "{}");
-  assert.equal(byId(ctx).gemma.isDone(), false);  // binary still missing
+  assert.equal(byId(ctx)["ollama-runtime"].isDone(), false);
   mkdirSync(join(ctx.kitDir, "ollama"), { recursive: true });
   writeFileSync(join(ctx.kitDir, "ollama", exeName("ollama")), "");
-  assert.equal(byId(ctx).gemma.isDone(), true);
+  assert.equal(byId(ctx)["ollama-runtime"].isDone(), true);
 });
 
 test("payload step copies bundle including campplus and marks done", async () => {
@@ -239,73 +237,48 @@ test("ffmpeg step copies binaries reported by static-ffmpeg", async () => {
   assert.equal(await step.isDone(), true);
 });
 
-test("models step skips models whose marker exists", async () => {
+test("models step downloads nothing when the Demucs marker exists", async () => {
   const ctx = freshCtx();
   mkdirSync(join(ctx.kitDir, "models", "demucs", "HTDemucs"), { recursive: true });
   writeFileSync(join(ctx.kitDir, "models", "demucs", "HTDemucs", "955717e8.safetensors"), "done");
   const hfCalls = [];
-  ctx.run = async (argv) => {
-    hfCalls.push(argv);
-    const dirIdx = argv.indexOf("--local-dir") + 1;
-    const dir = argv[dirIdx];
-    mkdirSync(dir, { recursive: true });
-    if (dir.includes("whisper")) writeFileSync(join(dir, "model.bin"), "");
-    if (dir.includes("qwen3-tts")) {
-      mkdirSync(join(dir, "speech_tokenizer"), { recursive: true });
-      writeFileSync(join(dir, "model.safetensors"), "");
-      writeFileSync(join(dir, "speech_tokenizer", "model.safetensors"), "");
-    }
-  };
+  ctx.run = async (argv) => { hfCalls.push(argv); };
   const step = byId(ctx).models;
-  assert.equal(await step.isDone(), false);
-  await step.run(() => {});
-  assert.equal(hfCalls.length, 2, "demucs must be skipped");
-  assert.ok(hfCalls.every((a) => !a.join(" ").includes("HTDemucs")));
   assert.equal(await step.isDone(), true);
+  await step.run(() => {});
+  assert.equal(hfCalls.length, 0);
 });
 
-// The TTS model's only marker used to be config.json -- 4.5 KB that lands
-// seconds into a 4.3 GB download. An install killed just after it left the
-// step "done" forever: this isDone skipped the model on every later run, and
-// engineCheck (which never looked at model files) reported the kit installed,
-// so boot went straight to a sidecar with no weights and failed every time.
-test("models step is not done until every model's weight file exists", () => {
+test("models step downloads only Demucs and ignores the optional models", async () => {
+  // Whisper and Qwen3-TTS moved to the in-app model catalog (the Python
+  // server downloads them on first use); the install fetches only the small
+  // always-installed model.
   const ctx = freshCtx();
-  const put = (...rel) => {
-    mkdirSync(join(ctx.kitDir, ...rel.slice(0, -1)), { recursive: true });
-    writeFileSync(join(ctx.kitDir, ...rel), "");
-  };
-  put("models", "demucs", "HTDemucs", "955717e8.safetensors");
-  put("models", "whisper", "faster-whisper-large-v3", "model.bin");
-  put("models", "qwen3-tts", "config.json");
-  assert.equal(byId(ctx).models.isDone(), false, "config.json alone is not the model");
-  put("models", "qwen3-tts", "model.safetensors");
-  assert.equal(byId(ctx).models.isDone(), false, "speech_tokenizer weights still missing");
-  put("models", "qwen3-tts", "speech_tokenizer", "model.safetensors");
-  assert.equal(byId(ctx).models.isDone(), true);
-});
-
-test("models step re-downloads the TTS model when only its config landed", async () => {
-  const ctx = freshCtx();
-  const put = (...rel) => {
-    mkdirSync(join(ctx.kitDir, ...rel.slice(0, -1)), { recursive: true });
-    writeFileSync(join(ctx.kitDir, ...rel), "");
-  };
-  put("models", "demucs", "HTDemucs", "955717e8.safetensors");
-  put("models", "whisper", "faster-whisper-large-v3", "model.bin");
-  put("models", "qwen3-tts", "config.json");
   const hfCalls = [];
   ctx.run = async (argv) => {
     hfCalls.push(argv);
     const dir = argv[argv.indexOf("--local-dir") + 1];
-    mkdirSync(join(dir, "speech_tokenizer"), { recursive: true });
-    writeFileSync(join(dir, "model.safetensors"), "");
-    writeFileSync(join(dir, "speech_tokenizer", "model.safetensors"), "");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "955717e8.safetensors"), "");
   };
-  await byId(ctx).models.run(() => {});
-  assert.equal(hfCalls.length, 1, "only the TTS model is re-downloaded");
-  assert.ok(hfCalls[0].join(" ").includes("Qwen/Qwen3-TTS"), hfCalls[0].join(" "));
-  assert.equal(byId(ctx).models.isDone(), true);
+  const step = byId(ctx).models;
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+  assert.equal(hfCalls.length, 1, "only Demucs is downloaded");
+  assert.ok(hfCalls[0].join(" ").includes("HTDemucs"), hfCalls[0].join(" "));
+  assert.equal(await step.isDone(), true);
+});
+
+test("the boot markers carry only the always-installed model; the optional ones stay exported", () => {
+  // engineCheck consumes MODEL_MARKERS as the boot requirement, so it must
+  // list only what the install itself lays down (Demucs); the big optional
+  // models live in OPTIONAL_MODEL_MARKERS, downloaded in-app by the server.
+  assert.deepEqual(MODEL_MARKERS, [["models", "demucs", "HTDemucs", "955717e8.safetensors"]]);
+  assert.deepEqual(OPTIONAL_MODEL_MARKERS, [
+    ["models", "whisper", "faster-whisper-large-v3", "model.bin"],
+    ["models", "qwen3-tts", "model.safetensors"],
+    ["models", "qwen3-tts", "speech_tokenizer", "model.safetensors"],
+  ]);
 });
 
 // A missing "base" model means every laugh/breath in a dub gets silently
@@ -460,10 +433,11 @@ test("every step declares how much room it takes", () => {
 });
 
 test("the whole kit adds up to roughly what the installing screen promises", () => {
-  // Measured 2026-08-24 on a real mac install: 18.4 GB. The screen says
-  // "about 19 GB". If this drifts, one of the two is now lying to the user.
+  // The screen says "about 3.6 GB" (runtime + small always-installed models;
+  // Windows runs larger for its CUDA torch wheels). If this drifts back
+  // toward the old 18 GB, a big model crept back into the install.
   const total = buildSteps(freshCtx()).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
-  assert.ok(total > 15 && total < 30, `total is ${total.toFixed(1)} GB`);
+  assert.ok(total > 2 && total < 12, `total is ${total.toFixed(1)} GB`);
 });
 
 test("only the steps still missing are counted", async () => {

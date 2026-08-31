@@ -124,9 +124,9 @@ test("an install failure records which step it died in", () => {
   // what turns a count into something fixable.
   const p = buildPayload({
     event: "install_failure", os: "windows", version: "0.3.5", device: "a".repeat(32),
-    errorCode: "disk-full", step: "gemma",
+    errorCode: "disk-full", step: "ollama-runtime",
   });
-  assert.equal(p.step, "gemma");
+  assert.equal(p.step, "ollama-runtime");
 });
 
 test("an unlisted step leaves as unknown", () => {
@@ -143,7 +143,7 @@ test("only install failures carry a step", () => {
   for (const event of ["app_launch", "dub_success", "dub_failure"]) {
     const p = buildPayload({
       event, os: "mac", version: "0.3.5", device: "a".repeat(32),
-      errorCode: "out-of-memory", step: "gemma",
+      errorCode: "out-of-memory", step: "ollama-runtime",
     });
     assert.equal(p.step, undefined, event);
   }
@@ -439,9 +439,9 @@ test("the failing step travels all the way to the wire", async () => {
   const { sent, fetchImpl } = recorder();
   await countEvent("install_failure", {
     ...BASE, mode: "on", stateFile: tempStateFile(), fetchImpl,
-    errorCode: "disk-full", step: "gemma",
+    errorCode: "disk-full", step: "ollama-runtime",
   });
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].step, "gemma");
+  assert.equal(sent[0].step, "ollama-runtime");
   assert.equal(sent[0].error_code, "disk-full");
 });
