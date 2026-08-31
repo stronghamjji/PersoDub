@@ -51,6 +51,20 @@ test("starts fakes, reports url, stopAll kills everything", async () => {
   assert.ok(await waitGone(pids), "engine processes should die after stopAll");
 });
 
+test("sidecar with no voice model yet (model_loaded:false) still boots", async () => {
+  // The voice model may not be downloaded at boot any more (in-app catalog);
+  // the sidecar lazy-loads it and /synthesize 503s until then, so startup
+  // must only wait for status "ok", not model_loaded.
+  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
+  const cfg = fakeCfg({
+    sidecarCmd: [process.execPath, join(FAKE, "fake_sidecar.mjs"), "{port}", "--no-model"],
+  });
+  const { url, pids, stopAll } = await startEngines(cfg, { logDir });
+  assert.ok((await (await fetch(url)).text()).includes("PersoDub"));
+  stopAll();
+  assert.ok(await waitGone(pids), "engine processes should die after stopAll");
+});
+
 test("sidecar never ready -> rejects and leaves no processes", async () => {
   const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
   const cfg = fakeCfg({

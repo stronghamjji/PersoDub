@@ -46,10 +46,10 @@ test("missing uvicorn binaries are reported even with a matching version", () =>
   assert.deepEqual(res.missing.sort(), REQUIRED.filter((r) => !present.includes(r)).sort());
 });
 
-// The install's Ollama runtime + 8 GB Gemma pull used to sit outside this
-// check, so a kit whose download died halfway still reported ok: boot skipped
-// runInstall, the app never repaired itself, and local translation stayed dead
-// across every restart with no way out but a reinstall.
+// The install's Ollama runtime used to sit outside this check, so a kit
+// whose download died halfway still reported ok: boot skipped runInstall,
+// the app never repaired itself, and local translation stayed dead across
+// every restart with no way out but a reinstall.
 test("kit missing the Ollama runtime is not installed", () => {
   const ollamaRel = join("ollama", exeName("ollama"));
   const dir = makeKit(REQUIRED.filter((p) => p !== ollamaRel), { version: "1.0.0+abc1234" });
@@ -58,19 +58,21 @@ test("kit missing the Ollama runtime is not installed", () => {
   assert.deepEqual(res.missing, [ollamaRel]);
 });
 
-test("kit missing the pulled Gemma model is not installed", () => {
-  const manifest = "models/ollama/manifests/registry.ollama.ai/library/gemma3/12b";
-  const dir = makeKit(REQUIRED.filter((p) => p !== manifest), { version: "1.0.0+abc1234" });
-  const res = checkKit(dir, "1.0.0+abc1234");
-  assert.equal(res.ok, false);
-  assert.deepEqual(res.missing, [manifest]);
+// The big models (Gemma, Whisper, Qwen3-TTS) are optional now -- downloaded
+// in-app by the Python server -- so a kit without any of them must boot
+// straight into the app instead of bouncing back to the installer forever.
+test("kit without the optional models passes (runtime + always-installed only)", () => {
+  assert.ok(!REQUIRED.some((p) => String(p).includes("gemma3")), "Gemma manifest must not be required");
+  assert.ok(!REQUIRED.some((p) => String(p).includes("qwen3-tts")), "TTS weights must not be required");
+  assert.ok(!REQUIRED.some((p) => String(p).includes(join("models", "whisper"))), "Whisper weights must not be required");
+  const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
+  assert.deepEqual(checkKit(dir, "1.0.0+abc1234"), { ok: true, missing: [] });
 });
 
-// The TTS weights sat outside this check too, so the half-finished install
-// above (installSpec's config.json marker) also passed boot: no model, no
-// working sidecar, and no way back to the installer short of a reinstall.
-test("kit missing the TTS weights is not installed", () => {
-  const weights = join("models", "qwen3-tts", "model.safetensors");
+// The always-installed models stay on the boot requirement: a kit that lost
+// one must go back to the installer, which re-downloads it.
+test("kit missing the Demucs weights is not installed", () => {
+  const weights = join("models", "demucs", "HTDemucs", "955717e8.safetensors");
   const dir = makeKit(REQUIRED.filter((p) => p !== weights), { version: "1.0.0+abc1234" });
   const res = checkKit(dir, "1.0.0+abc1234");
   assert.equal(res.ok, false);

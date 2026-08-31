@@ -124,9 +124,14 @@ export async function startEngines(cfg, { logDir, appVersion }) {
       env, logPath: join(logDir, "sidecar.log"),
     }));
     record();
+    // Status ok is enough: the voice model may not be downloaded yet (it is
+    // optional now, fetched through the in-app catalog), and the sidecar
+    // lazy-loads it when the weights appear (vendor/sidecar/server.py) --
+    // /synthesize answers 503 until then. Waiting on model_loaded here made
+    // every model-less boot a 2-minute timeout and an error screen.
     await waitForHealth(`http://127.0.0.1:${sidecarPort}/health`, {
       timeoutMs: cfg.sidecarHealthTimeoutMs,
-      predicate: (b) => b.model_loaded === true,
+      predicate: (b) => b.status === "ok",
     });
 
     const backendPort = await getFreePort();

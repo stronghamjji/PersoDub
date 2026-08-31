@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname } from "node:path";
+import { STEP_IDS } from "./installSpec.js";
 
 // Usage counts. The decisions live here as pure functions so they can be tested
 // without Electron; main.js and the renderer do the wiring. What a payload is
@@ -13,13 +14,10 @@ const FAILURE_EVENTS = new Set(["dub_failure", "install_failure"]);
 // The published list. An error code that is not on it becomes "unknown" rather
 // than travelling verbatim -- that is what keeps a stray path or message, which
 // is what real error text is full of, out of the request.
-// The install steps, in order, exactly as installSpec.js names them. Kept here
-// rather than imported so a rename there cannot quietly start sending a value
-// the table has never heard of.
-export const INSTALL_STEPS = new Set([
-  "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
-  "models", "gemma", "nonverbal-weights", "kit-env",
-]);
+// The install steps, imported from the one place they live (installSpec.js,
+// same main process) -- a copy here once drifted on a rename and the failing
+// step travelled as "unknown".
+export const INSTALL_STEPS = new Set(STEP_IDS);
 
 export const ERROR_CODES = new Set([
   "path-too-long", "disk-full", "network", "permission", "engine-start",

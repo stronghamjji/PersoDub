@@ -22,6 +22,7 @@ import hashlib
 import io
 import os
 import tempfile
+import threading
 
 import numpy as np
 import soundfile as sf
@@ -60,10 +61,27 @@ def _resolve_mode(mode):
     return m
 
 
+# Guards the late load below: without it two concurrent /generate requests
+# arriving right after the download finishes would both build a QwenSynth.
+_LOAD_LOCK = threading.Lock()
+
+
+def _weights_path():
+    return os.path.join(MODEL_PATH, "model.safetensors")
+
+
 def _synth():
     s = getattr(app.state, "synth", None)
     if s is None:
-        raise HTTPException(503, "model not loaded")
+        # The model is optional at startup now (downloaded through the in-app
+        # catalog): if the weights have appeared since, load them here -- no
+        # restart needed after a download. Only a still-missing file is a 503.
+        if not os.path.exists(_weights_path()):
+            raise HTTPException(503, "model not loaded")
+        with _LOAD_LOCK:
+            if getattr(app.state, "synth", None) is None:
+                app.state.synth = QwenSynth(device=app.state.device)
+        s = app.state.synth
     return s
 
 
@@ -214,5 +232,11 @@ def _load_model():
     if getattr(app.state, "synth", None) is not None:
         return
     if os.environ.get("QWEN_TTS_SKIP_LOAD") == "1":
+        return
+    # The model is optional now: when its weights are not on disk yet (the
+    # in-app catalog downloads them later), start without it. /health reports
+    # model_loaded false and _synth() loads it lazily once the file appears.
+    if not os.path.exists(_weights_path()):
+        print(f"QWEN_TTS model not downloaded yet ({_weights_path()}); starting without it", flush=True)
         return
     app.state.synth = QwenSynth(device=device)

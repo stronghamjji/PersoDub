@@ -68,27 +68,16 @@ test("full install dry run completes, satisfies checkKit, and resumes as all-ski
       }
       if (joined.includes("static_ffmpeg")) onLine?.(JSON.stringify([ffmpegReal, ffprobeReal]));
       if (joined.includes(" download ")) {
+        // Only the always-installed Demucs model downloads here now; the big
+        // optional models moved to the in-app catalog (Python server).
         const dir = argv[argv.indexOf("--local-dir") + 1];
         mkdirSync(dir, { recursive: true });
         if (dir.includes("HTDemucs")) writeFileSync(join(dir, "955717e8.safetensors"), "");
-        if (dir.includes("whisper")) writeFileSync(join(dir, "model.bin"), "");
-        if (dir.includes("qwen3-tts")) {
-          mkdirSync(join(dir, "speech_tokenizer"), { recursive: true });
-          writeFileSync(join(dir, "model.safetensors"), "");
-          writeFileSync(join(dir, "speech_tokenizer", "model.safetensors"), "");
-        }
       }
       if (joined.includes("whisper.load_model")) {
         mkdirSync(join(cacheDir, "whisper"), { recursive: true });
         writeFileSync(join(cacheDir, "whisper", "base.pt"), "weights");
       }
-    },
-    pullOllama: async ({ modelsDir }) => {
-      // Real pull writes blobs then the manifest; the manifest is the
-      // done-marker the gemma step's isDone checks on resume.
-      const manifestDir = join(modelsDir, "manifests", "registry.ollama.ai", "library", "gemma3");
-      mkdirSync(manifestDir, { recursive: true });
-      writeFileSync(join(manifestDir, "12b"), "{}");
     },
   };
 
