@@ -161,3 +161,29 @@ def test_extract_subtitles_relays_a_refusal(monkeypatch):
     monkeypatch.setattr(mcp_server.httpx, "get", fake_get)
     with pytest.raises(ValueError, match="No such video"):
         mcp_server.extract_subtitles("/tmp/x.mp4")
+
+
+def test_cut_clip_posts_the_range_and_needs_no_confirmation(monkeypatch):
+    # Free and local: unlike the Perso-paid tools there is no confirm gate.
+    calls = []
+
+    def fake_post(url, json=None, timeout=None):
+        calls.append((url, json))
+        return _Response(200, {"clip_path": "/tmp/영상-clip-10s-25s.mp4",
+                               "seconds": 15.0})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.cut_clip("/tmp/영상.mp4", "10", "25")
+    assert out["clip_path"].endswith("-clip-10s-25s.mp4")
+    url, body = calls[0]
+    assert url == "%s/api/clips/cut" % mcp_server.API
+    assert body == {"video_path": "/tmp/영상.mp4", "start": "10", "end": "25"}
+
+
+def test_cut_clip_relays_a_refusal(monkeypatch):
+    def fake_post(url, json=None, timeout=None):
+        return _Response(422, {"detail": "The clip must start before it ends."})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    with pytest.raises(ValueError, match="start before it ends"):
+        mcp_server.cut_clip("/tmp/영상.mp4", "25", "10")

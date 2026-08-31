@@ -252,5 +252,23 @@ def extract_subtitles(video_path: str, confirm: bool = False) -> dict:
     return r.json()
 
 
+@mcp.tool()
+def cut_clip(video_path: str, start: str, end: str) -> dict:
+    """Cut one stretch of a video file into a NEW video file beside it.
+
+    Free and local (ffmpeg on this machine) -- no Perso, no credits, no
+    confirmation needed. start and end take seconds ("85") or colon timecodes
+    ("1:25", "0:01:25"). The original video is never touched, and an existing
+    file is never written over. Returns the new clip's path and length.
+    """
+    r = httpx.post("%s/api/clips/cut" % API,
+                   json={"video_path": video_path, "start": start, "end": end},
+                   timeout=600.0)
+    if r.status_code in (404, 422, 503):
+        raise ValueError(r.json().get("detail", "could not cut this video"))
+    r.raise_for_status()
+    return r.json()
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
