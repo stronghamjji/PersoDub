@@ -314,11 +314,13 @@ test("applyEngineAvailability: all engines available -> no disabling, no switch,
   assert.equal(result.warning, null);
 });
 
-test("applyEngineAvailability: gemma dead -> disabled and translate switches to gemini", () => {
+test("applyEngineAvailability: a missing local Gemma is neither disabled nor switched away", () => {
+  // Its Download line under the dropdown handles absence now (the catalog);
+  // greying it out or hopping to Gemini would hide the way to get it.
   const av = { ...ALL_AVAILABLE, gemma_available: false };
   const result = applyEngineAvailability(av, { translate: "gemma", stt: "local" });
-  assert.deepEqual(result.disable, { gemma: true, gemini: false, perso: false });
-  assert.equal(result.translate, "gemini");
+  assert.deepEqual(result.disable, { gemma: false, gemini: false, perso: false });
+  assert.equal(result.translate, "gemma");
   assert.equal(result.warning, null);
 });
 
@@ -326,25 +328,20 @@ test("applyEngineAvailability: gemma dead -> disabled and translate switches to 
 // carried gemma/perso, so "Gemini (cloud, needs API key)" stayed selectable
 // with no key and the user only found out at Start dubbing (a 422 from
 // dub_start's preflight).
-test("applyEngineAvailability: gemini dead -> disabled and translate switches to gemma", () => {
+test("applyEngineAvailability: gemini without a key is greyed but the selection is kept", () => {
   const av = { ...ALL_AVAILABLE, gemini_available: false };
   const result = applyEngineAvailability(av, { translate: "gemini", stt: "local" });
   assert.deepEqual(result.disable, { gemma: false, gemini: true, perso: false });
-  assert.equal(result.translate, "gemma");
+  assert.equal(result.translate, "gemini");
   assert.equal(result.warning, null);
 });
 
-test("applyEngineAvailability: both translate engines dead -> warning shown, current selection kept", () => {
+test("applyEngineAvailability: nothing available -> no warning, no switch (the catalog handles it)", () => {
   const av = { ...ALL_AVAILABLE, gemma_available: false, gemini_available: false };
   const result = applyEngineAvailability(av, { translate: "gemma", stt: "local" });
-  assert.deepEqual(result.disable, { gemma: true, gemini: true, perso: false });
-  assert.equal(result.translate, "gemma"); // kept, nothing else to switch to
-  // "install Ollama" was stale advice: the desktop installer downloads and
-  // runs its own Ollama, so there is nothing for a user to install by hand.
-  // Restarting is what actually helps -- boot re-runs the installer for a kit
-  // missing the runtime or the model (checkKit), and relaunches the server for
-  // a kit that has both but failed to start it.
-  assert.equal(result.warning, "No translation engine is ready. Restart PersoDub, or save a Gemini API key in Settings.");
+  assert.deepEqual(result.disable, { gemma: false, gemini: true, perso: false });
+  assert.equal(result.translate, "gemma");
+  assert.equal(result.warning, null);
 });
 
 test("applyEngineAvailability: perso dead -> disabled only, translate untouched (already available)", () => {

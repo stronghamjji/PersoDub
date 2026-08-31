@@ -124,9 +124,11 @@ export function buildDubFormData(opts) {
 /**
  * Progressive-enhancement decision logic for GET /api/engines: given the
  * engine-availability payload and the Upload form's current translate/STT
- * selections, decides what to disable, whether the translate selection must
- * move off a dead engine, and what warning (if any) to show. Never changes
- * an already-available current selection.
+ * selections, decides what to grey out. Local models (Gemma, Hunyuan) are
+ * never disabled and never switched away from -- a missing one shows its
+ * Download line under the dropdown (the model catalog), and Start dubbing
+ * explains the rest through the 409 dialog. Only key-gated cloud engines
+ * grey out.
  *
  * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available}
  * @param {Object} current - {translate, stt} the Upload form's current select values
@@ -137,32 +139,11 @@ export function applyEngineAvailability(av, current) {
   // needs API key)" stayed selectable with no key saved and the user only
   // learned otherwise from dub_start's 422 after pressing Start dubbing.
   const disable = {
-    gemma: !av.gemma_available,
+    gemma: false,
     gemini: !av.gemini_available,
     perso: !av.perso_available,
   };
-
-  const isAvailable = { gemma: av.gemma_available, gemini: av.gemini_available,
-                        hunyuan: av.hunyuan_available };
-  let translate = current.translate;
-  let warning = null;
-  // A missing Hunyuan is not a dead engine: picking it is what starts the
-  // in-app download, so the selection must never be switched away.
-  if (translate !== "hunyuan" && !isAvailable[translate]) {
-    const fallback = ["gemma", "gemini"].find((engine) => isAvailable[engine]);
-    if (fallback) {
-      translate = fallback;
-    } else {
-      // Not "install Ollama": the desktop installer downloads and runs its
-      // own, so a user has nothing to install by hand. Restarting is the
-      // advice that works for both ways this state is reached -- a kit
-      // missing the runtime/model re-enters the installer on boot, and a
-      // complete kit whose Ollama failed to start gets a fresh launch.
-      warning = "No translation engine is ready. Restart PersoDub, or save a Gemini API key in Settings.";
-    }
-  }
-
-  return { disable, translate, warning };
+  return { disable, translate: current.translate, warning: null };
 }
 
 /** POST /api/dub/start and return the new job id. */

@@ -2099,21 +2099,14 @@ async function applyEngineAvailabilityToForm() {
     stt: sttSel.value,
   });
 
-  const gemmaOption = translateSel.querySelector('option[value="gemma"]');
-  if (gemmaOption) setOptionDisabledLabel(gemmaOption, result.disable.gemma, " — not available on this machine");
+  // Local models never grey out -- their state lives in the Download line
+  // under the dropdown (the model catalog). Only key-gated cloud engines do.
   const geminiOption = translateSel.querySelector('option[value="gemini"]');
   if (geminiOption) setOptionDisabledLabel(geminiOption, result.disable.gemini, " — needs API key");
   const persoOption = sttSel.querySelector('option[value="perso"]');
   if (persoOption) setOptionDisabledLabel(persoOption, result.disable.perso, " — needs API key");
   const sepPersoOption = $("sepSelect").querySelector('option[value="perso"]');
   if (sepPersoOption) setOptionDisabledLabel(sepPersoOption, result.disable.perso, " — needs API key");
-  const hunyuanOption = translateSel.querySelector('option[value="hunyuan"]');
-  if (hunyuanOption) {
-    // Never disabled: picking it is what starts the in-app download.
-    if (hunyuanOption.dataset.baseLabel === undefined) hunyuanOption.dataset.baseLabel = hunyuanOption.textContent;
-    hunyuanOption.textContent = hunyuanOption.dataset.baseLabel + (av.hunyuan_available ? "" : " — 1.1GB download");
-  }
-  translateSel.value = result.translate;
 
   const warnEl = $("engineWarning");
   if (warnEl) {
