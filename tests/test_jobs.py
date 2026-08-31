@@ -374,3 +374,16 @@ def test_a_cut_still_owed_survives_a_restart(tmp_path):
     store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
     assert store2.get(jid)["trim"] == {"start": 5, "end": 20}
     assert store2.get(jid)["trim_pending"] is True
+
+
+def test_separation_choice_survives_persist_and_shows_in_the_list(tmp_path):
+    # The Separation chip and "Try again" both read this back after a restart;
+    # a SAVED_FIELDS miss silently dropped it (found in live testing 2026-08-31).
+    (tmp_path / "x").mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="done", project="a", separation="perso")
+    store.persist(jid, str(tmp_path / "x"))
+    store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
+    assert store2.get(jid)["separation"] == "perso"
+    assert store2.all()[0]["separation"] == "perso"
