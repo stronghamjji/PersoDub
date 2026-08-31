@@ -5201,6 +5201,9 @@ let busy = false;
 // after the next has started, and without this its clean-up would put the new
 // turn's button back to Send.
 let turnToken = 0;
+// The running turn's stream, so Stop can cut it mid-sentence -- asking the
+// server alone left the text pouring in for seconds (user feedback).
+let turnAbort = null;
 
 // Press Stop, and the server ends the CLI. The conversation is not lost: the
 // CLI is asked to go rather than shot, so the next message carries on.
@@ -5208,6 +5211,7 @@ async function stopTurn() {
   if (!busy) return;
   busy = false;
   paintGo();
+  turnAbort?.abort();
   try { await fetch("/api/agent/stop", { method: "POST" }); }
   catch { /* the turn ends on its own when the server is gone */ }
 }
@@ -5256,9 +5260,11 @@ async function ask(message) {
     if (dots) dots.querySelector("span").textContent = "Still working…";
   }, 12000);
 
+  turnAbort = new AbortController();
   try {
     const res = await fetch("/api/agent/chat", {
       method: "POST",
+      signal: turnAbort.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message,
@@ -5347,7 +5353,9 @@ async function ask(message) {
   } catch (e) {
     clearDots();
     settlePrevious();
-    showError(String(e.message || e), "");
+    // A cut stream is the Stop working, not a failure.
+    if (e && e.name === "AbortError") stoppedLine();
+    else showError(String(e.message || e), "");
   } finally {
     clearTimeout(slow);
     // The writes have certainly landed by the time the turn is over, so this is
