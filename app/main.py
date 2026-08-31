@@ -14,6 +14,7 @@ from datetime import date
 from typing import List, Optional
 from urllib.parse import urlparse
 
+import requests
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,10 +22,12 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app import config
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
-from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
+from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL,
+                        OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
                         QWEN_N_TAKES, TRANSLATE_ENGINE, default_stt_engine)
 from app.dub_script import (
     DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
@@ -41,6 +44,8 @@ from app.engines_status import (
     gemini_available,
     gemma_available,
     gemma_status,
+    hunyuan_available,
+    hunyuan_status,
     perso_available,
     qwen_available,
     qwen_status,
@@ -724,7 +729,7 @@ def dub_job_retry(jid: str):
     # other way round), with nothing on screen to say the choice had changed.
     # A job saved before these were kept has none of them, so that one still
     # falls back to what the app is set to now.
-    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality")}
+    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality", "separation")}
     if not engines.get("stt_engine"):
         engines = _engines_used()
 
@@ -756,6 +761,9 @@ def dub_job_retry(jid: str):
             # translator, so a Perso job came back transcribed by something
             # else with nothing on screen to say so.
             stt_engine="perso" if engines["stt_engine"] == "perso" else None,
+            # Replay the first run's separation choice too. .get: jobs saved
+            # before separation was selectable carry none and fall back local.
+            sep_engine="perso" if engines.get("separation") == "perso" else None,
             translate_engine=engines["translator"],
             n_takes=engines["quality"],
             source_language_code=job.get("source_lang"),
@@ -832,6 +840,7 @@ def engines_status():
     return {
         "gemma_available": gemma_available(),
         "qwen_available": qwen_available(),
+        "hunyuan_available": hunyuan_available(),
         "gemini_available": gemini_available(),
         "perso_available": perso_available(),
     }
@@ -853,6 +862,80 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
         f"(the model is not pulled). Choose Gemini in the Translation dropdown, "
         f"or run: ollama pull {model_tag}"
     )
+
+
+# In-app Hunyuan installer state, polled by the screen. One shared dict (not
+# per-request) because there is only ever one install to talk about; the lock
+# only guards the start decision so a double-click can't spawn two pulls.
+_hunyuan_install = {"state": "idle", "pct": None, "detail": ""}
+_hunyuan_install_lock = threading.Lock()
+
+
+def _hunyuan_install_worker():
+    """Pull the Hunyuan GGUF through Ollama, then bake in the chat template.
+
+    Two steps because the Hugging Face GGUF ships without a usable template:
+    /api/pull downloads the weights, then /api/create layers the validated
+    template/parameters (see app.config) on top under the app's own tag.
+    Config is read live inside the thread (not captured at import), the same
+    way engines_status.py does -- the desktop shell injects OLLAMA_URL at
+    runtime, and tests monkeypatch config values.
+    """
+    try:
+        url = config.OLLAMA_URL
+        r = requests.post(
+            f"{url}/api/pull",
+            json={"model": config.HUNYUAN_PULL_SOURCE, "stream": True},
+            stream=True,
+            timeout=600,
+        )
+        r.raise_for_status()
+        for line in r.iter_lines():
+            if not line:
+                continue
+            progress = json.loads(line)
+            if "error" in progress:
+                raise RuntimeError(progress["error"])
+            if progress.get("total") and progress.get("completed") is not None:
+                _hunyuan_install["pct"] = int(
+                    100 * progress["completed"] / progress["total"]
+                )
+        r = requests.post(
+            f"{url}/api/create",
+            json={
+                "model": config.OLLAMA_HUNYUAN_MODEL,
+                "from": config.HUNYUAN_PULL_SOURCE,
+                "template": config.HUNYUAN_TEMPLATE,
+                "parameters": config.HUNYUAN_PARAMETERS,
+                "stream": False,
+            },
+            timeout=600,
+        )
+        r.raise_for_status()
+        status = r.json().get("status")
+        if status != "success":
+            raise RuntimeError(f"Ollama create reported: {status}")
+        _hunyuan_install.update({"state": "done", "pct": 100, "detail": ""})
+    except Exception as e:
+        # A short reason only -- this dict goes straight to the screen, and a
+        # raw traceback would put file paths there for nothing.
+        _hunyuan_install.update({"state": "error", "detail": str(e)[:120]})
+
+
+@app.post("/api/translation/hunyuan/install")
+def hunyuan_install_start():
+    """Start installing the Hunyuan model in the background (idempotent while
+    running: a second POST just reports the install already in flight)."""
+    with _hunyuan_install_lock:
+        if _hunyuan_install["state"] != "running":
+            _hunyuan_install.update({"state": "running", "pct": 0, "detail": ""})
+            threading.Thread(target=_hunyuan_install_worker, daemon=True).start()
+        return dict(_hunyuan_install)
+
+
+@app.get("/api/translation/hunyuan/install")
+def hunyuan_install_state():
+    return dict(_hunyuan_install)
 
 
 def _cut_video(path: str, start: float, end: float, on_cut=None) -> None:
@@ -892,7 +975,7 @@ def _cut_video(path: str, start: float, end: float, on_cut=None) -> None:
             os.remove(tmp)
 
 
-def _engines_used(stt_engine=None, translate_engine=None, n_takes=None) -> dict:
+def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engine=None) -> dict:
     """The engine choices this job is really being made with, resolved now.
 
     The form may leave any of them out, in which case the app's own setting
@@ -908,6 +991,7 @@ def _engines_used(stt_engine=None, translate_engine=None, n_takes=None) -> dict:
         "translator": (translate_engine or TRANSLATE_ENGINE or "").lower() or None,
         "tts": "qwen3",
         "quality": n_takes if n_takes is not None else QWEN_N_TAKES,
+        "separation": "perso" if (sep_engine or "").lower() == "perso" else "demucs",
     }
 
 
@@ -922,6 +1006,7 @@ def dub_start(
     num_speakers: Optional[int] = Form(None),
     translate_engine: Optional[str] = Form(None),
     stt_engine: Optional[str] = Form(None),
+    sep_engine: Optional[str] = Form(None),
     n_takes: Optional[int] = Form(None),
     source_language_code: Optional[str] = Form(None),
     project: Optional[str] = Form(None),
@@ -971,6 +1056,11 @@ def dub_start(
     stt_engine = (stt_engine or "").strip().lower() or None
     if stt_engine not in (None, "local", "perso"):
         raise HTTPException(422, f"Unknown stt_engine: {stt_engine}")
+    # Same normalization for the same reason: "Perso" with a capital P must not
+    # silently skip the preflight and run the free local engine instead.
+    sep_engine = (sep_engine or "").strip().lower() or None
+    if sep_engine not in (None, "local", "demucs", "perso"):
+        raise HTTPException(422, f"Unknown sep_engine: {sep_engine}")
     if not _valid_language_code(language_code):
         raise HTTPException(422, f"Unknown language_code: {language_code}")
     effective_translate_engine = (translate_engine or TRANSLATE_ENGINE or "").lower()
@@ -982,6 +1072,16 @@ def dub_start(
         status = qwen_status()
         if status != "available":
             raise HTTPException(422, _ollama_unavailable_message("Qwen", status, OLLAMA_QWEN_MODEL))
+    if effective_translate_engine == "hunyuan":
+        status = hunyuan_status()
+        if status == "model_missing":
+            # Not _ollama_unavailable_message: its "ollama pull <tag>" advice
+            # cannot produce this model -- the tag only exists after the in-app
+            # installer bakes the chat template in (/api/translation/hunyuan/install).
+            raise HTTPException(422, "The Hunyuan model is not downloaded yet. Pick "
+                                     "Hunyuan in the Translation dropdown to download it first.")
+        if status != "available":
+            raise HTTPException(422, _ollama_unavailable_message("Hunyuan", status, OLLAMA_HUNYUAN_MODEL))
     if effective_translate_engine == "gemini" and not gemini_available():
         raise HTTPException(
             422, "Gemini translation needs an API key. Open Settings and save your Gemini API key first."
@@ -992,7 +1092,13 @@ def dub_start(
             "Perso transcription needs an API key. Open Settings and save your Perso "
             "API key, or choose Local transcription.",
         )
-    if stt_engine == "perso" and not current_value("PERSO_SPACE_SEQ"):
+    if sep_engine == "perso" and not perso_available():
+        raise HTTPException(
+            422,
+            "Perso separation needs an API key. Open Settings and save your Perso "
+            "API key, or choose Local separation.",
+        )
+    if "perso" in (stt_engine, sep_engine) and not current_value("PERSO_SPACE_SEQ"):
         # No workspace pinned: a single-workspace account resolves silently in
         # the pipeline, but several would fail AFTER minutes of separation
         # work. Catch that here, before the upload is accepted.
@@ -1082,7 +1188,7 @@ def dub_start(
                       # What made this job: read back by the finished screen and
                       # by "Try again", which repeats these rather than today's
                       # defaults.
-                      **_engines_used(stt_engine, translate_engine, n_takes))
+                      **_engines_used(stt_engine, translate_engine, n_takes, sep_engine))
     # Written now, not just at the end: a job the user quits the app in the
     # middle of still has a folder, and without a file in it that folder is
     # nameless -- Projects would have nothing to show for it.
@@ -1118,6 +1224,7 @@ def dub_start(
             num_speakers=num_speakers,
             translate_engine=translate_engine,
             stt_engine=stt_engine or default_stt_engine() or None,
+            sep_engine=sep_engine,
             n_takes=n_takes,
             source_language_code=source_language_code,
             cancel_check=lambda: job_store.is_cancel_requested(jid),

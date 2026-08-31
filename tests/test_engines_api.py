@@ -5,6 +5,9 @@ Why this exists: the desktop UI's default translate engine ("gemma", via local
 Ollama) does not exist on a clean machine, so jobs used to die 10 minutes in.
 These checks let the UI/backend fail fast instead.
 """
+import threading
+import time
+
 import requests
 from fastapi.testclient import TestClient
 
@@ -205,6 +208,7 @@ def test_perso_available_false_when_key_missing(monkeypatch):
 def test_engines_endpoint_all_unavailable(monkeypatch):
     monkeypatch.setattr(main, "gemma_available", lambda: False)
     monkeypatch.setattr(main, "qwen_available", lambda: False)
+    monkeypatch.setattr(main, "hunyuan_available", lambda: False)
     monkeypatch.setattr(main, "gemini_available", lambda: False)
     monkeypatch.setattr(main, "perso_available", lambda: False)
 
@@ -213,6 +217,7 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
     assert r.json() == {
         "gemma_available": False,
         "qwen_available": False,
+        "hunyuan_available": False,
         "gemini_available": False,
         "perso_available": False,
     }
@@ -221,6 +226,7 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
 def test_engines_endpoint_all_available(monkeypatch):
     monkeypatch.setattr(main, "gemma_available", lambda: True)
     monkeypatch.setattr(main, "qwen_available", lambda: True)
+    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
     monkeypatch.setattr(main, "gemini_available", lambda: True)
     monkeypatch.setattr(main, "perso_available", lambda: True)
 
@@ -229,6 +235,7 @@ def test_engines_endpoint_all_available(monkeypatch):
     assert r.json() == {
         "gemma_available": True,
         "qwen_available": True,
+        "hunyuan_available": True,
         "gemini_available": True,
         "perso_available": True,
     }
@@ -450,3 +457,161 @@ def test_dub_start_no_stt_engine_skips_perso_preflight(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 200
+
+
+# --- hunyuan: availability, preflight, and the in-app installer -------------
+
+def test_hunyuan_available_true_when_tag_present(monkeypatch):
+    monkeypatch.setattr(
+        requests, "get",
+        lambda *a, **kw: _FakeResponse(
+            {"models": [{"name": config.OLLAMA_HUNYUAN_MODEL}]}
+        ),
+    )
+    assert engines_status.hunyuan_available() is True
+
+
+def test_hunyuan_available_false_when_tag_missing(monkeypatch):
+    monkeypatch.setattr(
+        requests, "get",
+        lambda *a, **kw: _FakeResponse({"models": [{"name": "gemma3:12b"}]}),
+    )
+    assert engines_status.hunyuan_available() is False
+
+
+def test_hunyuan_status_checks_the_configured_ollama_hunyuan_model(monkeypatch):
+    calls = {}
+
+    def fake(url, model, timeout=4.0):
+        calls["args"] = (url, model)
+        return "available"
+
+    monkeypatch.setattr(engines_status, "ollama_model_status", fake)
+    assert engines_status.hunyuan_status() == "available"
+    assert calls["args"] == (config.OLLAMA_URL, config.OLLAMA_HUNYUAN_MODEL)
+
+
+def test_dub_start_hunyuan_model_missing_422(monkeypatch):
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "model_missing")
+
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "translate_engine": "hunyuan"},
+    )
+    assert r.status_code == 422
+    # Not the generic "ollama pull" advice -- that cannot produce this model
+    # (the tag only exists after the in-app installer runs).
+    assert "not downloaded" in r.json()["detail"]
+
+
+def test_dub_start_hunyuan_available_job_starts(monkeypatch):
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "translate_engine": "hunyuan"},
+    )
+    assert r.status_code == 200
+
+
+# --- POST/GET /api/translation/hunyuan/install ------------------------------
+#
+# The installer runs a real background thread, so each test joins it by
+# polling GET until the state leaves "running" (bounded, ~5s max) -- the
+# monkeypatched requests.post must stay in place until the thread is done.
+
+class _FakeStreamResponse:
+    """Stands in for requests.post(..., stream=True) on Ollama's /api/pull:
+    iter_lines() yields the JSON progress lines the real endpoint streams."""
+
+    def __init__(self, lines, status_code=200):
+        self._lines = lines
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"{self.status_code}")
+
+    def iter_lines(self):
+        for ln in self._lines:
+            yield ln
+
+
+def _poll_install_settled(timeout=5.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        state = client.get("/api/translation/hunyuan/install").json()
+        if state["state"] in ("done", "error"):
+            return state
+        time.sleep(0.05)
+    return client.get("/api/translation/hunyuan/install").json()
+
+
+def test_hunyuan_install_happy_path(monkeypatch):
+    created = {}
+
+    def fake_post(url, json=None, stream=False, timeout=None):
+        if url.endswith("/api/pull"):
+            return _FakeStreamResponse([
+                b'{"status": "pulling", "total": 100, "completed": 50}',
+                b'{"status": "success"}',
+            ])
+        assert url.endswith("/api/create")
+        created.update(json)
+        return _FakeResponse({"status": "success"})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    r = client.post("/api/translation/hunyuan/install")
+    assert r.status_code == 200
+
+    state = _poll_install_settled()
+    assert state["state"] == "done"
+    assert state["pct"] == 100
+    # The create step must bake in the validated template/parameters -- a
+    # plain pull alone leaves the model without a usable chat template.
+    assert created["model"] == config.OLLAMA_HUNYUAN_MODEL
+    assert created["from"] == config.HUNYUAN_PULL_SOURCE
+    assert created["template"] == config.HUNYUAN_TEMPLATE
+    assert created["parameters"] == config.HUNYUAN_PARAMETERS
+
+
+def test_hunyuan_install_pull_error_sets_error_state(monkeypatch):
+    def fake_post(url, **kw):
+        assert url.endswith("/api/pull")
+        return _FakeStreamResponse([b'{"error": "boom"}'])
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    r = client.post("/api/translation/hunyuan/install")
+    assert r.status_code == 200
+
+    state = _poll_install_settled()
+    assert state["state"] == "error"
+    assert "boom" in state["detail"]
+
+
+def test_hunyuan_install_double_post_returns_running_state(monkeypatch):
+    gate = threading.Event()
+
+    def fake_post(url, **kw):
+        if url.endswith("/api/pull"):
+            gate.wait(5)
+            return _FakeStreamResponse([b'{"total": 100, "completed": 100}'])
+        return _FakeResponse({"status": "success"})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    r1 = client.post("/api/translation/hunyuan/install")
+    assert r1.status_code == 200
+    assert r1.json()["state"] == "running"
+
+    # A double-click must not start a second pull or 500 -- it just reports
+    # the install already in flight.
+    r2 = client.post("/api/translation/hunyuan/install")
+    assert r2.status_code == 200
+    assert r2.json()["state"] == "running"
+
+    gate.set()
+    state = _poll_install_settled()
+    assert state["state"] == "done"

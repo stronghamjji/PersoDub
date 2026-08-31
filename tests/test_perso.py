@@ -623,3 +623,51 @@ def test_upload_media_is_cached_per_video(monkeypatch, tmp_path):
 
     assert first == second == 555
     assert sum(u.endswith("/file/api/upload/sas-token") for u in calls["get"]) == 1
+
+
+# ── 8. pipeline._separate_with_perso (fake client, no network) ─────────────
+def test_separate_with_perso_uses_client_and_maps_tracks(tmp_path):
+    from app import pipeline as pipeline_module
+
+    class FakeClient:
+        def __init__(self):
+            self.cancel_check = None
+            self.calls = []
+
+        def describe_workspace(self):
+            return {"seq": 9, "name": "My Space", "credits": 100}
+
+        def separate(self, video_path, out_dir):
+            self.calls.append((video_path, out_dir))
+            return {"vocals": "/w/perso_vocals.wav", "background": "/w/perso_background.wav"}
+
+    fake = FakeClient()
+    logs = []
+    sep_paths, pc = pipeline_module._separate_with_perso(
+        "/v/in.mp4", "/w", perso_client=fake,
+        cancel_check=lambda: False, on_notice=None, log=logs.append)
+
+    assert pc is fake
+    assert sep_paths == {"vocals": "/w/perso_vocals.wav", "background": "/w/perso_background.wav"}
+    assert fake.calls == [("/v/in.mp4", "/w")]
+    assert any("My Space" in l for l in logs)
+
+
+def test_separate_with_perso_credit_exhausted_notice():
+    from app import pipeline as pipeline_module
+
+    class FakeClient:
+        cancel_check = None
+
+        def describe_workspace(self):
+            return None
+
+        def separate(self, video_path, out_dir):
+            raise PersoCreditExhaustedError()
+
+    notices = []
+    with pytest.raises(RuntimeError):
+        pipeline_module._separate_with_perso(
+            "/v/in.mp4", "/w", perso_client=FakeClient(),
+            cancel_check=None, on_notice=notices.append, log=lambda m: None)
+    assert notices and notices[0]["type"] == "perso_credit_exhausted"

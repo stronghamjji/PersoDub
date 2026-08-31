@@ -1149,3 +1149,65 @@ def test_dub_retry_of_a_job_saved_before_the_engines_were_kept(monkeypatch, tmp_
     assert r.status_code == 200
     assert _wait_for(calls)[0]["stt_engine"] == "perso"
     assert client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()["stt_engine"] == "perso"
+
+
+def test_dub_start_sep_engine_perso_forwarded(monkeypatch):
+    # The sep_engine form field must reach the pipeline and the job record
+    # (the record is what "Try again" replays months later).
+    captured = {}
+
+    def fake_run_dub(**kw):
+        captured.update(kw)
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "sep_engine": "perso"},
+    )
+    assert r.status_code == 200
+    jid = r.json()["job_id"]
+    for _ in range(100):
+        job = client.get(f"/api/dub/jobs/{jid}").json()
+        if job["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert captured["sep_engine"] == "perso"
+    assert job["separation"] == "perso"
+
+
+def test_dub_start_sep_engine_defaults_to_demucs(monkeypatch):
+    def fake_run_dub(**kw):
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko"},
+    )
+    assert r.status_code == 200
+    job = client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()
+    assert job["separation"] == "demucs"
+
+
+def test_dub_start_sep_engine_unknown_is_422():
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "sep_engine": "container"},
+    )
+    assert r.status_code == 422
+
+
+def test_dub_start_sep_perso_without_key_is_422(monkeypatch):
+    monkeypatch.setattr(main, "perso_available", lambda: False)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "sep_engine": "perso"},
+    )
+    assert r.status_code == 422
+    assert "Perso separation" in r.json()["detail"]

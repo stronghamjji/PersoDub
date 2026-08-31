@@ -39,6 +39,21 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:12b")
 OLLAMA_QWEN_MODEL = os.environ.get("OLLAMA_QWEN_MODEL", "qwen2.5:7b")
 OLLAMA_GEMMA_MODEL = os.environ.get("OLLAMA_GEMMA_MODEL", "gemma3:12b")
+# Tencent Hunyuan MT2 1.8B, served by Ollama from the Hugging Face GGUF. The
+# GGUF ships without a usable chat template, so the in-app installer
+# (app/main.py) bakes HUNYUAN_TEMPLATE/HUNYUAN_PARAMETERS in via /api/create
+# under the OLLAMA_HUNYUAN_MODEL tag. Template and parameters are the exact
+# values validated in the 2026-08-18 translation model comparison.
+OLLAMA_HUNYUAN_MODEL = os.environ.get("OLLAMA_HUNYUAN_MODEL", "hy-mt2:1.8b")
+HUNYUAN_PULL_SOURCE = "hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M"
+HUNYUAN_TEMPLATE = "<｜hy_begin▁of▁sentence｜><｜hy_User｜>{{ .Prompt }}<｜hy_Assistant｜>"
+HUNYUAN_PARAMETERS = {
+    "repeat_penalty": 1.05,
+    "stop": ["<｜hy_place▁holder▁no▁2｜>", "<｜hy_User｜>"],
+    "temperature": 0.7,
+    "top_k": 20,
+    "top_p": 0.6,
+}
 
 
 # Best-of-N take selection on the Qwen dub path (app/qwen_pipeline.synth_lines).

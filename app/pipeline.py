@@ -280,6 +280,61 @@ def _carry_speaker_labels(target_cues: List[dict], labelled_cues: List[dict]) ->
             cue["speaker_id"] = spk
 
 
+def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_notice, log):
+    """Perso cloud voice/background separation for run_dub's 1b stage.
+
+    Same contract as the local SeparationEngine ({"vocals", "background"}), and
+    the same failure grammar as the Perso STT stage in run_dub (2026-08-06 rule:
+    the user picked Perso, so a failure FAILS the job -- no silent local
+    fallback). Returns (sep_paths, client) so the STT stage can reuse the
+    client -- its upload cache is what keeps the same video from being
+    uploaded twice when both stages go through Perso.
+    """
+    pc = perso_client or PersoClient()
+    pc.cancel_check = cancel_check
+    # Say which workspace is paying -- same reason as the STT stage below.
+    ws = getattr(pc, "describe_workspace", lambda: None)()
+    if ws:
+        name = ws.get("name") or f"workspace {ws.get('seq')}"
+        log(f"   Perso workspace: {name} (#{ws.get('seq')})")
+    try:
+        sep_paths = pc.separate(video_path, work_dir)
+    except JobCancelled:
+        raise  # a user cancel is not a Perso failure -- don't rewrap it
+    except PersoCreditExhaustedError as e:
+        msg = "Perso credits are used up. Recharge to continue."
+        log(f"   Error: {msg} ({e.link})")
+        if on_notice:
+            on_notice({"type": "perso_credit_exhausted", "message": msg, "link": e.link})
+        raise RuntimeError(msg) from e
+    except PersoInvalidKeyError as e:
+        msg = "Perso rejected the API key. Open Settings and check the key."
+        log(f"   Error: {msg}")
+        if on_notice:
+            on_notice({"type": "perso_invalid_key", "message": msg})
+        raise RuntimeError(msg) from e
+    except PersoUnavailableError as e:
+        msg = "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
+        log(f"   Error: {msg}")
+        if on_notice:
+            on_notice({"type": "perso_unavailable", "message": msg})
+        raise RuntimeError(msg) from e
+    except Exception as e:
+        msg = f"Perso separation failed ({str(e)[:80]}). Check Settings, or switch separation back to Local."
+        log(f"   Error: {msg}")
+        raise RuntimeError(msg) from e
+    # What THIS job consumed, not just the balance -- log-only, a surprise in
+    # the credits payload must never discard the paid result (STT stage rule).
+    try:
+        if ws and ws.get("credits") is not None:
+            after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
+            if after is not None:
+                log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
+    except Exception:
+        pass
+    return sep_paths, pc
+
+
 def run_dub(
     video_path: str,
     out_path: str,
@@ -290,6 +345,10 @@ def run_dub(
     num_speakers: Optional[int] = None,
     translate_engine: Optional[str] = None,
     stt_engine: Optional[str] = None,
+    # "perso" sends the voice/background split through Perso cloud; anything
+    # else (the default) runs local Demucs. Same no-silent-fallback rule as
+    # stt_engine.
+    sep_engine: Optional[str] = None,
     # Whisper language hint from the UI's source-language dropdown; None keeps
     # the old auto-detect behavior (server callers don't pass it).
     source_language_code: Optional[str] = None,
@@ -339,13 +398,19 @@ def run_dub(
 
     _check_cancel(cancel_check, log)
 
-    # 1b. Local Demucs separation -- mandatory, no container fallback. A failure
-    # here fails the whole job rather than silently falling back to a remote service.
-    log("1/6 Separating background audio locally (Demucs)…")
-    try:
-        sep_paths = SeparationEngine().separate(video_path, work_dir)
-    except Exception as e:
-        raise RuntimeError(f"Local separation failed, aborting (no container fallback): {str(e)[:200]}")
+    # 1b. Voice/background separation -- local Demucs (default) or Perso cloud.
+    # Either way a failure fails the whole job: no silent engine substitution
+    # (2026-08-06 rule), and no container fallback.
+    if (sep_engine or "").lower() == "perso":
+        log("1/6 Separating background audio via Perso cloud…")
+        sep_paths, perso_client = _separate_with_perso(
+            video_path, work_dir, perso_client, cancel_check, on_notice, log)
+    else:
+        log("1/6 Separating background audio locally (Demucs)…")
+        try:
+            sep_paths = SeparationEngine().separate(video_path, work_dir)
+        except Exception as e:
+            raise RuntimeError(f"Local separation failed, aborting (no container fallback): {str(e)[:200]}")
     vocals_path, background_path = sep_paths["vocals"], sep_paths["background"]
 
     _check_cancel(cancel_check, log)
