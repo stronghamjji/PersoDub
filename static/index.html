@@ -1265,13 +1265,13 @@
         <span><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Advanced options</span><span class="chev"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg></span>
       </button>
       <div class="advanced-body" id="advancedBody" hidden>
-        <div class="field"><label for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected>On this computer</option><option value="perso">Perso API</option></select><div class="settings-hint">This computer: free, uses the models below.</div><div class="settings-hint">Perso API: Perso&#8217;s servers do everything (paid).</div><div class="settings-hint" id="dubModeHint" hidden>About 1 credit per second of video.</div></div>
-        <div class="field"><label for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint">Splits the voices from the background sound.</div><div class="settings-hint">Perso API uses credits (about 0.5 per second).</div></div>
-        <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint">Turns the speech in your video into text.</div><div class="settings-hint">Want higher quality? Choose Perso API.</div><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
-        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="gemma" selected>Gemma 3 (12B)</option><option value="gemini">Gemini API</option><option value="hunyuan">Hunyuan (1.8B, fast)</option></select><div class="settings-hint">Translates that text into the new language.</div><div class="settings-hint">Want higher quality? Choose Gemini API.</div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
-        <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint">Speaks the translated lines in a generated voice.</div><div class="settings-hint model-line" id="voiceModelHint" hidden></div></div>
+        <div class="field"><label for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected>On this computer</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint" hidden>Perso&#8217;s servers do everything — about 1 credit per second (paid).</div></div>
+        <div class="field"><label for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint">Perso API is paid (about 0.5 credits per second).</div></div>
+        <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
+        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="gemma" selected>Gemma 3 (12B)</option><option value="gemini">Gemini API</option><option value="hunyuan">Hunyuan (1.8B, fast)</option></select><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
+        <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint model-line" id="voiceModelHint" hidden></div></div>
         <div class="field"><label for="qualitySelect">Voice quality</label><select id="qualitySelect"><option value="fast" selected>Fast</option><option value="high">High quality</option></select><div class="settings-hint" id="qualityHint"></div></div>
-        <div class="field"><label for="numSpeakers">Number of speakers</label><input type="number" id="numSpeakers" min="1" placeholder="Auto-detect"><div class="settings-hint">Auto-detect assumes at least 2. Set 1 for a single-speaker video.</div></div>
+        <div class="field"><label for="numSpeakers">Number of speakers</label><input type="number" id="numSpeakers" min="1" placeholder="Auto-detect"><div class="settings-hint">Set 1 for a single-speaker video.</div></div>
         <button type="button" class="keys-link" id="advancedKeysLink">Perso and Gemini need an API key. Add it in Settings</button>
       </div>
       <!-- Start's own error line: the first screen's #formError sits behind the
@@ -3266,8 +3266,8 @@ async function resumeJob(jobId) {
 // ---------------- Quality mode hint ----------------
 // The mode names alone don't tell a user what they trade away; spell it out.
 const QUALITY_HINTS = {
-  fast: "Each line is voiced once and used as is. Quickest way to preview a dub.",
-  high: "Each line is voiced 4 times and the best take is kept. Noticeably better voices, but the voice stage takes about 4× longer.",
+  fast: "One take per line — the quickest preview.",
+  high: "Best of 4 takes per line — about 4× slower.",
 };
 function updateQualityHint() {
   $("qualityHint").textContent = QUALITY_HINTS[$("qualitySelect").value] || "";
