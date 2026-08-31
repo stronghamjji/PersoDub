@@ -887,6 +887,9 @@
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
   .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  /* Above the settings sheet: What's new can be opened FROM Settings, and a
+     sibling overlay later in the DOM would otherwise paint over it. */
+  #whatsNewOverlay { z-index: 30; }
   .wn-list { margin: 0; padding-left: 18px; }
   .wn-list li { font-size: 0.85rem; line-height: 1.6; margin: 4px 0; }
   .license-list { font-size: 0.78rem; color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
