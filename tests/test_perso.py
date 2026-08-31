@@ -818,3 +818,19 @@ def test_get_project_script_paginates_and_returns_sentences(monkeypatch):
     assert calls[1].get("cursorId") == 77
     # every page carries the full speaker list; the last one wins
     assert len(script["speakers"]) == 2
+
+
+# ── 11. PersoClient.add_speaker_from_sentence (mocked httpx) ───────────────
+def test_add_speaker_from_sentence_posts_the_sentence(monkeypatch):
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append((url, json))
+        return _FakeHttpxResponse({"result": {"ok": True}})
+
+    monkeypatch.setattr(perso_client_module.httpx, "post", fake_post)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    client.add_speaker_from_sentence(409873, 11056763)
+    url, body = calls[0]
+    assert url.endswith("/projects/409873/spaces/999/speakers/from-sentence")
+    assert body == {"sourceSentenceSeq": 11056763}

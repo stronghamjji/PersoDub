@@ -479,6 +479,21 @@ class PersoClient:
             cursor = body.get("nextCursorId")
         return {"sentences": sentences, "speakers": speakers}
 
+    def add_speaker_from_sentence(self, project_seq: int, sentence_seq: int,
+                                  space_seq: Optional[int] = None) -> dict:
+        """Give one sentence a NEW speaker, derived from that sentence's own
+        audio -- the write API the official plugin's speaker.mjs uses. The
+        response shape is unverified upstream; callers re-read the script to
+        confirm the effect (the plugin's own defensive pattern)."""
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        r = httpx.post(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/speakers/from-sentence",
+            json={"sourceSentenceSeq": sentence_seq},
+            headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        return r.json() or {}
+
     def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
         """Upload one video to Perso STT and return scriptTimestamps (JSON).
 

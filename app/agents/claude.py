@@ -23,6 +23,7 @@ TOOL_LABELS = {
     "get_job_status": "Checking progress",
     "remake_voices": "Remaking the changed voices",
     "remake_line_voice": "Remaking this line",
+    "change_speaker": "Changing the speaker",
 }
 
 MCP_PREFIX = "mcp__persodub__"
@@ -137,7 +138,12 @@ SYSTEM_PROMPT = (
     "it has fits=false. Use only the persodub tools. Never change timings. "
     "When the user asks for the voices to be remade, call remake_voices "
     "yourself -- it respeaks only the lines whose words changed and rebuilds "
-    "the video in place -- and do not tell them to press a button. Answer in "
+    "the video in place -- and do not tell them to press a button. "
+    "A Perso-dubbed job (its status says so) reads its script from Perso; its "
+    "text cannot be edited here yet, but change_speaker can give a line a new "
+    "voice. Any tool answer with needs_confirmation=true may spend Perso "
+    "credits: relay its message to the user as a question, and call the tool "
+    "again with confirm=true only after they clearly agree. Answer in "
     "the user's language, briefly."
 )
 

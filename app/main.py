@@ -946,6 +946,43 @@ def model_remove(mid: str):
     return {"removed": mid}
 
 
+class PersoSpeakerRequest(BaseModel):
+    line: int
+
+
+@app.post("/api/dub/jobs/{jid}/perso/speaker")
+def dub_job_perso_speaker(jid: str, body: PersoSpeakerRequest):
+    """Give one line of a Perso dub a NEW speaker, on Perso's side.
+
+    The agent's change_speaker tool lands here. Line numbers are the same
+    1-based order the script endpoint serves. The write is verified the way
+    the official plugin does it: re-read the script and report what it says.
+    """
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("dub_mode") != "perso" or not job.get("perso_project_seq"):
+        raise HTTPException(status_code=409, detail="Only Perso dubs have server-side speakers.")
+    seq = int(job["perso_project_seq"])
+    pc = PersoClient()
+    try:
+        sents = (pc.get_project_script(seq).get("sentences") or [])
+        if not 1 <= body.line <= len(sents):
+            raise HTTPException(status_code=422, detail=f"There is no line {body.line}.")
+        sent = sents[body.line - 1]
+        old = sent.get("speakerOrderIndex")
+        pc.add_speaker_from_sentence(seq, int(sent["seq"]))
+        after = pc.get_project_script(seq).get("sentences") or []
+        new = after[body.line - 1].get("speakerOrderIndex") if len(after) >= body.line else None
+    except HTTPException:
+        raise
+    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Perso did not accept the change ({str(e)[:80]}).")
+    return {"line": body.line, "old_speaker": old, "new_speaker": new}
+
+
 @app.get("/api/engines")
 def engines_status():
     """Which translation/transcription engines actually work on this machine right now.

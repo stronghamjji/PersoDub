@@ -66,3 +66,56 @@ def test_remake_line_voice_asks_for_that_one_line(posted):
     posted.answer = _Response(200, {"line": 3, "ok": True})
     assert mcp_server.remake_line_voice("job7", 3) == {"line": 3, "ok": True}
     assert posted == ["%s/api/dub/jobs/job7/script/3/voice" % mcp_server.API]
+
+
+# --- change_speaker: the Perso-dub tool with the pay-gate -------------------
+
+def test_change_speaker_asks_before_spending(monkeypatch):
+    # Without confirm=True nothing may be posted -- the agent must relay the
+    # question and only proceed once the user agrees (money rule A).
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append(a))
+    out = mcp_server.change_speaker("job7", 3)
+    assert out.get("needs_confirmation") is True
+    assert "credit" in out.get("message", "").lower()
+    assert posted == []
+
+
+def test_change_speaker_posts_once_confirmed(monkeypatch):
+    calls = []
+
+    def fake_post(url, json=None, timeout=None):
+        calls.append((url, json))
+        return _Response(200, {"line": 3, "new_speaker": 6})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.change_speaker("job7", 3, confirm=True)
+    assert out == {"line": 3, "new_speaker": 6}
+    url, body = calls[0]
+    assert url == "%s/api/dub/jobs/job7/perso/speaker" % mcp_server.API
+    assert body == {"line": 3}
+
+
+def test_change_speaker_relays_a_refusal(monkeypatch):
+    def fake_post(url, json=None, timeout=None):
+        return _Response(409, {"detail": "Only Perso dubs have server-side speakers."})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    with pytest.raises(ValueError, match="Only Perso dubs"):
+        mcp_server.change_speaker("job7", 3, confirm=True)
+
+
+def test_get_script_serves_a_perso_dub_through_the_api(monkeypatch):
+    # A Perso dub's lines live on Perso's side -- the tool must read them from
+    # the app's script endpoint instead of the local files it uses otherwise.
+    def fake_get(url, **kw):
+        if url.endswith("/api/dub/jobs/jobP"):
+            return _Response(200, {"id": "jobP", "status": "done", "dub_mode": "perso"})
+        if url.endswith("/api/dub/jobs/jobP/script"):
+            return _Response(200, {"lines": [{"line": 1, "text": "Hi", "source": "안녕"}],
+                                   "readonly": True})
+        raise AssertionError("unexpected GET %s" % url)
+
+    monkeypatch.setattr(mcp_server.httpx, "get", fake_get)
+    lines = mcp_server.get_script("jobP")
+    assert lines == [{"line": 1, "text": "Hi", "source": "안녕"}]

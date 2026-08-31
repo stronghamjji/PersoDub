@@ -1360,3 +1360,38 @@ def test_cloud_job_without_a_recorded_project_404s_the_script(monkeypatch):
     )
     j = _wait_done(r.json()["job_id"])
     assert client.get(f"/api/dub/jobs/{j['id']}/script").status_code == 404
+
+
+def test_perso_speaker_change_maps_the_line_and_verifies(monkeypatch):
+    class SpeakerClient(_ScriptedCloudClient):
+        added = []
+
+        def add_speaker_from_sentence(self, project_seq, sentence_seq, space_seq=None):
+            SpeakerClient.added.append((project_seq, sentence_seq))
+            return {"ok": True}
+
+        def get_project_script(self, project_seq, space_seq=None):
+            script = super().get_project_script(project_seq, space_seq)
+            if SpeakerClient.added:
+                # after the write, the second line carries a fresh speaker
+                script["sentences"][1]["speakerOrderIndex"] = 9
+            return script
+
+    SpeakerClient.added = []
+    monkeypatch.setattr(main, "PersoClient", SpeakerClient)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    j = _wait_done(r.json()["job_id"])
+
+    rs = client.post(f"/api/dub/jobs/{j['id']}/perso/speaker", json={"line": 2})
+    assert rs.status_code == 200
+    assert rs.json() == {"line": 2, "old_speaker": 2, "new_speaker": 9}
+    # the write targeted line 2's own sentence seq
+    assert SpeakerClient.added == [(409873, 2)]
+
+    # a local job refuses: only Perso dubs have server-side speakers
+    r2 = client.post("/api/dub/jobs/nope/perso/speaker", json={"line": 1})
+    assert r2.status_code == 404

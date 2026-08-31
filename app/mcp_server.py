@@ -76,6 +76,14 @@ def get_script(job_id: str) -> List[dict]:
     changed still sounds like the old ones until remake_line_voice runs).
     """
     job = _job(job_id)
+    if job.get("dub_mode") == "perso":
+        # A Perso dub's lines live on Perso's side; the app's own script
+        # endpoint mirrors them (read-only for now -- see change_speaker).
+        r = httpx.get("%s/api/dub/jobs/%s/script" % (API, job_id), timeout=60.0)
+        if r.status_code in (404, 503):
+            raise ValueError(r.json().get("detail", "no script for this job"))
+        r.raise_for_status()
+        return r.json()["lines"]
     return load_lines(_work_dir(job), _lang(job))
 
 
@@ -183,6 +191,28 @@ def remake_line_voice(job_id: str, line: int) -> dict:
     r = httpx.post("%s/api/dub/jobs/%s/script/%d/voice" % (API, job_id, line), timeout=600.0)
     if r.status_code in (404, 409, 422):
         raise ValueError(r.json().get("detail", "cannot remake line %d" % line))
+    r.raise_for_status()
+    return r.json()
+
+
+@mcp.tool()
+def change_speaker(job_id: str, line: int, confirm: bool = False) -> dict:
+    """Give ONE line of a Perso dub a NEW speaker (a fresh voice), on Perso's side.
+
+    Perso dubs only. THIS MAY SPEND PERSO CREDITS. Called without confirm=true
+    it does nothing but return the confirmation question: relay that message to
+    the user, and call again with confirm=true only after they clearly agree.
+    """
+    if not confirm:
+        return {
+            "needs_confirmation": True,
+            "message": ("Changing this line's speaker runs on Perso's side and "
+                        "may spend Perso credits. Proceed?"),
+        }
+    r = httpx.post("%s/api/dub/jobs/%s/perso/speaker" % (API, job_id),
+                   json={"line": line}, timeout=600.0)
+    if r.status_code in (404, 409, 422):
+        raise ValueError(r.json().get("detail", "cannot change line %d's speaker" % line))
     r.raise_for_status()
     return r.json()
 
