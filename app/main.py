@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -836,14 +836,45 @@ def models_list():
     Settings catalog, the advanced-options status lines and the dub-start
     warning dialog all render from. Always-installed models stay out: the
     install itself guarantees them and there is nothing to manage."""
-    kit = model_store.kit_dir()
-    rows = []
-    for m in model_store.load_catalog():
-        if m["role"] == "always":
-            continue
-        rows.append({"id": m["id"], "role": m["role"], "name": m["name"],
-                     "bytes": m["bytes"], "state": model_store.model_state(m, kit)})
-    return {"models": rows}
+    return {"models": model_store.status_rows()}
+
+
+def _model_or_404(mid: str):
+    entry = model_store.find(mid)
+    if entry is None or entry["role"] == "always":
+        raise HTTPException(404, f"Unknown model: {mid}")
+    return entry
+
+
+@app.post("/api/models/{mid}/download")
+def model_download(mid: str):
+    entry = _model_or_404(mid)
+    free = model_store.free_bytes_at(model_store.kit_dir())
+    if free is not None and free < entry["bytes"] * 1.1:
+        raise HTTPException(409, "Not enough space: needs %.1f GB, %.1f GB free"
+                                 % (entry["bytes"] / 1024**3, free / 1024**3))
+    started = model_store.request_download(entry)
+    # 202 for a fresh start, 200 when it was already running -- a double-click
+    # must never error or start a second download.
+    return JSONResponse({"state": "downloading"}, status_code=202 if started == "started" else 200)
+
+
+@app.post("/api/models/{mid}/cancel")
+def model_cancel(mid: str):
+    _model_or_404(mid)
+    model_store.cancel_download(mid)
+    # The pieces stay on disk -- the next GET shows "paused" with Resume.
+    return {"state": "cancelling"}
+
+
+@app.delete("/api/models/{mid}")
+def model_remove(mid: str):
+    entry = _model_or_404(mid)
+    if model_store.dub_in_progress():
+        raise HTTPException(409, "A dub is running right now. Wait for it to finish, then remove the model.")
+    model_store.cancel_download(mid)
+    model_store.remove_model(entry)
+    return {"removed": mid}
 
 
 @app.get("/api/engines")
@@ -879,80 +910,6 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
         f"(the model is not pulled). Choose Gemini in the Translation dropdown, "
         f"or run: ollama pull {model_tag}"
     )
-
-
-# In-app Hunyuan installer state, polled by the screen. One shared dict (not
-# per-request) because there is only ever one install to talk about; the lock
-# only guards the start decision so a double-click can't spawn two pulls.
-_hunyuan_install = {"state": "idle", "pct": None, "detail": ""}
-_hunyuan_install_lock = threading.Lock()
-
-
-def _hunyuan_install_worker():
-    """Pull the Hunyuan GGUF through Ollama, then bake in the chat template.
-
-    Two steps because the Hugging Face GGUF ships without a usable template:
-    /api/pull downloads the weights, then /api/create layers the validated
-    template/parameters (see app.config) on top under the app's own tag.
-    Config is read live inside the thread (not captured at import), the same
-    way engines_status.py does -- the desktop shell injects OLLAMA_URL at
-    runtime, and tests monkeypatch config values.
-    """
-    try:
-        url = config.OLLAMA_URL
-        r = requests.post(
-            f"{url}/api/pull",
-            json={"model": config.HUNYUAN_PULL_SOURCE, "stream": True},
-            stream=True,
-            timeout=600,
-        )
-        r.raise_for_status()
-        for line in r.iter_lines():
-            if not line:
-                continue
-            progress = json.loads(line)
-            if "error" in progress:
-                raise RuntimeError(progress["error"])
-            if progress.get("total") and progress.get("completed") is not None:
-                _hunyuan_install["pct"] = int(
-                    100 * progress["completed"] / progress["total"]
-                )
-        r = requests.post(
-            f"{url}/api/create",
-            json={
-                "model": config.OLLAMA_HUNYUAN_MODEL,
-                "from": config.HUNYUAN_PULL_SOURCE,
-                "template": config.HUNYUAN_TEMPLATE,
-                "parameters": config.HUNYUAN_PARAMETERS,
-                "stream": False,
-            },
-            timeout=600,
-        )
-        r.raise_for_status()
-        status = r.json().get("status")
-        if status != "success":
-            raise RuntimeError(f"Ollama create reported: {status}")
-        _hunyuan_install.update({"state": "done", "pct": 100, "detail": ""})
-    except Exception as e:
-        # A short reason only -- this dict goes straight to the screen, and a
-        # raw traceback would put file paths there for nothing.
-        _hunyuan_install.update({"state": "error", "detail": str(e)[:120]})
-
-
-@app.post("/api/translation/hunyuan/install")
-def hunyuan_install_start():
-    """Start installing the Hunyuan model in the background (idempotent while
-    running: a second POST just reports the install already in flight)."""
-    with _hunyuan_install_lock:
-        if _hunyuan_install["state"] != "running":
-            _hunyuan_install.update({"state": "running", "pct": 0, "detail": ""})
-            threading.Thread(target=_hunyuan_install_worker, daemon=True).start()
-        return dict(_hunyuan_install)
-
-
-@app.get("/api/translation/hunyuan/install")
-def hunyuan_install_state():
-    return dict(_hunyuan_install)
 
 
 def _cut_video(path: str, start: float, end: float, on_cut=None) -> None:

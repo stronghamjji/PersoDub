@@ -2080,48 +2080,55 @@ applyEngineAvailabilityToForm();
 // mere selection (user decision 2026-08-31). An install already running (the
 // dialog was reopened mid-download) resumes its progress display instead.
 let hunyuanPolling = false;
+async function hunyuanRow() {
+  try {
+    const r = await fetch("/api/models");
+    if (!r.ok) return null;
+    return (await r.json()).models.find((m) => m.id === "hunyuan") || null;
+  } catch { return null; }
+}
 function pollHunyuanInstall() {
   const hint = $("hunyuanHint");
   if (hunyuanPolling) return;
   hunyuanPolling = true;
   const poll = async () => {
-    let s = null;
-    try { s = await (await fetch("/api/translation/hunyuan/install")).json(); } catch { /* keep last text */ }
-    if (s && s.state === "running") {
-      hint.textContent = `Downloading Hunyuan (1.1GB)… ${s.pct ?? 0}%`;
+    const s = await hunyuanRow();
+    if (s && s.state === "downloading") {
+      hint.className = "settings-hint hunyuan-busy";
+      hint.textContent = `Downloading Hunyuan (1.1GB)… ${s.progress ?? 0}%`;
       setTimeout(poll, 2000);
       return;
     }
     hunyuanPolling = false;
-    if (s && s.state === "done") {
+    if (s && s.state === "ready") {
+      hint.className = "settings-hint hunyuan-ok";
       hint.textContent = "Hunyuan is ready.";
       applyEngineAvailabilityToForm();
     } else {
-      hint.textContent = "Hunyuan download failed" + (s && s.detail ? `: ${s.detail}` : ".");
+      hint.className = "settings-hint hunyuan-busy";
+      hint.textContent = "Hunyuan download failed" + (s && s.error ? `: ${s.error}` : ".");
     }
   };
   poll();
 }
 async function startHunyuanDownload() {
+  $("hunyuanHint").className = "settings-hint hunyuan-busy";
   $("hunyuanHint").textContent = "Downloading Hunyuan (1.1GB)…";
-  try { await fetch("/api/translation/hunyuan/install", { method: "POST" }); } catch {}
+  try { await fetch("/api/models/hunyuan/download", { method: "POST" }); } catch {}
   pollHunyuanInstall();
 }
 async function showHunyuanState() {
   const hint = $("hunyuanHint");
-  try {
-    const r = await fetch("/api/engines");
-    if (!r.ok || (await r.json()).hunyuan_available) { hint.hidden = true; return; }
-  } catch { return; }
+  const s = await hunyuanRow();
+  if (!s || s.state === "ready") { hint.hidden = true; return; }
   hint.hidden = false;
-  let s = null;
-  try { s = await (await fetch("/api/translation/hunyuan/install")).json(); } catch {}
-  if (s && s.state === "running") { pollHunyuanInstall(); return; }
+  if (s.state === "downloading") { pollHunyuanInstall(); return; }
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "keys-link";
   btn.textContent = "Download Hunyuan (1.1GB)";
   btn.addEventListener("click", startHunyuanDownload);
+  hint.className = "settings-hint";
   hint.replaceChildren(btn);
 }
 $("translateSelect").addEventListener("change", () => {
