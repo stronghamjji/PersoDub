@@ -67,6 +67,83 @@ from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_s
 from app.translate import get_translator
 
 
+def _dub_target_for(job: dict):
+    """Rebuild a queued job's work from nothing but its saved record.
+
+    A job that starts straight away runs a closure built in dub_start, with
+    the request still in hand. A job that waited out an app restart has only
+    its job.json and its folder -- this reads the same choices back out of
+    those (the way "Try again" does) so the queue can start it as if the app
+    had never closed.
+    """
+    jid = job["id"]
+    work = job["work_dir"]
+    video_path = os.path.join(work, "input.mp4")
+    out_path = os.path.join(work, "dubbed.mp4")
+    language_code = job.get("language_code") or "en"
+    language = job.get("language") or _language_name(language_code)
+    srt_path = os.path.join(work, "sub.srt")
+    srt_path = srt_path if os.path.exists(srt_path) else None
+    source_srt_path = os.path.join(work, "source.srt")
+    source_srt_path = source_srt_path if os.path.exists(source_srt_path) else None
+    trim = job.get("trim")
+    source_url = job.get("source_url")
+
+    def _target(log):
+        if source_url and not os.path.exists(video_path):
+            fetch_source(source_url, video_path, log=log,
+                         cancel_check=lambda: job_store.is_cancel_requested(jid))
+        if (job.get("trim_pending") and trim
+                and trim.get("start") is not None and trim.get("end") is not None):
+            def _cut_recorded():
+                job_store._update(jid, trim_pending=False)
+                job_store.persist(jid, work)
+            _cut_video(video_path, trim["start"], trim["end"], on_cut=_cut_recorded)
+        if job.get("dub_mode") == "perso":
+            return _run_cloud_dub(jid, video_path, out_path,
+                                  job.get("source_lang"), language_code,
+                                  job.get("num_speakers"), log)
+        return run_dub(
+            video_path=video_path,
+            srt_path=srt_path,
+            source_srt_path=source_srt_path,
+            out_path=out_path,
+            language=language,
+            language_code=language_code,
+            num_speakers=job.get("num_speakers"),
+            # The record keeps what _engines_used wrote down; the same mapping
+            # "Try again" uses turns it back into run_dub's arguments.
+            stt_engine="perso" if job.get("stt_engine") == "perso" else None,
+            sep_engine="perso" if job.get("separation") == "perso" else None,
+            translate_engine=job.get("translator"),
+            n_takes=job.get("quality"),
+            source_language_code=job.get("source_lang"),
+            cancel_check=lambda: job_store.is_cancel_requested(jid),
+            on_notice=lambda n: job_store.append_notice(jid, n),
+            log=log,
+        )
+
+    return _target
+
+
+def _rearm_queued_jobs() -> None:
+    """Put restored queued jobs back in line, oldest first.
+
+    Their threads never existed, so a restart cost them nothing -- but the
+    functions they were queued with died with the process. Best-effort per
+    job: one whose folder has gone missing becomes an error, not a crash."""
+    waiting = sorted((j for j in (job_store.get(j["id"]) for j in job_store.all())
+                      if j and j.get("status") == "queued"),
+                     key=lambda j: j.get("created") or "")
+    for job in waiting:
+        try:
+            if not job.get("work_dir"):
+                raise RuntimeError("no folder on record")
+            job_store.start(job["id"], _dub_target_for(job))
+        except Exception as e:
+            job_store._update(job["id"], status="error", error=str(e))
+
+
 @asynccontextmanager
 async def lifespan(_app):
     """Jobs from before this launch.
@@ -82,6 +159,7 @@ async def lifespan(_app):
     file is skipped rather than taking the app down.
     """
     job_store.restore(WORKSPACE)
+    _rearm_queued_jobs()
     yield
 
 
@@ -830,7 +908,7 @@ def dub_job_retry(jid: str):
         )
 
     job_store.start(new_jid, _target)
-    return {"job_id": new_jid, "status": "running"}
+    return {"job_id": new_jid, "status": job_store.get(new_jid)["status"]}
 
 
 @app.post("/api/dub/jobs/{jid}/cancel")
@@ -844,10 +922,13 @@ def dub_job_cancel(jid: str):
     the job already finished (done/error) or was already cancelled -- there
     is nothing left to interrupt.
     """
+    was_queued = (job_store.get(jid) or {}).get("status") == "queued"
     status = job_store.request_cancel(jid)
     if status is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if status in ("done", "error", "cancelled"):
+    # A queued job comes back "cancelled" from the call that cancelled it --
+    # that is this request doing its work, not a job with nothing left to stop.
+    if status in ("done", "error", "cancelled") and not was_queued:
         raise HTTPException(status_code=409, detail=f"Job already {status}, nothing to cancel")
     return {"job_id": jid, "status": status}
 
@@ -1563,6 +1644,11 @@ def dub_start(
                       # thread below, which clears this the moment it is.
                       trim_pending=bool(source_url and trim_start is not None),
                       from_link=bool(source_url),
+                      # The link itself and the speaker count: what the boot
+                      # re-arm needs to rebuild this job's work should it wait
+                      # out an app restart in the queue.
+                      source_url=source_url,
+                      num_speakers=num_speakers,
                       # What made this job: read back by the finished screen and
                       # by "Try again", which repeats these rather than today's
                       # defaults.
@@ -1619,7 +1705,9 @@ def dub_start(
         )
 
     job_store.start(jid, _target)
-    return {"job_id": jid, "status": "running"}
+    # "running", or "queued" when another dub holds the air -- the screen's
+    # toast says which.
+    return {"job_id": jid, "status": job_store.get(jid)["status"]}
 
 
 class ProbeRequest(BaseModel):
