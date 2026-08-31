@@ -2361,7 +2361,7 @@ for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
 }
 const ENGINE_HINTS = {
   dubMode: { local: "Runs on your desktop, free. You can edit the script after.",
-             perso: "Perso does everything. About 1 credit per second. No script to edit." },
+             perso: "Perso does it all, start to finish. No choices needed. About 1 credit per second." },
   sep: { local: "Runs on your desktop, free. For accuracy, use the API.",
          perso: "Most accurate. Uses Perso credits." },
   stt: { local: "Runs on your desktop, free. For accuracy, use the API.",
@@ -4007,7 +4007,7 @@ async function renderScript(jobId) {
   if (!data || !data.lines || !data.lines.length) {
     const perso = state.job && state.job.dub_mode === "perso";
     box.innerHTML = `<div class="script-empty">${perso
-      ? "Perso dubbing arrives as a finished video, without a script. To edit lines, dub on this computer."
+      ? "Perso dubbing arrives as a finished video, so this job has no script."
       : "No script was recorded for this job."}</div>`;
     renderTimeline([], 0);
     return;
