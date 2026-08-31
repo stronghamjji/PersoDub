@@ -1777,16 +1777,11 @@ def _valid_language_code(code: str) -> bool:
     return bool(_LANGUAGE_CODE.match(code or ""))
 
 
-# The ten languages the bundled voice model speaks, by code -- the same table
-# the screen keeps (ui/src/dubApi.mjs LANGUAGES). run_dub is given the NAME,
-# which it pastes into the translation prompt and hands to the voice sidecar,
-# so a job whose saved record predates `language` needs its name worked out
-# from the code rather than the code sent in its place.
-LANGUAGE_NAMES = {
-    "en": "English", "ko": "Korean", "zh": "Chinese", "fr": "French",
-    "de": "German", "it": "Italian", "ja": "Japanese", "pt": "Portuguese",
-    "ru": "Russian", "es": "Spanish",
-}
+# run_dub is given the language's NAME, which it pastes into the translation
+# prompt and hands to the voice sidecar -- a job whose saved record predates
+# `language` needs its name worked out from the code. The table itself lives
+# in app/config.py, shared with the agent's queue_dub tool.
+LANGUAGE_NAMES = config.LANGUAGE_NAMES
 
 
 def _language_name(code: str) -> str:

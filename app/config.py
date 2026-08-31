@@ -238,3 +238,13 @@ def default_stt_engine() -> str:
     from app.settings_env import current_value
 
     return os.environ.get("STT_ENGINE") or ("perso" if current_value("PERSO_API_KEY") else "")
+
+
+# The ten languages the bundled voice model speaks, by code -- the same table
+# the screen keeps (ui/src/dubApi.mjs LANGUAGES). One copy here, read by the
+# server (app/main.py) and by the agent's tools (app/mcp_server.py).
+LANGUAGE_NAMES = {
+    "en": "English", "ko": "Korean", "zh": "Chinese", "fr": "French",
+    "de": "German", "it": "Italian", "ja": "Japanese", "pt": "Portuguese",
+    "ru": "Russian", "es": "Spanish",
+}

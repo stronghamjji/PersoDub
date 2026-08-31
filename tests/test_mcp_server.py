@@ -231,3 +231,67 @@ def test_list_videos_shows_only_videos_newest_first(tmp_path):
 def test_list_videos_names_a_folder_that_is_not_there(tmp_path):
     with pytest.raises(ValueError, match="폴더|folder|No such"):
         mcp_server.list_videos(str(tmp_path / "없는폴더"))
+
+
+def _tmp_video(tmp_path):
+    v = tmp_path / "영상.mp4"
+    v.write_bytes(b"video-bytes")
+    return v
+
+
+def test_queue_dub_asks_with_the_credit_price_for_perso(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append(a))
+    monkeypatch.setattr(
+        mcp_server.httpx, "get",
+        lambda url, params=None, timeout=None: _Response(
+            200, {"seconds": 47.0, "credits_estimate": 10, "credits_balance": 500}))
+    out = mcp_server.queue_dub(str(video), "en", dub_mode="perso")
+    assert out.get("needs_confirmation") is True
+    # Dubbing is about 1 credit per SECOND -- not STT's 1-per-5s.
+    assert "47" in out["message"]
+    assert "500" in out["message"]
+    assert posted == []
+
+
+def test_queue_dub_asks_even_for_a_free_local_dub(monkeypatch, tmp_path):
+    # Free, but hours of this machine's time -- never started unasked.
+    video = _tmp_video(tmp_path)
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append(a))
+    monkeypatch.setattr(
+        mcp_server.httpx, "get",
+        lambda url, params=None, timeout=None: _Response(
+            200, {"seconds": 47.0, "credits_estimate": 0, "credits_balance": None}))
+    out = mcp_server.queue_dub(str(video), "en")
+    assert out.get("needs_confirmation") is True
+    assert posted == []
+
+
+def test_queue_dub_starts_the_job_once_confirmed(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    calls = {}
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        calls["url"] = url
+        calls["data"] = data
+        calls["file_name"] = files["video"][0]
+        return _Response(200, {"job_id": "j1", "status": "running"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.queue_dub(str(video), "en", dub_mode="perso",
+                               source_language="ko", confirm=True)
+    assert out == {"job_id": "j1", "status": "running"}
+    assert calls["url"] == "%s/api/dub/start" % mcp_server.API
+    assert calls["data"]["language"] == "English"
+    assert calls["data"]["language_code"] == "en"
+    assert calls["data"]["dub_mode"] == "perso"
+    assert calls["data"]["source_language_code"] == "ko"
+    assert calls["file_name"] == "영상.mp4"
+
+
+def test_queue_dub_refuses_a_language_the_voices_cannot_speak(tmp_path):
+    video = _tmp_video(tmp_path)
+    with pytest.raises(ValueError, match="target_language"):
+        mcp_server.queue_dub(str(video), "sw", confirm=True)

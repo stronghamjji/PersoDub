@@ -10,10 +10,12 @@ Run it with:
 See docs/superpowers/specs/2026-08-20-앱내터미널-설계.md for wiring it into a
 terminal tool.
 
-What is not here cannot be reached. Starting or cancelling a dub, changing settings
-and deleting files are deliberately absent -- anything that spends the GPU and a lot
-of time stays behind a button a person presses.
+What is not here cannot be reached. Changing settings and deleting files are
+deliberately absent. Starting a dub (queue_dub) exists since 2026-09-01, behind
+the same confirm gate as every other spending tool: nothing starts until the
+user has been asked and agreed.
 """
+import math
 import os
 from datetime import datetime
 from typing import List, Optional
@@ -21,6 +23,7 @@ from typing import List, Optional
 import httpx
 from mcp.server.mcpserver import MCPServer
 
+from app.config import LANGUAGE_NAMES
 from app.dub_script import edit_line, export_srt, load_lines
 
 API = os.environ.get("PERSODUB_API", "http://127.0.0.1:8000")
@@ -161,10 +164,9 @@ def remake_voices(job_id: str) -> dict:
     This is the whole-script version. To remake one particular line, changed or
     not, call remake_line_voice(job_id, line) instead.
 
-    This and remake_line_voice are the only things here that spend real GPU
-    time, and both are deliberately narrow: they can only respeak THIS job's own
-    lines. Starting a new dub, cancelling one, or changing any setting is still
-    not reachable.
+    This and remake_line_voice respeak only THIS job's own lines. (Starting a
+    whole new dub is queue_dub's job, behind its own confirm gate; cancelling
+    one and changing settings are still not reachable.)
 
     Added 2026-08-24, reversing the 2026-08-20 rule that every GPU-spending
     action stays behind a button. A user put it plainly: an assistant that
@@ -263,6 +265,80 @@ def extract_subtitles(video_path: str, engine: str = "",
 
 
 @mcp.tool()
+def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
+              source_language: str = "", num_speakers: Optional[int] = None,
+              confirm: bool = False) -> dict:
+    """Put ONE video into PersoDub's dubbing queue.
+
+    target_language (and optional source_language, else auto-detected) are
+    codes: en ko zh fr de it ja pt ru es. dub_mode is the user's choice:
+    "local" (free, dubbed on this machine, one at a time in the queue) or
+    "perso" (paid -- Perso's cloud, about 1 credit per SECOND of video,
+    starts at once without waiting in the local line).
+
+    NOTHING STARTS UNASKED. Called without confirm=true it starts nothing
+    and returns the video's length and, for perso, the estimated credits and
+    balance: relay that to the user as a question and call again with
+    confirm=true only after they clearly agree. For SEVERAL videos, gather
+    every estimate first, ask the user ONCE with the total, then call each
+    with confirm=true -- never ask five separate questions.
+
+    Returns {"job_id", "status"}; the home screen's Up next card shows the
+    queue, and get_job_status follows one job.
+    """
+    if dub_mode not in ("local", "perso"):
+        raise ValueError('dub_mode must be "local" or "perso"')
+    code = (target_language or "").lower()
+    if code not in LANGUAGE_NAMES:
+        raise ValueError("target_language must be one of: %s"
+                         % " ".join(sorted(LANGUAGE_NAMES)))
+    path = os.path.expanduser(video_path)
+    if not confirm:
+        # The estimate route already measures the video and, for perso, the
+        # balance. Dubbing costs ~1 credit per second (the route's own figure
+        # is STT's 1-per-5s, so only seconds and balance are read from it).
+        r = httpx.get("%s/api/subtitles/estimate" % API,
+                      params={"video_path": video_path,
+                              "engine": "perso" if dub_mode == "perso" else "local"},
+                      timeout=60.0)
+        if r.status_code in (404, 422):
+            raise ValueError(r.json().get("detail", "cannot read that video"))
+        r.raise_for_status()
+        est = r.json()
+        seconds = est.get("seconds", 0)
+        if dub_mode == "perso":
+            balance = est.get("credits_balance")
+            message = ("Dubbing this video (%.0fs) on Perso will spend about "
+                       "%d credits%s. Proceed?"
+                       % (seconds, math.ceil(seconds),
+                          "" if balance is None else " (balance: %s)" % balance))
+        else:
+            message = ("Dubbing this video (%.0fs) runs free on this machine "
+                       "and takes a while; queued dubs run one at a time. "
+                       "Proceed?" % seconds)
+        return {"needs_confirmation": True, "message": message,
+                "seconds": seconds}
+    if not os.path.isfile(path):
+        raise ValueError("No such video: %s" % video_path)
+    fields = {"language": LANGUAGE_NAMES[code], "language_code": code}
+    if dub_mode == "perso":
+        fields["dub_mode"] = "perso"
+    if source_language:
+        fields["source_language_code"] = source_language.lower()
+    if num_speakers:
+        fields["num_speakers"] = str(num_speakers)
+    with open(path, "rb") as f:
+        r = httpx.post("%s/api/dub/start" % API, data=fields,
+                       files={"video": (os.path.basename(path), f, "video/mp4")},
+                       timeout=600.0)
+    if r.status_code in (400, 404, 409, 422, 507):
+        detail = r.json().get("detail", "could not start this dub")
+        raise ValueError(detail if isinstance(detail, str) else str(detail))
+    r.raise_for_status()
+    return r.json()
+
+
+@mcp.tool()
 def list_videos(folder: str) -> dict:
     """List the video files in ONE folder on this computer, newest first.
 
@@ -297,6 +373,80 @@ def list_videos(folder: str) -> dict:
     # A folder of thousands would drown the conversation; the newest 100 is
     # every realistic ask, and the count says when there were more.
     return {"folder": root, "total": len(videos), "videos": videos[:100]}
+
+
+@mcp.tool()
+def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
+              source_language: str = "", num_speakers: Optional[int] = None,
+              confirm: bool = False) -> dict:
+    """Put ONE video into PersoDub's dubbing queue.
+
+    target_language (and optional source_language, else auto-detected) are
+    codes: en ko zh fr de it ja pt ru es. dub_mode is the user's choice:
+    "local" (free, dubbed on this machine, one at a time in the queue) or
+    "perso" (paid -- Perso's cloud, about 1 credit per SECOND of video,
+    starts at once without waiting in the local line).
+
+    NOTHING STARTS UNASKED. Called without confirm=true it starts nothing
+    and returns the video's length and, for perso, the estimated credits and
+    balance: relay that to the user as a question and call again with
+    confirm=true only after they clearly agree. For SEVERAL videos, gather
+    every estimate first, ask the user ONCE with the total, then call each
+    with confirm=true -- never ask five separate questions.
+
+    Returns {"job_id", "status"}; the home screen's Up next card shows the
+    queue, and get_job_status follows one job.
+    """
+    if dub_mode not in ("local", "perso"):
+        raise ValueError('dub_mode must be "local" or "perso"')
+    code = (target_language or "").lower()
+    if code not in LANGUAGE_NAMES:
+        raise ValueError("target_language must be one of: %s"
+                         % " ".join(sorted(LANGUAGE_NAMES)))
+    path = os.path.expanduser(video_path)
+    if not confirm:
+        # The estimate route already measures the video and, for perso, the
+        # balance. Dubbing costs ~1 credit per second (the route's own figure
+        # is STT's 1-per-5s, so only seconds and balance are read from it).
+        r = httpx.get("%s/api/subtitles/estimate" % API,
+                      params={"video_path": video_path,
+                              "engine": "perso" if dub_mode == "perso" else "local"},
+                      timeout=60.0)
+        if r.status_code in (404, 422):
+            raise ValueError(r.json().get("detail", "cannot read that video"))
+        r.raise_for_status()
+        est = r.json()
+        seconds = est.get("seconds", 0)
+        if dub_mode == "perso":
+            balance = est.get("credits_balance")
+            message = ("Dubbing this video (%.0fs) on Perso will spend about "
+                       "%d credits%s. Proceed?"
+                       % (seconds, math.ceil(seconds),
+                          "" if balance is None else " (balance: %s)" % balance))
+        else:
+            message = ("Dubbing this video (%.0fs) runs free on this machine "
+                       "and takes a while; queued dubs run one at a time. "
+                       "Proceed?" % seconds)
+        return {"needs_confirmation": True, "message": message,
+                "seconds": seconds}
+    if not os.path.isfile(path):
+        raise ValueError("No such video: %s" % video_path)
+    fields = {"language": LANGUAGE_NAMES[code], "language_code": code}
+    if dub_mode == "perso":
+        fields["dub_mode"] = "perso"
+    if source_language:
+        fields["source_language_code"] = source_language.lower()
+    if num_speakers:
+        fields["num_speakers"] = str(num_speakers)
+    with open(path, "rb") as f:
+        r = httpx.post("%s/api/dub/start" % API, data=fields,
+                       files={"video": (os.path.basename(path), f, "video/mp4")},
+                       timeout=600.0)
+    if r.status_code in (400, 404, 409, 422, 507):
+        detail = r.json().get("detail", "could not start this dub")
+        raise ValueError(detail if isinstance(detail, str) else str(detail))
+    r.raise_for_status()
+    return r.json()
 
 
 @mcp.tool()
