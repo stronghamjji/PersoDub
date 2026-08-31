@@ -1544,11 +1544,12 @@
   .agent { position: relative; flex: 0 0 auto; display: flex; flex-direction: column;
     background: var(--agent-bg); border-top: 2px solid var(--primary);
     color: var(--agent-fg); }
-  /* Nothing to talk about before there is a job -- and nothing yet while one
-     runs, where the script the assistant would fix does not exist. A greyed-out
-     row there was just a thing that could not be used taking up the bottom of
-     the screen, so both take it off the page instead. */
-  body[data-screen="home"] .agent,
+  /* Nothing yet while a dub runs, where the script the assistant would fix
+     does not exist. A greyed-out row there was just a thing that could not be
+     used taking up the bottom of the screen, so it goes off the page instead.
+     The home screen keeps the strip: there is no job there either, but the
+     assistant can still be asked things, and this is where batch requests
+     will land. */
   body[data-screen="running"] .agent { display: none; }
   /* A cancelled or failed job has no script either, but its card stays on show
      with the strip beneath it, so there the row is dimmed and locked -- a turn
@@ -4857,6 +4858,9 @@ function paintChoice() {
         : `${a.name} is not signed in`;
     } else if (document.body.classList.contains("agent-open")) {
       input.placeholder = "Message";
+    } else if (screen === "home") {
+      // No script on screen to point at, so no line-number example here.
+      input.placeholder = "Ask anything";
     } else {
       // Backticks, not quotes: the sentence contains both a double quote and an
       // apostrophe, and a quote of either kind would end the string early.
@@ -4993,14 +4997,15 @@ wire("picker", () => {
 
 let recheckedLogin = false;   // see loadAgents: one second look, never a loop
 // Each check is a child process, so none is started until the strip is on
-// screen AND there is something to say to it. Home hides the strip entirely
-// and a running dub locks it, so neither is a reason to start one -- and the
-// "agent-open" class outlives the screen that set it, which is why the screen
-// is asked first rather than the class alone.
+// screen AND there is something to say to it. A running dub hides the strip,
+// so that is no reason to start one -- and the "agent-open" class outlives
+// the screen that set it, which is why the screen is asked first rather than
+// the class alone.
 function stripInUse() {
   const screen = document.body.dataset.screen;
-  if (screen === "home" || screen === "running") return false;
-  return screen === "done" || document.body.classList.contains("agent-open");
+  if (screen === "running") return false;
+  return screen === "home" || screen === "done"
+    || document.body.classList.contains("agent-open");
 }
 
 // Somebody who never opens a job never spawns a thing.
@@ -5269,7 +5274,9 @@ function stoppedLine() {
 }
 
 async function ask(message) {
-  if (document.body.dataset.screen !== "done") return;
+  // The same doors submit() holds open: a finished job, or the home screen.
+  const screen = document.body.dataset.screen;
+  if (screen !== "done" && screen !== "home") return;
   const token = ++turnToken;
   busy = true;
   paintGo();
@@ -5410,9 +5417,11 @@ async function ask(message) {
 }
 
 function submit() {
-  // Only a finished job has a script to fix. Nothing here may start a turn
-  // against a job the pipeline is still rendering.
-  if (document.body.dataset.screen !== "done") return;
+  // A finished job has a script to fix, and the home screen has questions.
+  // Nothing here may start a turn against a job the pipeline is still
+  // rendering (running), or one that left no script behind (failed).
+  const screen = document.body.dataset.screen;
+  if (screen !== "done" && screen !== "home") return;
   const message = input.value.trim();
   if (!message || busy) return;
   if (!chosen.agent) { menu.hidden = false; return; }

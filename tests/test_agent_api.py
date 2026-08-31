@@ -131,6 +131,15 @@ def test_a_turn_goes_to_the_backend_the_panel_named(monkeypatch, tmp_path):
     assert not any("abc123" in a for a in seen["args"])
 
 
+def test_home_screen_turn_says_no_job_is_open(monkeypatch, tmp_path):
+    # The strip is on the home screen too, where no job is open. The assistant
+    # is told so, or it asks for a job number the user never sees.
+    seen = _capture(monkeypatch, tmp_path)
+    r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "claude"})
+    assert r.status_code == 200
+    assert "No job is open" in seen["input_text"]
+
+
 def test_claude_still_gets_claudes_command_line(monkeypatch, tmp_path):
     seen = _capture(monkeypatch, tmp_path)
     r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "claude"})

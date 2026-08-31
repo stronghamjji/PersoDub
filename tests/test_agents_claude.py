@@ -155,8 +155,10 @@ def test_the_job_on_screen_is_handed_to_the_assistant():
     out = _with_job("대본 읽어줘", "abc123")
     assert "abc123" in out
     assert out.endswith("대본 읽어줘")
-    # No job open: the question goes through untouched.
-    assert _with_job("안녕", None) == "안녕"
+    # No job open (the home screen): said outright, question kept whole.
+    home = _with_job("안녕", None)
+    assert "No job is open" in home
+    assert home.endswith("안녕")
 
 
 def test_remaking_the_voices_is_a_handle_the_assistant_has():

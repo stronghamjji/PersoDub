@@ -1737,7 +1737,10 @@ class AgentChatRequest(BaseModel):
 def _with_job(message: str, job_id: Optional[str]) -> str:
     """Tell the assistant which job is on screen before it reads the question."""
     if not job_id:
-        return message
+        # The home screen has the strip too, and there no job is open. Said
+        # outright, or the assistant asks for a job number the user never sees.
+        return ("(No job is open on screen right now -- the user is on the "
+                "home screen.)\n\n%s" % message)
     return "(The job open on screen right now: %s)\n\n%s" % (job_id, message)
 
 
