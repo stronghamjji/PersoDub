@@ -4040,6 +4040,9 @@ async function renderScript(jobId) {
     box.querySelectorAll(".sc-wave, .sc-undo").forEach((b) => b.remove());
     const bar = document.createElement("div");
     bar.className = "script-empty";
+    // The box lays rows out as a grid: without spanning every column the bar
+    // gets crushed into the first one and looks like nothing happened.
+    bar.style.gridColumn = "1 / -1";
     const note = document.createElement("span");
     note.textContent = "This Perso dub is read-only. ";
     const btn = document.createElement("button");
