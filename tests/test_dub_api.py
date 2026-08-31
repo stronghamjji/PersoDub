@@ -31,6 +31,9 @@ def _all_engines_available(monkeypatch):
     monkeypatch.setattr(main, "qwen_status", lambda: "available")
     monkeypatch.setattr(main, "gemini_available", lambda: True)
     monkeypatch.setattr(main, "perso_available", lambda: True)
+    # Model files live in a kit these tests never build -- the missing-model
+    # preflight (409) is exercised in tests/test_dub_start_preflight.py.
+    monkeypatch.setattr(main, "_missing_models", lambda *a, **kw: [])
 
 
 def test_dub_run_endpoint_is_gone():

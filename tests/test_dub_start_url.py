@@ -12,6 +12,14 @@ import pytest
 import app.main as main
 from app.main import app
 
+
+@pytest.fixture(autouse=True)
+def _models_ready(monkeypatch):
+    # Model files live in a kit these tests never build -- the 409
+    # preflight is exercised in tests/test_dub_start_preflight.py.
+    from app import main as _main
+    monkeypatch.setattr(_main, "_missing_models", lambda *a, **kw: [])
+
 client = TestClient(app, base_url="http://127.0.0.1")
 
 

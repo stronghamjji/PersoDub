@@ -633,6 +633,12 @@ def dub_job_redub(jid: str):
     if not engines.get("stt_engine"):
         engines = _engines_used()
 
+    # Only the voices are made again -- no STT, no translation -- but a voice
+    # model removed in the catalog must resurface as the dialog, not a crash.
+    missing = _missing_models(False, None)
+    if missing:
+        _raise_models_needed(missing)
+
     new_jid = job_store.create()
     job_store._update(new_jid, language_code=language_code, project=project,
                       day=_today(), from_link=False, work_dir=work,
@@ -733,6 +739,15 @@ def dub_job_retry(jid: str):
     engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality", "separation")}
     if not engines.get("stt_engine"):
         engines = _engines_used()
+
+    translate_missing_id = None
+    if engines.get("translator") in ("gemma", "hunyuan"):
+        status = gemma_status() if engines["translator"] == "gemma" else hunyuan_status()
+        if status == "model_missing":
+            translate_missing_id = engines["translator"]
+    missing = _missing_models(engines.get("stt_engine") != "perso", translate_missing_id)
+    if missing:
+        _raise_models_needed(missing)
 
     new_jid = job_store.create()
     job_store._update(new_jid, language_code=language_code, project=project,
@@ -969,6 +984,38 @@ def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engi
     }
 
 
+def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = True):
+    """Catalog entries this job still needs, in catalog order.
+
+    Pure lookups (disk markers via the catalog; the caller already resolved
+    the Ollama-side statuses) so tests can drive it without a network. The
+    409 built from it is what the screen's "Download N GB of AI models to
+    dub?" dialog renders.
+    """
+    kit = model_store.kit_dir()
+    wanted = []
+    if need_whisper:
+        wanted.append("whisper")
+    if need_tts:
+        wanted.append("qwen3-tts")
+    missing = []
+    for m in model_store.load_catalog():
+        if m["id"] in wanted and model_store.model_state(m, kit) != "ready":
+            missing.append({"id": m["id"], "name": m["name"], "bytes": m["bytes"]})
+        if translate_missing_id and m["id"] == translate_missing_id:
+            missing.append({"id": m["id"], "name": m["name"], "bytes": m["bytes"]})
+    return missing
+
+
+def _raise_models_needed(missing):
+    free = model_store.free_bytes_at(model_store.kit_dir())
+    raise HTTPException(409, {
+        "missing": missing,
+        "total_bytes": sum(m["bytes"] for m in missing),
+        "free_bytes": int(free or 0),
+    })
+
+
 @app.post("/api/dub/start")
 def dub_start(
     video: Optional[UploadFile] = File(None),
@@ -1038,24 +1085,23 @@ def dub_start(
     if not _valid_language_code(language_code):
         raise HTTPException(422, f"Unknown language_code: {language_code}")
     effective_translate_engine = (translate_engine or TRANSLATE_ENGINE or "").lower()
+    translate_missing_id = None
     if effective_translate_engine == "gemma":
         status = gemma_status()
-        if status != "available":
+        if status == "unreachable":
             raise HTTPException(422, _ollama_unavailable_message("Gemma", status, OLLAMA_GEMMA_MODEL))
+        if status == "model_missing":
+            translate_missing_id = "gemma"
     if effective_translate_engine == "qwen":
         status = qwen_status()
         if status != "available":
             raise HTTPException(422, _ollama_unavailable_message("Qwen", status, OLLAMA_QWEN_MODEL))
     if effective_translate_engine == "hunyuan":
         status = hunyuan_status()
-        if status == "model_missing":
-            # Not _ollama_unavailable_message: its "ollama pull <tag>" advice
-            # cannot produce this model -- the tag only exists after the in-app
-            # installer bakes the chat template in (/api/translation/hunyuan/install).
-            raise HTTPException(422, "The Hunyuan model is not downloaded yet. Pick "
-                                     "Hunyuan in the Translation dropdown to download it first.")
-        if status != "available":
+        if status == "unreachable":
             raise HTTPException(422, _ollama_unavailable_message("Hunyuan", status, OLLAMA_HUNYUAN_MODEL))
+        if status == "model_missing":
+            translate_missing_id = "hunyuan"
     if effective_translate_engine == "gemini" and not gemini_available():
         raise HTTPException(
             422, "Gemini translation needs an API key. Open Settings and save your Gemini API key first."
@@ -1087,6 +1133,14 @@ def dub_start(
                 "This Perso key has no dubbing workspace." if not spaces else
                 "Select a Perso workspace in Settings.",
             )
+
+    # The models this job still needs -- 409 with the dialog's exact payload
+    # instead of dying minutes into the pipeline (permanent rule: the screen
+    # asks, downloads, and resubmits; nothing here downloads silently).
+    need_whisper = (stt_engine or default_stt_engine() or "local") != "perso"
+    missing = _missing_models(need_whisper, translate_missing_id)
+    if missing:
+        _raise_models_needed(missing)
 
     # Names the job's folder. The caller may pass a title it already knows (the
     # screen probes a link before starting, and app/source_fetch.py's fetch()

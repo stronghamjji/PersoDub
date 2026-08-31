@@ -15,6 +15,16 @@ from app.main import app
 client = TestClient(app, base_url="http://127.0.0.1")
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _models_ready(monkeypatch):
+    # Whisper/TTS markers live in a kit these tests never build; the 409
+    # missing-model preflight has its own suite (test_dub_start_preflight.py).
+    monkeypatch.setattr(main, "_missing_models", lambda *a, **kw: [])
+
+
 class _FakeResponse:
     def __init__(self, json_data, status_code=200):
         self._json_data = json_data
@@ -239,34 +249,6 @@ def test_engines_endpoint_all_available(monkeypatch):
     }
 
 
-# --- POST /api/dub/start preflight ------------------------------------------
-#
-# I2: the preflight now probes gemma_status()/qwen_status() (not the plain
-# gemma_available()/qwen_available() booleans) so the 422 detail can
-# distinguish an unreachable Ollama from one that's reachable but hasn't
-# pulled the model -- tests below patch the *_status functions accordingly.
-# ("model_missing" is what the pre-I2 tests here meant by "unavailable".)
-
-def test_dub_start_gemma_model_missing_422_no_job_created(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "model_missing")
-    create_calls = {"n": 0}
-
-    def spy_create(*a, **kw):
-        create_calls["n"] += 1
-        return "should-not-be-called"
-
-    monkeypatch.setattr(main.job_store, "create", spy_create)
-
-    r = client.post(
-        "/api/dub/start",
-        files={"video": ("v.mp4", b"vid", "video/mp4")},
-        data={"language": "Korean", "language_code": "ko", "translate_engine": "gemma"},
-    )
-    assert r.status_code == 422
-    assert "ollama pull" in r.json()["detail"]
-    assert create_calls["n"] == 0
-
-
 def test_dub_start_gemma_unreachable_422_message(monkeypatch):
     monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
 
@@ -294,19 +276,6 @@ def test_dub_start_gemma_available_job_starts(monkeypatch):
     )
     assert r.status_code == 200
     assert "job_id" in r.json()
-
-
-def test_dub_start_gemma_message_interpolates_configured_tag(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "model_missing")
-    monkeypatch.setattr(main, "OLLAMA_GEMMA_MODEL", "my-custom-tag:7b")
-
-    r = client.post(
-        "/api/dub/start",
-        files={"video": ("v.mp4", b"vid", "video/mp4")},
-        data={"language": "Korean", "language_code": "ko", "translate_engine": "gemma"},
-    )
-    assert r.status_code == 422
-    assert "ollama pull my-custom-tag:7b" in r.json()["detail"]
 
 
 def test_dub_start_qwen_model_missing_422(monkeypatch):
@@ -375,9 +344,11 @@ def test_dub_start_gemini_available_job_starts(monkeypatch):
 
 def test_dub_start_default_engine_path_is_preflighted(monkeypatch):
     # No translate_engine form field -> falls back to app.config.TRANSLATE_ENGINE,
-    # which must still be preflighted (not silently skipped).
+    # which must still be preflighted (not silently skipped). Unreachable is
+    # the status that still 422s here; a missing model is the 409 dialog's
+    # business (tests/test_dub_start_preflight.py).
     monkeypatch.setattr(main, "TRANSLATE_ENGINE", "gemma")
-    monkeypatch.setattr(main, "gemma_status", lambda: "model_missing")
+    monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
 
     r = client.post(
         "/api/dub/start",
@@ -385,11 +356,11 @@ def test_dub_start_default_engine_path_is_preflighted(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 422
-    assert "ollama pull" in r.json()["detail"]
+    assert "not running or not reachable" in r.json()["detail"]
 
 
 def test_dub_start_translate_engine_case_insensitive(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "model_missing")
+    monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
 
     r = client.post(
         "/api/dub/start",
@@ -487,20 +458,6 @@ def test_hunyuan_status_checks_the_configured_ollama_hunyuan_model(monkeypatch):
     monkeypatch.setattr(engines_status, "ollama_model_status", fake)
     assert engines_status.hunyuan_status() == "available"
     assert calls["args"] == (config.OLLAMA_URL, config.OLLAMA_HUNYUAN_MODEL)
-
-
-def test_dub_start_hunyuan_model_missing_422(monkeypatch):
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "model_missing")
-
-    r = client.post(
-        "/api/dub/start",
-        files={"video": ("v.mp4", b"vid", "video/mp4")},
-        data={"language": "Korean", "language_code": "ko", "translate_engine": "hunyuan"},
-    )
-    assert r.status_code == 422
-    # Not the generic "ollama pull" advice -- that cannot produce this model
-    # (the tag only exists after the in-app installer runs).
-    assert "not downloaded" in r.json()["detail"]
 
 
 def test_dub_start_hunyuan_available_job_starts(monkeypatch):
