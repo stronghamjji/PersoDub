@@ -380,6 +380,67 @@ class PersoClient:
             out[key] = path
         return out
 
+    def dub_video(self, video_path: str, out_path: str,
+                  source_code: Optional[str], target_code: str,
+                  num_speakers: Optional[int] = None,
+                  space_seq: Optional[int] = None) -> str:
+        """Full cloud dub: upload -> translate project -> poll -> download.
+
+        The whole pipeline runs on Perso's side (translation, voices, mix);
+        what comes back is the finished dubbed video, saved to out_path.
+        Request contract mirrors the official plugin's api_adapter.mjs
+        requestTranslation/download exactly (verified 2026-08-31).
+        """
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        media_seq = self._upload_media(video_path, space)
+
+        r = httpx.post(
+            f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/translate",
+            json={
+                "mediaSeq": media_seq,
+                "isVideoProject": True,
+                # "auto" is the server's own detect-the-source value.
+                "sourceLanguageCode": source_code or "auto",
+                "targetLanguages": [{"languageCode": target_code, "ttsModel": "AUDIO_ENGINE_V3"}],
+                "numberOfSpeakers": int(num_speakers) if num_speakers else 1,
+                "preferredSpeedType": "GREEN",
+            },
+            headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        project_seq = r.json()["result"]["startGenerateProjectIdList"][0]
+        print(f"Perso dubbing project {project_seq} (workspace {space})", file=sys.stderr)
+
+        self._wait_completed(project_seq, space, what="Perso dubbing")
+
+        # The gate the plugin checks before asking for a link: a completed
+        # project whose video is not served yet must fail loudly, not save
+        # an empty file.
+        r = httpx.get(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/download-info",
+            headers=self._headers, timeout=60,
+        )
+        _raise_for_status(r)
+        info = (r.json() or {}).get("result") or {}
+        if info.get("hasTranslatedVideo") is False:
+            raise RuntimeError("Perso dubbing finished but the video is not ready to download")
+
+        r = httpx.get(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/download",
+            params={"target": "dubbingVideo"}, headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        link = r.json()["result"]["videoFile"]["videoDownloadLink"]
+        url = link if link.startswith("http") else MEDIA_HOST + link
+        # Identity only, no API key: a storage link, not the Perso API.
+        r = httpx.get(url, headers={"User-Agent": USER_AGENT,
+                                    "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
+        _raise_for_status(r)
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(out_path, "wb") as f:
+            f.write(r.content)
+        return out_path
+
     def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
         """Upload one video to Perso STT and return scriptTimestamps (JSON).
 
