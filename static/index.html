@@ -3328,14 +3328,19 @@ async function renderQueueCard() {
     const line = document.createElement("div");
     line.className = "queue-line";
     line.appendChild(row);
-    if (!live) {
+    // Every row can leave the line -- the one on air included (user request
+    // 2026-09-01). A waiting job goes quietly; stopping the one running is
+    // asked about first, since minutes of work go with it. "cancelling" has
+    // no X: it is already on its way out.
+    if (job.status !== "cancelling") {
       const x = document.createElement("button");
       x.type = "button";
       x.className = "queue-x";
-      x.title = "Take this video out of line";
+      x.title = live ? "Cancel this dub" : "Take this video out of line";
       x.textContent = "✕";
       x.addEventListener("click", async (e) => {
         e.stopPropagation();
+        if (live && !confirm("Cancel this dubbing job?")) return;
         try { await fetch(`/api/dub/jobs/${job.id}/cancel`, { method: "POST" }); } catch { /* the next poll tells the truth */ }
         renderQueueCard().catch(() => {});
         renderHistory().catch(() => {});
