@@ -210,3 +210,24 @@ def test_extract_subtitles_local_runs_at_once_for_free(monkeypatch):
     out = mcp_server.extract_subtitles("/tmp/영상.mp4", engine="local")
     assert out["lines"] == 2
     assert calls[0][1] == {"video_path": "/tmp/영상.mp4", "engine": "local"}
+
+
+def test_list_videos_shows_only_videos_newest_first(tmp_path):
+    import time as _time
+    old = tmp_path / "옛날영상.mp4"
+    old.write_bytes(b"a" * 1000)
+    _time.sleep(0.01)
+    new = tmp_path / "새영상.mov"
+    new.write_bytes(b"b" * 2000)
+    (tmp_path / "문서.pdf").write_bytes(b"x")
+    (tmp_path / "._새영상.mov").write_bytes(b"x")     # macOS metadata litter
+    (tmp_path / ".숨김.mp4").write_bytes(b"x")
+    out = mcp_server.list_videos(str(tmp_path))
+    assert [v["name"] for v in out["videos"]] == ["새영상.mov", "옛날영상.mp4"]
+    assert out["videos"][0]["path"] == str(new)
+    assert out["videos"][0]["size_mb"] >= 0
+
+
+def test_list_videos_names_a_folder_that_is_not_there(tmp_path):
+    with pytest.raises(ValueError, match="폴더|folder|No such"):
+        mcp_server.list_videos(str(tmp_path / "없는폴더"))

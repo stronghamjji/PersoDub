@@ -15,6 +15,7 @@ and deleting files are deliberately absent -- anything that spends the GPU and a
 of time stays behind a button a person presses.
 """
 import os
+from datetime import datetime
 from typing import List, Optional
 
 import httpx
@@ -259,6 +260,80 @@ def extract_subtitles(video_path: str, engine: str = "",
         raise ValueError(r.json().get("detail", "could not extract subtitles"))
     r.raise_for_status()
     return r.json()
+
+
+@mcp.tool()
+def list_videos(folder: str) -> dict:
+    """List the video files in ONE folder on this computer, newest first.
+
+    folder is a path the user names (e.g. "~/Downloads"). Only video files
+    are listed (.mp4 .mov .mkv .webm .avi), nothing is opened or changed, and
+    subfolders are not entered. Each entry carries name, path (hand this to
+    the other tools), size_mb and modified. This plus the user's word is how
+    "the second one" or "the newest one" becomes a real file path.
+    """
+    root = os.path.expanduser(folder)
+    if not os.path.isdir(root):
+        raise ValueError("No such folder: %s" % folder)
+    exts = (".mp4", ".mov", ".mkv", ".webm", ".avi")
+    videos = []
+    for entry in os.scandir(root):
+        # "._x" is macOS metadata litter, "." anything is hidden -- neither is
+        # a video the user means.
+        if not entry.is_file() or entry.name.startswith("."):
+            continue
+        if not entry.name.lower().endswith(exts):
+            continue
+        st = entry.stat()
+        videos.append({
+            "name": entry.name,
+            "path": entry.path,
+            "size_mb": round(st.st_size / (1024 * 1024), 1),
+            # The full timestamp orders; the rounded one is what is shown.
+            "_mtime": st.st_mtime,
+            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+        })
+    videos.sort(key=lambda v: v.pop("_mtime"), reverse=True)
+    # A folder of thousands would drown the conversation; the newest 100 is
+    # every realistic ask, and the count says when there were more.
+    return {"folder": root, "total": len(videos), "videos": videos[:100]}
+
+
+@mcp.tool()
+def list_videos(folder: str) -> dict:
+    """List the video files in ONE folder on this computer, newest first.
+
+    folder is a path the user names (e.g. "~/Downloads"). Only video files
+    are listed (.mp4 .mov .mkv .webm .avi), nothing is opened or changed, and
+    subfolders are not entered. Each entry carries name, path (hand this to
+    the other tools), size_mb and modified. This plus the user's word is how
+    "the second one" or "the newest one" becomes a real file path.
+    """
+    root = os.path.expanduser(folder)
+    if not os.path.isdir(root):
+        raise ValueError("No such folder: %s" % folder)
+    exts = (".mp4", ".mov", ".mkv", ".webm", ".avi")
+    videos = []
+    for entry in os.scandir(root):
+        # "._x" is macOS metadata litter, "." anything is hidden -- neither is
+        # a video the user means.
+        if not entry.is_file() or entry.name.startswith("."):
+            continue
+        if not entry.name.lower().endswith(exts):
+            continue
+        st = entry.stat()
+        videos.append({
+            "name": entry.name,
+            "path": entry.path,
+            "size_mb": round(st.st_size / (1024 * 1024), 1),
+            # The full timestamp orders; the rounded one is what is shown.
+            "_mtime": st.st_mtime,
+            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+        })
+    videos.sort(key=lambda v: v.pop("_mtime"), reverse=True)
+    # A folder of thousands would drown the conversation; the newest 100 is
+    # every realistic ask, and the count says when there were more.
+    return {"folder": root, "total": len(videos), "videos": videos[:100]}
 
 
 @mcp.tool()
