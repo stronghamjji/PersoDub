@@ -887,6 +887,8 @@
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
   .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .wn-list { margin: 0; padding-left: 18px; }
+  .wn-list li { font-size: 0.85rem; line-height: 1.6; margin: 4px 0; }
   .license-list { font-size: 0.78rem; color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
   .license-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
   .license-list li:last-child { border-bottom: none; }
@@ -1306,6 +1308,16 @@
 </div>
 
 <!-- ============ SETTINGS ============ -->
+<div class="modal-overlay" id="whatsNewOverlay">
+  <div class="modal" style="max-width: 430px">
+    <div class="modal-body">
+      <h2 id="wnTitle" style="margin: 0 0 10px">What&#8217;s new</h2>
+      <ul class="wn-list" id="wnList"></ul>
+      <div class="mn-buttons"><button class="btn btn-primary" id="wnOk" type="button">OK</button></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modelsNeededOverlay">
   <div class="modal" style="max-width: 430px">
     <div class="modal-body">
@@ -1424,6 +1436,7 @@
              is labelled the way NOTICE labels it rather than pinned here. -->
         <div class="settings-line">
           <span id="aboutVersion">PersoDub</span>
+          <button class="settings-link" id="whatsNewLink" type="button">What&#8217;s new</button>
           <button class="settings-link" id="ackToggle" type="button" aria-expanded="false">Acknowledgements</button>
         </div>
         <div id="ackList" hidden>
@@ -1944,6 +1957,42 @@ function closeSettings() {
 function realVersion(v) { return v && v !== "0.0.0" ? v : ""; }
 
 $("settingsBtn").addEventListener("click", openSettings);
+
+// What's new: shown once after an update. A fresh install only records the
+// version (everything is new to a new user); Settings > About reopens it.
+const WHATS_NEW_SEEN = "pd.whatsNewSeen";
+let whatsNew = null;
+function showWhatsNew() {
+  if (!whatsNew || !whatsNew.notes.length) return;
+  $("wnTitle").textContent = `What\u2019s new in ${whatsNew.version}`;
+  $("wnList").replaceChildren(...whatsNew.notes.map((n) => {
+    const li = document.createElement("li");
+    li.textContent = n;
+    return li;
+  }));
+  $("whatsNewOverlay").classList.add("open");
+}
+async function checkWhatsNew() {
+  try {
+    const r = await fetch("/api/whats-new");
+    if (!r.ok) return;
+    whatsNew = await r.json();
+  } catch { return; }
+  if (!whatsNew.version || whatsNew.version === "0.0.0") return;
+  let seen = null;
+  try { seen = localStorage.getItem(WHATS_NEW_SEEN); } catch { return; }
+  if (seen === null) {
+    try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
+    return;
+  }
+  if (seen !== whatsNew.version) showWhatsNew();
+}
+$("wnOk").addEventListener("click", () => {
+  try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
+  $("whatsNewOverlay").classList.remove("open");
+});
+$("whatsNewLink").addEventListener("click", showWhatsNew);
+checkWhatsNew();
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
 $("advancedKeysLink").addEventListener("click", openSettings);
 $("settingsCloseBtn").addEventListener("click", closeSettings);

@@ -851,6 +851,21 @@ def dub_job_delete_workspace(jid: str):
     return {"job_id": jid, "deleted": True}
 
 
+@app.get("/api/whats-new")
+def whats_new():
+    """The bundled release notes + the running version. The screen shows them
+    once after an update (never on a fresh install) and again on demand from
+    Settings; the file ships with each release."""
+    path = os.path.join(os.path.dirname(__file__), "whats_new.json")
+    notes = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            notes = [str(n) for n in (json.load(f).get("notes") or [])]
+    except Exception:
+        pass  # no notes is fine; the popup simply never shows
+    return {"version": APP_VERSION, "notes": notes}
+
+
 @app.get("/api/models")
 def models_list():
     """The model catalog with each model's download state -- what the
