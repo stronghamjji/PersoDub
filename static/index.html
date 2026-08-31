@@ -5212,6 +5212,18 @@ async function stopTurn() {
   catch { /* the turn ends on its own when the server is gone */ }
 }
 
+// Esc stops a running turn from anywhere: on a maximized window the Stop
+// button sits far away (user request 2026-09-01). Fields keep their own
+// Escape meaning -- a script cell reverts, an input drops focus -- so the
+// key only reaches the agent when nothing is being typed.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !busy) return;
+  const a = document.activeElement;
+  if (a && (a.isContentEditable || a.tagName === "INPUT" || a.tagName === "TEXTAREA")) return;
+  e.preventDefault();
+  stopTurn();
+});
+
 // The muted line under whatever the turn had already said.
 function stoppedLine() {
   const d = document.createElement("div");
