@@ -2814,7 +2814,7 @@ function closeNewProject() {
   $("projectOverlay").classList.remove("open");
   releaseProjectVideo();
   state.newProject = null;
-  setVideoFile(null);
+  $("formError").textContent = "";
   videoInput.value = "";  // otherwise re-picking the same file fires no change event
   // Same reason for the link field: the probe only runs on an `input` event, so
   // a URL left sitting there could never open the dialog again.
@@ -3043,7 +3043,7 @@ function resetForNewJob() {
   state.job = null;
   delete document.body.dataset.jobId;
   videoInput.value = ""; // otherwise re-picking the same file fires no change event
-  setVideoFile(null);
+  $("formError").textContent = "";
   state.newProject = null;
   // Both ways in are on the first screen at once now, so the link field has to
   // be emptied too -- otherwise the last job's link is still sitting there.
@@ -3539,7 +3539,7 @@ async function startDubbing() {
     releaseProjectVideo();
     showScreen("running");
     // No back arrow while it runs: Cancel is the only way out of a live job.
-    setTopbar({ title: label, subtitle: `Working · ${langsLabel()}`, running: true, back: false });
+    setTopbar({ title: label, subtitle: `Working · ${langsLabel()}`, running: true, back: true });
     runPollLoop(jobId, myGeneration);
   } catch (e) {
     if (e && e.status === 409 && e.detail && e.detail.missing) {
@@ -3656,9 +3656,10 @@ async function handleJobUpdate(job) {
     subtitle: jobStatusLine(job, progress),
     running,
     done: job.status === "done",
-    // Only once the job is over: going back mid-dub would drop the view of a
-    // job that is still running.
-    back: !running,
+    // Always: the first screen's Up next card keeps a running job in view
+    // now, so going back mid-dub no longer means losing it (user request
+    // 2026-09-01 -- with a queue there has to be a way back to the line).
+    back: true,
   });
   renderLog(job);
   renderNotices(job);
