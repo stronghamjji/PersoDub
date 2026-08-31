@@ -879,6 +879,8 @@
   .model-line .keys-link { margin: 0; }
   .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: #fff;
                font-size: 0.74rem; font-weight: 600; padding: 4px 10px; cursor: pointer; }
+  #modelsFold > summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+  #modelsFold[open] > summary { margin-bottom: 6px; }
   .model-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 10px; }
   .model-size { color: var(--muted-foreground); font-size: 0.8rem; }
   .model-btn { height: 30px; padding: 0 12px; font-size: 0.78rem; }
@@ -1331,11 +1333,14 @@
     <div class="modal-body">
       <div class="settings-section">
         <h3>Models</h3>
-        <!-- One button per row (Download / Resume / Cancel / Remove) -- the
-             App Store grammar the 2026-08-28 mockups settled on. -->
-        <div id="modelsList"></div>
-        <div class="form-error" id="modelsError"></div>
-        <div class="settings-hint" id="modelsFootprint"></div>
+        <!-- Folded to one summary line by default (the open list made Settings
+             too long); renderModelsList opens it whenever a model is busy.
+             Rows keep the App Store grammar: one button each. -->
+        <details id="modelsFold">
+          <summary id="modelsSummary"></summary>
+          <div id="modelsList"></div>
+          <div class="form-error" id="modelsError"></div>
+        </details>
       </div>
 
       <div class="settings-section">
@@ -2236,7 +2241,12 @@ function renderModelsList() {
     row.append(name, size, status, btn);
     list.append(row);
   }
-  $("modelsFootprint").textContent = `On this computer: ${gb(onDisk)} GB`;
+  const busy = modelRows.some((m) => m.state === "downloading" || m.state === "paused");
+  $("modelsSummary").textContent =
+    `${modelRows.length} models · ${gb(onDisk)} GB on this computer`
+    + (busy ? " — attention needed" : "");
+  // Never force it shut -- only open it for the user when something is busy.
+  if (busy) $("modelsFold").open = true;
 }
 
 // -- the dub-start dialog (dub_start's 409) --------------------------------
