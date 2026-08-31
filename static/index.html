@@ -2075,18 +2075,13 @@ async function applyEngineAvailabilityToForm() {
 }
 applyEngineAvailabilityToForm();
 
-// Picking Hunyuan before it is downloaded starts the in-app install (Ollama
-// pull + template bake, ~1.1GB) and reports progress in the field's own hint.
+// Picking Hunyuan before it is downloaded shows a Download button in the
+// field's own hint -- a 1.1GB download must be asked for, never started by a
+// mere selection (user decision 2026-08-31). An install already running (the
+// dialog was reopened mid-download) resumes its progress display instead.
 let hunyuanPolling = false;
-async function ensureHunyuanInstalled() {
+function pollHunyuanInstall() {
   const hint = $("hunyuanHint");
-  try {
-    const r = await fetch("/api/engines");
-    if (!r.ok || (await r.json()).hunyuan_available) { hint.hidden = true; return; }
-  } catch { return; }
-  hint.hidden = false;
-  hint.textContent = "Downloading Hunyuan (1.1GB)…";
-  try { await fetch("/api/translation/hunyuan/install", { method: "POST" }); } catch {}
   if (hunyuanPolling) return;
   hunyuanPolling = true;
   const poll = async () => {
@@ -2107,8 +2102,30 @@ async function ensureHunyuanInstalled() {
   };
   poll();
 }
+async function startHunyuanDownload() {
+  $("hunyuanHint").textContent = "Downloading Hunyuan (1.1GB)…";
+  try { await fetch("/api/translation/hunyuan/install", { method: "POST" }); } catch {}
+  pollHunyuanInstall();
+}
+async function showHunyuanState() {
+  const hint = $("hunyuanHint");
+  try {
+    const r = await fetch("/api/engines");
+    if (!r.ok || (await r.json()).hunyuan_available) { hint.hidden = true; return; }
+  } catch { return; }
+  hint.hidden = false;
+  let s = null;
+  try { s = await (await fetch("/api/translation/hunyuan/install")).json(); } catch {}
+  if (s && s.state === "running") { pollHunyuanInstall(); return; }
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "keys-link";
+  btn.textContent = "Download Hunyuan (1.1GB)";
+  btn.addEventListener("click", startHunyuanDownload);
+  hint.replaceChildren(btn);
+}
 $("translateSelect").addEventListener("change", () => {
-  if ($("translateSelect").value === "hunyuan") ensureHunyuanInstalled();
+  if ($("translateSelect").value === "hunyuan") showHunyuanState();
   else $("hunyuanHint").hidden = true;
 });
 
