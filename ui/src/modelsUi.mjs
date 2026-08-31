@@ -32,7 +32,7 @@ export function modelStatusLine(row) {
     return { cls: "model-busy", text, button: "cancel" };
   }
   if (row.state === "paused") {
-    const why = row.error ? ` — ${row.error}` : "";
+    const why = row.error ? `: ${row.error}` : "";
     return { cls: "model-busy", text: `Paused${why}`, button: "resume" };
   }
   return { cls: "", text: `${gb(row.bytes)} GB`, button: "download" };

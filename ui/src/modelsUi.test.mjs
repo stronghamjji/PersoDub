@@ -25,7 +25,7 @@ test("modelStatusLine covers the four states with the mockup's words", () => {
   assert.deepEqual(modelStatusLine({ state: "paused" }),
     { cls: "model-busy", text: "Paused", button: "resume" });
   assert.deepEqual(modelStatusLine({ state: "paused", error: "network died" }),
-    { cls: "model-busy", text: "Paused — network died", button: "resume" });
+    { cls: "model-busy", text: "Paused: network died", button: "resume" });
   assert.deepEqual(
     modelStatusLine({ state: "not_downloaded", bytes: 7.6 * 1024 ** 3 }),
     { cls: "", text: "7.6 GB", button: "download" });

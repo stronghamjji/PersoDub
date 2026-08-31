@@ -1269,7 +1269,7 @@
         <span><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Advanced options</span><span class="chev"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg></span>
       </button>
       <div class="advanced-body" id="advancedBody" hidden>
-        <div class="field"><label for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected>On this computer</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint" hidden>Perso&#8217;s servers do everything — about 1 credit per second (paid).</div></div>
+        <div class="field"><label for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected>On this computer</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint" hidden>Perso&#8217;s servers do everything. About 1 credit per second (paid).</div></div>
         <div class="field"><label for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint">Perso API is paid (about 0.5 credits per second).</div></div>
         <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
         <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="gemma" selected>Gemma 3 (12B)</option><option value="gemini">Gemini API</option><option value="hunyuan">Hunyuan (1.8B, fast)</option></select><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
@@ -1325,12 +1325,12 @@
       </div>
       <div class="settings-section">
         <h3>The stages</h3>
-        <p><strong>Dubbing</strong> — where the whole job runs: on this computer (free), or on Perso&#8217;s servers (paid, about 1 credit per second of video).</p>
-        <p><strong>Audio separation</strong> — splits voices from music and noise, so the background survives the dub. Demucs runs here for free; Perso API is paid (about 0.5 credits per second).</p>
-        <p><strong>Speech-to-text</strong> — writes down what is said and when. Whisper runs here for free; Perso API gives the best quality.</p>
-        <p><strong>Translation</strong> — turns that text into the new language. Gemma 3 runs here for free; Gemini API gives the best quality; Hunyuan is small and fast.</p>
-        <p><strong>Text-to-speech</strong> — speaks every translated line in a voice cloned from its speaker (Qwen3-TTS).</p>
-        <p><strong>Voice quality</strong> — Fast makes one take per line; High quality makes four and keeps the best (about 4× slower).</p>
+        <p><strong>Dubbing</strong>: where the whole job runs: on this computer (free), or on Perso&#8217;s servers (paid, about 1 credit per second of video).</p>
+        <p><strong>Audio separation</strong>: splits voices from music and noise, so the background survives the dub. Demucs runs here for free; Perso API is paid (about 0.5 credits per second).</p>
+        <p><strong>Speech-to-text</strong>: writes down what is said and when. Whisper runs here for free; Perso API gives the best quality.</p>
+        <p><strong>Translation</strong>: turns that text into the new language. Gemma 3 runs here for free; Gemini API gives the best quality; Hunyuan is small and fast.</p>
+        <p><strong>Text-to-speech</strong>: speaks every translated line in a voice cloned from its speaker (Qwen3-TTS).</p>
+        <p><strong>Voice quality</strong>: Fast makes one take per line; High quality makes four and keeps the best (about 4× slower).</p>
       </div>
       <div class="settings-section">
         <h3>The agent</h3>
@@ -2283,7 +2283,7 @@ function renderModelsList() {
   const busy = modelRows.some((m) => m.state === "downloading" || m.state === "paused");
   $("modelsSummary").textContent =
     `${modelRows.length} models · ${gb(onDisk)} GB on this computer`
-    + (busy ? " — attention needed" : "");
+    + (busy ? " · attention needed" : "");
   // Never force it shut -- only open it for the user when something is busy.
   if (busy) $("modelsFold").open = true;
 }
@@ -2306,9 +2306,9 @@ function paintModelsDialog() {
   const pct = overallProgress(modelRows, pendingDub.ids);
   $("mnBar").style.width = pct + "%";
   $("mnTitle").textContent = "Downloading AI models";
-  $("mnLine").textContent = `${pct}% — dubbing starts when they finish.`;
+  $("mnLine").textContent = `${pct}%. Dubbing starts when they finish.`;
   const failed = pendingDub.ids.map(modelRow).find((r) => r && r.state === "paused");
-  if (failed) $("mnError").textContent = `${failed.name} stopped${failed.error ? ` — ${failed.error}` : ""}. Resume it from the line under its dropdown.`;
+  if (failed) $("mnError").textContent = `${failed.name} stopped${failed.error ? ` (${failed.error})` : ""}. Resume it from the line under its dropdown.`;
   if (allReady(modelRows, pendingDub.ids)) {
     pendingDub = null;
     $("modelsNeededOverlay").classList.remove("open");
@@ -3306,8 +3306,8 @@ async function resumeJob(jobId) {
 // ---------------- Quality mode hint ----------------
 // The mode names alone don't tell a user what they trade away; spell it out.
 const QUALITY_HINTS = {
-  fast: "One take per line — the quickest preview.",
-  high: "Best of 4 takes per line — about 4× slower.",
+  fast: "One take per line. The quickest preview.",
+  high: "Best of 4 takes per line. About 4× slower.",
 };
 function updateQualityHint() {
   $("qualityHint").textContent = QUALITY_HINTS[$("qualitySelect").value] || "";
