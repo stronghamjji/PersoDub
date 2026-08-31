@@ -34,7 +34,7 @@ from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL,
 from app.dub_script import (
     DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
 )
-from app.text.srt import parse_srt
+from app.text.srt import build_srt, parse_srt
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -55,8 +55,9 @@ from app.engines_status import (
 from app.jobs import JobCancelled, JobStore
 from app.perso_client import (PersoClient, PersoCreditExhaustedError,
                               PersoInvalidKeyError, PersoUnavailableError,
-                              APP_VERSION, SIGNUP_LINK, list_dubbing_spaces)
-from app.pipeline import run_dub
+                              APP_VERSION, SIGNUP_LINK, list_dubbing_spaces,
+                              perso_to_cues)
+from app.pipeline import _video_duration, run_dub
 from app.qwen_pipeline import rebuild_dub, resynth_one_line
 from app.text.naming import next_free, safe_name
 from app.settings_env import (current_value, read_analytics_off,
@@ -1015,6 +1016,89 @@ def dub_job_perso_speaker(jid: str, body: PersoSpeakerRequest):
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Perso did not accept the change ({str(e)[:80]}).")
     return {"line": body.line, "old_speaker": old, "new_speaker": new}
+
+
+# ---------------------------------------------------------------------------
+# Subtitles out of a plain video file, through Perso STT. These two routes are
+# the agent's extract_subtitles tool: /estimate names the price (nothing is
+# spent), /extract does the paid work. The .srt lands next to the video and an
+# existing file is never written over.
+# ---------------------------------------------------------------------------
+
+class SubtitleExtractRequest(BaseModel):
+    video_path: str
+
+
+def _subtitle_video(video_path: str) -> str:
+    """The checks both routes share, ending in the file's real path."""
+    if not perso_available():
+        raise HTTPException(status_code=422,
+                            detail="Perso is not set up. Add the API key in Settings first.")
+    path = os.path.expanduser(video_path)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail=f"No such video: {video_path}")
+    return path
+
+
+def _free_srt_path(video_path: str) -> str:
+    """video.srt beside the video, or video-1.srt.. when that name is taken."""
+    base, _ = os.path.splitext(video_path)
+    cand = base + ".srt"
+    n = 0
+    while os.path.exists(cand):
+        n += 1
+        cand = "%s-%d.srt" % (base, n)
+    return cand
+
+
+@app.get("/api/subtitles/estimate")
+def subtitles_estimate(video_path: str):
+    """What extracting this video's subtitles would cost, before spending it.
+
+    About 1 credit per 5 seconds of video -- measured 2026-08-31, 2 credits
+    for a 10s clip. The balance is best-effort: a workspace that will not
+    answer must not block the question.
+    """
+    path = _subtitle_video(video_path)
+    try:
+        seconds = _video_duration(path)
+    except Exception:
+        raise HTTPException(status_code=422,
+                            detail="That file does not look like a video.")
+    balance = None
+    try:
+        ws = PersoClient().describe_workspace()
+        balance = ws.get("credits") if ws else None
+    except Exception:
+        pass
+    return {"seconds": seconds,
+            "credits_estimate": math.ceil(seconds / 5.0),
+            "credits_balance": balance}
+
+
+@app.post("/api/subtitles/extract")
+def subtitles_extract(body: SubtitleExtractRequest):
+    """Transcribe one video on Perso and write the result beside it as .srt.
+
+    THIS SPENDS PERSO CREDITS. The confirmation lives in the agent tool (the
+    same needs_confirmation pattern as change_speaker); by the time this route
+    is called the user has already said yes.
+    """
+    path = _subtitle_video(body.video_path)
+    pc = PersoClient()
+    try:
+        cues = perso_to_cues(pc.transcribe(path))
+        if not cues:
+            raise RuntimeError("Perso heard no speech in this video.")
+    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503,
+                            detail=f"Perso could not transcribe this video ({str(e)[:80]}).")
+    out = _free_srt_path(path)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(build_srt(cues))
+    return {"srt_path": out, "lines": len(cues)}
 
 
 @app.get("/api/engines")

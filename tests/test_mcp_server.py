@@ -119,3 +119,45 @@ def test_get_script_serves_a_perso_dub_through_the_api(monkeypatch):
     monkeypatch.setattr(mcp_server.httpx, "get", fake_get)
     lines = mcp_server.get_script("jobP")
     assert lines == [{"line": 1, "text": "Hi", "source": "안녕"}]
+
+
+def test_extract_subtitles_names_the_price_before_spending(monkeypatch):
+    # Without confirm=True the tool may only ask /estimate (free) -- never
+    # /extract, which is the paid call (money rule A, like change_speaker).
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append(a))
+    monkeypatch.setattr(
+        mcp_server.httpx, "get",
+        lambda url, params=None, timeout=None: _Response(
+            200, {"seconds": 47.0, "credits_estimate": 10, "credits_balance": 120}))
+    out = mcp_server.extract_subtitles("/tmp/영상.mp4")
+    assert out.get("needs_confirmation") is True
+    assert "10" in out.get("message", "")
+    assert "120" in out.get("message", "")
+    assert posted == []
+
+
+def test_extract_subtitles_posts_once_confirmed(monkeypatch):
+    calls = []
+
+    def fake_post(url, json=None, timeout=None):
+        calls.append((url, json, timeout))
+        return _Response(200, {"srt_path": "/tmp/영상.srt", "lines": 4})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.extract_subtitles("/tmp/영상.mp4", confirm=True)
+    assert out == {"srt_path": "/tmp/영상.srt", "lines": 4}
+    url, body, timeout = calls[0]
+    assert url == "%s/api/subtitles/extract" % mcp_server.API
+    assert body == {"video_path": "/tmp/영상.mp4"}
+    # Transcription takes minutes -- the ten-second default would cut it off.
+    assert timeout >= 600
+
+
+def test_extract_subtitles_relays_a_refusal(monkeypatch):
+    def fake_get(url, params=None, timeout=None):
+        return _Response(404, {"detail": "No such video: /tmp/x.mp4"})
+
+    monkeypatch.setattr(mcp_server.httpx, "get", fake_get)
+    with pytest.raises(ValueError, match="No such video"):
+        mcp_server.extract_subtitles("/tmp/x.mp4")

@@ -217,5 +217,40 @@ def change_speaker(job_id: str, line: int, confirm: bool = False) -> dict:
     return r.json()
 
 
+@mcp.tool()
+def extract_subtitles(video_path: str, confirm: bool = False) -> dict:
+    """Pull the spoken lines out of ANY video file on this computer into a
+    subtitle file (.srt), transcribed by Perso.
+
+    Not tied to a job: video_path is a file the user names (e.g. a video in
+    their Downloads folder). The .srt is written next to the video with the
+    same name, and an existing file is never written over.
+
+    THIS SPENDS PERSO CREDITS -- about 1 per 5 seconds of video. Called
+    without confirm=true it spends nothing and returns the estimated cost:
+    relay that message to the user as a question, and call again with
+    confirm=true only after they clearly agree.
+    """
+    if not confirm:
+        r = httpx.get("%s/api/subtitles/estimate" % API,
+                      params={"video_path": video_path}, timeout=60.0)
+        if r.status_code in (404, 422):
+            raise ValueError(r.json().get("detail", "cannot read that video"))
+        r.raise_for_status()
+        est = r.json()
+        balance = est.get("credits_balance")
+        message = ("Extracting subtitles from this video (%.0fs) will spend "
+                   "about %d Perso credits%s. Proceed?"
+                   % (est.get("seconds", 0), est.get("credits_estimate", 0),
+                      "" if balance is None else " (balance: %s)" % balance))
+        return {"needs_confirmation": True, "message": message, "estimate": est}
+    r = httpx.post("%s/api/subtitles/extract" % API,
+                   json={"video_path": video_path}, timeout=3600.0)
+    if r.status_code in (404, 409, 422, 503):
+        raise ValueError(r.json().get("detail", "could not extract subtitles"))
+    r.raise_for_status()
+    return r.json()
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

@@ -24,6 +24,7 @@ TOOL_LABELS = {
     "remake_voices": "Remaking the changed voices",
     "remake_line_voice": "Remaking this line",
     "change_speaker": "Changing the speaker",
+    "extract_subtitles": "Extracting subtitles",
 }
 
 MCP_PREFIX = "mcp__persodub__"
@@ -142,7 +143,9 @@ SYSTEM_PROMPT = (
     "A Perso-dubbed job reads its script from Perso and starts read-only; "
     "the screen's Make-it-editable button fetches it, and from then on its "
     "lines edit and remake normally. change_speaker can give a line a new "
-    "voice on Perso's side. Any tool answer with needs_confirmation=true may spend Perso "
+    "voice on Perso's side. extract_subtitles pulls the spoken lines out of "
+    "any video file on this computer into an .srt beside it -- the user "
+    "names the file. Any tool answer with needs_confirmation=true may spend Perso "
     "credits: relay its message to the user as a question, and call the tool "
     "again with confirm=true only after they clearly agree. Answer in "
     "the user's language, briefly."
