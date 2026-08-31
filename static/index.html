@@ -2359,9 +2359,10 @@ for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
 const ENGINE_HINTS = {
   dubMode: { local: "Free. You can edit the script after.",
              perso: "Perso does everything. About 1 credit per second. No script to edit." },
-  sep: { local: "Free, runs here.", perso: "About 0.5 credits per second." },
-  stt: { local: "Free, runs here.", perso: "Most accurate. Uses Perso credits." },
-  translate: { hunyuan: "Fastest and light. Free.", gemma: "Free, runs here.",
+  sep: { local: "Free. For accuracy, use Perso API.", perso: "About 0.5 credits per second." },
+  stt: { local: "Free. For accuracy, use Perso API.", perso: "Most accurate. Uses Perso credits." },
+  translate: { hunyuan: "Fastest and free. For accuracy, use Gemini API.",
+               gemma: "Free. For accuracy, use Gemini API.",
                gemini: "Most accurate. Needs an API key." },
   voice: { qwen3: "Clones each speaker\u2019s voice. Free." },
 };
