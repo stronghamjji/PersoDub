@@ -96,6 +96,10 @@ export function buildDubFormData(opts) {
   const stt = opts.sttEngine ?? "auto";
   if (stt !== "auto") fd.append("stt_engine", stt);
 
+  // Voice/background separation: local Demucs is the server default, so only
+  // the paid Perso choice is worth sending (app/main.py:dub_start sep_engine).
+  if (opts.sepEngine === "perso") fd.append("sep_engine", "perso");
+
   if (opts.numSpeakers != null) fd.append("num_speakers", String(opts.numSpeakers));
   if (opts.translateEngine && opts.translateEngine !== "auto") {
     fd.append("translate_engine", opts.translateEngine);
@@ -124,7 +128,7 @@ export function buildDubFormData(opts) {
  * move off a dead engine, and what warning (if any) to show. Never changes
  * an already-available current selection.
  *
- * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, gemini_available, perso_available}
+ * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available}
  * @param {Object} current - {translate, stt} the Upload form's current select values
  * @returns {{disable: {gemma: boolean, gemini: boolean, perso: boolean}, translate: string, warning: (string|null)}}
  */
@@ -138,10 +142,13 @@ export function applyEngineAvailability(av, current) {
     perso: !av.perso_available,
   };
 
-  const isAvailable = { gemma: av.gemma_available, gemini: av.gemini_available };
+  const isAvailable = { gemma: av.gemma_available, gemini: av.gemini_available,
+                        hunyuan: av.hunyuan_available };
   let translate = current.translate;
   let warning = null;
-  if (!isAvailable[translate]) {
+  // A missing Hunyuan is not a dead engine: picking it is what starts the
+  // in-app download, so the selection must never be switched away.
+  if (translate !== "hunyuan" && !isAvailable[translate]) {
     const fallback = ["gemma", "gemini"].find((engine) => isAvailable[engine]);
     if (fallback) {
       translate = fallback;
@@ -345,8 +352,9 @@ export async function cancelDubJob(jobId, { baseUrl = "" } = {}) {
 const ENGINE_LABELS = {
   whisper: { label: "Whisper", api: false },
   perso: { label: "Perso", api: true },
-  gemma: { label: "Gemma", api: false },
+  gemma: { label: "Gemma 3", api: false },
   qwen: { label: "Qwen", api: false },
+  hunyuan: { label: "Hunyuan 1.8B", api: false },
   gemini: { label: "Gemini", api: true },
   vertex: { label: "Vertex", api: true },
   qwen3: { label: "Qwen3-TTS", api: false },
@@ -383,8 +391,8 @@ export function engineChips(job, { withQuality = true, withTts = true } = {}) {
   const chips = [];
   // The role is the field the id was read out of, which is the only place it
   // can be known from: "qwen" translates and "qwen3" speaks.
-  for (const [role, key] of [["STT", j.stt_engine], ["Translation", j.translator],
-                             ["TTS", withTts ? j.tts : null]]) {
+  for (const [role, key] of [["Separation", j.separation], ["STT", j.stt_engine],
+                             ["Translation", j.translator], ["TTS", withTts ? j.tts : null]]) {
     const known = key ? ENGINE_LABELS[String(key).toLowerCase()] : null;
     if (known) chips.push({ role, ...known });
   }

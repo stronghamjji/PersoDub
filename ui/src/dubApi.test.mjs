@@ -305,7 +305,7 @@ test("buildDubFormData sends trim_start/trim_end only when a trim is given", () 
 });
 
 // --- applyEngineAvailability: GET /api/engines progressive enhancement ----
-const ALL_AVAILABLE = { gemma_available: true, qwen_available: true, gemini_available: true, perso_available: true };
+const ALL_AVAILABLE = { gemma_available: true, qwen_available: true, hunyuan_available: true, gemini_available: true, perso_available: true };
 
 test("applyEngineAvailability: all engines available -> no disabling, no switch, no warning", () => {
   const result = applyEngineAvailability(ALL_AVAILABLE, { translate: "gemma", stt: "local" });
@@ -367,7 +367,7 @@ test("engineChips: the local stack, quality first and every role named", () => {
       source_lang: "es", language_code: "en" },
   );
   assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`.trim()),
-    ["High quality mode", "STT Whisper", "Translation Gemma", "TTS Qwen3-TTS"]);
+    ["High quality mode", "STT Whisper", "Translation Gemma 3", "TTS Qwen3-TTS"]);
   assert.deepEqual(chips.map((c) => c.api), [false, false, false, false]);
 });
 
@@ -382,7 +382,7 @@ test("engineChips: a sidebar row keeps only what differs between jobs", () => {
   const chips = engineChips({ stt_engine: "whisper", translator: "gemma", tts: "qwen3", quality: 4,
                               source_lang: "es", language_code: "en" },
                             { withQuality: false, withTts: false });
-  assert.deepEqual(chips.map((c) => c.label), ["Whisper", "Gemma"]);
+  assert.deepEqual(chips.map((c) => c.label), ["Whisper", "Gemma 3"]);
 });
 
 test("engineChips: a job saved before the fields existed shows nothing", () => {
@@ -399,4 +399,30 @@ test("startedLabel formats the job's start as local YYYY-MM-DD HH:MM", () => {
   assert.equal(startedLabel("2026-08-26T13:41:07.123456"), "2026-08-26 13:41");
   assert.equal(startedLabel(null), "");
   assert.equal(startedLabel("not a date"), "");
+});
+
+test("buildDubFormData sends sep_engine only for the paid Perso choice", () => {
+  const fd = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", sepEngine: "perso" });
+  assert.equal(fd.get("sep_engine"), "perso");
+  const fd2 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", sepEngine: "local" });
+  assert.equal(fd2.get("sep_engine"), null);
+  const fd3 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko" });
+  assert.equal(fd3.get("sep_engine"), null);
+});
+
+test("applyEngineAvailability: a missing Hunyuan keeps the selection (picking it starts the download)", () => {
+  const av = { ...ALL_AVAILABLE, hunyuan_available: false };
+  const result = applyEngineAvailability(av, { translate: "hunyuan", stt: "local" });
+  assert.equal(result.translate, "hunyuan");
+  assert.equal(result.warning, null);
+});
+
+test("engineChips: Perso separation gets a chip, local Demucs (the default) stays silent", () => {
+  const chips = engineChips({ separation: "perso", stt_engine: "whisper", translator: "gemma",
+                              tts: "qwen3", quality: 1 });
+  assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`.trim()),
+    ["Fast mode", "Separation Perso", "STT Whisper", "Translation Gemma 3", "TTS Qwen3-TTS"]);
+  const local = engineChips({ separation: "demucs", stt_engine: "whisper", translator: "gemma",
+                              tts: "qwen3", quality: 1 });
+  assert.ok(!local.some((c) => c.role === "Separation"));
 });
