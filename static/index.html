@@ -223,6 +223,7 @@
   .job-dot.dot-done { background: var(--success); }
   .job-dot.dot-error { background: var(--destructive); }
   .job-dot.dot-cancelled { background: var(--muted-foreground); }
+  .job-dot.dot-queued { background: var(--primary-line); }
   .job-row .job-info { min-width: 0; }
   /* The row itself is a <button>, so the delete control sits beside it rather
      than inside. It stays hidden until the row is hovered or it has focus --
@@ -471,6 +472,30 @@
     color: var(--primary); font-family: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
   .keys-link:hover { border-color: var(--primary); }
   .form-error { color: var(--destructive); font-size: 0.8rem; }
+
+  /* ---------------- Up next: the waiting line on the first screen ------- */
+  .queue-card { margin-top: 18px; background: var(--background); text-align: left;
+    border: 1px solid var(--border); border-radius: var(--radius-lg); }
+  .queue-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px 8px; }
+  .queue-head b { font-size: 0.85rem; }
+  .queue-head span { font-size: 0.72rem; color: var(--muted-foreground); }
+  .queue-line { display: flex; align-items: center; border-top: 1px solid var(--border); }
+  .queue-row { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
+    padding: 9px 16px; border: none;
+    background: none; font-size: 0.8rem; text-align: left; cursor: pointer;
+    color: var(--foreground); }
+  .queue-row:hover { background: var(--accent); }
+  .queue-row .q-name { flex: 1; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .queue-row .q-state { flex: none; font-size: 0.72rem; color: var(--muted-foreground); }
+  .queue-row .q-state.run { color: var(--primary); font-weight: 600; }
+  .queue-bar { height: 4px; border-radius: 2px; background: var(--secondary);
+    overflow: hidden; margin-top: 4px; }
+  .queue-bar > i { display: block; height: 100%; background: var(--primary); }
+  .queue-x { flex: none; border: none; background: none; cursor: pointer;
+    color: var(--muted-foreground); font-size: 0.85rem; padding: 2px 6px;
+    margin-right: 10px; border-radius: 6px; }
+  .queue-x:hover { background: var(--secondary); color: var(--foreground); }
   /* An empty error line is still a flex item, and would leave a gap under the
      link field for a message that is not there. */
   .form-error:empty { display: none; }
@@ -1094,18 +1119,24 @@
       <section class="screen" id="screen-home">
         <div class="home">
           <h1 class="home-title">Dubbing your video into another language</h1>
-          <p class="home-sub">Drop a video or paste a link. Everything runs on your desktop.</p>
+          <p class="home-sub">Drop videos or paste a link. Add several and they run one after another.</p>
           <div class="upload-zone" id="uploadZone" tabindex="0">
             <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-            <div class="upload-title">Drop your video here</div>
-            <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose File…</button><span>MP4 or MOV, up to 2 GB</span></div>
-            <input type="file" id="videoInput" accept="video/*" hidden>
+            <div class="upload-title">Drop your videos here</div>
+            <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose Files…</button><span>MP4 or MOV, up to 2 GB each. Several at once is fine.</span></div>
+            <input type="file" id="videoInput" accept="video/*" multiple hidden>
           </div>
           <div class="home-or"><span></span>OR<span></span></div>
           <label class="link-field"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
             <input id="linkInput" type="url" placeholder="Paste a YouTube, TikTok or Reels link" autocomplete="off"></label>
           <div class="link-card" id="linkCard" hidden></div>
           <div class="form-error" id="formError"></div>
+          <!-- The waiting line: the job on air and the ones queued behind it.
+               renderQueueCard() fills it and hides it when the line is empty. -->
+          <div class="queue-card" id="queueCard" hidden>
+            <div class="queue-head"><b>Up next</b><span id="queueSummary"></span></div>
+            <div id="queueRows"></div>
+          </div>
         </div>
       </section>
 
@@ -1257,7 +1288,7 @@
      (behind Advanced) the engines. -->
 <div class="modal-overlay" id="projectOverlay">
   <div class="modal project-modal">
-    <div class="modal-head"><h2>New project</h2><button class="modal-close" id="projectClose" type="button" aria-label="Close">
+    <div class="modal-head"><h2 id="projectTitle">New project</h2><button class="modal-close" id="projectClose" type="button" aria-label="Close">
       <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
     </button></div>
     <div class="modal-body">
@@ -2466,6 +2497,7 @@ $("topbarForward").addEventListener("click", () => {
 function showHome() {
   showScreen("home");
   setTopbar({ title: "PersoDub", subtitle: "Local dubbing" });
+  renderQueueCard().catch(() => {});
 }
 
 // ---------------- New project dialog ----------------
@@ -2736,24 +2768,37 @@ function releaseProjectVideo() {
 }
 
 function openNewProject(source) {
-  state.newProject = { file: source.file || null, probe: source.probe || null, trim: null };
+  // Several files come in as `files`; the dialog is then asked once and the
+  // same choices start them all, one after another (the queue's job).
+  const files = source.files && source.files.length > 1 ? source.files : null;
+  const file = source.file || (files ? files[0] : null);
+  state.newProject = { file, files, probe: source.probe || null, trim: null };
   releaseProjectVideo();
   const v = $("projectVideo");
   // A local file can be played and scrubbed; a link only ever has a still.
-  v.hidden = !source.file;
+  v.hidden = !file;
+  $("projectTitle").textContent = files ? `New projects (${files.length})` : "New project";
+  // Replace picks ONE file, which would silently drop the rest of the batch.
+  $("projectReplace").hidden = !!files;
   $("projectThumb").style.backgroundImage = "";
   // The previous video's bar would otherwise sit there until this one's
   // length is known -- and stay for good behind a link, which has no bar.
   $("trimBox").innerHTML = "";
-  if (source.file) {
-    projectObjectUrl = URL.createObjectURL(source.file);
+  if (file) {
+    projectObjectUrl = URL.createObjectURL(file);
     v.src = projectObjectUrl;
     // Only a real file ever fires this, so only a real file may register it --
     // a once-listener that never fires never detaches, and one per link would
     // pile up until the next file opened them all at once.
     v.addEventListener("loadedmetadata", () => {
-      $("projectDur").textContent = fmtClock(v.duration);
-      renderTrim(v.duration);
+      if (files) {
+        // The first video stands for the batch. No trim: a cut made on this
+        // one would mean nothing to the others.
+        $("projectDur").textContent = `${files.length} videos`;
+      } else {
+        $("projectDur").textContent = fmtClock(v.duration);
+        renderTrim(v.duration);
+      }
     }, { once: true });
   } else if (source.probe && source.probe.thumbnail_url) {
     $("projectThumb").style.backgroundImage = `url(${source.probe.thumbnail_url})`;
@@ -2805,17 +2850,30 @@ const MAX_VIDEO_LABEL = MAX_VIDEO_MB >= 1024 ? `${MAX_VIDEO_MB / 1024} GB` : `${
 
 // The zone itself never reports "video ready" any more: a good file opens the
 // New project dialog straight away, and that dialog is the confirmation.
-function setVideoFile(file) {
-  $("formError").textContent = "";
-  if (file && !/\.(mp4|mov)$/i.test(file.name)) {
-    $("formError").textContent = "Please choose an MP4 or MOV video file.";
-    file = null;
-  } else if (file && file.size > MAX_VIDEO_MB * 1024 * 1024) {
-    $("formError").textContent =
-      `This video is ${formatBytes(file.size)}. The limit is ${MAX_VIDEO_LABEL}. Please use a shorter or smaller file.`;
-    file = null;
+function videoProblem(file) {
+  if (!/\.(mp4|mov)$/i.test(file.name)) {
+    return "Please choose an MP4 or MOV video file.";
   }
-  if (file) openNewProject({ file });
+  if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
+    return `This video is ${formatBytes(file.size)}. The limit is ${MAX_VIDEO_LABEL}. Please use a shorter or smaller file.`;
+  }
+  return null;
+}
+
+function setVideoFiles(fileList) {
+  $("formError").textContent = "";
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  // One bad file stops the whole drop: silently dubbing the rest would leave
+  // the user thinking every video they dropped is in line.
+  for (const f of files) {
+    const bad = videoProblem(f);
+    if (bad) {
+      $("formError").textContent = files.length > 1 ? `${f.name}: ${bad}` : bad;
+      return;
+    }
+  }
+  openNewProject(files.length === 1 ? { file: files[0] } : { files });
 }
 
 uploadZone.addEventListener("click", () => videoInput.click());
@@ -2824,7 +2882,7 @@ uploadZone.addEventListener("click", () => videoInput.click());
 uploadZone.addEventListener("keydown", (e) => {
   if (e.target === uploadZone && (e.key === "Enter" || e.key === " ")) videoInput.click();
 });
-videoInput.addEventListener("change", () => setVideoFile(videoInput.files[0] || null));
+videoInput.addEventListener("change", () => setVideoFiles(videoInput.files));
 
 ["dragenter", "dragover"].forEach((evt) =>
   uploadZone.addEventListener(evt, (e) => { e.preventDefault(); uploadZone.classList.add("drag-over"); })
@@ -2833,8 +2891,7 @@ videoInput.addEventListener("change", () => setVideoFile(videoInput.files[0] || 
   uploadZone.addEventListener(evt, (e) => { e.preventDefault(); uploadZone.classList.remove("drag-over"); })
 );
 uploadZone.addEventListener("drop", (e) => {
-  const file = e.dataTransfer.files && e.dataTransfer.files[0];
-  if (file) setVideoFile(file);
+  setVideoFiles(e.dataTransfer.files);
 });
 
 // ---------------- Auto-update banner (desktop shell only) ----------------
@@ -2957,6 +3014,7 @@ function trimLabel(job, withLength = false) {
 // four competing failure messages meant the user read none of them
 // (feedback 2026-08-06).
 function jobStatusLine(job, progress) {
+  if (job.status === "queued") return "Waiting for its turn";
   if (job.status === "cancelling") return "Cancelling…";
   if (job.status === "cancelled") return "Cancelled";
   if (job.status === "error") return "Dubbing failed";
@@ -3173,7 +3231,7 @@ $("creditOverlay").addEventListener("click", (e) => { if (e.target === $("credit
 function updateCancelButton() {
   const btn = $("cancelBtn");
   const status = state.job ? state.job.status : null;
-  btn.hidden = status !== "running" && status !== "cancelling";
+  btn.hidden = !["running", "cancelling", "queued"].includes(status);
   btn.disabled = status === "cancelling";
   btn.textContent = status === "cancelling" ? "Cancelling…" : "Cancel";
 }
@@ -3215,7 +3273,8 @@ function projectMeta(job) {
 }
 
 // Anything that is not finished, failed or cancelled is still going.
-const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled" };
+const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled",
+                  queued: "dot-queued" };
 
 // A name too long for the column is cut off with an ellipsis, and hovering it
 // is then the only way to read the rest. Only the names actually cut off get a
@@ -3228,6 +3287,71 @@ function markClippedNames() {
     else name.removeAttribute("title");
   }
 }
+
+// ---------------- Up next: the waiting line on the first screen ----------
+// Shown only on the home screen, and only while something is running or
+// waiting. The one job on air is asked for its detail (that is where the
+// stage lives); the waiting rows each carry an X that takes them out of line.
+async function renderQueueCard() {
+  const card = $("queueCard");
+  if (document.body.dataset.screen !== "home") { card.hidden = true; return; }
+  let jobs;
+  try {
+    jobs = (await (await fetch("/api/dub/jobs")).json()).jobs || [];
+  } catch { return; }
+  const running = jobs.filter((j) => j.status === "running" || j.status === "cancelling");
+  const waiting = jobs.filter((j) => j.status === "queued");
+  if (!running.length && !waiting.length) { card.hidden = true; return; }
+  waiting.reverse();       // the list is newest first; the line is oldest first
+
+  let pct = null;
+  if (running.length) {
+    try {
+      const detail = await (await fetch(`/api/dub/jobs/${running[0].id}`)).json();
+      pct = parseProgress(detail.logs || []).percent;
+    } catch { /* the row just says Dubbing... */ }
+  }
+
+  const rows = $("queueRows");
+  rows.innerHTML = "";
+  for (const job of [...running, ...waiting]) {
+    const live = job.status !== "queued";
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "queue-row";
+    const stateText = job.status === "cancelling" ? "Cancelling…"
+      : live ? (pct != null ? `Dubbing ${pct}%` : "Dubbing…") : "Waiting";
+    row.innerHTML = `<span class="q-name">${escapeHtml(job.project || "Dubbing")}${
+      live ? `<div class="queue-bar"><i style="width:${pct ?? 0}%"></i></div>` : ""
+    }</span><span class="q-state${live ? " run" : ""}">${stateText}</span>`;
+    row.addEventListener("click", () => resumeJob(job.id));
+    const line = document.createElement("div");
+    line.className = "queue-line";
+    line.appendChild(row);
+    if (!live) {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "queue-x";
+      x.title = "Take this video out of line";
+      x.textContent = "✕";
+      x.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try { await fetch(`/api/dub/jobs/${job.id}/cancel`, { method: "POST" }); } catch { /* the next poll tells the truth */ }
+        renderQueueCard().catch(() => {});
+        renderHistory().catch(() => {});
+      });
+      line.appendChild(x);
+    }
+    rows.appendChild(line);
+  }
+  $("queueSummary").textContent =
+    `${running.length} running · ${waiting.length} waiting`;
+  card.hidden = false;
+}
+
+// The card follows the queue while the first screen is up. Cheap when idle:
+// one list request a tick, and none at all off the home screen.
+setInterval(() => { renderQueueCard().catch(() => {}); }, 2500);
 
 async function renderHistory() {
   const container = $("historyList");
@@ -3396,6 +3520,8 @@ async function startDubbing() {
     $("projectError").textContent = "Choose a video first."; return;
   }
 
+  if (np.files) return startBatchDubbing(np.files);
+
   $("startBtn").disabled = true;
   try {
     const fd = buildDubFormData(readOptions());
@@ -3428,6 +3554,36 @@ async function startDubbing() {
   }
 }
 $("startBtn").addEventListener("click", startDubbing);
+
+// Several videos, one set of choices: the first starts now, the rest join the
+// queue, and the first screen's Up next card is where the line shows.
+async function startBatchDubbing(files) {
+  $("startBtn").disabled = true;
+  try {
+    const opts = readOptions();
+    for (const f of files) {
+      const fd = buildDubFormData({ ...opts, video: f, sourceUrl: null,
+                                    project: undefined, trim: null });
+      await startDubJob(fd);
+    }
+    closeNewProject();
+    renderHistory().catch(() => {});
+    showHome();
+    renderQueueCard().catch(() => {});
+  } catch (e) {
+    // The jobs already posted are in line and stay there -- only the rest of
+    // the batch stops, and the dialog says why.
+    if (e && e.status === 409 && e.detail && e.detail.missing) {
+      await fetchModels();
+      paintModelUi();
+      showModelsDialog(e.detail);
+    } else if (!showIfOutOfSpace(e)) {
+      $("projectError").textContent = errorText(e);
+    }
+  } finally {
+    $("startBtn").disabled = false;
+  }
+}
 
 // Server errors arrive as the raw response body, so a FastAPI detail shows up
 // as JSON unless it is unwrapped here.
@@ -3490,7 +3646,10 @@ async function handleJobUpdate(job) {
   // they have no way of knowing.
   document.body.dataset.jobId = job.id;
   const progress = parseProgress(job.logs);
-  const running = job.status === "running" || job.status === "cancelling";
+  // "queued" is alive too -- it shows the waiting version of the running
+  // screen rather than a failure, and starts by itself.
+  const running = job.status === "running" || job.status === "cancelling"
+    || job.status === "queued";
   showScreen(running ? "running" : job.status === "done" ? "done" : "failed");
   setTopbar({
     title: jobLabel(job),

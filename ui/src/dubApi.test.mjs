@@ -452,3 +452,20 @@ test("parseProgress follows the three Perso cloud phases", () => {
   assert.equal(p.label, "Delivering");
   assert.equal(p.percent, 90);
 });
+
+test("pollDubJob keeps watching a queued job until it runs and finishes", async () => {
+  // The queue starts a waiting job by itself; a watcher that stopped at
+  // "queued" would never see it happen.
+  const answers = [
+    { id: "j1", status: "queued", logs: [] },
+    { id: "j1", status: "running", logs: [] },
+    { id: "j1", status: "done", logs: [] },
+  ];
+  let i = 0;
+  const fetchImpl = async () => ({ ok: true, json: async () => answers[Math.min(i++, 2)] });
+  globalThis.fetch = fetchImpl;
+  const seen = [];
+  const job = await pollDubJob("j1", { intervalMs: 1, onUpdate: (j) => seen.push(j.status) });
+  assert.equal(job.status, "done");
+  assert.deepEqual(seen, ["queued", "running", "done"]);
+});

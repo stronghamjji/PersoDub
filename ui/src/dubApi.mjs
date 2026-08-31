@@ -319,7 +319,9 @@ export async function pollDubJob(jobId, {
     wait = intervalMs;   // back in touch -- ask at the normal pace again
     const progress = parseProgress(job.logs);
     if (onUpdate) onUpdate(job, progress);
-    if (job.status !== "running" && job.status !== "cancelling") return job;
+    // "queued" is a live job too: it will start by itself, and the watcher
+    // has to still be looking when it does.
+    if (!["running", "cancelling", "queued"].includes(job.status)) return job;
     if (shouldStop && shouldStop()) return job;
     await sleep(wait);
   }
