@@ -4033,6 +4033,12 @@ async function renderScript(jobId) {
   renderTimeline(data.lines, total || data.lines[data.lines.length - 1].end);
   paintPlayhead();
 
+  if (data.readonly) {
+    // A Perso dub's script is a mirror of the server's for now: no editing,
+    // no per-line remake -- those land with the agent integration.
+    box.querySelectorAll(".sc-dst").forEach((c) => c.removeAttribute("contenteditable"));
+    box.querySelectorAll(".sc-wave, .sc-undo").forEach((b) => b.remove());
+  }
   box.querySelectorAll(".sc-dst[contenteditable]").forEach((cell) => {
     const before = cell.textContent;
     // Enter commits rather than opening a second line: a script line has one

@@ -403,6 +403,39 @@ def dub_job_script(jid: str):
     job = job_store.get(jid)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("dub_mode") == "perso":
+        # A Perso dub's script lives on Perso's side; read it back live.
+        seq = job.get("perso_project_seq")
+        if not seq:
+            raise HTTPException(status_code=404, detail="No script was recorded for this job.")
+        try:
+            script = PersoClient().get_project_script(int(seq))
+        except Exception:
+            raise HTTPException(status_code=503,
+                                detail="Could not reach Perso for this job's script. Try again in a moment.")
+        lines = []
+        for n, sent in enumerate(script.get("sentences") or [], start=1):
+            start = (sent.get("offsetMs") or 0) / 1000.0
+            dur = (sent.get("durationMs") or 0) / 1000.0
+            lines.append({
+                "line": n,
+                "start": round(start, 2),
+                "end": round(start + dur, 2),
+                "slot": round(dur, 2),
+                "source": sent.get("originalText"),
+                "text": sent.get("translatedText") or "",
+                # The voice already exists and fills its slot exactly -- there
+                # is nothing to estimate and nothing stale.
+                "estimated": round(dur, 2),
+                "fits": True,
+                "speaker": sent.get("speakerOrderIndex"),
+                "audio_sec": None,
+                "voice_stale": False,
+                "edited": False,
+                "was": None,
+            })
+        # Read-only until editing Perso lines lands (the next stage).
+        return {"lines": lines, "edited": False, "readonly": True}
     out = (job.get("result") or {}).get("out_path")
     if not out:
         raise HTTPException(status_code=409,
@@ -1039,6 +1072,12 @@ def _run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_spea
         log(f"   Perso workspace: {ws.get('name') or ws.get('seq')} (#{ws.get('seq')})")
     try:
         pc.dub_video(video_path, out_path, source_code, target_code, num_speakers=num_speakers, log=log)
+        # The Perso project number is how the script viewer (and later the
+        # agent) finds this job's sentences again -- persist it with the job.
+        seq = getattr(pc, "last_dub_project_seq", None)
+        if seq:
+            job_store._update(jid, perso_project_seq=seq)
+            job_store.persist(jid, os.path.dirname(out_path))
     except JobCancelled:
         raise
     except PersoCreditExhaustedError as e:

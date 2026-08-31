@@ -785,3 +785,36 @@ def test_perso_client_dub_video_raises_on_hasFailed(monkeypatch, tmp_path):
     client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
     with pytest.raises(RuntimeError):
         client.dub_video(str(video), str(tmp_path / "out.mp4"), "ko", "en")
+
+
+# ── 10. PersoClient.get_project_script() (mocked httpx, no network) ────────
+def test_get_project_script_paginates_and_returns_sentences(monkeypatch):
+    pages = [
+        {"sentences": [{"seq": 1, "originalText": "안녕", "translatedText": "Hi",
+                        "offsetMs": 0, "durationMs": 900, "speakerOrderIndex": 1,
+                        "audioUrl": "/perso-storage/a1.wav"}],
+         "speakers": [{"speakerOrderIndex": 1, "voiceId": "v1"}],
+         "hasNext": True, "nextCursorId": 77},
+        {"sentences": [{"seq": 2, "originalText": "잘 가", "translatedText": "Bye",
+                        "offsetMs": 1000, "durationMs": 800, "speakerOrderIndex": 2,
+                        "audioUrl": "/perso-storage/a2.wav"}],
+         "speakers": [{"speakerOrderIndex": 1, "voiceId": "v1"},
+                      {"speakerOrderIndex": 2, "voiceId": "v2"}],
+         "hasNext": False},
+    ]
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert "/script" in url
+        calls.append(dict(params or {}))
+        return _FakeHttpxResponse(pages[len(calls) - 1])
+
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    script = client.get_project_script(409873)
+
+    assert [s["seq"] for s in script["sentences"]] == [1, 2]
+    # the cursor from page 1 drives page 2
+    assert calls[1].get("cursorId") == 77
+    # every page carries the full speaker list; the last one wins
+    assert len(script["speakers"]) == 2

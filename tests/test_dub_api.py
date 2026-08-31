@@ -1306,3 +1306,57 @@ def test_dub_start_cloud_mode_credit_exhaustion_fails_with_notice(monkeypatch):
     assert j["status"] == "error"
     notices = client.get(f"/api/dub/jobs/{j['id']}").json().get("notices") or []
     assert any(n.get("type") == "perso_credit_exhausted" for n in notices)
+
+
+class _ScriptedCloudClient(_FakeCloudClient):
+    """Cloud fake that also carries a project seq and serves its script."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.last_dub_project_seq = 409873
+
+    def get_project_script(self, project_seq, space_seq=None):
+        assert project_seq == 409873
+        return {"sentences": [
+            {"seq": 1, "originalText": "안녕", "translatedText": "Hi there",
+             "offsetMs": 270, "durationMs": 5940, "speakerOrderIndex": 1,
+             "audioUrl": "/perso-storage/a1.wav"},
+            {"seq": 2, "originalText": "잘 가", "translatedText": "Bye now",
+             "offsetMs": 6500, "durationMs": 900, "speakerOrderIndex": 2,
+             "audioUrl": "/perso-storage/a2.wav"},
+        ], "speakers": [{"speakerOrderIndex": 1}, {"speakerOrderIndex": 2}]}
+
+
+def test_cloud_job_keeps_its_project_and_serves_the_perso_script(monkeypatch):
+    monkeypatch.setattr(main, "PersoClient", _ScriptedCloudClient)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    assert r.status_code == 200
+    j = _wait_done(r.json()["job_id"])
+    assert j["status"] == "done"
+    assert j["perso_project_seq"] == 409873
+
+    rs = client.get(f"/api/dub/jobs/{j['id']}/script")
+    assert rs.status_code == 200
+    body = rs.json()
+    # Read-only for now: editing Perso lines is the next stage's work.
+    assert body["readonly"] is True
+    lines = body["lines"]
+    assert [l["text"] for l in lines] == ["Hi there", "Bye now"]
+    assert lines[0]["source"] == "안녕"
+    assert lines[0]["start"] == 0.27 and lines[0]["end"] == 6.21
+    assert lines[0]["line"] == 1 and lines[1]["speaker"] == 2
+
+
+def test_cloud_job_without_a_recorded_project_404s_the_script(monkeypatch):
+    monkeypatch.setattr(main, "PersoClient", _FakeCloudClient)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    j = _wait_done(r.json()["job_id"])
+    assert client.get(f"/api/dub/jobs/{j['id']}/script").status_code == 404

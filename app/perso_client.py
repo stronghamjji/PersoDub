@@ -412,6 +412,9 @@ class PersoClient:
         )
         _raise_for_status(r)
         project_seq = r.json()["result"]["startGenerateProjectIdList"][0]
+        # Kept on the client so the caller can stamp it on the job record --
+        # the script viewer reads the project back through it later.
+        self.last_dub_project_seq = project_seq
         print(f"Perso dubbing project {project_seq} (workspace {space})", file=sys.stderr)
 
         self._wait_completed(project_seq, space, what="Perso dubbing")
@@ -444,6 +447,37 @@ class PersoClient:
         with open(out_path, "wb") as f:
             f.write(r.content)
         return out_path
+
+    def get_project_script(self, project_seq: int, space_seq: Optional[int] = None) -> dict:
+        """A dubbing project's script: {"sentences": [...], "speakers": [...]}.
+
+        Pages through GET /projects/{seq}/spaces/{space}/script the way the
+        official plugin's getProjectScript does (size 100, cursor pagination;
+        every page carries the full speaker array, last one wins). Sentences
+        carry originalText/translatedText, offsetMs/durationMs, a per-sentence
+        audioUrl and speakerOrderIndex (shape verified live 2026-08-31).
+        """
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        sentences, speakers = [], []
+        cursor = None
+        for _ in range(50):
+            params = {"size": 100}
+            if cursor is not None:
+                params["cursorId"] = cursor
+            r = httpx.get(
+                f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/script",
+                params=params, headers=self._headers, timeout=60,
+            )
+            _raise_for_status(r)
+            body = r.json() or {}
+            body = body.get("result") or body
+            sentences.extend(body.get("sentences") or [])
+            if body.get("speakers"):
+                speakers = body["speakers"]
+            if not body.get("hasNext"):
+                break
+            cursor = body.get("nextCursorId")
+        return {"sentences": sentences, "speakers": speakers}
 
     def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
         """Upload one video to Perso STT and return scriptTimestamps (JSON).
