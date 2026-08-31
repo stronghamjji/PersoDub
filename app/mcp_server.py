@@ -267,7 +267,7 @@ def extract_subtitles(video_path: str, engine: str = "",
 @mcp.tool()
 def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
               source_language: str = "", num_speakers: Optional[int] = None,
-              confirm: bool = False) -> dict:
+              translator: str = "", confirm: bool = False) -> dict:
     """Put ONE video into PersoDub's dubbing queue.
 
     target_language (and optional source_language, else auto-detected) are
@@ -283,11 +283,18 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     every estimate first, ask the user ONCE with the total, then call each
     with confirm=true -- never ask five separate questions.
 
+    translator picks the translation engine for a local dub when the user
+    names one -- "gemma" or "hunyuan" (on this machine) or "gemini" (Google's
+    API); empty keeps the app's default. If starting fails because a local
+    model is not installed, say so and offer gemini.
+
     Returns {"job_id", "status"}; the home screen's Up next card shows the
     queue, and get_job_status follows one job.
     """
     if dub_mode not in ("local", "perso"):
         raise ValueError('dub_mode must be "local" or "perso"')
+    if translator not in ("", "gemma", "hunyuan", "gemini"):
+        raise ValueError('translator must be "gemma", "hunyuan", "gemini" or empty')
     code = (target_language or "").lower()
     if code not in LANGUAGE_NAMES:
         raise ValueError("target_language must be one of: %s"
@@ -327,6 +334,8 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
         fields["source_language_code"] = source_language.lower()
     if num_speakers:
         fields["num_speakers"] = str(num_speakers)
+    if translator and dub_mode == "local":
+        fields["translate_engine"] = translator
     with open(path, "rb") as f:
         r = httpx.post("%s/api/dub/start" % API, data=fields,
                        files={"video": (os.path.basename(path), f, "video/mp4")},
@@ -378,7 +387,7 @@ def list_videos(folder: str) -> dict:
 @mcp.tool()
 def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
               source_language: str = "", num_speakers: Optional[int] = None,
-              confirm: bool = False) -> dict:
+              translator: str = "", confirm: bool = False) -> dict:
     """Put ONE video into PersoDub's dubbing queue.
 
     target_language (and optional source_language, else auto-detected) are
@@ -394,11 +403,18 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     every estimate first, ask the user ONCE with the total, then call each
     with confirm=true -- never ask five separate questions.
 
+    translator picks the translation engine for a local dub when the user
+    names one -- "gemma" or "hunyuan" (on this machine) or "gemini" (Google's
+    API); empty keeps the app's default. If starting fails because a local
+    model is not installed, say so and offer gemini.
+
     Returns {"job_id", "status"}; the home screen's Up next card shows the
     queue, and get_job_status follows one job.
     """
     if dub_mode not in ("local", "perso"):
         raise ValueError('dub_mode must be "local" or "perso"')
+    if translator not in ("", "gemma", "hunyuan", "gemini"):
+        raise ValueError('translator must be "gemma", "hunyuan", "gemini" or empty')
     code = (target_language or "").lower()
     if code not in LANGUAGE_NAMES:
         raise ValueError("target_language must be one of: %s"
@@ -438,6 +454,8 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
         fields["source_language_code"] = source_language.lower()
     if num_speakers:
         fields["num_speakers"] = str(num_speakers)
+    if translator and dub_mode == "local":
+        fields["translate_engine"] = translator
     with open(path, "rb") as f:
         r = httpx.post("%s/api/dub/start" % API, data=fields,
                        files={"video": (os.path.basename(path), f, "video/mp4")},

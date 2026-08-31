@@ -295,3 +295,16 @@ def test_queue_dub_refuses_a_language_the_voices_cannot_speak(tmp_path):
     video = _tmp_video(tmp_path)
     with pytest.raises(ValueError, match="target_language"):
         mcp_server.queue_dub(str(video), "sw", confirm=True)
+
+
+def test_queue_dub_passes_the_named_translator_through(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    calls = {}
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        calls["data"] = data
+        return _Response(200, {"job_id": "j2", "status": "queued"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    mcp_server.queue_dub(str(video), "en", translator="gemini", confirm=True)
+    assert calls["data"]["translate_engine"] == "gemini"
