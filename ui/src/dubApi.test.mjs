@@ -423,3 +423,17 @@ test("engineChips: Perso separation gets a chip, local Demucs (the default) stay
                               tts: "qwen3", quality: 1 });
   assert.ok(!local.some((c) => c.role === "Separation"));
 });
+
+test("buildDubFormData sends dub_mode only for the paid Perso cloud", () => {
+  const fd = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", dubMode: "perso" });
+  assert.equal(fd.get("dub_mode"), "perso");
+  const fd2 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", dubMode: "local" });
+  assert.equal(fd2.get("dub_mode"), null);
+});
+
+test("engineChips: a cloud dub gets a Dubbing chip; a local one stays silent", () => {
+  const cloud = engineChips({ dub_mode: "perso", quality: 1 });
+  assert.deepEqual(cloud.map((c) => `${c.role} ${c.label}`.trim()), ["Fast mode", "Dubbing Perso"]);
+  const local = engineChips({ dub_mode: "local", stt_engine: "whisper", translator: "gemma", tts: "qwen3", quality: 1 });
+  assert.ok(!local.some((c) => c.role === "Dubbing"));
+});

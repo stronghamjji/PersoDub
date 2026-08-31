@@ -100,6 +100,9 @@ export function buildDubFormData(opts) {
   // the paid Perso choice is worth sending (app/main.py:dub_start sep_engine).
   if (opts.sepEngine === "perso") fd.append("sep_engine", "perso");
 
+  // Whole-job cloud dubbing: local is the default; only the paid choice travels.
+  if (opts.dubMode === "perso") fd.append("dub_mode", "perso");
+
   if (opts.numSpeakers != null) fd.append("num_speakers", String(opts.numSpeakers));
   if (opts.translateEngine && opts.translateEngine !== "auto") {
     fd.append("translate_engine", opts.translateEngine);
@@ -377,7 +380,7 @@ export function engineChips(job, { withQuality = true, withTts = true } = {}) {
   const chips = [];
   // The role is the field the id was read out of, which is the only place it
   // can be known from: "qwen" translates and "qwen3" speaks.
-  for (const [role, key] of [["Separation", j.separation], ["STT", j.stt_engine],
+  for (const [role, key] of [["Dubbing", j.dub_mode], ["Separation", j.separation], ["STT", j.stt_engine],
                              ["Translation", j.translator], ["TTS", withTts ? j.tts : null]]) {
     const known = key ? ENGINE_LABELS[String(key).toLowerCase()] : null;
     if (known) chips.push({ role, ...known });
