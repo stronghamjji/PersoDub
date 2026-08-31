@@ -887,6 +887,7 @@
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
   .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  #helpOverlay p { font-size: 0.85rem; line-height: 1.65; margin: 6px 0; color: var(--foreground); }
   .license-list { font-size: 0.78rem; color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
   .license-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
   .license-list li:last-child { border-bottom: none; }
@@ -1019,6 +1020,9 @@
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     </button>
     <div class="rail-spacer"></div>
+    <button class="rail-item" id="helpBtn" title="Help" type="button" aria-label="Open help">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.2a2.6 2.6 0 1 1 3.6 2.4c-.8.34-1 1-1 1.7"/><line x1="12" y1="16.6" x2="12" y2="16.72"/></svg>
+    </button>
     <button class="rail-item" id="settingsBtn" title="Settings" type="button" aria-label="Open settings">
       <svg class="icon" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.6"/>
@@ -1306,6 +1310,40 @@
 </div>
 
 <!-- ============ SETTINGS ============ -->
+<div class="modal-overlay" id="helpOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Help</h2>
+      <button class="modal-close" id="helpCloseBtn" type="button" aria-label="Close help">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-section">
+        <h3>How dubbing works</h3>
+        <p>Drop a video or paste a link. PersoDub separates the voices from the background, writes down the speech, translates it, and speaks each line in a voice cloned from the original — then shows you the result with the full script, where any line can be fixed and revoiced on its own.</p>
+      </div>
+      <div class="settings-section">
+        <h3>The stages</h3>
+        <p><strong>Dubbing</strong> — where the whole job runs: on this computer (free), or on Perso&#8217;s servers (paid, about 1 credit per second of video).</p>
+        <p><strong>Audio separation</strong> — splits voices from music and noise, so the background survives the dub. Demucs runs here for free; Perso API is paid (about 0.5 credits per second).</p>
+        <p><strong>Speech-to-text</strong> — writes down what is said and when. Whisper runs here for free; Perso API gives the best quality.</p>
+        <p><strong>Translation</strong> — turns that text into the new language. Gemma 3 runs here for free; Gemini API gives the best quality; Hunyuan is small and fast.</p>
+        <p><strong>Text-to-speech</strong> — speaks every translated line in a voice cloned from its speaker (Qwen3-TTS).</p>
+        <p><strong>Voice quality</strong> — Fast makes one take per line; High quality makes four and keeps the best (about 4× slower).</p>
+      </div>
+      <div class="settings-section">
+        <h3>The agent</h3>
+        <p>Every finished dub opens with its script and an agent beside it. Ask it to rewrite a line, shorten one that does not fit its slot, or remake a voice — it edits the script and regenerates only what changed.</p>
+      </div>
+      <div class="settings-section">
+        <h3>Keys and credits</h3>
+        <p>Perso API and Gemini API need a key, saved once in Settings. Perso charges credits by video length; everything that runs on this computer is free.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modelsNeededOverlay">
   <div class="modal" style="max-width: 430px">
     <div class="modal-body">
@@ -1944,6 +1982,8 @@ function closeSettings() {
 function realVersion(v) { return v && v !== "0.0.0" ? v : ""; }
 
 $("settingsBtn").addEventListener("click", openSettings);
+$("helpBtn").addEventListener("click", () => $("helpOverlay").classList.add("open"));
+$("helpCloseBtn").addEventListener("click", () => $("helpOverlay").classList.remove("open"));
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
 $("advancedKeysLink").addEventListener("click", openSettings);
 $("settingsCloseBtn").addEventListener("click", closeSettings);
