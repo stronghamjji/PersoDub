@@ -170,7 +170,12 @@ export async function startDubJob(formData, { baseUrl = "" } = {}) {
   const res = await fetch(`${baseUrl}/api/dub/start`, { method: "POST", body: formData });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(text || `Failed to start dubbing (HTTP ${res.status})`);
+    const err = new Error(text || `Failed to start dubbing (HTTP ${res.status})`);
+    // The missing-models 409 carries a structured detail the caller renders
+    // as the download dialog -- hand it over parsed, beside the status.
+    err.status = res.status;
+    try { err.detail = JSON.parse(text).detail; } catch { /* plain text error */ }
+    throw err;
   }
   const data = await res.json();
   return data.job_id;

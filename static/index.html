@@ -873,6 +873,18 @@
   .settings-row { margin-bottom: 12px; }
   .settings-row:last-child { margin-bottom: 0; }
   .settings-hint { font-size: 0.74rem; color: var(--muted-foreground); margin-top: 4px; }
+  .settings-hint.model-busy { color: var(--destructive); font-weight: 600; }
+  .settings-hint.model-ok { color: #2a8a4a; font-weight: 600; }
+  .model-line { display: flex; align-items: center; gap: 8px; }
+  .model-line .keys-link { margin: 0; }
+  .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: #fff;
+               font-size: 0.74rem; font-weight: 600; padding: 4px 10px; cursor: pointer; }
+  .model-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 10px; }
+  .model-size { color: var(--muted-foreground); font-size: 0.8rem; }
+  .model-btn { height: 30px; padding: 0 12px; font-size: 0.78rem; }
+  .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
+  .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
+  .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
   .license-list { font-size: 0.78rem; color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
   .license-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
   .license-list li:last-child { border-bottom: none; }
@@ -1052,6 +1064,9 @@
         <span class="topbar-sub" id="topbarSub">Local dubbing</span>
       </div>
       <span class="topbar-spacer"></span>
+      <!-- Purple while a model downloads in the background; clicking reopens
+           the progress dialog (or Settings when none is pending). -->
+      <button class="topbar-dl" id="topbarDl" type="button" hidden></button>
       <!-- The way back INTO the job the back arrow above just left. Only on the
            first screen, and only while there is such a job (see paintForward). -->
       <button class="topbar-back" id="topbarForward" type="button"
@@ -1249,9 +1264,9 @@
       </button>
       <div class="advanced-body" id="advancedBody" hidden>
         <div class="field"><label for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint">Splits the voices from the background sound.</div><div class="settings-hint">Perso API uses credits (about 0.5 per second).</div></div>
-        <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint">Turns the speech in your video into text.</div><div class="settings-hint">Want higher quality? Choose Perso API.</div></div>
-        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="gemma" selected>Gemma 3 (12B)</option><option value="gemini">Gemini API</option><option value="hunyuan">Hunyuan (1.8B, fast)</option></select><div class="settings-hint">Translates that text into the new language.</div><div class="settings-hint">Want higher quality? Choose Gemini API.</div><div class="settings-hint" id="hunyuanHint" hidden></div></div>
-        <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint">Speaks the translated lines in a generated voice.</div></div>
+        <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint">Turns the speech in your video into text.</div><div class="settings-hint">Want higher quality? Choose Perso API.</div><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
+        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="gemma" selected>Gemma 3 (12B)</option><option value="gemini">Gemini API</option><option value="hunyuan">Hunyuan (1.8B, fast)</option></select><div class="settings-hint">Translates that text into the new language.</div><div class="settings-hint">Want higher quality? Choose Gemini API.</div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
+        <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint">Speaks the translated lines in a generated voice.</div><div class="settings-hint model-line" id="voiceModelHint" hidden></div></div>
         <div class="field"><label for="qualitySelect">Voice quality</label><select id="qualitySelect"><option value="fast" selected>Fast</option><option value="high">High quality</option></select><div class="settings-hint" id="qualityHint"></div></div>
         <div class="field"><label for="numSpeakers">Number of speakers</label><input type="number" id="numSpeakers" min="1" placeholder="Auto-detect"><div class="settings-hint">Auto-detect assumes at least 2. Set 1 for a single-speaker video.</div></div>
         <button type="button" class="keys-link" id="advancedKeysLink">Perso and Gemini need an API key. Add it in Settings</button>
@@ -1288,6 +1303,23 @@
 </div>
 
 <!-- ============ SETTINGS ============ -->
+<div class="modal-overlay" id="modelsNeededOverlay">
+  <div class="modal" style="max-width: 430px">
+    <div class="modal-body">
+      <h2 id="mnTitle" style="margin: 0 0 8px"></h2>
+      <p class="settings-hint" id="mnLine" style="margin: 0"></p>
+      <div class="mn-progress" id="mnProgress" hidden><div id="mnBar"></div></div>
+      <div class="form-error" id="mnError"></div>
+      <div class="mn-buttons">
+        <button class="btn btn-outline" id="mnCancel" type="button">Cancel</button>
+        <button class="btn btn-outline" id="mnHide" type="button" hidden>Hide</button>
+        <button class="btn btn-outline" id="mnSettings" type="button">Open Settings</button>
+        <button class="btn btn-primary" id="mnDownload" type="button">Download and Start</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="settingsOverlay">
   <div class="modal">
     <div class="modal-head">
@@ -1297,6 +1329,15 @@
       </button>
     </div>
     <div class="modal-body">
+      <div class="settings-section">
+        <h3>Models</h3>
+        <!-- One button per row (Download / Resume / Cancel / Remove) -- the
+             App Store grammar the 2026-08-28 mockups settled on. -->
+        <div id="modelsList"></div>
+        <div class="form-error" id="modelsError"></div>
+        <div class="settings-hint" id="modelsFootprint"></div>
+      </div>
+
       <div class="settings-section">
         <h3>API keys</h3>
         <!-- Saved values still prefill (a hidden-once-saved field just looked
@@ -1641,6 +1682,7 @@
 
 <script type="module">
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips } from "/js/dubApi.mjs";
+import { gb, neededModelId, modelStatusLine, dubStartDialog, overallProgress, allReady } from "/js/modelsUi.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -1880,6 +1922,7 @@ async function openSettings() {
   } catch {
     $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
   }
+  fetchModels().then(paintModelUi);
   $("settingsOverlay").classList.add("open");
 }
 // Closing saves too: a key typed and then Escape (or the X) never left the
@@ -2079,62 +2122,183 @@ applyEngineAvailabilityToForm();
 // field's own hint -- a 1.1GB download must be asked for, never started by a
 // mere selection (user decision 2026-08-31). An install already running (the
 // dialog was reopened mid-download) resumes its progress display instead.
-let hunyuanPolling = false;
-async function hunyuanRow() {
+// ---------------- Models: hints, dialog, chip, Settings catalog ----------
+// One controller over GET /api/models. The status line under each dropdown,
+// the "Download N GB to dub?" dialog, the topbar chip and the Settings list
+// all paint from the same rows; a single 2s poll runs only while something
+// is downloading (same cadence as the dub-progress poll).
+let modelRows = [];
+let modelsPolling = false;
+let pendingDub = null;   // { ids, downloading } while the dialog drives a dub
+
+async function fetchModels() {
   try {
     const r = await fetch("/api/models");
-    if (!r.ok) return null;
-    return (await r.json()).models.find((m) => m.id === "hunyuan") || null;
-  } catch { return null; }
+    if (r.ok) modelRows = (await r.json()).models;
+  } catch { /* keep the last rows */ }
+  return modelRows;
 }
-function pollHunyuanInstall() {
-  const hint = $("hunyuanHint");
-  if (hunyuanPolling) return;
-  hunyuanPolling = true;
-  const poll = async () => {
-    const s = await hunyuanRow();
-    if (s && s.state === "downloading") {
-      hint.className = "settings-hint hunyuan-busy";
-      hint.textContent = `Downloading Hunyuan (1.1GB)… ${s.progress ?? 0}%`;
-      setTimeout(poll, 2000);
-      return;
-    }
-    hunyuanPolling = false;
-    if (s && s.state === "ready") {
-      hint.className = "settings-hint hunyuan-ok";
-      hint.textContent = "Hunyuan is ready.";
-      applyEngineAvailabilityToForm();
-    } else {
-      hint.className = "settings-hint hunyuan-busy";
-      hint.textContent = "Hunyuan download failed" + (s && s.error ? `: ${s.error}` : ".");
-    }
-  };
-  poll();
-}
-async function startHunyuanDownload() {
-  $("hunyuanHint").className = "settings-hint hunyuan-busy";
-  $("hunyuanHint").textContent = "Downloading Hunyuan (1.1GB)…";
-  try { await fetch("/api/models/hunyuan/download", { method: "POST" }); } catch {}
-  pollHunyuanInstall();
-}
-async function showHunyuanState() {
-  const hint = $("hunyuanHint");
-  const s = await hunyuanRow();
-  if (!s || s.state === "ready") { hint.hidden = true; return; }
-  hint.hidden = false;
-  if (s.state === "downloading") { pollHunyuanInstall(); return; }
+const modelRow = (id) => modelRows.find((m) => m.id === id) || null;
+
+function paintHint(el, row) {
+  const line = modelStatusLine(row);
+  if (line.cls === "model-busy") el.dataset.everBusy = "1";
+  // A quiet machine stays quiet: Ready only shows after this session saw the
+  // model busy -- three green lines on a fully-installed machine are noise.
+  if (!row || (row.state === "ready" && !el.dataset.everBusy)) { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = "settings-hint model-line" + (line.cls ? " " + line.cls : "");
+  el.replaceChildren();
+  const span = document.createElement("span");
+  span.textContent = line.text;
+  el.append(span);
+  if (!line.button) return;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "keys-link";
-  btn.textContent = "Download Hunyuan (1.1GB)";
-  btn.addEventListener("click", startHunyuanDownload);
-  hint.className = "settings-hint";
-  hint.replaceChildren(btn);
+  btn.textContent = line.button === "download" ? `Download (${gb(row.bytes)} GB)`
+                  : line.button === "resume" ? "Resume" : "Cancel";
+  btn.addEventListener("click", () =>
+    line.button === "cancel" ? cancelModel(row.id) : downloadModel(row.id));
+  el.append(btn);
 }
-$("translateSelect").addEventListener("change", () => {
-  if ($("translateSelect").value === "hunyuan") showHunyuanState();
-  else $("hunyuanHint").hidden = true;
+
+function paintModelUi() {
+  paintHint($("sttModelHint"), modelRow(neededModelId("stt", $("sttSelect").value)));
+  paintHint($("translateModelHint"), modelRow(neededModelId("translate", $("translateSelect").value)));
+  paintHint($("voiceModelHint"), modelRow(neededModelId("voice", $("voiceSelect").value)));
+  const dl = modelRows.find((m) => m.state === "downloading" && m.progress != null)
+          || modelRows.find((m) => m.state === "downloading");
+  $("topbarDl").hidden = !dl;
+  if (dl) $("topbarDl").textContent = `${dl.name} · ${dl.progress ?? 0}%`;
+  renderModelsList();
+  paintModelsDialog();
+}
+
+function anyDownloading() { return modelRows.some((m) => m.state === "downloading"); }
+function ensureModelsPolling() {
+  if (modelsPolling) return;
+  modelsPolling = true;
+  const tick = async () => {
+    await fetchModels();
+    paintModelUi();
+    if (anyDownloading() || (pendingDub && pendingDub.downloading)) { setTimeout(tick, 2000); return; }
+    modelsPolling = false;
+  };
+  tick();
+}
+async function downloadModel(id) {
+  try { await fetch(`/api/models/${id}/download`, { method: "POST" }); } catch { /* poll shows it */ }
+  ensureModelsPolling();
+}
+async function cancelModel(id) {
+  try { await fetch(`/api/models/${id}/cancel`, { method: "POST" }); } catch { /* poll shows it */ }
+  ensureModelsPolling();
+}
+async function removeModel(id) {
+  $("modelsError").textContent = "";
+  try {
+    const r = await fetch(`/api/models/${id}`, { method: "DELETE" });
+    if (!r.ok) {
+      const body = await r.json().catch(() => null);
+      $("modelsError").textContent = String((body && body.detail) || "Could not remove it.");
+    }
+  } catch { $("modelsError").textContent = "Could not remove it. Is the engine running?"; }
+  await fetchModels();
+  paintModelUi();
+}
+
+function renderModelsList() {
+  const list = document.getElementById("modelsList");
+  if (!list) return;
+  list.replaceChildren();
+  let onDisk = 0;
+  for (const m of modelRows) {
+    if (m.state === "ready") onDisk += m.bytes;
+    const row = document.createElement("div");
+    row.className = "settings-row model-row";
+    const name = document.createElement("span");
+    name.textContent = m.name;
+    const size = document.createElement("span");
+    size.className = "model-size";
+    size.textContent = `${gb(m.bytes)} GB`;
+    const st = modelStatusLine(m);
+    const status = document.createElement("span");
+    status.className = "settings-hint" + (st.cls ? " " + st.cls : "");
+    status.textContent = m.state === "not_downloaded" ? "" : st.text;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-outline model-btn";
+    if (m.state === "ready") { btn.textContent = "Remove"; btn.onclick = () => removeModel(m.id); }
+    else if (m.state === "downloading") { btn.textContent = "Cancel"; btn.onclick = () => cancelModel(m.id); }
+    else if (m.state === "paused") { btn.textContent = "Resume"; btn.onclick = () => downloadModel(m.id); }
+    else { btn.textContent = "Download"; btn.onclick = () => downloadModel(m.id); }
+    row.append(name, size, status, btn);
+    list.append(row);
+  }
+  $("modelsFootprint").textContent = `On this computer: ${gb(onDisk)} GB`;
+}
+
+// -- the dub-start dialog (dub_start's 409) --------------------------------
+function showModelsDialog(detail) {
+  const d = dubStartDialog(detail);
+  pendingDub = { ids: d.ids, downloading: false };
+  $("mnTitle").textContent = d.title;
+  $("mnLine").textContent = d.line;
+  $("mnError").textContent = "";
+  $("mnProgress").hidden = true;
+  $("mnDownload").hidden = false;
+  $("mnSettings").hidden = false;
+  $("mnHide").hidden = true;
+  $("modelsNeededOverlay").classList.add("open");
+}
+function paintModelsDialog() {
+  if (!pendingDub || !pendingDub.downloading) return;
+  const pct = overallProgress(modelRows, pendingDub.ids);
+  $("mnBar").style.width = pct + "%";
+  $("mnTitle").textContent = "Downloading AI models";
+  $("mnLine").textContent = `${pct}% — dubbing starts when they finish.`;
+  const failed = pendingDub.ids.map(modelRow).find((r) => r && r.state === "paused");
+  if (failed) $("mnError").textContent = `${failed.name} stopped${failed.error ? ` — ${failed.error}` : ""}. Resume it from the line under its dropdown.`;
+  if (allReady(modelRows, pendingDub.ids)) {
+    pendingDub = null;
+    $("modelsNeededOverlay").classList.remove("open");
+    startDubbing();   // the New project dialog still holds the same form
+  }
+}
+$("mnDownload").addEventListener("click", () => {
+  if (!pendingDub) return;
+  pendingDub.downloading = true;
+  $("mnDownload").hidden = true;
+  $("mnSettings").hidden = true;
+  $("mnHide").hidden = false;
+  $("mnProgress").hidden = false;
+  for (const id of pendingDub.ids) {
+    const r = modelRow(id);
+    if (!r || r.state !== "ready") downloadModel(id);
+  }
 });
+$("mnSettings").addEventListener("click", () => openSettings());
+$("mnHide").addEventListener("click", () => $("modelsNeededOverlay").classList.remove("open"));
+$("mnCancel").addEventListener("click", () => {
+  if (pendingDub && pendingDub.downloading) {
+    // The dub is off; the downloads stop too. Their pieces stay (Paused).
+    for (const id of pendingDub.ids) {
+      const r = modelRow(id);
+      if (r && r.state === "downloading") cancelModel(id);
+    }
+  }
+  pendingDub = null;
+  $("modelsNeededOverlay").classList.remove("open");
+});
+$("topbarDl").addEventListener("click", () => {
+  if (pendingDub) $("modelsNeededOverlay").classList.add("open");
+  else openSettings();
+});
+for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
+  $(id).addEventListener("change", paintModelUi);
+}
+fetchModels().then(paintModelUi);
 
 // ---------------- Screens and top bar ----------------
 // Three sections live inside <main class="work"> and exactly one is shown.
@@ -3151,7 +3315,13 @@ async function startDubbing() {
     setTopbar({ title: label, subtitle: `Working · ${langsLabel()}`, running: true, back: false });
     runPollLoop(jobId, myGeneration);
   } catch (e) {
-    if (!showIfOutOfSpace(e)) $("projectError").textContent = errorText(e);
+    if (e && e.status === 409 && e.detail && e.detail.missing) {
+      await fetchModels();
+      paintModelUi();
+      showModelsDialog(e.detail);
+    } else if (!showIfOutOfSpace(e)) {
+      $("projectError").textContent = errorText(e);
+    }
   } finally {
     $("startBtn").disabled = false;
   }
