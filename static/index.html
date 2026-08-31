@@ -3970,7 +3970,10 @@ async function renderScript(jobId) {
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null);
   if (!data || !data.lines || !data.lines.length) {
-    box.innerHTML = '<div class="script-empty">No script was recorded for this job.</div>';
+    const perso = state.job && state.job.dub_mode === "perso";
+    box.innerHTML = `<div class="script-empty">${perso
+      ? "Perso dubbing arrives as a finished video, without a script. To edit lines, dub on this computer."
+      : "No script was recorded for this job."}</div>`;
     renderTimeline([], 0);
     return;
   }

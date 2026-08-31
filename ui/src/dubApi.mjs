@@ -236,6 +236,20 @@ const VOICE_CAP = 40;
  * the job finishes). An explicit lineCount wins when both are available.
  */
 export function parseProgress(logs, { lineCount = null } = {}) {
+  // A Perso cloud dub logs three phases of its own instead of the six local
+  // stages -- map them to a moving bar so the run never looks frozen.
+  let cloud = 0;
+  for (const line of logs || []) {
+    const l = String(line);
+    if (/Uploading the video to Perso/.test(l)) cloud = Math.max(cloud, 1);
+    if (/Perso is dubbing/.test(l)) cloud = Math.max(cloud, 2);
+    if (/Downloading the finished video/.test(l)) cloud = Math.max(cloud, 3);
+  }
+  if (cloud > 0) {
+    const label = cloud === 1 ? "Uploading to Perso" : cloud === 2 ? "Dubbing at Perso" : "Delivering";
+    const percent = cloud === 1 ? 15 : cloud === 2 ? 55 : 90;
+    return { stage: cloud, total: 3, label, percent, voiceDone: 0, voiceTotal: null, raw: 0 };
+  }
   let raw = 0, voiceDone = 0, loggedTotal = null;
   for (const line of logs || []) {
     const m = /^(\d)\/6\s/.exec(String(line).trim());

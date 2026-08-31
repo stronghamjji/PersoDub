@@ -1023,7 +1023,7 @@ def _run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_spea
     if ws:
         log(f"   Perso workspace: {ws.get('name') or ws.get('seq')} (#{ws.get('seq')})")
     try:
-        pc.dub_video(video_path, out_path, source_code, target_code, num_speakers=num_speakers)
+        pc.dub_video(video_path, out_path, source_code, target_code, num_speakers=num_speakers, log=log)
     except JobCancelled:
         raise
     except PersoCreditExhaustedError as e:

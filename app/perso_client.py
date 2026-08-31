@@ -383,7 +383,7 @@ class PersoClient:
     def dub_video(self, video_path: str, out_path: str,
                   source_code: Optional[str], target_code: str,
                   num_speakers: Optional[int] = None,
-                  space_seq: Optional[int] = None) -> str:
+                  space_seq: Optional[int] = None, log=None) -> str:
         """Full cloud dub: upload -> translate project -> poll -> download.
 
         The whole pipeline runs on Perso's side (translation, voices, mix);
@@ -391,8 +391,11 @@ class PersoClient:
         Request contract mirrors the official plugin's api_adapter.mjs
         requestTranslation/download exactly (verified 2026-08-31).
         """
+        log = log or (lambda m: None)
         space = int(space_seq) if space_seq is not None else self.space_seq
+        log("   Uploading the video to Perso…")
         media_seq = self._upload_media(video_path, space)
+        log("   Perso is dubbing… this takes a few minutes.")
 
         r = httpx.post(
             f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/translate",
@@ -412,6 +415,7 @@ class PersoClient:
         print(f"Perso dubbing project {project_seq} (workspace {space})", file=sys.stderr)
 
         self._wait_completed(project_seq, space, what="Perso dubbing")
+        log("   Downloading the finished video…")
 
         # The gate the plugin checks before asking for a link: a completed
         # project whose video is not served yet must fail loudly, not save

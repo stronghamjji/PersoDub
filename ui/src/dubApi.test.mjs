@@ -437,3 +437,18 @@ test("engineChips: a cloud dub gets a Dubbing chip; a local one stays silent", (
   const local = engineChips({ dub_mode: "local", stt_engine: "whisper", translator: "gemma", tts: "qwen3", quality: 1 });
   assert.ok(!local.some((c) => c.role === "Dubbing"));
 });
+
+test("parseProgress follows the three Perso cloud phases", () => {
+  const logs = ["clip.mp4", "1/1 Dubbing in the Perso cloud…", "   Uploading the video to Perso…"];
+  let p = parseProgress(logs);
+  assert.equal(p.label, "Uploading to Perso");
+  assert.equal(p.percent, 15);
+  logs.push("   Perso is dubbing… this takes a few minutes.");
+  p = parseProgress(logs);
+  assert.equal(p.label, "Dubbing at Perso");
+  assert.equal(p.percent, 55);
+  logs.push("   Downloading the finished video…");
+  p = parseProgress(logs);
+  assert.equal(p.label, "Delivering");
+  assert.equal(p.percent, 90);
+});

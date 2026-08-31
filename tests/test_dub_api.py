@@ -1224,7 +1224,7 @@ class _FakeCloudClient:
     def __init__(self, *a, **kw):
         self.cancel_check = None
 
-    def dub_video(self, video_path, out_path, source_code, target_code, num_speakers=None, space_seq=None):
+    def dub_video(self, video_path, out_path, source_code, target_code, num_speakers=None, space_seq=None, log=None):
         _FakeCloudClient.calls.append({
             "video": video_path, "out": out_path, "source": source_code,
             "target": target_code, "speakers": num_speakers,
