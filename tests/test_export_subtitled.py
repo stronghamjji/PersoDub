@@ -156,3 +156,24 @@ def test_subtitled_refuses_a_position_off_the_frame(monkeypatch, tmp_path):
     ran, jid, work = _done_job(monkeypatch, tmp_path)
     assert client.get(f"/api/dub/result/{jid}/subtitled?pos=140").status_code == 422
     assert ran.calls == []
+
+
+def test_subtitled_takes_a_font_size(monkeypatch, tmp_path):
+    # size scales the preset's letters: 100 as designed, 60 to 160 allowed.
+    # clean's base Fontsize is 20, so 150 burns at 30.
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    r = client.get(f"/api/dub/result/{jid}/subtitled?preset=clean&size=150")
+    assert r.status_code == 200
+    assert "Fontsize=30" in _vf(ran.calls[0])
+    assert ran.calls[0][-1] == str(work / "subtitled-clean-s150.mp4")
+    assert client.get(f"/api/dub/result/{jid}/subtitled?size=300").status_code == 422
+
+
+def test_subtitle_preview_takes_size_and_position_together(monkeypatch, tmp_path):
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    r = client.get(f"/api/dub/result/{jid}/subtitle_preview?preset=variety&pos=30&size=80")
+    assert r.status_code == 200
+    vf = _vf(ran.calls[0])
+    assert "Fontsize=18" in vf          # variety's 23 at 80% -> 18
+    assert "MarginV=202" in vf          # (100-30)% of 288
+    assert ran.calls[0][-1] == str(work / "subtitle-preview-variety-p30-s80.jpg")

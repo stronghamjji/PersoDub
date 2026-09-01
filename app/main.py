@@ -1282,6 +1282,7 @@ class SubtitleBurnRequest(BaseModel):
     srt_path: str = ""
     preset: str = "clean"
     pos: Optional[float] = None
+    size: Optional[float] = None
 
 
 # One force_style per preset. ASS colours are &HAABBGGRR (alpha first, then
@@ -1292,14 +1293,14 @@ _BURN_FONT = ("Apple SD Gothic Neo" if sys.platform == "darwin"
               else "Noto Sans CJK KR")
 _BURN_PRESETS = {
     # White with a dark outline -- fine over almost anything.
-    "clean": ("Fontsize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+    "clean": ("PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
               "Outline=1.5,Shadow=0.5,Bold=0"),
     # The loud yellow of Korean variety shows, a notch bigger and bolder.
-    "variety": ("Fontsize=23,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,"
+    "variety": ("PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,"
                 "Outline=2.5,Shadow=0,Bold=1"),
     # White on a translucent dark band, for busy or bright footage.
     # BorderStyle=3 draws the box with OutlineColour; 80 alpha is half-clear.
-    "box": ("Fontsize=20,PrimaryColour=&H00FFFFFF,BorderStyle=3,"
+    "box": ("PrimaryColour=&H00FFFFFF,BorderStyle=3,"
             "OutlineColour=&H80000000,Outline=1,Shadow=0,Bold=0"),
 }
 
@@ -1313,13 +1314,34 @@ def _filter_path(path: str) -> str:
     return path.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
 
 
-def _burn_vf(srt: str, preset: str, pos: Optional[float] = None) -> str:
+# Each preset's letter height at size 100, in libass's 288-line system.
+_BURN_FONTSIZE = {"clean": 20, "variety": 23, "box": 20}
+
+
+def _burn_vf(srt: str, preset: str, pos: Optional[float] = None,
+             size: Optional[float] = None) -> str:
     """pos places the subtitles: 0 is the top of the frame, 100 the bottom,
-    None the usual spot near the bottom. Mapped onto MarginV, the distance up
-    from the bottom edge in libass's own 288-line coordinate system."""
+    None the usual spot near the bottom (mapped onto MarginV, the distance up
+    from the bottom edge in libass's own 288-line coordinate system).
+    size scales the letters: 100 as the preset was designed, 60 to 160."""
     margin = 22 if pos is None else min(266, max(0, round((100 - pos) / 100 * 288)))
-    style = "%s,MarginV=%d,FontName=%s" % (_BURN_PRESETS[preset], margin, _BURN_FONT)
+    fontsize = round(_BURN_FONTSIZE[preset] * (100 if size is None else size) / 100)
+    style = "Fontsize=%d,%s,MarginV=%d,FontName=%s" % (
+        fontsize, _BURN_PRESETS[preset], margin, _BURN_FONT)
     return "subtitles=filename='%s':force_style='%s'" % (_filter_path(srt), style)
+
+
+def _check_pos_size(pos: Optional[float], size: Optional[float]) -> None:
+    if pos is not None and not 0 <= pos <= 100:
+        raise HTTPException(status_code=422, detail="pos must be between 0 and 100")
+    if size is not None and not 60 <= size <= 160:
+        raise HTTPException(status_code=422, detail="size must be between 60 and 160")
+
+
+def _pos_size_suffix(pos: Optional[float], size: Optional[float]) -> str:
+    """The cache-name tail: every position and size is its own file."""
+    return (("" if pos is None else "-p%d" % round(pos))
+            + ("" if size is None else "-s%d" % round(size)))
 
 
 @app.post("/api/subtitles/burn")
@@ -1345,9 +1367,8 @@ def subtitles_burn(body: SubtitleBurnRequest):
                             detail="No subtitle file to lay on. Extract subtitles "
                                    "first, or name an .srt file.")
     out = _free_path("%s-sub-%s" % (base, body.preset), ext or ".mp4")
-    if body.pos is not None and not 0 <= body.pos <= 100:
-        raise HTTPException(status_code=422, detail="pos must be between 0 and 100")
-    vf = _burn_vf(srt, body.preset, body.pos)
+    _check_pos_size(body.pos, body.size)
+    vf = _burn_vf(srt, body.preset, body.pos, body.size)
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
            "-i", path, "-vf", vf,
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
@@ -2018,7 +2039,7 @@ def _stale(built: str, *sources: str) -> bool:
 
 @app.get("/api/dub/result/{jid}/subtitled")
 def dub_result_subtitled(jid: str, preset: str = "clean", download: int = 0,
-                         pos: Optional[float] = None):
+                         pos: Optional[float] = None, size: Optional[float] = None):
     """The dubbed video with its subtitles laid on, built on first ask.
 
     Lives in the job's own folder as subtitled-<preset>.mp4 and is served from
@@ -2030,15 +2051,13 @@ def dub_result_subtitled(jid: str, preset: str = "clean", download: int = 0,
         raise HTTPException(status_code=422,
                             detail="preset must be one of: %s"
                                    % ", ".join(sorted(_BURN_PRESETS)))
-    if pos is not None and not 0 <= pos <= 100:
-        raise HTTPException(status_code=422, detail="pos must be between 0 and 100")
+    _check_pos_size(pos, size)
     j, out, srt, work = _subtitled_sources(jid)
-    built = os.path.join(work, "subtitled-%s%s.mp4"
-                         % (preset, "" if pos is None else "-p%d" % round(pos)))
+    built = os.path.join(work, "subtitled-%s%s.mp4" % (preset, _pos_size_suffix(pos, size)))
     if _stale(built, out, srt):
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-             "-i", out, "-vf", _burn_vf(srt, preset, pos),
+             "-i", out, "-vf", _burn_vf(srt, preset, pos, size),
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
              "-pix_fmt", "yuv420p", "-c:a", "copy",
              "-movflags", "+faststart", built],
@@ -2065,7 +2084,8 @@ def _first_srt_second(srt: str) -> float:
 
 @app.get("/api/dub/result/{jid}/subtitle_preview")
 def dub_result_subtitle_preview(jid: str, preset: str = "clean",
-                                pos: Optional[float] = None):
+                                pos: Optional[float] = None,
+                                size: Optional[float] = None):
     """One frame of the subtitled video, for the Export dialog's style cards.
 
     Seeked into the first subtitle line; -copyts keeps the original clock so
@@ -2075,17 +2095,15 @@ def dub_result_subtitle_preview(jid: str, preset: str = "clean",
         raise HTTPException(status_code=422,
                             detail="preset must be one of: %s"
                                    % ", ".join(sorted(_BURN_PRESETS)))
-    if pos is not None and not 0 <= pos <= 100:
-        raise HTTPException(status_code=422, detail="pos must be between 0 and 100")
+    _check_pos_size(pos, size)
     j, out, srt, work = _subtitled_sources(jid)
-    built = os.path.join(work, "subtitle-preview-%s%s.jpg"
-                         % (preset, "" if pos is None else "-p%d" % round(pos)))
+    built = os.path.join(work, "subtitle-preview-%s%s.jpg" % (preset, _pos_size_suffix(pos, size)))
     if _stale(built, out, srt):
         at = _first_srt_second(srt) + 0.5
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-ss", "%.3f" % at, "-copyts", "-i", out,
-             "-vf", _burn_vf(srt, preset, pos) + ",scale=480:-2",
+             "-vf", _burn_vf(srt, preset, pos, size) + ",scale=480:-2",
              "-frames:v", "1", "-q:v", "5", built],
             capture_output=True, text=True)
         if run.returncode != 0:
