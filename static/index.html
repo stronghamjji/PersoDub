@@ -792,7 +792,10 @@
      under it. Read-only -- clicking a bar plays that line, nothing here drags.
      150px is where it starts; the handle on its top line is what changes it. */
 
-  .timeline { flex: 0 0 auto; height: 150px; display: flex; flex-direction: column;
+  /* 192, not 150: the subtitle lane made it three lanes, and at 150 the
+     bottom one sat flush on the window edge, reading as cut off (user,
+     2026-09-01). The last-lane margin below is the same breath. */
+  .timeline { flex: 0 0 auto; height: 192px; display: flex; flex-direction: column;
     border-top: 1px solid var(--border); background: var(--background); }
   /* Nothing to draw (no script, or no job open) must leave no empty strip. */
   .timeline:empty { display: none; }
@@ -864,6 +867,7 @@
     border-radius: 50%; background: var(--primary); color: #fff; font-size: 9px;
     line-height: 15px; text-align: center; box-shadow: 0 0 0 2px var(--background);
     cursor: pointer; z-index: 3; }
+  .tl-lane-caps { margin-bottom: 12px; }
   .tl-lane-caps.off, .tl-name-caps.off { opacity: 0.35; }
   .tl-trim-tip { position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
     background: var(--agent-bg); color: #fff; font-size: 0.62rem; padding: 2px 7px;
