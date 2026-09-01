@@ -1312,6 +1312,11 @@ def _filter_path(path: str) -> str:
     return path.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
 
 
+def _burn_vf(srt: str, preset: str) -> str:
+    return "subtitles=filename='%s':force_style='%s'" % (
+        _filter_path(srt), _BURN_PRESETS[preset] + ",FontName=" + _BURN_FONT)
+
+
 @app.post("/api/subtitles/burn")
 def subtitles_burn(body: SubtitleBurnRequest):
     """Lay an .srt onto a video as a new file beside the original.
@@ -1335,8 +1340,7 @@ def subtitles_burn(body: SubtitleBurnRequest):
                             detail="No subtitle file to lay on. Extract subtitles "
                                    "first, or name an .srt file.")
     out = _free_path("%s-sub-%s" % (base, body.preset), ext or ".mp4")
-    vf = "subtitles=filename='%s':force_style='%s'" % (
-        _filter_path(srt), _BURN_PRESETS[body.preset] + ",FontName=" + _BURN_FONT)
+    vf = _burn_vf(srt, body.preset)
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
            "-i", path, "-vf", vf,
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
@@ -1961,7 +1965,9 @@ def dub_result_srt(jid: str, download: int = 0):
     if not out:
         raise HTTPException(status_code=404, detail="Result file not found")
     work_dir = os.path.dirname(out)
-    for name in ("translated.srt", "sub.srt"):
+    # edited.srt first: once the user has fixed lines, THAT is the script the
+    # remade voices speak, and the one every export should carry (2026-09-01).
+    for name in ("edited.srt", "translated.srt", "sub.srt"):
         candidate = os.path.join(work_dir, name)
         if os.path.exists(candidate):
             with open(candidate, encoding="utf-8-sig") as f:
@@ -1974,6 +1980,104 @@ def dub_result_srt(jid: str, download: int = 0):
                             media_type="text/plain; charset=utf-8",
                             headers=headers)
     raise HTTPException(status_code=404, detail="Subtitle file not found")
+
+
+def _subtitled_sources(jid: str):
+    """The finished video and the script to lay on it, or the HTTPException
+    that says why not. Shared by the subtitled export and its preview."""
+    j = job_store.get(jid)
+    if j is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if j["status"] != "done":
+        raise HTTPException(status_code=409, detail="Job not finished yet")
+    out = (j.get("result") or {}).get("out_path")
+    if not out or not os.path.exists(out):
+        raise HTTPException(status_code=404, detail="Result file not found")
+    work = os.path.dirname(out)
+    for name in ("edited.srt", "translated.srt", "sub.srt"):
+        srt = os.path.join(work, name)
+        if os.path.exists(srt):
+            return j, out, srt, work
+    raise HTTPException(status_code=404, detail="Subtitle file not found")
+
+
+def _stale(built: str, *sources: str) -> bool:
+    """The built file is missing, or something it was built from is newer."""
+    if not os.path.exists(built):
+        return True
+    made = os.path.getmtime(built)
+    return any(os.path.getmtime(src) > made for src in sources)
+
+
+@app.get("/api/dub/result/{jid}/subtitled")
+def dub_result_subtitled(jid: str, preset: str = "clean", download: int = 0):
+    """The dubbed video with its subtitles laid on, built on first ask.
+
+    Lives in the job's own folder as subtitled-<preset>.mp4 and is served from
+    there afterwards; a remade video or an edited script makes it stale and it
+    is built again. The edited script wins over the original -- it is what the
+    remade voices actually say.
+    """
+    if preset not in _BURN_PRESETS:
+        raise HTTPException(status_code=422,
+                            detail="preset must be one of: %s"
+                                   % ", ".join(sorted(_BURN_PRESETS)))
+    j, out, srt, work = _subtitled_sources(jid)
+    built = os.path.join(work, "subtitled-%s.mp4" % preset)
+    if _stale(built, out, srt):
+        run = subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-i", out, "-vf", _burn_vf(srt, preset),
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+             "-pix_fmt", "yuv420p", "-c:a", "copy",
+             "-movflags", "+faststart", built],
+            capture_output=True, text=True)
+        if run.returncode != 0:
+            raise HTTPException(status_code=503,
+                                detail="ffmpeg could not subtitle this video (%s)."
+                                       % (run.stderr or "no detail")[-120:].strip())
+    filename = "dub_%s-sub-%s.mp4" % (_target_code(j), preset)
+    headers = ({"Content-Disposition": 'attachment; filename="%s"' % filename}
+               if download else None)
+    return FileResponse(built, media_type="video/mp4", headers=headers)
+
+
+def _first_srt_second(srt: str) -> float:
+    """When the first line appears, so the preview frame has words on it."""
+    with open(srt, encoding="utf-8-sig") as f:
+        m = re.search(r"(\d+):(\d+):(\d+)[,.](\d+)", f.read())
+    if not m:
+        return 0.0
+    h, mnt, sec, ms = (int(g) for g in m.groups())
+    return h * 3600 + mnt * 60 + sec + ms / 1000.0
+
+
+@app.get("/api/dub/result/{jid}/subtitle_preview")
+def dub_result_subtitle_preview(jid: str, preset: str = "clean"):
+    """One frame of the subtitled video, for the Export dialog's style cards.
+
+    Seeked into the first subtitle line; -copyts keeps the original clock so
+    the subtitles filter still knows a line is on screen at that moment.
+    """
+    if preset not in _BURN_PRESETS:
+        raise HTTPException(status_code=422,
+                            detail="preset must be one of: %s"
+                                   % ", ".join(sorted(_BURN_PRESETS)))
+    j, out, srt, work = _subtitled_sources(jid)
+    built = os.path.join(work, "subtitle-preview-%s.jpg" % preset)
+    if _stale(built, out, srt):
+        at = _first_srt_second(srt) + 0.5
+        run = subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-ss", "%.3f" % at, "-copyts", "-i", out,
+             "-vf", _burn_vf(srt, preset) + ",scale=480:-2",
+             "-frames:v", "1", "-q:v", "5", built],
+            capture_output=True, text=True)
+        if run.returncode != 0:
+            raise HTTPException(status_code=503,
+                                detail="ffmpeg could not draw the preview (%s)."
+                                       % (run.stderr or "no detail")[-120:].strip())
+    return FileResponse(built, media_type="image/jpeg")
 
 
 # ---------------------------------------------------------------------------

@@ -875,6 +875,17 @@
   .export-list a .export-state { margin-left: auto; font-size: 0.78rem; font-weight: 500;
     color: var(--muted-foreground); display: inline-flex; align-items: center; gap: 5px; }
   .export-list a.saved { border-color: var(--success); }
+  /* The subtitled row's three style cards: real frames of THIS job, one per
+     look. The chosen card styles what the row above it downloads. */
+  .style-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .style-card { border: 2px solid var(--border); border-radius: var(--radius-sm);
+    overflow: hidden; background: var(--background); padding: 0; cursor: pointer; font: inherit; }
+  .style-card img { display: block; width: 100%; aspect-ratio: 16 / 9;
+    object-fit: cover; background: var(--thumb-bg); }
+  .style-card span { display: block; padding: 5px 0 6px; font-size: 0.74rem;
+    font-weight: 600; text-align: center; color: var(--muted-foreground); }
+  .style-card.on { border-color: var(--primary); }
+  .style-card.on span { color: var(--primary); }
   .export-list a.saved > .icon { color: var(--success); }
   /* Quiet enough not to compete with the links above it, and it wraps rather
      than pushing the dialog wider -- a project name can be long. */
@@ -3960,6 +3971,19 @@ async function openExport() {
     .then((r) => r.ok).catch(() => false);
   const item = (href, name, label) =>
     `<a href="${href}" download="${name}" data-name="${name}">${DOWNLOAD_ICON}${label}<span class="export-state"></span></a>`;
+  // The subtitled video: one row, three style cards under it choosing the
+  // look (the chosen card restyles what the row downloads). Previews are real
+  // frames of this job, drawn by the server on first ask. The remake mark
+  // rides along for the same cache reason as the video row's.
+  const mark = doneVersion ? `&v=${doneVersion}` : "";
+  let subPreset = "clean";
+  const subHref = (p) => `/api/dub/result/${job.id}/subtitled?preset=${p}&download=1${mark}`;
+  const subName = (p) => `dub_${target}-sub-${p}.mp4`;
+  const styleCards = [["clean", "Clean"], ["variety", "Variety"], ["box", "Box"]]
+    .map(([p, label]) => `<button class="style-card${p === subPreset ? " on" : ""}"
+      data-preset="${p}" type="button">
+      <img src="/api/dub/result/${job.id}/subtitle_preview?preset=${p}${mark}" alt="${label} style">
+      <span>${label}</span></button>`).join("");
   $("exportList").innerHTML = [
     // The same URL the player is on, remake mark and all: without it a download
     // taken straight after a remake can be served the old video from cache.
@@ -3968,6 +3992,8 @@ async function openExport() {
     item(doneVideoSrc(job, "dubbed"), `dub_${target}.mp4`, "Dubbed video (.mp4)"),
     hasSrt ? item(`/api/dub/result/${job.id}/srt?download=1`, `dub_${target}.srt`,
                   "Subtitles (.srt)") : "",
+    hasSrt ? item(subHref(subPreset), subName(subPreset), "Subtitled video (.mp4)")
+             + `<div class="style-cards">${styleCards}</div>` : "",
     // Only a link job has an original worth handing back -- a local file is
     // already on the machine it would be saved to.
     job.from_link ? item(`/api/dub/result/${job.id}/original?download=1`, "org.mp4",
@@ -3986,6 +4012,20 @@ async function openExport() {
     for (const a of $("exportList").querySelectorAll("a")) {
       a.addEventListener("click", () => markExportSaved(a));
     }
+  }
+  // Picking a card restyles the subtitled row in place -- href, saved name
+  // and all -- so the next click downloads that look.
+  const subLink = $("exportList").querySelector(`a[data-name="${subName(subPreset)}"]`);
+  for (const card of $("exportList").querySelectorAll(".style-card")) {
+    card.addEventListener("click", () => {
+      subPreset = card.dataset.preset;
+      for (const x of $("exportList").querySelectorAll(".style-card")) {
+        x.classList.toggle("on", x === card);
+      }
+      subLink.href = subHref(subPreset);
+      subLink.setAttribute("download", subName(subPreset));
+      subLink.dataset.name = subName(subPreset);
+    });
   }
   $("exportOverlay").classList.add("open");
 }

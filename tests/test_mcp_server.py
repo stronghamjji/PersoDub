@@ -383,26 +383,42 @@ def test_the_stdio_server_actually_serves_every_tool():
     import os
     import subprocess
     import sys
-    lines = "\n".join([
-        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                    "params": {"protocolVersion": "2025-06-18", "capabilities": {},
-                               "clientInfo": {"name": "probe", "version": "0"}}}),
-        json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
-        json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
-    ]) + "\n"
-    out = subprocess.run(
-        [sys.executable, "-m", "app.mcp_server"], input=lines, text=True,
-        capture_output=True, timeout=30,
-        env={**os.environ, "PERSODUB_API": "http://127.0.0.1:1"},
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).stdout
-    served = set()
-    for line in out.splitlines():
-        try:
-            m = json.loads(line)
-        except ValueError:
-            continue
-        if m.get("id") == 2:
-            served = {t["name"] for t in m["result"]["tools"]}
+    # A real handshake, one message at a time: piling all three lines in and
+    # closing stdin raced the server's own shutdown-on-EOF, which sometimes ate
+    # the answer (flaky 2026-09-01).
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "app.mcp_server"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        text=True, env={**os.environ, "PERSODUB_API": "http://127.0.0.1:1"},
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    def say(msg):
+        proc.stdin.write(json.dumps(msg) + "\n")
+        proc.stdin.flush()
+
+    def hear(want_id):
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                raise AssertionError("the server hung up before answering")
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            if m.get("id") == want_id:
+                return m
+
+    try:
+        say({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+             "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                        "clientInfo": {"name": "probe", "version": "0"}}})
+        hear(1)
+        say({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        say({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        served = {t["name"] for t in hear(2)["result"]["tools"]}
+    finally:
+        proc.stdin.close()
+        proc.wait(timeout=10)
     from app.agents.claude import TOOL_LABELS
     missing = set(TOOL_LABELS) - served
     assert not missing, "promised to the assistant but never served: %s" % sorted(missing)
