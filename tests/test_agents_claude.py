@@ -205,3 +205,13 @@ def test_an_unknown_model_is_ignored_rather_than_passed_on():
     from app.agents.claude import command
     assert "--model" not in command("/tmp/mcp.json", resume=False, model="wat")
     assert "--model" not in command("/tmp/mcp.json", resume=False)
+
+
+def test_the_prompt_says_todays_tools_beat_yesterdays_no():
+    # A resumed conversation carries the assistant's own old "I cannot cancel"
+    # -- said before cancel_dub existed -- and it repeated that instead of
+    # reading its current tool list (user report, 2026-09-01). The prompt has
+    # to say outright that the list is now, and old refusals prove nothing.
+    from app.agents.claude import SYSTEM_PROMPT
+    assert "earlier in this conversation" in SYSTEM_PROMPT
+    assert "current tool list" in SYSTEM_PROMPT
