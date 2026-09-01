@@ -903,7 +903,11 @@
      look, and three word buttons that swap it (user, 2026-09-01 -- the small
      image cards were too small to judge a style by). */
   .style-big { border: 1px solid var(--border); border-radius: var(--radius-sm);
-    overflow: hidden; }
+    overflow: hidden; position: relative; cursor: grab; touch-action: none; }
+  .style-big:active { cursor: grabbing; }
+  .style-pos-guide { position: absolute; left: 0; right: 0; height: 0;
+    border-top: 2px dashed var(--primary); pointer-events: none; }
+  .style-hint { font-size: 0.72rem; color: var(--muted-foreground); text-align: center; }
   .style-big img { display: block; width: 100%; aspect-ratio: 16 / 9;
     object-fit: cover; background: var(--thumb-bg); }
   .style-picks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
@@ -4067,11 +4071,18 @@ async function openExport() {
   // rides along for the same cache reason as the video row's.
   const mark = doneVersion ? `&v=${doneVersion}` : "";
   let subPreset = "clean";
-  const subHref = (p) => `/api/dub/result/${job.id}/subtitled?preset=${p}&download=1${mark}`;
+  const subHref = (p) => `/api/dub/result/${job.id}/subtitled?preset=${p}${posQ()}&download=1${mark}`;
   const subName = (p) => `dub_${target}-sub-${p}.mp4`;
-  const previewSrc = (p) => `/api/dub/result/${job.id}/subtitle_preview?preset=${p}${mark}`;
+  // Where the subtitles sit, 0 top to 100 bottom; null is the usual spot.
+  // Set by dragging the preview, sent to the server, and part of the URLs so
+  // every position renders (and caches) as its own picture.
+  let subPos = null;
+  const posQ = () => subPos == null ? "" : `&pos=${subPos}`;
+  const previewSrc = (p) => `/api/dub/result/${job.id}/subtitle_preview?preset=${p}${posQ()}${mark}`;
   const styleCards = `<div class="style-big">
-      <img id="stylePreview" src="${previewSrc(subPreset)}" alt="How the subtitles will look"></div>
+      <img id="stylePreview" src="${previewSrc(subPreset)}" alt="How the subtitles will look" draggable="false">
+      <div class="style-pos-guide" hidden></div></div>
+    <div class="style-hint">Drag the picture to move the subtitles up or down</div>
     <div class="style-picks">` + [["clean", "Clean"], ["variety", "Variety"], ["box", "Box"]]
     .map(([p, label]) => `<button class="style-pick${p === subPreset ? " on" : ""}"
       data-preset="${p}" type="button">${label}</button>`).join("") + `</div>`;
@@ -4117,6 +4128,35 @@ async function openExport() {
       subLink.href = subHref(subPreset);
       subLink.setAttribute("download", subName(subPreset));
       subLink.dataset.name = subName(subPreset);
+    });
+  }
+  // Dragging the preview moves the subtitles: a dashed line follows the
+  // pointer, and letting go redraws the frame with the text there. The line
+  // marks where the BOTTOM of the text will sit.
+  const bigBox = $("exportList").querySelector(".style-big");
+  if (bigBox) {
+    const guide = bigBox.querySelector(".style-pos-guide");
+    const pctAt = (ev) => {
+      const r = bigBox.getBoundingClientRect();
+      return Math.min(97, Math.max(3, ((ev.clientY - r.top) / r.height) * 100));
+    };
+    bigBox.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      const move = (ev) => { guide.hidden = false; guide.style.top = `${pctAt(ev)}%`; };
+      const up = (ev) => {
+        bigBox.removeEventListener("pointermove", move);
+        bigBox.removeEventListener("pointerup", up);
+        bigBox.removeEventListener("pointercancel", up);
+        guide.hidden = true;
+        subPos = Math.round(pctAt(ev));
+        $("stylePreview").src = previewSrc(subPreset);
+        subLink.href = subHref(subPreset);
+      };
+      bigBox.addEventListener("pointermove", move);
+      bigBox.addEventListener("pointerup", up);
+      bigBox.addEventListener("pointercancel", up);
+      bigBox.setPointerCapture(e.pointerId);
+      move(e);
     });
   }
   $("exportOverlay").classList.add("open");

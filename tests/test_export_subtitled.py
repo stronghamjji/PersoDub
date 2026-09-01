@@ -126,3 +126,33 @@ def test_srt_export_prefers_the_edited_script(monkeypatch, tmp_path):
         "1\n00:00:02,000 --> 00:00:04,000\n고친 번역\n", encoding="utf-8")
     r = client.get(f"/api/dub/result/{jid}/srt")
     assert "고친 번역" in r.text
+
+
+def test_subtitled_takes_a_vertical_position(monkeypatch, tmp_path):
+    # pos is a percentage of the frame's height, 0 top to 100 bottom, mapped
+    # onto libass's MarginV (bottom-anchored, PlayResY 288). Dragging the
+    # subtitles in the Export preview sends it.
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    r = client.get(f"/api/dub/result/{jid}/subtitled?preset=clean&pos=20")
+    assert r.status_code == 200
+    assert "MarginV=230" in _vf(ran.calls[0])          # (100-20)% of 288
+    assert ran.calls[0][-1] == str(work / "subtitled-clean-p20.mp4")
+    # Its own cache: the default-position build stays a separate file.
+    client.get(f"/api/dub/result/{jid}/subtitled?preset=clean")
+    assert "MarginV=22" in _vf(ran.calls[1])
+    client.get(f"/api/dub/result/{jid}/subtitled?preset=clean&pos=20")
+    assert len(ran.calls) == 2
+
+
+def test_subtitle_preview_takes_the_same_position(monkeypatch, tmp_path):
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    r = client.get(f"/api/dub/result/{jid}/subtitle_preview?preset=box&pos=50")
+    assert r.status_code == 200
+    assert "MarginV=144" in _vf(ran.calls[0])
+    assert ran.calls[0][-1] == str(work / "subtitle-preview-box-p50.jpg")
+
+
+def test_subtitled_refuses_a_position_off_the_frame(monkeypatch, tmp_path):
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    assert client.get(f"/api/dub/result/{jid}/subtitled?pos=140").status_code == 422
+    assert ran.calls == []
