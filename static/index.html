@@ -685,7 +685,7 @@
   .vtab.active { color: var(--foreground); font-weight: 600;
     box-shadow: inset 0 -2px 0 var(--primary); }
   .video-body { padding: 14px; display: flex; flex-direction: column; gap: 10px;
-    flex: 1; min-height: 0; }
+    flex: 1; min-height: 0; position: relative; }
   .video-wrap { position: relative; border-radius: var(--radius); overflow: hidden;
     background: var(--thumb-bg); display: flex; justify-content: center;
     align-items: center; flex: 1; min-height: 0; }
@@ -1337,18 +1337,21 @@
                   <div class="sub-overlay" id="subOverlay" hidden>
                     <span class="sub-ov-text" id="subOverlayText"></span>
                   </div>
-                  <div class="sub-toolbar" id="subToolbar" hidden>
-                    <button id="subSmaller" type="button" title="Smaller">A−</button>
-                    <span class="sub-size" id="subSizeLv">100%</span>
-                    <button id="subBigger" type="button" title="Bigger">A＋</button>
-                    <span class="sub-sep"></span>
-                    <button class="sub-style" id="subStyleBtn" type="button" title="Style">Clean ▾</button>
-                  </div>
-                  <div class="sub-style-menu" id="subStyleMenu" hidden></div>
                   <button class="video-bigplay" id="bigPlay" type="button" aria-label="Play">
                     <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:4px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
                   </button>
                 </div>
+                <!-- Outside .video-wrap on purpose: the frame clips at its
+                     rounded corners, and on a small video the style menu was
+                     cut off inside it. The pane's body is the anchor now. -->
+                <div class="sub-toolbar" id="subToolbar" hidden>
+                  <button id="subSmaller" type="button" title="Smaller">A−</button>
+                  <span class="sub-size" id="subSizeLv">100%</span>
+                  <button id="subBigger" type="button" title="Bigger">A＋</button>
+                  <span class="sub-sep"></span>
+                  <button class="sub-style" id="subStyleBtn" type="button" title="Style">Clean ▾</button>
+                </div>
+                <div class="sub-style-menu" id="subStyleMenu" hidden></div>
                 <div class="video-under">
                   <!-- Filled in by paintPlayToggle: play or pause, whichever
                        the video is not doing right now. -->
@@ -4644,9 +4647,11 @@ function updateSubtitleNow() {
   let idx = timelineLines.findIndex((l, i) => {
     const c = subCueOf(l, i); return t >= c.start && t < c.end;
   });
-  // Paused between lines: show the first line anyway, so there is always a
-  // subtitle on screen to click and style.
-  if (idx < 0 && doneVideo.paused) idx = 0;
+  // Paused before anything has been said: show the first line, so there is
+  // a subtitle to click and style. Only there -- at the END of the video the
+  // same trick made the first line reappear, which read as a bug (user,
+  // 2026-09-01 evening).
+  if (idx < 0 && doneVideo.paused && t <= subCueOf(timelineLines[0], 0).start) idx = 0;
   if (idx < 0) { subOverlay.hidden = true; return; }
   syncSubOverlayBox();
   subOvText.textContent = timelineLines[idx].text || "";
@@ -4668,11 +4673,11 @@ const subMenu = $("subStyleMenu");
 const SUB_STYLES = Object.entries(SUB_META).map(([id, m]) => [id, m.label]);
 
 function placeSubToolbar() {
-  const wrap = subOverlay.parentElement;
-  const tr = subOvText.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+  const host = subToolbar.parentElement;   // the pane body, not the clipping frame
+  const tr = subOvText.getBoundingClientRect(), wr = host.getBoundingClientRect();
   const above = tr.top - wr.top > 60;
   subToolbar.style.top = (above ? tr.top - wr.top - 44 : tr.bottom - wr.top + 10) + "px";
-  subMenu.style.top = Math.max(8, parseFloat(subToolbar.style.top) - 96) + "px";
+  subMenu.style.top = "8px";
 }
 
 function subSelect(on) {
@@ -4697,7 +4702,7 @@ function buildSubMenu() {
     if (pKey === subStyle.preset) b.classList.add("on");
     const sm = document.createElement("span");
     sm.className = "sample sub-ov-" + pKey;
-    sm.textContent = "자막 Aa";
+    sm.textContent = "Sample Aa";
     const nm = document.createElement("span");
     nm.className = "nm";
     nm.textContent = label;
