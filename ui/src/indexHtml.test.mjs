@@ -59,3 +59,15 @@ test("the agent input ignores Enter pressed mid-composition", () => {
   assert.match(handler[0], /isComposing/,
     "keydown must return early while the IME is still composing");
 });
+
+// The topbar's three pane buttons (list / timeline / agent), sitting right of
+// Export. The timeline is the one pane with no fold of its own, so its CSS
+// off-switch is pinned here too (mockup approved 2026-09-01).
+test("the topbar carries the three pane buttons and the timeline off-switch", () => {
+  const html = readFileSync(INDEX, "utf8");
+  for (const id of ["paneList", "paneTimeline", "paneAgent"]) {
+    assert.ok(html.includes(`id="${id}"`), `${id} is missing from the topbar`);
+  }
+  assert.match(html, /body\.timeline-off (#timeline|\.timeline)/,
+    "hiding the timeline needs a body.timeline-off rule");
+});

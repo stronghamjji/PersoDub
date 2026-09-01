@@ -242,7 +242,23 @@
 
   /* ---------------- TOPBAR ---------------- */
 
-  .topbar {
+    /* ---- Pane buttons: which panels are open (mockup 2026-09-01) ---- */
+  /* Right of Export behind a hairline: [Cancel] [Export] | [list] [timeline]
+     [agent]. A pressed button is an open panel. */
+  .tb-div { width: 1px; height: 22px; background: var(--border); margin: 0 2px; flex: none; }
+  .pane-btn { width: 30px; height: 26px; border-radius: 7px; border: 0; background: transparent;
+    display: grid; place-items: center; cursor: pointer; color: var(--muted-foreground); flex: none; }
+  .pane-btn:hover { background: var(--secondary); }
+  .pane-btn.on { background: var(--primary-soft); color: var(--primary); }
+  .pane-btn[disabled] { opacity: 0.35; cursor: default; }
+  .pane-btn[disabled]:hover { background: transparent; }
+  .pane-btn svg { width: 17px; height: 17px; }
+  .pane-btn rect { stroke: currentColor; fill: none; stroke-width: 1.6; }
+  .pane-btn .fill { fill: currentColor; stroke: none; opacity: 0.55; }
+  /* The timeline has no fold of its own; this is its off-switch. */
+  body.timeline-off #timeline, body.timeline-off #gripTimeline { display: none; }
+
+.topbar {
     flex: 0 0 auto; height: 52px;
     display: flex; align-items: center; gap: 12px;
     padding: 0 16px;
@@ -1120,6 +1136,18 @@
       <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
+      <!-- Which panels are open. Each button presses the panel's own existing
+           fold, so there is exactly one way each panel opens and closes. -->
+      <span class="tb-div"></span>
+      <button class="pane-btn" id="paneList" type="button" title="Projects" aria-label="Toggle the projects list">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><rect class="fill" x="5" y="6" width="5" height="12" rx="1"/></svg>
+      </button>
+      <button class="pane-btn" id="paneTimeline" type="button" title="Timeline" aria-label="Toggle the timeline">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><rect class="fill" x="5" y="13.5" width="14" height="4.5" rx="1"/></svg>
+      </button>
+      <button class="pane-btn" id="paneAgent" type="button" title="Dub Agent" aria-label="Toggle the conversation">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><rect class="fill" x="14" y="6" width="5" height="12" rx="1"/></svg>
+      </button>
     </div>
 
     <main class="work" id="work">
@@ -1837,6 +1865,32 @@ $("historyToggle").addEventListener("click", () => {
 // measured in a column still on its way to full width -- and every name would
 // look cut off. Measure again once the sliding has stopped.
 $("historySidebar").addEventListener("transitionend", markClippedNames);
+
+// ---------------- Topbar pane buttons ----------------
+// Pressed = open. Each button presses the panel's own control (the rail's
+// folder, the agent strip's fold), so this stays a remote and never a second
+// source of truth; the observers below repaint whichever way a panel was
+// toggled. The timeline exists only on the done screen, so its button dims
+// elsewhere.
+function paintPanes() {
+  $("paneList").classList.toggle("on", !$("historySidebar").classList.contains("collapsed"));
+  $("paneAgent").classList.toggle("on", document.body.classList.contains("agent-open"));
+  const done = document.body.dataset.screen === "done";
+  $("paneTimeline").disabled = !done;
+  $("paneTimeline").classList.toggle(
+    "on", done && !document.body.classList.contains("timeline-off"));
+}
+$("paneList").addEventListener("click", () => $("historyToggle").click());
+$("paneAgent").addEventListener("click", () => $("assistantFold").click());
+$("paneTimeline").addEventListener("click", () => {
+  if ($("paneTimeline").disabled) return;
+  document.body.classList.toggle("timeline-off");
+});
+new MutationObserver(paintPanes).observe(document.body,
+  { attributes: true, attributeFilter: ["class", "data-screen"] });
+new MutationObserver(paintPanes).observe($("historySidebar"),
+  { attributes: true, attributeFilter: ["class"] });
+paintPanes();
 
 // ---------------- Settings modal ----------------
 
