@@ -433,5 +433,31 @@ def cancel_dub(job_id: str, confirm: bool = False) -> dict:
     return r.json()
 
 
+@mcp.tool()
+def burn_subtitles(video_path: str, srt_path: str = "", preset: str = "clean") -> dict:
+    """Lay subtitles onto a video file as a NEW video beside it.
+
+    Free, on this machine, no confirmation needed. srt_path names the subtitle
+    file; left empty, the .srt sitting next to the video with the video's own
+    name is used (extract_subtitles leaves one exactly there -- if neither
+    exists, offer to extract subtitles first). preset picks the look:
+    "clean" (white, dark outline -- the default), "variety" (bold yellow, the
+    Korean variety-show look) or "box" (white on a translucent dark band, for
+    bright or busy footage). When the user names no style use clean, and
+    mention the other two exist. The original video is never touched.
+    """
+    if preset not in ("clean", "variety", "box"):
+        raise ValueError('preset must be "clean", "variety" or "box"')
+    r = httpx.post("%s/api/subtitles/burn" % API,
+                   json={"video_path": video_path, "srt_path": srt_path,
+                         "preset": preset},
+                   timeout=1800.0)
+    if r.status_code in (404, 422, 503):
+        detail = r.json().get("detail", "could not subtitle this video")
+        raise ValueError(detail if isinstance(detail, str) else str(detail))
+    r.raise_for_status()
+    return r.json()
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

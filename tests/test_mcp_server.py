@@ -406,3 +406,29 @@ def test_the_stdio_server_actually_serves_every_tool():
     from app.agents.claude import TOOL_LABELS
     missing = set(TOOL_LABELS) - served
     assert not missing, "promised to the assistant but never served: %s" % sorted(missing)
+
+
+def test_burn_subtitles_posts_the_preset_and_needs_no_confirmation(monkeypatch):
+    calls = {}
+
+    def fake_post(url, json=None, timeout=None):
+        calls["url"] = url
+        calls["json"] = json
+        return _Response(200, {"out_path": "/v/쇼츠-sub-variety.mp4",
+                               "preset": "variety"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.burn_subtitles("/v/쇼츠.mp4", preset="variety")
+    assert out["out_path"].endswith("-sub-variety.mp4")
+    assert calls["url"] == "%s/api/subtitles/burn" % mcp_server.API
+    assert calls["json"] == {"video_path": "/v/쇼츠.mp4", "srt_path": "",
+                             "preset": "variety"}
+
+
+def test_burn_subtitles_relays_a_refusal(monkeypatch):
+    def fake_post(url, json=None, timeout=None):
+        return _Response(404, {"detail": "No subtitle file to lay on."})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    with pytest.raises(ValueError, match="No subtitle file"):
+        mcp_server.burn_subtitles("/v/쇼츠.mp4")

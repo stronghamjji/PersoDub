@@ -1277,6 +1277,79 @@ def clips_cut(body: ClipCutRequest):
     return {"clip_path": out, "seconds": round(end - start, 3)}
 
 
+class SubtitleBurnRequest(BaseModel):
+    video_path: str
+    srt_path: str = ""
+    preset: str = "clean"
+
+
+# One force_style per preset. ASS colours are &HAABBGGRR (alpha first, then
+# blue-green-red), which is why yellow reads as 0000FFFF. The font must hold
+# Korean: each platform's own gothic, with Noto for the Linux server case.
+_BURN_FONT = ("Apple SD Gothic Neo" if sys.platform == "darwin"
+              else "Malgun Gothic" if sys.platform == "win32"
+              else "Noto Sans CJK KR")
+_BURN_PRESETS = {
+    # White with a dark outline -- fine over almost anything.
+    "clean": ("Fontsize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+              "Outline=1.5,Shadow=0.5,Bold=0,MarginV=22"),
+    # The loud yellow of Korean variety shows, a notch bigger and bolder.
+    "variety": ("Fontsize=23,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,"
+                "Outline=2.5,Shadow=0,Bold=1,MarginV=22"),
+    # White on a translucent dark band, for busy or bright footage.
+    # BorderStyle=3 draws the box with OutlineColour; 80 alpha is half-clear.
+    "box": ("Fontsize=20,PrimaryColour=&H00FFFFFF,BorderStyle=3,"
+            "OutlineColour=&H80000000,Outline=1,Shadow=0,Bold=0,MarginV=22"),
+}
+
+
+def _filter_path(path: str) -> str:
+    """A file path as ffmpeg's filter parser wants it.
+
+    Inside -vf, backslash starts an escape, colon ends the argument and an
+    apostrophe ends the quoted run -- all three appear in real paths (Windows
+    drives, "it's.srt")."""
+    return path.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+
+
+@app.post("/api/subtitles/burn")
+def subtitles_burn(body: SubtitleBurnRequest):
+    """Lay an .srt onto a video as a new file beside the original.
+
+    The srt defaults to the video's own name next to it -- exactly where
+    /api/subtitles/extract leaves one. Rendering text onto frames forces a
+    re-encode (same x264 settings as the clip route); the audio is untouched
+    and copied through.
+    """
+    if body.preset not in _BURN_PRESETS:
+        raise HTTPException(status_code=422,
+                            detail="preset must be one of: %s"
+                                   % ", ".join(sorted(_BURN_PRESETS)))
+    path = os.path.expanduser(body.video_path)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail=f"No such video: {body.video_path}")
+    base, ext = os.path.splitext(path)
+    srt = os.path.expanduser(body.srt_path) if body.srt_path else base + ".srt"
+    if not os.path.isfile(srt):
+        raise HTTPException(status_code=404,
+                            detail="No subtitle file to lay on. Extract subtitles "
+                                   "first, or name an .srt file.")
+    out = _free_path("%s-sub-%s" % (base, body.preset), ext or ".mp4")
+    vf = "subtitles=filename='%s':force_style='%s'" % (
+        _filter_path(srt), _BURN_PRESETS[body.preset] + ",FontName=" + _BURN_FONT)
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+           "-i", path, "-vf", vf,
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+           "-pix_fmt", "yuv420p", "-c:a", "copy",
+           "-movflags", "+faststart", out]
+    run = subprocess.run(cmd, capture_output=True, text=True)
+    if run.returncode != 0:
+        raise HTTPException(status_code=503,
+                            detail="ffmpeg could not subtitle this video (%s)."
+                                   % (run.stderr or "no detail")[-120:].strip())
+    return {"out_path": out, "preset": body.preset}
+
+
 @app.get("/api/engines")
 def engines_status():
     """Which translation/transcription engines actually work on this machine right now.
