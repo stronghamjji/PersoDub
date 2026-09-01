@@ -474,7 +474,7 @@
   .form-error { color: var(--destructive); font-size: 0.8rem; }
 
   /* ---------------- Up next: the waiting line on the first screen ------- */
-  .queue-card { margin-top: 18px; background: var(--background); text-align: left;
+  .queue-card { margin-top: 2px; background: var(--background); text-align: left;
     border: 1px solid var(--border); border-radius: var(--radius-lg); }
   .queue-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px 8px; }
   .queue-head b { font-size: 0.85rem; }
@@ -1120,6 +1120,15 @@
         <div class="home">
           <h1 class="home-title">Dubbing your video into another language</h1>
           <p class="home-sub">Drop videos or paste a link. Add several and they run one after another.</p>
+          <!-- The waiting line: the job on air and the ones queued behind it.
+               renderQueueCard() fills it and hides it when the line is empty.
+               First thing on the screen, above the drop zone: dubs the agent
+               starts used to appear below the fold, where a tall conversation
+               hid them entirely (user, 2026-09-01). -->
+          <div class="queue-card" id="queueCard" hidden>
+            <div class="queue-head"><b>Up next</b><span id="queueSummary"></span></div>
+            <div id="queueRows"></div>
+          </div>
           <div class="upload-zone" id="uploadZone" tabindex="0">
             <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
             <div class="upload-title">Drop your videos here</div>
@@ -1131,12 +1140,6 @@
             <input id="linkInput" type="url" placeholder="Paste a YouTube, TikTok or Reels link" autocomplete="off"></label>
           <div class="link-card" id="linkCard" hidden></div>
           <div class="form-error" id="formError"></div>
-          <!-- The waiting line: the job on air and the ones queued behind it.
-               renderQueueCard() fills it and hides it when the line is empty. -->
-          <div class="queue-card" id="queueCard" hidden>
-            <div class="queue-head"><b>Up next</b><span id="queueSummary"></span></div>
-            <div id="queueRows"></div>
-          </div>
         </div>
       </section>
 
