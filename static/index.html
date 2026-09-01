@@ -721,6 +721,17 @@
     border-top: 1px solid var(--border); background: var(--background); }
   /* Nothing to draw (no script, or no job open) must leave no empty strip. */
   .timeline:empty { display: none; }
+  /* Zoom, next to the clock: out, the level, in, and back to fit-all. */
+  .tl-zoom { display: inline-flex; align-items: center; gap: 2px; }
+  .tl-zbtn { width: 26px; height: 22px; border: 1px solid var(--border); background: var(--background);
+    border-radius: 6px; cursor: pointer; font-size: 0.85rem; line-height: 1;
+    color: var(--foreground); display: grid; place-items: center; }
+  .tl-zbtn:hover { border-color: var(--primary); color: var(--primary); }
+  .tl-zbtn:disabled { opacity: 0.35; cursor: default; }
+  .tl-zbtn:disabled:hover { border-color: var(--border); color: var(--foreground); }
+  .tl-zfit { width: auto; padding: 0 8px; font-size: 0.7rem; font-weight: 600; }
+  .tl-zlv { min-width: 30px; text-align: center; color: var(--muted-foreground);
+    font-size: 0.7rem; font-variant-numeric: tabular-nums; }
   .tl-head { display: flex; align-items: center; gap: 14px; padding: 6px 14px;
     font-size: 0.75rem; color: var(--muted-foreground); }
   .tl-title { font-weight: 600; color: var(--foreground); }
@@ -888,17 +899,20 @@
   .export-list a .export-state { margin-left: auto; font-size: 0.78rem; font-weight: 500;
     color: var(--muted-foreground); display: inline-flex; align-items: center; gap: 5px; }
   .export-list a.saved { border-color: var(--success); }
-  /* The subtitled row's three style cards: real frames of THIS job, one per
-     look. The chosen card styles what the row above it downloads. */
-  .style-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .style-card { border: 2px solid var(--border); border-radius: var(--radius-sm);
-    overflow: hidden; background: var(--background); padding: 0; cursor: pointer; font: inherit; }
-  .style-card img { display: block; width: 100%; aspect-ratio: 16 / 9;
+  /* The subtitled row's preview: ONE big frame of this job in the chosen
+     look, and three word buttons that swap it (user, 2026-09-01 -- the small
+     image cards were too small to judge a style by). */
+  .style-big { border: 1px solid var(--border); border-radius: var(--radius-sm);
+    overflow: hidden; }
+  .style-big img { display: block; width: 100%; aspect-ratio: 16 / 9;
     object-fit: cover; background: var(--thumb-bg); }
-  .style-card span { display: block; padding: 5px 0 6px; font-size: 0.74rem;
-    font-weight: 600; text-align: center; color: var(--muted-foreground); }
-  .style-card.on { border-color: var(--primary); }
-  .style-card.on span { color: var(--primary); }
+  .style-picks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .style-pick { padding: 7px 0; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--background); cursor: pointer; font: inherit; font-size: 0.78rem;
+    font-weight: 600; color: var(--muted-foreground); }
+  .style-pick:hover { border-color: var(--primary); color: var(--primary); }
+  .style-pick.on { border-color: var(--primary); background: var(--primary-soft);
+    color: var(--primary); }
   .export-list a.saved > .icon { color: var(--success); }
   /* Quiet enough not to compete with the links above it, and it wraps rather
      than pushing the dialog wider -- a project name can be long. */
@@ -1218,8 +1232,8 @@
           <div class="done-main" id="doneMain">
             <div class="video-pane" id="videoPane">
               <div class="video-tabs">
-                <button class="vtab" data-src="original" type="button">Original</button>
-                <button class="vtab active" data-src="dubbed" type="button">Dubbed</button>
+                <button class="vtab" data-src="original" type="button">오리지널</button>
+                <button class="vtab active" data-src="dubbed" type="button">더빙</button>
               </div>
               <div class="video-body">
                 <div class="video-wrap">
@@ -1292,8 +1306,12 @@
            than a control floating in the corner, which the user's own messages
            ran underneath. -->
       <div class="agent-head">
+        <span class="agent-title">Dub Agent</span>
         <div class="assistant-state" id="assistantState" hidden></div>
-        <button class="agent-fold" id="assistantFold" type="button" aria-expanded="false"
+        <!-- No arrow on screen: the top bar's pane button opens and closes the
+             column now. The button itself stays, hidden, because that pane
+             button and the narrow-window fold both press it. -->
+        <button class="agent-fold" id="assistantFold" type="button" hidden aria-expanded="false"
                 aria-label="Show the conversation" title="Show the conversation">
           <svg class="icon chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
         </button>
@@ -1646,7 +1664,15 @@
      is on show at both sizes -- folded, it is the whole strip above the input
      row. Clear of the drag handle along the very top edge. */
   .agent-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-    padding: 5px 8px 3px 16px; min-height: 34px; box-sizing: border-box; }
+    padding: 0 12px 0 16px; height: 40px; box-sizing: border-box;
+    border-bottom: 1px solid var(--agent-border); }
+  .agent-title { font-size: 0.82rem; font-weight: 700; }
+  /* Pushed to the far right of the heading row -- the base rule below says
+     flex:1 (it once had a row to itself), which parks its text next to the
+     title instead. */
+  .agent-head .assistant-state { flex: 0 1 auto; margin-left: auto;
+    text-align: right; font-size: 0.7rem; color: var(--agent-muted); }
+  .agent-fold[hidden] { display: none; }
 
   /* Folds the conversation away and brings it back. A square big enough to hit
      rather than two small words, and out of the conversation's own column, so
@@ -4043,11 +4069,12 @@ async function openExport() {
   let subPreset = "clean";
   const subHref = (p) => `/api/dub/result/${job.id}/subtitled?preset=${p}&download=1${mark}`;
   const subName = (p) => `dub_${target}-sub-${p}.mp4`;
-  const styleCards = [["clean", "Clean"], ["variety", "Variety"], ["box", "Box"]]
-    .map(([p, label]) => `<button class="style-card${p === subPreset ? " on" : ""}"
-      data-preset="${p}" type="button">
-      <img src="/api/dub/result/${job.id}/subtitle_preview?preset=${p}${mark}" alt="${label} style">
-      <span>${label}</span></button>`).join("");
+  const previewSrc = (p) => `/api/dub/result/${job.id}/subtitle_preview?preset=${p}${mark}`;
+  const styleCards = `<div class="style-big">
+      <img id="stylePreview" src="${previewSrc(subPreset)}" alt="How the subtitles will look"></div>
+    <div class="style-picks">` + [["clean", "Clean"], ["variety", "Variety"], ["box", "Box"]]
+    .map(([p, label]) => `<button class="style-pick${p === subPreset ? " on" : ""}"
+      data-preset="${p}" type="button">${label}</button>`).join("") + `</div>`;
   $("exportList").innerHTML = [
     // The same URL the player is on, remake mark and all: without it a download
     // taken straight after a remake can be served the old video from cache.
@@ -4057,7 +4084,7 @@ async function openExport() {
     hasSrt ? item(`/api/dub/result/${job.id}/srt?download=1`, `dub_${target}.srt`,
                   "Subtitles (.srt)") : "",
     hasSrt ? item(subHref(subPreset), subName(subPreset), "Subtitled video (.mp4)")
-             + `<div class="style-cards">${styleCards}</div>` : "",
+             + styleCards : "",
     // Only a link job has an original worth handing back -- a local file is
     // already on the machine it would be saved to.
     job.from_link ? item(`/api/dub/result/${job.id}/original?download=1`, "org.mp4",
@@ -4080,12 +4107,13 @@ async function openExport() {
   // Picking a card restyles the subtitled row in place -- href, saved name
   // and all -- so the next click downloads that look.
   const subLink = $("exportList").querySelector(`a[data-name="${subName(subPreset)}"]`);
-  for (const card of $("exportList").querySelectorAll(".style-card")) {
-    card.addEventListener("click", () => {
-      subPreset = card.dataset.preset;
-      for (const x of $("exportList").querySelectorAll(".style-card")) {
-        x.classList.toggle("on", x === card);
+  for (const pick of $("exportList").querySelectorAll(".style-pick")) {
+    pick.addEventListener("click", () => {
+      subPreset = pick.dataset.preset;
+      for (const x of $("exportList").querySelectorAll(".style-pick")) {
+        x.classList.toggle("on", x === pick);
       }
+      $("stylePreview").src = previewSrc(subPreset);
       subLink.href = subHref(subPreset);
       subLink.setAttribute("download", subName(subPreset));
       subLink.dataset.name = subName(subPreset);
@@ -4411,6 +4439,11 @@ let timelineRoom = 0;
 // resized, and the viewer should find the same moment at the left edge either
 // way instead of being thrown back to the start.
 let timelineAt = 0;
+// How far in the viewer has zoomed: 1 is fit-the-whole-video, steps of 1.5 up
+// to 8. A factor on the fit scale rather than a scale of its own, so a window
+// resize keeps the same zoom rather than the same now-meaningless pixel count.
+let timelineZoom = 1;
+const TL_ZOOM_STEP = 1.5, TL_ZOOM_MAX = 8;
 
 // Draws the whole strip. Empty lines (or no length yet) leave it blank, which
 // CSS collapses to nothing.
@@ -4428,6 +4461,12 @@ function renderTimeline(lines, duration) {
     <div class="tl-head">
       <span class="tl-title">Timeline</span>
       <span class="tl-clock" id="timelineClock">${doneClock}</span>
+      <span class="tl-zoom">
+        <button class="tl-zbtn" id="tlZoomOut" type="button" title="Zoom out (-)">−</button>
+        <span class="tl-zlv" id="tlZoomLevel">×1</span>
+        <button class="tl-zbtn" id="tlZoomIn" type="button" title="Zoom in (+)">＋</button>
+        <button class="tl-zbtn tl-zfit" id="tlZoomFit" type="button" title="Fit the whole video (0)">맞춤</button>
+      </span>
       <span class="tl-legend">
         <span><i class="tl-sw-voice"></i>Voice length</span>
         <span><i class="tl-sw-slot"></i>Time available</span>
@@ -4504,7 +4543,7 @@ function drawTimelineTrack() {
   const track = $("timelineTrack");
   if (!track || !timelineDuration) return;
   timelineRoom = track.clientWidth;
-  timelinePps = Math.max(timelineRoom / timelineDuration, TL_MIN_PPS);
+  timelinePps = Math.max(timelineRoom / timelineDuration, TL_MIN_PPS) * timelineZoom;
   const width = timelineDuration * timelinePps;
 
   // One tick every `every` seconds, labelled. Close together, that is every
@@ -4556,6 +4595,36 @@ function drawTimelineTrack() {
   // A brand new strip knows nothing about where the video is, and a paused
   // video sends no event to tell it. Put the moment back on it straight away.
   paintTimelineAt(doneVideo.currentTime || 0);
+  paintTimelineZoom();
+}
+
+function paintTimelineZoom() {
+  const lv = $("tlZoomLevel");
+  if (!lv) return;
+  lv.textContent = "\u00d7" + (Math.round(timelineZoom * 10) / 10 + "").replace(/\.0$/, "");
+  $("tlZoomOut").disabled = timelineZoom <= 1;
+  $("tlZoomIn").disabled = timelineZoom >= TL_ZOOM_MAX;
+}
+
+// Zooms around the playhead, the way an editor's timeline does: the moment
+// under the playhead stays put on screen, and the strip stretches or shrinks
+// around it. Off-screen playhead: the middle of the view holds instead.
+function setTimelineZoom(zoom) {
+  zoom = Math.min(TL_ZOOM_MAX, Math.max(1, zoom));
+  if (zoom === timelineZoom) return;
+  const track = $("timelineTrack");
+  const t = doneVideo.currentTime || 0;
+  let frac = 0.5;
+  if (track && track.clientWidth) {
+    const f = (t * timelinePps - track.scrollLeft) / track.clientWidth;
+    if (f >= 0 && f <= 1) frac = f;
+  }
+  timelineZoom = zoom;
+  drawTimelineTrack();
+  if (track && track.clientWidth) {
+    track.scrollLeft = Math.max(0, t * timelinePps - frac * track.clientWidth);
+    timelineAt = track.scrollLeft / timelinePps;
+  }
 }
 
 // Everything on the strip that stands for one moment: the playhead, and the
@@ -4629,6 +4698,9 @@ $("timeline").addEventListener("scroll", (e) => {
 // The head's own button folds the strip away.
 $("timeline").addEventListener("click", (e) => {
   if (e.target.closest(".tl-fold")) { setTimelineOpen(!timelineOpen); return; }
+  if (e.target.closest("#tlZoomIn")) { setTimelineZoom(timelineZoom * TL_ZOOM_STEP); return; }
+  if (e.target.closest("#tlZoomOut")) { setTimelineZoom(timelineZoom / TL_ZOOM_STEP); return; }
+  if (e.target.closest("#tlZoomFit")) { setTimelineZoom(1); return; }
   const blk = e.target.closest(".tl-blk");
   if (!blk) return;
   const which = blk.classList.contains("tl-org") ? "original" : "dubbed";
@@ -4637,6 +4709,33 @@ $("timeline").addEventListener("click", (e) => {
   showVideoSource(which)
     .then(() => playRange(doneVideo, start, end))
     .catch(() => {});
+});
+
+// ---- The keyboard on the finished screen -------------------------------------
+// Space plays from where the playhead stands (and pauses again); Enter plays
+// from the very start; + - 0 zoom the timeline. Only on the finished screen,
+// and never while the user is typing or pressing an actual control -- a space
+// in the middle of a sentence must stay a space (user, 2026-09-01).
+document.addEventListener("keydown", (e) => {
+  if (document.body.dataset.screen !== "done") return;
+  if (e.isComposing) return;
+  if (e.target.closest("input, textarea, select, button, a, [contenteditable]")) return;
+  if (document.querySelector(".modal-overlay.open")) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === " ") {
+    e.preventDefault();   // space scrolls the page otherwise
+    toggleDonePlay();
+  } else if (e.key === "Enter") {
+    cancelRange(doneVideo);
+    doneVideo.currentTime = 0;
+    doneVideo.play().catch(() => {});
+  } else if (e.key === "+" || e.key === "=") {
+    setTimelineZoom(timelineZoom * TL_ZOOM_STEP);
+  } else if (e.key === "-") {
+    setTimelineZoom(timelineZoom / TL_ZOOM_STEP);
+  } else if (e.key === "0") {
+    setTimelineZoom(1);
+  }
 });
 
 // ---- The playhead as a control ----------------------------------------------
