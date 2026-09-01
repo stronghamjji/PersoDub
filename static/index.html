@@ -5606,6 +5606,11 @@ function submit() {
 // carry the conversation on.
 input.addEventListener("keydown", async (e) => {
   if (e.key !== "Enter" || e.shiftKey) return;
+  // Korean (and any IME) fires Enter once more to settle the syllable being
+  // composed. Acting on that one sent the leftover syllable as a message of
+  // its own -- and stopped the turn in flight to do it. keyCode 229 is the
+  // same event as Safari reports it.
+  if (e.isComposing || e.keyCode === 229) return;
   e.preventDefault();
   if (busy && input.value.trim()) await stopTurn();
   submit();

@@ -46,3 +46,16 @@ test("every inline module in static/index.html parses", () => {
     }
   }
 });
+
+// Korean typing sends Enter twice: once to settle the syllable being composed
+// (isComposing=true), once for real. The agent input treating the first as
+// "send" left the settled syllable behind in the box and -- worse -- stopped
+// the running answer to send it ("해" turns ending in Stopped, 2026-09-01).
+// The guard is the standard one; this pins it to the agent input's handler.
+test("the agent input ignores Enter pressed mid-composition", () => {
+  const html = readFileSync(INDEX, "utf8");
+  const handler = html.match(/input\.addEventListener\("keydown"[\s\S]{0,600}/);
+  assert.ok(handler, "the agent input's keydown handler is gone?");
+  assert.match(handler[0], /isComposing/,
+    "keydown must return early while the IME is still composing");
+});
