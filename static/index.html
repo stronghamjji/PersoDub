@@ -534,7 +534,10 @@
   /* A container, so the table below can pick its own width off THIS pane rather
      than off the window: the grip between the panes changes it with the window
      standing still. */
-  .script-pane { position: relative; flex: 1 1 auto; min-width: 0; min-height: 120px; display: flex;
+  /* The line the video/script divider lives on -- drawn, so the drag is
+     discoverable (user, 2026-09-01), with a small grab pill in the middle. */
+  .script-pane { position: relative; border-top: 1px solid var(--border);
+    flex: 1 1 auto; min-width: 0; min-height: 120px; display: flex;
     flex-direction: column; border-right: 1px solid var(--border);
     container: scriptpane / inline-size; }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
@@ -701,12 +704,29 @@
     white-space: pre-wrap; }
   .sub-ov-text.sel { outline: 2px dashed var(--primary); outline-offset: 5px;
     border-radius: 4px; }
+  /* One class per look -- close kin of app/subtitle_ass.py's real styles,
+     drawn by the browser for the live overlay and the menu samples. */
   .sub-ov-clean { color: #fff;
-    text-shadow: 0 0 3px #000, 0 0 5px #000, 1px 1px 2px #000; }
-  .sub-ov-variety { color: #ffef00; font-weight: 800;
-    text-shadow: 0 0 3px #000, 0 0 7px #000, 1px 1px 2px #000; }
-  .sub-ov-box { color: #fff; background: rgba(0, 0, 0, 0.55);
-    padding: 0.05em 0.45em; border-radius: 0.15em; }
+    text-shadow: 0 0 2px #000, 0 0 4px #000, 1px 1px 2px #000; }
+  .sub-ov-bold-punch { color: #fff; font-weight: 900; text-transform: uppercase;
+    text-shadow: 0 0 4px #000, 2px 2px 0 #000, -1px -1px 0 #000; }
+  .sub-ov-sticker { color: #fff; background: rgba(0, 0, 0, 0.6);
+    padding: 0.08em 0.5em; border-radius: 0.18em; }
+  .sub-ov-neon-yellow { color: #ffe600; font-weight: 800;
+    text-shadow: 0 0 3px #000, 0 0 6px #000, 1px 1px 2px #000; }
+  .sub-ov-soft-card { color: #3a332c; background: rgba(255, 255, 255, 0.85);
+    padding: 0.1em 0.55em; border-radius: 0.25em; font-weight: 600; }
+  .sub-ov-rainbow { font-weight: 800;
+    background-image: linear-gradient(90deg, #ff5d5d, #ff8c1a, #ffe000, #3ddc5c, #1a8cff, #c04dff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(1px 1px 1px #000); }
+  .sub-ov-broadcast { color: #fff;
+    text-shadow: 0 0 3px #000, 2px 2px 3px #000; }
+  .sub-ov-streaming { color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,.9); }
+  .sub-ov-lower-bar { color: #fff; background: rgba(0, 0, 0, 0.6);
+    padding: 0.08em 0.55em; }
+  .sub-ov-neon { color: #00e5ff; font-weight: 800;
+    text-shadow: 0 0 6px #00e5ff, 0 0 14px #00e5ff, 0 0 2px #003c44; }
   .sub-toolbar { position: absolute; left: 50%; transform: translateX(-50%);
     display: flex; align-items: center; gap: 4px; z-index: 6;
     background: rgba(24, 24, 27, 0.92); border: 1px solid var(--agent-border);
@@ -723,7 +743,8 @@
   .sub-style-menu { position: absolute; left: 50%; transform: translateX(-50%);
     z-index: 7; background: rgba(24, 24, 27, 0.97); border: 1px solid var(--agent-border);
     border-radius: 12px; padding: 8px; display: grid;
-    grid-template-columns: 1fr 1fr 1fr; gap: 6px; width: 320px; }
+    grid-template-columns: 1fr 1fr 1fr; gap: 6px; width: 380px;
+    max-height: min(60vh, 320px); overflow-y: auto; }
   .sub-style-menu button { border: 1px solid var(--agent-border); border-radius: 8px;
     background: #26262b; color: #fff; font: inherit; padding: 10px 6px 7px;
     cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; }
@@ -918,6 +939,10 @@
 
   /* Video over script: the line between them is the script pane's top edge. */
   #gripPanes { left: 0; right: 0; top: -6px; }
+  #gripPanes::before { content: ""; position: absolute; left: 50%; top: 4px;
+    width: 44px; height: 4px; margin-left: -22px; border-radius: 2px;
+    background: var(--border); }
+  #gripPanes:hover::before, #gripPanes.dragging::before { background: var(--primary); }
   /* Outside the sidebar rather than inside it, the same way as the one above:
      the last 6px inside belong to a row's Delete button, and a handle over
      those would eat the click aimed at it. The 6px it reaches into instead are
@@ -974,9 +999,9 @@
   .style-hint { font-size: 0.72rem; color: var(--muted-foreground); text-align: center; }
   .style-big img { display: block; width: 100%; aspect-ratio: 16 / 9;
     object-fit: cover; background: var(--thumb-bg); }
-  .style-picks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .style-pick { padding: 7px 0; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--background); cursor: pointer; font: inherit; font-size: 0.78rem;
+  .style-picks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .style-pick { padding: 6px 0; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--background); cursor: pointer; font: inherit; font-size: 0.68rem;
     font-weight: 600; color: var(--muted-foreground); }
   .style-pick:hover { border-color: var(--primary); color: var(--primary); }
   .style-pick.on { border-color: var(--primary); background: var(--primary-soft);
@@ -4156,7 +4181,7 @@ async function openExport() {
   // style here and the overlay follows, drag the overlay and this preview
   // follows. subStyleRev busts the image cache when only a stored value
   // (a retimed line, say) changed under an unchanged URL.
-  let subPreset0 = subStyle.preset;
+  let subPreset0 = SUB_LEGACY[subStyle.preset] || subStyle.preset;
   const posQ = () => (subStyle.pos == null ? "" : `&pos=${subStyle.pos}`)
     + (subStyle.size == null ? "" : `&size=${subStyle.size}`) + `&r=${subStyleRev}`;
   const previewSrc = (p) => `/api/dub/result/${job.id}/subtitle_preview?preset=${p}${posQ()}${mark}`;
@@ -4164,7 +4189,7 @@ async function openExport() {
       <img id="stylePreview" src="${previewSrc(subPreset)}" alt="How the subtitles will look" draggable="false">
       <div class="style-pos-guide" hidden></div></div>
     <div class="style-hint">Drag the picture to move the subtitles up or down</div>
-    <div class="style-picks">` + [["clean", "Clean"], ["variety", "Variety"], ["box", "Box"]]
+    <div class="style-picks">` + SUB_STYLES
     .map(([p, label]) => `<button class="style-pick${p === subPreset ? " on" : ""}"
       data-preset="${p}" type="button">${label}</button>`).join("") + `</div>`;
   $("exportList").innerHTML = [
@@ -4548,7 +4573,23 @@ let subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {}
 let subStyleJobId = null;
 let subStyleRev = 0;   // bumped on save, busts the Export preview's image cache
 let subStyleTimer = null;
-const SUB_BASE = { clean: 20, variety: 23, box: 20 };   // = the server's sizes
+// The plugin's ten looks, mirrored from app/subtitle_ass.py: letter height as
+// a fraction of the video, and where each look sits when the user has not
+// dragged it (as a fraction up from the bottom edge).
+const SUB_META = {
+  "clean":       { label: "Clean",       frac: 0.032, bottom: 0.28 },
+  "bold-punch":  { label: "Bold Punch",  frac: 0.052, bottom: 0.48 },
+  "sticker":     { label: "Sticker",     frac: 0.029, bottom: 0.28 },
+  "neon-yellow": { label: "Neon Yellow", frac: 0.049, bottom: 0.28 },
+  "soft-card":   { label: "Soft Card",   frac: 0.026, bottom: 0.64 },
+  "rainbow":     { label: "Rainbow",     frac: 0.045, bottom: 0.28 },
+  "broadcast":   { label: "Broadcast",   frac: 0.06,  bottom: 0.055 },
+  "streaming":   { label: "Streaming",   frac: 0.06,  bottom: 0.055 },
+  "lower-bar":   { label: "Lower Bar",   frac: 0.06,  bottom: 0.055 },
+  "neon":        { label: "Neon",        frac: 0.06,  bottom: 0.055 },
+};
+// The first three shipped for a day under our own names.
+const SUB_LEGACY = { variety: "neon-yellow", box: "sticker" };
 
 function saveSubStyle() {
   subStyleRev++;
@@ -4569,6 +4610,8 @@ async function loadSubStyle(jobId) {
   try {
     subStyle = await (await fetch(`/api/dub/jobs/${jobId}/subtitle_style`)).json();
   } catch { /* defaults stand */ }
+  subStyle.preset = SUB_LEGACY[subStyle.preset] || subStyle.preset;
+  if (!SUB_META[subStyle.preset]) subStyle.preset = "clean";
   if (timelineLines.length) renderTimeline(timelineLines, timelineDuration);
   updateSubtitleNow();
 }
@@ -4610,10 +4653,11 @@ function updateSubtitleNow() {
   subOvText.className = "sub-ov-text sub-ov-" + subStyle.preset
     + (subSelected ? " sel" : "");
   const h = doneVideo.offsetHeight || 1;
+  const meta = SUB_META[subStyle.preset] || SUB_META.clean;
   const scale = (subStyle.size == null ? 100 : subStyle.size) / 100;
-  subOvText.style.fontSize = (h * SUB_BASE[subStyle.preset] / 288 * scale) + "px";
-  const margin = subStyle.pos == null ? 22 : Math.max(0, (100 - subStyle.pos) / 100 * 288);
-  subOvText.style.bottom = (h * margin / 288) + "px";
+  subOvText.style.fontSize = (h * meta.frac * scale) + "px";
+  const bottomFrac = subStyle.pos == null ? meta.bottom : (100 - subStyle.pos) / 100;
+  subOvText.style.bottom = (h * Math.max(0, bottomFrac)) + "px";
   subOverlay.hidden = false;
   if (subSelected) placeSubToolbar();
 }
@@ -4621,7 +4665,7 @@ function updateSubtitleNow() {
 // ---- The toolbar and the style menu ----
 const subToolbar = $("subToolbar");
 const subMenu = $("subStyleMenu");
-const SUB_STYLES = [["clean", "Clean"], ["variety", "Variety"], ["box", "Box"]];
+const SUB_STYLES = Object.entries(SUB_META).map(([id, m]) => [id, m.label]);
 
 function placeSubToolbar() {
   const wrap = subOverlay.parentElement;

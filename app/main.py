@@ -28,6 +28,7 @@ from app import perso_materialize
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
+from app.subtitle_ass import PRESETS as SUBTITLE_PRESETS, build_ass
 from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL,
                         OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
                         QWEN_N_TAKES, TRANSLATE_ENGINE, default_stt_engine)
@@ -1285,24 +1286,70 @@ class SubtitleBurnRequest(BaseModel):
     size: Optional[float] = None
 
 
-# One force_style per preset. ASS colours are &HAABBGGRR (alpha first, then
-# blue-green-red), which is why yellow reads as 0000FFFF. The font must hold
-# Korean: each platform's own gothic, with Noto for the Linux server case.
+# The font must hold Korean: each platform's own gothic, with Noto for the
+# Linux server case. The presets themselves are the official plugin's ten,
+# ported in app/subtitle_ass.py.
 _BURN_FONT = ("Apple SD Gothic Neo" if sys.platform == "darwin"
               else "Malgun Gothic" if sys.platform == "win32"
               else "Noto Sans CJK KR")
-_BURN_PRESETS = {
-    # White with a dark outline -- fine over almost anything.
-    "clean": ("PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-              "Outline=1.5,Shadow=0.5,Bold=0"),
-    # The loud yellow of Korean variety shows, a notch bigger and bolder.
-    "variety": ("PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,"
-                "Outline=2.5,Shadow=0,Bold=1"),
-    # White on a translucent dark band, for busy or bright footage.
-    # BorderStyle=3 draws the box with OutlineColour; 80 alpha is half-clear.
-    "box": ("PrimaryColour=&H00FFFFFF,BorderStyle=3,"
-            "OutlineColour=&H80000000,Outline=1,Shadow=0,Bold=0"),
-}
+# The first three styles shipped under our own names for a day (2026-09-01);
+# anything stored or asked for under those keeps working.
+_PRESET_ALIASES = {"variety": "neon-yellow", "box": "sticker"}
+
+
+def _norm_preset(preset: str) -> str:
+    preset = _PRESET_ALIASES.get(preset, preset)
+    if preset not in SUBTITLE_PRESETS:
+        raise HTTPException(status_code=422,
+                            detail="preset must be one of: %s"
+                                   % ", ".join(sorted(SUBTITLE_PRESETS)))
+    return preset
+
+
+def _video_dims(path: str):
+    """The video's width and height, for drawing subtitles in its own
+    coordinates. check_output on purpose: tests fake subprocess.run for the
+    burn itself, and this probe must not be caught in that net. Unreadable
+    file: a plain 1080p canvas -- fractions keep everything proportional."""
+    try:
+        out = subprocess.check_output(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+            text=True, timeout=30)
+        w, h = (int(x) for x in out.strip().split(",")[:2])
+        if w > 0 and h > 0:
+            return w, h
+    except Exception:
+        pass
+    return 1920, 1080
+
+
+def _srt_cues(path: str):
+    """The srt as [{start, end, text}], in block order."""
+    with open(path, encoding="utf-8-sig") as f:
+        blocks = f.read().split("\n\n")
+    cues = []
+    for block in blocks:
+        m = _SRT_TIMING.search(block)
+        if not m:
+            continue
+        h1, m1, s1, ms1, h2, m2, s2, ms2 = (int(g) for g in m.groups())
+        text = block[m.end():].strip()
+        cues.append({"start": h1 * 3600 + m1 * 60 + s1 + ms1 / 1000.0,
+                     "end": h2 * 3600 + m2 * 60 + s2 + ms2 / 1000.0,
+                     "text": text})
+    return cues
+
+
+def _write_burn_ass(srt: str, preset: str, pos, size, work: str, video: str) -> str:
+    """The styled .ass beside the job, rebuilt for every burn (cheap)."""
+    w, h = _video_dims(video)
+    ass = build_ass(_srt_cues(srt), preset, width=w, height=h,
+                    pos=pos, size=size, font=_BURN_FONT)
+    out = os.path.join(work, "subtitle_render.ass")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(ass)
+    return out
 
 
 def _filter_path(path: str) -> str:
@@ -1312,23 +1359,6 @@ def _filter_path(path: str) -> str:
     apostrophe ends the quoted run -- all three appear in real paths (Windows
     drives, "it's.srt")."""
     return path.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
-
-
-# Each preset's letter height at size 100, in libass's 288-line system.
-_BURN_FONTSIZE = {"clean": 20, "variety": 23, "box": 20}
-
-
-def _burn_vf(srt: str, preset: str, pos: Optional[float] = None,
-             size: Optional[float] = None) -> str:
-    """pos places the subtitles: 0 is the top of the frame, 100 the bottom,
-    None the usual spot near the bottom (mapped onto MarginV, the distance up
-    from the bottom edge in libass's own 288-line coordinate system).
-    size scales the letters: 100 as the preset was designed, 60 to 160."""
-    margin = 22 if pos is None else min(266, max(0, round((100 - pos) / 100 * 288)))
-    fontsize = round(_BURN_FONTSIZE[preset] * (100 if size is None else size) / 100)
-    style = "Fontsize=%d,%s,MarginV=%d,FontName=%s" % (
-        fontsize, _BURN_PRESETS[preset], margin, _BURN_FONT)
-    return "subtitles=filename='%s':force_style='%s'" % (_filter_path(srt), style)
 
 
 def _check_pos_size(pos: Optional[float], size: Optional[float]) -> None:
@@ -1353,10 +1383,7 @@ def subtitles_burn(body: SubtitleBurnRequest):
     re-encode (same x264 settings as the clip route); the audio is untouched
     and copied through.
     """
-    if body.preset not in _BURN_PRESETS:
-        raise HTTPException(status_code=422,
-                            detail="preset must be one of: %s"
-                                   % ", ".join(sorted(_BURN_PRESETS)))
+    preset = _norm_preset(body.preset)
     path = os.path.expanduser(body.video_path)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail=f"No such video: {body.video_path}")
@@ -1366,9 +1393,11 @@ def subtitles_burn(body: SubtitleBurnRequest):
         raise HTTPException(status_code=404,
                             detail="No subtitle file to lay on. Extract subtitles "
                                    "first, or name an .srt file.")
-    out = _free_path("%s-sub-%s" % (base, body.preset), ext or ".mp4")
+    out = _free_path("%s-sub-%s" % (base, preset), ext or ".mp4")
     _check_pos_size(body.pos, body.size)
-    vf = _burn_vf(srt, body.preset, body.pos, body.size)
+    work = os.path.dirname(path)
+    ass = _write_burn_ass(srt, preset, body.pos, body.size, work, path)
+    vf = "ass=filename='%s'" % _filter_path(ass)
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
            "-i", path, "-vf", vf,
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
@@ -1379,7 +1408,7 @@ def subtitles_burn(body: SubtitleBurnRequest):
         raise HTTPException(status_code=503,
                             detail="ffmpeg could not subtitle this video (%s)."
                                    % (run.stderr or "no detail")[-120:].strip())
-    return {"out_path": out, "preset": body.preset}
+    return {"out_path": out, "preset": preset}
 
 
 @app.get("/api/engines")
@@ -2051,9 +2080,10 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
         jid, preset, pos, size)
     built = os.path.join(work, "subtitled-%s%s.mp4" % (preset, _pos_size_suffix(pos, size)))
     if _stale(built, *sources):
+        ass = _write_burn_ass(srt, preset, pos, size, work, out)
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-             "-i", out, "-vf", _burn_vf(srt, preset, pos, size),
+             "-i", out, "-vf", "ass=filename='%s'" % _filter_path(ass),
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
              "-pix_fmt", "yuv420p", "-c:a", "copy",
              "-movflags", "+faststart", built],
@@ -2102,10 +2132,7 @@ def subtitle_style_put(jid: str, body: dict):
     path = _subtitle_style_file(jid)
     merged = {**_SUBTITLE_STYLE_DEFAULTS,
               **{k: v for k, v in (body or {}).items() if k in _SUBTITLE_STYLE_DEFAULTS}}
-    if merged["preset"] not in _BURN_PRESETS:
-        raise HTTPException(status_code=422,
-                            detail="preset must be one of: %s"
-                                   % ", ".join(sorted(_BURN_PRESETS)))
+    merged["preset"] = _norm_preset(merged["preset"])
     _check_pos_size(merged["pos"], merged["size"])
     if not isinstance(merged["cues"], dict):
         raise HTTPException(status_code=422, detail="cues must be an object")
@@ -2159,11 +2186,7 @@ def _resolved_burn_inputs(jid, preset, pos, size):
     _check_pos_size(pos, size)
     j, out, srt, work = _subtitled_sources(jid)
     stored = _load_subtitle_style(work)
-    preset = preset or stored["preset"]
-    if preset not in _BURN_PRESETS:
-        raise HTTPException(status_code=422,
-                            detail="preset must be one of: %s"
-                                   % ", ".join(sorted(_BURN_PRESETS)))
+    preset = _norm_preset(preset or stored["preset"])
     pos = stored["pos"] if pos is None else pos
     size = stored["size"] if size is None else size
     _check_pos_size(pos, size)
@@ -2198,10 +2221,11 @@ def dub_result_subtitle_preview(jid: str, preset: Optional[str] = None,
     built = os.path.join(work, "subtitle-preview-%s%s.jpg" % (preset, _pos_size_suffix(pos, size)))
     if _stale(built, *sources):
         at = _first_srt_second(srt) + 0.5
+        ass = _write_burn_ass(srt, preset, pos, size, work, out)
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-ss", "%.3f" % at, "-copyts", "-i", out,
-             "-vf", _burn_vf(srt, preset, pos, size) + ",scale=480:-2",
+             "-vf", "ass=filename='%s',scale=480:-2" % _filter_path(ass),
              "-frames:v", "1", "-q:v", "5", built],
             capture_output=True, text=True)
         if run.returncode != 0:
