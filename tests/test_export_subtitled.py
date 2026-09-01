@@ -170,7 +170,9 @@ def test_subtitled_takes_a_font_size(monkeypatch, tmp_path):
     assert r.status_code == 200
     assert "Base,Arial,52," in _ass(work).split("Style: ")[1][:40] or ",52," in _ass(work)  # 1080 * .032 * 1.5
     assert ran.calls[0][-1] == str(work / "subtitled-clean-s150.mp4")
-    assert client.get(f"/api/dub/result/{jid}/subtitled?size=300").status_code == 422
+    # 300 is a legal size now (user wanted bigger); past it is still nonsense.
+    assert client.get(f"/api/dub/result/{jid}/subtitled?preset=clean&size=300").status_code == 200
+    assert client.get(f"/api/dub/result/{jid}/subtitled?size=400").status_code == 422
 
 
 def test_subtitle_preview_takes_size_and_position_together(monkeypatch, tmp_path):
@@ -193,13 +195,14 @@ def test_subtitle_settings_start_with_the_defaults(monkeypatch, tmp_path):
     r = client.get(f"/api/dub/jobs/{jid}/subtitle_style")
     assert r.status_code == 200
     assert r.json() == {"enabled": True, "preset": "clean", "pos": None,
-                        "size": None, "cues": {}}
+                        "size": None, "cues": {}, "boxWidth": None, "widths": {}}
 
 
 def test_subtitle_settings_survive_a_round_trip(monkeypatch, tmp_path):
     ran, jid, work = _done_job(monkeypatch, tmp_path)
     body = {"enabled": False, "preset": "variety", "pos": 30, "size": 120,
-            "cues": {"1": {"start": 0.5, "end": 3.0}}}
+            "cues": {"1": {"start": 0.5, "end": 3.0}},
+            "boxWidth": 62, "widths": {"2": 84}}
     assert client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=body).status_code == 200
     assert client.get(f"/api/dub/jobs/{jid}/subtitle_style").json() == {
         **body, "preset": "neon-yellow"}
@@ -211,6 +214,9 @@ def test_subtitle_settings_refuse_nonsense(monkeypatch, tmp_path):
     assert put({"preset": "sparkle"}) == 422
     assert put({"pos": 140}) == 422
     assert put({"size": 30}) == 422
+    assert put({"size": 250}) == 200
+    assert put({"boxWidth": 5}) == 422
+    assert put({"widths": {"2": 200}}) == 422
     assert put({"cues": {"1": {"start": 5, "end": 2}}}) == 422
 
 
@@ -238,3 +244,14 @@ def test_retimed_lines_burn_with_their_new_times(monkeypatch, tmp_path):
     assert "0:00:00.50,0:00:04.00" in ass
     assert "원래 번역" in ass
     assert "00:00:02,000" in (work / "translated.srt").read_text()
+
+
+def test_the_stored_box_width_reaches_the_burn(monkeypatch, tmp_path):
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    client.put(f"/api/dub/jobs/{jid}/subtitle_style",
+               json={"preset": "black-box", "boxWidth": 50, "widths": {"2": 80}})
+    r = client.get(f"/api/dub/result/{jid}/subtitled")
+    assert r.status_code == 200
+    ass = _ass(work)
+    assert "\\p1" in ass.replace("\\\\", "\\") or "\p1" in ass
+    assert "l 960 " in ass          # 50% of the 1080p fallback canvas

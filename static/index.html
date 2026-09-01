@@ -727,6 +727,10 @@
     padding: 0.08em 0.55em; }
   .sub-ov-neon { color: #00e5ff; font-weight: 800;
     text-shadow: 0 0 6px #00e5ff, 0 0 14px #00e5ff, 0 0 2px #003c44; }
+  .sub-ov-black-box { color: #fff; background: #000;
+    padding: 0.08em 0.5em; border-radius: 0.1em; }
+  .sub-ov-white-box { color: #3a332c; background: #fff;
+    padding: 0.1em 0.55em; border-radius: 0.1em; font-weight: 600; }
   .sub-toolbar { position: absolute; left: 50%; transform: translateX(-50%);
     display: flex; align-items: center; gap: 4px; z-index: 6;
     background: rgba(24, 24, 27, 0.92); border: 1px solid var(--agent-border);
@@ -739,6 +743,15 @@
     text-align: center; font-variant-numeric: tabular-nums; }
   .sub-sep { width: 1px; height: 16px; background: var(--agent-border); margin: 0 2px; }
   .sub-style { color: #c9b8ff; font-weight: 600; }
+  .sub-seg { display: inline-flex; background: #111; border: 1px solid var(--agent-border);
+    border-radius: 7px; padding: 2px; gap: 2px; }
+  .sub-seg button { min-width: 0; height: 20px; font-size: 0.68rem; padding: 0 8px; }
+  .sub-seg button.on { background: var(--primary); color: #fff; }
+  /* The box-width handles on the selected subtitles' sides. */
+  .sub-wh { position: absolute; top: 50%; margin-top: -11px; width: 5px; height: 22px;
+    border-radius: 3px; background: var(--primary); box-shadow: 0 0 0 1.5px #fff;
+    cursor: ew-resize; pointer-events: auto; }
+  .sub-wh.l { left: -12px; } .sub-wh.r { right: -12px; }
   /* Every style at once, each drawn as itself -- no clicking through blind. */
   .sub-style-menu { position: absolute; left: 50%; transform: translateX(-50%);
     z-index: 7; background: rgba(24, 24, 27, 0.97); border: 1px solid var(--agent-border);
@@ -846,6 +859,11 @@
     cursor: ew-resize; }
   .tl-cap .tl-hdl.l { left: -4px; } .tl-cap .tl-hdl.r { right: -4px; }
   .tl-cap.trimming { box-shadow: 0 0 0 2px var(--primary); z-index: 2; }
+  /* This line keeps its own box width: the dot says so, and puts it back. */
+  .tl-exdot { position: absolute; top: -7px; right: -7px; width: 15px; height: 15px;
+    border-radius: 50%; background: var(--primary); color: #fff; font-size: 9px;
+    line-height: 15px; text-align: center; box-shadow: 0 0 0 2px var(--background);
+    cursor: pointer; z-index: 3; }
   .tl-lane-caps.off, .tl-name-caps.off { opacity: 0.35; }
   .tl-trim-tip { position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
     background: var(--agent-bg); color: #fff; font-size: 0.62rem; padding: 2px 7px;
@@ -1350,6 +1368,11 @@
                   <button id="subBigger" type="button" title="Bigger">A＋</button>
                   <span class="sub-sep"></span>
                   <button class="sub-style" id="subStyleBtn" type="button" title="Style">Clean ▾</button>
+                  <span class="sub-sep" id="subScopeSep" hidden></span>
+                  <span class="sub-seg" id="subScopeSeg" hidden>
+                    <button id="subScopeAll" class="on" type="button">All lines</button>
+                    <button id="subScopeOne" type="button">This line</button>
+                  </span>
                 </div>
                 <div class="sub-style-menu" id="subStyleMenu" hidden></div>
                 <div class="video-under">
@@ -4572,7 +4595,10 @@ async function renderScript(jobId) {
 // (style, size, position), whether they go on at all, and any lines the user
 // retimed on the timeline. The overlay, the timeline lane and the Export
 // dialog all read and write it; saves are debounced PUTs.
-let subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {} };
+let subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {},
+                 boxWidth: null, widths: {} };
+let subScope = "all";     // what a width drag changes: every line, or this one
+let subNowIdx = 0;        // the line the overlay is showing right now
 let subStyleJobId = null;
 let subStyleRev = 0;   // bumped on save, busts the Export preview's image cache
 let subStyleTimer = null;
@@ -4590,9 +4616,13 @@ const SUB_META = {
   "streaming":   { label: "Streaming",   frac: 0.06,  bottom: 0.055 },
   "lower-bar":   { label: "Lower Bar",   frac: 0.06,  bottom: 0.055 },
   "neon":        { label: "Neon",        frac: 0.06,  bottom: 0.055 },
+  "black-box":   { label: "Black Box",   frac: 0.032, bottom: 0.28 },
+  "white-box":   { label: "White Box",   frac: 0.03,  bottom: 0.28 },
 };
 // The first three shipped for a day under our own names.
 const SUB_LEGACY = { variety: "neon-yellow", box: "sticker" };
+// The looks that have a background box -- the only ones a width applies to.
+const SUB_BOXED = new Set(["sticker", "soft-card", "lower-bar", "black-box", "white-box"]);
 
 function saveSubStyle() {
   subStyleRev++;
@@ -4609,7 +4639,8 @@ function saveSubStyle() {
 async function loadSubStyle(jobId) {
   if (subStyleJobId === jobId) return;
   subStyleJobId = jobId;
-  subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {} };
+  subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {},
+               boxWidth: null, widths: {} };
   try {
     subStyle = await (await fetch(`/api/dub/jobs/${jobId}/subtitle_style`)).json();
   } catch { /* defaults stand */ }
@@ -4653,8 +4684,26 @@ function updateSubtitleNow() {
   // 2026-09-01 evening).
   if (idx < 0 && doneVideo.paused && t <= subCueOf(timelineLines[0], 0).start) idx = 0;
   if (idx < 0) { subOverlay.hidden = true; return; }
+  subNowIdx = idx;
   syncSubOverlayBox();
   subOvText.textContent = timelineLines[idx].text || "";
+  const boxed = SUB_BOXED.has(subStyle.preset);
+  const linePct = subStyle.widths[String(idx + 1)];
+  const pct = linePct != null ? linePct : subStyle.boxWidth;
+  if (boxed && pct != null) {
+    subOvText.style.width = pct + "%";
+    subOvText.style.whiteSpace = "normal";
+  } else {
+    subOvText.style.width = "";
+    subOvText.style.whiteSpace = "";
+  }
+  if (subSelected && boxed) {
+    for (const side of ["l", "r"]) {
+      const h = document.createElement("span");
+      h.className = "sub-wh " + side;
+      subOvText.appendChild(h);
+    }
+  }
   subOvText.className = "sub-ov-text sub-ov-" + subStyle.preset
     + (subSelected ? " sel" : "");
   const h = doneVideo.offsetHeight || 1;
@@ -4685,14 +4734,24 @@ function subSelect(on) {
   subToolbar.hidden = !on;
   if (!on) subMenu.hidden = true;
   subOvText.classList.toggle("sel", on);
-  if (on) { paintSubToolbar(); placeSubToolbar(); }
+  if (on) {
+    updateSubtitleNow();   // redraws the text WITH its width handles
+    paintSubToolbar(); placeSubToolbar();
+  }
 }
 
 function paintSubToolbar() {
   $("subSizeLv").textContent = (subStyle.size == null ? 100 : subStyle.size) + "%";
   $("subStyleBtn").textContent =
     (SUB_STYLES.find(([p]) => p === subStyle.preset)?.[1] || "Clean") + " ▾";
+  const boxed = SUB_BOXED.has(subStyle.preset);
+  $("subScopeSep").hidden = !boxed;
+  $("subScopeSeg").hidden = !boxed;
+  $("subScopeAll").classList.toggle("on", subScope === "all");
+  $("subScopeOne").classList.toggle("on", subScope === "one");
 }
+$("subScopeAll").addEventListener("click", () => { subScope = "all"; paintSubToolbar(); });
+$("subScopeOne").addEventListener("click", () => { subScope = "one"; paintSubToolbar(); });
 
 function buildSubMenu() {
   subMenu.innerHTML = "";
@@ -4718,11 +4777,11 @@ function buildSubMenu() {
 }
 
 $("subBigger").addEventListener("click", () => {
-  subStyle.size = Math.min(160, (subStyle.size == null ? 100 : subStyle.size) + 10);
+  subStyle.size = Math.min(300, (subStyle.size == null ? 100 : subStyle.size) + 10);
   saveSubStyle(); updateSubtitleNow(); paintSubToolbar();
 });
 $("subSmaller").addEventListener("click", () => {
-  subStyle.size = Math.max(60, (subStyle.size == null ? 100 : subStyle.size) - 10);
+  subStyle.size = Math.max(50, (subStyle.size == null ? 100 : subStyle.size) - 10);
   saveSubStyle(); updateSubtitleNow(); paintSubToolbar();
 });
 $("subStyleBtn").addEventListener("click", (e) => {
@@ -4732,8 +4791,38 @@ $("subStyleBtn").addEventListener("click", (e) => {
   placeSubToolbar();
 });
 
+// The side handles: drag to set the box's width -- every line, or (with
+// "This line") just this one, which then keeps its own width.
+subOvText.addEventListener("pointerdown", (e) => {
+  const wh = e.target.closest?.(".sub-wh");
+  if (!wh) return;
+  e.preventDefault(); e.stopPropagation();
+  let dragged = false;
+  const move = (ev) => {
+    const vr = doneVideo.getBoundingClientRect();
+    if (!vr.width) return;
+    const pct = Math.round(Math.min(100, Math.max(10,
+      Math.abs(ev.clientX - (vr.left + vr.width / 2)) * 2 / vr.width * 100)));
+    if (subScope === "all") subStyle.boxWidth = pct;
+    else subStyle.widths[String(subNowIdx + 1)] = pct;
+    dragged = true;
+    updateSubtitleNow();
+  };
+  const up = () => {
+    wh.removeEventListener("pointermove", move);
+    wh.removeEventListener("pointerup", up);
+    wh.removeEventListener("pointercancel", up);
+    if (dragged) { saveSubStyle(); drawTimelineTrack(); }
+  };
+  wh.addEventListener("pointermove", move);
+  wh.addEventListener("pointerup", up);
+  wh.addEventListener("pointercancel", up);
+  wh.setPointerCapture(e.pointerId);
+}, true);
+
 // Click the subtitles to select them; drag to move them up and down.
 subOvText.addEventListener("pointerdown", (e) => {
+  if (e.target.closest?.(".sub-wh")) return;
   e.preventDefault(); e.stopPropagation();
   subSelect(true);
   let dragged = false;
@@ -4950,10 +5039,12 @@ function drawTimelineTrack() {
   let caps = "";
   timelineLines.forEach((l, idx) => {
     const c = subCueOf(l, idx);
+    const exdot = subStyle.widths[String(idx + 1)] != null
+      ? '<span class="tl-exdot" title="Back to the all-lines width">✱</span>' : "";
     caps += `<div class="tl-cap" data-idx="${idx}"
       style="left:${(c.start * timelinePps).toFixed(1)}px;width:${Math.max(8, (c.end - c.start) * timelinePps).toFixed(1)}px"
       title="${escapeHtml(l.text || "")}"><span class="tl-hdl l"></span><span
-      class="tl-cap-txt">${escapeHtml(l.text || "")}</span><span class="tl-hdl r"></span></div>`;
+      class="tl-cap-txt">${escapeHtml(l.text || "")}</span><span class="tl-hdl r"></span>${exdot}</div>`;
   });
   track.innerHTML = `<div class="tl-inner" style="width:${width.toFixed(0)}px">
     <div class="tl-ruler">${ticks}</div>
@@ -5068,6 +5159,13 @@ $("timeline").addEventListener("scroll", (e) => {
 // has to finish before the seek, hence the wait.
 // The head's own button folds the strip away.
 $("timeline").addEventListener("click", (e) => {
+  if (e.target.closest(".tl-exdot")) {
+    const idx = +e.target.closest(".tl-cap").dataset.idx;
+    delete subStyle.widths[String(idx + 1)];
+    saveSubStyle(); updateSubtitleNow();
+    renderTimeline(timelineLines, timelineDuration);
+    return;
+  }
   if (e.target.closest("#tlSubEye")) {
     subStyle.enabled = !subStyle.enabled;
     saveSubStyle(); updateSubtitleNow(); renderTimeline(timelineLines, timelineDuration);

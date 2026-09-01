@@ -1341,11 +1341,13 @@ def _srt_cues(path: str):
     return cues
 
 
-def _write_burn_ass(srt: str, preset: str, pos, size, work: str, video: str) -> str:
+def _write_burn_ass(srt: str, preset: str, pos, size, work: str, video: str,
+                    box_width=None, line_widths=None) -> str:
     """The styled .ass beside the job, rebuilt for every burn (cheap)."""
     w, h = _video_dims(video)
     ass = build_ass(_srt_cues(srt), preset, width=w, height=h,
-                    pos=pos, size=size, font=_BURN_FONT)
+                    pos=pos, size=size, font=_BURN_FONT,
+                    box_width=box_width, line_widths=line_widths)
     out = os.path.join(work, "subtitle_render.ass")
     with open(out, "w", encoding="utf-8") as f:
         f.write(ass)
@@ -1364,8 +1366,8 @@ def _filter_path(path: str) -> str:
 def _check_pos_size(pos: Optional[float], size: Optional[float]) -> None:
     if pos is not None and not 0 <= pos <= 100:
         raise HTTPException(status_code=422, detail="pos must be between 0 and 100")
-    if size is not None and not 60 <= size <= 160:
-        raise HTTPException(status_code=422, detail="size must be between 60 and 160")
+    if size is not None and not 50 <= size <= 300:
+        raise HTTPException(status_code=422, detail="size must be between 50 and 300")
 
 
 def _pos_size_suffix(pos: Optional[float], size: Optional[float]) -> str:
@@ -2076,11 +2078,12 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
     is built again. The edited script wins over the original -- it is what the
     remade voices actually say.
     """
-    j, out, srt, work, preset, pos, size, sources = _resolved_burn_inputs(
+    j, out, srt, work, preset, pos, size, sources, stored = _resolved_burn_inputs(
         jid, preset, pos, size)
     built = os.path.join(work, "subtitled-%s%s.mp4" % (preset, _pos_size_suffix(pos, size)))
     if _stale(built, *sources):
-        ass = _write_burn_ass(srt, preset, pos, size, work, out)
+        ass = _write_burn_ass(srt, preset, pos, size, work, out,
+                              stored["boxWidth"], stored["widths"])
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-i", out, "-vf", "ass=filename='%s'" % _filter_path(ass),
@@ -2099,7 +2102,8 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
 
 
 _SUBTITLE_STYLE_DEFAULTS = {"enabled": True, "preset": "clean",
-                            "pos": None, "size": None, "cues": {}}
+                            "pos": None, "size": None, "cues": {},
+                            "boxWidth": None, "widths": {}}
 
 
 def _subtitle_style_file(jid: str) -> str:
@@ -2134,6 +2138,17 @@ def subtitle_style_put(jid: str, body: dict):
               **{k: v for k, v in (body or {}).items() if k in _SUBTITLE_STYLE_DEFAULTS}}
     merged["preset"] = _norm_preset(merged["preset"])
     _check_pos_size(merged["pos"], merged["size"])
+    if merged["boxWidth"] is not None and not 10 <= merged["boxWidth"] <= 100:
+        raise HTTPException(status_code=422, detail="boxWidth must be between 10 and 100")
+    if not isinstance(merged["widths"], dict):
+        raise HTTPException(status_code=422, detail="widths must be an object")
+    for k, w in merged["widths"].items():
+        try:
+            w = float(w)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail=f"width {k} must be a number")
+        if not 10 <= w <= 100:
+            raise HTTPException(status_code=422, detail=f"width {k} must be between 10 and 100")
     if not isinstance(merged["cues"], dict):
         raise HTTPException(status_code=422, detail="cues must be an object")
     for k, cue in merged["cues"].items():
@@ -2194,7 +2209,7 @@ def _resolved_burn_inputs(jid, preset, pos, size):
     sources = [out, srt] + ([style_file] if os.path.exists(style_file) else [])
     if stored["cues"]:
         srt = _retimed_srt(srt, stored["cues"], work)
-    return j, out, srt, work, preset, pos, size, sources
+    return j, out, srt, work, preset, pos, size, sources, stored
 
 
 def _first_srt_second(srt: str) -> float:
@@ -2216,12 +2231,13 @@ def dub_result_subtitle_preview(jid: str, preset: Optional[str] = None,
     Seeked into the first subtitle line; -copyts keeps the original clock so
     the subtitles filter still knows a line is on screen at that moment.
     """
-    j, out, srt, work, preset, pos, size, sources = _resolved_burn_inputs(
+    j, out, srt, work, preset, pos, size, sources, stored = _resolved_burn_inputs(
         jid, preset, pos, size)
     built = os.path.join(work, "subtitle-preview-%s%s.jpg" % (preset, _pos_size_suffix(pos, size)))
     if _stale(built, *sources):
         at = _first_srt_second(srt) + 0.5
-        ass = _write_burn_ass(srt, preset, pos, size, work, out)
+        ass = _write_burn_ass(srt, preset, pos, size, work, out,
+                              stored["boxWidth"], stored["widths"])
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-ss", "%.3f" % at, "-copyts", "-i", out,
