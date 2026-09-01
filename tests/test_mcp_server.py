@@ -371,3 +371,38 @@ def test_cancel_dub_names_a_job_that_is_not_there(monkeypatch):
                         lambda url, **kw: _Response(404, {}))
     with pytest.raises(ValueError, match="no such job"):
         mcp_server.cancel_dub("ghost")
+
+
+def test_the_stdio_server_actually_serves_every_tool():
+    # Registration alone is not delivery: `python -m app.mcp_server` stops at
+    # the __main__ run block, so a tool defined below it imports fine (and
+    # passes every test above) yet never reaches the assistant. cancel_dub
+    # shipped exactly that way on 2026-09-01. This speaks to the server the
+    # one way the CLIs do -- over stdio -- and reads the list it hands out.
+    import json
+    import os
+    import subprocess
+    import sys
+    lines = "\n".join([
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                    "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                               "clientInfo": {"name": "probe", "version": "0"}}}),
+        json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+    ]) + "\n"
+    out = subprocess.run(
+        [sys.executable, "-m", "app.mcp_server"], input=lines, text=True,
+        capture_output=True, timeout=30,
+        env={**os.environ, "PERSODUB_API": "http://127.0.0.1:1"},
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).stdout
+    served = set()
+    for line in out.splitlines():
+        try:
+            m = json.loads(line)
+        except ValueError:
+            continue
+        if m.get("id") == 2:
+            served = {t["name"] for t in m["result"]["tools"]}
+    from app.agents.claude import TOOL_LABELS
+    missing = set(TOOL_LABELS) - served
+    assert not missing, "promised to the assistant but never served: %s" % sorted(missing)

@@ -402,8 +402,6 @@ def cut_clip(video_path: str, start: str, end: str) -> dict:
     return r.json()
 
 
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
 
 
 @mcp.tool()
@@ -433,3 +431,7 @@ def cancel_dub(job_id: str, confirm: bool = False) -> dict:
         raise ValueError(detail if isinstance(detail, str) else str(detail))
     r.raise_for_status()
     return r.json()
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
