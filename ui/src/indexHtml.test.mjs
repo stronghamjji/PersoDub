@@ -98,3 +98,14 @@ test("timeline zoom controls, Dub Agent heading and Korean tabs are in place", (
     "the video tabs must read 오리지널/더빙");
   assert.ok(html.includes("Dub Agent"), "the agent column needs its Dub Agent heading");
 });
+
+// The player's subtitle overlay, its toolbar, and the timeline's subtitle lane
+// with the eye toggle (mockup approved 2026-09-01 evening).
+test("the subtitle overlay, toolbar and timeline lane are wired in", () => {
+  const html = readFileSync(INDEX, "utf8");
+  for (const id of ["subOverlay", "subToolbar", "subStyleMenu"]) {
+    assert.ok(html.includes(`id="${id}"`), `${id} is missing from the player`);
+  }
+  assert.ok(html.includes("tlSubEye"), "the timeline needs its subtitle eye toggle");
+  assert.ok(html.includes("tl-cap"), "the timeline needs its subtitle lane blocks");
+});

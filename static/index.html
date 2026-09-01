@@ -691,6 +691,47 @@
      over beside it is the pane's own dark ground. */
   .video-wrap video { display: block; max-width: 100%; max-height: 100%;
     object-fit: contain; }
+  /* ---- Subtitles on the player ---- */
+  /* The container is synced by script to the video's own box, so the text
+     sits on the picture, not on the letterbox around it. */
+  .sub-overlay { position: absolute; pointer-events: none; text-align: center; }
+  .sub-ov-text { position: absolute; left: 0; right: 0; margin: 0 auto;
+    width: max-content; max-width: 92%; pointer-events: auto; cursor: grab;
+    user-select: none; touch-action: none; font-weight: 700; line-height: 1.25;
+    white-space: pre-wrap; }
+  .sub-ov-text.sel { outline: 2px dashed var(--primary); outline-offset: 5px;
+    border-radius: 4px; }
+  .sub-ov-clean { color: #fff;
+    text-shadow: 0 0 3px #000, 0 0 5px #000, 1px 1px 2px #000; }
+  .sub-ov-variety { color: #ffef00; font-weight: 800;
+    text-shadow: 0 0 3px #000, 0 0 7px #000, 1px 1px 2px #000; }
+  .sub-ov-box { color: #fff; background: rgba(0, 0, 0, 0.55);
+    padding: 0.05em 0.45em; border-radius: 0.15em; }
+  .sub-toolbar { position: absolute; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 4px; z-index: 6;
+    background: rgba(24, 24, 27, 0.92); border: 1px solid var(--agent-border);
+    border-radius: 10px; padding: 5px 7px; }
+  .sub-toolbar button { min-width: 26px; height: 24px; border: 0; border-radius: 6px;
+    background: transparent; color: var(--agent-fg); font: inherit; font-size: 0.8rem;
+    cursor: pointer; padding: 0 7px; }
+  .sub-toolbar button:hover { background: var(--agent-border); }
+  .sub-size { color: var(--agent-muted); font-size: 0.7rem; min-width: 36px;
+    text-align: center; font-variant-numeric: tabular-nums; }
+  .sub-sep { width: 1px; height: 16px; background: var(--agent-border); margin: 0 2px; }
+  .sub-style { color: #c9b8ff; font-weight: 600; }
+  /* Every style at once, each drawn as itself -- no clicking through blind. */
+  .sub-style-menu { position: absolute; left: 50%; transform: translateX(-50%);
+    z-index: 7; background: rgba(24, 24, 27, 0.97); border: 1px solid var(--agent-border);
+    border-radius: 12px; padding: 8px; display: grid;
+    grid-template-columns: 1fr 1fr 1fr; gap: 6px; width: 320px; }
+  .sub-style-menu button { border: 1px solid var(--agent-border); border-radius: 8px;
+    background: #26262b; color: #fff; font: inherit; padding: 10px 6px 7px;
+    cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .sub-style-menu button:hover { border-color: var(--primary); }
+  .sub-style-menu button.on { border-color: var(--primary); background: #2d2440; }
+  .sub-style-menu .sample { font-weight: 700; font-size: 15px; line-height: 1.3; }
+  .sub-style-menu .nm { font-size: 0.64rem; color: var(--agent-muted); }
+
   .video-bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
     background: var(--thumb-badge); color: var(--thumb-foreground);
@@ -765,6 +806,29 @@
   .tl-corner { height: 18px; }
   .tl-name { height: 34px; display: flex; align-items: center; padding-left: 14px; }
   .tl-name.strong { font-weight: 600; color: var(--foreground); }
+  /* The subtitle lane's own label row: the eye says whether the burned video
+     gets subtitles at all (the Premiere/CapCut track toggle). */
+  .tl-name .tl-eye { width: 22px; height: 20px; border: 0; background: none;
+    cursor: pointer; padding: 0; margin-right: 5px; color: var(--muted-foreground);
+    display: inline-grid; place-items: center; border-radius: 5px; }
+  .tl-name .tl-eye:hover { background: var(--primary-soft); color: var(--primary); }
+  .tl-name .tl-eye.on { color: var(--primary); }
+  .tl-name .tl-eye svg { width: 15px; height: 15px; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tl-cap { position: absolute; top: 4px; height: 26px; border-radius: 5px;
+    background: var(--primary-soft); border: 1px solid var(--primary);
+    color: var(--spk-1-ink); font-size: 0.68rem; line-height: 24px;
+    box-sizing: border-box; }
+  .tl-cap-txt { display: block; padding: 0 8px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .tl-cap .tl-hdl { position: absolute; top: -2px; bottom: -2px; width: 9px;
+    cursor: ew-resize; }
+  .tl-cap .tl-hdl.l { left: -4px; } .tl-cap .tl-hdl.r { right: -4px; }
+  .tl-cap.trimming { box-shadow: 0 0 0 2px var(--primary); z-index: 2; }
+  .tl-lane-caps.off, .tl-name-caps.off { opacity: 0.35; }
+  .tl-trim-tip { position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+    background: var(--agent-bg); color: #fff; font-size: 0.62rem; padding: 2px 7px;
+    border-radius: 5px; white-space: nowrap; z-index: 3; }
   /* Only the track scrolls sideways: the two language names have to stay put. */
   .tl-track { position: relative; overflow-x: auto; overflow-y: hidden; margin: 0 14px; }
   .tl-inner { position: relative; height: 86px; }
@@ -1242,6 +1306,20 @@
               <div class="video-body">
                 <div class="video-wrap">
                   <video id="doneVideo" playsinline></video>
+                  <!-- The subtitles, live on the player: what the burned file
+                       will say, where and how big. Click to style, drag to
+                       move. Kept in the job's own subtitle_style.json. -->
+                  <div class="sub-overlay" id="subOverlay" hidden>
+                    <span class="sub-ov-text" id="subOverlayText"></span>
+                  </div>
+                  <div class="sub-toolbar" id="subToolbar" hidden>
+                    <button id="subSmaller" type="button" title="Smaller">A−</button>
+                    <span class="sub-size" id="subSizeLv">100%</span>
+                    <button id="subBigger" type="button" title="Bigger">A＋</button>
+                    <span class="sub-sep"></span>
+                    <button class="sub-style" id="subStyleBtn" type="button" title="Style">Clean ▾</button>
+                  </div>
+                  <div class="sub-style-menu" id="subStyleMenu" hidden></div>
                   <button class="video-bigplay" id="bigPlay" type="button" aria-label="Play">
                     <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:4px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
                   </button>
@@ -3886,6 +3964,7 @@ async function renderDone(job) {
   const src = doneVideoSrc(job, doneSource);
   // Assigning src on every poll would restart the download from the top.
   if (doneVideo.getAttribute("src") !== src) doneVideo.setAttribute("src", src);
+  loadSubStyle(job.id);
   await renderScript(job.id);
 }
 
@@ -4070,14 +4149,16 @@ async function openExport() {
   // frames of this job, drawn by the server on first ask. The remake mark
   // rides along for the same cache reason as the video row's.
   const mark = doneVersion ? `&v=${doneVersion}` : "";
-  let subPreset = "clean";
+  let subPreset = subPreset0;
   const subHref = (p) => `/api/dub/result/${job.id}/subtitled?preset=${p}${posQ()}&download=1${mark}`;
   const subName = (p) => `dub_${target}-sub-${p}.mp4`;
-  // Where the subtitles sit, 0 top to 100 bottom; null is the usual spot.
-  // Set by dragging the preview, sent to the server, and part of the URLs so
-  // every position renders (and caches) as its own picture.
-  let subPos = null;
-  const posQ = () => subPos == null ? "" : `&pos=${subPos}`;
+  // The dialog reads and writes the same subStyle the player edits: pick a
+  // style here and the overlay follows, drag the overlay and this preview
+  // follows. subStyleRev busts the image cache when only a stored value
+  // (a retimed line, say) changed under an unchanged URL.
+  let subPreset0 = subStyle.preset;
+  const posQ = () => (subStyle.pos == null ? "" : `&pos=${subStyle.pos}`)
+    + (subStyle.size == null ? "" : `&size=${subStyle.size}`) + `&r=${subStyleRev}`;
   const previewSrc = (p) => `/api/dub/result/${job.id}/subtitle_preview?preset=${p}${posQ()}${mark}`;
   const styleCards = `<div class="style-big">
       <img id="stylePreview" src="${previewSrc(subPreset)}" alt="How the subtitles will look" draggable="false">
@@ -4121,6 +4202,8 @@ async function openExport() {
   for (const pick of $("exportList").querySelectorAll(".style-pick")) {
     pick.addEventListener("click", () => {
       subPreset = pick.dataset.preset;
+      subStyle.preset = subPreset;
+      saveSubStyle(); updateSubtitleNow();
       for (const x of $("exportList").querySelectorAll(".style-pick")) {
         x.classList.toggle("on", x === pick);
       }
@@ -4148,7 +4231,8 @@ async function openExport() {
         bigBox.removeEventListener("pointerup", up);
         bigBox.removeEventListener("pointercancel", up);
         guide.hidden = true;
-        subPos = Math.round(pctAt(ev));
+        subStyle.pos = Math.round(pctAt(ev));
+        saveSubStyle(); updateSubtitleNow();
         $("stylePreview").src = previewSrc(subPreset);
         subLink.href = subHref(subPreset);
       };
@@ -4455,6 +4539,189 @@ async function renderScript(jobId) {
   });
 }
 
+// ---------------- Subtitles on the player ----------------
+// One object mirrors the job's subtitle_style.json: how the subtitles look
+// (style, size, position), whether they go on at all, and any lines the user
+// retimed on the timeline. The overlay, the timeline lane and the Export
+// dialog all read and write it; saves are debounced PUTs.
+let subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {} };
+let subStyleJobId = null;
+let subStyleRev = 0;   // bumped on save, busts the Export preview's image cache
+let subStyleTimer = null;
+const SUB_BASE = { clean: 20, variety: 23, box: 20 };   // = the server's sizes
+
+function saveSubStyle() {
+  subStyleRev++;
+  clearTimeout(subStyleTimer);
+  subStyleTimer = setTimeout(() => {
+    if (!subStyleJobId) return;
+    fetch(`/api/dub/jobs/${subStyleJobId}/subtitle_style`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subStyle),
+    }).catch(() => { /* the next save tries again */ });
+  }, 350);
+}
+
+async function loadSubStyle(jobId) {
+  if (subStyleJobId === jobId) return;
+  subStyleJobId = jobId;
+  subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {} };
+  try {
+    subStyle = await (await fetch(`/api/dub/jobs/${jobId}/subtitle_style`)).json();
+  } catch { /* defaults stand */ }
+  if (timelineLines.length) renderTimeline(timelineLines, timelineDuration);
+  updateSubtitleNow();
+}
+
+// The user's retimed window for a line, else the line's own.
+function subCueOf(l, idx) {
+  const o = subStyle.cues[String(idx + 1)];
+  return o ? { start: +o.start, end: +o.end } : { start: l.start, end: l.end };
+}
+
+const subOverlay = $("subOverlay");
+const subOvText = $("subOverlayText");
+let subSelected = false;
+
+// The overlay box follows the video's own box, so text sits on the picture
+// rather than on the dark around it.
+function syncSubOverlayBox() {
+  subOverlay.style.left = doneVideo.offsetLeft + "px";
+  subOverlay.style.top = doneVideo.offsetTop + "px";
+  subOverlay.style.width = doneVideo.offsetWidth + "px";
+  subOverlay.style.height = doneVideo.offsetHeight + "px";
+}
+
+function updateSubtitleNow() {
+  if (!subStyle.enabled || doneSource !== "dubbed" || !timelineLines.length
+      || document.body.dataset.screen !== "done") {
+    subOverlay.hidden = true; subSelect(false); return;
+  }
+  const t = doneVideo.currentTime || 0;
+  let idx = timelineLines.findIndex((l, i) => {
+    const c = subCueOf(l, i); return t >= c.start && t < c.end;
+  });
+  // Paused between lines: show the first line anyway, so there is always a
+  // subtitle on screen to click and style.
+  if (idx < 0 && doneVideo.paused) idx = 0;
+  if (idx < 0) { subOverlay.hidden = true; return; }
+  syncSubOverlayBox();
+  subOvText.textContent = timelineLines[idx].text || "";
+  subOvText.className = "sub-ov-text sub-ov-" + subStyle.preset
+    + (subSelected ? " sel" : "");
+  const h = doneVideo.offsetHeight || 1;
+  const scale = (subStyle.size == null ? 100 : subStyle.size) / 100;
+  subOvText.style.fontSize = (h * SUB_BASE[subStyle.preset] / 288 * scale) + "px";
+  const margin = subStyle.pos == null ? 22 : Math.max(0, (100 - subStyle.pos) / 100 * 288);
+  subOvText.style.bottom = (h * margin / 288) + "px";
+  subOverlay.hidden = false;
+  if (subSelected) placeSubToolbar();
+}
+
+// ---- The toolbar and the style menu ----
+const subToolbar = $("subToolbar");
+const subMenu = $("subStyleMenu");
+const SUB_STYLES = [["clean", "Clean"], ["variety", "Variety"], ["box", "Box"]];
+
+function placeSubToolbar() {
+  const wrap = subOverlay.parentElement;
+  const tr = subOvText.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+  const above = tr.top - wr.top > 60;
+  subToolbar.style.top = (above ? tr.top - wr.top - 44 : tr.bottom - wr.top + 10) + "px";
+  subMenu.style.top = Math.max(8, parseFloat(subToolbar.style.top) - 96) + "px";
+}
+
+function subSelect(on) {
+  subSelected = on;
+  subToolbar.hidden = !on;
+  if (!on) subMenu.hidden = true;
+  subOvText.classList.toggle("sel", on);
+  if (on) { paintSubToolbar(); placeSubToolbar(); }
+}
+
+function paintSubToolbar() {
+  $("subSizeLv").textContent = (subStyle.size == null ? 100 : subStyle.size) + "%";
+  $("subStyleBtn").textContent =
+    (SUB_STYLES.find(([p]) => p === subStyle.preset)?.[1] || "Clean") + " ▾";
+}
+
+function buildSubMenu() {
+  subMenu.innerHTML = "";
+  for (const [pKey, label] of SUB_STYLES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    if (pKey === subStyle.preset) b.classList.add("on");
+    const sm = document.createElement("span");
+    sm.className = "sample sub-ov-" + pKey;
+    sm.textContent = "자막 Aa";
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = label;
+    b.append(sm, nm);
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      subStyle.preset = pKey;
+      subMenu.hidden = true;
+      saveSubStyle(); updateSubtitleNow(); paintSubToolbar();
+    });
+    subMenu.appendChild(b);
+  }
+}
+
+$("subBigger").addEventListener("click", () => {
+  subStyle.size = Math.min(160, (subStyle.size == null ? 100 : subStyle.size) + 10);
+  saveSubStyle(); updateSubtitleNow(); paintSubToolbar();
+});
+$("subSmaller").addEventListener("click", () => {
+  subStyle.size = Math.max(60, (subStyle.size == null ? 100 : subStyle.size) - 10);
+  saveSubStyle(); updateSubtitleNow(); paintSubToolbar();
+});
+$("subStyleBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  buildSubMenu();
+  subMenu.hidden = !subMenu.hidden;
+  placeSubToolbar();
+});
+
+// Click the subtitles to select them; drag to move them up and down.
+subOvText.addEventListener("pointerdown", (e) => {
+  e.preventDefault(); e.stopPropagation();
+  subSelect(true);
+  let dragged = false;
+  const move = (ev) => {
+    const vr = doneVideo.getBoundingClientRect();
+    if (!vr.height) return;
+    subStyle.pos = Math.round(Math.min(97, Math.max(3,
+      (ev.clientY - vr.top) / vr.height * 100)));
+    dragged = true;
+    updateSubtitleNow();
+  };
+  const up = () => {
+    subOvText.removeEventListener("pointermove", move);
+    subOvText.removeEventListener("pointerup", up);
+    subOvText.removeEventListener("pointercancel", up);
+    if (dragged) saveSubStyle();
+  };
+  subOvText.addEventListener("pointermove", move);
+  subOvText.addEventListener("pointerup", up);
+  subOvText.addEventListener("pointercancel", up);
+  subOvText.setPointerCapture(e.pointerId);
+});
+// A click anywhere else on the picture puts the toolbar away.
+$("videoPane").addEventListener("click", (e) => {
+  if (!e.target.closest(".sub-ov-text, .sub-toolbar, .sub-style-menu")) subSelect(false);
+});
+for (const e of ["timeupdate", "seeked", "loadedmetadata", "play", "pause"]) {
+  doneVideo.addEventListener(e, updateSubtitleNow);
+}
+window.addEventListener("resize", () => { if (!subOverlay.hidden) updateSubtitleNow(); });
+
+function subEyeSvg(on) {
+  return on
+    ? '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6c2 0 3.7.6 5.2 1.4M22 12s-3.5 6-10 6c-2 0-3.7-.6-5.2-1.4"/><line x1="4" y1="20" x2="20" y2="4"/></svg>';
+}
+
 // ---------------- Done: the timeline ----------------
 // The script again, drawn in time: the dubbed voice of each line over the slot
 // it has to fit inside, the original line under it, a ruler above and the
@@ -4521,6 +4788,9 @@ function renderTimeline(lines, duration) {
         <div class="tl-corner"></div>
         <div class="tl-name strong">${escapeHtml(target)}</div>
         <div class="tl-name">${escapeHtml(source)}</div>
+        <div class="tl-name strong tl-name-caps${subStyle.enabled ? "" : " off"}">
+          <button class="tl-eye${subStyle.enabled ? " on" : ""}" id="tlSubEye" type="button"
+            title="Subtitles on or off" aria-label="Subtitles on or off">${subEyeSvg(subStyle.enabled)}</button>Subtitles</div>
       </div>
       <div class="tl-track" id="timelineTrack"></div>
     </div>`;
@@ -4625,10 +4895,22 @@ function drawTimelineTrack() {
     originals += timelineBlock(l, "tl-org", l.start, l.end, l.source || "");
   }
 
+  // The subtitle lane: when each line's words are on screen. The user drags
+  // a block's ends to keep a subtitle up longer or take it down sooner; the
+  // voices above never move.
+  let caps = "";
+  timelineLines.forEach((l, idx) => {
+    const c = subCueOf(l, idx);
+    caps += `<div class="tl-cap" data-idx="${idx}"
+      style="left:${(c.start * timelinePps).toFixed(1)}px;width:${Math.max(8, (c.end - c.start) * timelinePps).toFixed(1)}px"
+      title="${escapeHtml(l.text || "")}"><span class="tl-hdl l"></span><span
+      class="tl-cap-txt">${escapeHtml(l.text || "")}</span><span class="tl-hdl r"></span></div>`;
+  });
   track.innerHTML = `<div class="tl-inner" style="width:${width.toFixed(0)}px">
     <div class="tl-ruler">${ticks}</div>
     <div class="tl-lane">${voices}</div>
     <div class="tl-lane">${originals}</div>
+    <div class="tl-lane tl-lane-caps${subStyle.enabled ? "" : " off"}">${caps}</div>
     <div class="tl-playhead" id="timelinePlayhead"><i></i></div>
   </div>`;
   track.scrollLeft = timelineAt * timelinePps;
@@ -4737,6 +5019,12 @@ $("timeline").addEventListener("scroll", (e) => {
 // has to finish before the seek, hence the wait.
 // The head's own button folds the strip away.
 $("timeline").addEventListener("click", (e) => {
+  if (e.target.closest("#tlSubEye")) {
+    subStyle.enabled = !subStyle.enabled;
+    saveSubStyle(); updateSubtitleNow(); renderTimeline(timelineLines, timelineDuration);
+    return;
+  }
+  if (e.target.closest(".tl-hdl")) return;   // a trim, not a click-to-play
   if (e.target.closest(".tl-fold")) { setTimelineOpen(!timelineOpen); return; }
   if (e.target.closest("#tlZoomIn")) { setTimelineZoom(timelineZoom * TL_ZOOM_STEP); return; }
   if (e.target.closest("#tlZoomOut")) { setTimelineZoom(timelineZoom / TL_ZOOM_STEP); return; }
@@ -4776,6 +5064,49 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "0") {
     setTimelineZoom(1);
   }
+});
+
+// ---- Trimming the subtitle lane ---------------------------------------------
+// Grab a subtitle block's end and pull: the block follows, a tip says the new
+// times, and letting go remembers them (and the Export burn uses them).
+$("timeline").addEventListener("pointerdown", (e) => {
+  const hdl = e.target.closest(".tl-hdl");
+  if (!hdl) return;
+  const blk = hdl.closest(".tl-cap");
+  const idx = +blk.dataset.idx;
+  const line = timelineLines[idx];
+  if (!line) return;
+  e.preventDefault(); e.stopPropagation();
+  const isL = hdl.classList.contains("l");
+  const c0 = subCueOf(line, idx);
+  const x0 = e.clientX;
+  let cue = { ...c0 };
+  blk.classList.add("trimming");
+  const tip = document.createElement("span");
+  tip.className = "tl-trim-tip";
+  blk.appendChild(tip);
+  const move = (ev) => {
+    const dSec = (ev.clientX - x0) / timelinePps;
+    if (isL) cue.start = Math.min(c0.end - 0.2, Math.max(0, c0.start + dSec));
+    else cue.end = Math.max(c0.start + 0.2, Math.min(timelineDuration, c0.end + dSec));
+    blk.style.left = (cue.start * timelinePps).toFixed(1) + "px";
+    blk.style.width = Math.max(8, (cue.end - cue.start) * timelinePps).toFixed(1) + "px";
+    tip.textContent = cue.start.toFixed(1) + "s – " + cue.end.toFixed(1) + "s";
+  };
+  const up = () => {
+    hdl.removeEventListener("pointermove", move);
+    hdl.removeEventListener("pointerup", up);
+    hdl.removeEventListener("pointercancel", up);
+    blk.classList.remove("trimming");
+    tip.remove();
+    subStyle.cues[String(idx + 1)] = { start: Math.round(cue.start * 10) / 10,
+                                       end: Math.round(cue.end * 10) / 10 };
+    saveSubStyle(); updateSubtitleNow();
+  };
+  hdl.addEventListener("pointermove", move);
+  hdl.addEventListener("pointerup", up);
+  hdl.addEventListener("pointercancel", up);
+  hdl.setPointerCapture(e.pointerId);
 });
 
 // ---- The playhead as a control ----------------------------------------------

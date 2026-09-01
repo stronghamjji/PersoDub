@@ -2038,7 +2038,7 @@ def _stale(built: str, *sources: str) -> bool:
 
 
 @app.get("/api/dub/result/{jid}/subtitled")
-def dub_result_subtitled(jid: str, preset: str = "clean", download: int = 0,
+def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int = 0,
                          pos: Optional[float] = None, size: Optional[float] = None):
     """The dubbed video with its subtitles laid on, built on first ask.
 
@@ -2047,14 +2047,10 @@ def dub_result_subtitled(jid: str, preset: str = "clean", download: int = 0,
     is built again. The edited script wins over the original -- it is what the
     remade voices actually say.
     """
-    if preset not in _BURN_PRESETS:
-        raise HTTPException(status_code=422,
-                            detail="preset must be one of: %s"
-                                   % ", ".join(sorted(_BURN_PRESETS)))
-    _check_pos_size(pos, size)
-    j, out, srt, work = _subtitled_sources(jid)
+    j, out, srt, work, preset, pos, size, sources = _resolved_burn_inputs(
+        jid, preset, pos, size)
     built = os.path.join(work, "subtitled-%s%s.mp4" % (preset, _pos_size_suffix(pos, size)))
-    if _stale(built, out, srt):
+    if _stale(built, *sources):
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-i", out, "-vf", _burn_vf(srt, preset, pos, size),
@@ -2072,6 +2068,112 @@ def dub_result_subtitled(jid: str, preset: str = "clean", download: int = 0,
     return FileResponse(built, media_type="video/mp4", headers=headers)
 
 
+_SUBTITLE_STYLE_DEFAULTS = {"enabled": True, "preset": "clean",
+                            "pos": None, "size": None, "cues": {}}
+
+
+def _subtitle_style_file(jid: str) -> str:
+    j = job_store.get(jid)
+    if j is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    out = (j.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=404, detail="Result file not found")
+    return os.path.join(os.path.dirname(out), "subtitle_style.json")
+
+
+def _load_subtitle_style(work: str) -> dict:
+    try:
+        with open(os.path.join(work, "subtitle_style.json"), encoding="utf-8") as f:
+            return {**_SUBTITLE_STYLE_DEFAULTS, **json.load(f)}
+    except (OSError, ValueError):
+        return dict(_SUBTITLE_STYLE_DEFAULTS)
+
+
+@app.get("/api/dub/jobs/{jid}/subtitle_style")
+def subtitle_style_get(jid: str):
+    """How this job's subtitles should look -- one truth shared by the player
+    overlay, the timeline's subtitle lane and the Export dialog."""
+    return _load_subtitle_style(os.path.dirname(_subtitle_style_file(jid)))
+
+
+@app.put("/api/dub/jobs/{jid}/subtitle_style")
+def subtitle_style_put(jid: str, body: dict):
+    path = _subtitle_style_file(jid)
+    merged = {**_SUBTITLE_STYLE_DEFAULTS,
+              **{k: v for k, v in (body or {}).items() if k in _SUBTITLE_STYLE_DEFAULTS}}
+    if merged["preset"] not in _BURN_PRESETS:
+        raise HTTPException(status_code=422,
+                            detail="preset must be one of: %s"
+                                   % ", ".join(sorted(_BURN_PRESETS)))
+    _check_pos_size(merged["pos"], merged["size"])
+    if not isinstance(merged["cues"], dict):
+        raise HTTPException(status_code=422, detail="cues must be an object")
+    for k, cue in merged["cues"].items():
+        try:
+            start, end = float(cue["start"]), float(cue["end"])
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(status_code=422, detail=f"cue {k} needs start and end")
+        if not 0 <= start < end:
+            raise HTTPException(status_code=422, detail=f"cue {k} must start before it ends")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(merged, f, ensure_ascii=False)
+    return merged
+
+
+_SRT_TIMING = re.compile(
+    r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)")
+
+
+def _fmt_srt_time(sec: float) -> str:
+    ms = round(sec * 1000)
+    return "%02d:%02d:%02d,%03d" % (ms // 3600000, ms // 60000 % 60,
+                                    ms // 1000 % 60, ms % 1000)
+
+
+def _retimed_srt(srt: str, cues: dict, work: str) -> str:
+    """The srt with the user's own timings on the lines they stretched or
+    trimmed on the timeline (keyed 1-based, in block order). Written beside
+    the original, which stays the record of what the dub said."""
+    with open(srt, encoding="utf-8-sig") as f:
+        blocks = f.read().split("\n\n")
+    n = 0
+    for i, block in enumerate(blocks):
+        if not _SRT_TIMING.search(block):
+            continue
+        n += 1
+        cue = cues.get(str(n))
+        if cue:
+            blocks[i] = _SRT_TIMING.sub(
+                "%s --> %s" % (_fmt_srt_time(float(cue["start"])),
+                               _fmt_srt_time(float(cue["end"]))), block, count=1)
+    out = os.path.join(work, "subtitle_timed.srt")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("\n\n".join(blocks))
+    return out
+
+
+def _resolved_burn_inputs(jid, preset, pos, size):
+    """Query params when given, the stored settings where not -- plus the srt
+    (retimed if lines were), and every file the built result depends on."""
+    _check_pos_size(pos, size)
+    j, out, srt, work = _subtitled_sources(jid)
+    stored = _load_subtitle_style(work)
+    preset = preset or stored["preset"]
+    if preset not in _BURN_PRESETS:
+        raise HTTPException(status_code=422,
+                            detail="preset must be one of: %s"
+                                   % ", ".join(sorted(_BURN_PRESETS)))
+    pos = stored["pos"] if pos is None else pos
+    size = stored["size"] if size is None else size
+    _check_pos_size(pos, size)
+    style_file = os.path.join(work, "subtitle_style.json")
+    sources = [out, srt] + ([style_file] if os.path.exists(style_file) else [])
+    if stored["cues"]:
+        srt = _retimed_srt(srt, stored["cues"], work)
+    return j, out, srt, work, preset, pos, size, sources
+
+
 def _first_srt_second(srt: str) -> float:
     """When the first line appears, so the preview frame has words on it."""
     with open(srt, encoding="utf-8-sig") as f:
@@ -2083,7 +2185,7 @@ def _first_srt_second(srt: str) -> float:
 
 
 @app.get("/api/dub/result/{jid}/subtitle_preview")
-def dub_result_subtitle_preview(jid: str, preset: str = "clean",
+def dub_result_subtitle_preview(jid: str, preset: Optional[str] = None,
                                 pos: Optional[float] = None,
                                 size: Optional[float] = None):
     """One frame of the subtitled video, for the Export dialog's style cards.
@@ -2091,14 +2193,10 @@ def dub_result_subtitle_preview(jid: str, preset: str = "clean",
     Seeked into the first subtitle line; -copyts keeps the original clock so
     the subtitles filter still knows a line is on screen at that moment.
     """
-    if preset not in _BURN_PRESETS:
-        raise HTTPException(status_code=422,
-                            detail="preset must be one of: %s"
-                                   % ", ".join(sorted(_BURN_PRESETS)))
-    _check_pos_size(pos, size)
-    j, out, srt, work = _subtitled_sources(jid)
+    j, out, srt, work, preset, pos, size, sources = _resolved_burn_inputs(
+        jid, preset, pos, size)
     built = os.path.join(work, "subtitle-preview-%s%s.jpg" % (preset, _pos_size_suffix(pos, size)))
-    if _stale(built, out, srt):
+    if _stale(built, *sources):
         at = _first_srt_second(srt) + 0.5
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",

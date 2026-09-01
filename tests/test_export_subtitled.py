@@ -177,3 +177,60 @@ def test_subtitle_preview_takes_size_and_position_together(monkeypatch, tmp_path
     assert "Fontsize=18" in vf          # variety's 23 at 80% -> 18
     assert "MarginV=202" in vf          # (100-30)% of 288
     assert ran.calls[0][-1] == str(work / "subtitle-preview-variety-p30-s80.jpg")
+
+
+# ---- The per-job subtitle settings store --------------------------------------
+# One place remembers how this job's subtitles should look -- style, size,
+# position, on/off, and any retimed lines -- so the player overlay, the
+# timeline lane and the Export dialog all read and write the same truth.
+
+def test_subtitle_settings_start_with_the_defaults(monkeypatch, tmp_path):
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    r = client.get(f"/api/dub/jobs/{jid}/subtitle_style")
+    assert r.status_code == 200
+    assert r.json() == {"enabled": True, "preset": "clean", "pos": None,
+                        "size": None, "cues": {}}
+
+
+def test_subtitle_settings_survive_a_round_trip(monkeypatch, tmp_path):
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    body = {"enabled": False, "preset": "variety", "pos": 30, "size": 120,
+            "cues": {"1": {"start": 0.5, "end": 3.0}}}
+    assert client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=body).status_code == 200
+    assert client.get(f"/api/dub/jobs/{jid}/subtitle_style").json() == body
+
+
+def test_subtitle_settings_refuse_nonsense(monkeypatch, tmp_path):
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    put = lambda b: client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=b).status_code
+    assert put({"preset": "neon"}) == 422
+    assert put({"pos": 140}) == 422
+    assert put({"size": 30}) == 422
+    assert put({"cues": {"1": {"start": 5, "end": 2}}}) == 422
+
+
+def test_subtitled_reads_the_stored_settings(monkeypatch, tmp_path):
+    # The Export dialog sends nothing: what was set on the player is what burns.
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    client.put(f"/api/dub/jobs/{jid}/subtitle_style",
+               json={"preset": "variety", "pos": 30, "size": 120})
+    r = client.get(f"/api/dub/result/{jid}/subtitled")
+    assert r.status_code == 200
+    vf = _vf(ran.calls[0])
+    assert "&H0000FFFF" in vf and "MarginV=202" in vf and "Fontsize=28" in vf
+    assert "-variety-p30-s120.mp4" in ran.calls[0][-1]
+
+
+def test_retimed_lines_burn_with_their_new_times(monkeypatch, tmp_path):
+    # The user stretched line 1 on the timeline: the burned srt says so, the
+    # original stays untouched.
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    client.put(f"/api/dub/jobs/{jid}/subtitle_style",
+               json={"cues": {"1": {"start": 0.5, "end": 4.0}}})
+    r = client.get(f"/api/dub/result/{jid}/subtitled")
+    assert r.status_code == 200
+    burned_srt = _vf(ran.calls[0]).split("filename='")[1].split("'")[0].replace("\\", "")
+    text = open(burned_srt.replace("\\:", ":"), encoding="utf-8").read()
+    assert "00:00:00,500 --> 00:00:04,000" in text
+    assert "원래 번역" in text
+    assert "00:00:02,000" in (work / "translated.srt").read_text()
