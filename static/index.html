@@ -239,6 +239,8 @@
   .job-meta { font-size: 0.7rem; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  /* The row under the top bar: the work, and the agent column beside it. */
+  .mainrow { flex: 1; min-height: 0; display: flex; }
 
   /* ---------------- TOPBAR ---------------- */
 
@@ -315,7 +317,7 @@
   /* ---------------- Screens ---------------- */
   /* Exactly one of the three is on screen; showScreen() toggles `hidden`. */
 
-  .work { flex: 1; min-height: 0; position: relative; background: var(--canvas); }
+  .work { flex: 1; min-width: 0; min-height: 0; position: relative; background: var(--canvas); }
   .screen { position: absolute; inset: 0; overflow-y: auto; padding: 16px 22px 22px; }
 
   /* The done screen runs edge to edge: two panes divided by a line, and the
@@ -527,11 +529,12 @@
      squeezing the table down to no rows at all. */
   /* position, so the handle that sits on the line above the timeline can be
      hung off this pane's bottom edge. */
-  .done-main { position: relative; flex: 1; min-height: 200px; display: flex; }
+  .done-main { position: relative; flex: 1; min-height: 200px; display: flex;
+    flex-direction: column; }
   /* A container, so the table below can pick its own width off THIS pane rather
      than off the window: the grip between the panes changes it with the window
      standing still. */
-  .script-pane { position: relative; flex: 1 1 520px; min-width: 0; display: flex;
+  .script-pane { position: relative; flex: 1 1 auto; min-width: 0; min-height: 120px; display: flex;
     flex-direction: column; border-right: 1px solid var(--border);
     container: scriptpane / inline-size; }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
@@ -670,7 +673,7 @@
   /* 0 1: the video is the pane that gives way. Down to the window the app opens
      at there is nothing to give -- it is already at the 320px floor Task 10 set
      -- and below that the table simply takes whatever is left. */
-  .video-pane { flex: 0 1 clamp(320px, 24%, 460px); min-width: 320px;
+  .video-pane { flex: 0 0 clamp(200px, 36vh, 440px); min-width: 0; min-height: 180px;
     display: flex; flex-direction: column; background: var(--canvas); }
   .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     border-bottom: 1px solid var(--border); }
@@ -679,13 +682,14 @@
   .vtab.active { color: var(--foreground); font-weight: 600;
     box-shadow: inset 0 -2px 0 var(--primary); }
   .video-body { padding: 14px; display: flex; flex-direction: column; gap: 10px;
-    min-height: 0; }
+    flex: 1; min-height: 0; }
   .video-wrap { position: relative; border-radius: var(--radius); overflow: hidden;
-    background: var(--thumb-bg); display: flex; justify-content: center; }
+    background: var(--thumb-bg); display: flex; justify-content: center;
+    align-items: center; flex: 1; min-height: 0; }
   /* Capped in height as well as width: a portrait clip at full height pushed
      the playhead and the controls under the bottom of the window. What is left
      over beside it is the pane's own dark ground. */
-  .video-wrap video { display: block; max-width: 100%; max-height: min(45vh, 420px);
+  .video-wrap video { display: block; max-width: 100%; max-height: 100%;
     object-fit: contain; }
   .video-bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
@@ -837,11 +841,8 @@
   .grip-y { left: 0; right: 0; height: 6px; cursor: row-resize; }
   .grip-y::after { left: 0; right: 0; top: 0; height: 1px; }
 
-  /* Script | video: the script pane's right border, and the video's own padding
-     to the right of it. Not across the top row, where the table's header ends
-     and the video's tabs begin -- both are 40px, and a tab whose first pixels
-     belong to a handle is a tab that ignores the click aimed at its edge. */
-  #gripPanes { top: 40px; right: -6px; }
+  /* Video over script: the line between them is the script pane's top edge. */
+  #gripPanes { left: 0; right: 0; top: -6px; }
   /* Outside the sidebar rather than inside it, the same way as the one above:
      the last 6px inside belong to a row's Delete button, and a handle over
      those would eat the click aimed at it. The 6px it reaches into instead are
@@ -854,12 +855,8 @@
      to give or take, so the handle is not there to be dragged. */
   .done-main:has(+ .timeline:empty) #gripTimeline,
   .done-main:has(+ .timeline.folded) #gripTimeline { display: none; }
-  /* The Dub Agent's purple top border and the strip below it, never the
-     timeline above -- that is where the timeline's sideways scrollbar lives.
-     Only while the conversation is open: a collapsed strip is one input row,
-     and has no height to give or take. */
-  #gripAgent { top: -2px; }
-  body:not(.agent-open) #gripAgent { display: none; }
+  /* The Dub Agent's purple left border and the column right of it. */
+  #gripAgent { left: -2px; top: 0; }
 
   /* A job that failed or was cancelled has no script and no video -- only the
      reason, in the middle of the screen it would have filled, with the notice
@@ -1150,6 +1147,7 @@
       </button>
     </div>
 
+    <div class="mainrow">
     <main class="work" id="work">
       <!-- ============ HOME ============ -->
       <!-- One question only: which video? Everything else (languages, engines,
@@ -1218,19 +1216,6 @@
       <section class="screen" id="screen-done" hidden>
         <div class="done" id="doneLayout" hidden>
           <div class="done-main" id="doneMain">
-            <div class="script-pane" id="scriptPane">
-              <!-- The same notice line the running screen carries, on the
-                   screen that replaced it. Hidden unless there is one, and
-                   moved into the failure block when the job failed. -->
-              <div class="job-notice" id="doneNotice" hidden></div>
-              <div id="scriptBox"></div>
-              <!-- Saving, remaking, and anything that went wrong while doing
-                   either. Empty -- and so invisible -- the rest of the time. -->
-              <div class="script-status" id="scriptSaving"></div>
-              <!-- Drag the line between the table and the video. -->
-              <div class="grip grip-x" id="gripPanes" role="separator"
-                   aria-orientation="vertical" aria-label="Resize the video"></div>
-            </div>
             <div class="video-pane" id="videoPane">
               <div class="video-tabs">
                 <button class="vtab" data-src="original" type="button">Original</button>
@@ -1252,6 +1237,20 @@
                 </div>
               </div>
             </div>
+            <div class="script-pane" id="scriptPane">
+              <!-- The same notice line the running screen carries, on the
+                   screen that replaced it. Hidden unless there is one, and
+                   moved into the failure block when the job failed. -->
+              <div class="job-notice" id="doneNotice" hidden></div>
+              <div id="scriptBox"></div>
+              <!-- Saving, remaking, and anything that went wrong while doing
+                   either. Empty -- and so invisible -- the rest of the time. -->
+              <div class="script-status" id="scriptSaving"></div>
+              <!-- Drag the line between the video above and the table. -->
+              <div class="grip grip-y" id="gripPanes" role="separator"
+                   aria-orientation="horizontal" aria-label="Resize the video"></div>
+            </div>
+            
             <!-- Drag the line between the two panes and the timeline. -->
             <div class="grip grip-y" id="gripTimeline" role="separator"
                  aria-orientation="horizontal" aria-label="Resize the timeline"></div>
@@ -1277,15 +1276,15 @@
       </section>
     </main>
 
-    <!-- ============ AGENT STRIP ============ -->
-    <!-- The Dub Agent, along the bottom of the work area rather than beside it:
-         a side panel took width from the script it was talking about and its
-         own button sat on top of the top bar's. Styles are in the block near
-         the bottom of this file, next to the script that drives it. -->
-    <footer class="agent" id="agentStrip">
-      <!-- Drag the line between the work above and the conversation. -->
-      <div class="grip grip-y" id="gripAgent" role="separator"
-           aria-orientation="horizontal" aria-label="Resize the conversation"></div>
+    <!-- ============ AGENT PANEL ============ -->
+    <!-- The Dub Agent, a column on the right of the work area (2026-09-01).
+         Under the top bar -- the old side panel sat on top of the bar's own
+         buttons -- and openable/closable from the bar's pane buttons. Styles
+         are in the block near the bottom of this file. -->
+    <aside class="agent" id="agentStrip">
+      <!-- Drag the line between the work and the conversation. -->
+      <div class="grip grip-x" id="gripAgent" role="separator"
+           aria-orientation="vertical" aria-label="Resize the conversation"></div>
       <!-- The strip's heading row, on show whether the conversation is open or
            folded away. Left: which assistant answers and whether it is signed in
            -- anyone about to type has to know which one is about to be asked,
@@ -1320,7 +1319,8 @@
                aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
         </button>
       </div>
-    </footer>
+    </aside>
+    </div>
   </div>
 </div>
 
@@ -1611,12 +1611,14 @@
      The assistant can only read and rewrite the script (app/mcp_server.py) --
      starting or cancelling a dub stays behind a button a person presses. -->
 <style>
-  /* The strip is the last row of the main column, so it can never sit on top
-     of the work above it -- the old right-side panel covered the top bar's
-     own buttons, and the timeline now ends exactly where the strip begins. */
-  .agent { position: relative; flex: 0 0 auto; display: flex; flex-direction: column;
-    background: var(--agent-bg); border-top: 2px solid var(--primary);
+  /* A column beside the work, under the top bar -- so it can never sit on
+     top of the bar's own buttons, which is what sank the first side panel.
+     Closed is gone entirely; the bar's pane button brings it back. */
+  .agent { position: relative; flex: 0 0 auto; width: 320px; min-height: 0;
+    display: flex; flex-direction: column;
+    background: var(--agent-bg); border-left: 2px solid var(--primary);
     color: var(--agent-fg); }
+  body:not(.agent-open) .agent { display: none; }
   /* Nothing yet while a dub runs, where the script the assistant would fix
      does not exist. A greyed-out row there was just a thing that could not be
      used taking up the bottom of the screen, so it goes off the page instead.
@@ -1632,14 +1634,10 @@
   body[data-screen="failed"] .assistant-foot { opacity: .6; }
   .assistant-input:disabled, .assistant-modelbtn:disabled { cursor: default; }
 
-  /* Collapsed is one input row; open adds the conversation above it. 240 + the
-     60px row is the mockup's 300px strip, and the height stays a plain number
-     for Task 10's drag to write into. The clamp is only a floor and a ceiling
-     for windows too short to give the strip its 240. */
-  .assistant-log { display: none; flex-direction: column; gap: 8px;
-    height: 240px; max-height: clamp(160px, 40vh, 600px);
+  /* The conversation fills the column between the heading and the input. */
+  .assistant-log { display: flex; flex-direction: column; gap: 8px;
+    flex: 1; min-height: 0;
     overflow-y: auto; padding: 4px 14px 0; }
-  body.agent-open .assistant-log { display: flex; }
   /* A column of flex items shrinks to fit before it scrolls, and a squeezed
      bubble spills its own text over the one below it. Nothing here shrinks. */
   .assistant-log > * { flex-shrink: 0; }
@@ -1658,10 +1656,8 @@
     border-radius: 8px; background: none; color: var(--agent-soft); padding: 0; }
   .agent-fold:hover { background: var(--agent-box); color: var(--agent-fg); }
   .agent-fold:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-  /* Points up while the conversation is away (press it to bring it back) and
-     down once it is open (press it to fold it away again). */
-  .agent-fold .chevron { transform: rotate(180deg); }
-  body.agent-open .agent-fold .chevron { transform: rotate(0deg); }
+  /* Points right: pressing it folds the column away to the right edge. */
+  .agent-fold .chevron { transform: rotate(-90deg); }
 
   .assistant-foot { display: flex; align-items: center; gap: 12px;
     margin: 6px 14px; padding: 6px 6px 6px 16px; min-height: 48px;
@@ -1874,7 +1870,10 @@ $("historySidebar").addEventListener("transitionend", markClippedNames);
 // elsewhere.
 function paintPanes() {
   $("paneList").classList.toggle("on", !$("historySidebar").classList.contains("collapsed"));
-  $("paneAgent").classList.toggle("on", document.body.classList.contains("agent-open"));
+  const running = document.body.dataset.screen === "running";
+  $("paneAgent").disabled = running;
+  $("paneAgent").classList.toggle(
+    "on", !running && document.body.classList.contains("agent-open"));
   const done = document.body.dataset.screen === "done";
   $("paneTimeline").disabled = !done;
   $("paneTimeline").classList.toggle(
@@ -1891,6 +1890,17 @@ new MutationObserver(paintPanes).observe(document.body,
 new MutationObserver(paintPanes).observe($("historySidebar"),
   { attributes: true, attributeFilter: ["class"] });
 paintPanes();
+// On a window squeezed too narrow the agent column folds first; the pane
+// button reopens it. Only on the way DOWN through the line, so reopening it
+// on a small window is respected.
+let paneWasNarrow = window.innerWidth < 1080;
+window.addEventListener("resize", () => {
+  const narrow = window.innerWidth < 1080;
+  if (narrow && !paneWasNarrow && document.body.classList.contains("agent-open")) {
+    $("assistantFold").click();
+  }
+  paneWasNarrow = narrow;
+});
 
 // ---------------- Settings modal ----------------
 
@@ -4769,15 +4779,15 @@ const layoutFits = [
     },
   }),
   makeGrip({
-    el: $("gripPanes"), axis: "x", key: "persodub.layout.videoWidth",
-    read: () => $("videoPane").offsetWidth,
+    el: $("gripPanes"), axis: "y", key: "persodub.layout.videoHeight", before: true,
+    read: () => $("videoPane").offsetHeight,
     // The table is the point of the screen, so it keeps the room: the video
-    // only grows while 520px is left for the script beside it.
+    // only grows while 240px is left for the script under it.
     limits: () => {
-      const room = $("doneMain").offsetWidth;
-      return room ? [320, Math.max(320, room - 520)] : null;
+      const room = $("doneMain").offsetHeight;
+      return room ? [180, Math.max(180, room - 240)] : null;
     },
-    apply: (w) => { $("videoPane").style.flex = `0 0 ${w}px`; },
+    apply: (h) => { $("videoPane").style.flex = `0 0 ${h}px`; },
   }),
   makeGrip({
     el: $("gripTimeline"), axis: "y", key: "persodub.layout.timelineHeight",
@@ -4786,12 +4796,11 @@ const layoutFits = [
     apply: (h) => { $("timeline").style.height = `${h}px`; },
   }),
   makeGrip({
-    el: $("gripAgent"), axis: "y", key: "persodub.layout.agentHeight",
-    read: () => $("assistantLog").offsetHeight,
-    limits: () => [200, Math.max(200, window.innerHeight * 0.5)],
-    // The stylesheet's own max-height still applies on top of this, so on a
-    // short window whichever of the two is smaller wins.
-    apply: (h) => { $("assistantLog").style.height = `${h}px`; },
+    el: $("gripAgent"), axis: "x", key: "persodub.layout.agentWidth",
+    read: () => $("agentStrip").offsetWidth,
+    // Never so wide the work beside it stops being usable.
+    limits: () => [260, Math.max(260, Math.min(560, window.innerWidth - 560))],
+    apply: (w) => { $("agentStrip").style.width = `${w}px`; },
   }),
 ];
 
@@ -5759,5 +5768,5 @@ wire("input", () => {
 // as. That waits for the strip to be in use (ensureLoginChecked above).
 wire("saved pick", loadChoice);
 loadAgents().catch((e) => console.error("Dub Agent: the model list failed", e));
-setCollapsed(true);
+setCollapsed(false);
 </script>

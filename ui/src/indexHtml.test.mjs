@@ -71,3 +71,18 @@ test("the topbar carries the three pane buttons and the timeline off-switch", ()
   assert.match(html, /body\.timeline-off (#timeline|\.timeline)/,
     "hiding the timeline needs a body.timeline-off rule");
 });
+
+// The agent lives in a right-hand column and the finished screen stacks
+// video over script (layout approved 2026-09-01). The grips must match:
+// the agent's resizes width (x), the video/script divider resizes height (y).
+test("the agent column sits beside the work and the grips point the right way", () => {
+  const html = readFileSync(INDEX, "utf8");
+  assert.ok(html.includes('class="mainrow"'), "work and agent need the mainrow wrapper");
+  assert.match(html, /class="grip grip-x" id="gripAgent"/,
+    "the agent grip must resize width");
+  assert.match(html, /class="grip grip-y" id="gripPanes"/,
+    "the video/script grip must resize height");
+  const video = html.indexOf('id="videoPane"');
+  const script = html.indexOf('id="scriptPane"');
+  assert.ok(video > 0 && video < script, "the video pane must come before the script");
+});
