@@ -404,3 +404,32 @@ def cut_clip(video_path: str, start: str, end: str) -> dict:
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
+
+
+@mcp.tool()
+def cancel_dub(job_id: str, confirm: bool = False) -> dict:
+    """Cancel ONE dub: take a waiting job out of the line, or stop a running one.
+
+    A WAITING (queued) job leaves the line at once and loses nothing, so the
+    user's ask is confirmation enough. A RUNNING job loses the minutes it has
+    already dubbed: called without confirm=true this stops nothing and returns
+    the job's name for you to put to the user as a question -- call again with
+    confirm=true only after they clearly agree. A job that already ended
+    (done/error/cancelled) has nothing left to stop. Job ids come from
+    queue_dub and get_job_status.
+    """
+    job = _job(job_id)
+    status = job.get("status")
+    if status in ("done", "error", "cancelled"):
+        raise ValueError("nothing to cancel: this job is already %s" % status)
+    if status != "queued" and not confirm:
+        return {"needs_confirmation": True,
+                "message": 'Stop the running dub "%s"? The dubbing it has '
+                           "done so far is thrown away. Proceed?"
+                           % (job.get("project") or job_id)}
+    r = httpx.post("%s/api/dub/jobs/%s/cancel" % (API, job_id), timeout=30.0)
+    if r.status_code in (404, 409):
+        detail = r.json().get("detail", "cannot cancel this job")
+        raise ValueError(detail if isinstance(detail, str) else str(detail))
+    r.raise_for_status()
+    return r.json()

@@ -120,7 +120,8 @@ def test_the_command_fences_the_assistant_in():
     # would come along and hand the assistant tools this app never offered.
     assert "--strict-mcp-config" in args
     allowed = args[args.index("--allowedTools") + 1]
-    assert allowed.count("mcp__persodub__") == 12
+    assert allowed.count("mcp__persodub__") == 13
+    assert "mcp__persodub__cancel_dub" in allowed
     denied = args[args.index("--disallowedTools") + 1]
     for tool in ("Bash", "Write", "WebFetch"):
         assert tool in denied

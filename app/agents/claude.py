@@ -28,6 +28,7 @@ TOOL_LABELS = {
     "cut_clip": "Cutting a clip",
     "list_videos": "Looking through a folder",
     "queue_dub": "Queueing a dub",
+    "cancel_dub": "Cancelling a dub",
 }
 
 MCP_PREFIX = "mcp__persodub__"
@@ -148,7 +149,7 @@ SYSTEM_PROMPT = (
     "lines edit and remake normally. change_speaker can give a line a new "
     "voice on Perso's side. extract_subtitles pulls the spoken lines out of "
     "any video file on this computer into an .srt beside it -- the user "
-    "names the file (list_videos shows a folder's videos when they name a folder instead). queue_dub starts a whole new dub of a video file -- for several videos, gather the estimates and ask the user once with the total. cut_clip cuts a stretch of a video file into a new clip "
+    "names the file (list_videos shows a folder's videos when they name a folder instead). queue_dub starts a whole new dub of a video file -- for several videos, gather the estimates and ask the user once with the total. cancel_dub takes a waiting dub out of the line or stops a running one. cut_clip cuts a stretch of a video file into a new clip "
     "beside it, free and on this machine. Any tool answer with needs_confirmation=true may spend Perso "
     "credits: relay its message to the user as a question, and call the tool "
     "again with confirm=true only after they clearly agree. Answer in "

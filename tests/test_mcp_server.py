@@ -308,3 +308,66 @@ def test_queue_dub_passes_the_named_translator_through(monkeypatch, tmp_path):
     monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
     mcp_server.queue_dub(str(video), "en", translator="gemini", confirm=True)
     assert calls["data"]["translate_engine"] == "gemini"
+
+
+def _job_answer(monkeypatch, status, project="회사소개"):
+    monkeypatch.setattr(
+        mcp_server.httpx, "get",
+        lambda url, **kw: _Response(200, {"id": "j1", "status": status,
+                                          "project": project}))
+
+
+def test_cancel_dub_takes_a_waiting_job_out_at_once(monkeypatch):
+    # Leaving the line loses nothing, so the user's ask is confirmation enough.
+    _job_answer(monkeypatch, "queued")
+    calls = []
+
+    def fake_post(url, **kw):
+        calls.append(url)
+        return _Response(200, {"job_id": "j1", "status": "cancelled"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.cancel_dub("j1")
+    assert out == {"job_id": "j1", "status": "cancelled"}
+    assert calls == ["%s/api/dub/jobs/j1/cancel" % mcp_server.API]
+
+
+def test_cancel_dub_asks_before_stopping_a_running_job(monkeypatch):
+    # Minutes of dubbing go with a running job -- never thrown away unasked.
+    _job_answer(monkeypatch, "running")
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append(a))
+    out = mcp_server.cancel_dub("j1")
+    assert out.get("needs_confirmation") is True
+    assert "회사소개" in out["message"]
+    assert posted == []
+
+
+def test_cancel_dub_stops_a_running_job_once_confirmed(monkeypatch):
+    _job_answer(monkeypatch, "running")
+    calls = []
+
+    def fake_post(url, **kw):
+        calls.append(url)
+        return _Response(200, {"job_id": "j1", "status": "cancelling"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.cancel_dub("j1", confirm=True)
+    assert out == {"job_id": "j1", "status": "cancelling"}
+    assert calls == ["%s/api/dub/jobs/j1/cancel" % mcp_server.API]
+
+
+def test_cancel_dub_says_so_when_the_job_is_already_finished(monkeypatch):
+    _job_answer(monkeypatch, "done")
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append(a))
+    with pytest.raises(ValueError, match="done"):
+        mcp_server.cancel_dub("j1")
+    assert posted == []
+
+
+def test_cancel_dub_names_a_job_that_is_not_there(monkeypatch):
+    monkeypatch.setattr(mcp_server.httpx, "get",
+                        lambda url, **kw: _Response(404, {}))
+    with pytest.raises(ValueError, match="no such job"):
+        mcp_server.cancel_dub("ghost")
