@@ -458,6 +458,12 @@
   .update-banner button { border: none; border-radius: 999px; padding: 6px 14px;
     font-size: 0.8rem; font-weight: 600; cursor: pointer;
     background: var(--background); color: var(--foreground); }
+  /* The post-update notice reuses the pill: same place, same shape, so the
+     "Restart to update" pill before the restart and this one after it read
+     as one exchange. Its only control is a link to the list. */
+  #updatedNotice:not([hidden]) { display: flex; }
+  .update-banner .link { background: none; color: var(--primary-line); padding: 0; }
+  .update-banner .link:hover { text-decoration: underline; }
 
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 0.84rem; font-weight: 600; cursor: pointer; font-family: inherit; }
   .btn-primary { background: var(--primary); color: var(--primary-foreground); }
@@ -1548,6 +1554,12 @@
 </div>
 
 <!-- ============ SETTINGS ============ -->
+<!-- After an update, one line in the update pill's place: the version, and a
+     link to the list. The list itself (below) opens only from that link and
+     from the version in Settings -- it no longer pops up on its own (user,
+     2026-09-02). -->
+<div class="update-banner" id="updatedNotice" hidden><span id="updatedText"></span><button class="link" id="updatedWhatsNew" type="button">What&#8217;s new</button></div>
+
 <div class="modal-overlay" id="whatsNewOverlay">
   <div class="modal" style="max-width: 430px">
     <div class="modal-body">
@@ -2272,8 +2284,25 @@ async function checkWhatsNew() {
     try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
     return;
   }
-  if (seen !== whatsNew.version) showWhatsNew();
+  if (seen === whatsNew.version) return;
+  try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
+  showUpdatedNotice();
 }
+// "Updated to 0.4.4 · What's new": six seconds, then gone on its own; a
+// pointer resting on it keeps it. Adobe and the App Store call the list
+// "What's new", so the link does too.
+let updatedTimer = null;
+function hideUpdatedNotice() { clearTimeout(updatedTimer); $("updatedNotice").hidden = true; }
+function showUpdatedNotice() {
+  const el = $("updatedNotice");
+  $("updatedText").textContent = `Updated to ${whatsNew.version}`;
+  el.hidden = false;
+  const arm = () => { clearTimeout(updatedTimer); updatedTimer = setTimeout(hideUpdatedNotice, 6000); };
+  el.onmouseenter = () => clearTimeout(updatedTimer);
+  el.onmouseleave = arm;
+  arm();
+}
+$("updatedWhatsNew").addEventListener("click", () => { hideUpdatedNotice(); showWhatsNew(); });
 $("wnOk").addEventListener("click", () => {
   try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
   $("whatsNewOverlay").classList.remove("open");

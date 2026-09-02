@@ -109,3 +109,17 @@ test("the subtitle overlay, toolbar and timeline lane are wired in", () => {
   assert.ok(html.includes("tlSubEye"), "the timeline needs its subtitle eye toggle");
   assert.ok(html.includes("tl-cap"), "the timeline needs its subtitle lane blocks");
 });
+
+test("after an update the page says so in one line and keeps the What's new sheet for the link", () => {
+  const html = readFileSync(INDEX, "utf8");
+  // The notice is the same pill as the "Restart to update" one, in the same
+  // place, and says only the version -- the list is one click away.
+  assert.match(html, /id="updatedNotice"/);
+  assert.match(html, /Updated to \$\{/);
+  assert.match(html, /id="updatedWhatsNew"[^>]*>What(’|&#8217;)s new</);
+  // A changed version shows the notice, never the sheet on its own.
+  const start = html.indexOf("async function checkWhatsNew");
+  const check = html.slice(start, html.indexOf("\n}\n", start));
+  assert.match(check, /showUpdatedNotice\(\)/);
+  assert.doesNotMatch(check, /showWhatsNew\(\)/);
+});
