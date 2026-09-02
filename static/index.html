@@ -194,7 +194,7 @@
     background: var(--secondary);
     transition: width 0.15s ease, opacity 0.15s ease;
   }
-  .history-scroll { flex: 1; min-width: 0; overflow-y: auto; }
+  .history-scroll { flex: 1; min-width: 0; overflow-y: auto; padding-bottom: 12px; }
 
   /* The 0.15s above is for opening and closing. Under the pointer it is the
      wrong thing entirely: every step of a drag would ease into place and the
@@ -1823,7 +1823,7 @@
   .agent-fold .chevron { transform: rotate(-90deg); }
 
   .assistant-foot { display: flex; align-items: center; gap: 12px;
-    margin: 6px 14px; padding: 6px 6px 6px 16px; min-height: 48px;
+    margin: 6px 14px 12px; padding: 6px 6px 6px 16px; min-height: 48px;
     border: 1px solid var(--agent-border); border-radius: 14px;
     background: var(--agent-box); }
   .assistant-input { flex: 1; resize: none; border: none; background: none;
