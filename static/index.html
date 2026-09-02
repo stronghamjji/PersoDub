@@ -875,10 +875,14 @@
   .tl-trim-tip { position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
     background: var(--agent-bg); color: #fff; font-size: 0.62rem; padding: 2px 7px;
     border-radius: 5px; white-space: nowrap; z-index: 3; }
-  /* Only the track scrolls sideways: the two language names have to stay put. */
-  .tl-track { position: relative; overflow-x: auto; overflow-y: hidden; margin: 0 14px; }
-  /* The ruler and the lanes stack; the padding is the breath under the last. */
-  .tl-inner { position: relative; padding-bottom: 12px; }
+  /* Only the track scrolls sideways: the two language names have to stay put.
+     The scrollbar is always there, like Premiere's timeline panel, not only
+     once a zoom makes it needed (user, 2026-09-02); it is the strip's bottom
+     edge, so it keeps the 12px off the window that the lanes did. */
+  .tl-track { position: relative; overflow-x: scroll; overflow-y: hidden; margin: 0 14px 12px; }
+  /* The ruler and the lanes stack; the padding is the breath between the
+     last lane and the scrollbar under it. */
+  .tl-inner { position: relative; padding-bottom: 6px; }
 
   /* Also a way into the video: press anywhere on it to go to that moment. */
   .tl-ruler { position: relative; height: 18px; cursor: pointer; }
