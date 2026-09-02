@@ -243,7 +243,7 @@ def test_retimed_lines_burn_with_their_new_times(monkeypatch, tmp_path):
     ass = _ass(work)
     assert "0:00:00.50,0:00:04.00" in ass
     assert "원래 번역" in ass
-    assert "00:00:02,000" in (work / "translated.srt").read_text()
+    assert "00:00:02,000" in (work / "translated.srt").read_text(encoding="utf-8")
 
 
 def test_the_stored_box_width_reaches_the_burn(monkeypatch, tmp_path):

@@ -826,7 +826,9 @@ def test_a_finished_job_writes_job_json_next_to_the_video(monkeypatch):
                 saved = json.load(f)
             if saved["status"] == "done":
                 break
-        except (FileNotFoundError, json.JSONDecodeError):
+        # PermissionError: Windows refuses to open the file while the atomic
+        # replace that writes it is still holding it.
+        except (FileNotFoundError, PermissionError, json.JSONDecodeError):
             pass
         time.sleep(0.02)
     assert saved["id"] == jid and saved["status"] == "done"

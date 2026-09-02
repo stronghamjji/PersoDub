@@ -31,7 +31,7 @@ def _wire(monkeypatch, tmp_path, srt=True):
     video = tmp_path / "쇼츠 3편.mp4"
     video.write_bytes(b"not really a video")
     if srt:
-        (tmp_path / "쇼츠 3편.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\n안녕\n")
+        (tmp_path / "쇼츠 3편.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\n안녕\n", encoding="utf-8")
     return ran, video
 
 
@@ -58,7 +58,7 @@ def test_burn_writes_the_subtitled_video_next_to_the_original(monkeypatch, tmp_p
 def test_burn_takes_a_named_srt_and_the_quiet_default(monkeypatch, tmp_path):
     ran, video = _wire(monkeypatch, tmp_path, srt=False)
     other = tmp_path / "손질한 자막.srt"
-    other.write_text("1\n00:00:00,000 --> 00:00:01,000\n다듬은 문장\n")
+    other.write_text("1\n00:00:00,000 --> 00:00:01,000\n다듬은 문장\n", encoding="utf-8")
     r = client.post("/api/subtitles/burn",
                     json={"video_path": str(video), "srt_path": str(other)})
     assert r.status_code == 200
