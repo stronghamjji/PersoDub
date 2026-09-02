@@ -63,6 +63,10 @@
     --foreground: #0a0a0a;
     --background: #ffffff;
     --border: #e5e5e5;
+    /* The lines between the finished screen's three panes (video, script,
+       timeline): heavier and darker than --border, which was too faint to say
+       where one pane ends and the next begins (user, 2026-09-02). */
+    --divider: #c4c4cb;
     --success: #11ad32;
     /* Timeline bars that fit: one notch softer than --success, matched to --destructive. */
     --timeline-fit: #55A071;
@@ -542,7 +546,7 @@
      standing still. */
   /* The line the video/script divider lives on -- drawn, so the drag is
      discoverable (user, 2026-09-01), with a small grab pill in the middle. */
-  .script-pane { position: relative; border-top: 1px solid var(--border);
+  .script-pane { position: relative; border-top: 3px solid var(--divider);
     flex: 1 1 auto; min-width: 0; min-height: 120px; display: flex;
     flex-direction: column; border-right: 1px solid var(--border);
     container: scriptpane / inline-size; }
@@ -807,7 +811,7 @@
      sit on one line (user, 2026-09-02). A fixed 192 left 10px of nothing under
      the lanes. The handle on its top line still writes an inline height. */
   .timeline { flex: 0 0 auto; height: auto; display: flex; flex-direction: column;
-    border-top: 1px solid var(--border); background: var(--background); }
+    border-top: 3px solid var(--divider); background: var(--background); }
   /* Nothing to draw (no script, or no job open) must leave no empty strip. */
   .timeline:empty { display: none; }
   /* Zoom, next to the clock: out, the level, in, and back to fit-all. */
