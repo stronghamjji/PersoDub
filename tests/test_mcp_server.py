@@ -332,18 +332,10 @@ def test_cancel_dub_takes_a_waiting_job_out_at_once(monkeypatch):
     assert calls == ["%s/api/dub/jobs/j1/cancel" % mcp_server.API]
 
 
-def test_cancel_dub_asks_before_stopping_a_running_job(monkeypatch):
-    # Minutes of dubbing go with a running job -- never thrown away unasked.
-    _job_answer(monkeypatch, "running")
-    posted = []
-    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append(a))
-    out = mcp_server.cancel_dub("j1")
-    assert out.get("needs_confirmation") is True
-    assert "회사소개" in out["message"]
-    assert posted == []
-
-
-def test_cancel_dub_stops_a_running_job_once_confirmed(monkeypatch):
+def test_cancel_dub_stops_a_running_job_at_once(monkeypatch):
+    # No second question: a cancel is urgent, and asking again meant the job
+    # was sometimes finished before the user could answer (user, 2026-09-01).
+    # "Cancel it" IS the confirmation.
     _job_answer(monkeypatch, "running")
     calls = []
 
@@ -352,7 +344,7 @@ def test_cancel_dub_stops_a_running_job_once_confirmed(monkeypatch):
         return _Response(200, {"job_id": "j1", "status": "cancelling"})
 
     monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
-    out = mcp_server.cancel_dub("j1", confirm=True)
+    out = mcp_server.cancel_dub("j1")
     assert out == {"job_id": "j1", "status": "cancelling"}
     assert calls == ["%s/api/dub/jobs/j1/cancel" % mcp_server.API]
 

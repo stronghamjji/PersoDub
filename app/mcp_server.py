@@ -405,14 +405,13 @@ def cut_clip(video_path: str, start: str, end: str) -> dict:
 
 
 @mcp.tool()
-def cancel_dub(job_id: str, confirm: bool = False) -> dict:
-    """Cancel ONE dub: take a waiting job out of the line, or stop a running one.
+def cancel_dub(job_id: str) -> dict:
+    """Cancel ONE dub AT ONCE: a waiting job leaves the line, a running one
+    stops at its next safe point.
 
-    A WAITING (queued) job leaves the line at once and loses nothing, so the
-    user's ask is confirmation enough. A RUNNING job loses the minutes it has
-    already dubbed: called without confirm=true this stops nothing and returns
-    the job's name for you to put to the user as a question -- call again with
-    confirm=true only after they clearly agree. A job that already ended
+    Never ask the user to confirm first -- "cancel it" IS the confirmation,
+    and a cancel is urgent (asking again meant the job sometimes finished
+    before the user could answer). A job that already ended
     (done/error/cancelled) has nothing left to stop. Job ids come from
     queue_dub and get_job_status.
     """
@@ -420,11 +419,6 @@ def cancel_dub(job_id: str, confirm: bool = False) -> dict:
     status = job.get("status")
     if status in ("done", "error", "cancelled"):
         raise ValueError("nothing to cancel: this job is already %s" % status)
-    if status != "queued" and not confirm:
-        return {"needs_confirmation": True,
-                "message": 'Stop the running dub "%s"? The dubbing it has '
-                           "done so far is thrown away. Proceed?"
-                           % (job.get("project") or job_id)}
     r = httpx.post("%s/api/dub/jobs/%s/cancel" % (API, job_id), timeout=30.0)
     if r.status_code in (404, 409):
         detail = r.json().get("detail", "cannot cancel this job")
@@ -440,14 +434,15 @@ def burn_subtitles(video_path: str, srt_path: str = "", preset: str = "clean") -
     Free, on this machine, no confirmation needed. srt_path names the subtitle
     file; left empty, the .srt sitting next to the video with the video's own
     name is used (extract_subtitles leaves one exactly there -- if neither
-    exists, offer to extract subtitles first). preset picks the look:
-    "clean" (white, dark outline -- the default), "variety" (bold yellow, the
-    Korean variety-show look) or "box" (white on a translucent dark band, for
-    bright or busy footage). When the user names no style use clean, and
-    mention the other two exist. The original video is never touched.
+    exists, offer to extract subtitles first). preset picks the look, one of
+    twelve: clean (white, outlined -- the default), bold-punch (huge,
+    shouted), sticker (white on a dark chip), neon-yellow (bold yellow),
+    soft-card (dark on a pale card), rainbow (a colour per word), broadcast,
+    streaming, lower-bar (news-style band), neon (cyan glow), black-box or
+    white-box (solid grounds that cover whatever sits under them). When the
+    user names no style use clean and mention the others exist. The original
+    video is never touched.
     """
-    if preset not in ("clean", "variety", "box"):
-        raise ValueError('preset must be "clean", "variety" or "box"')
     r = httpx.post("%s/api/subtitles/burn" % API,
                    json={"video_path": video_path, "srt_path": srt_path,
                          "preset": preset},

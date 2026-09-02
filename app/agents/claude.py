@@ -150,7 +150,7 @@ SYSTEM_PROMPT = (
     "lines edit and remake normally. change_speaker can give a line a new "
     "voice on Perso's side. extract_subtitles pulls the spoken lines out of "
     "any video file on this computer into an .srt beside it -- the user "
-    "names the file (list_videos shows a folder's videos when they name a folder instead). queue_dub starts a whole new dub of a video file -- for several videos, gather the estimates and ask the user once with the total. cancel_dub takes a waiting dub out of the line or stops a running one. burn_subtitles lays an .srt onto a video as a new file, in one of ten looks (clean, bold-punch, sticker, neon-yellow, soft-card, rainbow, broadcast, streaming, lower-bar, neon). cut_clip cuts a stretch of a video file into a new clip "
+    "names the file (list_videos shows a folder's videos when they name a folder instead). queue_dub starts a whole new dub of a video file -- for several videos, gather the estimates and ask the user once with the total. cancel_dub cancels a dub the moment the user asks -- never ask them to confirm a cancel. burn_subtitles lays an .srt onto a video as a new file, in one of twelve looks (clean, bold-punch, sticker, neon-yellow, soft-card, rainbow, broadcast, streaming, lower-bar, neon, black-box, white-box). cut_clip cuts a stretch of a video file into a new clip "
     "beside it, free and on this machine. Any tool answer with needs_confirmation=true may spend Perso "
     "credits: relay its message to the user as a question, and call the tool "
     "again with confirm=true only after they clearly agree. Answer in "
