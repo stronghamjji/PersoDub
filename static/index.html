@@ -792,10 +792,12 @@
      under it. Read-only -- clicking a bar plays that line, nothing here drags.
      150px is where it starts; the handle on its top line is what changes it. */
 
-  /* 192, not 150: the subtitle lane made it three lanes, and at 150 the
-     bottom one sat flush on the window edge, reading as cut off (user,
-     2026-09-01). The last-lane margin below is the same breath. */
-  .timeline { flex: 0 0 auto; height: 192px; display: flex; flex-direction: column;
+  /* As tall as its lanes, no more: the head, the ruler, two or three lanes,
+     and a 12px breath under the last one -- the same 12px the agent's input
+     box and the projects list keep off the window edge, so the three bottoms
+     sit on one line (user, 2026-09-02). A fixed 192 left 10px of nothing under
+     the lanes. The handle on its top line still writes an inline height. */
+  .timeline { flex: 0 0 auto; height: auto; display: flex; flex-direction: column;
     border-top: 1px solid var(--border); background: var(--background); }
   /* Nothing to draw (no script, or no job open) must leave no empty strip. */
   .timeline:empty { display: none; }
@@ -860,21 +862,23 @@
     overflow: hidden; text-overflow: ellipsis; }
   .tl-cap .tl-hdl { position: absolute; top: -2px; bottom: -2px; width: 9px;
     cursor: ew-resize; }
-  .tl-cap .tl-hdl.l { left: -4px; } .tl-cap .tl-hdl.r { right: -4px; }
+  /* Inside the box: a handle poking past the last box made the track 3px
+     wider than its room, and that put a scrollbar under the lanes at Fit. */
+  .tl-cap .tl-hdl.l { left: 0; } .tl-cap .tl-hdl.r { right: 0; }
   .tl-cap.trimming { box-shadow: 0 0 0 2px var(--primary); z-index: 2; }
   /* This line keeps its own box width: the dot says so, and puts it back. */
   .tl-exdot { position: absolute; top: -7px; right: -7px; width: 15px; height: 15px;
     border-radius: 50%; background: var(--primary); color: #fff; font-size: 9px;
     line-height: 15px; text-align: center; box-shadow: 0 0 0 2px var(--background);
     cursor: pointer; z-index: 3; }
-  .tl-lane-caps { margin-bottom: 12px; }
   .tl-lane-caps.off, .tl-name-caps.off { opacity: 0.35; }
   .tl-trim-tip { position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
     background: var(--agent-bg); color: #fff; font-size: 0.62rem; padding: 2px 7px;
     border-radius: 5px; white-space: nowrap; z-index: 3; }
   /* Only the track scrolls sideways: the two language names have to stay put. */
   .tl-track { position: relative; overflow-x: auto; overflow-y: hidden; margin: 0 14px; }
-  .tl-inner { position: relative; height: 86px; }
+  /* The ruler and the lanes stack; the padding is the breath under the last. */
+  .tl-inner { position: relative; padding-bottom: 12px; }
 
   /* Also a way into the video: press anywhere on it to go to that moment. */
   .tl-ruler { position: relative; height: 18px; cursor: pointer; }
