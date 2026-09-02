@@ -684,6 +684,9 @@
      -- and below that the table simply takes whatever is left. */
   .video-pane { flex: 0 0 clamp(200px, 36vh, 440px); min-width: 0; min-height: 180px;
     display: flex; flex-direction: column; background: var(--canvas); }
+  /* A portrait clip is drawn to the pane's height, so it gets more of it:
+     46vh leaves a 13-inch window (800px tall) about 200px of table. */
+  .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
   .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     border-bottom: 1px solid var(--border); }
   .vtab { flex: 1; border: none; background: none; cursor: pointer;
@@ -4127,6 +4130,12 @@ paintPlayToggle();
 for (const e of ["play", "playing"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = true; paintPlayToggle(); });
 for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = false; paintPlayToggle(); });
 for (const e of ["timeupdate", "loadedmetadata", "seeked"]) doneVideo.addEventListener(e, paintPlayhead);
+// A portrait clip gets a taller pane by default: drawn to the pane's width it
+// came out thumbnail-sized on a laptop screen (user, 2026-09-02). A height the
+// user has dragged still wins -- that is an inline style.
+doneVideo.addEventListener("loadedmetadata", () => {
+  $("videoPane").classList.toggle("portrait", doneVideo.videoHeight > doneVideo.videoWidth);
+});
 
 // Is the video inside this line right now? The table's highlighted row and the
 // timeline's highlighted bars are the same answer, so they ask it the same way.
@@ -5438,6 +5447,20 @@ const layoutFits = [
       markClippedNames();
     },
   }),
+  // Before the video/script grip on purpose: that one measures its room off
+  // what the timeline leaves, so the timeline has to be settled first. The
+  // other order let a remembered tall timeline push a remembered tall video
+  // pane's share of the room out from under the table, which then slid under
+  // the timeline (13-inch screen, user, 2026-09-02).
+  makeGrip({
+    el: $("gripTimeline"), axis: "y", key: "persodub.layout.timelineHeight",
+    read: () => $("timeline").offsetHeight,
+    // At most 40% of the window, and never so tall that the top bar (44), the
+    // video tabs (40), the smallest video pane (180) and a readable table
+    // (240) cannot share what is left -- about 480px above it.
+    limits: () => [110, Math.max(110, Math.min(window.innerHeight * 0.4, window.innerHeight - 480))],
+    apply: (h) => { $("timeline").style.height = `${h}px`; },
+  }),
   makeGrip({
     el: $("gripPanes"), axis: "y", key: "persodub.layout.videoHeight", before: true,
     read: () => $("videoPane").offsetHeight,
@@ -5448,12 +5471,6 @@ const layoutFits = [
       return room ? [180, Math.max(180, room - 240)] : null;
     },
     apply: (h) => { $("videoPane").style.flex = `0 0 ${h}px`; },
-  }),
-  makeGrip({
-    el: $("gripTimeline"), axis: "y", key: "persodub.layout.timelineHeight",
-    read: () => $("timeline").offsetHeight,
-    limits: () => [110, Math.max(110, window.innerHeight * 0.4)],
-    apply: (h) => { $("timeline").style.height = `${h}px`; },
   }),
   makeGrip({
     el: $("gripAgent"), axis: "x", key: "persodub.layout.agentWidth",
