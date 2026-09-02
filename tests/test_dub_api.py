@@ -826,7 +826,9 @@ def test_a_finished_job_writes_job_json_next_to_the_video(monkeypatch):
                 saved = json.load(f)
             if saved["status"] == "done":
                 break
-        except (FileNotFoundError, json.JSONDecodeError):
+        # PermissionError: Windows refuses to open the file while the atomic
+        # replace that writes it is still holding it.
+        except (FileNotFoundError, PermissionError, json.JSONDecodeError):
             pass
         time.sleep(0.02)
     assert saved["id"] == jid and saved["status"] == "done"
@@ -1214,3 +1216,217 @@ def test_dub_start_sep_perso_without_key_is_422(monkeypatch):
     )
     assert r.status_code == 422
     assert "Perso separation" in r.json()["detail"]
+
+
+class _FakeCloudClient:
+    """Stands in for PersoClient in cloud-dub tests: writes the "dubbed" file
+    the way the real dub_video does, and records what it was asked."""
+    calls = []
+
+    def __init__(self, *a, **kw):
+        self.cancel_check = None
+
+    def dub_video(self, video_path, out_path, source_code, target_code, num_speakers=None, space_seq=None, log=None):
+        _FakeCloudClient.calls.append({
+            "video": video_path, "out": out_path, "source": source_code,
+            "target": target_code, "speakers": num_speakers,
+        })
+        with open(out_path, "wb") as f:
+            f.write(b"CLOUDMP4")
+        return out_path
+
+
+def _wait_done(jid):
+    for _ in range(200):
+        j = client.get(f"/api/dub/jobs/{jid}").json()
+        if j["status"] != "running":
+            return j
+        time.sleep(0.02)
+    return j
+
+
+def test_dub_start_cloud_mode_skips_local_pipeline(monkeypatch):
+    _FakeCloudClient.calls = []
+    monkeypatch.setattr(main, "PersoClient", _FakeCloudClient)
+
+    def never(**kw):
+        raise AssertionError("run_dub must not run in cloud mode")
+
+    monkeypatch.setattr(main, "run_dub", never)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en",
+              "source_language_code": "ko", "dub_mode": "perso", "num_speakers": "2"},
+    )
+    assert r.status_code == 200
+    j = _wait_done(r.json()["job_id"])
+    assert j["status"] == "done"
+    assert j["dub_mode"] == "perso"
+    call = _FakeCloudClient.calls[0]
+    assert call["target"] == "en" and call["source"] == "ko" and call["speakers"] == 2
+    # and the finished file is the cloud one
+    rr = client.get(f"/api/dub/result/{j['id']}")
+    assert rr.content == b"CLOUDMP4"
+
+
+def test_dub_start_cloud_mode_unknown_value_is_422():
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "dub_mode": "banana"},
+    )
+    assert r.status_code == 422
+
+
+def test_dub_start_cloud_mode_without_key_is_422(monkeypatch):
+    monkeypatch.setattr(main, "perso_available", lambda: False)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "dub_mode": "perso"},
+    )
+    assert r.status_code == 422
+    assert "Perso" in r.json()["detail"]
+
+
+def test_dub_start_cloud_mode_credit_exhaustion_fails_with_notice(monkeypatch):
+    from app.perso_client import PersoCreditExhaustedError
+
+    class BrokeClient(_FakeCloudClient):
+        def dub_video(self, *a, **kw):
+            raise PersoCreditExhaustedError()
+
+    monkeypatch.setattr(main, "PersoClient", BrokeClient)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    assert r.status_code == 200
+    j = _wait_done(r.json()["job_id"])
+    assert j["status"] == "error"
+    notices = client.get(f"/api/dub/jobs/{j['id']}").json().get("notices") or []
+    assert any(n.get("type") == "perso_credit_exhausted" for n in notices)
+
+
+class _ScriptedCloudClient(_FakeCloudClient):
+    """Cloud fake that also carries a project seq and serves its script."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.last_dub_project_seq = 409873
+
+    def get_project_script(self, project_seq, space_seq=None):
+        assert project_seq == 409873
+        return {"sentences": [
+            {"seq": 1, "originalText": "안녕", "translatedText": "Hi there",
+             "offsetMs": 270, "durationMs": 5940, "speakerOrderIndex": 1,
+             "audioUrl": "/perso-storage/a1.wav"},
+            {"seq": 2, "originalText": "잘 가", "translatedText": "Bye now",
+             "offsetMs": 6500, "durationMs": 900, "speakerOrderIndex": 2,
+             "audioUrl": "/perso-storage/a2.wav"},
+        ], "speakers": [{"speakerOrderIndex": 1}, {"speakerOrderIndex": 2}]}
+
+
+def test_cloud_job_keeps_its_project_and_serves_the_perso_script(monkeypatch):
+    monkeypatch.setattr(main, "PersoClient", _ScriptedCloudClient)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    assert r.status_code == 200
+    j = _wait_done(r.json()["job_id"])
+    assert j["status"] == "done"
+    assert j["perso_project_seq"] == 409873
+
+    rs = client.get(f"/api/dub/jobs/{j['id']}/script")
+    assert rs.status_code == 200
+    body = rs.json()
+    # Read-only for now: editing Perso lines is the next stage's work.
+    assert body["readonly"] is True
+    lines = body["lines"]
+    assert [l["text"] for l in lines] == ["Hi there", "Bye now"]
+    assert lines[0]["source"] == "안녕"
+    assert lines[0]["start"] == 0.27 and lines[0]["end"] == 6.21
+    assert lines[0]["line"] == 1 and lines[1]["speaker"] == 2
+
+
+def test_cloud_job_without_a_recorded_project_404s_the_script(monkeypatch):
+    monkeypatch.setattr(main, "PersoClient", _FakeCloudClient)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    j = _wait_done(r.json()["job_id"])
+    assert client.get(f"/api/dub/jobs/{j['id']}/script").status_code == 404
+
+
+def test_perso_speaker_change_maps_the_line_and_verifies(monkeypatch):
+    class SpeakerClient(_ScriptedCloudClient):
+        added = []
+
+        def add_speaker_from_sentence(self, project_seq, sentence_seq, space_seq=None):
+            SpeakerClient.added.append((project_seq, sentence_seq))
+            return {"ok": True}
+
+        def get_project_script(self, project_seq, space_seq=None):
+            script = super().get_project_script(project_seq, space_seq)
+            if SpeakerClient.added:
+                # after the write, the second line carries a fresh speaker
+                script["sentences"][1]["speakerOrderIndex"] = 9
+            return script
+
+    SpeakerClient.added = []
+    monkeypatch.setattr(main, "PersoClient", SpeakerClient)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    j = _wait_done(r.json()["job_id"])
+
+    rs = client.post(f"/api/dub/jobs/{j['id']}/perso/speaker", json={"line": 2})
+    assert rs.status_code == 200
+    assert rs.json() == {"line": 2, "old_speaker": 2, "new_speaker": 9}
+    # the write targeted line 2's own sentence seq
+    assert SpeakerClient.added == [(409873, 2)]
+
+    # a local job refuses: only Perso dubs have server-side speakers
+    r2 = client.post("/api/dub/jobs/nope/perso/speaker", json={"line": 1})
+    assert r2.status_code == 404
+
+
+def test_materialize_turns_a_perso_dub_editable(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "PersoClient", _ScriptedCloudClient)
+
+    def fake_materialize(pc, seq, work_dir, language, **kw):
+        assert seq == 409873
+        with open(os.path.join(work_dir, "translated.srt"), "w", encoding="utf-8") as f:
+            f.write("1\n00:00:00,270 --> 00:00:06,210\nHi there\n")
+        with open(os.path.join(work_dir, "original.srt"), "w", encoding="utf-8") as f:
+            f.write("1\n00:00:00,270 --> 00:00:06,210\n안녕\n")
+        return {"lines": 1, "speakers": 1}
+
+    monkeypatch.setattr(main.perso_materialize, "materialize", fake_materialize)
+
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    j = _wait_done(r.json()["job_id"])
+    # before: the live, read-only mirror
+    assert client.get(f"/api/dub/jobs/{j['id']}/script").json()["readonly"] is True
+
+    rm = client.post(f"/api/dub/jobs/{j['id']}/perso/materialize")
+    assert rm.status_code == 200
+    assert rm.json()["lines"] == 1
+
+    # after: served from the local files, editable like any other job
+    body = client.get(f"/api/dub/jobs/{j['id']}/script").json()
+    assert body.get("readonly") is None
+    assert body["lines"][0]["text"] == "Hi there"
+    assert body["lines"][0]["source"] == "안녕"

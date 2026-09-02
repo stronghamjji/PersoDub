@@ -120,7 +120,9 @@ def test_the_command_fences_the_assistant_in():
     # would come along and hand the assistant tools this app never offered.
     assert "--strict-mcp-config" in args
     allowed = args[args.index("--allowedTools") + 1]
-    assert allowed.count("mcp__persodub__") == 7
+    assert allowed.count("mcp__persodub__") == 14
+    assert "mcp__persodub__cancel_dub" in allowed
+    assert "mcp__persodub__burn_subtitles" in allowed
     denied = args[args.index("--disallowedTools") + 1]
     for tool in ("Bash", "Write", "WebFetch"):
         assert tool in denied
@@ -155,8 +157,10 @@ def test_the_job_on_screen_is_handed_to_the_assistant():
     out = _with_job("대본 읽어줘", "abc123")
     assert "abc123" in out
     assert out.endswith("대본 읽어줘")
-    # No job open: the question goes through untouched.
-    assert _with_job("안녕", None) == "안녕"
+    # No job open (the home screen): said outright, question kept whole.
+    home = _with_job("안녕", None)
+    assert "No job is open" in home
+    assert home.endswith("안녕")
 
 
 def test_remaking_the_voices_is_a_handle_the_assistant_has():
@@ -202,3 +206,13 @@ def test_an_unknown_model_is_ignored_rather_than_passed_on():
     from app.agents.claude import command
     assert "--model" not in command("/tmp/mcp.json", resume=False, model="wat")
     assert "--model" not in command("/tmp/mcp.json", resume=False)
+
+
+def test_the_prompt_says_todays_tools_beat_yesterdays_no():
+    # A resumed conversation carries the assistant's own old "I cannot cancel"
+    # -- said before cancel_dub existed -- and it repeated that instead of
+    # reading its current tool list (user report, 2026-09-01). The prompt has
+    # to say outright that the list is now, and old refusals prove nothing.
+    from app.agents.claude import SYSTEM_PROMPT
+    assert "earlier in this conversation" in SYSTEM_PROMPT
+    assert "current tool list" in SYSTEM_PROMPT

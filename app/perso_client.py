@@ -380,6 +380,161 @@ class PersoClient:
             out[key] = path
         return out
 
+    def dub_video(self, video_path: str, out_path: str,
+                  source_code: Optional[str], target_code: str,
+                  num_speakers: Optional[int] = None,
+                  space_seq: Optional[int] = None, log=None) -> str:
+        """Full cloud dub: upload -> translate project -> poll -> download.
+
+        The whole pipeline runs on Perso's side (translation, voices, mix);
+        what comes back is the finished dubbed video, saved to out_path.
+        Request contract mirrors the official plugin's api_adapter.mjs
+        requestTranslation/download exactly (verified 2026-08-31).
+        """
+        log = log or (lambda m: None)
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        log("   Uploading the video to Perso…")
+        media_seq = self._upload_media(video_path, space)
+        log("   Perso is dubbing… this takes a few minutes.")
+
+        r = httpx.post(
+            f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/translate",
+            json={
+                "mediaSeq": media_seq,
+                "isVideoProject": True,
+                # "auto" is the server's own detect-the-source value.
+                "sourceLanguageCode": source_code or "auto",
+                "targetLanguages": [{"languageCode": target_code, "ttsModel": "AUDIO_ENGINE_V3"}],
+                "numberOfSpeakers": int(num_speakers) if num_speakers else 1,
+                "preferredSpeedType": "GREEN",
+            },
+            headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        project_seq = r.json()["result"]["startGenerateProjectIdList"][0]
+        # Kept on the client so the caller can stamp it on the job record --
+        # the script viewer reads the project back through it later.
+        self.last_dub_project_seq = project_seq
+        print(f"Perso dubbing project {project_seq} (workspace {space})", file=sys.stderr)
+
+        self._wait_completed(project_seq, space, what="Perso dubbing")
+        log("   Downloading the finished video…")
+
+        # The gate the plugin checks before asking for a link: a completed
+        # project whose video is not served yet must fail loudly, not save
+        # an empty file.
+        r = httpx.get(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/download-info",
+            headers=self._headers, timeout=60,
+        )
+        _raise_for_status(r)
+        info = (r.json() or {}).get("result") or {}
+        if info.get("hasTranslatedVideo") is False:
+            raise RuntimeError("Perso dubbing finished but the video is not ready to download")
+
+        r = httpx.get(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/download",
+            params={"target": "dubbingVideo"}, headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        link = r.json()["result"]["videoFile"]["videoDownloadLink"]
+        url = link if link.startswith("http") else MEDIA_HOST + link
+        # Identity only, no API key: a storage link, not the Perso API.
+        r = httpx.get(url, headers={"User-Agent": USER_AGENT,
+                                    "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
+        _raise_for_status(r)
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(out_path, "wb") as f:
+            f.write(r.content)
+        return out_path
+
+    def get_project_script(self, project_seq: int, space_seq: Optional[int] = None) -> dict:
+        """A dubbing project's script: {"sentences": [...], "speakers": [...]}.
+
+        Pages through GET /projects/{seq}/spaces/{space}/script the way the
+        official plugin's getProjectScript does (size 100, cursor pagination;
+        every page carries the full speaker array, last one wins). Sentences
+        carry originalText/translatedText, offsetMs/durationMs, a per-sentence
+        audioUrl and speakerOrderIndex (shape verified live 2026-08-31).
+        """
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        sentences, speakers = [], []
+        cursor = None
+        for _ in range(50):
+            params = {"size": 100}
+            if cursor is not None:
+                params["cursorId"] = cursor
+            r = httpx.get(
+                f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/script",
+                params=params, headers=self._headers, timeout=60,
+            )
+            _raise_for_status(r)
+            body = r.json() or {}
+            body = body.get("result") or body
+            sentences.extend(body.get("sentences") or [])
+            if body.get("speakers"):
+                speakers = body["speakers"]
+            if not body.get("hasNext"):
+                break
+            cursor = body.get("nextCursorId")
+        return {"sentences": sentences, "speakers": speakers}
+
+    def add_speaker_from_sentence(self, project_seq: int, sentence_seq: int,
+                                  space_seq: Optional[int] = None) -> dict:
+        """Give one sentence a NEW speaker, derived from that sentence's own
+        audio -- the write API the official plugin's speaker.mjs uses. The
+        response shape is unverified upstream; callers re-read the script to
+        confirm the effect (the plugin's own defensive pattern)."""
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        r = httpx.post(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/speakers/from-sentence",
+            json={"sourceSentenceSeq": sentence_seq},
+            headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        return r.json() or {}
+
+    def download_media(self, url: str, out_path: str) -> str:
+        """Fetch one storage file (a sentence's audio, a subtitle) to disk.
+        Identity headers only -- storage links never see the API key."""
+        full = url if url.startswith("http") else MEDIA_HOST + url
+        r = httpx.get(full, headers={"User-Agent": USER_AGENT,
+                                     "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
+        _raise_for_status(r)
+        with open(out_path, "wb") as f:
+            f.write(r.content)
+        return out_path
+
+    def download_target(self, project_seq: int, target: str, out_path: str,
+                        space_seq: Optional[int] = None) -> str:
+        """Download one of a project's named artifacts (e.g. backgroundAudio).
+
+        The link's key varies per target, so the response is scanned for any
+        *DownloadLink value -- the official plugin's own fallback.
+        """
+        space = int(space_seq) if space_seq is not None else self.space_seq
+        r = httpx.get(
+            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/download",
+            params={"target": target}, headers=self._headers, timeout=120,
+        )
+        _raise_for_status(r)
+        body = (r.json() or {}).get("result") or {}
+
+        def find_link(o):
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    if isinstance(v, str) and k.endswith("DownloadLink") and v:
+                        return v
+                    hit = find_link(v)
+                    if hit:
+                        return hit
+            return None
+
+        link = find_link(body)
+        if not link:
+            raise RuntimeError(f"Perso served no download link for {target}")
+        return self.download_media(link, out_path)
+
     def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
         """Upload one video to Perso STT and return scriptTimestamps (JSON).
 

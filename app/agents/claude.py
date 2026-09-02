@@ -23,6 +23,13 @@ TOOL_LABELS = {
     "get_job_status": "Checking progress",
     "remake_voices": "Remaking the changed voices",
     "remake_line_voice": "Remaking this line",
+    "change_speaker": "Changing the speaker",
+    "extract_subtitles": "Extracting subtitles",
+    "cut_clip": "Cutting a clip",
+    "list_videos": "Looking through a folder",
+    "queue_dub": "Queueing a dub",
+    "cancel_dub": "Cancelling a dub",
+    "burn_subtitles": "Subtitling a video",
 }
 
 MCP_PREFIX = "mcp__persodub__"
@@ -137,8 +144,22 @@ SYSTEM_PROMPT = (
     "it has fits=false. Use only the persodub tools. Never change timings. "
     "When the user asks for the voices to be remade, call remake_voices "
     "yourself -- it respeaks only the lines whose words changed and rebuilds "
-    "the video in place -- and do not tell them to press a button. Answer in "
-    "the user's language, briefly."
+    "the video in place -- and do not tell them to press a button. "
+    "A Perso-dubbed job reads its script from Perso and starts read-only; "
+    "the screen's Make-it-editable button fetches it, and from then on its "
+    "lines edit and remake normally. change_speaker can give a line a new "
+    "voice on Perso's side. extract_subtitles pulls the spoken lines out of "
+    "any video file on this computer into an .srt beside it -- the user "
+    "names the file (list_videos shows a folder's videos when they name a folder instead). queue_dub starts a whole new dub of a video file -- for several videos, gather the estimates and ask the user once with the total. cancel_dub cancels a dub the moment the user asks -- never ask them to confirm a cancel. burn_subtitles lays an .srt onto a video as a new file, in one of twelve looks (clean, bold-punch, sticker, neon-yellow, soft-card, rainbow, broadcast, streaming, lower-bar, neon, black-box, white-box). cut_clip cuts a stretch of a video file into a new clip "
+    "beside it, free and on this machine. Any tool answer with needs_confirmation=true may spend Perso "
+    "credits: relay its message to the user as a question, and call the tool "
+    "again with confirm=true only after they clearly agree. Answer in "
+    "the user's language, briefly. "
+    "Your tools are exactly the ones offered to you on THIS turn: the app "
+    "updates between turns, and tools appear that did not exist before. If "
+    "you said earlier in this conversation that you cannot do something, "
+    "check the current tool list before saying it again -- an old refusal "
+    "proves nothing about now."
 )
 
 

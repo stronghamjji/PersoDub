@@ -11,7 +11,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Union
 from urllib.parse import urlparse
 
 import requests
@@ -24,16 +24,18 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import config
 from app import models as model_store
+from app import perso_materialize
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
+from app.subtitle_ass import PRESETS as SUBTITLE_PRESETS, build_ass
 from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL,
                         OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
                         QWEN_N_TAKES, TRANSLATE_ENGINE, default_stt_engine)
 from app.dub_script import (
     DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
 )
-from app.text.srt import parse_srt
+from app.text.srt import build_srt, parse_srt
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -51,16 +53,98 @@ from app.engines_status import (
     qwen_available,
     qwen_status,
 )
-from app.jobs import JobStore
-from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
-from app.pipeline import run_dub
+from app.jobs import JobCancelled, JobStore
+from app.perso_client import (PersoClient, PersoCreditExhaustedError,
+                              PersoInvalidKeyError, PersoUnavailableError,
+                              APP_VERSION, SIGNUP_LINK, list_dubbing_spaces,
+                              perso_to_cues)
+from app.pipeline import _video_duration, run_dub
 from app.qwen_pipeline import rebuild_dub, resynth_one_line
 from app.text.naming import next_free, safe_name
 from app.settings_env import (current_value, read_analytics_off,
                               read_key_status, read_value,
                               write_analytics_off, write_keys)
 from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
+from app.stt_local import transcribe_local
 from app.translate import get_translator
+
+
+def _dub_target_for(job: dict):
+    """Rebuild a queued job's work from nothing but its saved record.
+
+    A job that starts straight away runs a closure built in dub_start, with
+    the request still in hand. A job that waited out an app restart has only
+    its job.json and its folder -- this reads the same choices back out of
+    those (the way "Try again" does) so the queue can start it as if the app
+    had never closed.
+    """
+    jid = job["id"]
+    work = job["work_dir"]
+    video_path = os.path.join(work, "input.mp4")
+    out_path = os.path.join(work, "dubbed.mp4")
+    language_code = job.get("language_code") or "en"
+    language = job.get("language") or _language_name(language_code)
+    srt_path = os.path.join(work, "sub.srt")
+    srt_path = srt_path if os.path.exists(srt_path) else None
+    source_srt_path = os.path.join(work, "source.srt")
+    source_srt_path = source_srt_path if os.path.exists(source_srt_path) else None
+    trim = job.get("trim")
+    source_url = job.get("source_url")
+
+    def _target(log):
+        if source_url and not os.path.exists(video_path):
+            fetch_source(source_url, video_path, log=log,
+                         cancel_check=lambda: job_store.is_cancel_requested(jid))
+        if (job.get("trim_pending") and trim
+                and trim.get("start") is not None and trim.get("end") is not None):
+            def _cut_recorded():
+                job_store._update(jid, trim_pending=False)
+                job_store.persist(jid, work)
+            _cut_video(video_path, trim["start"], trim["end"], on_cut=_cut_recorded)
+        if job.get("dub_mode") == "perso":
+            return _run_cloud_dub(jid, video_path, out_path,
+                                  job.get("source_lang"), language_code,
+                                  job.get("num_speakers"), log)
+        return run_dub(
+            video_path=video_path,
+            srt_path=srt_path,
+            source_srt_path=source_srt_path,
+            out_path=out_path,
+            language=language,
+            language_code=language_code,
+            num_speakers=job.get("num_speakers"),
+            # The record keeps what _engines_used wrote down; the same mapping
+            # "Try again" uses turns it back into run_dub's arguments.
+            stt_engine="perso" if job.get("stt_engine") == "perso" else None,
+            sep_engine="perso" if job.get("separation") == "perso" else None,
+            translate_engine=job.get("translator"),
+            n_takes=job.get("quality"),
+            source_language_code=job.get("source_lang"),
+            cancel_check=lambda: job_store.is_cancel_requested(jid),
+            on_notice=lambda n: job_store.append_notice(jid, n),
+            log=log,
+        )
+
+    return _target
+
+
+def _rearm_queued_jobs() -> None:
+    """Put restored queued jobs back in line, oldest first.
+
+    Their threads never existed, so a restart cost them nothing -- but the
+    functions they were queued with died with the process. Best-effort per
+    job: one whose folder has gone missing becomes an error, not a crash."""
+    waiting = sorted((j for j in (job_store.get(j["id"]) for j in job_store.all())
+                      if j and j.get("status") == "queued"),
+                     key=lambda j: j.get("created") or "")
+    for job in waiting:
+        try:
+            if not job.get("work_dir"):
+                raise RuntimeError("no folder on record")
+            job_store.start(job["id"], _dub_target_for(job),
+                            parallel=(job.get("dub_mode") == "perso"))
+        except Exception as e:
+            job_store._update(job["id"], status="error", error=str(e))
 
 
 @asynccontextmanager
@@ -78,6 +162,7 @@ async def lifespan(_app):
     file is skipped rather than taking the app down.
     """
     job_store.restore(WORKSPACE)
+    _rearm_queued_jobs()
     yield
 
 
@@ -401,6 +486,39 @@ def dub_job_script(jid: str):
     job = job_store.get(jid)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("dub_mode") == "perso" and not _perso_is_materialized(job):
+        # A Perso dub's script lives on Perso's side; read it back live.
+        seq = job.get("perso_project_seq")
+        if not seq:
+            raise HTTPException(status_code=404, detail="No script was recorded for this job.")
+        try:
+            script = PersoClient().get_project_script(int(seq))
+        except Exception:
+            raise HTTPException(status_code=503,
+                                detail="Could not reach Perso for this job's script. Try again in a moment.")
+        lines = []
+        for n, sent in enumerate(script.get("sentences") or [], start=1):
+            start = (sent.get("offsetMs") or 0) / 1000.0
+            dur = (sent.get("durationMs") or 0) / 1000.0
+            lines.append({
+                "line": n,
+                "start": round(start, 2),
+                "end": round(start + dur, 2),
+                "slot": round(dur, 2),
+                "source": sent.get("originalText"),
+                "text": sent.get("translatedText") or "",
+                # The voice already exists and fills its slot exactly -- there
+                # is nothing to estimate and nothing stale.
+                "estimated": round(dur, 2),
+                "fits": True,
+                "speaker": sent.get("speakerOrderIndex"),
+                "audio_sec": None,
+                "voice_stale": False,
+                "edited": False,
+                "was": None,
+            })
+        # Read-only until editing Perso lines lands (the next stage).
+        return {"lines": lines, "edited": False, "readonly": True}
     out = (job.get("result") or {}).get("out_path")
     if not out:
         raise HTTPException(status_code=409,
@@ -767,6 +885,10 @@ def dub_job_retry(jid: str):
     job_store.append_log(new_jid, "%s (run again)" % project)
 
     def _target(log):
+        if job.get("dub_mode") == "perso":
+            return _run_cloud_dub(new_jid, video_path, out_path,
+                                  job.get("source_lang"), language_code,
+                                  None, log)
         return run_dub(
             video_path=video_path,
             out_path=out_path,
@@ -788,8 +910,8 @@ def dub_job_retry(jid: str):
             log=log,
         )
 
-    job_store.start(new_jid, _target)
-    return {"job_id": new_jid, "status": "running"}
+    job_store.start(new_jid, _target, parallel=(job.get("dub_mode") == "perso"))
+    return {"job_id": new_jid, "status": job_store.get(new_jid)["status"]}
 
 
 @app.post("/api/dub/jobs/{jid}/cancel")
@@ -803,10 +925,13 @@ def dub_job_cancel(jid: str):
     the job already finished (done/error) or was already cancelled -- there
     is nothing left to interrupt.
     """
+    was_queued = (job_store.get(jid) or {}).get("status") == "queued"
     status = job_store.request_cancel(jid)
     if status is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if status in ("done", "error", "cancelled"):
+    # A queued job comes back "cancelled" from the call that cancelled it --
+    # that is this request doing its work, not a job with nothing left to stop.
+    if status in ("done", "error", "cancelled") and not was_queued:
         raise HTTPException(status_code=409, detail=f"Job already {status}, nothing to cancel")
     return {"job_id": jid, "status": status}
 
@@ -843,6 +968,21 @@ def dub_job_delete_workspace(jid: str):
     # would still put the job in the list until the next restart.
     job_store.forget(jid)
     return {"job_id": jid, "deleted": True}
+
+
+@app.get("/api/whats-new")
+def whats_new():
+    """The bundled release notes + the running version. The screen shows them
+    once after an update (never on a fresh install) and again on demand from
+    Settings; the file ships with each release."""
+    path = os.path.join(os.path.dirname(__file__), "whats_new.json")
+    notes = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            notes = [str(n) for n in (json.load(f).get("notes") or [])]
+    except Exception:
+        pass  # no notes is fine; the popup simply never shows
+    return {"version": APP_VERSION, "notes": notes}
 
 
 @app.get("/api/models")
@@ -890,6 +1030,387 @@ def model_remove(mid: str):
     model_store.cancel_download(mid)
     model_store.remove_model(entry)
     return {"removed": mid}
+
+
+class PersoSpeakerRequest(BaseModel):
+    line: int
+
+
+def _perso_is_materialized(job) -> bool:
+    """True once a Perso dub's parts were fetched for local editing -- from
+    then on its script (and every edit tool) runs on the local files."""
+    out = (job.get("result") or {}).get("out_path")
+    return bool(out and os.path.exists(os.path.join(os.path.dirname(out), DUB_NAME)))
+
+
+@app.post("/api/dub/jobs/{jid}/perso/materialize")
+def dub_job_perso_materialize(jid: str):
+    """Fetch a Perso dub's parts (script, per-line audio, background bed) and
+    write the local job files -- after this the dub edits like any other job.
+    Downloads only; no Perso credits are spent."""
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("dub_mode") != "perso" or not job.get("perso_project_seq"):
+        raise HTTPException(status_code=409, detail="Only Perso dubs can be fetched for editing.")
+    out = (job.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=409, detail="This job has no finished video yet.")
+    try:
+        summary = perso_materialize.materialize(
+            PersoClient(), int(job["perso_project_seq"]), os.path.dirname(out),
+            job.get("language") or "English",
+            log=lambda msg: job_store.append_log(jid, msg))
+    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503,
+                            detail=f"Could not fetch this dub from Perso ({str(e)[:80]}).")
+    return summary
+
+
+@app.post("/api/dub/jobs/{jid}/perso/speaker")
+def dub_job_perso_speaker(jid: str, body: PersoSpeakerRequest):
+    """Give one line of a Perso dub a NEW speaker, on Perso's side.
+
+    The agent's change_speaker tool lands here. Line numbers are the same
+    1-based order the script endpoint serves. The write is verified the way
+    the official plugin does it: re-read the script and report what it says.
+    """
+    job = job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("dub_mode") != "perso" or not job.get("perso_project_seq"):
+        raise HTTPException(status_code=409, detail="Only Perso dubs have server-side speakers.")
+    seq = int(job["perso_project_seq"])
+    pc = PersoClient()
+    try:
+        sents = (pc.get_project_script(seq).get("sentences") or [])
+        if not 1 <= body.line <= len(sents):
+            raise HTTPException(status_code=422, detail=f"There is no line {body.line}.")
+        sent = sents[body.line - 1]
+        old = sent.get("speakerOrderIndex")
+        pc.add_speaker_from_sentence(seq, int(sent["seq"]))
+        after = pc.get_project_script(seq).get("sentences") or []
+        new = after[body.line - 1].get("speakerOrderIndex") if len(after) >= body.line else None
+    except HTTPException:
+        raise
+    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Perso did not accept the change ({str(e)[:80]}).")
+    return {"line": body.line, "old_speaker": old, "new_speaker": new}
+
+
+# ---------------------------------------------------------------------------
+# Subtitles out of a plain video file, through Perso STT. These two routes are
+# the agent's extract_subtitles tool: /estimate names the price (nothing is
+# spent), /extract does the paid work. The .srt lands next to the video and an
+# existing file is never written over.
+# ---------------------------------------------------------------------------
+
+class SubtitleExtractRequest(BaseModel):
+    video_path: str
+    # "perso" (paid, better quality) or "local" (free Whisper on this machine).
+    engine: str = "perso"
+
+
+def _subtitle_video(video_path: str, engine: str) -> str:
+    """The checks both routes share, ending in the file's real path."""
+    if engine not in ("perso", "local"):
+        raise HTTPException(status_code=422, detail=f"Unknown engine: {engine}")
+    if engine == "perso" and not perso_available():
+        raise HTTPException(status_code=422,
+                            detail="Perso is not set up. Add the API key in Settings first.")
+    path = os.path.expanduser(video_path)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail=f"No such video: {video_path}")
+    return path
+
+
+def _free_path(base: str, ext: str) -> str:
+    """base+ext, or base-1+ext.. when that name is taken. Never writes over."""
+    cand = base + ext
+    n = 0
+    while os.path.exists(cand):
+        n += 1
+        cand = "%s-%d%s" % (base, n, ext)
+    return cand
+
+
+@app.get("/api/subtitles/estimate")
+def subtitles_estimate(video_path: str, engine: str = "perso"):
+    """What extracting this video's subtitles would cost, before spending it.
+
+    Perso: about 1 credit per 5 seconds of video -- measured 2026-08-31,
+    2 credits for a 10s clip. Local Whisper is free, so its estimate is 0.
+    The balance is best-effort: a workspace that will not answer must not
+    block the question.
+    """
+    path = _subtitle_video(video_path, engine)
+    try:
+        seconds = _video_duration(path)
+    except Exception:
+        raise HTTPException(status_code=422,
+                            detail="That file does not look like a video.")
+    if engine == "local":
+        return {"seconds": seconds, "credits_estimate": 0, "credits_balance": None}
+    balance = None
+    try:
+        ws = PersoClient().describe_workspace()
+        balance = ws.get("credits") if ws else None
+    except Exception:
+        pass
+    return {"seconds": seconds,
+            "credits_estimate": math.ceil(seconds / 5.0),
+            "credits_balance": balance}
+
+
+@app.post("/api/subtitles/extract")
+def subtitles_extract(body: SubtitleExtractRequest):
+    """Transcribe one video on Perso and write the result beside it as .srt.
+
+    THIS SPENDS PERSO CREDITS. The confirmation lives in the agent tool (the
+    same needs_confirmation pattern as change_speaker); by the time this route
+    is called the user has already said yes.
+    """
+    path = _subtitle_video(body.video_path, body.engine)
+    try:
+        if body.engine == "local":
+            cues = transcribe_local(path)
+            if not cues:
+                raise RuntimeError("Whisper heard no speech in this video.")
+        else:
+            cues = perso_to_cues(PersoClient().transcribe(path))
+            if not cues:
+                raise RuntimeError("Perso heard no speech in this video.")
+    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503,
+                            detail=f"Could not transcribe this video ({str(e)[:120]}).")
+    out = _free_path(os.path.splitext(path)[0], ".srt")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(build_srt(cues))
+    return {"srt_path": out, "lines": len(cues)}
+
+
+# ---------------------------------------------------------------------------
+# Cutting a stretch of a video into its own file -- the agent's cut_clip tool.
+# All local ffmpeg work: free, no Perso, no confirm gate. The clip lands next
+# to the original, which is never touched.
+# ---------------------------------------------------------------------------
+
+class ClipCutRequest(BaseModel):
+    video_path: str
+    start: Union[float, str]
+    end: Union[float, str]
+
+
+def _parse_timecode(value) -> float:
+    """Seconds ("85", 85, 85.5) or colon timecodes ("1:25", "0:01:25")."""
+    if isinstance(value, bool):
+        raise ValueError("not a time: %r" % (value,))
+    if isinstance(value, (int, float)):
+        return float(value)
+    parts = str(value).strip().split(":")
+    if not 1 <= len(parts) <= 3:
+        raise ValueError("not a time: %r" % (value,))
+    total = 0.0
+    for p in parts:
+        total = total * 60.0 + float(p)
+    return total
+
+
+def _clip_stamp(sec: float) -> str:
+    """A time for a file name: 10 -> "10s", 65 -> "1m5s", 3700 -> "1h1m40s"."""
+    sec = int(round(sec))
+    m, s = divmod(sec, 60)
+    h, m = divmod(m, 60)
+    if h:
+        return "%dh%dm%ds" % (h, m, s)
+    if m:
+        return "%dm%ds" % (m, s)
+    return "%ds" % s
+
+
+@app.post("/api/clips/cut")
+def clips_cut(body: ClipCutRequest):
+    """Cut [start, end) of a video into a new file beside it.
+
+    Re-encoded rather than stream-copied, the way the official Perso plugin
+    cuts: -c copy can only cut on keyframes, so the first second of a copied
+    clip is often frozen or missing.
+    """
+    path = os.path.expanduser(body.video_path)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail=f"No such video: {body.video_path}")
+    try:
+        start = _parse_timecode(body.start)
+        end = _parse_timecode(body.end)
+    except ValueError:
+        raise HTTPException(status_code=422,
+                            detail='Times must be seconds ("85") or timecodes ("1:25").')
+    if start < 0 or end <= start:
+        raise HTTPException(status_code=422, detail="The clip must start before it ends.")
+    try:
+        duration = _video_duration(path)
+    except Exception:
+        raise HTTPException(status_code=422,
+                            detail="That file does not look like a video.")
+    if start >= duration:
+        raise HTTPException(status_code=422,
+                            detail=f"This video is only {duration:.0f}s long.")
+    end = min(end, duration)
+    base, ext = os.path.splitext(path)
+    out = _free_path("%s-clip-%s-%s" % (base, _clip_stamp(start), _clip_stamp(end)),
+                     ext or ".mp4")
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+           "-ss", "%.3f" % start, "-t", "%.3f" % (end - start), "-i", path,
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+           "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+           "-movflags", "+faststart", out]
+    run = subprocess.run(cmd, capture_output=True, text=True)
+    if run.returncode != 0:
+        raise HTTPException(status_code=503,
+                            detail="ffmpeg could not cut this video (%s)."
+                                   % (run.stderr or "no detail")[-120:].strip())
+    return {"clip_path": out, "seconds": round(end - start, 3)}
+
+
+class SubtitleBurnRequest(BaseModel):
+    video_path: str
+    srt_path: str = ""
+    preset: str = "clean"
+    pos: Optional[float] = None
+    size: Optional[float] = None
+
+
+# The font must hold Korean: each platform's own gothic, with Noto for the
+# Linux server case. The presets themselves are the official plugin's ten,
+# ported in app/subtitle_ass.py.
+_BURN_FONT = ("Apple SD Gothic Neo" if sys.platform == "darwin"
+              else "Malgun Gothic" if sys.platform == "win32"
+              else "Noto Sans CJK KR")
+# The first three styles shipped under our own names for a day (2026-09-01);
+# anything stored or asked for under those keeps working.
+_PRESET_ALIASES = {"variety": "neon-yellow", "box": "sticker"}
+
+
+def _norm_preset(preset: str) -> str:
+    preset = _PRESET_ALIASES.get(preset, preset)
+    if preset not in SUBTITLE_PRESETS:
+        raise HTTPException(status_code=422,
+                            detail="preset must be one of: %s"
+                                   % ", ".join(sorted(SUBTITLE_PRESETS)))
+    return preset
+
+
+def _video_dims(path: str):
+    """The video's width and height, for drawing subtitles in its own
+    coordinates. check_output on purpose: tests fake subprocess.run for the
+    burn itself, and this probe must not be caught in that net. Unreadable
+    file: a plain 1080p canvas -- fractions keep everything proportional."""
+    try:
+        out = subprocess.check_output(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+            text=True, timeout=30)
+        w, h = (int(x) for x in out.strip().split(",")[:2])
+        if w > 0 and h > 0:
+            return w, h
+    except Exception:
+        pass
+    return 1920, 1080
+
+
+def _srt_cues(path: str):
+    """The srt as [{start, end, text}], in block order."""
+    with open(path, encoding="utf-8-sig") as f:
+        blocks = f.read().split("\n\n")
+    cues = []
+    for block in blocks:
+        m = _SRT_TIMING.search(block)
+        if not m:
+            continue
+        h1, m1, s1, ms1, h2, m2, s2, ms2 = (int(g) for g in m.groups())
+        text = block[m.end():].strip()
+        cues.append({"start": h1 * 3600 + m1 * 60 + s1 + ms1 / 1000.0,
+                     "end": h2 * 3600 + m2 * 60 + s2 + ms2 / 1000.0,
+                     "text": text})
+    return cues
+
+
+def _write_burn_ass(srt: str, preset: str, pos, size, work: str, video: str,
+                    box_width=None, line_widths=None) -> str:
+    """The styled .ass beside the job, rebuilt for every burn (cheap)."""
+    w, h = _video_dims(video)
+    ass = build_ass(_srt_cues(srt), preset, width=w, height=h,
+                    pos=pos, size=size, font=_BURN_FONT,
+                    box_width=box_width, line_widths=line_widths)
+    out = os.path.join(work, "subtitle_render.ass")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(ass)
+    return out
+
+
+def _filter_path(path: str) -> str:
+    """A file path as ffmpeg's filter parser wants it.
+
+    Inside -vf, backslash starts an escape, colon ends the argument and an
+    apostrophe ends the quoted run -- all three appear in real paths (Windows
+    drives, "it's.srt")."""
+    return path.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+
+
+def _check_pos_size(pos: Optional[float], size: Optional[float]) -> None:
+    if pos is not None and not 0 <= pos <= 100:
+        raise HTTPException(status_code=422, detail="pos must be between 0 and 100")
+    if size is not None and not 50 <= size <= 300:
+        raise HTTPException(status_code=422, detail="size must be between 50 and 300")
+
+
+def _pos_size_suffix(pos: Optional[float], size: Optional[float]) -> str:
+    """The cache-name tail: every position and size is its own file."""
+    return (("" if pos is None else "-p%d" % round(pos))
+            + ("" if size is None else "-s%d" % round(size)))
+
+
+@app.post("/api/subtitles/burn")
+def subtitles_burn(body: SubtitleBurnRequest):
+    """Lay an .srt onto a video as a new file beside the original.
+
+    The srt defaults to the video's own name next to it -- exactly where
+    /api/subtitles/extract leaves one. Rendering text onto frames forces a
+    re-encode (same x264 settings as the clip route); the audio is untouched
+    and copied through.
+    """
+    preset = _norm_preset(body.preset)
+    path = os.path.expanduser(body.video_path)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail=f"No such video: {body.video_path}")
+    base, ext = os.path.splitext(path)
+    srt = os.path.expanduser(body.srt_path) if body.srt_path else base + ".srt"
+    if not os.path.isfile(srt):
+        raise HTTPException(status_code=404,
+                            detail="No subtitle file to lay on. Extract subtitles "
+                                   "first, or name an .srt file.")
+    out = _free_path("%s-sub-%s" % (base, preset), ext or ".mp4")
+    _check_pos_size(body.pos, body.size)
+    work = os.path.dirname(path)
+    ass = _write_burn_ass(srt, preset, body.pos, body.size, work, path)
+    vf = "ass=filename='%s'" % _filter_path(ass)
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+           "-i", path, "-vf", vf,
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+           "-pix_fmt", "yuv420p", "-c:a", "copy",
+           "-movflags", "+faststart", out]
+    run = subprocess.run(cmd, capture_output=True, text=True)
+    if run.returncode != 0:
+        raise HTTPException(status_code=503,
+                            detail="ffmpeg could not subtitle this video (%s)."
+                                   % (run.stderr or "no detail")[-120:].strip())
+    return {"out_path": out, "preset": preset}
 
 
 @app.get("/api/engines")
@@ -1007,6 +1528,50 @@ def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = T
     return missing
 
 
+def _run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speakers, log):
+    """The whole-job Perso path: upload -> cloud dub -> download. Same failure
+    grammar as the Perso STT/separation stages (no silent local fallback)."""
+    log("1/1 Dubbing in the Perso cloud…")
+    pc = PersoClient()
+    pc.cancel_check = lambda: job_store.is_cancel_requested(jid)
+    ws = getattr(pc, "describe_workspace", lambda: None)()
+    if ws:
+        log(f"   Perso workspace: {ws.get('name') or ws.get('seq')} (#{ws.get('seq')})")
+    try:
+        pc.dub_video(video_path, out_path, source_code, target_code, num_speakers=num_speakers, log=log)
+        # The Perso project number is how the script viewer (and later the
+        # agent) finds this job's sentences again -- persist it with the job.
+        seq = getattr(pc, "last_dub_project_seq", None)
+        if seq:
+            job_store._update(jid, perso_project_seq=seq)
+            job_store.persist(jid, os.path.dirname(out_path))
+    except JobCancelled:
+        raise
+    except PersoCreditExhaustedError as e:
+        msg = "Perso credits are used up. Recharge to continue."
+        log(f"   Error: {msg} ({e.link})")
+        job_store.append_notice(jid, {"type": "perso_credit_exhausted", "message": msg, "link": e.link})
+        raise RuntimeError(msg) from e
+    except PersoInvalidKeyError as e:
+        msg = "Perso rejected the API key. Open Settings and check the key."
+        log(f"   Error: {msg}")
+        job_store.append_notice(jid, {"type": "perso_invalid_key", "message": msg})
+        raise RuntimeError(msg) from e
+    except PersoUnavailableError as e:
+        msg = "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
+        log(f"   Error: {msg}")
+        job_store.append_notice(jid, {"type": "perso_unavailable", "message": msg})
+        raise RuntimeError(msg) from e
+    try:
+        if ws and ws.get("credits") is not None:
+            after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
+            if after is not None:
+                log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
+    except Exception:
+        pass
+    return {"job_id": jid, "out_path": out_path, "num_segments": 0, "dub_mode": "perso"}
+
+
 def _raise_models_needed(missing):
     free = model_store.free_bytes_at(model_store.kit_dir())
     raise HTTPException(409, {
@@ -1028,6 +1593,7 @@ def dub_start(
     translate_engine: Optional[str] = Form(None),
     stt_engine: Optional[str] = Form(None),
     sep_engine: Optional[str] = Form(None),
+    dub_mode: Optional[str] = Form(None),
     n_takes: Optional[int] = Form(None),
     source_language_code: Optional[str] = Form(None),
     project: Optional[str] = Form(None),
@@ -1082,9 +1648,16 @@ def dub_start(
     sep_engine = (sep_engine or "").strip().lower() or None
     if sep_engine not in (None, "local", "demucs", "perso"):
         raise HTTPException(422, f"Unknown sep_engine: {sep_engine}")
+    dub_mode = (dub_mode or "").strip().lower() or "local"
+    if dub_mode not in ("local", "perso"):
+        raise HTTPException(422, f"Unknown dub_mode: {dub_mode}")
+    if dub_mode == "perso":
+        # The cloud does everything -- the per-stage engine choices (and their
+        # preflights, including the local-model 409) do not apply.
+        stt_engine = sep_engine = translate_engine = None
     if not _valid_language_code(language_code):
         raise HTTPException(422, f"Unknown language_code: {language_code}")
-    effective_translate_engine = (translate_engine or TRANSLATE_ENGINE or "").lower()
+    effective_translate_engine = "" if dub_mode == "perso" else (translate_engine or TRANSLATE_ENGINE or "").lower()
     translate_missing_id = None
     if effective_translate_engine == "gemma":
         status = gemma_status()
@@ -1118,7 +1691,13 @@ def dub_start(
             "Perso separation needs an API key. Open Settings and save your Perso "
             "API key, or choose Local separation.",
         )
-    if "perso" in (stt_engine, sep_engine) and not current_value("PERSO_SPACE_SEQ"):
+    if dub_mode == "perso" and not perso_available():
+        raise HTTPException(
+            422,
+            "Perso cloud dubbing needs an API key. Open Settings and save your "
+            "Perso API key, or dub on this computer.",
+        )
+    if (dub_mode == "perso" or "perso" in (stt_engine, sep_engine)) and not current_value("PERSO_SPACE_SEQ"):
         # No workspace pinned: a single-workspace account resolves silently in
         # the pipeline, but several would fail AFTER minutes of separation
         # work. Catch that here, before the upload is accepted.
@@ -1137,10 +1716,11 @@ def dub_start(
     # The models this job still needs -- 409 with the dialog's exact payload
     # instead of dying minutes into the pipeline (permanent rule: the screen
     # asks, downloads, and resubmits; nothing here downloads silently).
-    need_whisper = (stt_engine or default_stt_engine() or "local") != "perso"
-    missing = _missing_models(need_whisper, translate_missing_id)
-    if missing:
-        _raise_models_needed(missing)
+    if dub_mode != "perso":
+        need_whisper = (stt_engine or default_stt_engine() or "local") != "perso"
+        missing = _missing_models(need_whisper, translate_missing_id)
+        if missing:
+            _raise_models_needed(missing)
 
     # Names the job's folder. The caller may pass a title it already knows (the
     # screen probes a link before starting, and app/source_fetch.py's fetch()
@@ -1213,10 +1793,19 @@ def dub_start(
                       # thread below, which clears this the moment it is.
                       trim_pending=bool(source_url and trim_start is not None),
                       from_link=bool(source_url),
+                      # The link itself and the speaker count: what the boot
+                      # re-arm needs to rebuild this job's work should it wait
+                      # out an app restart in the queue.
+                      source_url=source_url,
+                      num_speakers=num_speakers,
                       # What made this job: read back by the finished screen and
                       # by "Try again", which repeats these rather than today's
                       # defaults.
-                      **_engines_used(stt_engine, translate_engine, n_takes, sep_engine))
+                      # A cloud job records its mode, not local engine choices
+                      # its finished screen would then lie about.
+                      **({"dub_mode": "perso"} if dub_mode == "perso" else
+                         {"dub_mode": "local",
+                          **_engines_used(stt_engine, translate_engine, n_takes, sep_engine)}))
     # Written now, not just at the end: a job the user quits the app in the
     # middle of still has a folder, and without a file in it that folder is
     # nameless -- Projects would have nothing to show for it.
@@ -1242,6 +1831,10 @@ def dub_start(
                     job_store.persist(jid, work)
 
                 _cut_video(video_path, trim_start, trim_end, on_cut=_cut_recorded)
+        if dub_mode == "perso":
+            return _run_cloud_dub(jid, video_path, out_path,
+                                  source_language_code or None, language_code,
+                                  num_speakers, log)
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,
@@ -1260,8 +1853,12 @@ def dub_start(
             log=log,
         )
 
-    job_store.start(jid, _target)
-    return {"job_id": jid, "status": "running"}
+    # A Perso cloud dub runs on Perso's servers, so it skips the local line
+    # (user decision 2026-09-01): waiting here would idle both machines.
+    job_store.start(jid, _target, parallel=(dub_mode == "perso"))
+    # "running", or "queued" when another dub holds the air -- the screen's
+    # toast says which.
+    return {"job_id": jid, "status": job_store.get(jid)["status"]}
 
 
 class ProbeRequest(BaseModel):
@@ -1316,16 +1913,11 @@ def _valid_language_code(code: str) -> bool:
     return bool(_LANGUAGE_CODE.match(code or ""))
 
 
-# The ten languages the bundled voice model speaks, by code -- the same table
-# the screen keeps (ui/src/dubApi.mjs LANGUAGES). run_dub is given the NAME,
-# which it pastes into the translation prompt and hands to the voice sidecar,
-# so a job whose saved record predates `language` needs its name worked out
-# from the code rather than the code sent in its place.
-LANGUAGE_NAMES = {
-    "en": "English", "ko": "Korean", "zh": "Chinese", "fr": "French",
-    "de": "German", "it": "Italian", "ja": "Japanese", "pt": "Portuguese",
-    "ru": "Russian", "es": "Spanish",
-}
+# run_dub is given the language's NAME, which it pastes into the translation
+# prompt and hands to the voice sidecar -- a job whose saved record predates
+# `language` needs its name worked out from the code. The table itself lives
+# in app/config.py, shared with the agent's queue_dub tool.
+LANGUAGE_NAMES = config.LANGUAGE_NAMES
 
 
 def _language_name(code: str) -> str:
@@ -1432,7 +2024,9 @@ def dub_result_srt(jid: str, download: int = 0):
     if not out:
         raise HTTPException(status_code=404, detail="Result file not found")
     work_dir = os.path.dirname(out)
-    for name in ("translated.srt", "sub.srt"):
+    # edited.srt first: once the user has fixed lines, THAT is the script the
+    # remade voices speak, and the one every export should carry (2026-09-01).
+    for name in ("edited.srt", "translated.srt", "sub.srt"):
         candidate = os.path.join(work_dir, name)
         if os.path.exists(candidate):
             with open(candidate, encoding="utf-8-sig") as f:
@@ -1445,6 +2039,216 @@ def dub_result_srt(jid: str, download: int = 0):
                             media_type="text/plain; charset=utf-8",
                             headers=headers)
     raise HTTPException(status_code=404, detail="Subtitle file not found")
+
+
+def _subtitled_sources(jid: str):
+    """The finished video and the script to lay on it, or the HTTPException
+    that says why not. Shared by the subtitled export and its preview."""
+    j = job_store.get(jid)
+    if j is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if j["status"] != "done":
+        raise HTTPException(status_code=409, detail="Job not finished yet")
+    out = (j.get("result") or {}).get("out_path")
+    if not out or not os.path.exists(out):
+        raise HTTPException(status_code=404, detail="Result file not found")
+    work = os.path.dirname(out)
+    for name in ("edited.srt", "translated.srt", "sub.srt"):
+        srt = os.path.join(work, name)
+        if os.path.exists(srt):
+            return j, out, srt, work
+    raise HTTPException(status_code=404, detail="Subtitle file not found")
+
+
+def _stale(built: str, *sources: str) -> bool:
+    """The built file is missing, or something it was built from is newer."""
+    if not os.path.exists(built):
+        return True
+    made = os.path.getmtime(built)
+    return any(os.path.getmtime(src) > made for src in sources)
+
+
+@app.get("/api/dub/result/{jid}/subtitled")
+def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int = 0,
+                         pos: Optional[float] = None, size: Optional[float] = None):
+    """The dubbed video with its subtitles laid on, built on first ask.
+
+    Lives in the job's own folder as subtitled-<preset>.mp4 and is served from
+    there afterwards; a remade video or an edited script makes it stale and it
+    is built again. The edited script wins over the original -- it is what the
+    remade voices actually say.
+    """
+    j, out, srt, work, preset, pos, size, sources, stored = _resolved_burn_inputs(
+        jid, preset, pos, size)
+    built = os.path.join(work, "subtitled-%s%s.mp4" % (preset, _pos_size_suffix(pos, size)))
+    if _stale(built, *sources):
+        ass = _write_burn_ass(srt, preset, pos, size, work, out,
+                              stored["boxWidth"], stored["widths"])
+        run = subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-i", out, "-vf", "ass=filename='%s'" % _filter_path(ass),
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+             "-pix_fmt", "yuv420p", "-c:a", "copy",
+             "-movflags", "+faststart", built],
+            capture_output=True, text=True)
+        if run.returncode != 0:
+            raise HTTPException(status_code=503,
+                                detail="ffmpeg could not subtitle this video (%s)."
+                                       % (run.stderr or "no detail")[-120:].strip())
+    filename = "dub_%s-sub-%s.mp4" % (_target_code(j), preset)
+    headers = ({"Content-Disposition": 'attachment; filename="%s"' % filename}
+               if download else None)
+    return FileResponse(built, media_type="video/mp4", headers=headers)
+
+
+_SUBTITLE_STYLE_DEFAULTS = {"enabled": True, "preset": "clean",
+                            "pos": None, "size": None, "cues": {},
+                            "boxWidth": None, "widths": {}}
+
+
+def _subtitle_style_file(jid: str) -> str:
+    j = job_store.get(jid)
+    if j is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    out = (j.get("result") or {}).get("out_path")
+    if not out:
+        raise HTTPException(status_code=404, detail="Result file not found")
+    return os.path.join(os.path.dirname(out), "subtitle_style.json")
+
+
+def _load_subtitle_style(work: str) -> dict:
+    try:
+        with open(os.path.join(work, "subtitle_style.json"), encoding="utf-8") as f:
+            return {**_SUBTITLE_STYLE_DEFAULTS, **json.load(f)}
+    except (OSError, ValueError):
+        return dict(_SUBTITLE_STYLE_DEFAULTS)
+
+
+@app.get("/api/dub/jobs/{jid}/subtitle_style")
+def subtitle_style_get(jid: str):
+    """How this job's subtitles should look -- one truth shared by the player
+    overlay, the timeline's subtitle lane and the Export dialog."""
+    return _load_subtitle_style(os.path.dirname(_subtitle_style_file(jid)))
+
+
+@app.put("/api/dub/jobs/{jid}/subtitle_style")
+def subtitle_style_put(jid: str, body: dict):
+    path = _subtitle_style_file(jid)
+    merged = {**_SUBTITLE_STYLE_DEFAULTS,
+              **{k: v for k, v in (body or {}).items() if k in _SUBTITLE_STYLE_DEFAULTS}}
+    merged["preset"] = _norm_preset(merged["preset"])
+    _check_pos_size(merged["pos"], merged["size"])
+    if merged["boxWidth"] is not None and not 10 <= merged["boxWidth"] <= 100:
+        raise HTTPException(status_code=422, detail="boxWidth must be between 10 and 100")
+    if not isinstance(merged["widths"], dict):
+        raise HTTPException(status_code=422, detail="widths must be an object")
+    for k, w in merged["widths"].items():
+        try:
+            w = float(w)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail=f"width {k} must be a number")
+        if not 10 <= w <= 100:
+            raise HTTPException(status_code=422, detail=f"width {k} must be between 10 and 100")
+    if not isinstance(merged["cues"], dict):
+        raise HTTPException(status_code=422, detail="cues must be an object")
+    for k, cue in merged["cues"].items():
+        try:
+            start, end = float(cue["start"]), float(cue["end"])
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(status_code=422, detail=f"cue {k} needs start and end")
+        if not 0 <= start < end:
+            raise HTTPException(status_code=422, detail=f"cue {k} must start before it ends")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(merged, f, ensure_ascii=False)
+    return merged
+
+
+_SRT_TIMING = re.compile(
+    r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)")
+
+
+def _fmt_srt_time(sec: float) -> str:
+    ms = round(sec * 1000)
+    return "%02d:%02d:%02d,%03d" % (ms // 3600000, ms // 60000 % 60,
+                                    ms // 1000 % 60, ms % 1000)
+
+
+def _retimed_srt(srt: str, cues: dict, work: str) -> str:
+    """The srt with the user's own timings on the lines they stretched or
+    trimmed on the timeline (keyed 1-based, in block order). Written beside
+    the original, which stays the record of what the dub said."""
+    with open(srt, encoding="utf-8-sig") as f:
+        blocks = f.read().split("\n\n")
+    n = 0
+    for i, block in enumerate(blocks):
+        if not _SRT_TIMING.search(block):
+            continue
+        n += 1
+        cue = cues.get(str(n))
+        if cue:
+            blocks[i] = _SRT_TIMING.sub(
+                "%s --> %s" % (_fmt_srt_time(float(cue["start"])),
+                               _fmt_srt_time(float(cue["end"]))), block, count=1)
+    out = os.path.join(work, "subtitle_timed.srt")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("\n\n".join(blocks))
+    return out
+
+
+def _resolved_burn_inputs(jid, preset, pos, size):
+    """Query params when given, the stored settings where not -- plus the srt
+    (retimed if lines were), and every file the built result depends on."""
+    _check_pos_size(pos, size)
+    j, out, srt, work = _subtitled_sources(jid)
+    stored = _load_subtitle_style(work)
+    preset = _norm_preset(preset or stored["preset"])
+    pos = stored["pos"] if pos is None else pos
+    size = stored["size"] if size is None else size
+    _check_pos_size(pos, size)
+    style_file = os.path.join(work, "subtitle_style.json")
+    sources = [out, srt] + ([style_file] if os.path.exists(style_file) else [])
+    if stored["cues"]:
+        srt = _retimed_srt(srt, stored["cues"], work)
+    return j, out, srt, work, preset, pos, size, sources, stored
+
+
+def _first_srt_second(srt: str) -> float:
+    """When the first line appears, so the preview frame has words on it."""
+    with open(srt, encoding="utf-8-sig") as f:
+        m = re.search(r"(\d+):(\d+):(\d+)[,.](\d+)", f.read())
+    if not m:
+        return 0.0
+    h, mnt, sec, ms = (int(g) for g in m.groups())
+    return h * 3600 + mnt * 60 + sec + ms / 1000.0
+
+
+@app.get("/api/dub/result/{jid}/subtitle_preview")
+def dub_result_subtitle_preview(jid: str, preset: Optional[str] = None,
+                                pos: Optional[float] = None,
+                                size: Optional[float] = None):
+    """One frame of the subtitled video, for the Export dialog's style cards.
+
+    Seeked into the first subtitle line; -copyts keeps the original clock so
+    the subtitles filter still knows a line is on screen at that moment.
+    """
+    j, out, srt, work, preset, pos, size, sources, stored = _resolved_burn_inputs(
+        jid, preset, pos, size)
+    built = os.path.join(work, "subtitle-preview-%s%s.jpg" % (preset, _pos_size_suffix(pos, size)))
+    if _stale(built, *sources):
+        at = _first_srt_second(srt) + 0.5
+        ass = _write_burn_ass(srt, preset, pos, size, work, out,
+                              stored["boxWidth"], stored["widths"])
+        run = subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-ss", "%.3f" % at, "-copyts", "-i", out,
+             "-vf", "ass=filename='%s',scale=480:-2" % _filter_path(ass),
+             "-frames:v", "1", "-q:v", "5", built],
+            capture_output=True, text=True)
+        if run.returncode != 0:
+            raise HTTPException(status_code=503,
+                                detail="ffmpeg could not draw the preview (%s)."
+                                       % (run.stderr or "no detail")[-120:].strip())
+    return FileResponse(built, media_type="image/jpeg")
 
 
 # ---------------------------------------------------------------------------
@@ -1545,7 +2349,10 @@ class AgentChatRequest(BaseModel):
 def _with_job(message: str, job_id: Optional[str]) -> str:
     """Tell the assistant which job is on screen before it reads the question."""
     if not job_id:
-        return message
+        # The home screen has the strip too, and there no job is open. Said
+        # outright, or the assistant asks for a job number the user never sees.
+        return ("(No job is open on screen right now -- the user is on the "
+                "home screen.)\n\n%s" % message)
     return "(The job open on screen right now: %s)\n\n%s" % (job_id, message)
 
 

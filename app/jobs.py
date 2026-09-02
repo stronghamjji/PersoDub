@@ -35,13 +35,18 @@ from app.config import PERSODUB_LOG_DIR
 SAVED_FIELDS = ("id", "status", "language", "language_code", "source_lang",
                 "project", "day", "from_link", "created", "work_dir", "trim",
                 "trim_pending", "error", "remade_as",
-                "stt_engine", "translator", "tts", "quality", "separation")
+                "stt_engine", "translator", "tts", "quality", "separation",
+                "dub_mode", "perso_project_seq",
+                # What the boot re-arm needs to rebuild a queued job's work:
+                # the speaker count, and (for a link job still waiting to
+                # download) the link itself.
+                "num_speakers", "source_url")
 
 # What GET /api/dub/jobs sends the screen: the same minus the two absolute
 # paths. The sidebar names a job, colours its dot and addresses everything else
 # -- open, delete, retry -- by id, so shipping the user's home directory in
 # every row would be for nothing.
-LIST_FIELDS = tuple(f for f in SAVED_FIELDS if f != "work_dir")
+LIST_FIELDS = tuple(f for f in SAVED_FIELDS if f not in ("work_dir", "source_url"))
 
 
 class JobCancelled(Exception):
@@ -55,6 +60,10 @@ class JobStore:
         self._jobs: Dict[str, dict] = {}
         self._lock = threading.Lock()
         self._log_dir = log_dir
+        # One dub at a time (see start): the id on air, and the jobs waiting
+        # behind it with the function each will run when its turn comes.
+        self._active: Optional[str] = None
+        self._pending: List[tuple] = []
 
     @property
     def log_dir(self) -> str:
@@ -262,6 +271,7 @@ class JobStore:
         leave the list with them."""
         with self._lock:
             self._jobs.pop(jid, None)
+            self._pending = [(i, t) for i, t in self._pending if i != jid]
 
     def is_cancel_requested(self, jid: str) -> bool:
         """Polled by app/pipeline.py's cancel_check at stage boundaries."""
@@ -282,11 +292,21 @@ class JobStore:
             j = self._jobs.get(jid)
             if j is None:
                 return None
-            if j["status"] != "running":
+            if j["status"] == "queued":
+                # No thread to wind down: it stops the moment it is told to,
+                # and _dispatch_next skips it when its turn would have come.
+                j["status"] = "cancelled"
+                self._pending = [(i, t) for i, t in self._pending if i != jid]
+                work_dir = j.get("work_dir")
+            elif j["status"] != "running":
                 return j["status"]
-            j["cancel_requested"] = True
-            j["status"] = "cancelling"
-            return "cancelling"
+            else:
+                j["cancel_requested"] = True
+                j["status"] = "cancelling"
+                return "cancelling"
+        if work_dir:
+            self.persist(jid, work_dir)
+        return "cancelled"
 
     def run_async(self, target: Callable[[Callable[[str], None]], Any]) -> str:
         """Create a job, run target(log) on a background thread, return the job id.
@@ -297,12 +317,72 @@ class JobStore:
         self.start(jid, target)
         return jid
 
-    def start(self, jid: str, target: Callable[[Callable[[str], None]], Any]) -> None:
-        """Run target(log) on a background thread for an already-created job id.
+    def start(self, jid: str, target: Callable[[Callable[[str], None]], Any],
+              parallel: bool = False) -> None:
+        """Run target(log) now -- or, when another job is on air, queue it.
 
-        Used when the caller needs the job id before the thread starts (e.g.
-        to build a cancel_check closure bound to that id -- see app/main.py).
+        One dub at a time, whichever door it came in through (a new upload,
+        Try again, a redub): two pipelines at once would fight over the same
+        GPU and memory. A queued job starts by itself the moment the one
+        before it ends, however that one ends. Used instead of run_async when
+        the caller needs the job id before the thread starts (e.g. to build a
+        cancel_check closure bound to that id -- see app/main.py).
+
+        `parallel` is for work another machine does (a Perso cloud dub): it
+        starts at once beside whatever is on air, never takes the air, and
+        its ending frees nothing -- waiting in the local line would have
+        idled both machines.
         """
+        if parallel:
+            self._update(jid, status="running")
+            self._launch(jid, target, holds_air=False)
+            return
+        with self._lock:
+            if self._active is not None:
+                self._jobs[jid]["status"] = "queued"
+                self._pending.append((jid, target))
+                work_dir = self._jobs[jid].get("work_dir")
+                queued = True
+            else:
+                self._active = jid
+                # Fresh jobs are born "running"; a re-armed queued one is not.
+                self._jobs[jid]["status"] = "running"
+                queued = False
+        if queued:
+            # The file beside the video has to say "queued" too, or a restart
+            # would read the "running" written when the record was made and
+            # turn a job that lost nothing into an error.
+            if work_dir:
+                self.persist(jid, work_dir)
+            return
+        self._launch(jid, target)
+
+    def _dispatch_next(self) -> None:
+        """The job on air is over -- put the next waiting one on."""
+        while True:
+            with self._lock:
+                self._active = None
+                if not self._pending:
+                    return
+                jid, target = self._pending.pop(0)
+                j = self._jobs.get(jid)
+                if j is None or j.get("status") != "queued":
+                    continue      # cancelled or deleted while it waited
+                j["status"] = "running"
+                self._active = jid
+            work_dir = (self.get(jid) or {}).get("work_dir")
+            if work_dir:
+                self.persist(jid, work_dir)
+            self._launch(jid, target)
+            return
+
+    def _launch(self, jid: str, target: Callable[[Callable[[str], None]], Any],
+                holds_air: bool = True) -> None:
+        """Run target(log) on a background thread.
+
+        holds_air: this job owns the one local seat (self._active is jid), so
+        its ending must hand the seat to the next in line. A parallel (cloud)
+        job never held it, and must not hand it to anyone."""
         def log(msg: str):
             self.append_log(jid, msg)
 
@@ -337,5 +417,9 @@ class JobStore:
             work_dir = (self.get(jid) or {}).get("work_dir")
             if work_dir:
                 self.persist(jid, work_dir)
+            # However this one ended, the air is free now -- unless this job
+            # never held it (a parallel cloud dub beside the local line).
+            if holds_air:
+                self._dispatch_next()
 
         threading.Thread(target=_wrap, daemon=True).start()

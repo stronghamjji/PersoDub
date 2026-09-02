@@ -736,7 +736,7 @@ def place_lines(background_path: str, line_paths: List[Optional[str]],
                         "time-stretch is banned in this app, this should never happen"
                         % (i, stretch_rate))
 
-        gain = gains[i] if gains is not None else 1.0
+        gain = gains[i] if gains is not None and gains[i] is not None else 1.0
         if gain != 1.0:
             line = audioop.mul(line, MIX_WIDTH, gain)
 

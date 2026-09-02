@@ -671,3 +671,184 @@ def test_separate_with_perso_credit_exhausted_notice():
             "/v/in.mp4", "/w", perso_client=FakeClient(),
             cancel_check=None, on_notice=notices.append, log=lambda m: None)
     assert notices and notices[0]["type"] == "perso_credit_exhausted"
+
+
+# ── 9. PersoClient.dub_video() HTTP flow (mocked httpx, no network) ────────
+def _install_fake_perso_dub_http(monkeypatch, progress_sequence, has_video=True):
+    """Fake the cloud-dub flow: upload (3 steps) -> create translate project ->
+    poll -> download-info -> download?target=dubbingVideo -> media fetch."""
+    calls = {"get": [], "put": [], "post": []}
+    progress_iter = iter(progress_sequence)
+    monkeypatch.setattr(perso_client_module, "MEDIA_HOST", "https://media.example.com")
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls["get"].append((url, dict(params or {})))
+        if url.endswith("/file/api/upload/sas-token"):
+            return _FakeHttpxResponse({"blobSasUrl": "https://blob.example.com/x?sig=abc"})
+        if "/progress" in url:
+            return _FakeHttpxResponse({"result": next(progress_iter)})
+        if url.endswith("/download-info"):
+            return _FakeHttpxResponse({"result": {"hasTranslatedVideo": has_video}})
+        if "/download" in url:
+            return _FakeHttpxResponse({"result": {"videoFile": {
+                "videoDownloadLink": "/perso-storage/dubbed_en.mp4"}}})
+        if url.startswith("https://media.example.com"):
+            r = _FakeHttpxResponse({})
+            r.content = b"FAKE-DUBBED-MP4"
+            return r
+        raise AssertionError(f"unexpected GET {url}")
+
+    def fake_put(url, content=None, json=None, headers=None, timeout=None):
+        calls["put"].append(url)
+        if url == "https://blob.example.com/x?sig=abc":
+            return _FakeHttpxResponse({})
+        if url.endswith("/file/api/upload/video"):
+            return _FakeHttpxResponse({"seq": 555})
+        raise AssertionError(f"unexpected PUT {url}")
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls["post"].append((url, json))
+        if url.endswith("/translate"):
+            return _FakeHttpxResponse({"result": {"startGenerateProjectIdList": [888]}})
+        raise AssertionError(f"unexpected POST {url}")
+
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(perso_client_module.httpx, "put", fake_put)
+    monkeypatch.setattr(perso_client_module.httpx, "post", fake_post)
+    return calls
+
+
+def test_perso_client_dub_video_happy_path(monkeypatch, tmp_path):
+    calls = _install_fake_perso_dub_http(
+        monkeypatch,
+        progress_sequence=[{"progressReason": "Processing", "hasFailed": False},
+                           {"progressReason": "Completed", "hasFailed": False}],
+    )
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"fake-video")
+    out = tmp_path / "dubbed.mp4"
+
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    result = client.dub_video(str(video), str(out), "ko", "en", num_speakers=2)
+
+    assert result == str(out)
+    assert out.read_bytes() == b"FAKE-DUBBED-MP4"
+    # The translate request carries the exact contract the plugin validated.
+    url, body = next(c for c in calls["post"] if c[0].endswith("/translate"))
+    assert body["mediaSeq"] == 555
+    assert body["isVideoProject"] is True
+    assert body["sourceLanguageCode"] == "ko"
+    assert body["targetLanguages"] == [{"languageCode": "en", "ttsModel": "AUDIO_ENGINE_V3"}]
+    assert body["numberOfSpeakers"] == 2
+    assert body["preferredSpeedType"] == "GREEN"
+    # download-info gate ran before the download link was asked for
+    assert any(u.endswith("/download-info") for u, _ in calls["get"])
+    assert any(p.get("target") == "dubbingVideo" for _, p in calls["get"])
+
+
+def test_perso_client_dub_video_defaults_source_auto_and_one_speaker(monkeypatch, tmp_path):
+    calls = _install_fake_perso_dub_http(
+        monkeypatch, progress_sequence=[{"progressReason": "Completed", "hasFailed": False}])
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    client.dub_video(str(video), str(tmp_path / "out.mp4"), None, "en")
+    _, body = next(c for c in calls["post"] if c[0].endswith("/translate"))
+    assert body["sourceLanguageCode"] == "auto"
+    assert body["numberOfSpeakers"] == 1
+
+
+def test_perso_client_dub_video_raises_when_video_not_ready(monkeypatch, tmp_path):
+    _install_fake_perso_dub_http(
+        monkeypatch,
+        progress_sequence=[{"progressReason": "Completed", "hasFailed": False}],
+        has_video=False,
+    )
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    with pytest.raises(RuntimeError):
+        client.dub_video(str(video), str(tmp_path / "out.mp4"), "ko", "en")
+
+
+def test_perso_client_dub_video_raises_on_hasFailed(monkeypatch, tmp_path):
+    _install_fake_perso_dub_http(
+        monkeypatch,
+        progress_sequence=[{"progressReason": "Failed", "hasFailed": True}],
+    )
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    with pytest.raises(RuntimeError):
+        client.dub_video(str(video), str(tmp_path / "out.mp4"), "ko", "en")
+
+
+# ── 10. PersoClient.get_project_script() (mocked httpx, no network) ────────
+def test_get_project_script_paginates_and_returns_sentences(monkeypatch):
+    pages = [
+        {"sentences": [{"seq": 1, "originalText": "안녕", "translatedText": "Hi",
+                        "offsetMs": 0, "durationMs": 900, "speakerOrderIndex": 1,
+                        "audioUrl": "/perso-storage/a1.wav"}],
+         "speakers": [{"speakerOrderIndex": 1, "voiceId": "v1"}],
+         "hasNext": True, "nextCursorId": 77},
+        {"sentences": [{"seq": 2, "originalText": "잘 가", "translatedText": "Bye",
+                        "offsetMs": 1000, "durationMs": 800, "speakerOrderIndex": 2,
+                        "audioUrl": "/perso-storage/a2.wav"}],
+         "speakers": [{"speakerOrderIndex": 1, "voiceId": "v1"},
+                      {"speakerOrderIndex": 2, "voiceId": "v2"}],
+         "hasNext": False},
+    ]
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert "/script" in url
+        calls.append(dict(params or {}))
+        return _FakeHttpxResponse(pages[len(calls) - 1])
+
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    script = client.get_project_script(409873)
+
+    assert [s["seq"] for s in script["sentences"]] == [1, 2]
+    # the cursor from page 1 drives page 2
+    assert calls[1].get("cursorId") == 77
+    # every page carries the full speaker list; the last one wins
+    assert len(script["speakers"]) == 2
+
+
+# ── 11. PersoClient.add_speaker_from_sentence (mocked httpx) ───────────────
+def test_add_speaker_from_sentence_posts_the_sentence(monkeypatch):
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append((url, json))
+        return _FakeHttpxResponse({"result": {"ok": True}})
+
+    monkeypatch.setattr(perso_client_module.httpx, "post", fake_post)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    client.add_speaker_from_sentence(409873, 11056763)
+    url, body = calls[0]
+    assert url.endswith("/projects/409873/spaces/999/speakers/from-sentence")
+    assert body == {"sourceSentenceSeq": 11056763}
+
+
+def test_download_target_scans_for_the_link_and_saves(monkeypatch, tmp_path):
+    def fake_get(url, params=None, headers=None, timeout=None):
+        if "/download" in url:
+            assert params == {"target": "backgroundAudio"}
+            return _FakeHttpxResponse({"result": {"audioFile": {
+                "backgroundAudioDownloadLink": "/perso-storage/bg.m4a"}}})
+        r = _FakeHttpxResponse({})
+        r.content = b"BG-BYTES"
+        return r
+
+    monkeypatch.setattr(perso_client_module, "MEDIA_HOST", "https://media.example.com")
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    out = tmp_path / "bg.src"
+    client.download_target(409873, "backgroundAudio", str(out))
+    assert out.read_bytes() == b"BG-BYTES"

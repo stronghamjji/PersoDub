@@ -214,6 +214,24 @@ def test_place_lines_applies_gains_when_given(tmp_path):
     assert sample == 2000  # gained 2x before being placed
 
 
+def test_place_lines_none_gain_means_unchanged(tmp_path):
+    # A dub materialized from Perso has no measured loudness, so its manifest
+    # carries gain None for every line -- that must mean "as is", not a crash.
+    bg = tmp_path / "bg.wav"
+    _write_wav(bg, SR, 2, 2, _const_frames(0, SR, 2))  # 1s silence
+    line = tmp_path / "line0.wav"
+    _write_wav(line, SR, 1, 2, _const_frames(1000, 4800, 1))  # 0.1s @1000
+
+    out = tmp_path / "out.wav"
+    place_lines(str(bg), [str(line)], [0.2], str(out), gains=[None])
+
+    with wave.open(str(out), "rb") as w:
+        data = w.readframes(w.getnframes())
+    pos = int(0.2 * SR) * 4
+    sample = int.from_bytes(data[pos:pos + 2], "little", signed=True)
+    assert sample == 1000  # placed at its own loudness
+
+
 def test_place_lines_peak_guard_avoids_hard_clipping(tmp_path):
     # Background and a (gained) line both near full-scale and fully overlapping --
     # a naive 16-bit sum would hard-clip (flat-top at 32767). The peak guard should

@@ -100,6 +100,9 @@ export function buildDubFormData(opts) {
   // the paid Perso choice is worth sending (app/main.py:dub_start sep_engine).
   if (opts.sepEngine === "perso") fd.append("sep_engine", "perso");
 
+  // Whole-job cloud dubbing: local is the default; only the paid choice travels.
+  if (opts.dubMode === "perso") fd.append("dub_mode", "perso");
+
   if (opts.numSpeakers != null) fd.append("num_speakers", String(opts.numSpeakers));
   if (opts.translateEngine && opts.translateEngine !== "auto") {
     fd.append("translate_engine", opts.translateEngine);
@@ -233,6 +236,20 @@ const VOICE_CAP = 40;
  * the job finishes). An explicit lineCount wins when both are available.
  */
 export function parseProgress(logs, { lineCount = null } = {}) {
+  // A Perso cloud dub logs three phases of its own instead of the six local
+  // stages -- map them to a moving bar so the run never looks frozen.
+  let cloud = 0;
+  for (const line of logs || []) {
+    const l = String(line);
+    if (/Uploading the video to Perso/.test(l)) cloud = Math.max(cloud, 1);
+    if (/Perso is dubbing/.test(l)) cloud = Math.max(cloud, 2);
+    if (/Downloading the finished video/.test(l)) cloud = Math.max(cloud, 3);
+  }
+  if (cloud > 0) {
+    const label = cloud === 1 ? "Uploading to Perso" : cloud === 2 ? "Dubbing at Perso" : "Delivering";
+    const percent = cloud === 1 ? 15 : cloud === 2 ? 55 : 90;
+    return { stage: cloud, total: 3, label, percent, voiceDone: 0, voiceTotal: null, raw: 0 };
+  }
   let raw = 0, voiceDone = 0, loggedTotal = null;
   for (const line of logs || []) {
     const m = /^(\d)\/6\s/.exec(String(line).trim());
@@ -302,7 +319,9 @@ export async function pollDubJob(jobId, {
     wait = intervalMs;   // back in touch -- ask at the normal pace again
     const progress = parseProgress(job.logs);
     if (onUpdate) onUpdate(job, progress);
-    if (job.status !== "running" && job.status !== "cancelling") return job;
+    // "queued" is a live job too: it will start by itself, and the watcher
+    // has to still be looking when it does.
+    if (!["running", "cancelling", "queued"].includes(job.status)) return job;
     if (shouldStop && shouldStop()) return job;
     await sleep(wait);
   }
@@ -377,7 +396,7 @@ export function engineChips(job, { withQuality = true, withTts = true } = {}) {
   const chips = [];
   // The role is the field the id was read out of, which is the only place it
   // can be known from: "qwen" translates and "qwen3" speaks.
-  for (const [role, key] of [["Separation", j.separation], ["STT", j.stt_engine],
+  for (const [role, key] of [["Dubbing", j.dub_mode], ["Separation", j.separation], ["STT", j.stt_engine],
                              ["Translation", j.translator], ["TTS", withTts ? j.tts : null]]) {
     const known = key ? ENGINE_LABELS[String(key).toLowerCase()] : null;
     if (known) chips.push({ role, ...known });

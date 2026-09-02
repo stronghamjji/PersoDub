@@ -423,3 +423,49 @@ test("engineChips: Perso separation gets a chip, local Demucs (the default) stay
                               tts: "qwen3", quality: 1 });
   assert.ok(!local.some((c) => c.role === "Separation"));
 });
+
+test("buildDubFormData sends dub_mode only for the paid Perso cloud", () => {
+  const fd = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", dubMode: "perso" });
+  assert.equal(fd.get("dub_mode"), "perso");
+  const fd2 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", dubMode: "local" });
+  assert.equal(fd2.get("dub_mode"), null);
+});
+
+test("engineChips: a cloud dub gets a Dubbing chip; a local one stays silent", () => {
+  const cloud = engineChips({ dub_mode: "perso", quality: 1 });
+  assert.deepEqual(cloud.map((c) => `${c.role} ${c.label}`.trim()), ["Fast mode", "Dubbing Perso"]);
+  const local = engineChips({ dub_mode: "local", stt_engine: "whisper", translator: "gemma", tts: "qwen3", quality: 1 });
+  assert.ok(!local.some((c) => c.role === "Dubbing"));
+});
+
+test("parseProgress follows the three Perso cloud phases", () => {
+  const logs = ["clip.mp4", "1/1 Dubbing in the Perso cloud…", "   Uploading the video to Perso…"];
+  let p = parseProgress(logs);
+  assert.equal(p.label, "Uploading to Perso");
+  assert.equal(p.percent, 15);
+  logs.push("   Perso is dubbing… this takes a few minutes.");
+  p = parseProgress(logs);
+  assert.equal(p.label, "Dubbing at Perso");
+  assert.equal(p.percent, 55);
+  logs.push("   Downloading the finished video…");
+  p = parseProgress(logs);
+  assert.equal(p.label, "Delivering");
+  assert.equal(p.percent, 90);
+});
+
+test("pollDubJob keeps watching a queued job until it runs and finishes", async () => {
+  // The queue starts a waiting job by itself; a watcher that stopped at
+  // "queued" would never see it happen.
+  const answers = [
+    { id: "j1", status: "queued", logs: [] },
+    { id: "j1", status: "running", logs: [] },
+    { id: "j1", status: "done", logs: [] },
+  ];
+  let i = 0;
+  const fetchImpl = async () => ({ ok: true, json: async () => answers[Math.min(i++, 2)] });
+  globalThis.fetch = fetchImpl;
+  const seen = [];
+  const job = await pollDubJob("j1", { intervalMs: 1, onUpdate: (j) => seen.push(j.status) });
+  assert.equal(job.status, "done");
+  assert.deepEqual(seen, ["queued", "running", "done"]);
+});

@@ -66,3 +66,8 @@ docs/superpowers/
 
 # ---- Wrangler local state (holds account info; never commit) ----
 .wrangler/
+
+# ---- Personal notes (Korean worklists, write-ups) stay local: GitHub gets code and user docs only ----
+/*.md
+!/README.md
+!/INSTALL.md
