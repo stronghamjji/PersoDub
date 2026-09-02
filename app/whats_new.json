@@ -1,6 +1,9 @@
 {"notes": [
-  "Setup is now about 3.6 GB. AI models download when first used.",
-  "Perso API dubbing: the whole job runs on Perso's servers.",
-  "New translation model: Hunyuan (fast, 1.1 GB).",
-  "Models in Settings: download, resume, and remove them."
+  "Dub Agent beside your work: it starts and cancels dubs, extracts subtitles, cuts clips and burns subtitles.",
+  "Lighter setup: about 3.6 GB on Mac (was 19 GB) and about 21 GB on Windows (was 34 GB). AI models download when first used.",
+  "Perso API dubbing: the whole job can run on Perso's servers.",
+  "Dub several videos: they line up and run one after another.",
+  "Timeline under the script: zoom, click to jump, space to play, Enter to start over.",
+  "Subtitles on your video: pick one of twelve looks, set the size, drag it into place. Export previews them.",
+  "New translation model: Hunyuan (fast, 1.1 GB)."
 ]}

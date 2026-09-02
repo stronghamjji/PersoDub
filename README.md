@@ -137,7 +137,7 @@ The source files live in [docs/demo](docs/demo).
 | **OS** | macOS 11 (Big Sur) or later, or Windows 10 (21H2) / Windows 11. Linux is [planned](docs/roadmap.md). |
 | **Graphics (Windows)** | An NVIDIA GPU is strongly recommended — AMD and Intel graphics are not accelerated. Everything works without one, just slower; see [Speed without a GPU](docs/faq.md#speed-without-a-gpu). |
 | **Memory** | 24 GB recommended, 16 GB minimum |
-| **Disk** | 30 GB free on macOS, 45 GB on Windows. The first launch downloads the AI models and runtimes once — roughly 19 GB on macOS, 34 GB on Windows. |
+| **Disk** | 30 GB free on macOS, 45 GB on Windows. The first launch downloads the AI models and runtimes once — roughly 3.6 GB on macOS, 21 GB on Windows. |
 | **Network** | Required for the first-run download. Afterwards PersoDub runs offline unless you enable a cloud engine. |
 
 ## Installation
@@ -161,7 +161,7 @@ shows "Windows protected your PC" the first time — click **More info**, then
 **Run anyway**.
 
 On either platform, the first launch downloads the AI models and runtimes — roughly
-19 GB on macOS, about 34 GB on Windows (see [Requirements](#requirements)). It happens
+3.6 GB on macOS, about 21 GB on Windows (see [Requirements](#requirements)). It happens
 once; [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks like.
 
 ## Usage

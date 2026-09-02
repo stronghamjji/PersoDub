@@ -126,7 +126,7 @@ and a desktop shortcut, and registers an uninstaller.
 ### First launch
 
 The first time you open PersoDub, it downloads the engine kit into
-`%LOCALAPPDATA%\PersoDub` — about **34 GB**, roughly **27 minutes** on a fast
+`%LOCALAPPDATA%\PersoDub` — about **21 GB**, roughly **14 minutes** on a fast
 connection. This happens once.
 
 Leave the app open while it downloads. If it closes, open it again — setup resumes where
@@ -143,7 +143,7 @@ The measured numbers are in [Speed without a GPU](README.md#speed-without-a-gpu)
 
 Use the uninstaller in the **Start menu**, or **Settings > Apps**.
 
-> **That removes the app, but not the engine kit.** The roughly 34 GB in
+> **That removes the app, but not the engine kit.** The roughly 21 GB in
 > `%LOCALAPPDATA%\PersoDub` stays on your disk. To get that space back, open that folder
 > and delete it yourself.
 
