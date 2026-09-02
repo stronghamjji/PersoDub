@@ -19,9 +19,9 @@ your computer.
 **macOS** — The button downloads the `.dmg` (0.5.0) straight away; open it and drag **PersoDub** into Applications.
 It's signed and notarized, so it opens with a normal double-click.
 
-**Windows (beta)** — Download and run the `.exe`. It isn't code-signed yet, so
+**Windows** — Download and run the `.exe`. It isn't code-signed yet, so
 SmartScreen shows "Windows protected your PC" the first time — click **More info**,
-then **Run anyway**. [Details](INSTALL.md#windows-beta).
+then **Run anyway**. [Details](INSTALL.md#windows).
 
 ---
 
@@ -45,7 +45,7 @@ original soundtrack. With the default settings, every one of those steps runs lo
 </p>
 
 > **PersoDub is under active development.** It is usable today.
-> macOS on Apple Silicon and Windows (beta) are supported; Linux is planned.
+> macOS on Apple Silicon and Windows are supported; Linux is planned.
 > Interfaces and defaults may change. Please report problems through
 > [Issues](https://github.com/stronghamjji/PersoDub/issues).
 
@@ -155,7 +155,7 @@ download the file for your computer.
 notarized, so it opens with a normal double-click, and it checks for updates on launch.
 Building from source: [INSTALL.md](INSTALL.md#macos--install-from-source-for-developers).
 
-**Windows (beta)** — Run `PersoDub-Setup-<version>.exe`. It installs for your user
+**Windows** — Run `PersoDub-Setup-<version>.exe`. It installs for your user
 account only (no admin rights needed). The build isn't code-signed yet, so SmartScreen
 shows "Windows protected your PC" the first time — click **More info**, then
 **Run anyway**.

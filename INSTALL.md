@@ -4,7 +4,7 @@ How to install **PersoDub**, the app that auto-dubs videos into other languages,
 starting from scratch. Written so you can follow along without being technical —
 just go step by step.
 
-Pick the path for your computer: **[macOS](#macos)** or **[Windows](#windows-beta)**.
+Pick the path for your computer: **[macOS](#macos)** or **[Windows](#windows)**.
 Both end in the same place — [After installing](#after-installing).
 
 ---
@@ -89,10 +89,9 @@ Next: [After installing](#after-installing).
 
 ---
 
-## Windows (beta)
+## Windows
 
-Windows support ships as a beta. Everything works, but it has had less use than the Mac
-version, so please [report anything that breaks](https://github.com/stronghamjji/PersoDub/issues).
+Windows has had less use than the Mac version so far, so please [report anything that breaks](https://github.com/stronghamjji/PersoDub/issues).
 
 **What you need**
 - Windows 10 (21H2 or newer) or Windows 11, 64-bit
