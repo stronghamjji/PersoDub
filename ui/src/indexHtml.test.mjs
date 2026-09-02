@@ -89,13 +89,13 @@ test("the agent column sits beside the work and the grips point the right way", 
 
 // Timeline zoom, the aligned agent heading, and the Korean tab names
 // (mockup approved 2026-09-01 afternoon).
-test("timeline zoom controls, Dub Agent heading and Korean tabs are in place", () => {
+test("timeline zoom controls, Dub Agent heading and English video tabs are in place", () => {
   const html = readFileSync(INDEX, "utf8");
   for (const id of ["tlZoomOut", "tlZoomIn", "tlZoomFit"]) {
     assert.ok(html.includes(`id="${id}"`), `${id} is missing from the timeline head`);
   }
-  assert.ok(html.includes(">오리지널<") && html.includes(">더빙<"),
-    "the video tabs must read 오리지널/더빙");
+  assert.ok(html.includes(">Original<") && html.includes(">Dubbing<"),
+    "the video tabs must read Original/Dubbing -- the app speaks English (user, 2026-09-02)");
   assert.ok(html.includes("Dub Agent"), "the agent column needs its Dub Agent heading");
 });
 

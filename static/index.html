@@ -1207,7 +1207,7 @@
 <div class="app">
   <!-- ============ RAIL ============ -->
   <div class="rail">
-    <button class="rail-item active" title="더빙" type="button" aria-label="더빙">
+    <button class="rail-item active" title="Dubbing" type="button" aria-label="Dubbing">
       <!-- Speech: a waveform with a pen across it -- what this app does to a
            video, rather than the microphone every other app uses. -->
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 12h2"/><path d="M7 8v8"/><path d="M11 5v14"/><path d="M15 9v6"/><path d="M14.5 21l5.5-5.5 1.8 1.8L16.3 22.8H14.5z"/><path d="M18.6 16.9l1.8 1.8"/></svg>
@@ -1361,8 +1361,8 @@
           <div class="done-main" id="doneMain">
             <div class="video-pane" id="videoPane">
               <div class="video-tabs">
-                <button class="vtab" data-src="original" type="button">오리지널</button>
-                <button class="vtab active" data-src="dubbed" type="button">더빙</button>
+                <button class="vtab" data-src="original" type="button">Original</button>
+                <button class="vtab active" data-src="dubbed" type="button">Dubbing</button>
               </div>
               <div class="video-body">
                 <div class="video-wrap">
@@ -2263,7 +2263,9 @@ const WHATS_NEW_SEEN = "pd.whatsNewSeen";
 let whatsNew = null;
 function showWhatsNew() {
   if (!whatsNew || !whatsNew.notes.length) return;
-  $("wnTitle").textContent = `What\u2019s new in ${whatsNew.version}`;
+  // "in PersoDub 0.4.4", the way Chrome and Adobe name a release: alone, the
+  // number said nothing (user, 2026-09-02).
+  $("wnTitle").textContent = `What\u2019s new in PersoDub ${whatsNew.version}`;
   $("wnList").replaceChildren(...whatsNew.notes.map((n) => {
     const li = document.createElement("li");
     li.textContent = n;
@@ -3187,7 +3189,7 @@ if (window.persodubShell?.onUpdateReady) {
       document.body.appendChild(el);
     }
     el.querySelector("span").textContent =
-      `Version ${info.version || "update"} is ready.`;
+      `PersoDub ${info.version || "update"} is ready.`;
     el.classList.add("shown");
   });
 }
