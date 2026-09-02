@@ -2,10 +2,11 @@
 # pure-logic (no models, network, or ffmpeg needed -- see tests/conftest.py),
 # so plain runners are enough.
 #
-# Every suite runs on Linux and on Windows. The Windows leg is not about a
+# Every suite runs on Linux, Windows and macOS. The Windows leg is not about a
 # supported platform list: it is the only automatic check that the path,
 # separator, and process handling in the desktop shell still work off the one
-# machine this project is developed on.
+# machine this project is developed on. The macOS leg mirrors the release
+# machine; the repository is public, so the runner costs nothing.
 name: CI
 
 on:
@@ -21,7 +22,7 @@ jobs:
       # break is platform-specific is the whole point of the matrix.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
