@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -225,12 +225,14 @@ test("venv-engines installs only the merged engines list", async () => {
 test("every pip install runs without the pip cache", async () => {
   // Windows kept a second copy of the 3 GB CUDA torch wheel in %LOCALAPPDATA%\pip
   // -- outside the kit, so no size report ever showed it.
-  const argvs = [];
-  const ctx = freshCtx({ run: async (argv) => { argvs.push(argv); } });
-  await byId(ctx)["venv-app"].run(() => {});
-  const installs = argvs.filter((a) => a.includes("install") && !a.includes("--upgrade"));
-  assert.ok(installs.length > 0);
-  for (const a of installs) assert.ok(a.includes("--no-cache-dir"), a.join(" "));
+  for (const id of ["venv-app", "venv-engines"]) {
+    const argvs = [];
+    const ctx = freshCtx({ run: async (argv) => { argvs.push(argv); } });
+    await byId(ctx)[id].run(() => {});
+    const installs = argvs.filter((a) => a.includes("install") && !a.includes("--upgrade"));
+    assert.ok(installs.length > 0, id);
+    for (const a of installs) assert.ok(a.includes("--no-cache-dir"), `${id}: ${a.join(" ")}`);
+  }
 });
 
 test("cleanup-qwen-venv removes the old voice environment and is done once it is gone", async () => {
@@ -242,6 +244,20 @@ test("cleanup-qwen-venv removes the old voice environment and is done once it is
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
   assert.equal(existsSync(join(ctx.kitDir, "qwen_venv")), false);
+  assert.equal(await step.isDone(), true);
+});
+
+// The locked-file branch (rmSync throwing EBUSY/EPERM under an antivirus or
+// indexer holding a file open, on Windows) is covered by the try/catch below
+// but is not portably reproducible in a unit test -- it is exercised
+// manually on Windows as part of Task 7's follow-up. This test covers the
+// other half of the same contract: run() must be safe to call again and
+// again, never throwing, whether or not there is anything left to remove.
+test("cleanup-qwen-venv run is a no-op and never throws when qwen_venv is already absent", async () => {
+  const ctx = freshCtx();
+  const step = byId(ctx)["cleanup-qwen-venv"];
+  assert.equal(await step.isDone(), true);
+  await assert.doesNotReject(step.run(() => {}));
   assert.equal(await step.isDone(), true);
 });
 
@@ -257,6 +273,49 @@ test("python and ollama-runtime steps delete their archives after extracting", a
   assert.equal(existsSync(join(ctx.kitDir, "downloads", "python.tar.gz")), false);
   await byId(ctx)["ollama-runtime"].run(() => {});
   assert.equal(existsSync(join(ctx.kitDir, "downloads", IS_WIN ? "ollama.zip" : "ollama.tgz")), false);
+});
+
+// An antivirus/indexer can hold the archive open (EBUSY/EPERM), which
+// { force: true } alone does not swallow (it only ignores ENOENT). The
+// step's real work -- extracting -- already succeeded, so a leftover archive
+// must never fail the step or force a re-download on the next launch.
+test("python step still marks done when the archive delete fails", async () => {
+  const ctx = freshCtx({
+    download: async (_url, dest) => writeFileSync(dest, "bytes"),
+    extract: async (tarball, destDir) => {
+      mkdirSync(destDir, { recursive: true });
+      // Simulate a locked file: replace the tarball with a non-empty
+      // directory, which a non-recursive rmSync cannot remove (EISDIR),
+      // even with { force: true }.
+      rmSync(tarball, { force: true });
+      mkdirSync(tarball, { recursive: true });
+      writeFileSync(join(tarball, "locked"), "");
+    },
+  });
+  const step = byId(ctx).python;
+  await step.run(() => {});
+  assert.equal(await step.isDone(), true, "extract succeeded -- the step must still complete");
+  assert.ok(existsSync(join(ctx.kitDir, "downloads", "python.tar.gz")), "left behind since it could not be removed");
+});
+
+test("ollama-runtime step still completes when the archive delete fails", async () => {
+  const ctx = freshCtx({
+    download: async (_url, dest) => writeFileSync(dest, "bytes"),
+    extract: async (archive, dest) => {
+      mkdirSync(dest, { recursive: true });
+      writeFileSync(join(dest, exeName("ollama")), "bin");
+      rmSync(archive, { force: true });
+      mkdirSync(archive, { recursive: true });
+      writeFileSync(join(archive, "locked"), "");
+    },
+  });
+  const step = byId(ctx)["ollama-runtime"];
+  await step.run(() => {});
+  assert.equal(step.isDone(), true, "extract succeeded -- the step must still complete");
+  assert.ok(
+    existsSync(join(ctx.kitDir, "downloads", IS_WIN ? "ollama.zip" : "ollama.tgz")),
+    "left behind since it could not be removed",
+  );
 });
 
 test("ffmpeg step copies binaries reported by static-ffmpeg", async () => {

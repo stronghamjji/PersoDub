@@ -339,7 +339,15 @@ export function buildSteps(ctx) {
         });
         report(null, "Extracting Python");
         await ctx.extract(tarball, ctx.kitDir);
-        rmSync(tarball, { force: true }); // 26 MB the kit never reads again
+        // Best-effort: the extract above is the real work, already done. An
+        // antivirus/indexer holding the archive open (EBUSY/EPERM) must not
+        // fail the step or force a re-download next launch -- { force: true }
+        // alone only swallows ENOENT, not a locked file.
+        try {
+          rmSync(tarball, { force: true }); // 26 MB the kit never reads again
+        } catch {
+          report(null, "Could not remove python.tar.gz; leaving it in downloads/");
+        }
         markOk("python");
       },
     },
@@ -395,7 +403,15 @@ export function buildSteps(ctx) {
       isDone: () => !existsSync(k("qwen_venv")),
       run: async (report) => {
         report(null, "Removing qwen_venv");
-        rmSync(k("qwen_venv"), { recursive: true, force: true });
+        // Best-effort: a locked file (antivirus/indexer, mainly Windows)
+        // must not block every step after this one on a half-migrated kit.
+        // isDone stays false while qwen_venv survives, so the next launch's
+        // install retries this step on its own.
+        try {
+          rmSync(k("qwen_venv"), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+        } catch {
+          report(null, "Could not remove qwen_venv yet; will retry next launch");
+        }
       },
     },
     {
@@ -435,7 +451,12 @@ export function buildSteps(ctx) {
         });
         report(null, "Extracting Ollama runtime");
         await ctx.extract(archive, k("ollama"));
-        rmSync(archive, { force: true }); // 139 MB (1.5 GB on Windows) the kit never reads again
+        // Best-effort, same reasoning as the python step above.
+        try {
+          rmSync(archive, { force: true }); // 139 MB (1.5 GB on Windows) the kit never reads again
+        } catch {
+          report(null, `Could not remove ${IS_WIN ? "ollama.zip" : "ollama.tgz"}; leaving it in downloads/`);
+        }
       },
     },
     {
