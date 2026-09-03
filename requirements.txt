@@ -7,3 +7,11 @@ python-multipart
 pytest
 yt-dlp
 mcp
+
+# The model downloader (app/models.py) shells out to the `hf` CLI, and the
+# installer's ffmpeg step to static-ffmpeg. Both lived in the engine venvs
+# until 2026-09; the app venv is the one that always exists, so they live here.
+# hf CLI arrived in huggingface_hub 0.34; <1.0 keeps the flags this code was
+# verified against.
+huggingface_hub[cli]>=0.34,<1.0
+static-ffmpeg

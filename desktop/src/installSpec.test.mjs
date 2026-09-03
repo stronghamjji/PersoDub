@@ -28,7 +28,6 @@ function makePayload(payloadDir, { campplus = true, version = "1.0.0+abc1234" } 
   mkdirSync(join(payloadDir, "kit-src", "sidecar"), { recursive: true });
   writeFileSync(join(payloadDir, "kit-src", "sidecar", "server.py"), "# sidecar");
   writeFileSync(join(payloadDir, "kit-src", `requirements_engines_${REQ_SUFFIX}.txt`), "torch");
-  writeFileSync(join(payloadDir, "kit-src", `requirements_qwen_${REQ_SUFFIX}.txt`), "uvicorn");
   if (campplus) writeFileSync(join(payloadDir, "campplus.onnx"), "onnx");
   writeFileSync(join(payloadDir, "KIT_VERSION"), version);
 }
@@ -38,11 +37,9 @@ const byId = (ctx) => Object.fromEntries(buildSteps(ctx).map((s) => [s.id, s]));
 test("returns the 10 steps in install order", () => {
   const ids = buildSteps(freshCtx()).map((s) => s.id);
   assert.deepEqual(ids, [
-    "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
+    "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup-qwen-venv",
     "models", "ollama-runtime", "nonverbal-weights", "kit-env",
   ]);
-  // analytics.js publishes exactly these ids -- the export and the real
-  // steps must not drift apart.
   assert.deepEqual(ids, STEP_IDS);
 });
 
@@ -85,6 +82,8 @@ test("payload step copies bundle including campplus and marks done", async () =>
   assert.ok(existsSync(join(ctx.kitDir, "app", "app", "main.py")));
   assert.ok(existsSync(join(ctx.kitDir, "sidecar", "server.py")));
   assert.ok(existsSync(join(ctx.kitDir, `requirements_engines_${REQ_SUFFIX}.txt`)));
+  assert.equal(existsSync(join(ctx.kitDir, `requirements_qwen_${REQ_SUFFIX}.txt`)), false,
+    "the voice environment's own list is gone -- one engines list now");
   assert.ok(existsSync(join(ctx.kitDir, "models", "campplus", "campplus.onnx")));
   assert.equal(await step.isDone(), true);
 });
@@ -175,7 +174,7 @@ test("venv-app runs venv + pip installs and marks done", async () => {
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
   assert.ok(argvs.some((a) => a.includes("-m venv") && a.includes("app_venv")));
-  assert.ok(argvs.some((a) => a.includes("install -r") && a.includes("requirements.txt")));
+  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir -r") && a.includes("requirements.txt")));
   assert.equal(await step.isDone(), true);
 });
 
@@ -209,15 +208,55 @@ test("a bare marker from before the fingerprint counts as not done", async () =>
   assert.equal(await byId(ctx)["venv-app"].isDone(), false);
 });
 
-// transformers pins huggingface-hub <1.0; an unbounded -U upgrade pulls 1.x and
-// breaks the sidecar at import time. 0.34 is the first release with the hf CLI.
-test("venv-qwen keeps huggingface_hub below 1.0", async () => {
+// One engines venv now carries the voice engine too. The hf CLI and
+// static-ffmpeg moved to app_venv (requirements.txt), so this step installs
+// the engines list and, on Windows, the CUDA torch first -- nothing else.
+test("venv-engines installs only the merged engines list", async () => {
   const argvs = [];
   const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });
-  await byId(ctx)["venv-qwen"].run(() => {});
-  const hub = argvs.filter((a) => a.includes("huggingface_hub"));
-  assert.equal(hub.length, 1);
-  assert.ok(hub[0].includes("huggingface_hub>=0.34,<1.0"), `unpinned: ${hub[0]}`);
+  await byId(ctx)["venv-engines"].run(() => {});
+  const installs = argvs.filter((a) => a.includes(" install ") && !a.includes("--upgrade pip"));
+  assert.ok(installs.some((a) => a.includes(`requirements_engines_${REQ_SUFFIX}.txt`)));
+  assert.ok(!installs.some((a) => a.includes("static-ffmpeg")), "static-ffmpeg belongs to app_venv now");
+  assert.ok(!installs.some((a) => a.includes("huggingface_hub")), "hf CLI belongs to app_venv now");
+  assert.ok(!argvs.some((a) => a.includes("qwen_venv")), "no second venv is created");
+});
+
+test("every pip install runs without the pip cache", async () => {
+  // Windows kept a second copy of the 3 GB CUDA torch wheel in %LOCALAPPDATA%\pip
+  // -- outside the kit, so no size report ever showed it.
+  const argvs = [];
+  const ctx = freshCtx({ run: async (argv) => { argvs.push(argv); } });
+  await byId(ctx)["venv-app"].run(() => {});
+  const installs = argvs.filter((a) => a.includes("install") && !a.includes("--upgrade"));
+  assert.ok(installs.length > 0);
+  for (const a of installs) assert.ok(a.includes("--no-cache-dir"), a.join(" "));
+});
+
+test("cleanup-qwen-venv removes the old voice environment and is done once it is gone", async () => {
+  const ctx = freshCtx();
+  const step = byId(ctx)["cleanup-qwen-venv"];
+  assert.equal(await step.isDone(), true, "a fresh kit never had one");
+  mkdirSync(join(ctx.kitDir, "qwen_venv", "bin"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, "qwen_venv", "bin", "uvicorn"), "");
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+  assert.equal(existsSync(join(ctx.kitDir, "qwen_venv")), false);
+  assert.equal(await step.isDone(), true);
+});
+
+test("python and ollama-runtime steps delete their archives after extracting", async () => {
+  const ctx = freshCtx({
+    download: async (_url, dest) => writeFileSync(dest, "bytes"),
+    extract: async (_file, dest) => {
+      mkdirSync(dest, { recursive: true });
+      if (dest.endsWith("ollama")) writeFileSync(join(dest, exeName("ollama")), "bin");
+    },
+  });
+  await byId(ctx).python.run(() => {});
+  assert.equal(existsSync(join(ctx.kitDir, "downloads", "python.tar.gz")), false);
+  await byId(ctx)["ollama-runtime"].run(() => {});
+  assert.equal(existsSync(join(ctx.kitDir, "downloads", IS_WIN ? "ollama.zip" : "ollama.tgz")), false);
 });
 
 test("ffmpeg step copies binaries reported by static-ffmpeg", async () => {
@@ -226,10 +265,12 @@ test("ffmpeg step copies binaries reported by static-ffmpeg", async () => {
   const f2 = join(ctx.base, "real-ffprobe");
   writeFileSync(f1, "ffmpeg-bytes");
   writeFileSync(f2, "ffprobe-bytes");
-  ctx.run = async (_argv, { onLine } = {}) => { onLine?.(JSON.stringify([f1, f2])); };
+  let argv0;
+  ctx.run = async (argv, { onLine } = {}) => { argv0 = argv[0]; onLine?.(JSON.stringify([f1, f2])); };
   const step = byId(ctx).ffmpeg;
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
+  assert.equal(argv0, venvBin(join(ctx.kitDir, "app_venv"), "python"), "ffmpeg is fetched by app_venv, which always exists");
   // Copied (not symlinked -- Windows needs admin for symlinks) into the kit's
   // bin/ under the platform's executable name (.exe suffix on Windows).
   assert.equal(readFileSync(join(ctx.kitDir, "bin", exeName("ffmpeg")), "utf8"), "ffmpeg-bytes");
@@ -266,6 +307,7 @@ test("models step downloads only Demucs and ignores the optional models", async 
   await step.run(() => {});
   assert.equal(hfCalls.length, 1, "only Demucs is downloaded");
   assert.ok(hfCalls[0].join(" ").includes("HTDemucs"), hfCalls[0].join(" "));
+  assert.equal(hfCalls[0][0], venvBin(join(ctx.kitDir, "app_venv"), "hf"), "hf runs from app_venv");
   assert.equal(await step.isDone(), true);
 });
 
