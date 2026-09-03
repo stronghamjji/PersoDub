@@ -71,6 +71,14 @@ function stopChild(child) {
   killTimer.unref();
 }
 
+// The voice sidecar's launch line. Exported so the path it boots from is
+// testable without spawning anything: it must be the engines venv (the voice
+// packages merged into it in 0.5.1), never the retired qwen_venv.
+export function sidecarArgv(kitDir, port) {
+  return [venvBin(join(kitDir, "engines_venv"), "uvicorn"),
+          "server:app", "--host", "127.0.0.1", "--port", String(port)];
+}
+
 export async function startEngines(cfg, { logDir, appVersion }) {
   mkdirSync(logDir, { recursive: true });
   await killStalePids(logDir);
@@ -115,11 +123,10 @@ export async function startEngines(cfg, { logDir, appVersion }) {
     }
 
     const sidecarPort = overrideMode && cfg.sidecarPort === 0 ? await getFreePort() : cfg.sidecarPort;
-    const sidecarArgv = overrideMode
+    const sidecarArgvFinal = overrideMode
       ? substitute(cfg.sidecarCmd, sidecarPort)
-      : [venvBin(join(cfg.kitDir, "qwen_venv"), "uvicorn"),
-         "server:app", "--host", "127.0.0.1", "--port", String(sidecarPort)];
-    children.push(launch(sidecarArgv, {
+      : sidecarArgv(cfg.kitDir, sidecarPort);
+    children.push(launch(sidecarArgvFinal, {
       cwd: overrideMode ? process.cwd() : join(cfg.kitDir, "sidecar"),
       env, logPath: join(logDir, "sidecar.log"),
     }));
