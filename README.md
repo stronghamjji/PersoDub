@@ -12,11 +12,11 @@ your computer.
 [![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
 
 <p>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-0.5.0-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-0.5.0.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-0.5.1-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-0.5.1.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
-**macOS** — The button downloads the `.dmg` (0.5.0) straight away; open it and drag **PersoDub** into Applications.
+**macOS** — The button downloads the `.dmg` (0.5.1) straight away; open it and drag **PersoDub** into Applications.
 It's signed and notarized, so it opens with a normal double-click.
 
 **Windows** — Download and run the `.exe`. It isn't code-signed yet, so

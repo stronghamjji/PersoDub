@@ -1,9 +1,5 @@
 {"notes": [
-  "Dub Agent beside your work: it starts and cancels dubs, extracts subtitles, cuts clips and burns subtitles.",
-  "Lighter setup: about 3.6 GB on Mac (was 19 GB) and about 21 GB on Windows (was 34 GB). AI models download when first used.",
-  "Perso API dubbing: the whole job can run on Perso's servers.",
-  "Dub several videos: they line up and run one after another.",
-  "Timeline under the script: zoom, click to jump, space to play, Enter to start over.",
-  "Subtitles on your video: pick one of twelve looks, set the size, drag it into place. Export previews them.",
-  "New translation model: Hunyuan (fast, 1.1 GB)."
-]}
+    "Export opens again. In 0.5.0 the Export button did nothing.",
+    "Export lists only the files: dubbed video, subtitles, subtitled video. The subtitle look you chose on the work screen is what it saves."
+  ]
+}
