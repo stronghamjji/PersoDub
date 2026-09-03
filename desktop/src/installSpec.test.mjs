@@ -534,9 +534,9 @@ test("every step declares how much room it takes", () => {
 });
 
 test("the whole kit adds up to roughly what the installing screen promises", () => {
-  // The screen says "about 3.6 GB" (runtime + small always-installed models;
-  // Windows runs larger for its CUDA torch wheels). If this drifts back
-  // toward the old 18 GB, a big model crept back into the install.
+  // The screen says "about 3 GB" (runtime with one engines venv + the small
+  // always-installed models; Windows runs larger for its CUDA torch wheels).
+  // If this drifts back toward the old 18 GB, a big model crept back in.
   const total = buildSteps(freshCtx()).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
   assert.ok(total > 2 && total < 12, `total is ${total.toFixed(1)} GB`);
 });

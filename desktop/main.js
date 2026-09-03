@@ -167,21 +167,21 @@ async function boot(win) {
       // each platform defines; ignoreLegacy keeps the replacement out of the
       // very folder this branch exists to abandon.
       const freshKitDir = defaultKitDir({ ignoreLegacy: true });
-      // Abandoning the stale kit must not strand its downloaded models: they
-      // are version-independent files the fresh install (and the in-app
-      // catalog) would otherwise re-download in full -- up to ~15 GB. Same
-      // volume, so a rename is instant; on any failure just log and carry on,
-      // a lost move costs a re-download, never the boot.
       try {
-        const oldModels = join(cfg.kitDir, "models");
-        const newModels = join(freshKitDir, "models");
-        if (freshKitDir !== cfg.kitDir && existsSync(oldModels) && !existsSync(newModels)) {
-          mkdirSync(freshKitDir, { recursive: true });
-          renameSync(oldModels, newModels);
-          console.log(`PERSODUB_KIT moved models from ${oldModels} to ${newModels}`);
+        // models/: version-independent weights, up to ~15 GB. engines_venv/:
+        // its pip fingerprint re-opens the venv-engines step in the fresh kit,
+        // which then installs only what changed instead of 2-9 GB of torch.
+        for (const name of ["models", "engines_venv"]) {
+          const oldDir = join(cfg.kitDir, name);
+          const newDir = join(freshKitDir, name);
+          if (freshKitDir !== cfg.kitDir && existsSync(oldDir) && !existsSync(newDir)) {
+            mkdirSync(freshKitDir, { recursive: true });
+            renameSync(oldDir, newDir);
+            console.log(`PERSODUB_KIT moved ${name} from ${oldDir} to ${newDir}`);
+          }
         }
       } catch (err) {
-        console.warn("PERSODUB_KIT could not carry models over:", String((err && err.message) || err));
+        console.warn("PERSODUB_KIT could not carry files over:", String((err && err.message) || err));
       }
       cfg = { ...cfg, kitDir: freshKitDir };
     }
