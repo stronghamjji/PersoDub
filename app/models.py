@@ -224,16 +224,21 @@ def _run_download(entry, kit, progress, cancelled):
         _pull_hf(entry, kit, progress, cancelled)
 
 
+def _hf_cli(kit: str) -> str:
+    """The `hf` CLI in app_venv -- the one venv every install has. It moved
+    here from qwen_venv in 0.5.1, when that venv was retired."""
+    bindir = "Scripts" if _sys.platform == "win32" else "bin"
+    return os.path.join(kit, "app_venv", bindir, "hf.exe" if _sys.platform == "win32" else "hf")
+
+
 def _pull_hf(entry, kit, progress, cancelled):
     """hf CLI download -- it resumes partial files by itself (--local-dir)."""
     from app.agents.base import _end  # the app's proven process-tree stopper
 
     dest = os.path.join(kit, *entry["dir"].split("/"))
     os.makedirs(dest, exist_ok=True)
-    bindir = "Scripts" if _sys.platform == "win32" else "bin"
-    hf = os.path.join(kit, "qwen_venv", bindir, "hf.exe" if _sys.platform == "win32" else "hf")
     src = entry["source"]
-    argv = [hf, "download", src["repo"], *src.get("files", []),
+    argv = [_hf_cli(kit), "download", src["repo"], *src.get("files", []),
             "--revision", src["rev"], "--local-dir", dest]
     proc = _subprocess.Popen(argv, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT, text=True)
     pct_re = _re.compile(r"(\d{1,3})%")
