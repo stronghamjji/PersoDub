@@ -1031,24 +1031,6 @@
   .export-list a .export-state { margin-left: auto; font-size: 0.78rem; font-weight: 500;
     color: var(--muted-foreground); display: inline-flex; align-items: center; gap: 5px; }
   .export-list a.saved { border-color: var(--success); }
-  /* The subtitled row's preview: ONE big frame of this job in the chosen
-     look, and three word buttons that swap it (user, 2026-09-01 -- the small
-     image cards were too small to judge a style by). */
-  .style-big { border: 1px solid var(--border); border-radius: var(--radius-sm);
-    overflow: hidden; position: relative; cursor: grab; touch-action: none; }
-  .style-big:active { cursor: grabbing; }
-  .style-pos-guide { position: absolute; left: 0; right: 0; height: 0;
-    border-top: 2px dashed var(--primary); pointer-events: none; }
-  .style-hint { font-size: 0.72rem; color: var(--muted-foreground); text-align: center; }
-  .style-big img { display: block; width: 100%; aspect-ratio: 16 / 9;
-    object-fit: cover; background: var(--thumb-bg); }
-  .style-picks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-  .style-pick { padding: 6px 0; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--background); cursor: pointer; font: inherit; font-size: 0.68rem;
-    font-weight: 600; color: var(--muted-foreground); }
-  .style-pick:hover { border-color: var(--primary); color: var(--primary); }
-  .style-pick.on { border-color: var(--primary); background: var(--primary-soft);
-    color: var(--primary); }
   .export-list a.saved > .icon { color: var(--success); }
   /* Quiet enough not to compete with the links above it, and it wraps rather
      than pushing the dialog wider -- a project name can be long. */
@@ -4251,29 +4233,16 @@ async function openExport() {
     .then((r) => r.ok).catch(() => false);
   const item = (href, name, label) =>
     `<a href="${href}" download="${name}" data-name="${name}">${DOWNLOAD_ICON}${label}<span class="export-state"></span></a>`;
-  // The subtitled video: one row, three style cards under it choosing the
-  // look (the chosen card restyles what the row downloads). Previews are real
-  // frames of this job, drawn by the server on first ask. The remake mark
-  // rides along for the same cache reason as the video row's.
+  // The subtitled video downloads in the look chosen on the work screen: the
+  // same subStyle the player edits (preset, position, size). Nothing to pick
+  // here -- the dialog only hands files over (user, 2026-09-03). The remake
+  // mark rides along for the same cache reason as the video row's.
   const mark = doneVersion ? `&v=${doneVersion}` : "";
-  let subPreset = subPreset0;
-  const subHref = (p) => `/api/dub/result/${job.id}/subtitled?preset=${p}${posQ()}&download=1${mark}`;
-  const subName = (p) => `dub_${target}-sub-${p}.mp4`;
-  // The dialog reads and writes the same subStyle the player edits: pick a
-  // style here and the overlay follows, drag the overlay and this preview
-  // follows. subStyleRev busts the image cache when only a stored value
-  // (a retimed line, say) changed under an unchanged URL.
-  let subPreset0 = SUB_LEGACY[subStyle.preset] || subStyle.preset;
-  const posQ = () => (subStyle.pos == null ? "" : `&pos=${subStyle.pos}`)
+  const subPreset = SUB_LEGACY[subStyle.preset] || subStyle.preset;
+  const posQ = (subStyle.pos == null ? "" : `&pos=${subStyle.pos}`)
     + (subStyle.size == null ? "" : `&size=${subStyle.size}`) + `&r=${subStyleRev}`;
-  const previewSrc = (p) => `/api/dub/result/${job.id}/subtitle_preview?preset=${p}${posQ()}${mark}`;
-  const styleCards = `<div class="style-big">
-      <img id="stylePreview" src="${previewSrc(subPreset)}" alt="How the subtitles will look" draggable="false">
-      <div class="style-pos-guide" hidden></div></div>
-    <div class="style-hint">Drag the picture to move the subtitles up or down</div>
-    <div class="style-picks">` + SUB_STYLES
-    .map(([p, label]) => `<button class="style-pick${p === subPreset ? " on" : ""}"
-      data-preset="${p}" type="button">${label}</button>`).join("") + `</div>`;
+  const subHref = `/api/dub/result/${job.id}/subtitled?preset=${subPreset}${posQ}&download=1${mark}`;
+  const subName = `dub_${target}-sub-${subPreset}.mp4`;
   $("exportList").innerHTML = [
     // The same URL the player is on, remake mark and all: without it a download
     // taken straight after a remake can be served the old video from cache.
@@ -4282,8 +4251,7 @@ async function openExport() {
     item(doneVideoSrc(job, "dubbed"), `dub_${target}.mp4`, "Dubbed video (.mp4)"),
     hasSrt ? item(`/api/dub/result/${job.id}/srt?download=1`, `dub_${target}.srt`,
                   "Subtitles (.srt)") : "",
-    hasSrt ? item(subHref(subPreset), subName(subPreset), "Subtitled video (.mp4)")
-             + styleCards : "",
+    hasSrt ? item(subHref, subName, "Subtitled video (.mp4)") : "",
     // Only a link job has an original worth handing back -- a local file is
     // already on the machine it would be saved to.
     job.from_link ? item(`/api/dub/result/${job.id}/original?download=1`, "org.mp4",
@@ -4302,53 +4270,6 @@ async function openExport() {
     for (const a of $("exportList").querySelectorAll("a")) {
       a.addEventListener("click", () => markExportSaved(a));
     }
-  }
-  // Picking a card restyles the subtitled row in place -- href, saved name
-  // and all -- so the next click downloads that look.
-  const subLink = $("exportList").querySelector(`a[data-name="${subName(subPreset)}"]`);
-  for (const pick of $("exportList").querySelectorAll(".style-pick")) {
-    pick.addEventListener("click", () => {
-      subPreset = pick.dataset.preset;
-      subStyle.preset = subPreset;
-      saveSubStyle(); updateSubtitleNow();
-      for (const x of $("exportList").querySelectorAll(".style-pick")) {
-        x.classList.toggle("on", x === pick);
-      }
-      $("stylePreview").src = previewSrc(subPreset);
-      subLink.href = subHref(subPreset);
-      subLink.setAttribute("download", subName(subPreset));
-      subLink.dataset.name = subName(subPreset);
-    });
-  }
-  // Dragging the preview moves the subtitles: a dashed line follows the
-  // pointer, and letting go redraws the frame with the text there. The line
-  // marks where the BOTTOM of the text will sit.
-  const bigBox = $("exportList").querySelector(".style-big");
-  if (bigBox) {
-    const guide = bigBox.querySelector(".style-pos-guide");
-    const pctAt = (ev) => {
-      const r = bigBox.getBoundingClientRect();
-      return Math.min(97, Math.max(3, ((ev.clientY - r.top) / r.height) * 100));
-    };
-    bigBox.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      const move = (ev) => { guide.hidden = false; guide.style.top = `${pctAt(ev)}%`; };
-      const up = (ev) => {
-        bigBox.removeEventListener("pointermove", move);
-        bigBox.removeEventListener("pointerup", up);
-        bigBox.removeEventListener("pointercancel", up);
-        guide.hidden = true;
-        subStyle.pos = Math.round(pctAt(ev));
-        saveSubStyle(); updateSubtitleNow();
-        $("stylePreview").src = previewSrc(subPreset);
-        subLink.href = subHref(subPreset);
-      };
-      bigBox.addEventListener("pointermove", move);
-      bigBox.addEventListener("pointerup", up);
-      bigBox.addEventListener("pointercancel", up);
-      bigBox.setPointerCapture(e.pointerId);
-      move(e);
-    });
   }
   $("exportOverlay").classList.add("open");
 }
