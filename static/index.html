@@ -4256,14 +4256,13 @@ async function openExport() {
   // frames of this job, drawn by the server on first ask. The remake mark
   // rides along for the same cache reason as the video row's.
   const mark = doneVersion ? `&v=${doneVersion}` : "";
-  let subPreset = subPreset0;
   const subHref = (p) => `/api/dub/result/${job.id}/subtitled?preset=${p}${posQ()}&download=1${mark}`;
   const subName = (p) => `dub_${target}-sub-${p}.mp4`;
   // The dialog reads and writes the same subStyle the player edits: pick a
   // style here and the overlay follows, drag the overlay and this preview
   // follows. subStyleRev busts the image cache when only a stored value
   // (a retimed line, say) changed under an unchanged URL.
-  let subPreset0 = SUB_LEGACY[subStyle.preset] || subStyle.preset;
+  let subPreset = SUB_LEGACY[subStyle.preset] || subStyle.preset;
   const posQ = () => (subStyle.pos == null ? "" : `&pos=${subStyle.pos}`)
     + (subStyle.size == null ? "" : `&size=${subStyle.size}`) + `&r=${subStyleRev}`;
   const previewSrc = (p) => `/api/dub/result/${job.id}/subtitle_preview?preset=${p}${posQ()}${mark}`;
