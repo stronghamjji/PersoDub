@@ -291,7 +291,6 @@ export function buildSteps(ctx) {
       const venvDir = k(venvName);
       report(null, `Creating ${venvName}`);
       await ctx.run([py, "-m", "venv", venvDir]);
-      const pip = venvBin(venvDir, "pip");
       // Upgrade pip via `python -m pip`, not `pip.exe`: on Windows pip.exe is
       // locked while running and cannot rewrite itself ("To modify pip, please
       // run: python -m pip install --upgrade pip"). `python -m pip` is safe on
@@ -299,7 +298,11 @@ export function buildSteps(ctx) {
       const venvPy = venvBin(venvDir, "python");
       await ctx.run([venvPy, "-m", "pip", "install", "--upgrade", "pip"], { onLine: (l) => report(null, l.slice(0, 120)) });
       for (const args of pipInstalls) {
-        await ctx.run([pip, "install", "--no-cache-dir", ...args], { onLine: (l) => report(null, l.slice(0, 120)) });
+        // `venvPy -m pip`, not the bin/pip shim: the shim carries an absolute
+        // shebang, so it is the one file in a venv that a moved or repaired
+        // environment can no longer run.
+        await ctx.run([venvPy, "-m", "pip", "install", "--no-cache-dir", ...args],
+                      { onLine: (l) => report(null, l.slice(0, 120)) });
       }
       markOk(id, pipFingerprint(pipInstalls));
     },
