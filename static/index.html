@@ -2024,12 +2024,18 @@ const state = {
 };
 
 // ---------------- Rail: history sidebar toggle ----------------
+const PROJECTS_OPEN_KEY = "persodub.layout.projectsOpen";
 $("historyToggle").addEventListener("click", () => {
   const opening = $("historySidebar").classList.toggle("collapsed") === false;
+  try { localStorage.setItem(PROJECTS_OPEN_KEY, opening ? "1" : "0"); } catch { /* private window */ }
   // Ask the server again on the way open: a job may have finished, or another
   // window may have started one, since the list was last drawn.
   if (opening) renderHistory().catch(() => {});
 });
+// Open at launch if it was open when the app was closed (the markup starts it closed).
+try {
+  if (localStorage.getItem(PROJECTS_OPEN_KEY) === "1") $("historySidebar").classList.remove("collapsed");
+} catch { /* private window */ }
 // The list slides open over 0.15s, so a name measured the moment it is drawn is
 // measured in a column still on its way to full width -- and every name would
 // look cut off. Measure again once the sliding has stopped.
@@ -2757,10 +2763,18 @@ let lastJobName = "";
 
 // A job that failed counts too, on purpose: the failure card is where "Try
 // again" lives, so the arrow back to it is a way on rather than a dead end.
+// Where the app was when it was closed: the job on screen, or "" for home.
+// Read once at launch (openLastScreen) so the app comes back where it was.
+const LAST_SCREEN_KEY = "persodub.layout.lastJobId";
+function noteLastScreen(jobId) {
+  try { localStorage.setItem(LAST_SCREEN_KEY, jobId || ""); } catch { /* private window */ }
+}
+
 function rememberLastJob() {
   if (!state.jobId) return;
   lastJobId = state.jobId;
   lastJobName = state.job ? jobLabel(state.job) : "";
+  noteLastScreen(state.jobId);
 }
 
 // That job is gone (deleted, or the server no longer has it), so the way back
@@ -2790,6 +2804,21 @@ function showHome() {
   showScreen("home");
   setTopbar({ title: "PersoDub", subtitle: "Local dubbing" });
   renderQueueCard().catch(() => {});
+  noteLastScreen("");
+}
+
+// The screen the app was closed on. A job that is gone since (deleted, or the
+// folder moved) means home, quietly -- a launch is not the moment for an
+// error about yesterday.
+async function openLastScreen() {
+  let last = "";
+  try { last = localStorage.getItem(LAST_SCREEN_KEY) || ""; } catch { /* private window */ }
+  if (!last) { showHome(); return; }
+  try {
+    const r = await fetch(`/api/dub/jobs/${last}`);
+    if (!r.ok) { showHome(); return; }
+  } catch { showHome(); return; }
+  await resumeJob(last);
 }
 
 // ---------------- New project dialog ----------------
@@ -5552,7 +5581,7 @@ window.addEventListener("persodub:voices-remade", async () => {
 });
 
 renderHistory().catch(() => {});
-showHome();
+openLastScreen();
 </script>
 
 <!-- The assistant's own script, kept apart from the app's so the whole feature
@@ -6369,10 +6398,12 @@ wire("send button", () => {
 // back in; the fold in the heading row goes both ways and says which it is
 // doing -- to a reader, through its arrow, and to a screen reader, through
 // aria-expanded.
+const AGENT_OPEN_KEY = "persodub.layout.agentOpen";
 function setCollapsed(collapsed) {
   // The class first, on its own: it is what the CSS folds the strip by, so it
   // has to land even if the button that says which way it went has gone.
   document.body.classList.toggle("agent-open", !collapsed);
+  try { localStorage.setItem(AGENT_OPEN_KEY, collapsed ? "0" : "1"); } catch { /* private window */ }
   wire("fold", () => {
     const fold = el("assistantFold");
     const words = collapsed ? "Show the conversation" : "Hide the conversation";
@@ -6399,5 +6430,8 @@ wire("input", () => {
 // as. That waits for the strip to be in use (ensureLoginChecked above).
 wire("saved pick", loadChoice);
 loadAgents().catch((e) => console.error("Dub Agent: the model list failed", e));
-setCollapsed(false);
+// As it was when the app was closed; open the first time.
+let agentWasClosed = false;
+try { agentWasClosed = localStorage.getItem(AGENT_OPEN_KEY) === "0"; } catch { /* private window */ }
+setCollapsed(agentWasClosed);
 </script>
