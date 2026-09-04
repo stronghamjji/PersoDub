@@ -502,7 +502,9 @@ def test_set_default_posts_one_stage_and_relays_a_refusal(monkeypatch):
 
 
 def test_download_model_asks_first_then_starts(monkeypatch):
-    rows = [{"id": "gemma", "name": "Gemma 3", "bytes": 7600000000, "state": "not_downloaded"}]
+    # The real answer shape of GET /api/models: {"models": [...]} (a bare list in
+    # this test hid a crash on the first live call, 2026-09-04).
+    rows = {"models": [{"id": "gemma", "name": "Gemma 3", "bytes": 7600000000, "state": "not_downloaded"}]}
     monkeypatch.setattr(mcp_server.httpx, "get",
                         lambda url, params=None, timeout=None: _Response(200, rows))
     posted = []
@@ -515,7 +517,7 @@ def test_download_model_asks_first_then_starts(monkeypatch):
 
 
 def test_download_model_says_when_it_is_already_there_or_unknown(monkeypatch):
-    rows = [{"id": "hunyuan", "name": "Hunyuan", "bytes": 1100000000, "state": "ready"}]
+    rows = {"models": [{"id": "hunyuan", "name": "Hunyuan", "bytes": 1100000000, "state": "ready"}]}
     monkeypatch.setattr(mcp_server.httpx, "get",
                         lambda url, params=None, timeout=None: _Response(200, rows))
     assert mcp_server.download_model("hunyuan")["state"] == "ready"

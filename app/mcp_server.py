@@ -415,7 +415,9 @@ def download_model(model_id: str, confirm: bool = False) -> dict:
     """
     r = httpx.get("%s/api/models" % API, timeout=10.0)
     r.raise_for_status()
-    rows = {m["id"]: m for m in r.json()}
+    # GET /api/models answers {"models": [...]} -- the same shape the screen's
+    # catalog reads. Assuming a bare list here crashed the first live call.
+    rows = {m["id"]: m for m in r.json()["models"]}
     if model_id not in rows:
         raise ValueError("No such model: %s (one of %s)" % (model_id, ", ".join(rows)))
     row = rows[model_id]
