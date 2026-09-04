@@ -211,7 +211,8 @@ async function boot(win) {
       // disk-full from deep inside a step, after gigabytes had already been
       // downloaded. Only the steps still missing are counted, so a half-done
       // install asks for the remainder rather than the whole kit again.
-      const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(cfg.kitDir));
+      const stillNeeded = await bytesStillNeeded(steps);
+      const noRoom = notEnoughSpace(stillNeeded, await freeSpaceAt(cfg.kitDir));
       if (noRoom) {
         countUsage("install_failure", cfg.kitDir, "disk-full");
         await win.loadFile(join(HERE, "screens", "error.html"), {
@@ -219,7 +220,14 @@ async function boot(win) {
         });
         return;
       }
-      await win.loadFile(join(HERE, "screens", "installing.html"));
+      await win.loadFile(join(HERE, "screens", "installing.html"), {
+        query: {
+          // Same kit again (an update) or a first install: the screen's title.
+          mode: existsSync(join(cfg.kitDir, KIT_ENV)) ? "update" : "install",
+          // What the steps still to run add up to -- the figure the title shows.
+          bytes: String(stillNeeded),
+        },
+      });
       // runInstall already reports which step failed; without keeping it the
       // count says only "somewhere in ten steps", which is what made the first
       // four real install failures unactionable.

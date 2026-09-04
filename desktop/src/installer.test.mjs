@@ -49,3 +49,17 @@ test("step whose run finishes but isDone stays false throws", async () => {
     /did not complete/,
   );
 });
+
+test("every progress event carries the step's bytes, so the screen can add up what it has received", async () => {
+  const log = [];
+  const events = [];
+  const a = step("a", { done: true }, log);
+  a.bytes = 5;
+  const b = step("b", {}, log);
+  b.bytes = 7;
+  await runInstall([a, b], { onProgress: (e) => events.push(e) });
+  assert.ok(events.length > 0);
+  for (const e of events) {
+    assert.equal(e.bytes, e.stepId === "a" ? 5 : 7);
+  }
+});
