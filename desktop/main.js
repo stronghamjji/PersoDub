@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
-import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
@@ -12,7 +12,7 @@ import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
 import { run } from "./src/exec.js";
-import { resolveUpdateMode, resolveFeed } from "./src/updater.js";
+import { resolveUpdateMode, resolveFeed, nextUpdateState } from "./src/updater.js";
 import { findForeignLockers } from "./src/lockCheck.js";
 import { resolveAnalyticsMode, countEvent, classifyError } from "./src/analytics.js";
 import { IS_WIN } from "./src/platform.js";
@@ -20,6 +20,10 @@ import { IS_WIN } from "./src/platform.js";
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
 let updateDownloaded = false;
+// The update as last announced -- re-sent to the page on every load, so a
+// page that arrives after the check (boot) or reloads mid-download still
+// shows the right pill. Null until an update is found.
+let updateState = null;
 let bootedKitDir = null;   // for the dub counts, which arrive long after boot
 
 
@@ -66,7 +70,24 @@ function countUsage(event, kitDir, errorCode, step) {
 // forced. electron-updater validates the new build's code signature, which is
 // why signing came first. Errors are logged and swallowed: an update check
 // must never break a working app.
+// <userData>/ports.json -- {"backend": 51799}: the port the backend listened
+// on last time. Reused when free so the page's origin (and its localStorage:
+// the seen "What's new" version, timeline state, pane sizes) survives a
+// relaunch. Unreadable or missing just means "pick a free port", as before.
+const PORTS_FILE = () => join(app.getPath("userData"), "ports.json");
+function readRememberedPorts() {
+  try { return JSON.parse(readFileSync(PORTS_FILE(), "utf8")) || {}; } catch { return {}; }
+}
+function rememberPorts(ports) {
+  try { writeFileSync(PORTS_FILE(), JSON.stringify(ports)); } catch { /* a forgotten port costs one blank launch, never the boot */ }
+}
+
+let updaterStarted = false;
 async function startUpdater(win, kitDir) {
+  // Boot can run more than once (the error screen's Retry); the updater's
+  // listeners and its network check must not.
+  if (updaterStarted) return;
+  updaterStarted = true;
   // The documented off-switch (PERSODUB_DISABLE_UPDATE_CHECK=1) lives in the
   // kit's kit.env with the user's other settings -- read it from there, since
   // a GUI app's process.env never carries it.
@@ -84,10 +105,27 @@ async function startUpdater(win, kitDir) {
     const feed = resolveFeed(process.env);
     if (feed) autoUpdater.setFeedURL(feed);
     autoUpdater.autoDownload = true;
+    // A downloaded update applies on plain quit too -- but not on Windows:
+    // there the update is an NSIS run that fails, after the window is gone,
+    // whenever another program holds a file in the install folder. That path
+    // has a pre-flight (shell:restart-to-update below) and a quit handler
+    // cannot run it, so Windows keeps the button as the one way in.
+    autoUpdater.autoInstallOnAppQuit = !IS_WIN;
+    const announce = (event, info) => {
+      const next = nextUpdateState(updateState, event, info);
+      if (next === updateState) return;
+      updateState = next;
+      if (!win.isDestroyed()) win.webContents.send("shell:update-state", updateState);
+    };
+    autoUpdater.on("update-available", (info) => {
+      console.log(`PERSODUB_UPDATE available ${info?.version ?? ""}`);
+      announce("update-available", info);
+    });
+    autoUpdater.on("download-progress", (info) => announce("download-progress", info));
     autoUpdater.on("update-downloaded", (info) => {
       updateDownloaded = true;
       console.log(`PERSODUB_UPDATE downloaded ${info?.version ?? ""}`);
-      win.webContents.send("shell:update-ready", { version: info?.version ?? "" });
+      announce("update-downloaded", info);
       // Test-only hook: lets the end-to-end update test apply the swap without
       // a human clicking the banner. (true, false) = silent, no relaunch --
       // the test verifies the version stamp on disk, and a relaunched app
@@ -255,17 +293,24 @@ async function boot(win) {
     console.log(`PERSODUB_KIT kitDir=${cfg.kitDir} version=${kitVersion ?? "unknown"}`);
   }
 
+  // The update check starts here -- before the engines, which take up to a
+  // minute to come up and which the check used to wait on before even asking.
+  // On the install path it starts once the install above has succeeded, since
+  // that is what this line sits after. Whatever it learns is re-sent on every
+  // page load below, so the app page gets it the moment it appears.
+  startUpdater(win, cfg.kitDir); // deliberately not awaited: boot never waits on the network
   await win.loadFile(join(HERE, "screens", "loading.html"));
   try {
     engines = await startEngines(cfg, {
       logDir: join(app.getPath("userData"), "logs"),
       appVersion: app.getVersion(), // desktop/package.json -- the one place the version lives
+      preferredBackendPort: readRememberedPorts().backend,
     });
+    rememberPorts({ backend: engines.port });
     await win.loadURL(engines.url);
     console.log(`PERSODUB_READY ${engines.url}`);
     bootedKitDir = cfg.kitDir;
     countUsage("app_launch", cfg.kitDir);
-    startUpdater(win, cfg.kitDir); // deliberately not awaited: boot never waits on the network
   } catch (err) {
     // The kit installed fine and the app still cannot run. Such a machine fires
     // no other event -- install_failure's other codes do not apply and
@@ -340,6 +385,12 @@ app.whenReady().then(() => {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+  // Every page load -- the app page arriving after boot, or a reload mid
+  // download -- gets the update's current state again; announcements sent to
+  // the loading screen would otherwise be the last the app page never hears.
+  win.webContents.on("did-finish-load", () => {
+    if (updateState && !win.isDestroyed()) win.webContents.send("shell:update-state", updateState);
   });
   // Outbound links (the credit popup's Recharge button, Settings' "get a key") belong in
   // the user's own browser. This window has no chrome -- no address bar, no Back -- so

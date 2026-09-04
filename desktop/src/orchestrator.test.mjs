@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { startEngines, killStalePids, applyBinDir, sidecarArgv } from "./orchestrator.js";
 import { DEFAULTS } from "./config.js";
 import { PATH_SEP, venvBin } from "./platform.js";
+import { getFreePort } from "./freePort.js";
 
 const FAKE = join(dirname(fileURLToPath(import.meta.url)), "..", "fake");
 
@@ -126,4 +127,16 @@ test("the sidecar is launched from the engines venv", () => {
   const argv = sidecarArgv("/k", 3901);
   assert.equal(argv[0], venvBin(join("/k", "engines_venv"), "uvicorn"));
   assert.deepEqual(argv.slice(1), ["server:app", "--host", "127.0.0.1", "--port", "3901"]);
+});
+
+test("the backend comes up on the preferred port when it is free, and says which port it used", async () => {
+  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
+  const preferred = await getFreePort();
+  const { url, port, stopAll } = await startEngines(fakeCfg(), { logDir, preferredBackendPort: preferred });
+  try {
+    assert.equal(port, preferred);
+    assert.ok(url.endsWith(`:${preferred}`), url);
+  } finally {
+    stopAll();
+  }
 });

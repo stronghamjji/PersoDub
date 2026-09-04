@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, openSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnvFile, KIT_ENV } from "./kitEnv.js";
-import { getFreePort } from "./freePort.js";
+import { getFreePort, getPreferredPort } from "./freePort.js";
 import { waitForHealth } from "./health.js";
 import { IS_WIN, venvBin, exeName, PATH_SEP } from "./platform.js";
 
@@ -79,7 +79,7 @@ export function sidecarArgv(kitDir, port) {
           "server:app", "--host", "127.0.0.1", "--port", String(port)];
 }
 
-export async function startEngines(cfg, { logDir, appVersion }) {
+export async function startEngines(cfg, { logDir, appVersion, preferredBackendPort }) {
   mkdirSync(logDir, { recursive: true });
   await killStalePids(logDir);
 
@@ -141,7 +141,9 @@ export async function startEngines(cfg, { logDir, appVersion }) {
       predicate: (b) => b.status === "ok",
     });
 
-    const backendPort = await getFreePort();
+    // Last launch's port when free (main.js remembers it), so the page keeps
+    // the same origin -- and its localStorage -- from one launch to the next.
+    const backendPort = await getPreferredPort(preferredBackendPort);
     const backendArgv = overrideMode
       ? substitute(cfg.backendCmd, backendPort)
       : [venvBin(join(cfg.kitDir, "app_venv"), "uvicorn"),
@@ -152,7 +154,7 @@ export async function startEngines(cfg, { logDir, appVersion }) {
       timeoutMs: cfg.backendHealthTimeoutMs,
     });
 
-    return { url: `http://127.0.0.1:${backendPort}`, pids: pids(), stopAll };
+    return { url: `http://127.0.0.1:${backendPort}`, port: backendPort, pids: pids(), stopAll };
   } catch (err) {
     stopAll();
     err.logDir = logDir;

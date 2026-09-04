@@ -35,3 +35,37 @@ test("PERSODUB_UPDATE_URL points the updater at a test feed", () => {
     url: "http://127.0.0.1:8099",
   });
 });
+
+// The shell now announces an update in two steps -- "found, downloading" and
+// "ready" -- and re-announces the current step whenever the page (re)loads.
+// The bookkeeping between electron-updater's events and what the page shows
+// is this pure reducer.
+import { nextUpdateState } from "./updater.js";
+
+test("update-available starts a downloading state with the version", () => {
+  assert.deepEqual(nextUpdateState(null, "update-available", { version: "0.5.2" }),
+    { version: "0.5.2", phase: "downloading", pct: 0 });
+});
+
+test("download-progress keeps the version and rounds the percent", () => {
+  const s = nextUpdateState({ version: "0.5.2", phase: "downloading", pct: 0 },
+    "download-progress", { percent: 41.6 });
+  assert.deepEqual(s, { version: "0.5.2", phase: "downloading", pct: 42 });
+});
+
+test("update-downloaded becomes ready at 100 even if progress never fired", () => {
+  const s = nextUpdateState(null, "update-downloaded", { version: "0.5.2" });
+  assert.deepEqual(s, { version: "0.5.2", phase: "ready", pct: 100 });
+});
+
+test("unknown events and a missing version leave the state alone", () => {
+  const prev = { version: "0.5.2", phase: "downloading", pct: 10 };
+  assert.equal(nextUpdateState(prev, "update-not-available", {}), prev);
+  assert.equal(nextUpdateState(null, "download-progress", { percent: 5 }), null,
+    "progress before a version is known is noise");
+});
+
+test("progress that rounds to the same percent is not a new state", () => {
+  const prev = { version: "0.5.2", phase: "downloading", pct: 42 };
+  assert.equal(nextUpdateState(prev, "download-progress", { percent: 42.4 }), prev);
+});
