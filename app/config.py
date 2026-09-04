@@ -26,9 +26,9 @@ VERTEX_MODEL = os.environ.get("VERTEX_MODEL", "gemini-2.5-flash")
 
 # Translation engine choice: "gemini" (cloud, needs key) | "vertex" (cloud, service account,
 # see VERTEX_* above) | "qwen" | "gemma" | "hunyuan" (local).
-# Default = hunyuan (user decision 2026-09-04): it is the 1.1 GB model a light install
-# actually has, so a dub started without an explicit choice -- the screen's default,
-# the Dub Agent's queue_dub -- does not demand the 7.6 GB Gemma download first.
+# Default = hunyuan (user decision 2026-09-04): the 1.1 GB model, so a dub started
+# without an explicit choice -- the screen's default, the Dub Agent's queue_dub --
+# asks for a 1.1 GB download at most, never the 7.6 GB Gemma.
 # Gemma 3 stays a choice for anyone who downloads it (on the 44-line Joker A/B it was
 # the most natural Korean; Hunyuan is more literal and lines can run short).
 TRANSLATE_ENGINE_DEFAULT = "hunyuan"
@@ -227,7 +227,7 @@ QWEN_MERGE_MAX_GAP_SEC = float(os.environ.get("QWEN_MERGE_MAX_GAP_SEC", "1.5"))
 def default_stt_engine() -> str:
     """Resolve the STT engine to use when the caller doesn't pick one explicitly.
 
-    STT_ENGINE env var wins if set. Otherwise: "perso" when a Perso API key is
+    STT_ENGINE from kit.env wins, then the env var. Otherwise: "perso" when a Perso API key is
     configured (best quality in our comparisons),
     else "" (local Whisper, optionally + diar_engine="campplus") so the app keeps
     working with zero setup and no paid key. Read live (not cached at import time)

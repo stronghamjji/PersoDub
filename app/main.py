@@ -1677,7 +1677,9 @@ def dub_start(
     # Normalize like translate_engine below: without this, "Perso" (capital P)
     # skipped both the preflight and the Perso branch and silently ran the
     # free local engine -- the exact downgrade the no-fallback rule forbids.
-    stt_engine = (stt_engine or "").strip().lower() or None
+    # Resolved here, once, so the preflights below judge the engine that will
+    # actually run -- a saved STT_ENGINE=perso must meet the key check too.
+    stt_engine = (stt_engine or "").strip().lower() or (default_stt_engine() or "").lower() or None
     if stt_engine not in (None, "local", "perso"):
         raise HTTPException(422, f"Unknown stt_engine: {stt_engine}")
     # Same normalization for the same reason: "Perso" with a capital P must not
@@ -1884,8 +1886,11 @@ def dub_start(
             language=language,
             language_code=language_code,
             num_speakers=num_speakers,
-            translate_engine=translate_engine,
-            stt_engine=stt_engine or default_stt_engine() or None,
+            # The engine the preflight judged, not the raw form value: a blank
+            # form field means the saved default (kit.env), and run_dub's own
+            # fallback is the process env, frozen at launch.
+            translate_engine=effective_translate_engine or None,
+            stt_engine=stt_engine,
             sep_engine=sep_engine,
             n_takes=n_takes,
             source_language_code=source_language_code,

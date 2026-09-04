@@ -2470,7 +2470,6 @@ async function applyEngineAvailabilityToForm() {
   // project dialog.
   const translateSel = $("translateSelect");
   const sttSel = $("sttSelect");
-  await loadSavedDefaults();
 
   let av;
   try {
@@ -2774,7 +2773,6 @@ function rememberLastJob() {
   if (!state.jobId) return;
   lastJobId = state.jobId;
   lastJobName = state.job ? jobLabel(state.job) : "";
-  noteLastScreen(state.jobId);
 }
 
 // That job is gone (deleted, or the server no longer has it), so the way back
@@ -3126,6 +3124,11 @@ function openNewProject(source) {
   }
   $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
   $("projectError").textContent = "";
+  // The dropdowns start on the saved defaults every time the dialog opens
+  // (the Dub Agent may have changed them a moment ago), then the key-gated
+  // options are greyed out. Not on a Settings save: that path must leave a
+  // choice the user is in the middle of making alone.
+  loadSavedDefaults().then(() => applyEngineAvailabilityToForm());
   $("projectOverlay").classList.add("open");
 }
 
@@ -3784,7 +3787,10 @@ async function resumeJob(jobId) {
     const job = await (await fetch(`/api/dub/jobs/${jobId}`)).json();
     if (job.detail) throw new Error("This job is no longer available (server may have restarted).");
     handleJobUpdate(job);
-    if (job.status === "running" || job.status === "cancelling") {
+    noteLastScreen(jobId);
+    // queued is alive too (handleJobUpdate paints it as waiting): a job
+    // restored at launch while it waits in line must keep polling.
+    if (job.status === "running" || job.status === "cancelling" || job.status === "queued") {
       runPollLoop(jobId, myGeneration);
     }
   } catch (e) {
@@ -3859,6 +3865,7 @@ async function startDubbing() {
     const fd = buildDubFormData(readOptions());
     const jobId = await startDubJob(fd);
     state.jobId = jobId;
+    noteLastScreen(jobId);
     state.pollGeneration += 1;
     const myGeneration = state.pollGeneration;
 

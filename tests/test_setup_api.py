@@ -59,3 +59,13 @@ def test_no_kit_means_503(monkeypatch, tmp_path):
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path / "nowhere"))
     r = client.post("/api/setup", json={"translator": "gemma"})
     assert r.status_code == 503
+
+
+def test_a_saved_perso_stt_still_needs_the_key(tmp_path, monkeypatch):
+    # STT_ENGINE=perso saved by the agent, key gone since: the preflight must
+    # refuse, not let run_dub resolve to Perso behind the guards' back.
+    _kit(tmp_path, monkeypatch, "PERSODUB_KIT_DIR=/x\nSTT_ENGINE=perso\nPERSO_API_KEY=\n")
+    monkeypatch.setattr(main, "perso_available", lambda: False)
+    r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
+                    data={"language": "Korean", "language_code": "ko"})
+    assert r.status_code == 422 and "Perso" in r.json()["detail"]

@@ -398,13 +398,15 @@ test("startedLabel formats the job's start as local YYYY-MM-DD HH:MM", () => {
   assert.equal(startedLabel("not a date"), "");
 });
 
-test("buildDubFormData sends sep_engine only for the paid Perso choice", () => {
+test("buildDubFormData always names the separation, local included", () => {
+  // A blank used to mean local on the server; now it means the saved default,
+  // which may be Perso -- so the dialog's local choice has to be said out loud.
   const fd = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", sepEngine: "perso" });
   assert.equal(fd.get("sep_engine"), "perso");
   const fd2 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", sepEngine: "local" });
-  assert.equal(fd2.get("sep_engine"), null);
+  assert.equal(fd2.get("sep_engine"), "local");
   const fd3 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko" });
-  assert.equal(fd3.get("sep_engine"), null);
+  assert.equal(fd3.get("sep_engine"), "local");
 });
 
 test("applyEngineAvailability: a missing Hunyuan keeps the selection (picking it starts the download)", () => {
@@ -424,11 +426,11 @@ test("engineChips: Perso separation gets a chip, local Demucs (the default) stay
   assert.ok(!local.some((c) => c.role === "Separation"));
 });
 
-test("buildDubFormData sends dub_mode only for the paid Perso cloud", () => {
+test("buildDubFormData always names the dub mode, local included", () => {
   const fd = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", dubMode: "perso" });
   assert.equal(fd.get("dub_mode"), "perso");
   const fd2 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", dubMode: "local" });
-  assert.equal(fd2.get("dub_mode"), null);
+  assert.equal(fd2.get("dub_mode"), "local");
 });
 
 test("engineChips: a cloud dub gets a Dubbing chip; a local one stays silent", () => {

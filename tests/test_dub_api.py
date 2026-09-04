@@ -267,8 +267,14 @@ def test_dub_start_with_translate_engine(monkeypatch):
     assert captured["translate_engine"] == "gemini"
 
 
-def test_dub_start_translate_engine_defaults_to_none(monkeypatch):
-    # Omitting translate_engine leaves it to run_dub's own TRANSLATE_ENGINE default
+def test_dub_start_translate_engine_blank_means_the_saved_default(monkeypatch):
+    # Omitting translate_engine hands run_dub the SAVED default (kit.env via
+    # app/setup.py), not None -- run_dub's own fallback is the process env,
+    # frozen at launch, so None would let the preflight judge one engine and
+    # the job run another (2026-09-04 review).
+    monkeypatch.setattr(main.dub_setup, "default_for",
+                        lambda stage, _real=main.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
+    monkeypatch.setattr(main, "gemma_status", lambda: "available")
     captured = {}
 
     def fake_run_dub(**kw):
@@ -283,7 +289,7 @@ def test_dub_start_translate_engine_defaults_to_none(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 200
-    assert captured["translate_engine"] is None
+    assert captured["translate_engine"] == "gemma"
 
 
 def test_dub_start_stt_engine_defaults_to_perso_with_key(monkeypatch):
