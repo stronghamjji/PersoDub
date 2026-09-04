@@ -363,6 +363,7 @@ export function buildSteps(ctx) {
         try {
           rmSync(tarball, { force: true }); // 26 MB the kit never reads again
         } catch {
+          console.warn(`PERSODUB_INSTALL could not remove ${tarball}; leaving it in downloads/`);
           report(null, "Could not remove python.tar.gz; leaving it in downloads/");
         }
         markOk("python");
@@ -417,6 +418,7 @@ export function buildSteps(ctx) {
       id: "cleanup",
       title: "Cleaning up",
       bytes: 0,
+      verify: false,   // a locked leftover is dead weight, never a failed install
       isDone: () => LEFTOVERS(k).every((l) => !existsSync(l.path)),
       run: async (report) => {
         for (const l of LEFTOVERS(k)) {
@@ -425,6 +427,7 @@ export function buildSteps(ctx) {
           try {
             rmSync(l.path, { recursive: !!l.recursive, force: true, maxRetries: 5, retryDelay: 200 });
           } catch {
+            console.warn(`PERSODUB_INSTALL could not remove ${l.path}; will retry next launch`);
             report(null, `Could not remove ${basename(l.path)} yet; will retry next launch`);
           }
         }
@@ -471,6 +474,7 @@ export function buildSteps(ctx) {
         try {
           rmSync(archive, { force: true }); // 139 MB (1.5 GB on Windows) the kit never reads again
         } catch {
+          console.warn(`PERSODUB_INSTALL could not remove ${archive}; leaving it in downloads/`);
           report(null, `Could not remove ${IS_WIN ? "ollama.zip" : "ollama.tgz"}; leaving it in downloads/`);
         }
       },

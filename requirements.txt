@@ -14,4 +14,7 @@ mcp
 # hf CLI arrived in huggingface_hub 0.34; <1.0 keeps the flags this code was
 # verified against.
 huggingface_hub[cli]>=0.34,<1.0
-static-ffmpeg
+# Pinned: the ffmpeg step parses this package's function return shape, so an
+# upstream change must not reach fresh installs unpinned. 3.0 is the version
+# the 2026-09-03 device install produced.
+static-ffmpeg==3.0

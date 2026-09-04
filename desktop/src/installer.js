@@ -13,7 +13,10 @@ export async function runInstall(steps, { onProgress = () => {} } = {}) {
       await step.run((pct, detail) => {
         onProgress({ stepId: step.id, title: step.title, state: "progress", pct, detail, bytes: step.bytes });
       });
-      if (!(await step.isDone())) {
+      // verify:false is for steps whose work is housekeeping, not an
+      // artifact: cleanup deletes leftovers, and a file Windows will not
+      // release must leave the kit tidy-ish, never fail an install.
+      if (step.verify !== false && !(await step.isDone())) {
         throw new Error(`step "${step.id}" ran but did not complete its artifacts`);
       }
     } catch (err) {

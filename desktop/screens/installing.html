@@ -20,11 +20,19 @@
   // via the query string, since only it knows which kit this is and what
   // bytesStillNeeded came out to.
   const q = new URLSearchParams(location.search);
-  const total = Number(q.get("bytes")) || 0;
   const gb = (b) => (b / 1024 ** 3).toFixed(1) + " GB";
   const title = document.getElementById("title");
-  title.textContent = (q.get("mode") === "update" ? "Updating PersoDub" : "Setting up PersoDub")
-    + (total ? " · " + gb(total) : "");
+  // The figure main.js sends is a floor: it is measured before the payload
+  // step replaces the requirements files, which is what re-opens the venv
+  // steps -- so steps it could not know about still arrive. Grow it as they
+  // do, rather than showing "2.3 GB of 0.3 GB".
+  let total = Number(q.get("bytes")) || 0;
+  const counted = new Set();
+  const setTitle = () => {
+    title.textContent = (q.get("mode") === "update" ? "Updating PersoDub" : "Setting up PersoDub")
+      + (total ? " · " + gb(total) : "");
+  };
+  setTitle();
 
   // The step list is built from the progress events themselves (each carries
   // its step's title, in order) -- a hard-coded copy of installSpec.js's
@@ -42,6 +50,7 @@
     // would make the list flash through steps the user never actually waited
     // on, which is what made an update look like a fresh install.
     if (p.state === "skipped") return;
+    if (!counted.has(p.stepId)) { counted.add(p.stepId); total = Math.max(total, received + (p.bytes || 0)); setTitle(); }
     if (!items[p.stepId]) {
       const el = document.createElement("li");
       el.textContent = p.title || p.stepId;

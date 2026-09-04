@@ -8,6 +8,7 @@ import {
   OLLAMA_TGZ_SHA256, bytesStillNeeded, STEP_IDS, MODEL_MARKERS,
   OPTIONAL_MODEL_MARKERS,
 } from "./installSpec.js";
+import { runInstall } from "./installer.js";
 import { IS_WIN, venvBin, exeName, TTS_DEVICE } from "./platform.js";
 
 // Bundled dependency lists are platform-specific (see buildSteps' reqSuffix).
@@ -261,6 +262,15 @@ test("cleanup run is a no-op and never throws when there is nothing left to remo
   assert.equal(await step.isDone(), true);
 });
 
+test("a leftover that cannot be removed does not fail the install", async () => {
+  const ctx = freshCtx();
+  mkdirSync(join(ctx.kitDir, "qwen_venv"), { recursive: true });
+  const step = byId(ctx)["cleanup"];
+  step.run = async () => {};            // stands in for rmSync losing to a lock
+  await assert.doesNotReject(runInstall([step], {}));
+  assert.equal(await step.isDone(), false, "still open, so the next launch retries");
+});
+
 // Real-device check (2026-09-03): an upgraded kit left more than qwen_venv
 // behind -- the archives that step's own extraction should have deleted, the
 // retired venv's requirements lists, and the retired step's .ok marker. This
@@ -346,7 +356,7 @@ test("ollama-runtime step still completes when the archive delete fails", async 
   });
   const step = byId(ctx)["ollama-runtime"];
   await step.run(() => {});
-  assert.equal(step.isDone(), true, "extract succeeded -- the step must still complete");
+  assert.equal(await step.isDone(), true, "extract succeeded -- the step must still complete");
   assert.ok(
     existsSync(join(ctx.kitDir, "downloads", IS_WIN ? "ollama.zip" : "ollama.tgz")),
     "left behind since it could not be removed",
@@ -569,8 +579,9 @@ test("every step declares how much room it takes", () => {
 });
 
 test("the whole kit adds up to roughly what the installing screen promises", () => {
-  // The screen says "about 3 GB" (runtime with one engines venv + the small
-  // always-installed models; Windows runs larger for its CUDA torch wheels).
+  // The install screen shows this sum next to its title (runtime with one
+  // engines venv + the small always-installed models; Windows runs larger for
+  // its CUDA torch wheels).
   // If this drifts back toward the old 18 GB, a big model crept back in.
   const total = buildSteps(freshCtx()).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
   assert.ok(total > 2 && total < 12, `total is ${total.toFixed(1)} GB`);
