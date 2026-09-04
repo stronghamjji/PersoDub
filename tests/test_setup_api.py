@@ -66,6 +66,9 @@ def test_a_saved_perso_stt_still_needs_the_key(tmp_path, monkeypatch):
     # refuse, not let run_dub resolve to Perso behind the guards' back.
     _kit(tmp_path, monkeypatch, "PERSODUB_KIT_DIR=/x\nSTT_ENGINE=perso\nPERSO_API_KEY=\n")
     monkeypatch.setattr(main, "perso_available", lambda: False)
+    # The translator preflight runs first; on a machine without Ollama (CI) it
+    # would answer for Hunyuan before the STT check is reached.
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
                     data={"language": "Korean", "language_code": "ko"})
     assert r.status_code == 422 and "Perso" in r.json()["detail"]

@@ -18,8 +18,10 @@ def _all_engines_available(monkeypatch):
     # Same bypass as tests/test_dub_api.py: these tests exercise the export
     # routes, not the model preflight.
     monkeypatch.setattr(main, "gemma_available", lambda: True)
+    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
     monkeypatch.setattr(main, "qwen_available", lambda: True)
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     monkeypatch.setattr(main, "qwen_status", lambda: "available")
     monkeypatch.setattr(main, "gemini_available", lambda: True)
     monkeypatch.setattr(main, "perso_available", lambda: True)

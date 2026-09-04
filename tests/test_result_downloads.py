@@ -24,6 +24,7 @@ def _all_engines_available(monkeypatch):
     for name in ("gemma_available", "qwen_available", "gemini_available", "perso_available"):
         monkeypatch.setattr(main, name, lambda: True)
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     monkeypatch.setattr(main, "qwen_status", lambda: "available")
 
 

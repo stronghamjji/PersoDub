@@ -26,8 +26,10 @@ def _all_engines_available(monkeypatch):
     /api/engines still reports those plain booleans.
     """
     monkeypatch.setattr(main, "gemma_available", lambda: True)
+    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
     monkeypatch.setattr(main, "qwen_available", lambda: True)
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     monkeypatch.setattr(main, "qwen_status", lambda: "available")
     monkeypatch.setattr(main, "gemini_available", lambda: True)
     monkeypatch.setattr(main, "perso_available", lambda: True)
@@ -275,6 +277,7 @@ def test_dub_start_translate_engine_blank_means_the_saved_default(monkeypatch):
     monkeypatch.setattr(main.dub_setup, "default_for",
                         lambda stage, _real=main.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     captured = {}
 
     def fake_run_dub(**kw):
