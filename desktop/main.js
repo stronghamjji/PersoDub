@@ -105,9 +105,12 @@ async function startUpdater(win, kitDir) {
     const feed = resolveFeed(process.env);
     if (feed) autoUpdater.setFeedURL(feed);
     autoUpdater.autoDownload = true;
-    // A downloaded update applies on plain quit too, not only through the
-    // "Restart to update" button -- the next launch is simply the new version.
-    autoUpdater.autoInstallOnAppQuit = true;
+    // A downloaded update applies on plain quit too -- but not on Windows:
+    // there the update is an NSIS run that fails, after the window is gone,
+    // whenever another program holds a file in the install folder. That path
+    // has a pre-flight (shell:restart-to-update below) and a quit handler
+    // cannot run it, so Windows keeps the button as the one way in.
+    autoUpdater.autoInstallOnAppQuit = !IS_WIN;
     const announce = (event, info) => {
       const next = nextUpdateState(updateState, event, info);
       if (next === updateState) return;
@@ -290,10 +293,11 @@ async function boot(win) {
     console.log(`PERSODUB_KIT kitDir=${cfg.kitDir} version=${kitVersion ?? "unknown"}`);
   }
 
-  // The update check starts here, beside the engines, not after them: the
-  // engines take up to a minute to come up, and the check used to wait for
-  // that before even asking. Whatever it learns is re-sent on every page
-  // load below, so the app page gets it the moment it appears.
+  // The update check starts here -- before the engines, which take up to a
+  // minute to come up and which the check used to wait on before even asking.
+  // On the install path it starts once the install above has succeeded, since
+  // that is what this line sits after. Whatever it learns is re-sent on every
+  // page load below, so the app page gets it the moment it appears.
   startUpdater(win, cfg.kitDir); // deliberately not awaited: boot never waits on the network
   await win.loadFile(join(HERE, "screens", "loading.html"));
   try {
