@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
-import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
@@ -70,6 +70,18 @@ function countUsage(event, kitDir, errorCode, step) {
 // forced. electron-updater validates the new build's code signature, which is
 // why signing came first. Errors are logged and swallowed: an update check
 // must never break a working app.
+// <userData>/ports.json -- {"backend": 51799}: the port the backend listened
+// on last time. Reused when free so the page's origin (and its localStorage:
+// the seen "What's new" version, timeline state, pane sizes) survives a
+// relaunch. Unreadable or missing just means "pick a free port", as before.
+const PORTS_FILE = () => join(app.getPath("userData"), "ports.json");
+function readRememberedPorts() {
+  try { return JSON.parse(readFileSync(PORTS_FILE(), "utf8")) || {}; } catch { return {}; }
+}
+function rememberPorts(ports) {
+  try { writeFileSync(PORTS_FILE(), JSON.stringify(ports)); } catch { /* a forgotten port costs one blank launch, never the boot */ }
+}
+
 let updaterStarted = false;
 async function startUpdater(win, kitDir) {
   // Boot can run more than once (the error screen's Retry); the updater's
@@ -288,7 +300,9 @@ async function boot(win) {
     engines = await startEngines(cfg, {
       logDir: join(app.getPath("userData"), "logs"),
       appVersion: app.getVersion(), // desktop/package.json -- the one place the version lives
+      preferredBackendPort: readRememberedPorts().backend,
     });
+    rememberPorts({ backend: engines.port });
     await win.loadURL(engines.url);
     console.log(`PERSODUB_READY ${engines.url}`);
     bootedKitDir = cfg.kitDir;
