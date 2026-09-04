@@ -284,7 +284,10 @@ export function buildSteps(ctx) {
   const venvStep = (id, title, bytes, venvName, pipInstalls) => ({
     id,
     title,
-    bytes,
+    // A venv that already exists is being updated: pip adds what the new list
+    // brings (hundreds of MB), not the full budget that includes torch. The
+    // budget is what the free-space preflight and the install title show.
+    bytes: existsSync(k(venvName)) ? Math.min(bytes, 0.5 * GB) : bytes,
     isDone: () => existsSync(okPath(id))
       && readFileSync(okPath(id), "utf8").trim() === pipFingerprint(pipInstalls),
     run: async (report) => {
