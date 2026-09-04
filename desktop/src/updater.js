@@ -27,3 +27,27 @@ export function resolveFeed(env) {
   if (url) return { provider: "generic", url };
   return null;
 }
+
+/**
+ * The update as the page should see it, folded from electron-updater's
+ * events: {version, phase: "downloading" | "ready", pct}. Kept outside
+ * main.js so the two-step announcement ("found, downloading" first, "ready"
+ * once the file is on disk) is testable. Returns `prev` unchanged for events
+ * that carry nothing new -- progress before a version is known, or an event
+ * this shell does not announce.
+ */
+export function nextUpdateState(prev, event, info) {
+  if (event === "update-available" && info?.version) {
+    return { version: info.version, phase: "downloading", pct: 0 };
+  }
+  if (event === "download-progress" && prev?.version) {
+    // electron-updater reports progress many times a second; only a whole
+    // percent that actually moved is worth an IPC message to the page.
+    const pct = Math.round(Number(info?.percent) || 0);
+    return pct === prev.pct ? prev : { ...prev, pct };
+  }
+  if (event === "update-downloaded" && (info?.version || prev?.version)) {
+    return { version: info?.version || prev.version, phase: "ready", pct: 100 };
+  }
+  return prev;
+}

@@ -1950,6 +1950,7 @@
 <script type="module">
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips } from "/js/dubApi.mjs";
 import { gb, neededModelId, modelStatusLine, dubStartDialog, overallProgress, allReady } from "/js/modelsUi.mjs";
+import { updateBannerView } from "/js/updateBanner.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -3164,21 +3165,27 @@ uploadZone.addEventListener("drop", (e) => {
 });
 
 // ---------------- Auto-update banner (desktop shell only) ----------------
-// The shell announces a fully-downloaded update; outside Electron (plain
-// browser, tests) persodubShell is absent and none of this runs.
-if (window.persodubShell?.onUpdateReady) {
-  window.persodubShell.onUpdateReady((info) => {
+// The shell announces the update's state as it changes: "downloading N%"
+// within seconds of launch, then "ready" with the restart button once the
+// file is on disk. Outside Electron (plain browser, tests) persodubShell is
+// absent and none of this runs.
+if (window.persodubShell?.onUpdateState) {
+  window.persodubShell.onUpdateState((state) => {
+    const view = updateBannerView(state);
+    if (!view) return;
     let el = $("updateBanner");
     if (!el) {
       el = document.createElement("div");
       el.id = "updateBanner";
       el.className = "update-banner";
-      el.innerHTML = `<span></span><button type="button">Restart to update</button>`;
+      el.innerHTML = `<span></span><button type="button" hidden></button>`;
       el.querySelector("button").addEventListener("click", () => window.persodubShell.restartToUpdate());
       document.body.appendChild(el);
     }
-    el.querySelector("span").textContent =
-      `PersoDub ${info.version || "update"} is ready.`;
+    el.querySelector("span").textContent = view.text;
+    const btn = el.querySelector("button");
+    btn.hidden = !view.button;
+    if (view.button) btn.textContent = view.button;
     el.classList.add("shown");
   });
 }
