@@ -1,7 +1,7 @@
 {
   "name": "persodub-desktop-shell",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.5.2",
   "type": "module",
   "main": "main.js",
   "scripts": {

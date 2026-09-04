@@ -1,5 +1,9 @@
 {"notes": [
-    "Export opens again. In 0.5.0 the Export button did nothing.",
-    "Export lists only the files: dubbed video, subtitles, subtitled video. The subtitle look you chose on the work screen is what it saves."
+    "Setup keeps one AI engine environment instead of two: about 1 GB smaller on Mac, about 8 GB smaller on Windows. The first launch after this update tidies up for a minute or two.",
+    "Hunyuan is the default translator. Gemma stays a choice if you download it.",
+    "The Dub Agent can now check your setup, change a stage's default, and download a model after asking you.",
+    "Update notices appear within seconds of launch and a downloaded update also applies when you quit (Mac).",
+    "The app reopens where you closed it, and your layout choices are remembered.",
+    "An install closed midway now resumes on the next launch."
   ]
 }

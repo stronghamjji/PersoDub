@@ -12,11 +12,11 @@ your computer.
 [![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
 
 <p>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-0.5.1-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-0.5.1.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-0.5.2-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-0.5.2.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
-**macOS** — The button downloads the `.dmg` (0.5.1) straight away; open it and drag **PersoDub** into Applications.
+**macOS** — The button downloads the `.dmg` (0.5.2) straight away; open it and drag **PersoDub** into Applications.
 It's signed and notarized, so it opens with a normal double-click.
 
 **Windows** — Download and run the `.exe`. It isn't code-signed yet, so
@@ -137,7 +137,7 @@ The source files live in [docs/demo](docs/demo).
 | **OS** | macOS 11 (Big Sur) or later, or Windows 10 (21H2) / Windows 11. Linux is [planned](docs/roadmap.md). |
 | **Graphics (Windows)** | An NVIDIA GPU is strongly recommended — AMD and Intel graphics are not accelerated. Everything works without one, just slower; see [Speed without a GPU](docs/faq.md#speed-without-a-gpu). |
 | **Memory** | 24 GB recommended, 16 GB minimum |
-| **Disk** | 30 GB free on macOS, 45 GB on Windows. The first launch downloads the AI models and runtimes once — roughly 3.6 GB on macOS, 21 GB on Windows. |
+| **Disk** | 30 GB free on macOS, 35 GB on Windows. The first launch downloads the AI models and runtimes once — roughly 3 GB on macOS, 12 GB on Windows. |
 | **Network** | Required for the first-run download. Afterwards PersoDub runs offline unless you enable a cloud engine. |
 
 ## Installation
@@ -161,7 +161,7 @@ shows "Windows protected your PC" the first time — click **More info**, then
 **Run anyway**.
 
 On either platform, the first launch downloads the AI models and runtimes — roughly
-3.6 GB on macOS, about 21 GB on Windows (see [Requirements](#requirements)). It happens
+3 GB on macOS, about 12 GB on Windows (see [Requirements](#requirements)). It happens
 once; [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks like.
 
 ## Usage
