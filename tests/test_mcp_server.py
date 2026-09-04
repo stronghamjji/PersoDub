@@ -440,3 +440,27 @@ def test_burn_subtitles_relays_a_refusal(monkeypatch):
     monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
     with pytest.raises(ValueError, match="No subtitle file"):
         mcp_server.burn_subtitles("/v/쇼츠.mp4")
+
+
+def test_queue_dub_names_the_missing_model_instead_of_a_raw_error(monkeypatch, tmp_path):
+    # The app refuses with 409 {"missing": [...]} when a chosen engine's model is not
+    # downloaded. Relayed raw, the agent could only tell the user "an error" (2026-09-04).
+    video = _tmp_video(tmp_path)
+    detail = {"missing": [{"id": "gemma", "name": "Gemma 3", "bytes": 7600000000}],
+              "total_bytes": 7600000000, "free_bytes": 10**11}
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda *a, **kw: _Response(409, {"detail": detail}))
+    with pytest.raises(ValueError) as e:
+        mcp_server.queue_dub(str(video), "en", translator="gemma", confirm=True)
+    msg = str(e.value)
+    assert "Gemma 3" in msg and "7.6 GB" in msg
+    assert "Settings" in msg and "hunyuan" in msg
+    assert "{" not in msg, "no raw dict for the agent to parrot"
+
+
+def test_queue_dub_keeps_a_plain_string_refusal_as_is(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda *a, **kw: _Response(409, {"detail": "A dub is already running"}))
+    with pytest.raises(ValueError, match="A dub is already running"):
+        mcp_server.queue_dub(str(video), "en", confirm=True)

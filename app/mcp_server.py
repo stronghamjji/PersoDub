@@ -284,9 +284,10 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     with confirm=true -- never ask five separate questions.
 
     translator picks the translation engine for a local dub when the user
-    names one -- "gemma" or "hunyuan" (on this machine) or "gemini" (Google's
-    API); empty keeps the app's default. If starting fails because a local
-    model is not installed, say so and offer gemini.
+    names one -- "hunyuan" or "gemma" (on this machine) or "gemini" (Google's
+    API); empty keeps the app's default, Hunyuan. If starting fails because a
+    model is not downloaded, the error names the model and its size: tell the
+    user exactly that, and offer the two ways out it lists.
 
     Returns {"job_id", "status"}; the home screen's Up next card shows the
     queue, and get_job_status follows one job.
@@ -342,9 +343,27 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
                        timeout=600.0)
     if r.status_code in (400, 404, 409, 422, 507):
         detail = r.json().get("detail", "could not start this dub")
-        raise ValueError(detail if isinstance(detail, str) else str(detail))
+        raise ValueError(_dub_refusal_text(detail))
     r.raise_for_status()
     return r.json()
+
+
+def _dub_refusal_text(detail) -> str:
+    """The app's refusal, as a sentence the agent can repeat. A 409 for missing
+    models arrives as {"missing": [{"name", "bytes"}, ...]}; relayed raw, the
+    agent could only say "an error" (2026-09-04). Name what is missing and the
+    two ways out: download it, or pick an engine this computer already has."""
+    if isinstance(detail, str):
+        return detail
+    missing = detail.get("missing") if isinstance(detail, dict) else None
+    if not missing:
+        return str(detail)
+    names = ", ".join("%s (%.1f GB)" % (m.get("name", m.get("id", "?")),
+                                          (m.get("bytes") or 0) / 1e9) for m in missing)
+    return ("Not downloaded on this computer: %s. Ask the user to download it in "
+            "Settings > Models, or start with an engine that is already here "
+            "(for example translator=\"hunyuan\", or dub_mode=\"perso\" with a Perso key)."
+            % names)
 
 
 @mcp.tool()

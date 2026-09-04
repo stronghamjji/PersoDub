@@ -25,12 +25,13 @@ VERTEX_LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")
 VERTEX_MODEL = os.environ.get("VERTEX_MODEL", "gemini-2.5-flash")
 
 # Translation engine choice: "gemini" (cloud, needs key) | "vertex" (cloud, service account,
-# see VERTEX_* above) | "qwen" | "gemma" (local).
-# Default = gemma: on the 44-line Joker A/B it was the most natural, actor-performable
-# Korean and closest to Gemini's style (naturalness 14:1 over Qwen), with no critical
-# bugs. Qwen was more literal but had breaking issues (Cyrillic chars in names,
-# opposite mistranslations). Chosen after a Gemma-vs-Qwen translation comparison (2026-07-23).
-TRANSLATE_ENGINE = os.environ.get("TRANSLATE_ENGINE", "gemma")
+# see VERTEX_* above) | "qwen" | "gemma" | "hunyuan" (local).
+# Default = hunyuan (user decision 2026-09-04): it is the 1.1 GB model a light install
+# actually has, so a dub started without an explicit choice -- the screen's default,
+# the Dub Agent's queue_dub -- does not demand the 7.6 GB Gemma download first.
+# Gemma 3 stays a choice for anyone who downloads it (on the 44-line Joker A/B it was
+# the most natural Korean; Hunyuan is more literal and lines can run short).
+TRANSLATE_ENGINE = os.environ.get("TRANSLATE_ENGINE", "hunyuan")
 
 # Ollama (local LLM) translation settings (internal only)
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
