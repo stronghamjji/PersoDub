@@ -167,11 +167,12 @@ async function boot(win) {
       // each platform defines; ignoreLegacy keeps the replacement out of the
       // very folder this branch exists to abandon.
       const freshKitDir = defaultKitDir({ ignoreLegacy: true });
-      // Abandoning the stale kit must not strand its downloaded models: they
-      // are version-independent files the fresh install (and the in-app
-      // catalog) would otherwise re-download in full -- up to ~15 GB. Same
-      // volume, so a rename is instant; on any failure just log and carry on,
-      // a lost move costs a re-download, never the boot.
+      // models/: version-independent weights, up to ~15 GB, and pure data --
+      // safe to move. engines_venv/ is NOT: a venv records its own absolute
+      // path in every console script's shebang (bin/pip, bin/uvicorn), and
+      // `python -m venv` over a moved directory repairs bin/python but leaves
+      // those shebangs pointing at the path we just renamed away. The kit
+      // would fail at `pip install` and, past that, at the sidecar's uvicorn.
       try {
         const oldModels = join(cfg.kitDir, "models");
         const newModels = join(freshKitDir, "models");
@@ -211,7 +212,8 @@ async function boot(win) {
       // disk-full from deep inside a step, after gigabytes had already been
       // downloaded. Only the steps still missing are counted, so a half-done
       // install asks for the remainder rather than the whole kit again.
-      const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(cfg.kitDir));
+      const stillNeeded = await bytesStillNeeded(steps);
+      const noRoom = notEnoughSpace(stillNeeded, await freeSpaceAt(cfg.kitDir));
       if (noRoom) {
         countUsage("install_failure", cfg.kitDir, "disk-full");
         await win.loadFile(join(HERE, "screens", "error.html"), {
@@ -219,7 +221,14 @@ async function boot(win) {
         });
         return;
       }
-      await win.loadFile(join(HERE, "screens", "installing.html"));
+      await win.loadFile(join(HERE, "screens", "installing.html"), {
+        query: {
+          // Same kit again (an update) or a first install: the screen's title.
+          mode: existsSync(join(cfg.kitDir, KIT_ENV)) ? "update" : "install",
+          // What the steps still to run add up to -- the figure the title shows.
+          bytes: String(stillNeeded),
+        },
+      });
       // runInstall already reports which step failed; without keeping it the
       // count says only "somewhere in ten steps", which is what made the first
       // four real install failures unactionable.

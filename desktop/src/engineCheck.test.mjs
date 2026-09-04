@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { checkKit, readKitVersion, REQUIRED } from "./engineCheck.js";
-import { exeName } from "./platform.js";
+import { exeName, venvBin } from "./platform.js";
 
 function makeKit(paths, { version } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "odkit-"));
@@ -65,6 +65,8 @@ test("kit without the optional models passes (runtime + always-installed only)",
   assert.ok(!REQUIRED.some((p) => String(p).includes("gemma3")), "Gemma manifest must not be required");
   assert.ok(!REQUIRED.some((p) => String(p).includes("qwen3-tts")), "TTS weights must not be required");
   assert.ok(!REQUIRED.some((p) => String(p).includes(join("models", "whisper"))), "Whisper weights must not be required");
+  assert.ok(REQUIRED.includes(venvBin("engines_venv", "uvicorn")), "the sidecar boots from the engines venv");
+  assert.ok(!REQUIRED.some((p) => String(p).includes("qwen_venv")), "the old voice venv is gone");
   const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
   assert.deepEqual(checkKit(dir, "1.0.0+abc1234"), { ok: true, missing: [] });
 });

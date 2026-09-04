@@ -4,9 +4,9 @@ import { mkdtempSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { startEngines, killStalePids, applyBinDir } from "./orchestrator.js";
+import { startEngines, killStalePids, applyBinDir, sidecarArgv } from "./orchestrator.js";
 import { DEFAULTS } from "./config.js";
-import { PATH_SEP } from "./platform.js";
+import { PATH_SEP, venvBin } from "./platform.js";
 
 const FAKE = join(dirname(fileURLToPath(import.meta.url)), "..", "fake");
 
@@ -120,4 +120,10 @@ test("hands the backend its desktop identity, overriding a stale kit.env", async
     if (prior === undefined) delete process.env.PERSODUB_CLIENT;
     else process.env.PERSODUB_CLIENT = prior;
   }
+});
+
+test("the sidecar is launched from the engines venv", () => {
+  const argv = sidecarArgv("/k", 3901);
+  assert.equal(argv[0], venvBin(join("/k", "engines_venv"), "uvicorn"));
+  assert.deepEqual(argv.slice(1), ["server:app", "--host", "127.0.0.1", "--port", "3901"]);
 });

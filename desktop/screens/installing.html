@@ -9,15 +9,31 @@
   #fill { height: 100%; width: 0%; background: #4a7dff; transition: width .3s; }
   #detail { color: #888; font-size: 13px; min-height: 1.2em; overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap; }
-  p.note { color: #888; font-size: 14px; }
 </style>
-<h2>Setting up PersoDub</h2>
-<p class="note">One-time setup, about 3.6 GB. AI models download later, when you first use them.
-Keep the app open; if it closes, setup resumes where it left off.</p>
+<h2 id="title"></h2>
 <ol id="steps"></ol>
 <div id="bar"><div id="fill"></div></div>
 <div id="detail"></div>
 <script>
+  // mode=update (same kit already installed) vs install (first time), and the
+  // total bytes the still-missing steps add up to -- both handed in by main.js
+  // via the query string, since only it knows which kit this is and what
+  // bytesStillNeeded came out to.
+  const q = new URLSearchParams(location.search);
+  const gb = (b) => (b / 1024 ** 3).toFixed(1) + " GB";
+  const title = document.getElementById("title");
+  // The figure main.js sends is a floor: it is measured before the payload
+  // step replaces the requirements files, which is what re-opens the venv
+  // steps -- so steps it could not know about still arrive. Grow it as they
+  // do, rather than showing "2.3 GB of 0.3 GB".
+  let total = Number(q.get("bytes")) || 0;
+  const counted = new Set();
+  const setTitle = () => {
+    title.textContent = (q.get("mode") === "update" ? "Updating PersoDub" : "Setting up PersoDub")
+      + (total ? " · " + gb(total) : "");
+  };
+  setTitle();
+
   // The step list is built from the progress events themselves (each carries
   // its step's title, in order) -- a hard-coded copy of installSpec.js's
   // titles drifted every time a step changed, down to a stale "mac-env" id.
@@ -25,7 +41,16 @@ Keep the app open; if it closes, setup resumes where it left off.</p>
   const items = {};
   const fill = document.getElementById("fill");
   const detail = document.getElementById("detail");
+  // Bytes received so far, from steps that actually ran (not skipped -- a
+  // skipped step was already there before this run and never counted toward
+  // `total`, which comes from bytesStillNeeded's not-yet-done steps only).
+  let received = 0;
   window.persodubShell.onInstallProgress((p) => {
+    // A skipped step was already there before this run started -- showing it
+    // would make the list flash through steps the user never actually waited
+    // on, which is what made an update look like a fresh install.
+    if (p.state === "skipped") return;
+    if (!counted.has(p.stepId)) { counted.add(p.stepId); total = Math.max(total, received + (p.bytes || 0)); setTitle(); }
     if (!items[p.stepId]) {
       const el = document.createElement("li");
       el.textContent = p.title || p.stepId;
@@ -34,11 +59,17 @@ Keep the app open; if it closes, setup resumes where it left off.</p>
     }
     const li = items[p.stepId];
     if (p.state === "start") li.className = "active";
-    if (p.state === "skipped" || p.state === "done") { li.className = "done"; fill.style.width = "0%"; }
+    if (p.state === "done") {
+      li.className = "done";
+      fill.style.width = "0%";
+      received += p.bytes || 0;
+    }
     if (p.state === "progress") {
       li.className = "active";
       if (p.pct != null) fill.style.width = p.pct + "%";
-      if (p.detail) detail.textContent = p.detail;
+      detail.textContent = total
+        ? gb(received + (p.pct || 0) / 100 * (p.bytes || 0)) + " of " + gb(total) + (p.detail ? " · " + p.detail : "")
+        : (p.detail || "");
     }
     if (p.state === "error") { li.className = "active"; detail.textContent = p.detail || "failed"; }
   });

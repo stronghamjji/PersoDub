@@ -46,3 +46,19 @@ numpy==2.4.6
 # lameenc, sphn, tqdm (all imported by demucs_separate.py or its deps) --
 # pip installs these automatically as demucs==4.1.0's own dependencies, all
 # confirmed to have macOS arm64 wheels or pure-Python sdists (2026-07-30).
+
+# --- Voice synthesis (merged from the former requirements_qwen_mac.txt, 2026-09) ---
+# One engines venv now serves separation, transcription, diarization, the
+# take scorer AND the Qwen3-TTS sidecar (sidecar/server.py, a small FastAPI
+# app). The shared pins above (torch, onnxruntime, numpy, soundfile) were
+# already identical in both lists, verified by pip --dry-run before merging.
+fastapi
+uvicorn[standard]
+python-multipart
+qwen-tts==0.1.1
+accelerate==1.12.0
+einops==0.8.2
+gradio==6.17.3
+librosa==0.11.0
+transformers==4.57.3
+sox==1.5.0

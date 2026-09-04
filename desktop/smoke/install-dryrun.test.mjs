@@ -22,7 +22,6 @@ function makePayload(payloadDir) {
   mkdirSync(join(payloadDir, "kit-src", "sidecar"), { recursive: true });
   writeFileSync(join(payloadDir, "kit-src", "sidecar", "server.py"), "# sidecar");
   writeFileSync(join(payloadDir, "kit-src", `requirements_engines_${REQ_SUFFIX}.txt`), "torch");
-  writeFileSync(join(payloadDir, "kit-src", `requirements_qwen_${REQ_SUFFIX}.txt`), "uvicorn");
   writeFileSync(join(payloadDir, "campplus.onnx"), "onnx");
   writeFileSync(join(payloadDir, "KIT_VERSION"), KIT_VERSION);
 }

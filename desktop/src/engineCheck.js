@@ -8,7 +8,8 @@ export const REQUIRED = [
   KIT_ENV,
   // venv entrypoints and the ollama binary carry platform-specific layout
   // (bin/x vs Scripts\x.exe, ".exe" suffix) -- see platform.js.
-  venvBin("qwen_venv", "uvicorn"),
+  // The voice sidecar boots from the engines venv since the two were merged.
+  venvBin("engines_venv", "uvicorn"),
   venvBin("app_venv", "uvicorn"),
   "sidecar/server.py",
   // The Ollama runtime binary, mirroring installSpec.js's ollama-runtime

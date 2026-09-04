@@ -4,7 +4,7 @@
 // PERSODUB_FAKE mode can substitute them.
 import { existsSync, mkdirSync, cpSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import { KIT_ENV } from "./kitEnv.js";
 import { IS_WIN, venvBin, standalonePython, exeName, TTS_DEVICE } from "./platform.js";
@@ -59,7 +59,7 @@ export const GEMMA_MANIFEST = [
 // analytics.js publishes exactly this list, and a rename here that never
 // reached its copy used to make a failing step travel as "unknown".
 export const STEP_IDS = [
-  "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
+  "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup",
   "models", "ollama-runtime", "nonverbal-weights", "kit-env",
 ];
 
@@ -208,16 +208,11 @@ function withMissingKitEnvKeys(text) {
 
 const GB = 1024 ** 3;
 
-// What each step leaves on disk, so the free-space preflight can add up the
-// steps that have not run yet. Measured 2026-08-24 on a finished mac install
-// (18.4 GB total, matching the "about 19 GB" the installing screen promises).
-//
-// Windows is larger and is NOT measured: torch there comes from the CUDA index
-// (see torchCuda below) and lands in both venvs, where macOS gets the much
-// smaller MPS wheel. The two venv figures below are the wheel sizes, not a
-// reading off a real machine -- worth re-measuring once a Windows kit is at
-// hand, since six of the eight install failures so far were Windows.
-const VENV_TORCH = IS_WIN ? 3.5 * GB : 1.5 * GB;
+// What the one engines venv leaves on disk. macOS measured 2026-09-03 on the
+// merged list (MPS torch 0.4 GB + the rest); Windows measured 2026-09-02 on
+// the CUDA torch alone (8.4 GB per venv) plus the voice packages that now
+// share it. Re-measure after the first Windows install of the merged venv.
+const VENV_ENGINES = IS_WIN ? 9 * GB : 2 * GB;
 
 /** How much room the steps that have not run yet still need. */
 export async function bytesStillNeeded(steps) {
@@ -228,14 +223,27 @@ export async function bytesStillNeeded(steps) {
   return total;
 }
 
+// What an older kit leaves behind and this version no longer reads. Each is
+// removed once venv-engines succeeded (this step sits right after it), and
+// the step stays open until every one is gone -- a locked file on Windows
+// just means it is retried next launch.
+const LEFTOVERS = (k) => [
+  { path: k("qwen_venv"), recursive: true },                       // the retired voice venv
+  { path: k("downloads", "python.tar.gz") },                         // archives, already extracted
+  { path: k("downloads", "ollama.tgz") },
+  { path: k("downloads", "ollama.zip") },
+  { path: k("requirements_qwen_mac.txt") },                          // the retired venv's lists
+  { path: k("requirements_qwen_win.txt") },
+  { path: k(".install", "venv-qwen.ok") },                          // the retired step's marker
+];
+
 export function buildSteps(ctx) {
   const k = (...p) => join(ctx.kitDir, ...p);
   const modelDone = (m) => m.markers.every((rel) => existsSync(k(...rel)));
   const py = standalonePython(k("python"));
-  // Per-platform pinned dependency lists (bundled by collect-payload.mjs).
+  // Per-platform pinned dependency list (bundled by collect-payload.mjs).
   const reqSuffix = IS_WIN ? "win" : "mac";
   const reqEngines = `requirements_engines_${reqSuffix}.txt`;
-  const reqQwen = `requirements_qwen_${reqSuffix}.txt`;
   // On Windows, torch/torchaudio come from PyPI as CPU-only wheels; the CUDA
   // build lives on a dedicated index, installed before the rest so the GPU is
   // usable. macOS gets the MPS wheel automatically, so no extra install.
@@ -283,7 +291,6 @@ export function buildSteps(ctx) {
       const venvDir = k(venvName);
       report(null, `Creating ${venvName}`);
       await ctx.run([py, "-m", "venv", venvDir]);
-      const pip = venvBin(venvDir, "pip");
       // Upgrade pip via `python -m pip`, not `pip.exe`: on Windows pip.exe is
       // locked while running and cannot rewrite itself ("To modify pip, please
       // run: python -m pip install --upgrade pip"). `python -m pip` is safe on
@@ -291,7 +298,11 @@ export function buildSteps(ctx) {
       const venvPy = venvBin(venvDir, "python");
       await ctx.run([venvPy, "-m", "pip", "install", "--upgrade", "pip"], { onLine: (l) => report(null, l.slice(0, 120)) });
       for (const args of pipInstalls) {
-        await ctx.run([pip, "install", ...args], { onLine: (l) => report(null, l.slice(0, 120)) });
+        // `venvPy -m pip`, not the bin/pip shim: the shim carries an absolute
+        // shebang, so it is the one file in a venv that a moved or repaired
+        // environment can no longer run.
+        await ctx.run([venvPy, "-m", "pip", "install", "--no-cache-dir", ...args],
+                      { onLine: (l) => report(null, l.slice(0, 120)) });
       }
       markOk(id, pipFingerprint(pipInstalls));
     },
@@ -318,9 +329,7 @@ export function buildSteps(ctx) {
         report(null, "Copying app code");
         cpSync(join(ctx.payloadDir, "app-repo"), k("app"), { recursive: true });
         cpSync(join(ctx.payloadDir, "kit-src", "sidecar"), k("sidecar"), { recursive: true });
-        for (const f of [reqEngines, reqQwen]) {
-          cpSync(join(ctx.payloadDir, "kit-src", f), k(f));
-        }
+        cpSync(join(ctx.payloadDir, "kit-src", reqEngines), k(reqEngines));
         mkdirSync(k("models", "campplus"), { recursive: true });
         const cam = join(ctx.payloadDir, "campplus.onnx");
         if (existsSync(cam)) {
@@ -347,15 +356,20 @@ export function buildSteps(ctx) {
         });
         report(null, "Extracting Python");
         await ctx.extract(tarball, ctx.kitDir);
+        // Best-effort: the extract above is the real work, already done. An
+        // antivirus/indexer holding the archive open (EBUSY/EPERM) must not
+        // fail the step or force a re-download next launch -- { force: true }
+        // alone only swallows ENOENT, not a locked file.
+        try {
+          rmSync(tarball, { force: true }); // 26 MB the kit never reads again
+        } catch {
+          console.warn(`PERSODUB_INSTALL could not remove ${tarball}; leaving it in downloads/`);
+          report(null, "Could not remove python.tar.gz; leaving it in downloads/");
+        }
         markOk("python");
       },
     },
     venvStep("venv-app", "Installing app environment", 0.2 * GB, "app_venv", [["-r", k("app", "requirements.txt")]]),
-    venvStep("venv-engines", "Installing AI engines (~3 GB)", VENV_TORCH, "engines_venv", [
-      ...torchCuda,
-      ["-r", k(reqEngines)],
-      ["static-ffmpeg"],
-    ]),
     {
       id: "ffmpeg",
       title: "Setting up ffmpeg",
@@ -364,9 +378,11 @@ export function buildSteps(ctx) {
       run: async (report) => {
         report(null, "Fetching ffmpeg binaries");
         const lines = [];
+        // static-ffmpeg lives in app_venv (requirements.txt): the one venv a
+        // light install always has, so ffmpeg no longer waits on the engines.
         await ctx.run(
           [
-            venvBin(k("engines_venv"), "python"),
+            venvBin(k("app_venv"), "python"),
             "-c",
             "import json; from static_ffmpeg.run import get_or_fetch_platform_executables_else_raise as g; print(json.dumps(list(g())))",
           ],
@@ -385,20 +401,45 @@ export function buildSteps(ctx) {
         }
       },
     },
-    venvStep("venv-qwen", "Installing voice engine", VENV_TORCH, "qwen_venv", [
+    // One venv for every engine: separation, transcription, diarization, the
+    // take scorer and the Qwen3-TTS sidecar. They used to be two (engines +
+    // qwen) because the original Linux host had Python 3.8 for some of them;
+    // on macOS/Windows with one 3.11 that split only bought a second copy of
+    // torch (0.4 GB on macOS, 8 GB of CUDA wheels on Windows).
+    venvStep("venv-engines", "Installing AI engines", VENV_ENGINES, "engines_venv", [
       ...torchCuda,
-      ["-r", k(reqQwen)],
-      // The hf CLI (used by the models step) landed in 0.34, but transformers
-      // requires <1.0 — an unbounded -U pulls 1.x and breaks the sidecar.
-      ["huggingface_hub>=0.34,<1.0"],
+      ["-r", k(reqEngines)],
     ]),
+    {
+      // Kits installed before the merge carry the old voice venv and its
+      // debris. Removing it is a step of its own so it runs only after
+      // venv-engines succeeded (runInstall stops at the first failure), shows
+      // on the install screen, and is skipped forever once everything is gone.
+      id: "cleanup",
+      title: "Cleaning up",
+      bytes: 0,
+      verify: false,   // a locked leftover is dead weight, never a failed install
+      isDone: () => LEFTOVERS(k).every((l) => !existsSync(l.path)),
+      run: async (report) => {
+        for (const l of LEFTOVERS(k)) {
+          if (!existsSync(l.path)) continue;
+          report(null, `Removing ${basename(l.path)}`);
+          try {
+            rmSync(l.path, { recursive: !!l.recursive, force: true, maxRetries: 5, retryDelay: 200 });
+          } catch {
+            console.warn(`PERSODUB_INSTALL could not remove ${l.path}; will retry next launch`);
+            report(null, `Could not remove ${basename(l.path)} yet; will retry next launch`);
+          }
+        }
+      },
+    },
     {
       id: "models",
       title: "Downloading sound-separation model (~80 MB)",
       bytes: 0.1 * GB,
       isDone: () => MODELS.every(modelDone),
       run: async (report) => {
-        const hf = venvBin(k("qwen_venv"), "hf");
+        const hf = venvBin(k("app_venv"), "hf");
         for (const m of MODELS) {
           if (modelDone(m)) continue;
           report(null, `Downloading ${m.name}`);
@@ -429,6 +470,13 @@ export function buildSteps(ctx) {
         });
         report(null, "Extracting Ollama runtime");
         await ctx.extract(archive, k("ollama"));
+        // Best-effort, same reasoning as the python step above.
+        try {
+          rmSync(archive, { force: true }); // 139 MB (1.5 GB on Windows) the kit never reads again
+        } catch {
+          console.warn(`PERSODUB_INSTALL could not remove ${archive}; leaving it in downloads/`);
+          report(null, `Could not remove ${IS_WIN ? "ollama.zip" : "ollama.tgz"}; leaving it in downloads/`);
+        }
       },
     },
     {

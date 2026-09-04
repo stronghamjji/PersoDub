@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -8,6 +8,7 @@ import {
   OLLAMA_TGZ_SHA256, bytesStillNeeded, STEP_IDS, MODEL_MARKERS,
   OPTIONAL_MODEL_MARKERS,
 } from "./installSpec.js";
+import { runInstall } from "./installer.js";
 import { IS_WIN, venvBin, exeName, TTS_DEVICE } from "./platform.js";
 
 // Bundled dependency lists are platform-specific (see buildSteps' reqSuffix).
@@ -28,7 +29,6 @@ function makePayload(payloadDir, { campplus = true, version = "1.0.0+abc1234" } 
   mkdirSync(join(payloadDir, "kit-src", "sidecar"), { recursive: true });
   writeFileSync(join(payloadDir, "kit-src", "sidecar", "server.py"), "# sidecar");
   writeFileSync(join(payloadDir, "kit-src", `requirements_engines_${REQ_SUFFIX}.txt`), "torch");
-  writeFileSync(join(payloadDir, "kit-src", `requirements_qwen_${REQ_SUFFIX}.txt`), "uvicorn");
   if (campplus) writeFileSync(join(payloadDir, "campplus.onnx"), "onnx");
   writeFileSync(join(payloadDir, "KIT_VERSION"), version);
 }
@@ -38,11 +38,9 @@ const byId = (ctx) => Object.fromEntries(buildSteps(ctx).map((s) => [s.id, s]));
 test("returns the 10 steps in install order", () => {
   const ids = buildSteps(freshCtx()).map((s) => s.id);
   assert.deepEqual(ids, [
-    "payload", "python", "venv-app", "venv-engines", "ffmpeg", "venv-qwen",
+    "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup",
     "models", "ollama-runtime", "nonverbal-weights", "kit-env",
   ]);
-  // analytics.js publishes exactly these ids -- the export and the real
-  // steps must not drift apart.
   assert.deepEqual(ids, STEP_IDS);
 });
 
@@ -85,6 +83,8 @@ test("payload step copies bundle including campplus and marks done", async () =>
   assert.ok(existsSync(join(ctx.kitDir, "app", "app", "main.py")));
   assert.ok(existsSync(join(ctx.kitDir, "sidecar", "server.py")));
   assert.ok(existsSync(join(ctx.kitDir, `requirements_engines_${REQ_SUFFIX}.txt`)));
+  assert.equal(existsSync(join(ctx.kitDir, `requirements_qwen_${REQ_SUFFIX}.txt`)), false,
+    "the voice environment's own list is gone -- one engines list now");
   assert.ok(existsSync(join(ctx.kitDir, "models", "campplus", "campplus.onnx")));
   assert.equal(await step.isDone(), true);
 });
@@ -175,7 +175,7 @@ test("venv-app runs venv + pip installs and marks done", async () => {
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
   assert.ok(argvs.some((a) => a.includes("-m venv") && a.includes("app_venv")));
-  assert.ok(argvs.some((a) => a.includes("install -r") && a.includes("requirements.txt")));
+  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir -r") && a.includes("requirements.txt")));
   assert.equal(await step.isDone(), true);
 });
 
@@ -209,15 +209,158 @@ test("a bare marker from before the fingerprint counts as not done", async () =>
   assert.equal(await byId(ctx)["venv-app"].isDone(), false);
 });
 
-// transformers pins huggingface-hub <1.0; an unbounded -U upgrade pulls 1.x and
-// breaks the sidecar at import time. 0.34 is the first release with the hf CLI.
-test("venv-qwen keeps huggingface_hub below 1.0", async () => {
+// One engines venv now carries the voice engine too. The hf CLI and
+// static-ffmpeg moved to app_venv (requirements.txt), so this step installs
+// the engines list and, on Windows, the CUDA torch first -- nothing else.
+test("venv-engines installs only the merged engines list", async () => {
   const argvs = [];
   const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });
-  await byId(ctx)["venv-qwen"].run(() => {});
-  const hub = argvs.filter((a) => a.includes("huggingface_hub"));
-  assert.equal(hub.length, 1);
-  assert.ok(hub[0].includes("huggingface_hub>=0.34,<1.0"), `unpinned: ${hub[0]}`);
+  await byId(ctx)["venv-engines"].run(() => {});
+  const installs = argvs.filter((a) => a.includes(" install ") && !a.includes("--upgrade pip"));
+  assert.ok(installs.some((a) => a.includes(`requirements_engines_${REQ_SUFFIX}.txt`)));
+  assert.ok(!installs.some((a) => a.includes("static-ffmpeg")), "static-ffmpeg belongs to app_venv now");
+  assert.ok(!installs.some((a) => a.includes("huggingface_hub")), "hf CLI belongs to app_venv now");
+  assert.ok(!argvs.some((a) => a.includes("qwen_venv")), "no second venv is created");
+});
+
+test("every pip install runs without the pip cache", async () => {
+  // Windows kept a second copy of the 3 GB CUDA torch wheel in %LOCALAPPDATA%\pip
+  // -- outside the kit, so no size report ever showed it.
+  for (const id of ["venv-app", "venv-engines"]) {
+    const argvs = [];
+    const ctx = freshCtx({ run: async (argv) => { argvs.push(argv); } });
+    await byId(ctx)[id].run(() => {});
+    const installs = argvs.filter((a) => a.includes("install") && !a.includes("--upgrade"));
+    assert.ok(installs.length > 0, id);
+    for (const a of installs) assert.ok(a.includes("--no-cache-dir"), `${id}: ${a.join(" ")}`);
+  }
+});
+
+test("cleanup removes the old voice environment and is done once it is gone", async () => {
+  const ctx = freshCtx();
+  const step = byId(ctx)["cleanup"];
+  assert.equal(await step.isDone(), true, "a fresh kit never had one");
+  mkdirSync(join(ctx.kitDir, "qwen_venv", "bin"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, "qwen_venv", "bin", "uvicorn"), "");
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+  assert.equal(existsSync(join(ctx.kitDir, "qwen_venv")), false);
+  assert.equal(await step.isDone(), true);
+});
+
+// The locked-file branch (rmSync throwing EBUSY/EPERM under an antivirus or
+// indexer holding a file open, on Windows) is covered by the try/catch below
+// but is not portably reproducible in a unit test -- it is exercised
+// manually on Windows as part of Task 7's follow-up. This test covers the
+// other half of the same contract: run() must be safe to call again and
+// again, never throwing, whether or not there is anything left to remove.
+test("cleanup run is a no-op and never throws when there is nothing left to remove", async () => {
+  const ctx = freshCtx();
+  const step = byId(ctx)["cleanup"];
+  assert.equal(await step.isDone(), true);
+  await assert.doesNotReject(step.run(() => {}));
+  assert.equal(await step.isDone(), true);
+});
+
+test("a leftover that cannot be removed does not fail the install", async () => {
+  const ctx = freshCtx();
+  mkdirSync(join(ctx.kitDir, "qwen_venv"), { recursive: true });
+  const step = byId(ctx)["cleanup"];
+  step.run = async () => {};            // stands in for rmSync losing to a lock
+  await assert.doesNotReject(runInstall([step], {}));
+  assert.equal(await step.isDone(), false, "still open, so the next launch retries");
+});
+
+// Real-device check (2026-09-03): an upgraded kit left more than qwen_venv
+// behind -- the archives that step's own extraction should have deleted, the
+// retired venv's requirements lists, and the retired step's .ok marker. This
+// step is where all of it goes, not only the venv.
+test("cleanup removes every leftover of the two-venv kit, not only qwen_venv", async () => {
+  const ctx = freshCtx();
+  mkdirSync(join(ctx.kitDir, "qwen_venv", "bin"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, "qwen_venv", "bin", "uvicorn"), "");
+  mkdirSync(join(ctx.kitDir, "downloads"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, "downloads", "python.tar.gz"), "");
+  writeFileSync(join(ctx.kitDir, "downloads", "ollama.tgz"), "");
+  writeFileSync(join(ctx.kitDir, "downloads", "ollama.zip"), "");
+  writeFileSync(join(ctx.kitDir, "requirements_qwen_mac.txt"), "");
+  writeFileSync(join(ctx.kitDir, "requirements_qwen_win.txt"), "");
+  mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, ".install", "venv-qwen.ok"), "");
+
+  const step = byId(ctx)["cleanup"];
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+
+  for (const rel of [
+    ["qwen_venv"],
+    ["downloads", "python.tar.gz"],
+    ["downloads", "ollama.tgz"],
+    ["downloads", "ollama.zip"],
+    ["requirements_qwen_mac.txt"],
+    ["requirements_qwen_win.txt"],
+    [".install", "venv-qwen.ok"],
+  ]) {
+    assert.equal(existsSync(join(ctx.kitDir, ...rel)), false, rel.join("/"));
+  }
+  assert.equal(await step.isDone(), true);
+});
+
+test("python and ollama-runtime steps delete their archives after extracting", async () => {
+  const ctx = freshCtx({
+    download: async (_url, dest) => writeFileSync(dest, "bytes"),
+    extract: async (_file, dest) => {
+      mkdirSync(dest, { recursive: true });
+      if (dest.endsWith("ollama")) writeFileSync(join(dest, exeName("ollama")), "bin");
+    },
+  });
+  await byId(ctx).python.run(() => {});
+  assert.equal(existsSync(join(ctx.kitDir, "downloads", "python.tar.gz")), false);
+  await byId(ctx)["ollama-runtime"].run(() => {});
+  assert.equal(existsSync(join(ctx.kitDir, "downloads", IS_WIN ? "ollama.zip" : "ollama.tgz")), false);
+});
+
+// An antivirus/indexer can hold the archive open (EBUSY/EPERM), which
+// { force: true } alone does not swallow (it only ignores ENOENT). The
+// step's real work -- extracting -- already succeeded, so a leftover archive
+// must never fail the step or force a re-download on the next launch.
+test("python step still marks done when the archive delete fails", async () => {
+  const ctx = freshCtx({
+    download: async (_url, dest) => writeFileSync(dest, "bytes"),
+    extract: async (tarball, destDir) => {
+      mkdirSync(destDir, { recursive: true });
+      // Simulate a locked file: replace the tarball with a non-empty
+      // directory, which a non-recursive rmSync cannot remove (EISDIR),
+      // even with { force: true }.
+      rmSync(tarball, { force: true });
+      mkdirSync(tarball, { recursive: true });
+      writeFileSync(join(tarball, "locked"), "");
+    },
+  });
+  const step = byId(ctx).python;
+  await step.run(() => {});
+  assert.equal(await step.isDone(), true, "extract succeeded -- the step must still complete");
+  assert.ok(existsSync(join(ctx.kitDir, "downloads", "python.tar.gz")), "left behind since it could not be removed");
+});
+
+test("ollama-runtime step still completes when the archive delete fails", async () => {
+  const ctx = freshCtx({
+    download: async (_url, dest) => writeFileSync(dest, "bytes"),
+    extract: async (archive, dest) => {
+      mkdirSync(dest, { recursive: true });
+      writeFileSync(join(dest, exeName("ollama")), "bin");
+      rmSync(archive, { force: true });
+      mkdirSync(archive, { recursive: true });
+      writeFileSync(join(archive, "locked"), "");
+    },
+  });
+  const step = byId(ctx)["ollama-runtime"];
+  await step.run(() => {});
+  assert.equal(await step.isDone(), true, "extract succeeded -- the step must still complete");
+  assert.ok(
+    existsSync(join(ctx.kitDir, "downloads", IS_WIN ? "ollama.zip" : "ollama.tgz")),
+    "left behind since it could not be removed",
+  );
 });
 
 test("ffmpeg step copies binaries reported by static-ffmpeg", async () => {
@@ -226,10 +369,12 @@ test("ffmpeg step copies binaries reported by static-ffmpeg", async () => {
   const f2 = join(ctx.base, "real-ffprobe");
   writeFileSync(f1, "ffmpeg-bytes");
   writeFileSync(f2, "ffprobe-bytes");
-  ctx.run = async (_argv, { onLine } = {}) => { onLine?.(JSON.stringify([f1, f2])); };
+  let argv0;
+  ctx.run = async (argv, { onLine } = {}) => { argv0 = argv[0]; onLine?.(JSON.stringify([f1, f2])); };
   const step = byId(ctx).ffmpeg;
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
+  assert.equal(argv0, venvBin(join(ctx.kitDir, "app_venv"), "python"), "ffmpeg is fetched by app_venv, which always exists");
   // Copied (not symlinked -- Windows needs admin for symlinks) into the kit's
   // bin/ under the platform's executable name (.exe suffix on Windows).
   assert.equal(readFileSync(join(ctx.kitDir, "bin", exeName("ffmpeg")), "utf8"), "ffmpeg-bytes");
@@ -266,6 +411,7 @@ test("models step downloads only Demucs and ignores the optional models", async 
   await step.run(() => {});
   assert.equal(hfCalls.length, 1, "only Demucs is downloaded");
   assert.ok(hfCalls[0].join(" ").includes("HTDemucs"), hfCalls[0].join(" "));
+  assert.equal(hfCalls[0][0], venvBin(join(ctx.kitDir, "app_venv"), "hf"), "hf runs from app_venv");
   assert.equal(await step.isDone(), true);
 });
 
@@ -433,9 +579,10 @@ test("every step declares how much room it takes", () => {
 });
 
 test("the whole kit adds up to roughly what the installing screen promises", () => {
-  // The screen says "about 3.6 GB" (runtime + small always-installed models;
-  // Windows runs larger for its CUDA torch wheels). If this drifts back
-  // toward the old 18 GB, a big model crept back into the install.
+  // The install screen shows this sum next to its title (runtime with one
+  // engines venv + the small always-installed models; Windows runs larger for
+  // its CUDA torch wheels).
+  // If this drifts back toward the old 18 GB, a big model crept back in.
   const total = buildSteps(freshCtx()).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
   assert.ok(total > 2 && total < 12, `total is ${total.toFixed(1)} GB`);
 });
