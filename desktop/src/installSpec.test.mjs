@@ -37,7 +37,7 @@ const byId = (ctx) => Object.fromEntries(buildSteps(ctx).map((s) => [s.id, s]));
 test("returns the 10 steps in install order", () => {
   const ids = buildSteps(freshCtx()).map((s) => s.id);
   assert.deepEqual(ids, [
-    "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup-qwen-venv",
+    "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup",
     "models", "ollama-runtime", "nonverbal-weights", "kit-env",
   ]);
   assert.deepEqual(ids, STEP_IDS);
@@ -235,9 +235,9 @@ test("every pip install runs without the pip cache", async () => {
   }
 });
 
-test("cleanup-qwen-venv removes the old voice environment and is done once it is gone", async () => {
+test("cleanup removes the old voice environment and is done once it is gone", async () => {
   const ctx = freshCtx();
-  const step = byId(ctx)["cleanup-qwen-venv"];
+  const step = byId(ctx)["cleanup"];
   assert.equal(await step.isDone(), true, "a fresh kit never had one");
   mkdirSync(join(ctx.kitDir, "qwen_venv", "bin"), { recursive: true });
   writeFileSync(join(ctx.kitDir, "qwen_venv", "bin", "uvicorn"), "");
@@ -253,11 +253,46 @@ test("cleanup-qwen-venv removes the old voice environment and is done once it is
 // manually on Windows as part of Task 7's follow-up. This test covers the
 // other half of the same contract: run() must be safe to call again and
 // again, never throwing, whether or not there is anything left to remove.
-test("cleanup-qwen-venv run is a no-op and never throws when qwen_venv is already absent", async () => {
+test("cleanup run is a no-op and never throws when there is nothing left to remove", async () => {
   const ctx = freshCtx();
-  const step = byId(ctx)["cleanup-qwen-venv"];
+  const step = byId(ctx)["cleanup"];
   assert.equal(await step.isDone(), true);
   await assert.doesNotReject(step.run(() => {}));
+  assert.equal(await step.isDone(), true);
+});
+
+// Real-device check (2026-09-03): an upgraded kit left more than qwen_venv
+// behind -- the archives that step's own extraction should have deleted, the
+// retired venv's requirements lists, and the retired step's .ok marker. This
+// step is where all of it goes, not only the venv.
+test("cleanup removes every leftover of the two-venv kit, not only qwen_venv", async () => {
+  const ctx = freshCtx();
+  mkdirSync(join(ctx.kitDir, "qwen_venv", "bin"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, "qwen_venv", "bin", "uvicorn"), "");
+  mkdirSync(join(ctx.kitDir, "downloads"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, "downloads", "python.tar.gz"), "");
+  writeFileSync(join(ctx.kitDir, "downloads", "ollama.tgz"), "");
+  writeFileSync(join(ctx.kitDir, "downloads", "ollama.zip"), "");
+  writeFileSync(join(ctx.kitDir, "requirements_qwen_mac.txt"), "");
+  writeFileSync(join(ctx.kitDir, "requirements_qwen_win.txt"), "");
+  mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, ".install", "venv-qwen.ok"), "");
+
+  const step = byId(ctx)["cleanup"];
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+
+  for (const rel of [
+    ["qwen_venv"],
+    ["downloads", "python.tar.gz"],
+    ["downloads", "ollama.tgz"],
+    ["downloads", "ollama.zip"],
+    ["requirements_qwen_mac.txt"],
+    ["requirements_qwen_win.txt"],
+    [".install", "venv-qwen.ok"],
+  ]) {
+    assert.equal(existsSync(join(ctx.kitDir, ...rel)), false, rel.join("/"));
+  }
   assert.equal(await step.isDone(), true);
 });
 

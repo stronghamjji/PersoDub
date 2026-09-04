@@ -4,7 +4,7 @@
 // PERSODUB_FAKE mode can substitute them.
 import { existsSync, mkdirSync, cpSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import { KIT_ENV } from "./kitEnv.js";
 import { IS_WIN, venvBin, standalonePython, exeName, TTS_DEVICE } from "./platform.js";
@@ -59,7 +59,7 @@ export const GEMMA_MANIFEST = [
 // analytics.js publishes exactly this list, and a rename here that never
 // reached its copy used to make a failing step travel as "unknown".
 export const STEP_IDS = [
-  "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup-qwen-venv",
+  "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup",
   "models", "ollama-runtime", "nonverbal-weights", "kit-env",
 ];
 
@@ -222,6 +222,20 @@ export async function bytesStillNeeded(steps) {
   }
   return total;
 }
+
+// What an older kit leaves behind and this version no longer reads. Each is
+// removed once venv-engines succeeded (this step sits right after it), and
+// the step stays open until every one is gone -- a locked file on Windows
+// just means it is retried next launch.
+const LEFTOVERS = (k) => [
+  { path: k("qwen_venv"), recursive: true },                       // the retired voice venv
+  { path: k("downloads", "python.tar.gz") },                         // archives, already extracted
+  { path: k("downloads", "ollama.tgz") },
+  { path: k("downloads", "ollama.zip") },
+  { path: k("requirements_qwen_mac.txt") },                          // the retired venv's lists
+  { path: k("requirements_qwen_win.txt") },
+  { path: k(".install", "venv-qwen.ok") },                          // the retired step's marker
+];
 
 export function buildSteps(ctx) {
   const k = (...p) => join(ctx.kitDir, ...p);
@@ -393,24 +407,23 @@ export function buildSteps(ctx) {
       ["-r", k(reqEngines)],
     ]),
     {
-      // Kits installed before the merge carry the old voice venv. Removing it
-      // is a step of its own so it runs only after venv-engines succeeded
-      // (runInstall stops at the first failure), shows on the install screen,
-      // and is skipped forever once the folder is gone.
-      id: "cleanup-qwen-venv",
-      title: "Removing the old voice environment",
+      // Kits installed before the merge carry the old voice venv and its
+      // debris. Removing it is a step of its own so it runs only after
+      // venv-engines succeeded (runInstall stops at the first failure), shows
+      // on the install screen, and is skipped forever once everything is gone.
+      id: "cleanup",
+      title: "Cleaning up",
       bytes: 0,
-      isDone: () => !existsSync(k("qwen_venv")),
+      isDone: () => LEFTOVERS(k).every((l) => !existsSync(l.path)),
       run: async (report) => {
-        report(null, "Removing qwen_venv");
-        // Best-effort: a locked file (antivirus/indexer, mainly Windows)
-        // must not block every step after this one on a half-migrated kit.
-        // isDone stays false while qwen_venv survives, so the next launch's
-        // install retries this step on its own.
-        try {
-          rmSync(k("qwen_venv"), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-        } catch {
-          report(null, "Could not remove qwen_venv yet; will retry next launch");
+        for (const l of LEFTOVERS(k)) {
+          if (!existsSync(l.path)) continue;
+          report(null, `Removing ${basename(l.path)}`);
+          try {
+            rmSync(l.path, { recursive: !!l.recursive, force: true, maxRetries: 5, retryDelay: 200 });
+          } catch {
+            report(null, `Could not remove ${basename(l.path)} yet; will retry next launch`);
+          }
         }
       },
     },
