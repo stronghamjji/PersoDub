@@ -1760,7 +1760,7 @@ def dub_start(
     # instead of dying minutes into the pipeline (permanent rule: the screen
     # asks, downloads, and resubmits; nothing here downloads silently).
     if dub_mode != "perso":
-        need_whisper = (stt_engine or default_stt_engine() or "local") != "perso"
+        need_whisper = stt_engine != "perso"  # resolved above, once
         missing = _missing_models(need_whisper, translate_missing_id)
         if missing:
             _raise_models_needed(missing)

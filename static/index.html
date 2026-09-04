@@ -3128,7 +3128,13 @@ function openNewProject(source) {
   // (the Dub Agent may have changed them a moment ago), then the key-gated
   // options are greyed out. Not on a Settings save: that path must leave a
   // choice the user is in the middle of making alone.
-  loadSavedDefaults().then(() => applyEngineAvailabilityToForm());
+  loadSavedDefaults().then(() => {
+    // Setting a select's value fires no change event, so the hints under the
+    // dropdowns and the cloud-mode greying must be repainted by hand.
+    updateEngineHints();
+    paintDubMode();
+    applyEngineAvailabilityToForm();
+  });
   $("projectOverlay").classList.add("open");
 }
 
