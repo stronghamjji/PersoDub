@@ -63,3 +63,24 @@ test("every progress event carries the step's bytes, so the screen can add up wh
     assert.equal(e.bytes, e.stepId === "a" ? 5 : 7);
   }
 });
+
+// A kit can pass the boot check (files present, version matching) with an
+// install still open: the payload step writes KIT_VERSION first, and a venv
+// step interrupted after it left the engines half-built (Windows, 2026-09-04).
+// The step markers are the truth; this is what boot asks before skipping the
+// installer.
+import { openSteps } from "./installer.js";
+
+test("openSteps names the steps still to run, ignoring housekeeping ones", async () => {
+  const steps = [
+    { id: "payload", isDone: () => true },
+    { id: "venv-engines", isDone: async () => false },
+    { id: "cleanup", verify: false, isDone: () => false },
+    { id: "kit-env", isDone: () => true },
+  ];
+  assert.deepEqual((await openSteps(steps)).map((s) => s.id), ["venv-engines"]);
+});
+
+test("openSteps is empty for a finished kit", async () => {
+  assert.deepEqual(await openSteps([{ id: "a", isDone: () => true }]), []);
+});

@@ -602,3 +602,15 @@ test("nothing is needed once every step is done", async () => {
   const steps = [{ id: "a", bytes: 5, isDone: () => true }];
   assert.equal(await bytesStillNeeded(steps), 0);
 });
+
+// On an update the engines venv already holds torch; the step only adds what
+// the new list brings. Quoting the full 2-9 GB budget in the install title
+// made a Windows user close a one-minute update (2026-09-04).
+test("venv-engines counts a small figure when the venv already exists", () => {
+  const ctx = freshCtx();
+  const fresh = byId(ctx)["venv-engines"].bytes;
+  mkdirSync(join(ctx.kitDir, "engines_venv"), { recursive: true });
+  const update = byId(ctx)["venv-engines"].bytes;
+  assert.ok(update < fresh, `update ${update} should be below fresh ${fresh}`);
+  assert.ok(update <= 0.5 * 1024 ** 3);
+});

@@ -7,7 +7,7 @@ import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, fr
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded } from "./src/installSpec.js";
-import { runInstall } from "./src/installer.js";
+import { runInstall, openSteps } from "./src/installer.js";
 import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
@@ -224,7 +224,21 @@ async function boot(win) {
       }
       cfg = { ...cfg, kitDir: freshKitDir };
     }
-    if (!checkKit(cfg.kitDir, kitVersion).ok) {
+    // checkKit sees files and a version, not whether the steps that produce
+    // them finished: the payload step writes KIT_VERSION first, so an install
+    // closed during the venv step looked "installed", the engines then failed
+    // to start, and Try again could never get back in (Windows, 2026-09-04).
+    // The installer's own step markers are the truth -- any open step reopens
+    // it, and it skips everything already done.
+    const kitOk = checkKit(cfg.kitDir, kitVersion).ok;
+    let unfinished = false;
+    if (kitOk && payload) {
+      const probe = buildSteps({ kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run });
+      const open = await openSteps(probe);
+      unfinished = open.length > 0;
+      if (unfinished) console.log(`PERSODUB_KIT resuming an unfinished install: ${open.map((s) => s.id).join(", ")}`);
+    }
+    if (!kitOk || unfinished) {
       if (!payload) {
         await win.loadFile(join(HERE, "screens", "not-installed.html"), {
           query: { kitDir: cfg.kitDir, missing: checkKit(cfg.kitDir, kitVersion).missing.join(",") },

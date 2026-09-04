@@ -26,3 +26,16 @@ export async function runInstall(steps, { onProgress = () => {} } = {}) {
     onProgress({ stepId: step.id, title: step.title, state: "done", bytes: step.bytes });
   }
 }
+
+// The steps a kit still has to run -- not counting housekeeping steps
+// (verify:false), whose leftovers must never reopen the installer on every
+// launch. Boot asks this even when checkKit passes: that check sees files and
+// a version, not whether the step that produces them finished.
+export async function openSteps(steps) {
+  const open = [];
+  for (const step of steps) {
+    if (step.verify === false) continue;
+    if (!(await step.isDone())) open.push(step);
+  }
+  return open;
+}
