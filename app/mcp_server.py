@@ -284,9 +284,10 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     with confirm=true -- never ask five separate questions.
 
     translator picks the translation engine for a local dub when the user
-    names one -- "gemma" or "hunyuan" (on this machine) or "gemini" (Google's
-    API); empty keeps the app's default. If starting fails because a local
-    model is not installed, say so and offer gemini.
+    names one -- "hunyuan" or "gemma" (on this machine) or "gemini" (Google's
+    API); empty keeps the app's default, Hunyuan. If starting fails because a
+    model is not downloaded, the error names the model and its size: tell the
+    user exactly that, and offer the two ways out it lists.
 
     Returns {"job_id", "status"}; the home screen's Up next card shows the
     queue, and get_job_status follows one job.
@@ -342,9 +343,98 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
                        timeout=600.0)
     if r.status_code in (400, 404, 409, 422, 507):
         detail = r.json().get("detail", "could not start this dub")
-        raise ValueError(detail if isinstance(detail, str) else str(detail))
+        raise ValueError(_dub_refusal_text(detail))
     r.raise_for_status()
     return r.json()
+
+
+def _dub_refusal_text(detail) -> str:
+    """The app's refusal, as a sentence the agent can repeat. A 409 for missing
+    models arrives as {"missing": [{"name", "bytes"}, ...]}; relayed raw, the
+    agent could only say "an error" (2026-09-04). Name what is missing and the
+    two ways out: download it, or pick an engine this computer already has."""
+    if isinstance(detail, str):
+        return detail
+    missing = detail.get("missing") if isinstance(detail, dict) else None
+    if not missing:
+        return str(detail)
+    names = ", ".join("%s (%.1f GB)" % (m.get("name", m.get("id", "?")),
+                                          (m.get("bytes") or 0) / 1e9) for m in missing)
+    return ("Not downloaded on this computer: %s. Ask the user to download it in "
+            "Settings > Models, or start with an engine that is already here "
+            "(for example translator=\"hunyuan\", or dub_mode=\"perso\" with a Perso key)."
+            % names)
+
+
+@mcp.tool()
+def get_setup() -> dict:
+    """How the app is set up right now, stage by stage: which engine each
+    stage uses when nobody chooses (dub_mode, separation, stt, translator,
+    voice_quality), the choices each stage offers, every optional model with
+    its download state (ready / downloading N% / paused / not_downloaded) and
+    size, and whether a Perso or Gemini key is saved. Read this before
+    answering "what does each step use?", before changing a default, and to
+    follow a download's progress.
+    """
+    r = httpx.get("%s/api/setup" % API, timeout=10.0)
+    r.raise_for_status()
+    data = r.json()
+    for m in data.get("models", []):
+        m["gb"] = round((m.get("bytes") or 0) / 1e9, 1)
+        if m.get("state") == "downloading" and m.get("progress") is not None:
+            m["state"] = "downloading %d%%" % m["progress"]
+    return data
+
+
+@mcp.tool()
+def set_default(stage: str, choice: str) -> dict:
+    """Change what one stage uses from now on -- for every dub, from the
+    screen or from here, no restart. stage is one of dub_mode (local |
+    perso), separation (local | perso), stt (local | perso), translator
+    (hunyuan | gemma | gemini), voice_quality (fast | high). Cloud choices
+    need the matching key saved (see get_setup); a local model that is not
+    downloaded is not a reason to refuse -- download_model handles that.
+    Returns the defaults now in force.
+    """
+    r = httpx.post("%s/api/setup" % API, json={stage: choice}, timeout=10.0)
+    if r.status_code in (422, 503):
+        raise ValueError(r.json().get("detail", "could not change that setting"))
+    r.raise_for_status()
+    return r.json()
+
+
+@mcp.tool()
+def download_model(model_id: str, confirm: bool = False) -> dict:
+    """Download one optional model onto this computer (ids and sizes come
+    from get_setup: whisper, qwen3-tts, gemma, hunyuan). Gigabytes, so the
+    first call answers with the size and needs_confirmation=true -- put that
+    to the user, and call again with confirm=true once they agree. Starts the
+    download in the background and returns at once; get_setup shows the
+    progress, and a dub that needs the model can be queued as soon as it
+    reads ready.
+    """
+    r = httpx.get("%s/api/models" % API, timeout=10.0)
+    r.raise_for_status()
+    # GET /api/models answers {"models": [...]} -- the same shape the screen's
+    # catalog reads. Assuming a bare list here crashed the first live call.
+    rows = {m["id"]: m for m in r.json()["models"]}
+    if model_id not in rows:
+        raise ValueError("No such model: %s (one of %s)" % (model_id, ", ".join(rows)))
+    row = rows[model_id]
+    gb = round((row.get("bytes") or 0) / 1e9, 1)
+    if row.get("state") == "ready":
+        return {"model": row["name"], "state": "ready", "message": "%s is already downloaded." % row["name"]}
+    if row.get("state") == "downloading":
+        return {"model": row["name"], "state": "downloading", "progress": row.get("progress")}
+    if not confirm:
+        return {"needs_confirmation": True, "model": row["name"], "gb": gb,
+                "message": "%s is %.1f GB. Download it now?" % (row["name"], gb)}
+    r = httpx.post("%s/api/models/%s/download" % (API, model_id), timeout=10.0)
+    if r.status_code in (404, 409):
+        raise ValueError(r.json().get("detail", "could not start the download"))
+    r.raise_for_status()
+    return {"model": row["name"], "state": "downloading", "gb": gb,
+            "message": "Downloading %s (%.1f GB). Check get_setup for progress." % (row["name"], gb)}
 
 
 @mcp.tool()

@@ -440,3 +440,86 @@ def test_burn_subtitles_relays_a_refusal(monkeypatch):
     monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
     with pytest.raises(ValueError, match="No subtitle file"):
         mcp_server.burn_subtitles("/v/쇼츠.mp4")
+
+
+def test_queue_dub_names_the_missing_model_instead_of_a_raw_error(monkeypatch, tmp_path):
+    # The app refuses with 409 {"missing": [...]} when a chosen engine's model is not
+    # downloaded. Relayed raw, the agent could only tell the user "an error" (2026-09-04).
+    video = _tmp_video(tmp_path)
+    detail = {"missing": [{"id": "gemma", "name": "Gemma 3", "bytes": 7600000000}],
+              "total_bytes": 7600000000, "free_bytes": 10**11}
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda *a, **kw: _Response(409, {"detail": detail}))
+    with pytest.raises(ValueError) as e:
+        mcp_server.queue_dub(str(video), "en", translator="gemma", confirm=True)
+    msg = str(e.value)
+    assert "Gemma 3" in msg and "7.6 GB" in msg
+    assert "Settings" in msg and "hunyuan" in msg
+    assert "{" not in msg, "no raw dict for the agent to parrot"
+
+
+def test_queue_dub_keeps_a_plain_string_refusal_as_is(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda *a, **kw: _Response(409, {"detail": "A dub is already running"}))
+    with pytest.raises(ValueError, match="A dub is already running"):
+        mcp_server.queue_dub(str(video), "en", confirm=True)
+
+
+# ---- setup tools (2026-09-04): the agent can see, change and complete the setup
+
+def test_get_setup_reports_stages_models_and_keys(monkeypatch):
+    payload = {"defaults": {"translator": "hunyuan", "stt": "local"},
+               "choices": {"translator": ["hunyuan", "gemma", "gemini"]},
+               "models": [{"id": "gemma", "name": "Gemma 3", "bytes": 7600000000,
+                           "state": "downloading", "progress": 41}],
+               "keys": {"perso": True, "gemini": False}}
+    monkeypatch.setattr(mcp_server.httpx, "get",
+                        lambda url, params=None, timeout=None: _Response(200, payload))
+    out = mcp_server.get_setup()
+    assert out["defaults"]["translator"] == "hunyuan"
+    assert out["models"][0]["gb"] == 7.6
+    assert out["models"][0]["state"] == "downloading 41%"
+    assert out["keys"] == {"perso": True, "gemini": False}
+
+
+def test_set_default_posts_one_stage_and_relays_a_refusal(monkeypatch):
+    posted = {}
+
+    def fake_post(url, json=None, data=None, files=None, timeout=None):
+        posted["url"] = url
+        posted["json"] = json
+        if json.get("translator") == "nope":
+            return _Response(422, {"detail": "translator must be one of: hunyuan, gemma, gemini"})
+        return _Response(200, {"defaults": {"translator": "gemma"}})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.set_default("translator", "gemma")
+    assert posted["url"].endswith("/api/setup") and posted["json"] == {"translator": "gemma"}
+    assert out["defaults"]["translator"] == "gemma"
+    with pytest.raises(ValueError, match="one of"):
+        mcp_server.set_default("translator", "nope")
+
+
+def test_download_model_asks_first_then_starts(monkeypatch):
+    # The real answer shape of GET /api/models: {"models": [...]} (a bare list in
+    # this test hid a crash on the first live call, 2026-09-04).
+    rows = {"models": [{"id": "gemma", "name": "Gemma 3", "bytes": 7600000000, "state": "not_downloaded"}]}
+    monkeypatch.setattr(mcp_server.httpx, "get",
+                        lambda url, params=None, timeout=None: _Response(200, rows))
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda url, **kw: (posted.append(url), _Response(202, {"state": "downloading"}))[1])
+    ask = mcp_server.download_model("gemma")
+    assert ask["needs_confirmation"] is True and ask["gb"] == 7.6 and posted == []
+    go = mcp_server.download_model("gemma", confirm=True)
+    assert go["state"] == "downloading" and posted[0].endswith("/api/models/gemma/download")
+
+
+def test_download_model_says_when_it_is_already_there_or_unknown(monkeypatch):
+    rows = {"models": [{"id": "hunyuan", "name": "Hunyuan", "bytes": 1100000000, "state": "ready"}]}
+    monkeypatch.setattr(mcp_server.httpx, "get",
+                        lambda url, params=None, timeout=None: _Response(200, rows))
+    assert mcp_server.download_model("hunyuan")["state"] == "ready"
+    with pytest.raises(ValueError, match="No such model"):
+        mcp_server.download_model("llama")

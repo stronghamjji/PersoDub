@@ -1505,7 +1505,7 @@
         <div class="field"><label for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected>On this device</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint"></div></div>
         <div class="field"><label for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sepHint"></div></div>
         <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sttHint"></div><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
-        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="hunyuan">Hunyuan (1.8B)</option><option value="gemma" selected>Gemma 3 (12B)</option><option value="gemini">Gemini API</option></select><div class="settings-hint" id="translateHint"></div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
+        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="hunyuan" selected>Hunyuan (1.8B)</option><option value="gemma">Gemma 3 (12B)</option><option value="gemini">Gemini API</option></select><div class="settings-hint" id="translateHint"></div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
         <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint" id="voiceHint"></div><div class="settings-hint model-line" id="voiceModelHint" hidden></div></div>
         <div class="field"><label for="qualitySelect">Voice quality</label><select id="qualitySelect"><option value="fast" selected>Fast</option><option value="high">High quality</option></select><div class="settings-hint" id="qualityHint"></div></div>
         <div class="field"><label for="numSpeakers">Number of speakers</label><input type="number" id="numSpeakers" min="1" placeholder="Auto-detect"><div class="settings-hint">Set 1 for a single-speaker video.</div></div>
@@ -2024,12 +2024,18 @@ const state = {
 };
 
 // ---------------- Rail: history sidebar toggle ----------------
+const PROJECTS_OPEN_KEY = "persodub.layout.projectsOpen";
 $("historyToggle").addEventListener("click", () => {
   const opening = $("historySidebar").classList.toggle("collapsed") === false;
+  try { localStorage.setItem(PROJECTS_OPEN_KEY, opening ? "1" : "0"); } catch { /* private window */ }
   // Ask the server again on the way open: a job may have finished, or another
   // window may have started one, since the list was last drawn.
   if (opening) renderHistory().catch(() => {});
 });
+// Open at launch if it was open when the app was closed (the markup starts it closed).
+try {
+  if (localStorage.getItem(PROJECTS_OPEN_KEY) === "1") $("historySidebar").classList.remove("collapsed");
+} catch { /* private window */ }
 // The list slides open over 0.15s, so a name measured the moment it is drawn is
 // measured in a column still on its way to full width -- and every name would
 // look cut off. Measure again once the sliding has stopped.
@@ -2438,6 +2444,27 @@ function setOptionDisabledLabel(option, disabled, suffix) {
   option.textContent = option.dataset.baseLabel + (disabled ? suffix : "");
 }
 
+// The dropdowns start on the app's saved defaults (GET /api/setup: kit.env,
+// written by Settings or the Dub Agent's set_default), so what the agent
+// changed is what the dialog shows, and a choice survives a relaunch.
+async function loadSavedDefaults() {
+  let d;
+  try {
+    const r = await fetch("/api/setup");
+    if (!r.ok) return;
+    d = (await r.json()).defaults || {};
+  } catch { return; }
+  const pick = (id, value) => {
+    const sel = $(id);
+    if (sel && value && sel.querySelector(`option[value="${value}"]`)) sel.value = value;
+  };
+  pick("dubModeSelect", d.dub_mode);
+  pick("sepSelect", d.separation);
+  pick("sttSelect", d.stt);
+  pick("translateSelect", d.translator);
+  pick("qualitySelect", d.voice_quality);
+}
+
 async function applyEngineAvailabilityToForm() {
   // The dropdowns this greys out live in Advanced options, inside the New
   // project dialog.
@@ -2735,6 +2762,13 @@ let lastJobName = "";
 
 // A job that failed counts too, on purpose: the failure card is where "Try
 // again" lives, so the arrow back to it is a way on rather than a dead end.
+// Where the app was when it was closed: the job on screen, or "" for home.
+// Read once at launch (openLastScreen) so the app comes back where it was.
+const LAST_SCREEN_KEY = "persodub.layout.lastJobId";
+function noteLastScreen(jobId) {
+  try { localStorage.setItem(LAST_SCREEN_KEY, jobId || ""); } catch { /* private window */ }
+}
+
 function rememberLastJob() {
   if (!state.jobId) return;
   lastJobId = state.jobId;
@@ -2768,6 +2802,21 @@ function showHome() {
   showScreen("home");
   setTopbar({ title: "PersoDub", subtitle: "Local dubbing" });
   renderQueueCard().catch(() => {});
+  noteLastScreen("");
+}
+
+// The screen the app was closed on. A job that is gone since (deleted, or the
+// folder moved) means home, quietly -- a launch is not the moment for an
+// error about yesterday.
+async function openLastScreen() {
+  let last = "";
+  try { last = localStorage.getItem(LAST_SCREEN_KEY) || ""; } catch { /* private window */ }
+  if (!last) { showHome(); return; }
+  try {
+    const r = await fetch(`/api/dub/jobs/${last}`);
+    if (!r.ok) { showHome(); return; }
+  } catch { showHome(); return; }
+  await resumeJob(last);
 }
 
 // ---------------- New project dialog ----------------
@@ -3075,6 +3124,17 @@ function openNewProject(source) {
   }
   $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
   $("projectError").textContent = "";
+  // The dropdowns start on the saved defaults every time the dialog opens
+  // (the Dub Agent may have changed them a moment ago), then the key-gated
+  // options are greyed out. Not on a Settings save: that path must leave a
+  // choice the user is in the middle of making alone.
+  loadSavedDefaults().then(() => {
+    // Setting a select's value fires no change event, so the hints under the
+    // dropdowns and the cloud-mode greying must be repainted by hand.
+    updateEngineHints();
+    paintDubMode();
+    applyEngineAvailabilityToForm();
+  });
   $("projectOverlay").classList.add("open");
 }
 
@@ -3733,7 +3793,10 @@ async function resumeJob(jobId) {
     const job = await (await fetch(`/api/dub/jobs/${jobId}`)).json();
     if (job.detail) throw new Error("This job is no longer available (server may have restarted).");
     handleJobUpdate(job);
-    if (job.status === "running" || job.status === "cancelling") {
+    noteLastScreen(jobId);
+    // queued is alive too (handleJobUpdate paints it as waiting): a job
+    // restored at launch while it waits in line must keep polling.
+    if (job.status === "running" || job.status === "cancelling" || job.status === "queued") {
       runPollLoop(jobId, myGeneration);
     }
   } catch (e) {
@@ -3808,6 +3871,7 @@ async function startDubbing() {
     const fd = buildDubFormData(readOptions());
     const jobId = await startDubJob(fd);
     state.jobId = jobId;
+    noteLastScreen(jobId);
     state.pollGeneration += 1;
     const myGeneration = state.pollGeneration;
 
@@ -5530,7 +5594,7 @@ window.addEventListener("persodub:voices-remade", async () => {
 });
 
 renderHistory().catch(() => {});
-showHome();
+openLastScreen();
 </script>
 
 <!-- The assistant's own script, kept apart from the app's so the whole feature
@@ -6347,10 +6411,12 @@ wire("send button", () => {
 // back in; the fold in the heading row goes both ways and says which it is
 // doing -- to a reader, through its arrow, and to a screen reader, through
 // aria-expanded.
+const AGENT_OPEN_KEY = "persodub.layout.agentOpen";
 function setCollapsed(collapsed) {
   // The class first, on its own: it is what the CSS folds the strip by, so it
   // has to land even if the button that says which way it went has gone.
   document.body.classList.toggle("agent-open", !collapsed);
+  try { localStorage.setItem(AGENT_OPEN_KEY, collapsed ? "0" : "1"); } catch { /* private window */ }
   wire("fold", () => {
     const fold = el("assistantFold");
     const words = collapsed ? "Show the conversation" : "Hide the conversation";
@@ -6377,5 +6443,8 @@ wire("input", () => {
 // as. That waits for the strip to be in use (ensureLoginChecked above).
 wire("saved pick", loadChoice);
 loadAgents().catch((e) => console.error("Dub Agent: the model list failed", e));
-setCollapsed(false);
+// As it was when the app was closed; open the first time.
+let agentWasClosed = false;
+try { agentWasClosed = localStorage.getItem(AGENT_OPEN_KEY) === "0"; } catch { /* private window */ }
+setCollapsed(agentWasClosed);
 </script>

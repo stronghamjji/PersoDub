@@ -233,6 +233,7 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
 
 def test_engines_endpoint_all_available(monkeypatch):
     monkeypatch.setattr(main, "gemma_available", lambda: True)
+    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
     monkeypatch.setattr(main, "qwen_available", lambda: True)
     monkeypatch.setattr(main, "hunyuan_available", lambda: True)
     monkeypatch.setattr(main, "gemini_available", lambda: True)
@@ -267,6 +268,7 @@ def test_dub_start_gemma_unreachable_422_message(monkeypatch):
 
 def test_dub_start_gemma_available_job_starts(monkeypatch):
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     monkeypatch.setattr(main, "run_dub", _fake_run_dub)
 
     r = client.post(
@@ -347,7 +349,8 @@ def test_dub_start_default_engine_path_is_preflighted(monkeypatch):
     # which must still be preflighted (not silently skipped). Unreachable is
     # the status that still 422s here; a missing model is the 409 dialog's
     # business (tests/test_dub_start_preflight.py).
-    monkeypatch.setattr(main, "TRANSLATE_ENGINE", "gemma")
+    monkeypatch.setattr(main.dub_setup, "default_for",
+                        lambda stage, _real=main.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
     monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
 
     r = client.post(
@@ -388,6 +391,7 @@ def test_dub_start_vertex_engine_skips_preflight(monkeypatch):
 
 def test_dub_start_perso_stt_without_key_422_message(monkeypatch):
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     monkeypatch.setattr(main, "perso_available", lambda: False)
 
     r = client.post(
@@ -404,6 +408,7 @@ def test_dub_start_perso_stt_without_key_422_message(monkeypatch):
 
 def test_dub_start_perso_stt_with_key_job_starts(monkeypatch):
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     monkeypatch.setattr(main, "perso_available", lambda: True)
     monkeypatch.setattr(main, "run_dub", _fake_run_dub)
 
@@ -417,6 +422,7 @@ def test_dub_start_perso_stt_with_key_job_starts(monkeypatch):
 
 def test_dub_start_no_stt_engine_skips_perso_preflight(monkeypatch):
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     monkeypatch.setattr(main, "perso_available", lambda: False)
     monkeypatch.setattr(main, "run_dub", _fake_run_dub)
 

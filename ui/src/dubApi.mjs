@@ -96,12 +96,12 @@ export function buildDubFormData(opts) {
   const stt = opts.sttEngine ?? "auto";
   if (stt !== "auto") fd.append("stt_engine", stt);
 
-  // Voice/background separation: local Demucs is the server default, so only
-  // the paid Perso choice is worth sending (app/main.py:dub_start sep_engine).
-  if (opts.sepEngine === "perso") fd.append("sep_engine", "perso");
-
-  // Whole-job cloud dubbing: local is the default; only the paid choice travels.
-  if (opts.dubMode === "perso") fd.append("dub_mode", "perso");
+  // Voice/background separation and whole-job cloud dubbing always travel:
+  // a blank no longer means "local" on the server -- it means "the saved
+  // default" (app/setup.py), which the user may have set to Perso. The
+  // dialog's own choice must never be overridden by that (2026-09-04).
+  fd.append("sep_engine", opts.sepEngine === "perso" ? "perso" : "local");
+  fd.append("dub_mode", opts.dubMode === "perso" ? "perso" : "local");
 
   if (opts.numSpeakers != null) fd.append("num_speakers", String(opts.numSpeakers));
   if (opts.translateEngine && opts.translateEngine !== "auto") {

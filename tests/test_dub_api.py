@@ -26,8 +26,10 @@ def _all_engines_available(monkeypatch):
     /api/engines still reports those plain booleans.
     """
     monkeypatch.setattr(main, "gemma_available", lambda: True)
+    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
     monkeypatch.setattr(main, "qwen_available", lambda: True)
     monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     monkeypatch.setattr(main, "qwen_status", lambda: "available")
     monkeypatch.setattr(main, "gemini_available", lambda: True)
     monkeypatch.setattr(main, "perso_available", lambda: True)
@@ -267,8 +269,15 @@ def test_dub_start_with_translate_engine(monkeypatch):
     assert captured["translate_engine"] == "gemini"
 
 
-def test_dub_start_translate_engine_defaults_to_none(monkeypatch):
-    # Omitting translate_engine leaves it to run_dub's own TRANSLATE_ENGINE default
+def test_dub_start_translate_engine_blank_means_the_saved_default(monkeypatch):
+    # Omitting translate_engine hands run_dub the SAVED default (kit.env via
+    # app/setup.py), not None -- run_dub's own fallback is the process env,
+    # frozen at launch, so None would let the preflight judge one engine and
+    # the job run another (2026-09-04 review).
+    monkeypatch.setattr(main.dub_setup, "default_for",
+                        lambda stage, _real=main.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
+    monkeypatch.setattr(main, "gemma_status", lambda: "available")
+    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
     captured = {}
 
     def fake_run_dub(**kw):
@@ -283,7 +292,7 @@ def test_dub_start_translate_engine_defaults_to_none(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 200
-    assert captured["translate_engine"] is None
+    assert captured["translate_engine"] == "gemma"
 
 
 def test_dub_start_stt_engine_defaults_to_perso_with_key(monkeypatch):
@@ -1104,7 +1113,7 @@ def test_dub_start_records_what_the_defaults_resolved_to_not_the_blank(monkeypat
 
     job = client.get(f"/api/dub/jobs/{jid}").json()
     assert job["stt_engine"] == "whisper"          # local Whisper, named
-    assert job["translator"] == main.TRANSLATE_ENGINE
+    assert job["translator"] == main.dub_setup.default_for("translator")
     assert job["quality"] == main.QWEN_N_TAKES
 
 
