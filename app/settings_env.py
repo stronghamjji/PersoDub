@@ -167,6 +167,21 @@ def _write_env(to_set: Dict[str, str]) -> None:
         os.chmod(path + ".bak", 0o600)
 
 
+# The per-stage dub defaults (app/setup.py) live in kit.env too. Not API keys,
+# so not in MANAGED_KEYS; the same writer, the same backup, the same 0600.
+DEFAULT_KEYS = ("DUB_MODE", "SEP_ENGINE", "STT_ENGINE", "TRANSLATE_ENGINE", "VOICE_QUALITY")
+
+
+def write_values(values: Dict[str, str]) -> None:
+    """Write dub-default lines into kit.env (with a .bak backup). Only the
+    DEFAULT_KEYS are accepted -- everything else in that file is an API key
+    or the shell's own configuration, and this is not the door for those."""
+    bad = [k for k in values if k not in DEFAULT_KEYS]
+    if bad:
+        raise ValueError("not a dub default: %s" % ", ".join(bad))
+    _write_env(dict(values))
+
+
 def write_keys(values: Dict[str, Optional[str]]) -> Dict[str, bool]:
     """Write values into kit.env (with a .bak backup) and return the resulting
     set/unset status. None leaves a key untouched; an empty string CLEARS it

@@ -31,7 +31,8 @@ from app.agents import codex as codex_agent
 from app.subtitle_ass import PRESETS as SUBTITLE_PRESETS, build_ass
 from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL,
                         OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
-                        QWEN_N_TAKES, TRANSLATE_ENGINE, default_stt_engine)
+                        QWEN_N_TAKES, default_stt_engine)
+from app import setup as dub_setup
 from app.dub_script import (
     DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
 )
@@ -382,6 +383,41 @@ def _open_folder(path: str) -> None:
         os.startfile(path)  # type: ignore[attr-defined]  # Windows only
     else:
         subprocess.Popen(["xdg-open", path])
+
+
+@app.get("/api/setup")
+def setup_get():
+    """One picture of the dub setup for the screen and the Dub Agent: the
+    choice in force for every stage, every optional model's download state,
+    and which cloud keys are saved. Defaults come from kit.env at call time."""
+    keys = read_key_status() or {}
+    return {
+        "defaults": dub_setup.defaults(),
+        "choices": {stage: list(spec[1]) for stage, spec in dub_setup.STAGES.items()},
+        "models": model_store.status_rows(),
+        "keys": {"perso": bool(keys.get("PERSO_API_KEY")), "gemini": bool(keys.get("GEMINI_API_KEY"))},
+    }
+
+
+class SetupRequest(BaseModel):
+    dub_mode: Optional[str] = None
+    separation: Optional[str] = None
+    stt: Optional[str] = None
+    translator: Optional[str] = None
+    voice_quality: Optional[str] = None
+
+
+@app.post("/api/setup")
+def setup_post(body: SetupRequest):
+    """Save new per-stage defaults into kit.env. Fields left out stay as they
+    are. In force for the next dub without a restart."""
+    try:
+        new = dub_setup.set_defaults(body.model_dump())
+    except FileNotFoundError:
+        raise HTTPException(503, "Settings need a desktop install (no kit.env found)")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"defaults": new}
 
 
 @app.post("/api/settings/reveal-output")
@@ -1496,12 +1532,13 @@ def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engi
     "local" and no choice at all); qwen3 is the app's only voice engine.
     """
     resolved_stt = (stt_engine or default_stt_engine() or "").lower()
+    resolved_sep = (sep_engine or dub_setup.default_for("separation")).lower()
     return {
         "stt_engine": "perso" if resolved_stt == "perso" else "whisper",
-        "translator": (translate_engine or TRANSLATE_ENGINE or "").lower() or None,
+        "translator": (translate_engine or dub_setup.default_for("translator")).lower() or None,
         "tts": "qwen3",
-        "quality": n_takes if n_takes is not None else QWEN_N_TAKES,
-        "separation": "perso" if (sep_engine or "").lower() == "perso" else "demucs",
+        "quality": n_takes if n_takes is not None else (dub_setup.default_n_takes() or QWEN_N_TAKES),
+        "separation": "perso" if resolved_sep == "perso" else "demucs",
     }
 
 
@@ -1645,19 +1682,23 @@ def dub_start(
         raise HTTPException(422, f"Unknown stt_engine: {stt_engine}")
     # Same normalization for the same reason: "Perso" with a capital P must not
     # silently skip the preflight and run the free local engine instead.
-    sep_engine = (sep_engine or "").strip().lower() or None
-    if sep_engine not in (None, "local", "demucs", "perso"):
+    # Blanks take the app's saved defaults (app/setup.py): what the Settings
+    # screen or the Dub Agent's set_default chose, in force without a restart.
+    sep_engine = (sep_engine or "").strip().lower() or dub_setup.default_for("separation")
+    if sep_engine not in ("local", "demucs", "perso"):
         raise HTTPException(422, f"Unknown sep_engine: {sep_engine}")
-    dub_mode = (dub_mode or "").strip().lower() or "local"
+    dub_mode = (dub_mode or "").strip().lower() or dub_setup.default_for("dub_mode")
     if dub_mode not in ("local", "perso"):
         raise HTTPException(422, f"Unknown dub_mode: {dub_mode}")
+    if n_takes is None:
+        n_takes = dub_setup.default_n_takes()  # None when no quality was ever saved
     if dub_mode == "perso":
         # The cloud does everything -- the per-stage engine choices (and their
         # preflights, including the local-model 409) do not apply.
         stt_engine = sep_engine = translate_engine = None
     if not _valid_language_code(language_code):
         raise HTTPException(422, f"Unknown language_code: {language_code}")
-    effective_translate_engine = "" if dub_mode == "perso" else (translate_engine or TRANSLATE_ENGINE or "").lower()
+    effective_translate_engine = "" if dub_mode == "perso" else (translate_engine or dub_setup.default_for("translator")).lower()
     translate_missing_id = None
     if effective_translate_engine == "gemma":
         status = gemma_status()

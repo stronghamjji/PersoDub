@@ -367,6 +367,75 @@ def _dub_refusal_text(detail) -> str:
 
 
 @mcp.tool()
+def get_setup() -> dict:
+    """How the app is set up right now, stage by stage: which engine each
+    stage uses when nobody chooses (dub_mode, separation, stt, translator,
+    voice_quality), the choices each stage offers, every optional model with
+    its download state (ready / downloading N% / paused / not_downloaded) and
+    size, and whether a Perso or Gemini key is saved. Read this before
+    answering "what does each step use?", before changing a default, and to
+    follow a download's progress.
+    """
+    r = httpx.get("%s/api/setup" % API, timeout=10.0)
+    r.raise_for_status()
+    data = r.json()
+    for m in data.get("models", []):
+        m["gb"] = round((m.get("bytes") or 0) / 1e9, 1)
+        if m.get("state") == "downloading" and m.get("progress") is not None:
+            m["state"] = "downloading %d%%" % m["progress"]
+    return data
+
+
+@mcp.tool()
+def set_default(stage: str, choice: str) -> dict:
+    """Change what one stage uses from now on -- for every dub, from the
+    screen or from here, no restart. stage is one of dub_mode (local |
+    perso), separation (local | perso), stt (local | perso), translator
+    (hunyuan | gemma | gemini), voice_quality (fast | high). Cloud choices
+    need the matching key saved (see get_setup); a local model that is not
+    downloaded is not a reason to refuse -- download_model handles that.
+    Returns the defaults now in force.
+    """
+    r = httpx.post("%s/api/setup" % API, json={stage: choice}, timeout=10.0)
+    if r.status_code in (422, 503):
+        raise ValueError(r.json().get("detail", "could not change that setting"))
+    r.raise_for_status()
+    return r.json()
+
+
+@mcp.tool()
+def download_model(model_id: str, confirm: bool = False) -> dict:
+    """Download one optional model onto this computer (ids and sizes come
+    from get_setup: whisper, qwen3-tts, gemma, hunyuan). Gigabytes, so the
+    first call answers with the size and needs_confirmation=true -- put that
+    to the user, and call again with confirm=true once they agree. Starts the
+    download in the background and returns at once; get_setup shows the
+    progress, and a dub that needs the model can be queued as soon as it
+    reads ready.
+    """
+    r = httpx.get("%s/api/models" % API, timeout=10.0)
+    r.raise_for_status()
+    rows = {m["id"]: m for m in r.json()}
+    if model_id not in rows:
+        raise ValueError("No such model: %s (one of %s)" % (model_id, ", ".join(rows)))
+    row = rows[model_id]
+    gb = round((row.get("bytes") or 0) / 1e9, 1)
+    if row.get("state") == "ready":
+        return {"model": row["name"], "state": "ready", "message": "%s is already downloaded." % row["name"]}
+    if row.get("state") == "downloading":
+        return {"model": row["name"], "state": "downloading", "progress": row.get("progress")}
+    if not confirm:
+        return {"needs_confirmation": True, "model": row["name"], "gb": gb,
+                "message": "%s is %.1f GB. Download it now?" % (row["name"], gb)}
+    r = httpx.post("%s/api/models/%s/download" % (API, model_id), timeout=10.0)
+    if r.status_code in (404, 409):
+        raise ValueError(r.json().get("detail", "could not start the download"))
+    r.raise_for_status()
+    return {"model": row["name"], "state": "downloading", "gb": gb,
+            "message": "Downloading %s (%.1f GB). Check get_setup for progress." % (row["name"], gb)}
+
+
+@mcp.tool()
 def list_videos(folder: str) -> dict:
     """List the video files in ONE folder on this computer, newest first.
 

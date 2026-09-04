@@ -2438,11 +2438,33 @@ function setOptionDisabledLabel(option, disabled, suffix) {
   option.textContent = option.dataset.baseLabel + (disabled ? suffix : "");
 }
 
+// The dropdowns start on the app's saved defaults (GET /api/setup: kit.env,
+// written by Settings or the Dub Agent's set_default), so what the agent
+// changed is what the dialog shows, and a choice survives a relaunch.
+async function loadSavedDefaults() {
+  let d;
+  try {
+    const r = await fetch("/api/setup");
+    if (!r.ok) return;
+    d = (await r.json()).defaults || {};
+  } catch { return; }
+  const pick = (id, value) => {
+    const sel = $(id);
+    if (sel && value && sel.querySelector(`option[value="${value}"]`)) sel.value = value;
+  };
+  pick("dubModeSelect", d.dub_mode);
+  pick("sepSelect", d.separation);
+  pick("sttSelect", d.stt);
+  pick("translateSelect", d.translator);
+  pick("qualitySelect", d.voice_quality);
+}
+
 async function applyEngineAvailabilityToForm() {
   // The dropdowns this greys out live in Advanced options, inside the New
   // project dialog.
   const translateSel = $("translateSelect");
   const sttSel = $("sttSelect");
+  await loadSavedDefaults();
 
   let av;
   try {

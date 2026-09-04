@@ -31,7 +31,8 @@ VERTEX_MODEL = os.environ.get("VERTEX_MODEL", "gemini-2.5-flash")
 # the Dub Agent's queue_dub -- does not demand the 7.6 GB Gemma download first.
 # Gemma 3 stays a choice for anyone who downloads it (on the 44-line Joker A/B it was
 # the most natural Korean; Hunyuan is more literal and lines can run short).
-TRANSLATE_ENGINE = os.environ.get("TRANSLATE_ENGINE", "hunyuan")
+TRANSLATE_ENGINE_DEFAULT = "hunyuan"
+TRANSLATE_ENGINE = os.environ.get("TRANSLATE_ENGINE", TRANSLATE_ENGINE_DEFAULT)
 
 # Ollama (local LLM) translation settings (internal only)
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
@@ -238,7 +239,10 @@ def default_stt_engine() -> str:
     """
     from app.settings_env import current_value
 
-    return os.environ.get("STT_ENGINE") or ("perso" if current_value("PERSO_API_KEY") else "")
+    # STT_ENGINE from kit.env first (the Settings screen and the Dub Agent
+    # write it there; app/setup.py), then the process env, then the key rule.
+    return current_value("STT_ENGINE") or os.environ.get("STT_ENGINE") or (
+        "perso" if current_value("PERSO_API_KEY") else "")
 
 
 # The ten languages the bundled voice model speaks, by code -- the same table

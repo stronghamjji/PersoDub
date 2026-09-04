@@ -1104,7 +1104,7 @@ def test_dub_start_records_what_the_defaults_resolved_to_not_the_blank(monkeypat
 
     job = client.get(f"/api/dub/jobs/{jid}").json()
     assert job["stt_engine"] == "whisper"          # local Whisper, named
-    assert job["translator"] == main.TRANSLATE_ENGINE
+    assert job["translator"] == main.dub_setup.default_for("translator")
     assert job["quality"] == main.QWEN_N_TAKES
 
 

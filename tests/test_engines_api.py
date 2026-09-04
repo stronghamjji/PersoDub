@@ -347,7 +347,8 @@ def test_dub_start_default_engine_path_is_preflighted(monkeypatch):
     # which must still be preflighted (not silently skipped). Unreachable is
     # the status that still 422s here; a missing model is the 409 dialog's
     # business (tests/test_dub_start_preflight.py).
-    monkeypatch.setattr(main, "TRANSLATE_ENGINE", "gemma")
+    monkeypatch.setattr(main.dub_setup, "default_for",
+                        lambda stage, _real=main.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
     monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
 
     r = client.post(
