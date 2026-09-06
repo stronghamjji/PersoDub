@@ -6,6 +6,7 @@ import {
   LANGUAGES,
   STAGES,
   stagePattern,
+  stepLabels,
   buildDubFormData,
   parseProgress,
   pollDubJob,
@@ -489,6 +490,21 @@ test("stagePattern reads the stage count off the table it is given", () => {
   assert.ok(p7.test("1/7 Separating background audio locally (Demucs)…"));
   assert.equal(p7.exec("4/7 Cloning & synthesizing voices…")[1], "4", "the stage number is captured");
   assert.ok(!p7.test("3/6 Translating…"), "and no longer matches the old six-stage marker");
+});
+
+test("a stage with a label of its own is one more step on the progress card", () => {
+  // The card (ui/src/runningScreen.mjs) draws one step per name this returns, so
+  // a seventh stage must arrive there by adding a row here and nothing else.
+  assert.deepEqual(stepLabels(STAGES),
+    ["Separating audio", "Transcribing", "Translating", "Dubbing"]);
+
+  const seven = [...STAGES, { name: "desubtitle", label: "Cleaning up", weight: 0 }];
+  assert.deepEqual(stepLabels(seven), [...stepLabels(STAGES), "Cleaning up"]);
+  assert.equal(stepLabels(seven).length, stepLabels(STAGES).length + 1);
+  // A stage that reuses its neighbour's label is folded into it instead --
+  // which is how the pipeline's six stages read as four.
+  assert.deepEqual(stepLabels([...STAGES, { name: "verify", label: "Dubbing", weight: 0 }]),
+    stepLabels(STAGES));
 });
 
 test("the stage table describes the four bar steps the UI shows", () => {

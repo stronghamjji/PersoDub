@@ -22,7 +22,9 @@ import { gb, modelStatusLine, dubStartDialog, overallProgress, allReady } from "
  * @param {() => void} deps.onOpenSettings      open the Settings sheet
  * @param {(rows: object[]) => void} deps.onRowsChanged  repaint the page's own
  *        model-dependent chrome (the dropdown hints and the topbar chip)
- * @returns the operations the rest of the page calls.
+ * @returns the operations the page calls, and the one the tests do -- grouped
+ *        and labelled in the returned object, so pruning this surface later
+ *        does not have to guess which member has a caller off the page.
  */
 export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged }) {
   // Every element this file names is required markup (index.html always has
@@ -186,6 +188,12 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged 
     $("modelsNeededOverlay").classList.remove("open");
   });
 
-  return { showModelsDialog, refreshModels, modelRow, downloadModel, cancelModel,
-           removeModel, renderModelsList, startPolling, repaint, reopenDialogOrSettings };
+  return {
+    // used by the page
+    showModelsDialog, refreshModels, modelRow, downloadModel, cancelModel,
+    repaint, reopenDialogOrSettings,
+    // used by tests only -- Remove is drawn by this file and clicked through
+    // its own row, so the page never names it. Reachable so the test can.
+    removeModel,
+  };
 }

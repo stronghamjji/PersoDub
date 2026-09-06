@@ -115,26 +115,30 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     // rather than a bar that lies. The loadedmetadata handler calls back.
     if (!Number.isFinite(duration) || duration < 1) { box.innerHTML = ""; return; }
 
+    // Every line below the first is HTML the browser receives, so its
+    // indentation is output, not layout: it is deliberately NOT stepped in with
+    // the rest of this file, and reads byte for byte as it did when this lived
+    // inline in static/index.html (pinned by newProject.test.mjs).
     box.innerHTML = `
-      <div class="trim-row">
-        <button class="trim-play" id="trimPlay" type="button" title="Play the selected part" aria-label="Play the selected part">
-          <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
-          <svg class="ico-pause" viewBox="0 0 18 18" aria-hidden="true"><rect x="5" y="3" width="3" height="12" rx="1"/><rect x="10" y="3" width="3" height="12" rx="1"/></svg>
-        </button>
-        <span class="trim-label">Trim</span>
-        <span class="trim-read" id="trimRead"></span>
+    <div class="trim-row">
+      <button class="trim-play" id="trimPlay" type="button" title="Play the selected part" aria-label="Play the selected part">
+        <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
+        <svg class="ico-pause" viewBox="0 0 18 18" aria-hidden="true"><rect x="5" y="3" width="3" height="12" rx="1"/><rect x="10" y="3" width="3" height="12" rx="1"/></svg>
+      </button>
+      <span class="trim-label">Trim</span>
+      <span class="trim-read" id="trimRead"></span>
+    </div>
+    <div class="trim-scale" id="trimScale">
+      <div class="trim-bar">
+        <div class="trim-hatch" id="trimHatchStart" style="left: 0"></div>
+        <div class="trim-hatch" id="trimHatchEnd" style="right: 0"></div>
+        <div class="trim-sel" id="trimSel"></div>
+        <input type="range" class="trim-range" id="trimStart" min="0" step="${TRIM_STEP}" aria-label="Trim start">
+        <input type="range" class="trim-range" id="trimEnd" min="0" step="${TRIM_STEP}" aria-label="Trim end">
+        <div class="trim-head" id="trimHead" hidden><i></i></div>
       </div>
-      <div class="trim-scale" id="trimScale">
-        <div class="trim-bar">
-          <div class="trim-hatch" id="trimHatchStart" style="left: 0"></div>
-          <div class="trim-hatch" id="trimHatchEnd" style="right: 0"></div>
-          <div class="trim-sel" id="trimSel"></div>
-          <input type="range" class="trim-range" id="trimStart" min="0" step="${TRIM_STEP}" aria-label="Trim start">
-          <input type="range" class="trim-range" id="trimEnd" min="0" step="${TRIM_STEP}" aria-label="Trim end">
-          <div class="trim-head" id="trimHead" hidden><i></i></div>
-        </div>
-        <div class="trim-ruler" id="trimRuler"></div>
-      </div>`;
+      <div class="trim-ruler" id="trimRuler"></div>
+    </div>`;
 
     const startInput = $("trimStart"), endInput = $("trimEnd");
     startInput.max = endInput.max = String(duration);

@@ -19,7 +19,7 @@
 // Run with: node --test ui/src/agentStrip.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initAgentStrip, loginWords, loginKnown, labelFor, aliasOf, chipText,
+import { initAgentStripUi, loginWords, loginKnown, labelFor, aliasOf, chipText,
          menuRow, replyHtml } from "./agentStrip.mjs";
 
 function makeEl(id) {
@@ -165,7 +165,7 @@ function harness({ agents = [], stored = {}, screen = "done", jobId = "job-1",
     return { ok: true, json: async () => ({}) };
   };
 
-  initAgentStrip({
+  initAgentStripUi({
     $, fetch,
     getScreen: () => document.body.dataset.screen,
     getJobId: () => jobId,
@@ -196,6 +196,51 @@ function stream(events, { tail = null } = {}) {
     },
   };
 }
+
+/**
+ * A chat response the test hands events to one at a time, so a turn can be read
+ * WHILE a call is still out -- which is when the chip says how far in it is.
+ * `stream` above cannot: it has every event before the strip asks for the first.
+ */
+function heldStream() {
+  const enc = new TextEncoder();
+  const waiting = [];   // reads the strip has made and nothing has answered yet
+  const ready = [];     // events sent before the strip asked for them
+  const hand = (chunk) => (waiting.length ? waiting.shift()(chunk) : ready.push(chunk));
+  return {
+    ok: true,
+    body: {
+      getReader: () => ({
+        read: () => new Promise((resolve) => {
+          if (ready.length) resolve(ready.shift());
+          else waiting.push(resolve);
+        }),
+      }),
+    },
+    send: (ev) => hand({ value: enc.encode(JSON.stringify(ev) + "\n"), done: false }),
+    end: () => hand({ value: undefined, done: true }),
+  };
+}
+
+/** Type a message and press Enter, the way the user starts a turn. */
+async function say(h, text) {
+  h.$("assistantInput").value = text;
+  await h.$("assistantInput").fire("keydown", { key: "Enter", isComposing: false,
+                                                keyCode: 13, preventDefault() {} });
+  await flush(60);
+}
+
+/** The chips on screen: what each says, and whether it is still spinning. */
+function chips(h) {
+  return h.$("assistantLog").children
+    .filter((c) => String(c.className).includes("chip"))
+    .map((c) => ({ text: words(c), running: !String(c.className).includes("chip-done") }));
+}
+
+// The events the server sends per tool call (app/agents/claude.py, codex.py).
+const EDIT = (line) => ({ kind: "progress", label: "Rewriting a line", line,
+                          tool: "edit_script_line" });
+const LANDED = { kind: "progress", done: true };
 
 const CLAUDE = { id: "claude", name: "Claude", installed: true, supported: true,
                  models: ["opus", "sonnet"], logged_in: true, account: "me@example.com" };
@@ -447,6 +492,87 @@ test("one chip per run of calls, ticked, in the order things happened", async ()
     // Every call is back, so both chips wear the tick rather than the spinner.
     assert.equal(drawn[1].mark.innerHTML, drawn[3].mark.innerHTML);
     assert.match(drawn[1].mark.innerHTML, /M5 13l4 4L19 7/);
+  } finally { h.log.restore(); }
+});
+
+test("a chip counts its own run while a call is still out", async () => {
+  const chat = heldStream();
+  const h = harness({ agents: [CLAUDE], chat });
+  try {
+    await flush();
+    await say(h, "Shorten lines 1 and 3");
+    chat.send(EDIT(1)); chat.send(LANDED); chat.send(EDIT(3));
+    await flush(40);
+    // Two calls in the chip and one of them still out: how far in it is is worth
+    // saying, because the row is locked until the turn is over.
+    assert.deepEqual(chips(h), [{ text: "Rewriting lines 1, 3 · 1 of 2", running: true }]);
+
+    chat.send(LANDED);
+    await flush(40);
+    // Everything is back, so the count goes and the tick arrives -- without
+    // waiting for the turn to end.
+    assert.deepEqual(chips(h), [{ text: "Rewriting lines 1, 3", running: false }]);
+    chat.end();
+    await flush(40);
+  } finally { h.log.restore(); }
+});
+
+test("one call on its own is not counted at the user", async () => {
+  const chat = heldStream();
+  const h = harness({ agents: [CLAUDE], chat });
+  try {
+    await flush();
+    await say(h, "Shorten line 3");
+    chat.send(EDIT(3));
+    await flush(40);
+    // "· 0 of 1" would be noise: there is nothing to be part-way through.
+    assert.deepEqual(chips(h), [{ text: "Rewriting line 3", running: true }]);
+
+    chat.send(LANDED);
+    await flush(40);
+    assert.deepEqual(chips(h), [{ text: "Rewriting line 3", running: false }]);
+    chat.end();
+    await flush(40);
+  } finally { h.log.restore(); }
+});
+
+test("the numbers come out sorted, and a line rewritten twice is named once", async () => {
+  // 12 after 2 and 3, not between them: they are numbers, not words.
+  const chat = stream([EDIT(3), LANDED, EDIT(12), LANDED, EDIT(3), LANDED,
+                       EDIT(2), LANDED, { kind: "done" }]);
+  const h = harness({ agents: [CLAUDE], chat });
+  try {
+    await flush();
+    await say(h, "Shorten lines 2, 3 and 12");
+    assert.deepEqual(chips(h).map((c) => c.text), ["Rewriting lines 2, 3, 12"]);
+  } finally { h.log.restore(); }
+});
+
+test("a step that names no line keeps its label, and repeats do not pile up", async () => {
+  const read = { kind: "progress", label: "Reading the script", tool: "get_script" };
+  const chat = stream([read, LANDED, read, LANDED,
+                       { kind: "progress", label: "Checking the timing", tool: "check_fit" },
+                       LANDED, { kind: "done" }]);
+  const h = harness({ agents: [CLAUDE], chat });
+  try {
+    await flush();
+    await say(h, "Does line 4 fit?");
+    // Reading the script twice is one chip -- a step is a step, however many
+    // times the assistant takes it -- and the next step is its own.
+    assert.deepEqual(chips(h).map((c) => c.text),
+      ["Reading the script", "Checking the timing"]);
+  } finally { h.log.restore(); }
+});
+
+test("a run cut short is ticked rather than left counting", async () => {
+  // The second call never comes back and the turn ends anyway: a chip left
+  // saying "1 of 2" under a finished turn is counting nothing.
+  const chat = stream([EDIT(1), LANDED, EDIT(3), { kind: "done" }]);
+  const h = harness({ agents: [CLAUDE], chat });
+  try {
+    await flush();
+    await say(h, "Shorten lines 1 and 3");
+    assert.deepEqual(chips(h), [{ text: "Rewriting lines 1, 3", running: false }]);
   } finally { h.log.restore(); }
 });
 

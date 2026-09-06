@@ -2072,7 +2072,7 @@ window.addEventListener("resize", () => {
 const settings = initSettingsUi({
   $,
   onSaved: () => applyEngineAvailabilityToForm(),
-  renderModelsList: () => models.refreshModels(),
+  refreshModelCatalog: () => models.refreshModels(),
 });
 
 $("settingsBtn").addEventListener("click", settings.openSettings);
@@ -3749,12 +3749,12 @@ openLastScreen();
      is one block to delete. It talks to /api/agent/chat and renders the five
      events the server sends: start, progress, text, done, error. -->
 <script type="module">
-import { initAgentStrip } from "/js/agentStrip.mjs";
+import { initAgentStripUi } from "/js/agentStrip.mjs";
 
 // The strip reads the page through these four and nothing else: the app's own
 // element lookup, which screen is on show, which job is open, and one way to
 // say that something under the page has changed.
-initAgentStrip({
+initAgentStripUi({
   $: (id) => document.getElementById(id),
   getScreen: () => document.body.dataset.screen,
   getJobId: () => document.body.dataset.jobId || null,

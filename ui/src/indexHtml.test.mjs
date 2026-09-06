@@ -6,6 +6,12 @@
 // Nothing else in this suite reads that file, so this is the only place such a
 // mistake can be caught before it ships.
 //
+// It also reads ui/src/timeline.mjs and ui/src/agentStrip.mjs: the ids of the
+// timeline's head and the agent input's Enter guard moved into those modules
+// when the page was split up (2026-09-06), and the markup contract they are
+// part of is still one contract -- so the checks stayed together here rather
+// than being scattered by which file the id happens to live in today.
+//
 // Run with: node --test ui/src/indexHtml.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -100,7 +106,11 @@ test("timeline zoom controls, Dub Agent heading and English video tabs are in pl
   }
   assert.ok(html.includes(">Original<") && html.includes(">Dubbing<"),
     "the video tabs must read Original/Dubbing -- the app speaks English (user, 2026-09-02)");
-  assert.ok(html.includes("Dub Agent"), "the agent column needs its Dub Agent heading");
+  // Anchored to markup, not to the words: "Dub Agent" also appears in a CSS
+  // comment and in a button's title, so `html.includes("Dub Agent")` passed
+  // with the heading itself deleted.
+  assert.match(html, />Dub Agent</,
+    "the agent column needs its Dub Agent heading, as an element's own text");
 });
 
 // The player's subtitle overlay, its toolbar, and the timeline's subtitle lane

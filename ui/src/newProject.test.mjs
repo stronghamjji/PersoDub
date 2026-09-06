@@ -192,6 +192,45 @@ test("opening re-reads the saved defaults, then repaints hints, mode and greying
 
 // -- the trim bar ----------------------------------------------------------
 
+// The trim box exactly as the page drew it before this file existed
+// (`git show 72b709a:static/index.html`, renderTrim, for duration 30). Every
+// line below the template's first is HTML the browser receives, so its leading
+// spaces are output, not layout: this pins them the way scriptTable.test.mjs
+// and timeline.test.mjs pin theirs, so the next re-indent of the module cannot
+// quietly change what is on screen.
+const TRIM_BOX =
+  '\n' +
+  '    <div class="trim-row">\n' +
+  '      <button class="trim-play" id="trimPlay" type="button" title="Play the selected part" aria-label="Play the selected part">\n' +
+  '        <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>\n' +
+  '        <svg class="ico-pause" viewBox="0 0 18 18" aria-hidden="true"><rect x="5" y="3" width="3" height="12" rx="1"/><rect x="10" y="3" width="3" height="12" rx="1"/></svg>\n' +
+  '      </button>\n' +
+  '      <span class="trim-label">Trim</span>\n' +
+  '      <span class="trim-read" id="trimRead"></span>\n' +
+  '    </div>\n' +
+  '    <div class="trim-scale" id="trimScale">\n' +
+  '      <div class="trim-bar">\n' +
+  '        <div class="trim-hatch" id="trimHatchStart" style="left: 0"></div>\n' +
+  '        <div class="trim-hatch" id="trimHatchEnd" style="right: 0"></div>\n' +
+  '        <div class="trim-sel" id="trimSel"></div>\n' +
+  '        <input type="range" class="trim-range" id="trimStart" min="0" step="0.1" aria-label="Trim start">\n' +
+  '        <input type="range" class="trim-range" id="trimEnd" min="0" step="0.1" aria-label="Trim end">\n' +
+  '        <div class="trim-head" id="trimHead" hidden><i></i></div>\n' +
+  '      </div>\n' +
+  '      <div class="trim-ruler" id="trimRuler"></div>\n' +
+  '    </div>';
+
+test("the trim box is byte for byte the box the page drew before this file existed", async (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.openNewProject({ file: { name: "a.mp4" } });
+  h.$("projectVideo").duration = 30;
+  await h.$("projectVideo").fire("loadedmetadata");
+
+  assert.equal(h.$("trimBox").innerHTML, TRIM_BOX);
+});
+
 test("a file's length draws the trim bar and its readout", async (t) => {
   const h = harness();
   t.after(h.log.restore);

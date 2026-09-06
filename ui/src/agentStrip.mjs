@@ -21,6 +21,7 @@
 // #assistantGo, #assistantGoIcon and #assistantFold. It never reaches the top
 // bar, the timeline, the script table or `state`.
 import { escapeHtml } from "./format.mjs";
+import { CHECK_ICON_SM } from "./icons.mjs";
 
 // Model aliases, not version numbers -- an alias keeps pointing at the current
 // model of that size, so this menu does not go stale.
@@ -28,8 +29,8 @@ const MODEL_LABELS = { fable: "Fable", opus: "Opus", sonnet: "Sonnet", haiku: "H
 
 // The picker's "this one is chosen" tick. Drawn, not typed: a typed tick is a
 // different shape in every font, and the rest of the app's marks are SVG.
-// This module cannot see the main one (two module blocks share nothing).
-const CHECK_MARK = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+// It is icons.mjs's tick at the picker's smaller size.
+const CHECK_MARK = CHECK_ICON_SM;
 // "there is more behind this row" and "back to the list", drawn for the same
 // reason as the tick above: a typed chevron is a different shape, weight and
 // height in every font, and next to real icons it reads as a stray character.
@@ -155,7 +156,7 @@ export function chipText(label, lines) {
  * @param {(name: string) => void} deps.emit  tell the rest of the page something
  *        changed under it (persodub:script-changed, persodub:voices-remade)
  */
-export function initAgentStrip({ $, fetch = globalThis.fetch, getScreen, getJobId, emit }) {
+export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJobId, emit }) {
   const log = $("assistantLog"), input = $("assistantInput");
   const stateLine = $("assistantState");
   const modelBtn = $("assistantModelBtn"), modelLabel = $("assistantModelLabel");

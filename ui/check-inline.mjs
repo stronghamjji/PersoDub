@@ -19,28 +19,28 @@ const html = fs.readFileSync(htmlPath, "utf-8");
 const blocks = [...html.matchAll(/<script\s+type="module"[^>]*>([\s\S]*?)<\/script>/g)];
 
 if (blocks.length === 0) {
-    console.error(`No <script type="module"> blocks found in ${htmlPath}`);
-    process.exit(1);
+  console.error(`No <script type="module"> blocks found in ${htmlPath}`);
+  process.exit(1);
 }
 
 let failed = false;
 for (let i = 0; i < blocks.length; i++) {
-    const body = blocks[i][1];
-    const tmpFile = path.join(os.tmpdir(), `persodub-inline-${i}-${process.pid}.mjs`);
-    fs.writeFileSync(tmpFile, body);
-    try {
-        execFileSync(process.execPath, ["--check", tmpFile], { stdio: "pipe" });
-    } catch (err) {
-        failed = true;
-        console.error(`Inline module block ${i} in ${htmlPath} failed node --check:`);
-        console.error(err.stderr ? err.stderr.toString() : err.message);
-    } finally {
-        fs.unlinkSync(tmpFile);
-    }
+  const body = blocks[i][1];
+  const tmpFile = path.join(os.tmpdir(), `persodub-inline-${i}-${process.pid}.mjs`);
+  fs.writeFileSync(tmpFile, body);
+  try {
+    execFileSync(process.execPath, ["--check", tmpFile], { stdio: "pipe" });
+  } catch (err) {
+    failed = true;
+    console.error(`Inline module block ${i} in ${htmlPath} failed node --check:`);
+    console.error(err.stderr ? err.stderr.toString() : err.message);
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
 }
 
 if (failed) {
-    process.exit(1);
+  process.exit(1);
 }
 
 console.log(`${blocks.length} inline module block(s) in ${htmlPath} parse OK.`);

@@ -247,16 +247,29 @@ export function stagePattern(stages) {
   return new RegExp(`^(\\d)\\/${stages.length}\\s`);
 }
 
-// The bar's steps: one per distinct label, in order.
-const STEP_LABELS = [...new Set(STAGES.map((s) => s.label))];
+/**
+ * The bar's steps for a stage table: its labels in order, with neighbouring
+ * stages that share one folded into a single step. Takes the table (not the
+ * module's own STAGES) so the running screen draws the same steps this file
+ * counts, and so a seventh stage can be tried in a test without editing the
+ * table. The progress card imports this -- a second hardcoded list of names is
+ * how the card and the percentages drift apart.
+ */
+export function stepLabels(stages) {
+  return stages.map((s) => s.label).filter((label, i, all) => label !== all[i - 1]);
+}
+
+// The bar's steps for the table this file parses for.
+const STEP_LABELS = stepLabels(STAGES);
 // Which step (1-based) each stage belongs to, by stage index.
 const STEP_OF = STAGES.map((s) => STEP_LABELS.indexOf(s.label) + 1);
 // Each step's share of the 100 percent, its stages' weights added up.
 const STEP_WEIGHT = STEP_LABELS.map((label) => STAGES
   .filter((s) => s.label === label)
   .reduce((sum, s) => sum + (s.weight || 0), 0));
-// The step the per-line voice math runs inside.
-const SYNTH_STEP = STEP_OF[STAGES.findIndex((s) => s.kind === "synthesis")];
+// The step the per-line voice math runs inside. Exported for the running
+// screen, whose voice counter sits on the same step.
+export const SYNTH_STEP = STEP_OF[STAGES.findIndex((s) => s.kind === "synthesis")];
 // The voice-line math only ever fills 40 of Dubbing's 45 points (not the full
 // 45) so that the stages carrying a `floor` above -- which land after every
 // voice line is already done -- still have room to nudge percent up (96, then

@@ -22,12 +22,16 @@
  * @param {() => void} deps.onSaved      run at the end of every save pass, so the
  *        page can re-check what a changed key made usable (the page passes
  *        applyEngineAvailabilityToForm, which reaches into the New project form)
- * @param {() => void} deps.renderModelsList  repaint the Models catalog inside the
- *        sheet (the page passes models.refreshModels, which re-reads the rows and
- *        then renders them -- what this code called before it moved here)
+ * @param {() => void} deps.refreshModelCatalog  bring the model rows up to date
+ *        when the sheet opens. The page passes models.refreshModels, which does
+ *        more than paint this sheet's list: it asks GET /api/models, repaints
+ *        the topbar's download chip and the New project dropdown hints, and --
+ *        if the rows a held-up dub was waiting for have all arrived -- starts
+ *        that dub. Not awaited, here or before the move: the sheet opens
+ *        without waiting on any of it.
  * @returns the operations the rest of the page calls.
  */
-export function initSettingsUi({ $, onSaved, renderModelsList }) {
+export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
   // The saved workspace id at modal-open time, so Save can post only an actual
   // change (posting the unchanged value would rewrite kit.env for nothing).
   let persoSpaceInitial = "";
@@ -160,8 +164,10 @@ export function initSettingsUi({ $, onSaved, renderModelsList }) {
 
   // Everything the sheet shows about the saved setup, in one pass:
   // GET /api/settings fills the key fields, the workspace picker, the
-  // version line and the usage-counts switch.
-  async function loadSettings() {
+  // version line and the usage-counts switch. Not "loadSettings": the page has
+  // one of those already (static/index.html), and it reads the browser's own
+  // persodub_settings blob -- the opposite source of truth to this one.
+  async function loadSavedSetup() {
     try {
       const r = await fetch("/api/settings");
       if (!r.ok) throw new Error();
@@ -189,8 +195,8 @@ export function initSettingsUi({ $, onSaved, renderModelsList }) {
   // Opening the sheet: the saved values first, then the models catalog
   // (not awaited -- the sheet opens without waiting on it), then the sheet.
   async function openSettings() {
-    await loadSettings();
-    renderModelsList();
+    await loadSavedSetup();
+    refreshModelCatalog();
     $("settingsOverlay").classList.add("open");
   }
   // Closing saves too: a key typed and then Escape (or the X) never left the
@@ -324,5 +330,8 @@ export function initSettingsUi({ $, onSaved, renderModelsList }) {
     $("analyticsHint").textContent = "Could not save that. Is the engine running?";
   });
 
-  return { openSettings, closeSettings, loadSettings };
+  // used by the page: openSettings. closeSettings and loadSavedSetup are
+  // reached from the tests only -- the page's ways out of the sheet are the
+  // sheet's own X, its backdrop and Escape, all wired above.
+  return { openSettings, closeSettings, loadSavedSetup };
 }

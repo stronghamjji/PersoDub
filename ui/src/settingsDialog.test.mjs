@@ -84,7 +84,7 @@ function harness({ responses = {} } = {}) {
   const api = initSettingsUi({
     $,
     onSaved: () => { state.saved += 1; },
-    renderModelsList: () => { state.models += 1; },
+    refreshModelCatalog: () => { state.models += 1; },
   });
   return { $, api, state };
 }
@@ -100,11 +100,11 @@ const SAVED = {
 };
 const SPACES = { spaces: [{ seq: 7, name: "Studio", tier: "Pro", credits: 120 }] };
 
-test("loadSettings fills the fields from GET /api/settings", async (t) => {
+test("loadSavedSetup fills the fields from GET /api/settings", async (t) => {
   const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
   t.after(h.state.restore);
 
-  await h.api.loadSettings();
+  await h.api.loadSavedSetup();
 
   assert.equal(h.$("persoKeyInput").value, SAVED.perso_api_key);
   assert.equal(h.$("geminiKeyInput").value, "gem-key");
@@ -119,7 +119,7 @@ test("a version of 0.0.0 is not put on screen", async (t) => {
   const h = harness({ responses: { "/api/settings": ok({ ...SAVED, app_version: "0.0.0" }) } });
   t.after(h.state.restore);
 
-  await h.api.loadSettings();
+  await h.api.loadSavedSetup();
 
   assert.equal(h.$("aboutVersion").textContent, "");
 });
@@ -128,7 +128,7 @@ test("a settings request that fails says so in the key fields", async (t) => {
   const h = harness({ responses: { "/api/settings": { ok: false, status: 500, json: async () => ({}) } } });
   t.after(h.state.restore);
 
-  await h.api.loadSettings();
+  await h.api.loadSavedSetup();
 
   assert.equal(h.$("persoKeyInput").placeholder, "Unavailable");
   assert.equal(h.$("geminiKeyInput").placeholder, "Unavailable");
@@ -148,7 +148,7 @@ test("the saved key's workspaces fill the picker, and one of them is preselected
   const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
   t.after(h.state.restore);
 
-  await h.api.loadSettings();
+  await h.api.loadSavedSetup();
   await settle();
 
   const sel = h.$("persoSpaceSelect");
@@ -164,7 +164,7 @@ test("a 0-credit workspace warns before it can cost a failed dub", async (t) => 
   const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(zero) } });
   t.after(h.state.restore);
 
-  await h.api.loadSettings();
+  await h.api.loadSavedSetup();
   await settle();
 
   assert.equal(h.$("persoSpaceSelect").children[0].textContent, "Studio (Free, 0 credits left)");
@@ -204,7 +204,7 @@ test("a key too short to be one is not looked up", async (t) => {
 test("emptying the key field empties the picker instead of leaving the old key's workspaces", async (t) => {
   const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
   t.after(h.state.restore);
-  await h.api.loadSettings();
+  await h.api.loadSavedSetup();
   await settle();
 
   h.$("persoKeyInput").value = "";
@@ -223,7 +223,7 @@ test("an edited key posts the change with the workspace chosen for it, then tell
                  "/api/perso/spaces/preview": ok(preview) },
   });
   t.after(h.state.restore);
-  await h.api.loadSettings();
+  await h.api.loadSavedSetup();
   await settle();
 
   h.$("persoKeyInput").value = "another-key-0123456789abc";
@@ -245,7 +245,7 @@ test("an edited key posts the change with the workspace chosen for it, then tell
 test("nothing edited posts nothing, but the page is still told", async (t) => {
   const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
   t.after(h.state.restore);
-  await h.api.loadSettings();
+  await h.api.loadSavedSetup();
   await settle();
   h.state.calls.length = 0;
 

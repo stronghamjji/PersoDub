@@ -15,3 +15,5 @@ export const REMAKE_ICON = '<svg viewBox="0 0 24 24" style="stroke:currentColor;
 // The tick that button wears once the voice is made, and the same mark the
 // running screen draws over a finished stage.
 export const CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+// The same tick at the picker's smaller size (the Dub Agent strip's rows).
+export const CHECK_ICON_SM = CHECK_ICON.replace('class="icon"', 'class="icon icon-sm"');

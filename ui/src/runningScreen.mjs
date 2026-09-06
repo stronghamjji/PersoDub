@@ -19,9 +19,12 @@
 // and #cancelBtn. It never reaches the top bar, the finished screen or `state`.
 import { escapeHtml } from "./format.mjs";
 import { CHECK_ICON } from "./icons.mjs";
+import { STAGES, SYNTH_STEP, stepLabels } from "./dubApi.mjs";
 
-// The four stages, in the order parseProgress numbers them (dubApi.mjs).
-const STAGE_NAMES = ["Separating audio", "Transcribing", "Translating", "Dubbing"];
+// The card's steps, in the order parseProgress numbers them: read off the one
+// stage table (dubApi.mjs) rather than written out again, so a seventh pipeline
+// stage shows up here too instead of leaving the card describing a shorter job.
+const STAGE_NAMES = stepLabels(STAGES);
 
 // Failures the server records as a token rather than a sentence, because the
 // token is what the code elsewhere tests. Said in plain words here, where the
@@ -138,7 +141,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
       // logged how many there are AND finished at least one. A standard-quality
       // run never logs a chosen take, so the counter would sit at "voice 0 of 5"
       // for the whole stage and read like something stuck.
-      const counted = stepState === "current" && n === 4
+      const counted = stepState === "current" && n === SYNTH_STEP
         && progress.voiceTotal && progress.voiceDone > 0;
       const note = counted
         ? ` <span class="step-note">· voice ${Math.min(progress.voiceDone, progress.voiceTotal)} of ${progress.voiceTotal}</span>`
