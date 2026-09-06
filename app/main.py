@@ -105,7 +105,7 @@ def _dub_target_for(job: dict):
         if (job.get("trim_pending") and trim
                 and trim.get("start") is not None and trim.get("end") is not None):
             def _cut_recorded():
-                job_store._update(jid, trim_pending=False)
+                job_store.update(jid, trim_pending=False)
                 job_store.persist(jid, work)
             _cut_video(video_path, trim["start"], trim["end"], on_cut=_cut_recorded)
         if job.get("dub_mode") == "perso":
@@ -151,7 +151,7 @@ def _rearm_queued_jobs() -> None:
             job_store.start(job["id"], _dub_target_for(job),
                             parallel=(job.get("dub_mode") == "perso"))
         except Exception as e:
-            job_store._update(job["id"], status="error", error=str(e))
+            job_store.update(job["id"], status="error", error=str(e))
 
 
 @asynccontextmanager
@@ -760,6 +760,44 @@ def dub_job_script_revert(jid: str, line: int):
     return edit_line(work_dir, line, texts[line - 1], job.get("language_code") or "en")
 
 
+def _inherited_engines(job, keys):
+    """The same engines the first run was given, not today's defaults: a Perso
+    job that failed used to come back transcribed by local Whisper (or the
+    other way round), with nothing on screen to say the choice had changed.
+    A job saved before these were kept has none of them, so that one still
+    falls back to what the app is set to now.
+
+    `keys` is the caller's business: a redub makes voices only, so the first
+    run's separation choice is none of its concern and it does not carry it.
+    """
+    engines = {k: job.get(k) for k in keys}
+    if not engines.get("stt_engine"):
+        engines = _engines_used()
+    return engines
+
+
+def launch_job(work, fields, log_line, target, parallel=False):
+    """Register a new job and set it running. Returns the new job's id.
+
+    The tail of the start ritual, the same one for a new dub, a redub and a
+    "Try again": make the record, stamp `fields` on it, write job.json into
+    the job's folder, log the first line, and hand the work to the store.
+
+    The file is written now, not just at the end: a job the user quits the app
+    in the middle of still has a folder, and without a file in it that folder
+    is nameless -- Projects would have nothing to show for it.
+
+    `target` is called as target(jid, log). The id only exists once the record
+    is made here, and the work needs it for its cancel_check and on_notice.
+    """
+    jid = job_store.create()
+    job_store.update(jid, **fields)
+    job_store.persist(jid, work)
+    job_store.append_log(jid, log_line)
+    job_store.start(jid, lambda log: target(jid, log), parallel=parallel)
+    return jid
+
+
 @app.post("/api/dub/jobs/{jid}/redub")
 def dub_job_redub(jid: str):
     """Make the voices again from this job's script, as it now stands.
@@ -784,14 +822,7 @@ def dub_job_redub(jid: str):
     shutil.copyfile(script_path(work_dir), srt_path)
     out_path = os.path.join(work, "dubbed.mp4")
 
-    # The same engines the first run was given, not today's defaults: a Perso
-    # job that failed used to come back transcribed by local Whisper (or the
-    # other way round), with nothing on screen to say the choice had changed.
-    # A job saved before these were kept has none of them, so that one still
-    # falls back to what the app is set to now.
-    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality")}
-    if not engines.get("stt_engine"):
-        engines = _engines_used()
+    engines = _inherited_engines(job, ("stt_engine", "translator", "tts", "quality"))
 
     # Only the voices are made again -- no STT, no translation -- but a voice
     # model removed in the catalog must resurface as the dialog, not a crash.
@@ -799,23 +830,7 @@ def dub_job_redub(jid: str):
     if missing:
         _raise_models_needed(missing)
 
-    new_jid = job_store.create()
-    job_store._update(new_jid, language_code=language_code, project=project,
-                      day=_today(), from_link=False, work_dir=work,
-                      # The remake is the same video in the same two languages.
-                      source_lang=job.get("source_lang"),
-                      # ...and made with the same engines, so its finished
-                      # screen says what the job it came from said.
-                      **engines)
-    # Same reason as in dub_start: quit the app mid-remake and this folder is
-    # nameless without a file in it, so Projects could never show or clear it.
-    job_store.persist(new_jid, work)
-    edited = os.path.exists(os.path.join(work_dir, EDITED_NAME))
-    job_store.append_log(new_jid, "%s (%s)"
-                         % (project, "voices remade from the edited script" if edited
-                            else "from the script as it was"))
-
-    def _target(log):
+    def _target(new_jid, log):
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,
@@ -830,10 +845,23 @@ def dub_job_redub(jid: str):
             log=log,
         )
 
-    job_store.start(new_jid, _target)
+    edited = os.path.exists(os.path.join(work_dir, EDITED_NAME))
+    new_jid = launch_job(
+        work,
+        {"language_code": language_code, "project": project,
+         "day": _today(), "from_link": False, "work_dir": work,
+         # The remake is the same video in the same two languages.
+         "source_lang": job.get("source_lang"),
+         # ...and made with the same engines, so its finished
+         # screen says what the job it came from said.
+         **engines},
+        "%s (%s)" % (project, "voices remade from the edited script" if edited
+                     else "from the script as it was"),
+        _target,
+    )
     # Stamped on the OLD job so the screen showing it can follow along when the
     # assistant, not the user, is the one who pressed go.
-    job_store._update(jid, remade_as=new_jid)
+    job_store.update(jid, remade_as=new_jid)
     return {"job_id": new_jid}
 
 
@@ -891,14 +919,8 @@ def dub_job_retry(jid: str):
             shutil.rmtree(work, ignore_errors=True)
             raise HTTPException(400, str(e))
 
-    # The same engines the first run was given, not today's defaults: a Perso
-    # job that failed used to come back transcribed by local Whisper (or the
-    # other way round), with nothing on screen to say the choice had changed.
-    # A job saved before these were kept has none of them, so that one still
-    # falls back to what the app is set to now.
-    engines = {k: job.get(k) for k in ("stt_engine", "translator", "tts", "quality", "separation")}
-    if not engines.get("stt_engine"):
-        engines = _engines_used()
+    engines = _inherited_engines(
+        job, ("stt_engine", "translator", "tts", "quality", "separation"))
 
     translate_missing_id = None
     if engines.get("translator") in ("gemma", "hunyuan"):
@@ -909,24 +931,7 @@ def dub_job_retry(jid: str):
     if missing:
         _raise_models_needed(missing)
 
-    new_jid = job_store.create()
-    job_store._update(new_jid, language_code=language_code, project=project,
-                      day=_today(), work_dir=work,
-                      language=language,
-                      # Cut just now, or copied from a video already cut: either
-                      # way this job owes no cut.
-                      trim=trim, trim_pending=False,
-                      source_lang=job.get("source_lang"),
-                      # The video is a local copy now, whatever the first job was
-                      # started from -- there is no link to download again.
-                      from_link=False,
-                      **engines)
-    # Same reason as in dub_start: quit the app mid-run and this folder is
-    # nameless without a file in it, so Projects could never show or clear it.
-    job_store.persist(new_jid, work)
-    job_store.append_log(new_jid, "%s (run again)" % project)
-
-    def _target(log):
+    def _target(new_jid, log):
         if job.get("dub_mode") == "perso":
             return _run_cloud_dub(new_jid, video_path, out_path,
                                   job.get("source_lang"), language_code,
@@ -952,7 +957,23 @@ def dub_job_retry(jid: str):
             log=log,
         )
 
-    job_store.start(new_jid, _target, parallel=(job.get("dub_mode") == "perso"))
+    new_jid = launch_job(
+        work,
+        {"language_code": language_code, "project": project,
+         "day": _today(), "work_dir": work,
+         "language": language,
+         # Cut just now, or copied from a video already cut: either
+         # way this job owes no cut.
+         "trim": trim, "trim_pending": False,
+         "source_lang": job.get("source_lang"),
+         # The video is a local copy now, whatever the first job was
+         # started from -- there is no link to download again.
+         "from_link": False,
+         **engines},
+        "%s (run again)" % project,
+        _target,
+        parallel=(job.get("dub_mode") == "perso"),
+    )
     return {"job_id": new_jid, "status": job_store.get(new_jid)["status"]}
 
 
@@ -1549,7 +1570,7 @@ def _run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_spea
         # agent) finds this job's sentences again -- persist it with the job.
         seq = getattr(pc, "last_dub_project_seq", None)
         if seq:
-            job_store._update(jid, perso_project_seq=seq)
+            job_store.update(jid, perso_project_seq=seq)
             job_store.persist(jid, os.path.dirname(out_path))
     except JobCancelled:
         raise
@@ -1774,59 +1795,7 @@ def dub_start(
             shutil.copyfileobj(source_srt.file, f)
     out_path = os.path.join(work, "dubbed.mp4")
 
-    jid = job_store.create()
-    # The download filenames are built from this; the job record is the only
-    # place the result endpoints can read the user's choice back from.
-    # project/day/from_link are read back by the download endpoints and by the
-    # desktop shell, which builds the save folder from them. `day` is stamped
-    # here rather than recomputed later: a job started at 23:59 must not land in
-    # tomorrow's folder when it finishes.
-    job_store._update(jid, language_code=language_code,
-                      project=project or os.path.basename(work),
-                      day=_today(),
-                      # Where input.mp4 lives. Stamped here because the running
-                      # screen asks for the original while the job is still
-                      # going, when there is no result to find the folder from.
-                      work_dir=work,
-                      # Kept so a later redub of this job can pass the same
-                      # language name back into run_dub.
-                      language=language,
-                      # The language the user said the video is in, or None for
-                      # auto-detect. Only auto-detect leaves a language behind in
-                      # the result (app/stt_local.py fires on_language solely when
-                      # nothing was forced), so without this the screen has no way
-                      # to name the source column of a job that was told.
-                      source_lang=source_language_code or None,
-                      # The seconds the user kept, or None for the whole video.
-                      trim=({"start": trim_start, "end": trim_end}
-                            if trim_start is not None else None),
-                      # An upload was cut just above, before this record existed.
-                      # A link still holds the whole video and is cut in the
-                      # thread below, which clears this the moment it is.
-                      trim_pending=bool(source_url and trim_start is not None),
-                      from_link=bool(source_url),
-                      # The link itself and the speaker count: what the boot
-                      # re-arm needs to rebuild this job's work should it wait
-                      # out an app restart in the queue.
-                      source_url=source_url,
-                      num_speakers=num_speakers,
-                      # What made this job: read back by the finished screen and
-                      # by "Try again", which repeats these rather than today's
-                      # defaults.
-                      # A cloud job records its mode, not local engine choices
-                      # its finished screen would then lie about.
-                      **({"dub_mode": "perso"} if dub_mode == "perso" else
-                         {"dub_mode": "local",
-                          **_engines_used(stt_engine, translate_engine, n_takes, sep_engine)}))
-    # Written now, not just at the end: a job the user quits the app in the
-    # middle of still has a folder, and without a file in it that folder is
-    # nameless -- Projects would have nothing to show for it.
-    job_store.persist(jid, work)
-    # First log line names the source -- log files are job-<id>.log, so without
-    # this there is no way to tell which video a log belongs to.
-    job_store.append_log(jid, f"{source_url or video.filename or 'video'}")
-
-    def _target(log):
+    def _target(jid, log):
         if source_url:
             fetch_source(
                 source_url, video_path, log=log,
@@ -1839,7 +1808,7 @@ def dub_start(
                 # already had one, and running it again would take the same
                 # seconds out twice.
                 def _cut_recorded():
-                    job_store._update(jid, trim_pending=False)
+                    job_store.update(jid, trim_pending=False)
                     job_store.persist(jid, work)
 
                 _cut_video(video_path, trim_start, trim_end, on_cut=_cut_recorded)
@@ -1868,9 +1837,60 @@ def dub_start(
             log=log,
         )
 
+    # The download filenames are built from this; the job record is the only
+    # place the result endpoints can read the user's choice back from.
+    # project/day/from_link are read back by the download endpoints and by the
+    # desktop shell, which builds the save folder from them. `day` is stamped
+    # here rather than recomputed later: a job started at 23:59 must not land in
+    # tomorrow's folder when it finishes.
+    #
     # A Perso cloud dub runs on Perso's servers, so it skips the local line
     # (user decision 2026-09-01): waiting here would idle both machines.
-    job_store.start(jid, _target, parallel=(dub_mode == "perso"))
+    jid = launch_job(
+        work,
+        {"language_code": language_code,
+         "project": project or os.path.basename(work),
+         "day": _today(),
+         # Where input.mp4 lives. Stamped here because the running
+         # screen asks for the original while the job is still
+         # going, when there is no result to find the folder from.
+         "work_dir": work,
+         # Kept so a later redub of this job can pass the same
+         # language name back into run_dub.
+         "language": language,
+         # The language the user said the video is in, or None for
+         # auto-detect. Only auto-detect leaves a language behind in
+         # the result (app/stt_local.py fires on_language solely when
+         # nothing was forced), so without this the screen has no way
+         # to name the source column of a job that was told.
+         "source_lang": source_language_code or None,
+         # The seconds the user kept, or None for the whole video.
+         "trim": ({"start": trim_start, "end": trim_end}
+                  if trim_start is not None else None),
+         # An upload was cut further up, before this record existed.
+         # A link still holds the whole video and is cut in the
+         # thread above, which clears this the moment it is.
+         "trim_pending": bool(source_url and trim_start is not None),
+         "from_link": bool(source_url),
+         # The link itself and the speaker count: what the boot
+         # re-arm needs to rebuild this job's work should it wait
+         # out an app restart in the queue.
+         "source_url": source_url,
+         "num_speakers": num_speakers,
+         # What made this job: read back by the finished screen and
+         # by "Try again", which repeats these rather than today's
+         # defaults.
+         # A cloud job records its mode, not local engine choices
+         # its finished screen would then lie about.
+         **({"dub_mode": "perso"} if dub_mode == "perso" else
+            {"dub_mode": "local",
+             **_engines_used(stt_engine, translate_engine, n_takes, sep_engine)})},
+        # First log line names the source -- log files are job-<id>.log, so
+        # without this there is no way to tell which video a log belongs to.
+        f"{source_url or video.filename or 'video'}",
+        _target,
+        parallel=(dub_mode == "perso"),
+    )
     # "running", or "queued" when another dub holds the air -- the screen's
     # toast says which.
     return {"job_id": jid, "status": job_store.get(jid)["status"]}

@@ -98,10 +98,13 @@ class JobStore:
             self._jobs[jid] = self._blank(jid)
         return jid
 
-    def _update(self, jid: str, **kw):
+    def update(self, jid: str, **kw):
         with self._lock:
             if jid in self._jobs:
                 self._jobs[jid].update(kw)
+
+    # Deprecated name, kept so callers written against it keep working.
+    _update = update
 
     def _write_log_line(self, jid: str, msg: str):
         """Mirror a log line to log_dir/job-<jid>.log. Best-effort: a logging
@@ -334,7 +337,7 @@ class JobStore:
         idled both machines.
         """
         if parallel:
-            self._update(jid, status="running")
+            self.update(jid, status="running")
             self._launch(jid, target, holds_air=False)
             return
         with self._lock:
@@ -404,14 +407,14 @@ class JobStore:
                         if detected and not self._jobs[jid].get("source_lang"):
                             self._jobs[jid]["source_lang"] = detected
             except JobCancelled:
-                self._update(jid, status="cancelled")
+                self.update(jid, status="cancelled")
             except Exception as e:
                 # The class name stays in the log for debugging; the stored
                 # error is what the UI shows the user under the red bar, and
                 # "RuntimeError:" in front of a plain-language sentence only
                 # made it read like a crash.
                 log(f"Error: {type(e).__name__}: {e}")
-                self._update(jid, status="error", error=str(e) or type(e).__name__)
+                self.update(jid, status="error", error=str(e) or type(e).__name__)
             # However it ended, the file beside the video now says so -- this is
             # the only moment the final status exists to be written down.
             work_dir = (self.get(jid) or {}).get("work_dir")
