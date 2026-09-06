@@ -43,7 +43,7 @@ OLLAMA_QWEN_MODEL = os.environ.get("OLLAMA_QWEN_MODEL", "qwen2.5:7b")
 OLLAMA_GEMMA_MODEL = os.environ.get("OLLAMA_GEMMA_MODEL", "gemma3:12b")
 # Tencent Hunyuan MT2 1.8B, served by Ollama from the Hugging Face GGUF. The
 # GGUF ships without a usable chat template, so the in-app installer
-# (app/main.py) bakes HUNYUAN_TEMPLATE/HUNYUAN_PARAMETERS in via /api/create
+# (app/models.py) bakes HUNYUAN_TEMPLATE/HUNYUAN_PARAMETERS in via /api/create
 # under the OLLAMA_HUNYUAN_MODEL tag. Template and parameters are the exact
 # values validated in the 2026-08-18 translation model comparison.
 OLLAMA_HUNYUAN_MODEL = os.environ.get("OLLAMA_HUNYUAN_MODEL", "hy-mt2:1.8b")
@@ -250,7 +250,7 @@ def default_stt_engine() -> str:
 
 # The ten languages the bundled voice model speaks, by code -- the same table
 # the screen keeps (ui/src/dubApi.mjs LANGUAGES). One copy here, read by the
-# server (app/main.py) and by the agent's tools (app/mcp_server.py).
+# server (app/api/dub.py) and by the agent's tools (app/mcp_server.py).
 LANGUAGE_NAMES = {
     "en": "English", "ko": "Korean", "zh": "Chinese", "fr": "French",
     "de": "German", "it": "Italian", "ja": "Japanese", "pt": "Portuguese",

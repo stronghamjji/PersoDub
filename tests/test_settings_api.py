@@ -4,7 +4,7 @@ Until now the modal stored keys in localStorage only -- the engines never saw
 them (they read kit.env at startup), so users followed the UI and nothing
 happened. The backend now owns reading/writing the file. GET /api/settings
 returns the saved key VALUES (user decision 2026-08-06 -- see settings_get in
-app/main.py): this is a single-user desktop app bound to 127.0.0.1, and hiding
+app/api/settings.py): this is a single-user desktop app bound to 127.0.0.1, and hiding
 a saved key behind a set/unset boolean only made it look like an empty field.
 """
 

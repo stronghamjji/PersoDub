@@ -87,6 +87,12 @@ def stage_marker(name: str) -> str:
     return f"{_STAGE_NUMBER[name]}/{len(STAGES)}"
 
 
+def pre_stage_marker() -> str:
+    """The "0/6" prefix for progress logged before any stage above starts
+    (e.g. fetching the source video)."""
+    return f"0/{len(STAGES)}"
+
+
 def _log_stage(log: Callable[[str], None], name: str, text: str) -> None:
     """Log one stage line: the stage's marker, a space, then the given text."""
     log(f"{stage_marker(name)} {text}")

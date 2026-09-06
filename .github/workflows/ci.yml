@@ -77,6 +77,8 @@ jobs:
         with:
           node-version: "22"
       - run: node --test ui/src/*.test.mjs
+      - run: node ui/check-inline.mjs
+      - run: for f in ui/src/*.mjs; do node --check "$f" || exit 1; done
 
   # Fails the build if a credential was ever committed, on this branch or
   # anywhere in the history behind it. gitleaks is fetched from its own release

@@ -1,6 +1,6 @@
 """Engine capability discovery -- can this machine actually run engine X right now?
 
-Pure checks that GET /api/engines and dub_start's preflight (app/main.py) use to
+Pure checks that GET /api/engines and dub_start's preflight (app/api/dub.py) use to
 stop offering/starting translation and transcription engines that don't actually
 work on this machine: gemma/qwen need a local Ollama server with the model
 pulled, gemini/perso need an API key configured. Everything here reads
@@ -71,19 +71,19 @@ def hunyuan_available() -> bool:
 
 def gemma_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
-    Used by dub_start's preflight (app/main.py) to give an accurate 422."""
+    Used by dub_start's preflight (app/api/dub.py) to give an accurate 422."""
     return ollama_model_status(config.OLLAMA_URL, config.OLLAMA_GEMMA_MODEL)
 
 
 def qwen_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
-    Used by dub_start's preflight (app/main.py) to give an accurate 422."""
+    Used by dub_start's preflight (app/api/dub.py) to give an accurate 422."""
     return ollama_model_status(config.OLLAMA_URL, config.OLLAMA_QWEN_MODEL)
 
 
 def hunyuan_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
-    Used by dub_start's preflight (app/main.py) to give an accurate 422."""
+    Used by dub_start's preflight (app/api/dub.py) to give an accurate 422."""
     return ollama_model_status(config.OLLAMA_URL, config.OLLAMA_HUNYUAN_MODEL)
 
 

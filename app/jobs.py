@@ -68,7 +68,7 @@ class JobStore:
 
     @property
     def log_dir(self) -> str:
-        # Resolved on every read, not in __init__: app/main.py builds its store
+        # Resolved on every read, not in __init__: app/state.py builds its store
         # at import time, before test fixtures can redirect PERSODUB_LOG_DIR --
         # a snapshot taken then would litter the real logs/ on every test run.
         return self._log_dir or PERSODUB_LOG_DIR
@@ -132,7 +132,7 @@ class JobStore:
         """Record a structured mid-job event (e.g. {"type": "perso_credit_exhausted",
         "message": ..., "link": ...}) in the job status JSON -- for events the UI
         needs to render specially (a message + link), not just as a plain log line.
-        See app/pipeline.py's on_notice parameter and app/main.py, which wires it here.
+        See app/pipeline.py's on_notice parameter and app/api/dub.py, which wires it here.
         """
         with self._lock:
             if jid in self._jobs:
@@ -332,7 +332,7 @@ class JobStore:
         GPU and memory. A queued job starts by itself the moment the one
         before it ends, however that one ends. Used instead of run_async when
         the caller needs the job id before the thread starts (e.g. to build a
-        cancel_check closure bound to that id -- see app/main.py).
+        cancel_check closure bound to that id -- see app/api/dub.py).
 
         `parallel` is for work another machine does (a Perso cloud dub): it
         starts at once beside whatever is on air, never takes the air, and

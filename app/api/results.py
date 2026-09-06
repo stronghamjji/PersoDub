@@ -307,7 +307,8 @@ def dub_result_original(jid: str, download: int = 0):
     return FileResponse(original, media_type="video/mp4", filename="org.mp4")
 
 
-@router.api_route("/api/dub/result/{jid}/srt", methods=["GET", "HEAD"])
+@router.get("/api/dub/result/{jid}/srt")
+@router.head("/api/dub/result/{jid}/srt", include_in_schema=False)
 def dub_result_srt(jid: str, download: int = 0):
     """Return the translated subtitles used for the dub, as plain text.
 

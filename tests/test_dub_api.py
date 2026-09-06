@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 import app.api.script as script_api
 import app.main as main
-from app import engines_status, jobs, perso_client, settings_env, state
+from app import engines_status, jobs, perso_client, state
 from app.api import dub as dub_api
 from app.main import app
 
@@ -173,7 +173,6 @@ def test_dub_start_perso_without_pin_rejects_multi_workspace_accounts(monkeypatc
     # minutes of separation work. The preflight must refuse up front and send
     # the user to Settings.
     monkeypatch.delenv("PERSO_SPACE_SEQ", raising=False)
-    monkeypatch.setattr(settings_env, "read_value", lambda k: "k-123" if k == "PERSO_API_KEY" else None)
     monkeypatch.setattr(dub_api, "list_dubbing_spaces",
                         lambda key: [{"seq": 1, "name": "A"}, {"seq": 2, "name": "B"}])
     r = client.post(
@@ -192,7 +191,6 @@ def test_dub_start_perso_without_pin_allows_single_workspace_accounts(monkeypatc
 
     monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     monkeypatch.delenv("PERSO_SPACE_SEQ", raising=False)
-    monkeypatch.setattr(settings_env, "read_value", lambda k: "k-123" if k == "PERSO_API_KEY" else None)
     monkeypatch.setattr(dub_api, "list_dubbing_spaces", lambda key: [{"seq": 1, "name": "A"}])
     r = client.post(
         "/api/dub/start",

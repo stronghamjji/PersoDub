@@ -221,6 +221,12 @@ def _inherited_engines(job, keys):
 
     `keys` is the caller's business: a redub makes voices only, so the first
     run's separation choice is none of its concern and it does not carry it.
+
+    Takes the job dict and the engine keys to read from it. Returns a dict
+    with one entry per key in `keys`, holding whatever the job recorded for
+    it (None where it recorded nothing) -- unless the job has no stt_engine
+    at all (saved before these fields existed), in which case it returns
+    today's engine defaults instead, for every engine, not just `keys`.
     """
     engines = {k: job.get(k) for k in keys}
     if not engines.get("stt_engine"):
