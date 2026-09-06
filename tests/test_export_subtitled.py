@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main
+from app.api import results as results_api
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -50,7 +51,7 @@ def _ass(work):
 
 def _done_job(monkeypatch, tmp_path):
     ran = _Ran()
-    monkeypatch.setattr(main.subprocess, "run", ran)
+    monkeypatch.setattr(results_api.subprocess, "run", ran)
     out_file = tmp_path / "dubbed.mp4"
     (tmp_path / "translated.srt").write_text(
         "1\n00:00:02,000 --> 00:00:04,000\n원래 번역\n", encoding="utf-8")

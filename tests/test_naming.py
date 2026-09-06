@@ -107,12 +107,13 @@ def _finished_job(tmp_path, **extra):
 
 def test_download_names_are_short_and_say_the_language(tmp_path, monkeypatch):
     from app import main
+    from app.api import results as results_api
 
     job = _finished_job(tmp_path, from_link=True)
     monkeypatch.setattr(main.job_store, "get", lambda jid: job)
 
-    assert main.dub_result("abc123").filename == "dub_en.mp4"
-    assert main.dub_result_original("abc123").filename == "org.mp4"
+    assert results_api.dub_result("abc123").filename == "dub_en.mp4"
+    assert results_api.dub_result_original("abc123").filename == "org.mp4"
 
 
 def test_original_download_is_refused_for_an_uploaded_file(tmp_path, monkeypatch):
@@ -122,13 +123,14 @@ def test_original_download_is_refused_for_an_uploaded_file(tmp_path, monkeypatch
     from fastapi import HTTPException
 
     from app import main
+    from app.api import results as results_api
 
     job = _finished_job(tmp_path, from_link=False)
     monkeypatch.setattr(main.job_store, "get", lambda jid: job)
 
-    assert main.dub_result_original("abc123").filename == "org.mp4"
+    assert results_api.dub_result_original("abc123").filename == "org.mp4"
     with pytest.raises(HTTPException) as e:
-        main.dub_result_original("abc123", download=1)
+        results_api.dub_result_original("abc123", download=1)
     assert e.value.status_code == 404
 
 

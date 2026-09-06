@@ -10,6 +10,7 @@ import math
 from fastapi.testclient import TestClient
 
 import app.main as main
+from app.api import results as results_api
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -40,7 +41,7 @@ def _wire(monkeypatch, tmp_path, duration=10.0):
     fake = _FakePerso()
     monkeypatch.setattr(main, "perso_available", lambda: True)
     monkeypatch.setattr(main, "PersoClient", lambda: fake)
-    monkeypatch.setattr(main, "_video_duration", lambda p: duration)
+    monkeypatch.setattr(results_api, "_video_duration", lambda p: duration)
     video = tmp_path / "쇼츠 3편.mp4"
     video.write_bytes(b"not really a video")
     return fake, video
@@ -78,7 +79,7 @@ def test_estimate_calls_a_file_ffprobe_cannot_read_not_a_video(monkeypatch, tmp_
 
     def broken(_):
         raise RuntimeError("no video stream")
-    monkeypatch.setattr(main, "_video_duration", broken)
+    monkeypatch.setattr(results_api, "_video_duration", broken)
     r = client.get("/api/subtitles/estimate", params={"video_path": str(video)})
     assert r.status_code == 422
 
@@ -143,7 +144,7 @@ def test_local_extraction_runs_whisper_on_this_machine(monkeypatch, tmp_path):
         heard.append(path)
         return [{"start": 0.5, "end": 2.0, "text": "안녕하세요"}]
 
-    monkeypatch.setattr(main, "transcribe_local", fake_whisper)
+    monkeypatch.setattr(results_api, "transcribe_local", fake_whisper)
     r = client.post("/api/subtitles/extract",
                     json={"video_path": str(video), "engine": "local"})
     assert r.status_code == 200

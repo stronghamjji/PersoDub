@@ -6,7 +6,7 @@ presets) and burns THAT; ffmpeg is a recorder, so what these pin down is the
 written over. All free and local: no Perso, no credits, no confirm gate."""
 from fastapi.testclient import TestClient
 
-import app.main as main
+from app.api import results as results_api
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -27,7 +27,7 @@ class _Ran:
 
 def _wire(monkeypatch, tmp_path, srt=True):
     ran = _Ran()
-    monkeypatch.setattr(main.subprocess, "run", ran)
+    monkeypatch.setattr(results_api.subprocess, "run", ran)
     video = tmp_path / "쇼츠 3편.mp4"
     video.write_bytes(b"not really a video")
     if srt:
