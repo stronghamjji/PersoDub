@@ -9,7 +9,7 @@ genuine jobs.
 """
 import pytest
 
-from app import jobs, main
+from app import jobs, state
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +34,7 @@ def isolate_workspace(tmp_path, monkeypatch):
     """
     ws = tmp_path / "workspace"
     ws.mkdir()
-    monkeypatch.setattr(main, "WORKSPACE", str(ws))
+    monkeypatch.setattr(state, "WORKSPACE", str(ws))
 
 
 @pytest.fixture

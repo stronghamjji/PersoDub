@@ -9,7 +9,8 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import app.main as main
+from app import engines_status, state
+from app.api import dub as dub_api
 from app.main import app
 
 
@@ -17,22 +18,22 @@ from app.main import app
 def _models_ready(monkeypatch):
     # Model files live in a kit these tests never build -- the 409
     # preflight is exercised in tests/test_dub_start_preflight.py.
-    from app import main as _main
-    monkeypatch.setattr(_main, "_missing_models", lambda *a, **kw: [])
+    from app.api import dub as _dub
+    monkeypatch.setattr(_dub, "_missing_models", lambda *a, **kw: [])
 
 client = TestClient(app, base_url="http://127.0.0.1")
 
 
 @pytest.fixture(autouse=True)
 def _all_engines_available(monkeypatch):
-    monkeypatch.setattr(main, "gemma_available", lambda: True)
-    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
-    monkeypatch.setattr(main, "qwen_available", lambda: True)
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "qwen_status", lambda: "available")
-    monkeypatch.setattr(main, "gemini_available", lambda: True)
-    monkeypatch.setattr(main, "perso_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_available", lambda: True)
+    monkeypatch.setattr(engines_status, "hunyuan_available", lambda: True)
+    monkeypatch.setattr(engines_status, "qwen_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "qwen_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
 
 
 def _wait_done(jid, timeout=5.0):
@@ -75,8 +76,8 @@ def test_url_job_fetches_before_dubbing(monkeypatch):
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1,
                 "auto_translated": False}
 
-    monkeypatch.setattr(main, "fetch_source", fake_fetch)
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "fetch_source", fake_fetch)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post("/api/dub/start",
                     data={"language_code": "en", "source_url": "https://youtu.be/abc"})
@@ -91,8 +92,8 @@ def test_fetch_failure_fails_the_job_with_the_human_message(monkeypatch):
     def boom(url, dest, log=None, cancel_check=None):
         raise FetchError("geo", "This video isn't available in your region.")
 
-    monkeypatch.setattr(main, "fetch_source", boom)
-    monkeypatch.setattr(main, "run_dub", lambda **kw: pytest.fail("must not dub"))
+    monkeypatch.setattr(dub_api, "fetch_source", boom)
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: pytest.fail("must not dub"))
 
     r = client.post("/api/dub/start",
                     data={"language_code": "en", "source_url": "https://youtu.be/abc"})
@@ -104,8 +105,8 @@ def test_fetch_failure_fails_the_job_with_the_human_message(monkeypatch):
 
 def test_trim_cuts_the_uploaded_video(monkeypatch):
     calls = []
-    monkeypatch.setattr(main, "_cut_video", lambda src, start, end: calls.append((start, end)))
-    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(dub_api, "_cut_video", lambda src, start, end: calls.append((start, end)))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: None)
     r = client.post("/api/dub/start", files={"video": ("a.mp4", b"0" * 10, "video/mp4")},
                     data={"language_code": "ko", "language": "Korean", "trim_start": "2.0", "trim_end": "8.0"})
     assert r.status_code == 200
@@ -119,7 +120,7 @@ def _job_files(name="input.mp4"):
     to look at the disk the endpoint writes to.
     """
     return [os.path.join(root, f)
-            for root, _dirs, files in os.walk(main.WORKSPACE)
+            for root, _dirs, files in os.walk(state.WORKSPACE)
             for f in files if f == name]
 
 
@@ -138,8 +139,8 @@ def _job_files(name="input.mp4"):
     ({"trim_start": "nan", "trim_end": "5"}, "0 seconds"),
 ])
 def test_a_broken_trim_is_refused_before_anything_is_saved(monkeypatch, trim, expected):
-    monkeypatch.setattr(main, "_cut_video", lambda *a: pytest.fail("must not cut"))
-    monkeypatch.setattr(main, "run_dub", lambda **kw: pytest.fail("must not dub"))
+    monkeypatch.setattr(dub_api, "_cut_video", lambda *a: pytest.fail("must not cut"))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: pytest.fail("must not dub"))
     data = {"language_code": "ko", "language": "Korean", **trim}
     r = client.post("/api/dub/start", files={"video": ("a.mp4", b"0" * 10, "video/mp4")}, data=data)
     assert r.status_code == 400
@@ -149,8 +150,8 @@ def test_a_broken_trim_is_refused_before_anything_is_saved(monkeypatch, trim, ex
 
 def test_a_non_numeric_trim_is_refused_by_request_validation(monkeypatch):
     """422, not 400: FastAPI rejects "abc" as a float before dub_start runs."""
-    monkeypatch.setattr(main, "_cut_video", lambda *a: pytest.fail("must not cut"))
-    monkeypatch.setattr(main, "run_dub", lambda **kw: pytest.fail("must not dub"))
+    monkeypatch.setattr(dub_api, "_cut_video", lambda *a: pytest.fail("must not cut"))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: pytest.fail("must not dub"))
     r = client.post("/api/dub/start", files={"video": ("a.mp4", b"0" * 10, "video/mp4")},
                     data={"language_code": "ko", "trim_start": "abc", "trim_end": "5"})
     assert r.status_code == 422
@@ -161,8 +162,8 @@ def test_a_failed_cut_answers_with_a_sentence_and_leaves_no_job_folder(monkeypat
     def boom(path, start, end):
         raise RuntimeError("Could not trim the video: moov atom not found")
 
-    monkeypatch.setattr(main, "_cut_video", boom)
-    monkeypatch.setattr(main, "run_dub", lambda **kw: pytest.fail("must not dub"))
+    monkeypatch.setattr(dub_api, "_cut_video", boom)
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: pytest.fail("must not dub"))
     r = client.post("/api/dub/start", files={"video": ("a.mp4", b"0" * 10, "video/mp4")},
                     data={"language_code": "ko", "trim_start": "2.0", "trim_end": "8.0"})
     assert r.status_code == 400
@@ -184,7 +185,7 @@ def test_a_failed_cut_reports_only_ffmpeg_s_last_line(monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: Failed())
     with pytest.raises(RuntimeError) as e:
-        main._cut_video(str(main.WORKSPACE + "/nothing.mp4"), 1.0, 2.0)
+        dub_api._cut_video(str(state.WORKSPACE + "/nothing.mp4"), 1.0, 2.0)
     assert str(e.value) == "Could not trim the video: Invalid data found when processing input"
 
 
@@ -217,9 +218,9 @@ def test_a_link_is_cut_after_it_is_fetched_and_the_record_says_so_at_once(monkey
             on_cut()   # the real _cut_video calls this the moment os.replace lands
         saved["after"] = _job_json(path)
 
-    monkeypatch.setattr(main, "fetch_source", fake_fetch)
-    monkeypatch.setattr(main, "_cut_video", fake_cut)
-    monkeypatch.setattr(main, "run_dub", lambda **kw: order.append("dub"))
+    monkeypatch.setattr(dub_api, "fetch_source", fake_fetch)
+    monkeypatch.setattr(dub_api, "_cut_video", fake_cut)
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: order.append("dub"))
 
     r = client.post("/api/dub/start",
                     data={"language_code": "ko", "source_url": "https://youtu.be/abc",

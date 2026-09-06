@@ -7,11 +7,13 @@ One module because they are one job: the burn helpers below (_norm_preset,
 _write_burn_ass, _filter_path) draw the subtitles for the standalone burn, the
 subtitled export and the Export dialog's preview alike.
 
-Lifted out of app/main.py unchanged (2026-09-06). Four names it needs are
-still main's -- job_store, PersoClient, perso_available and _work_dir_of are
-read by routes that stay there, and the tests redirect them on app.main -- so
-_main() below reads them back at call time instead of keeping copies a
-redirect would miss.
+Lifted out of app/main.py unchanged (2026-09-06). The four names it shares
+with other routers come from the module that owns each: the job store from
+app/state.py, the Perso client from app.perso_client, the key check from
+app.engines_status, and work_dir_of from app/api/_shared.py. Those first three
+are imported as MODULES and read at call time -- the tests fake them by
+setting attributes on the module object, which every importer sees because
+there is only ever one module object.
 """
 import json
 import math
@@ -25,7 +27,8 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.api._shared import free_path
+from app import engines_status, perso_client, state
+from app.api._shared import free_path, work_dir_of
 from app.perso_client import (
     PersoCreditExhaustedError,
     PersoInvalidKeyError,
@@ -39,18 +42,6 @@ from app.subtitle_ass import build_ass
 from app.text.srt import build_srt
 
 router = APIRouter()
-
-
-def _main():
-    """app.main, imported at call time.
-
-    The four names read off it -- job_store, PersoClient, perso_available and
-    _work_dir_of -- are shared with routes that did not move, so they stay
-    defined there; the tests redirect them on app.main and this is what makes
-    a redirect land on these routes too.
-    """
-    from app import main
-    return main
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +61,7 @@ def _subtitle_video(video_path: str, engine: str) -> str:
     """The checks both routes share, ending in the file's real path."""
     if engine not in ("perso", "local"):
         raise HTTPException(status_code=422, detail=f"Unknown engine: {engine}")
-    if engine == "perso" and not _main().perso_available():
+    if engine == "perso" and not engines_status.perso_available():
         raise HTTPException(status_code=422,
                             detail="Perso is not set up. Add the API key in Settings first.")
     path = os.path.expanduser(video_path)
@@ -98,7 +89,7 @@ def subtitles_estimate(video_path: str, engine: str = "perso"):
         return {"seconds": seconds, "credits_estimate": 0, "credits_balance": None}
     balance = None
     try:
-        ws = _main().PersoClient().describe_workspace()
+        ws = perso_client.PersoClient().describe_workspace()
         balance = ws.get("credits") if ws else None
     except Exception:
         pass
@@ -122,7 +113,7 @@ def subtitles_extract(body: SubtitleExtractRequest):
             if not cues:
                 raise RuntimeError("Whisper heard no speech in this video.")
         else:
-            cues = perso_to_cues(_main().PersoClient().transcribe(path))
+            cues = perso_to_cues(perso_client.PersoClient().transcribe(path))
             if not cues:
                 raise RuntimeError("Perso heard no speech in this video.")
     except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
@@ -278,7 +269,7 @@ def _target_code(job: dict) -> str:
 @router.get("/api/dub/result/{jid}")
 def dub_result(jid: str):
     """Return the finished dubbed file."""
-    j = _main().job_store.get(jid)
+    j = state.job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if j["status"] != "done":
@@ -303,13 +294,13 @@ def dub_result_original(jid: str, download: int = 0):
     user uploaded is already on their machine, so offering it back is noise;
     a video pulled from a link is the only original they cannot otherwise get.
     """
-    j = _main().job_store.get(jid)
+    j = state.job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if download and not j.get("from_link"):
         raise HTTPException(status_code=404,
                             detail="This job started from a file you already have")
-    work_dir = _main()._work_dir_of(j)
+    work_dir = work_dir_of(j)
     original = os.path.join(work_dir, "input.mp4") if work_dir else ""
     if not original or not os.path.exists(original):
         raise HTTPException(status_code=404, detail="Original file not found")
@@ -327,10 +318,10 @@ def dub_result_srt(jid: str, download: int = 0):
     run_dub()'s result dict doesn't carry the srt path, but it
     always writes/copies it into the same job workspace folder as out_path, under
     one of two fixed names: "translated.srt" (auto-translated) or "sub.srt" (the
-    caller's own pre-translated subtitles, see app/main.py:dub_start). Looked up by
+    caller's own pre-translated subtitles, see app/api/dub.py's dub_start). Looked up by
     filename here rather than changing run_dub's return shape.
     """
-    j = _main().job_store.get(jid)
+    j = state.job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if j["status"] != "done":
@@ -359,7 +350,7 @@ def dub_result_srt(jid: str, download: int = 0):
 def _subtitled_sources(jid: str):
     """The finished video and the script to lay on it, or the HTTPException
     that says why not. Shared by the subtitled export and its preview."""
-    j = _main().job_store.get(jid)
+    j = state.job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if j["status"] != "done":
@@ -422,7 +413,7 @@ _SUBTITLE_STYLE_DEFAULTS = {"enabled": True, "preset": "clean",
 
 
 def _subtitle_style_file(jid: str) -> str:
-    j = _main().job_store.get(jid)
+    j = state.job_store.get(jid)
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     out = (j.get("result") or {}).get("out_path")

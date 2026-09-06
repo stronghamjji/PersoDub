@@ -7,14 +7,14 @@ One module because they are one screen: every route here starts from the same
 job folder, and the private helpers below (_dubbed_texts, _line_manifest,
 _remake_one_voice, _perso_is_materialized) are shared between them.
 
-Lifted out of app/main.py unchanged (2026-09-06). Three names it needs are
-still main's -- job_store, PersoClient and _script_work_dir are read by routes
-that stay there (redub reads the last two), and the tests redirect job_store
-and PersoClient on app.main -- so _main() below reads them back at call time
-instead of keeping copies a redirect would miss. resynth_one_line and
-rebuild_dub are NOT among them: nothing in main calls them any more, so they
-are imported here from app.qwen_pipeline where they live, and the tests that
-stub them patch this module.
+Lifted out of app/main.py unchanged (2026-09-06). The three names it shares
+with other routers come from the module that owns each: the job store from
+app/state.py, the Perso client from app.perso_client (both read at call time
+off the module object, which is what makes the tests' fakes land here too),
+and script_work_dir from app/api/_shared.py, where redub reads it as well.
+resynth_one_line and rebuild_dub are NOT among them: no other module calls
+them, so they are imported here from app.qwen_pipeline where they live, and
+the tests that stub them patch this module.
 """
 import json
 import os
@@ -24,7 +24,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import perso_materialize
+from app import perso_client, perso_materialize, state
+from app.api._shared import script_work_dir
 from app.dub_script import DUB_NAME, edit_line, line_wav_path, load_lines
 from app.perso_client import (
     PersoCreditExhaustedError,
@@ -37,18 +38,6 @@ from app.text.srt import parse_srt
 router = APIRouter()
 
 
-def _main():
-    """app.main, imported at call time.
-
-    The three names read off it -- job_store, PersoClient and _script_work_dir
-    -- are shared with routes that did not move, so they stay defined there;
-    the tests redirect job_store and PersoClient on app.main and this is what
-    makes a redirect land on these routes too.
-    """
-    from app import main
-    return main
-
-
 @router.get("/api/dub/jobs/{jid}/script")
 def dub_job_script(jid: str):
     """This job's script, line by line, with the source line beside each one.
@@ -58,7 +47,7 @@ def dub_job_script(jid: str):
     original-language lines, so the export screen could only list the finished
     subtitles with nothing to compare them against.
     """
-    job = _main().job_store.get(jid)
+    job = state.job_store.get(jid)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if job.get("dub_mode") == "perso" and not _perso_is_materialized(job):
@@ -67,7 +56,7 @@ def dub_job_script(jid: str):
         if not seq:
             raise HTTPException(status_code=404, detail="No script was recorded for this job.")
         try:
-            script = _main().PersoClient().get_project_script(int(seq))
+            script = perso_client.PersoClient().get_project_script(int(seq))
         except Exception:
             raise HTTPException(status_code=503,
                                 detail="Could not reach Perso for this job's script. Try again in a moment.")
@@ -135,7 +124,7 @@ class ScriptLineRequest(BaseModel):
 @router.post("/api/dub/jobs/{jid}/script/{line}")
 def dub_job_script_edit(jid: str, line: int, body: ScriptLineRequest):
     """Rewrite one line. Same path the assistant takes -- edited.srt only."""
-    job, work_dir = _main()._script_work_dir(jid)
+    job, work_dir = script_work_dir(jid)
     try:
         return edit_line(work_dir, line, body.text, job.get("language_code") or "en")
     except ValueError as e:
@@ -147,7 +136,7 @@ def dub_job_script_edit(jid: str, line: int, body: ScriptLineRequest):
 @router.get("/api/dub/jobs/{jid}/script/{line}/audio")
 def dub_job_line_audio(jid: str, line: int):
     """The voice that was made for one line, on its own."""
-    _job, work_dir = _main()._script_work_dir(jid)
+    _job, work_dir = script_work_dir(jid)
     path = line_wav_path(work_dir, line)
     if not os.path.exists(path):
         raise HTTPException(
@@ -195,7 +184,7 @@ def dub_job_line_voice(jid: str, line: int):
     the speaker's cloned voice all stay on disk after a job (app/pipeline.py).
     Rewriting two lines of ten should not cost a whole synthesis pass.
     """
-    job, work_dir = _main()._script_work_dir(jid)
+    job, work_dir = script_work_dir(jid)
     data = _line_manifest(work_dir)
     lines = load_lines(work_dir, job.get("language_code") or "en")
     if not 1 <= line <= len(lines):
@@ -220,7 +209,7 @@ def dub_job_stale_voices(jid: str):
     (static/index.html: `l.edited && l.voice_stale`), so one press does the set
     of lines the buttons were offering and not a line more.
     """
-    job, work_dir = _main()._script_work_dir(jid)
+    job, work_dir = script_work_dir(jid)
     if job.get("status") in ("running", "cancelling"):
         raise HTTPException(status_code=409, detail="This job is still running.")
     data = _line_manifest(work_dir)
@@ -245,7 +234,7 @@ def dub_job_stale_voices(jid: str):
 @router.post("/api/dub/jobs/{jid}/script/{line}/revert")
 def dub_job_script_revert(jid: str, line: int):
     """Put one line back to what the translation wrote."""
-    job, work_dir = _main()._script_work_dir(jid)
+    job, work_dir = script_work_dir(jid)
     texts = _dubbed_texts(work_dir)
     if not 1 <= line <= len(texts):
         raise HTTPException(status_code=422, detail=f"There is no line {line}.")
@@ -269,7 +258,7 @@ def dub_job_perso_materialize(jid: str):
     """Fetch a Perso dub's parts (script, per-line audio, background bed) and
     write the local job files -- after this the dub edits like any other job.
     Downloads only; no Perso credits are spent."""
-    job = _main().job_store.get(jid)
+    job = state.job_store.get(jid)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if job.get("dub_mode") != "perso" or not job.get("perso_project_seq"):
@@ -279,9 +268,9 @@ def dub_job_perso_materialize(jid: str):
         raise HTTPException(status_code=409, detail="This job has no finished video yet.")
     try:
         summary = perso_materialize.materialize(
-            _main().PersoClient(), int(job["perso_project_seq"]), os.path.dirname(out),
+            perso_client.PersoClient(), int(job["perso_project_seq"]), os.path.dirname(out),
             job.get("language") or "English",
-            log=lambda msg: _main().job_store.append_log(jid, msg))
+            log=lambda msg: state.job_store.append_log(jid, msg))
     except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
         raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
@@ -298,13 +287,13 @@ def dub_job_perso_speaker(jid: str, body: PersoSpeakerRequest):
     1-based order the script endpoint serves. The write is verified the way
     the official plugin does it: re-read the script and report what it says.
     """
-    job = _main().job_store.get(jid)
+    job = state.job_store.get(jid)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if job.get("dub_mode") != "perso" or not job.get("perso_project_seq"):
         raise HTTPException(status_code=409, detail="Only Perso dubs have server-side speakers.")
     seq = int(job["perso_project_seq"])
-    pc = _main().PersoClient()
+    pc = perso_client.PersoClient()
     try:
         sents = (pc.get_project_script(seq).get("sentences") or [])
         if not 1 <= body.line <= len(sents):

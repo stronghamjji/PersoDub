@@ -36,16 +36,17 @@ def test_survives_a_folder_that_is_not_there(tmp_path):
 
 
 def test_delete_workspace_removes_the_folder(tmp_path, monkeypatch):
-    from app import main
+    from app import state
+    from app.api import dub as dub_api
 
     work = tmp_path / "job"
     work.mkdir()
     (work / "dubbed.mp4").write_bytes(b"vid")
-    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path))
-    monkeypatch.setattr(main.job_store, "get", lambda jid: {
+    monkeypatch.setattr(state, "WORKSPACE", str(tmp_path))
+    monkeypatch.setattr(state.job_store, "get", lambda jid: {
         "id": jid, "status": "done", "result": {"out_path": str(work / "dubbed.mp4")}})
 
-    assert main.dub_job_delete_workspace("abc")["deleted"] is True
+    assert dub_api.dub_job_delete_workspace("abc")["deleted"] is True
     assert not work.exists()
 
 
@@ -53,17 +54,18 @@ def test_delete_workspace_refuses_a_path_outside_it(tmp_path, monkeypatch):
     import pytest
     from fastapi import HTTPException
 
-    from app import main
+    from app import state
+    from app.api import dub as dub_api
 
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     (outside / "dubbed.mp4").write_bytes(b"vid")
-    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path / "workspace"))
-    monkeypatch.setattr(main.job_store, "get", lambda jid: {
+    monkeypatch.setattr(state, "WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setattr(state.job_store, "get", lambda jid: {
         "id": jid, "status": "done", "result": {"out_path": str(outside / "dubbed.mp4")}})
 
     with pytest.raises(HTTPException) as e:
-        main.dub_job_delete_workspace("abc")
+        dub_api.dub_job_delete_workspace("abc")
     assert e.value.status_code == 400
     assert outside.exists()
 
@@ -72,11 +74,12 @@ def test_delete_workspace_refuses_while_the_job_runs(monkeypatch):
     import pytest
     from fastapi import HTTPException
 
-    from app import main
+    from app import state
+    from app.api import dub as dub_api
 
-    monkeypatch.setattr(main.job_store, "get", lambda jid: {"id": jid, "status": "running"})
+    monkeypatch.setattr(state.job_store, "get", lambda jid: {"id": jid, "status": "running"})
     with pytest.raises(HTTPException) as e:
-        main.dub_job_delete_workspace("abc")
+        dub_api.dub_job_delete_workspace("abc")
     assert e.value.status_code == 409
 
 
@@ -84,34 +87,36 @@ def test_delete_workspace_clears_a_job_that_never_produced_a_video(tmp_path, mon
     # Projects lists failed jobs too, and a job that died in the first stage has
     # no out_path -- only work_dir. Without that fallback its row could never be
     # cleared away.
-    from app import main
+    from app import state
+    from app.api import dub as dub_api
 
     work = tmp_path / "job"
     work.mkdir()
     (work / "input.mp4").write_bytes(b"vid")
-    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path))
-    monkeypatch.setattr(main.job_store, "get", lambda jid: {
+    monkeypatch.setattr(state, "WORKSPACE", str(tmp_path))
+    monkeypatch.setattr(state.job_store, "get", lambda jid: {
         "id": jid, "status": "error", "work_dir": str(work), "result": None})
 
-    assert main.dub_job_delete_workspace("abc")["deleted"] is True
+    assert dub_api.dub_job_delete_workspace("abc")["deleted"] is True
     assert not work.exists()
 
 
 def test_delete_workspace_forgets_the_job(tmp_path, monkeypatch):
     # The folder is gone, so its job.json is gone -- but the in-memory record
     # would keep drawing the row until the next restart.
-    from app import main
+    from app import state
+    from app.api import dub as dub_api
 
     work = tmp_path / "job"
     work.mkdir()
     (work / "dubbed.mp4").write_bytes(b"vid")
-    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path))
-    jid = main.job_store.create()
-    main.job_store._update(jid, status="done", work_dir=str(work),
+    monkeypatch.setattr(state, "WORKSPACE", str(tmp_path))
+    jid = state.job_store.create()
+    state.job_store._update(jid, status="done", work_dir=str(work),
                            result={"out_path": str(work / "dubbed.mp4")})
 
-    main.dub_job_delete_workspace(jid)
-    assert main.job_store.get(jid) is None
+    dub_api.dub_job_delete_workspace(jid)
+    assert state.job_store.get(jid) is None
 
 
 def test_delete_workspace_refuses_a_work_dir_outside_it(tmp_path, monkeypatch):
@@ -121,17 +126,18 @@ def test_delete_workspace_refuses_a_work_dir_outside_it(tmp_path, monkeypatch):
     import pytest
     from fastapi import HTTPException
 
-    from app import main
+    from app import state
+    from app.api import dub as dub_api
 
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     (outside / "dubbed.mp4").write_bytes(b"vid")
-    monkeypatch.setattr(main, "WORKSPACE", str(tmp_path / "workspace"))
-    monkeypatch.setattr(main.job_store, "get", lambda jid: {
+    monkeypatch.setattr(state, "WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setattr(state.job_store, "get", lambda jid: {
         "id": jid, "status": "done", "work_dir": str(outside), "result": None})
 
     with pytest.raises(HTTPException) as e:
-        main.dub_job_delete_workspace("abc")
+        dub_api.dub_job_delete_workspace("abc")
     assert e.value.status_code == 400
     assert outside.exists()
 
@@ -142,19 +148,20 @@ def test_delete_workspace_refuses_a_work_dir_that_climbs_out(tmp_path, monkeypat
     import pytest
     from fastapi import HTTPException
 
-    from app import main
+    from app import state
+    from app.api import dub as dub_api
 
     ws = tmp_path / "workspace"
     (ws / "day" / "job").mkdir(parents=True)
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     (outside / "keepme.txt").write_text("x", encoding="utf-8")
-    monkeypatch.setattr(main, "WORKSPACE", str(ws))
-    monkeypatch.setattr(main.job_store, "get", lambda jid: {
+    monkeypatch.setattr(state, "WORKSPACE", str(ws))
+    monkeypatch.setattr(state.job_store, "get", lambda jid: {
         "id": jid, "status": "done", "result": None,
         "work_dir": str(ws / "day" / ".." / ".." / "elsewhere")})
 
     with pytest.raises(HTTPException) as e:
-        main.dub_job_delete_workspace("abc")
+        dub_api.dub_job_delete_workspace("abc")
     assert e.value.status_code == 400
     assert (outside / "keepme.txt").exists()

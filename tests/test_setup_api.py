@@ -2,8 +2,10 @@
 share, saved in kit.env and read at use time (app/setup.py)."""
 from fastapi.testclient import TestClient
 
-from app import main
+from app import engines_status, main
 from app import setup as dub_setup
+from app.api import dub as dub_api
+from app.api import models as models_api
 
 client = TestClient(main.app, base_url="http://127.0.0.1")
 
@@ -20,7 +22,7 @@ def _kit(tmp_path, monkeypatch, text="PERSODUB_KIT_DIR=/x\n# PERSO_API_KEY=\n"):
     # would otherwise decide these tests.
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setattr(main.model_store, "status_rows", lambda: [])
+    monkeypatch.setattr(models_api.model_store, "status_rows", lambda: [])
     return kit
 
 
@@ -77,7 +79,7 @@ def test_post_refuses_a_choice_the_stage_does_not_offer(tmp_path, monkeypatch):
 def test_a_saved_default_drives_the_dub_without_a_restart(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch)
     client.post("/api/setup", json={"translator": "gemma", "separation": "perso"})
-    used = main._engines_used()
+    used = dub_api._engines_used()
     assert used["translator"] == "gemma" and used["separation"] == "perso"
 
 
@@ -91,10 +93,10 @@ def test_a_saved_perso_stt_still_needs_the_key(tmp_path, monkeypatch):
     # STT_ENGINE=perso saved by the agent, key gone since: the preflight must
     # refuse, not let run_dub resolve to Perso behind the guards' back.
     _kit(tmp_path, monkeypatch, "PERSODUB_KIT_DIR=/x\nSTT_ENGINE=perso\nPERSO_API_KEY=\n")
-    monkeypatch.setattr(main, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
     # The translator preflight runs first; on a machine without Ollama (CI) it
     # would answer for Hunyuan before the STT check is reached.
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
                     data={"language": "Korean", "language_code": "ko"})
     assert r.status_code == 422 and "Perso" in r.json()["detail"]

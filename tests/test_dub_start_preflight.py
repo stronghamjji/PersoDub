@@ -5,7 +5,8 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from app import main
+from app import engines_status, perso_client, state
+from app.api import dub as dub_api
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -35,8 +36,8 @@ def _kit(monkeypatch, tmp_path):
     kit = str(tmp_path / "kit")
     os.makedirs(kit)
     monkeypatch.setenv("PERSODUB_KIT_DIR", kit)
-    monkeypatch.setattr(main, "gemini_available", lambda: True)
-    monkeypatch.setattr(main, "perso_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
     yield kit
 
 
@@ -49,7 +50,7 @@ def _start(data_extra=None):
 
 def test_409_lists_every_missing_model_and_no_job_is_created(monkeypatch, _kit):
     created = {"n": 0}
-    monkeypatch.setattr(main.job_store, "create",
+    monkeypatch.setattr(state.job_store, "create",
                         lambda *a, **kw: created.__setitem__("n", created["n"] + 1))
     r = _start()
     assert r.status_code == 409
@@ -68,14 +69,14 @@ def test_409_lists_every_missing_model_and_no_job_is_created(monkeypatch, _kit):
 def test_all_models_present_starts_the_job(monkeypatch, _kit):
     _put_whisper(_kit)
     _put_tts(_kit)
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
     assert _start().status_code == 200
 
 
 def test_perso_stt_does_not_need_whisper(monkeypatch, _kit):
     _put_tts(_kit)
-    monkeypatch.setattr(main, "current_value", lambda k: "1" if k == "PERSO_SPACE_SEQ" else "x")
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(dub_api, "current_value", lambda k: "1" if k == "PERSO_SPACE_SEQ" else "x")
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
     r = _start({"stt_engine": "perso"})
     assert r.status_code == 200
 
@@ -83,7 +84,7 @@ def test_perso_stt_does_not_need_whisper(monkeypatch, _kit):
 def test_gemma_model_missing_joins_the_409_list(monkeypatch, _kit):
     _put_whisper(_kit)
     _put_tts(_kit)
-    monkeypatch.setattr(main, "gemma_status", lambda: "model_missing")
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "model_missing")
     r = _start({"translate_engine": "gemma"})
     assert r.status_code == 409
     assert [m["id"] for m in r.json()["detail"]["missing"]] == ["gemma"]
@@ -93,7 +94,7 @@ def test_gemma_unreachable_is_still_a_422(monkeypatch, _kit):
     # A down Ollama is not a missing download -- no dialog can fix it.
     _put_whisper(_kit)
     _put_tts(_kit)
-    monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "unreachable")
     r = _start({"translate_engine": "gemma"})
     assert r.status_code == 422
     assert "not running or not reachable" in r.json()["detail"]
@@ -102,7 +103,7 @@ def test_gemma_unreachable_is_still_a_422(monkeypatch, _kit):
 def test_hunyuan_model_missing_joins_the_409_list(monkeypatch, _kit):
     _put_whisper(_kit)
     _put_tts(_kit)
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "model_missing")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "model_missing")
     r = _start({"translate_engine": "hunyuan"})
     assert r.status_code == 409
     assert [m["id"] for m in r.json()["detail"]["missing"]] == ["hunyuan"]
@@ -119,7 +120,7 @@ def test_cloud_mode_needs_no_local_models(monkeypatch, _kit):
                 f.write(b"CLOUDMP4")
             return out_path
 
-    monkeypatch.setattr(main, "PersoClient", FakeClient)
-    monkeypatch.setattr(main, "current_value", lambda k: "1" if k == "PERSO_SPACE_SEQ" else "x")
+    monkeypatch.setattr(perso_client, "PersoClient", FakeClient)
+    monkeypatch.setattr(dub_api, "current_value", lambda k: "1" if k == "PERSO_SPACE_SEQ" else "x")
     r = _start({"dub_mode": "perso"})
     assert r.status_code == 200

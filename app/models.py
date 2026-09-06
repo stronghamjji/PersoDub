@@ -115,9 +115,9 @@ def free_bytes_at(path):
 
 def dub_in_progress() -> bool:
     """True while any dub job runs -- removal is refused then (409)."""
-    from app.main import job_store  # late import: app.main imports this module
+    from app import state  # late import: read the store as it stands right now
     try:
-        return any(j.get("status") == "running" for j in job_store.all())
+        return any(j.get("status") == "running" for j in state.job_store.all())
     except Exception:
         return False
 

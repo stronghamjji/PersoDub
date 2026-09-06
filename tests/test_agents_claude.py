@@ -176,7 +176,7 @@ def test_a_job_is_refused_when_the_disk_is_nearly_full(monkeypatch):
     """Failing here beats failing three stages in with a half-written folder."""
     from fastapi import HTTPException
 
-    import app.main as m
+    from app.api import dub as m
 
     monkeypatch.setattr(m, "free_bytes", lambda p: 100 * 1024 ** 2)  # 100 MB
     try:
@@ -189,7 +189,7 @@ def test_a_job_is_refused_when_the_disk_is_nearly_full(monkeypatch):
 
 
 def test_plenty_of_room_starts_the_job():
-    import app.main as m
+    from app.api import dub as m
     m.check_space("/tmp")  # must not raise on a normal disk
 
 

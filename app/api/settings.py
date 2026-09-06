@@ -2,9 +2,9 @@
 that opens the folder finished videos are saved in.
 
 Lifted out of app/main.py unchanged (2026-09-06). WORKSPACE is the one name
-left behind: most of the app's other routes read it too and the tests redirect
-it on app.main, so this module reads it back off main at call time instead of
-keeping a second copy a redirect would miss.
+shared with the rest of the app; it lives in app/state.py and is read as
+state.WORKSPACE at CALL time, never copied into a name of our own -- the tests
+reassign it (tests/conftest.py) and a copy would never see that.
 """
 import os
 import subprocess
@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app import state
 from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
 from app.settings_env import (
     current_value,
@@ -26,13 +27,6 @@ from app.settings_env import (
 )
 
 router = APIRouter()
-
-
-def _workspace() -> str:
-    """The folder finished videos are saved in, read off app.main at call time
-    (that is where it is defined and where the tests redirect it)."""
-    from app import main
-    return main.WORKSPACE
 
 
 class SettingsRequest(BaseModel):
@@ -67,7 +61,7 @@ def settings_get():
             # The folder every finished video is saved in. Only the server knows
             # it -- the desktop shell can point the workspace anywhere -- so the
             # screen cannot tell the user where their videos are without this.
-            "workspace": _workspace(),
+            "workspace": state.WORKSPACE,
             "app_version": APP_VERSION}
 
 
@@ -125,7 +119,7 @@ def settings_reveal_output():
     desktop app does instead (2026-08-28), and only the server knows the folder
     (the desktop shell can point the workspace anywhere)."""
     try:
-        _open_folder(_workspace())
+        _open_folder(state.WORKSPACE)
     except OSError as e:
         raise HTTPException(500, f"Could not open the folder: {e}")
     return {"ok": True}

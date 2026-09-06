@@ -5,7 +5,8 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import app.main as main
+from app import engines_status
+from app.api import dub as dub_api
 from app.main import app
 
 
@@ -13,8 +14,8 @@ from app.main import app
 def _models_ready(monkeypatch):
     # Model files live in a kit these tests never build -- the 409
     # preflight is exercised in tests/test_dub_start_preflight.py.
-    from app import main as _main
-    monkeypatch.setattr(_main, "_missing_models", lambda *a, **kw: [])
+    from app.api import dub as _dub
+    monkeypatch.setattr(_dub, "_missing_models", lambda *a, **kw: [])
 
 client = TestClient(app, base_url="http://127.0.0.1")
 
@@ -22,10 +23,10 @@ client = TestClient(app, base_url="http://127.0.0.1")
 @pytest.fixture(autouse=True)
 def _all_engines_available(monkeypatch):
     for name in ("gemma_available", "qwen_available", "gemini_available", "perso_available"):
-        monkeypatch.setattr(main, name, lambda: True)
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "qwen_status", lambda: "available")
+        monkeypatch.setattr(engines_status, name, lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "qwen_status", lambda: "available")
 
 
 def _finished_job(monkeypatch, target="en"):
@@ -39,7 +40,7 @@ def _finished_job(monkeypatch, target="en"):
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1,
                 "auto_translated": True}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     r = client.post("/api/dub/start",
                     data={"language_code": target},
                     files={"video": ("v.mp4", b"FAKEMP4", "video/mp4")})
@@ -63,7 +64,7 @@ def test_original_is_downloadable_for_a_link_job(monkeypatch):
     # _finished_job posts an uploaded file; stamping from_link makes the job
     # look like one that pulled its video from a URL, which is the only case
     # where the original is handed back.
-    from app.main import job_store
+    from app.state import job_store
     jid = _finished_job(monkeypatch)
     job_store._update(jid, from_link=True)
 

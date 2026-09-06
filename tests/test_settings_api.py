@@ -11,7 +11,7 @@ a saved key behind a set/unset boolean only made it look like an empty field.
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, engines_status, main, perso_client, settings_env, translate
+from app import config, engines_status, main, perso_client, settings_env, state, translate
 from app import setup as dub_setup
 from app.api import settings as settings_api
 from app.settings_env import update_env_text
@@ -62,7 +62,7 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     assert body.pop("app_version") == perso_client.APP_VERSION
     # Where the finished videos actually are. The screen used to guess at this
     # path; it comes from the server now, so a moved workspace still reads true.
-    assert body.pop("workspace") == main.WORKSPACE
+    assert body.pop("workspace") == state.WORKSPACE
     assert body == {"gemini_key_set": False, "perso_key_set": False,
                     "gemini_api_key": None, "perso_api_key": None,
                     "perso_space_seq": None, "analytics_off": False}

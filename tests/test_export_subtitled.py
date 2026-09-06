@@ -7,7 +7,8 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import app.main as main
+from app import engines_status
+from app.api import dub as dub_api
 from app.api import results as results_api
 from app.main import app
 
@@ -18,15 +19,15 @@ client = TestClient(app, base_url="http://127.0.0.1")
 def _all_engines_available(monkeypatch):
     # Same bypass as tests/test_dub_api.py: these tests exercise the export
     # routes, not the model preflight.
-    monkeypatch.setattr(main, "gemma_available", lambda: True)
-    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
-    monkeypatch.setattr(main, "qwen_available", lambda: True)
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "qwen_status", lambda: "available")
-    monkeypatch.setattr(main, "gemini_available", lambda: True)
-    monkeypatch.setattr(main, "perso_available", lambda: True)
-    monkeypatch.setattr(main, "_missing_models", lambda *a, **kw: [])
+    monkeypatch.setattr(engines_status, "gemma_available", lambda: True)
+    monkeypatch.setattr(engines_status, "hunyuan_available", lambda: True)
+    monkeypatch.setattr(engines_status, "qwen_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "qwen_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
+    monkeypatch.setattr(dub_api, "_missing_models", lambda *a, **kw: [])
 
 
 class _Ran:
@@ -60,7 +61,7 @@ def _done_job(monkeypatch, tmp_path):
         out_file.write_bytes(b"FAKEMP4")
         return {"job_id": "x", "out_path": str(out_file), "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
                     data={"language": "Korean", "language_code": "ko"})
     jid = r.json()["job_id"]

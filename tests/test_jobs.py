@@ -160,7 +160,7 @@ def test_log_dir_override_applies_to_stores_created_earlier(tmp_path, monkeypatc
     # the real logs/ folder with job-<id>.log stubs.
     from app import jobs as jobs_module
 
-    store = JobStore()  # created "too early", like main.job_store
+    store = JobStore()  # created "too early", like state.job_store
     monkeypatch.setattr(jobs_module, "PERSODUB_LOG_DIR", str(tmp_path / "redir"))
     jid = store.create()
     store.append_log(jid, "redirected line")

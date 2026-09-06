@@ -9,7 +9,7 @@ import math
 
 from fastapi.testclient import TestClient
 
-import app.main as main
+from app import engines_status, perso_client
 from app.api import results as results_api
 from app.main import app
 
@@ -39,8 +39,8 @@ class _FakePerso:
 def _wire(monkeypatch, tmp_path, duration=10.0):
     """A world where Perso works, the probe answers, and a video exists."""
     fake = _FakePerso()
-    monkeypatch.setattr(main, "perso_available", lambda: True)
-    monkeypatch.setattr(main, "PersoClient", lambda: fake)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
+    monkeypatch.setattr(perso_client, "PersoClient", lambda: fake)
     monkeypatch.setattr(results_api, "_video_duration", lambda p: duration)
     video = tmp_path / "쇼츠 3편.mp4"
     video.write_bytes(b"not really a video")
@@ -61,7 +61,7 @@ def test_estimate_names_the_price_before_anything_is_spent(monkeypatch, tmp_path
 
 def test_estimate_without_a_perso_key_is_a_422_not_a_surprise_later(monkeypatch, tmp_path):
     _, video = _wire(monkeypatch, tmp_path)
-    monkeypatch.setattr(main, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
     r = client.get("/api/subtitles/estimate", params={"video_path": str(video)})
     assert r.status_code == 422
     assert "Perso" in r.json()["detail"]
@@ -119,7 +119,7 @@ def test_extract_relays_perso_being_out_of_credits(monkeypatch, tmp_path):
     fake, video = _wire(monkeypatch, tmp_path)
 
     def broke(p, space_seq=None):
-        raise main.PersoCreditExhaustedError("Perso credits are exhausted.")
+        raise perso_client.PersoCreditExhaustedError("Perso credits are exhausted.")
     fake.transcribe = broke
     r = client.post("/api/subtitles/extract", json={"video_path": str(video)})
     assert r.status_code == 409
@@ -128,7 +128,7 @@ def test_extract_relays_perso_being_out_of_credits(monkeypatch, tmp_path):
 
 def test_local_extraction_is_free_and_needs_no_perso(monkeypatch, tmp_path):
     _, video = _wire(monkeypatch, tmp_path)
-    monkeypatch.setattr(main, "perso_available", lambda: False)   # no key at all
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)   # no key at all
     r = client.get("/api/subtitles/estimate",
                    params={"video_path": str(video), "engine": "local"})
     assert r.status_code == 200
@@ -137,7 +137,7 @@ def test_local_extraction_is_free_and_needs_no_perso(monkeypatch, tmp_path):
 
 def test_local_extraction_runs_whisper_on_this_machine(monkeypatch, tmp_path):
     fake, video = _wire(monkeypatch, tmp_path)
-    monkeypatch.setattr(main, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
     heard = []
 
     def fake_whisper(path, **kw):
