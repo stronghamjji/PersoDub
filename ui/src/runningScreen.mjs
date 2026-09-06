@@ -18,10 +18,10 @@
 // and the reason has to survive the crossing), #creditOverlay and its children,
 // and #cancelBtn. It never reaches the top bar, the finished screen or `state`.
 import { escapeHtml } from "./format.mjs";
+import { CHECK_ICON } from "./icons.mjs";
 
 // The four stages, in the order parseProgress numbers them (dubApi.mjs).
 const STAGE_NAMES = ["Separating audio", "Transcribing", "Translating", "Dubbing"];
-const CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 // Failures the server records as a token rather than a sentence, because the
 // token is what the code elsewhere tests. Said in plain words here, where the
