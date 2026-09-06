@@ -1949,7 +1949,8 @@
 
 <script type="module">
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips } from "/js/dubApi.mjs";
-import { gb, neededModelId, modelStatusLine, dubStartDialog, overallProgress, allReady } from "/js/modelsUi.mjs";
+import { gb, neededModelId, modelStatusLine } from "/js/modelsUi.mjs";
+import { initModelsUi } from "/js/modelsDialog.mjs";
 import { updateBannerView } from "/js/updateBanner.mjs";
 import { fmtClock, fmtClockTenths, formatBytes, escapeHtml, errorText } from "/js/format.mjs";
 
@@ -2239,7 +2240,7 @@ async function openSettings() {
   } catch {
     $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
   }
-  fetchModels().then(paintModelUi);
+  models.refreshModels();
   $("settingsOverlay").classList.add("open");
 }
 // Closing saves too: a key typed and then Escape (or the X) never left the
@@ -2511,22 +2512,17 @@ applyEngineAvailabilityToForm();
 // mere selection (user decision 2026-08-31). An install already running (the
 // dialog was reopened mid-download) resumes its progress display instead.
 // ---------------- Models: hints, dialog, chip, Settings catalog ----------
-// One controller over GET /api/models. The status line under each dropdown,
-// the "Download N GB to dub?" dialog, the topbar chip and the Settings list
-// all paint from the same rows; a single 2s poll runs only while something
-// is downloading (same cadence as the dub-progress poll).
-let modelRows = [];
-let modelsPolling = false;
-let pendingDub = null;   // { ids, downloading } while the dialog drives a dub
-
-async function fetchModels() {
-  try {
-    const r = await fetch("/api/models");
-    if (r.ok) modelRows = (await r.json()).models;
-  } catch { /* keep the last rows */ }
-  return modelRows;
-}
-const modelRow = (id) => modelRows.find((m) => m.id === id) || null;
+// One controller over GET /api/models (ui/src/modelsDialog.mjs) owns the rows
+// and the pending dub, and renders the Settings catalog and the download
+// dialog. The status line under each dropdown and the topbar chip stay here,
+// because they read the New project form's own selects; the controller calls
+// paintModelStatusLines after every refresh so they repaint with the rest.
+const models = initModelsUi({
+  $,
+  onStartDubbing: startDubbing,
+  onOpenSettings: openSettings,
+  onRowsChanged: paintModelStatusLines,
+});
 
 function paintHint(el, row) {
   const line = modelStatusLine(row);
@@ -2547,152 +2543,28 @@ function paintHint(el, row) {
   btn.textContent = line.button === "download" ? `Download (${gb(row.bytes)} GB)`
                   : line.button === "resume" ? "Resume" : "Cancel";
   btn.addEventListener("click", () =>
-    line.button === "cancel" ? cancelModel(row.id) : downloadModel(row.id));
+    line.button === "cancel" ? models.cancelModel(row.id) : models.downloadModel(row.id));
   el.append(btn);
 }
 
-function paintModelUi() {
+// The parts of the model UI this page owns: the three dropdown hints and the
+// topbar download chip.
+function paintModelStatusLines(rows) {
   // Cloud dubbing needs no local models -- their download lines would only
   // confuse; the per-stage dropdowns are greyed by paintDubMode below.
   const cloud = $("dubModeSelect").value === "perso";
-  paintHint($("sttModelHint"), cloud ? null : modelRow(neededModelId("stt", $("sttSelect").value)));
-  paintHint($("translateModelHint"), cloud ? null : modelRow(neededModelId("translate", $("translateSelect").value)));
-  paintHint($("voiceModelHint"), cloud ? null : modelRow(neededModelId("voice", $("voiceSelect").value)));
-  const dl = modelRows.find((m) => m.state === "downloading" && m.progress != null)
-          || modelRows.find((m) => m.state === "downloading");
+  paintHint($("sttModelHint"), cloud ? null : models.modelRow(neededModelId("stt", $("sttSelect").value)));
+  paintHint($("translateModelHint"), cloud ? null : models.modelRow(neededModelId("translate", $("translateSelect").value)));
+  paintHint($("voiceModelHint"), cloud ? null : models.modelRow(neededModelId("voice", $("voiceSelect").value)));
+  const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
+          || rows.find((m) => m.state === "downloading");
   $("topbarDl").hidden = !dl;
   if (dl) $("topbarDl").textContent = `${dl.name} · ${dl.progress ?? 0}%`;
-  renderModelsList();
-  paintModelsDialog();
 }
 
-function anyDownloading() { return modelRows.some((m) => m.state === "downloading"); }
-function ensureModelsPolling() {
-  if (modelsPolling) return;
-  modelsPolling = true;
-  const tick = async () => {
-    await fetchModels();
-    paintModelUi();
-    if (anyDownloading() || (pendingDub && pendingDub.downloading)) { setTimeout(tick, 2000); return; }
-    modelsPolling = false;
-  };
-  tick();
-}
-async function downloadModel(id) {
-  try { await fetch(`/api/models/${id}/download`, { method: "POST" }); } catch { /* poll shows it */ }
-  ensureModelsPolling();
-}
-async function cancelModel(id) {
-  try { await fetch(`/api/models/${id}/cancel`, { method: "POST" }); } catch { /* poll shows it */ }
-  ensureModelsPolling();
-}
-async function removeModel(id) {
-  $("modelsError").textContent = "";
-  try {
-    const r = await fetch(`/api/models/${id}`, { method: "DELETE" });
-    if (!r.ok) {
-      const body = await r.json().catch(() => null);
-      $("modelsError").textContent = String((body && body.detail) || "Could not remove it.");
-    }
-  } catch { $("modelsError").textContent = "Could not remove it. Is the engine running?"; }
-  await fetchModels();
-  paintModelUi();
-}
-
-function renderModelsList() {
-  const list = document.getElementById("modelsList");
-  if (!list) return;
-  list.replaceChildren();
-  let onDisk = 0;
-  for (const m of modelRows) {
-    if (m.state === "ready") onDisk += m.bytes;
-    const row = document.createElement("div");
-    row.className = "settings-row model-row";
-    const name = document.createElement("span");
-    name.textContent = m.name;
-    const size = document.createElement("span");
-    size.className = "model-size";
-    size.textContent = `${gb(m.bytes)} GB`;
-    const st = modelStatusLine(m);
-    const status = document.createElement("span");
-    status.className = "settings-hint" + (st.cls ? " " + st.cls : "");
-    status.textContent = m.state === "not_downloaded" ? "" : st.text;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-outline model-btn";
-    if (m.state === "ready") { btn.textContent = "Remove"; btn.onclick = () => removeModel(m.id); }
-    else if (m.state === "downloading") { btn.textContent = "Cancel"; btn.onclick = () => cancelModel(m.id); }
-    else if (m.state === "paused") { btn.textContent = "Resume"; btn.onclick = () => downloadModel(m.id); }
-    else { btn.textContent = "Download"; btn.onclick = () => downloadModel(m.id); }
-    row.append(name, size, status, btn);
-    list.append(row);
-  }
-  const busy = modelRows.some((m) => m.state === "downloading" || m.state === "paused");
-  $("modelsSummary").textContent =
-    `${modelRows.length} models · ${gb(onDisk)} GB on this computer`
-    + (busy ? " · attention needed" : "");
-  // Never force it shut -- only open it for the user when something is busy.
-  if (busy) $("modelsFold").open = true;
-}
-
-// -- the dub-start dialog (dub_start's 409) --------------------------------
-function showModelsDialog(detail) {
-  const d = dubStartDialog(detail);
-  pendingDub = { ids: d.ids, downloading: false };
-  $("mnTitle").textContent = d.title;
-  $("mnLine").textContent = d.line;
-  $("mnError").textContent = "";
-  $("mnProgress").hidden = true;
-  $("mnDownload").hidden = false;
-  $("mnSettings").hidden = false;
-  $("mnHide").hidden = true;
-  $("modelsNeededOverlay").classList.add("open");
-}
-function paintModelsDialog() {
-  if (!pendingDub || !pendingDub.downloading) return;
-  const pct = overallProgress(modelRows, pendingDub.ids);
-  $("mnBar").style.width = pct + "%";
-  $("mnTitle").textContent = "Downloading AI models";
-  $("mnLine").textContent = `${pct}%. Dubbing starts when they finish.`;
-  const failed = pendingDub.ids.map(modelRow).find((r) => r && r.state === "paused");
-  if (failed) $("mnError").textContent = `${failed.name} stopped${failed.error ? ` (${failed.error})` : ""}. Resume it from the line under its dropdown.`;
-  if (allReady(modelRows, pendingDub.ids)) {
-    pendingDub = null;
-    $("modelsNeededOverlay").classList.remove("open");
-    startDubbing();   // the New project dialog still holds the same form
-  }
-}
-$("mnDownload").addEventListener("click", () => {
-  if (!pendingDub) return;
-  pendingDub.downloading = true;
-  $("mnDownload").hidden = true;
-  $("mnSettings").hidden = true;
-  $("mnHide").hidden = false;
-  $("mnProgress").hidden = false;
-  for (const id of pendingDub.ids) {
-    const r = modelRow(id);
-    if (!r || r.state !== "ready") downloadModel(id);
-  }
-});
-$("mnSettings").addEventListener("click", () => openSettings());
-$("mnHide").addEventListener("click", () => $("modelsNeededOverlay").classList.remove("open"));
-$("mnCancel").addEventListener("click", () => {
-  if (pendingDub && pendingDub.downloading) {
-    // The dub is off; the downloads stop too. Their pieces stay (Paused).
-    for (const id of pendingDub.ids) {
-      const r = modelRow(id);
-      if (r && r.state === "downloading") cancelModel(id);
-    }
-  }
-  pendingDub = null;
-  $("modelsNeededOverlay").classList.remove("open");
-});
-$("topbarDl").addEventListener("click", () => {
-  if (pendingDub) $("modelsNeededOverlay").classList.add("open");
-  else openSettings();
-});
+$("topbarDl").addEventListener("click", () => models.reopenDialogOrSettings());
 for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
-  $(id).addEventListener("change", paintModelUi);
+  $(id).addEventListener("change", () => models.repaint());
 }
 // One sentence per line (they read as a wall when joined -- user feedback):
 // the hint slots render these with pre-line whitespace.
@@ -2727,9 +2599,9 @@ function paintDubMode() {
     $(id).disabled = cloud;
   }
 }
-$("dubModeSelect").addEventListener("change", () => { paintDubMode(); paintModelUi(); });
+$("dubModeSelect").addEventListener("change", () => { paintDubMode(); models.repaint(); });
 paintDubMode();
-fetchModels().then(paintModelUi);
+models.refreshModels();
 
 // ---------------- Screens and top bar ----------------
 // Three sections live inside <main class="work"> and exactly one is shown.
@@ -3865,9 +3737,8 @@ async function startDubbing() {
     runPollLoop(jobId, myGeneration);
   } catch (e) {
     if (e && e.status === 409 && e.detail && e.detail.missing) {
-      await fetchModels();
-      paintModelUi();
-      showModelsDialog(e.detail);
+      await models.refreshModels();
+      models.showModelsDialog(e.detail);
     } else if (!showIfOutOfSpace(e)) {
       $("projectError").textContent = errorText(e);
     }
@@ -3896,9 +3767,8 @@ async function startBatchDubbing(files) {
     // The jobs already posted are in line and stay there -- only the rest of
     // the batch stops, and the dialog says why.
     if (e && e.status === 409 && e.detail && e.detail.missing) {
-      await fetchModels();
-      paintModelUi();
-      showModelsDialog(e.detail);
+      await models.refreshModels();
+      models.showModelsDialog(e.detail);
     } else if (!showIfOutOfSpace(e)) {
       $("projectError").textContent = errorText(e);
     }
