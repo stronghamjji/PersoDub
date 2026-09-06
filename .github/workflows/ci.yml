@@ -2,7 +2,9 @@
 # pure-logic (no models, network, or ffmpeg needed -- see tests/conftest.py),
 # so plain runners are enough.
 #
-# Every suite runs on Linux, Windows and macOS. The Windows leg is not about a
+# The two suites that touch the filesystem run on Linux, Windows and macOS
+# (lint and the ui suite read the same source everywhere, so those run once).
+# The Windows leg is not about a
 # supported platform list: it is the only automatic check that the path,
 # separator, and process handling in the desktop shell still work off the one
 # machine this project is developed on. The macOS leg mirrors the release
@@ -29,11 +31,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"  # matches the kit's interpreter (pyproject requires-python)
-      - run: pip install -r requirements.txt ruff
-      # Lint before tests: the rules in pyproject.toml are the ratchet list the
-      # project keeps green (2026-09-06: 0 findings on app/ and tests/).
-      - run: ruff check app tests
+      - run: pip install -r requirements.txt
       - run: python -m pytest tests/ -q
+
+  # Lint is one job, not one per OS: the rules in pyproject.toml are the
+  # ratchet list the project keeps green (2026-09-06: 0 findings on app/ and
+  # tests/), and they read the same source on every platform. ruff's version is
+  # pinned in requirements-dev.txt so a new release cannot redefine "green"
+  # under a branch nobody touched.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check app tests
 
   desktop:
     strategy:
@@ -50,6 +64,19 @@ jobs:
         working-directory: desktop
       - run: npm test
         working-directory: desktop
+
+  # The browser UI's own unit tests (ui/src/*.test.mjs). The desktop job above
+  # only runs desktop/'s suite, so these went unrun by CI until 2026-09-06.
+  # Pure ESM on node:test -- no dependencies, no DOM, nothing platform-specific
+  # to learn from a second OS, so one runner is the whole check.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test ui/src/*.test.mjs
 
   # Fails the build if a credential was ever committed, on this branch or
   # anywhere in the history behind it. gitleaks is fetched from its own release

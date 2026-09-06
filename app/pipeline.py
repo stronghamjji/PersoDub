@@ -10,7 +10,7 @@ import os
 import re
 import tempfile
 import uuid
-from typing import Callable, List, Optional
+from typing import Callable, List, NoReturn, Optional
 
 from app import config, media
 from app.config import QWEN_N_TAKES
@@ -49,6 +49,11 @@ from app.translate import (
 # app/qwen_pipeline.py can reach them without importing this module back.
 # These names stay: pipeline's own call sites below use them, and the tests
 # monkeypatch pipeline._mux / _video_duration / ensure_video_length.
+# They are aliases, not wrappers, so patching pipeline._mux or
+# pipeline._video_duration no longer reaches inside ensure_video_length -- that
+# one calls media.mux / media.video_duration directly. A test that stubs two of
+# the three and lets the third run really shells out to ffprobe: stub
+# ensure_video_length too.
 _stream_duration = media.stream_duration
 _video_duration = media.video_duration
 _mux = media.mux
@@ -113,7 +118,7 @@ _PERSO_NOTICE_ERRORS = (
 _GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError)
 
 
-def _raise_notice(e, log, on_notice):
+def _raise_notice(e, log, on_notice) -> NoReturn:
     """Report a _NOTICE_ERRORS failure and fail the job with its message.
 
     Always raises. Logs one "   Error: …" line (with the link in parentheses

@@ -105,7 +105,11 @@ class JobStore:
                 self._jobs[jid].update(kw)
 
     # Deprecated name, kept so callers written against it keep working.
-    _update = update
+    # A method rather than `_update = update`: the class-body alias froze the
+    # original function, so a test that replaced update on one store still had
+    # _update calling the real thing.
+    def _update(self, jid: str, **kw):
+        return self.update(jid, **kw)
 
     def _write_log_line(self, jid: str, msg: str):
         """Mirror a log line to log_dir/job-<jid>.log. Best-effort: a logging

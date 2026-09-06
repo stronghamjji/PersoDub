@@ -25,6 +25,10 @@ import { gb, modelStatusLine, dubStartDialog, overallProgress, allReady } from "
  * @returns the operations the rest of the page calls.
  */
 export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged }) {
+  // Every element this file names is required markup (index.html always has
+  // it), so nothing here null-checks what $ returns -- same as
+  // ui/src/settingsDialog.mjs. A missing id is a broken page, and a crash on
+  // the first paint says so far louder than a silent half-drawn dialog.
   let modelRows = [];
   let modelsPolling = false;
   let pendingDub = null;   // { ids, downloading } while the dialog drives a dub
@@ -89,7 +93,6 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged 
 
   function renderModelsList() {
     const list = $("modelsList");
-    if (!list) return;
     list.replaceChildren();
     let onDisk = 0;
     for (const m of modelRows) {

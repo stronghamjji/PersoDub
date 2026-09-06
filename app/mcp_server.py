@@ -28,6 +28,39 @@ from app.dub_script import edit_line, export_srt, load_lines
 
 API = os.environ.get("PERSODUB_API", "http://127.0.0.1:8000")
 
+
+def _offline() -> ValueError:
+    """The app itself is not answering. Every tool here talks to the local app
+    over HTTP, so a refused connection means PersoDub is closed -- say so,
+    instead of handing the assistant a raw connection error to guess at."""
+    return ValueError("PersoDub is not running")
+
+
+def _api_get(path: str, **kw):
+    """GET one of the local app's routes. path starts with "/".
+
+    Every httpx call in this file goes through here or _api_post, so the
+    closed-app answer is the same wherever the assistant happens to knock
+    (before 2026-09-06 only the three setup tools said it, and the other
+    thirteen leaked a raw ConnectError). The url stays positional and the rest
+    of the arguments pass through untouched -- the tests' fakes read it that
+    way, and httpx is reached through the module attribute so monkeypatching
+    mcp_server.httpx.get still bites.
+    """
+    try:
+        return httpx.get(API + path, **kw)
+    except httpx.ConnectError as e:
+        raise _offline() from e
+
+
+def _api_post(path: str, **kw):
+    """POST one of the local app's routes. See _api_get."""
+    try:
+        return httpx.post(API + path, **kw)
+    except httpx.ConnectError as e:
+        raise _offline() from e
+
+
 mcp = MCPServer(
     name="persodub",
     instructions=(
@@ -41,7 +74,7 @@ mcp = MCPServer(
 
 def _job(job_id: str) -> dict:
     """Ask the app server about a job."""
-    r = httpx.get("%s/api/dub/jobs/%s" % (API, job_id), timeout=10.0)
+    r = _api_get("/api/dub/jobs/%s" % job_id, timeout=10.0)
     if r.status_code == 404:
         raise ValueError("no such job: %s" % job_id)
     r.raise_for_status()
@@ -83,7 +116,7 @@ def get_script(job_id: str) -> List[dict]:
     if job.get("dub_mode") == "perso":
         # A Perso dub's lines live on Perso's side; the app's own script
         # endpoint mirrors them (read-only for now -- see change_speaker).
-        r = httpx.get("%s/api/dub/jobs/%s/script" % (API, job_id), timeout=60.0)
+        r = _api_get("/api/dub/jobs/%s/script" % job_id, timeout=60.0)
         if r.status_code in (404, 503):
             raise ValueError(r.json().get("detail", "no script for this job"))
         r.raise_for_status()
@@ -173,7 +206,7 @@ def remake_voices(job_id: str) -> dict:
     rewrites a line and then asks the user to go press a button themselves is
     doing nothing they could not do alone.
     """
-    r = httpx.post("%s/api/dub/jobs/%s/voices/stale" % (API, job_id), timeout=600.0)
+    r = _api_post("/api/dub/jobs/%s/voices/stale" % job_id, timeout=600.0)
     if r.status_code == 404:
         raise ValueError("no such job: %s" % job_id)
     if r.status_code in (409, 422):
@@ -191,7 +224,7 @@ def remake_line_voice(job_id: str, line: int) -> dict:
     line whose words changed, which is the usual way to catch up after a batch
     of rewrites.
     """
-    r = httpx.post("%s/api/dub/jobs/%s/script/%d/voice" % (API, job_id, line), timeout=600.0)
+    r = _api_post("/api/dub/jobs/%s/script/%d/voice" % (job_id, line), timeout=600.0)
     if r.status_code in (404, 409, 422):
         raise ValueError(r.json().get("detail", "cannot remake line %d" % line))
     r.raise_for_status()
@@ -212,8 +245,8 @@ def change_speaker(job_id: str, line: int, confirm: bool = False) -> dict:
             "message": ("Changing this line's speaker runs on Perso's side and "
                         "may spend Perso credits. Proceed?"),
         }
-    r = httpx.post("%s/api/dub/jobs/%s/perso/speaker" % (API, job_id),
-                   json={"line": line}, timeout=600.0)
+    r = _api_post("/api/dub/jobs/%s/perso/speaker" % job_id,
+                  json={"line": line}, timeout=600.0)
     if r.status_code in (404, 409, 422):
         raise ValueError(r.json().get("detail", "cannot change line %d's speaker" % line))
     r.raise_for_status()
@@ -242,9 +275,9 @@ def extract_subtitles(video_path: str, engine: str = "",
         raise ValueError('Ask the user which engine to use first: "local" '
                          '(free, this machine) or "perso" (paid, better quality).')
     if engine == "perso" and not confirm:
-        r = httpx.get("%s/api/subtitles/estimate" % API,
-                      params={"video_path": video_path, "engine": "perso"},
-                      timeout=60.0)
+        r = _api_get("/api/subtitles/estimate",
+                     params={"video_path": video_path, "engine": "perso"},
+                     timeout=60.0)
         if r.status_code in (404, 422):
             raise ValueError(r.json().get("detail", "cannot read that video"))
         r.raise_for_status()
@@ -255,9 +288,9 @@ def extract_subtitles(video_path: str, engine: str = "",
                    % (est.get("seconds", 0), est.get("credits_estimate", 0),
                       "" if balance is None else " (balance: %s)" % balance))
         return {"needs_confirmation": True, "message": message, "estimate": est}
-    r = httpx.post("%s/api/subtitles/extract" % API,
-                   json={"video_path": video_path, "engine": engine},
-                   timeout=3600.0)
+    r = _api_post("/api/subtitles/extract",
+                  json={"video_path": video_path, "engine": engine},
+                  timeout=3600.0)
     if r.status_code in (404, 409, 422, 503):
         raise ValueError(r.json().get("detail", "could not extract subtitles"))
     r.raise_for_status()
@@ -305,10 +338,10 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
         # The estimate route already measures the video and, for perso, the
         # balance. Dubbing costs ~1 credit per second (the route's own figure
         # is STT's 1-per-5s, so only seconds and balance are read from it).
-        r = httpx.get("%s/api/subtitles/estimate" % API,
-                      params={"video_path": video_path,
-                              "engine": "perso" if dub_mode == "perso" else "local"},
-                      timeout=60.0)
+        r = _api_get("/api/subtitles/estimate",
+                     params={"video_path": video_path,
+                             "engine": "perso" if dub_mode == "perso" else "local"},
+                     timeout=60.0)
         if r.status_code in (404, 422):
             raise ValueError(r.json().get("detail", "cannot read that video"))
         r.raise_for_status()
@@ -338,9 +371,9 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     if translator and dub_mode == "local":
         fields["translate_engine"] = translator
     with open(path, "rb") as f:
-        r = httpx.post("%s/api/dub/start" % API, data=fields,
-                       files={"video": (os.path.basename(path), f, "video/mp4")},
-                       timeout=600.0)
+        r = _api_post("/api/dub/start", data=fields,
+                      files={"video": (os.path.basename(path), f, "video/mp4")},
+                      timeout=600.0)
     if r.status_code in (400, 404, 409, 422, 507):
         detail = r.json().get("detail", "could not start this dub")
         raise ValueError(_dub_refusal_text(detail))
@@ -366,13 +399,6 @@ def _dub_refusal_text(detail) -> str:
             % names)
 
 
-def _offline() -> ValueError:
-    """The app itself is not answering. Every setup tool talks to the local
-    app over HTTP, so a refused connection means PersoDub is closed -- say so,
-    instead of handing the assistant a raw connection error to guess at."""
-    return ValueError("PersoDub is not running")
-
-
 @mcp.tool()
 def get_setup() -> dict:
     """How the app is set up right now, stage by stage: which engine each
@@ -384,10 +410,7 @@ def get_setup() -> dict:
     answering "what does each step use?", before changing a default, and to
     follow a download's progress.
     """
-    try:
-        r = httpx.get("%s/api/setup" % API, timeout=10.0)
-    except httpx.ConnectError as e:
-        raise _offline() from e
+    r = _api_get("/api/setup", timeout=10.0)
     r.raise_for_status()
     data = r.json()
     for m in data.get("models", []):
@@ -410,10 +433,7 @@ def set_default(stage: str, choice: str) -> dict:
     downloaded is not a reason to refuse -- download_model handles that.
     Returns the defaults now in force.
     """
-    try:
-        r = httpx.post("%s/api/setup" % API, json={stage: choice}, timeout=10.0)
-    except httpx.ConnectError as e:
-        raise _offline() from e
+    r = _api_post("/api/setup", json={stage: choice}, timeout=10.0)
     if r.status_code in (422, 503):
         raise ValueError(r.json().get("detail", "could not change that setting"))
     r.raise_for_status()
@@ -430,10 +450,7 @@ def download_model(model_id: str, confirm: bool = False) -> dict:
     progress, and a dub that needs the model can be queued as soon as it
     reads ready.
     """
-    try:
-        r = httpx.get("%s/api/models" % API, timeout=10.0)
-    except httpx.ConnectError as e:
-        raise _offline() from e
+    r = _api_get("/api/models", timeout=10.0)
     r.raise_for_status()
     # GET /api/models answers {"models": [...]} -- the same shape the screen's
     # catalog reads. Assuming a bare list here crashed the first live call.
@@ -449,7 +466,7 @@ def download_model(model_id: str, confirm: bool = False) -> dict:
     if not confirm:
         return {"needs_confirmation": True, "model": row["name"], "gb": gb,
                 "message": "%s is %.1f GB. Download it now?" % (row["name"], gb)}
-    r = httpx.post("%s/api/models/%s/download" % (API, model_id), timeout=10.0)
+    r = _api_post("/api/models/%s/download" % model_id, timeout=10.0)
     if r.status_code in (404, 409):
         raise ValueError(r.json().get("detail", "could not start the download"))
     r.raise_for_status()
@@ -503,9 +520,9 @@ def cut_clip(video_path: str, start: str, end: str) -> dict:
     ("1:25", "0:01:25"). The original video is never touched, and an existing
     file is never written over. Returns the new clip's path and length.
     """
-    r = httpx.post("%s/api/clips/cut" % API,
-                   json={"video_path": video_path, "start": start, "end": end},
-                   timeout=600.0)
+    r = _api_post("/api/clips/cut",
+                  json={"video_path": video_path, "start": start, "end": end},
+                  timeout=600.0)
     if r.status_code in (404, 422, 503):
         raise ValueError(r.json().get("detail", "could not cut this video"))
     r.raise_for_status()
@@ -529,7 +546,7 @@ def cancel_dub(job_id: str) -> dict:
     status = job.get("status")
     if status in ("done", "error", "cancelled"):
         raise ValueError("nothing to cancel: this job is already %s" % status)
-    r = httpx.post("%s/api/dub/jobs/%s/cancel" % (API, job_id), timeout=30.0)
+    r = _api_post("/api/dub/jobs/%s/cancel" % job_id, timeout=30.0)
     if r.status_code in (404, 409):
         detail = r.json().get("detail", "cannot cancel this job")
         raise ValueError(detail if isinstance(detail, str) else str(detail))
@@ -553,10 +570,10 @@ def burn_subtitles(video_path: str, srt_path: str = "", preset: str = "clean") -
     user names no style use clean and mention the others exist. The original
     video is never touched.
     """
-    r = httpx.post("%s/api/subtitles/burn" % API,
-                   json={"video_path": video_path, "srt_path": srt_path,
-                         "preset": preset},
-                   timeout=1800.0)
+    r = _api_post("/api/subtitles/burn",
+                  json={"video_path": video_path, "srt_path": srt_path,
+                        "preset": preset},
+                  timeout=1800.0)
     if r.status_code in (404, 422, 503):
         detail = r.json().get("detail", "could not subtitle this video")
         raise ValueError(detail if isinstance(detail, str) else str(detail))

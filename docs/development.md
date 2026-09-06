@@ -109,7 +109,9 @@ Length-fitting retry policy:
 
 ```bash
 .venv/bin/python -m pytest tests/ -q       # Python (pipeline)
+node --test ui/src/*.test.mjs              # browser UI modules
 cd desktop && npm test                     # Electron desktop shell
+.venv/bin/ruff check app tests             # lint (pinned in requirements-dev.txt)
 ```
 
 All tests are pure-logic tests — they run without any external service (TTS
@@ -119,8 +121,10 @@ sidecar, Ollama, Perso).
 
 ```
 app/
-  main.py                FastAPI endpoints (upload, dub, progress, download, translation API)
+  main.py                FastAPI app: the routers below are mounted here
+  api/                   the endpoints, one router per area (results, clips, ...)
   pipeline.py            run_dub(): orchestrates the whole pipeline
+  media.py               the ffmpeg helpers (lowest layer -- imports nothing from app/)
   qwen_pipeline.py       TTS dub path: voice registration -> synthesis -> line placement
   qwen_assemble.py       line placement, loudness matching, final audio assembly
   translate.py           translation engines (Ollama / Google Gemini API)
@@ -137,6 +141,9 @@ app/
 desktop/                 Electron desktop shell (install, engine management, window)
 static/index.html        the web UI
 ui/src/                  UI plugin-layer JS modules (with node:test unit tests)
+  format.mjs             pure formatting helpers (durations, sizes, labels)
+  modelsDialog.mjs       the AI-models catalog and the "download to dub?" dialog
+  settingsDialog.mjs     the Settings sheet behind the topbar gear
 tests/                   unit tests
 ```
 

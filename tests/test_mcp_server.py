@@ -516,6 +516,20 @@ def test_the_setup_tools_say_the_app_is_closed(monkeypatch, tool):
         tool()
 
 
+def test_queue_dub_says_the_app_is_closed_too(monkeypatch, tmp_path):
+    # Not only the setup tools: every call in mcp_server goes through
+    # _api_get/_api_post, so the POST that actually starts a dub answers with
+    # the same sentence instead of a raw ConnectError (2026-09-06).
+    video = _tmp_video(tmp_path)
+
+    def refuse(*a, **kw):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(mcp_server.httpx, "post", refuse)
+    with pytest.raises(ValueError, match="PersoDub is not running"):
+        mcp_server.queue_dub(str(video), "en", confirm=True)
+
+
 def test_set_default_posts_one_stage_and_relays_a_refusal(monkeypatch):
     posted = {}
 
