@@ -104,10 +104,23 @@ def reset_downloads_for_tests():
 
 
 def free_bytes_at(path):
-    """Bytes free on the kit's volume, or None when unreadable (a preflight
-    that cannot read the disk must not become the reason a download fails)."""
+    """Bytes free on the volume holding path, or None when unreadable (a
+    preflight that cannot read the disk must not become the reason a download
+    fails).
+
+    Walks up to the nearest existing parent first: the kit folder and a job's
+    workspace are both asked about before they are made, and statvfs on a path
+    that does not exist yet answers nothing at all when the disk under it is
+    the thing being asked about.
+    """
+    path = path or "."
+    while path and not os.path.exists(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            break
+        path = parent
     try:
-        st = os.statvfs(path or ".")
+        st = os.statvfs(path or "/")
         return st.f_bavail * st.f_frsize
     except Exception:
         return None
