@@ -134,7 +134,7 @@ class TranslationEngine:
     display_name: str = ""
 
     # How many "still outside the ±15% budget window" retry rounds app.text.length_fit.fit_translate
-    # may spend re-asking a line (see app/len_fit.py MAX_RETRY). Default 3, for local/free
+    # may spend re-asking a line (see app/text/length_fit.py MAX_RETRY). Default 3, for local/free
     # engines -- paid Google engines override this to 0 (cost/429-driven, see GeminiTranslator).
     max_budget_retries: int = 3
 

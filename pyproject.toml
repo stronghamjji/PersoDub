@@ -54,7 +54,7 @@ ignore = [
   "PLC0415",  #  91  import-outside-top-level. Some are lazy heavy-dependency
               #      imports (the subprocess workers) and are correct as-is.
               #      NOTE: one is not -- app/translate.py's function-body import
-              #      of app.len_fit exists only to break a circular import. That
+              #      of app.text.length_fit exists only to break a circular import. That
               #      is tracked as a refactor task, not by this rule.
 ]
 

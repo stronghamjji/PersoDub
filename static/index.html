@@ -1954,9 +1954,11 @@ import { updateBannerView } from "/js/updateBanner.mjs";
 
 const $ = (id) => document.getElementById(id);
 
-// ---------------- localStorage-backed settings (TODO: wire to a real
-// backend /api/settings endpoint once one exists -- there is none today,
-// see app/main.py. Everything in this block is client-side only.) ----------
+// ---------------- localStorage-backed settings ---------------------------
+// The API keys moved to the backend: GET/POST /api/settings (app/main.py's
+// settings_get/settings_post) reads and writes kit.env. What is left in this
+// block is client-side only -- the one-time cleanup of the key values this
+// localStorage entry used to hold, and dropping the old job-history key.
 const SETTINGS_KEY = "persodub_settings";
 const HISTORY_KEY = "persodub_job_history";
 

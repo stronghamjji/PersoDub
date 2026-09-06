@@ -215,7 +215,7 @@ def _validate_manifest_spans(kept: Sequence[dict], mix_dur_sec: float,
     max(MAX_NONVERBAL_TOTAL_SEC, 10% of the mix).
 
     mode="company" (the manifest's own "mode" marker, written by
-    app/company_gate.py): the TOTAL cap is waived -- the company ambience
+    app/audio/ambience.py): the TOTAL cap is waived -- the company ambience
     layer deliberately keeps every whisper-verified nonverbal span at 0dB, and
     a laugh-heavy clip can legitimately verify more than the whitelist-mode
     cap allows. The caps themselves are NOT weakened: the per-span 3s cap and

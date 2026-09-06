@@ -157,7 +157,7 @@ QWEN_GATE_BED_RESIDUE = int(os.environ.get("QWEN_GATE_BED_RESIDUE", "1"))
 # through even faintly; non-speech regions inside the gate still keep the
 # gentler QWEN_GATE_DUCK_DB ambience duck. "company" (opt-in): the
 # professional-dub approach -- safe assembly first, then a speech-erased
-# original-vocals ambience layer added to the bed (app/company_gate.py): the
+# original-vocals ambience layer added to the bed (app/audio/ambience.py): the
 # union of (speech cue spans +-0.3s), (energetic VAD regions NOT
 # whisper-verified nonverbal, fail-closed) and (placed dub-line spans +-0.1s)
 # is erased to TRUE ZERO with 60-80ms raised-cosine crossfades (no ducking
@@ -185,12 +185,12 @@ QWEN_KEEP_NONVERBAL = int(os.environ.get("QWEN_KEEP_NONVERBAL", "1"))
 # MUST point at a venv where openai-whisper is installed; with a bare
 # "python3" every nonverbal candidate is fail-closed-dropped and an ERROR is
 # logged (see app/nonverbal.py), so set this in your .env for real runs.
+NONVERBAL_WHISPER_PYTHON = os.environ.get("NONVERBAL_WHISPER_PYTHON", "python3")
+NONVERBAL_WHISPER_MODEL = os.environ.get("NONVERBAL_WHISPER_MODEL", "base")
+
 # Where per-job progress logs are written (app/jobs.py). Relative to the working
 # directory, so a desktop run lands them next to the code the app is serving.
 PERSODUB_LOG_DIR = os.environ.get("PERSODUB_LOG_DIR", "logs")
-
-NONVERBAL_WHISPER_PYTHON = os.environ.get("NONVERBAL_WHISPER_PYTHON", "python3")
-NONVERBAL_WHISPER_MODEL = os.environ.get("NONVERBAL_WHISPER_MODEL", "base")
 
 # Cap, in seconds, on how much leading silence app/qwen_assemble.py's
 # _trim_lead_tail_silence will ever trim off a synthesized line before it's
@@ -211,7 +211,7 @@ QWEN_TRIM_LEAD_SEC = float(os.environ.get("QWEN_TRIM_LEAD_SEC", "1.0"))
 QWEN_GAIN_STEP_MAX = float(os.environ.get("QWEN_GAIN_STEP_MAX", "1.5"))
 
 
-# Ultra-short-line handling on the Qwen dub path (app/qwen_merge.py): a line
+# Ultra-short-line handling on the Qwen dub path (app/audio/merge.py): a line
 # whose usable slot (app.text.cues.effective_slots) is under this many seconds
 # gets synthesized together with its previous same-speaker/adjacent line in
 # one TTS call, then split back apart at the quiet energy valley between the
