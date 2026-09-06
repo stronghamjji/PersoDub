@@ -26,6 +26,7 @@ import shutil
 import wave
 from typing import Callable, Dict, List, Optional
 
+from app import media
 from app.audio.ambience import apply_company_ambience
 from app.audio.merge import group_merge_units, split_unit_audio
 from app.config import QWEN_GATE_MODE, QWEN_KEEP_NONVERBAL, QWEN_VOICE_MODE
@@ -486,7 +487,7 @@ def run_qwen_dub(
     """Full Qwen3-TTS dub-audio path. Returns the path to the assembled 48kHz wav
     (background + our synthesized lines, each gained to match the original line's
     loudness -- see match_line_gains) -- muxing onto the original video is the
-    caller's job (app/pipeline.py already has _mux/ensure_video_length for that).
+    caller's job (app/media.py has mux/ensure_video_length for that).
 
     vocals_path / background_path (local Demucs -- app/separate.py) are required:
     the caller (app/pipeline.py) always separates locally first and fails the job
@@ -601,7 +602,7 @@ def run_qwen_dub(
     elif QWEN_GATE_MODE == "company":
         # Company-style: safe assembly (vocals never reach place_lines), then
         # the speech-erased original-vocals ambience layer on top (see
-        # app/company_gate.py). The whitelist overlay is AUTO-DISABLED here
+        # app/audio/ambience.py). The whitelist overlay is AUTO-DISABLED here
         # regardless of QWEN_KEEP_NONVERBAL -- the layer already carries the
         # verified nonverbal content at 0dB; overlaying it again would double
         # the audio (clipping/echo).
@@ -662,8 +663,6 @@ def rebuild_dub(work_dir, data, video_path, out_path):
     here because they read the original vocals track, which a finished job no
     longer keeps. What comes out is the same mix minus those overlays.
     """
-    from app.pipeline import _mux, _video_duration, ensure_video_length
-
     lines = data.get("lines") or []
     line_paths = []
     for e in lines:
@@ -681,8 +680,8 @@ def rebuild_dub(work_dir, data, video_path, out_path):
     place_lines(background, line_paths, starts, out_wav, gains=gains, log=lambda m: None)
 
     out_path = out_path or os.path.join(work_dir, "dubbed.mp4")
-    r = _mux(video_path, out_wav, out_path, _video_duration(video_path))
+    r = media.mux(video_path, out_wav, out_path, media.video_duration(video_path))
     if r.returncode != 0:
         raise RuntimeError("mux failed: %s" % r.stderr[-200:])
-    ensure_video_length(video_path, out_path, lambda m: None)
+    media.ensure_video_length(video_path, out_path, lambda m: None)
     return out_path

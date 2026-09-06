@@ -23,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import config
+from app import media
 from app import models as model_store
 from app import perso_materialize
 from app.agents import base as agent_base
@@ -68,6 +69,11 @@ from app.settings_env import (current_value, read_analytics_off,
 from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
 from app.stt_local import transcribe_local
 from app.translate import get_translator
+
+# Kept as module attributes on purpose: main's own call sites read these names
+# off this module, and the tests monkeypatch main._cut_video /
+# main._video_duration. The code itself lives in app/media.py.
+_cut_video = media.cut_video
 
 
 def _dub_target_for(job: dict):
@@ -1482,43 +1488,6 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
         f"(the model is not pulled). Choose Gemini in the Translation dropdown, "
         f"or run: ollama pull {model_tag}"
     )
-
-
-def _cut_video(path: str, start: float, end: float, on_cut=None) -> None:
-    """Keep only [start, end] of the video, in place. Re-encodes so the cut is
-    exact (a copy-cut lands on the nearest keyframe, seconds away).
-
-    `on_cut` runs the instant the cut file takes the original's place, before
-    anything else can happen. That is where a caller records "this video is cut
-    now": recording it a statement later leaves a window where a force-quit
-    saves a record that still owes a cut over a video that has already had one,
-    and the next run would take the same seconds out twice.
-    """
-    tmp = path + ".cut.mp4"
-    try:
-        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
-                            "-i", path, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", tmp],
-                           capture_output=True, text=True)
-        if r.returncode != 0:
-            # Only ffmpeg's last line, which is the complaint itself. The lines
-            # before it name the input file, so a tail of the whole thing put the
-            # user's folders on screen (and into a bug report) for nothing.
-            last = ([ln.strip() for ln in (r.stderr or "").splitlines() if ln.strip()] or [""])[-1]
-            # ffmpeg names files by their full path even in that last line, so
-            # each one is cut back to its own name: the user learns which file
-            # upset it without their folders ending up on screen.
-            last = re.sub(r"\S*/(\S+)", r"\1", last)
-            raise RuntimeError(("Could not trim the video: " + last) if last
-                               else "Could not trim the video.")
-        os.replace(tmp, path)
-        if on_cut is not None:
-            on_cut()
-    finally:
-        # A cut that died with the output already open (out of disk, a killed
-        # encoder) would otherwise leave a half-written .cut.mp4 beside a good
-        # input.mp4, in a folder the pipeline later walks.
-        if os.path.exists(tmp):
-            os.remove(tmp)
 
 
 def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engine=None) -> dict:

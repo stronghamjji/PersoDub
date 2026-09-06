@@ -8,12 +8,12 @@ container anywhere in this app.
 import json
 import os
 import re
-import subprocess
 import tempfile
 import uuid
 from typing import Callable, List, Optional
 
 from app import config
+from app import media
 from app.config import QWEN_N_TAKES
 from app.diar_campplus_client import diarize
 from app.engines.qwen_tts import QwenTTSEngine
@@ -47,6 +47,16 @@ from app.translate import (
 )
 
 
+# The ffmpeg helpers moved to app/media.py (lowest layer, no app imports) so
+# app/qwen_pipeline.py can reach them without importing this module back.
+# These names stay: pipeline's own call sites below use them, and the tests
+# monkeypatch pipeline._mux / _video_duration / ensure_video_length.
+_stream_duration = media.stream_duration
+_video_duration = media.video_duration
+_mux = media.mux
+ensure_video_length = media.ensure_video_length
+
+
 def _check_cancel(cancel_check: Optional[Callable[[], bool]], log: Callable[[str], None]) -> None:
     """Cooperative cancellation checkpoint, called between pipeline stages.
 
@@ -59,33 +69,6 @@ def _check_cancel(cancel_check: Optional[Callable[[], bool]], log: Callable[[str
     if cancel_check is not None and cancel_check():
         log("Cancelled by user request")
         raise JobCancelled("cancelled by user")
-
-
-def _stream_duration(path: str, stream: str) -> float:
-    out = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", stream,
-         "-show_entries", "stream=duration", "-of", "csv=p=0", path],
-        capture_output=True, text=True,
-    )
-    # ffmpeg 7.x appends a trailing comma to csv output -> strip it and convert to number
-    return float(out.stdout.strip().splitlines()[0].rstrip(","))
-
-
-def _video_duration(path: str) -> float:
-    return _stream_duration(path, "v:0")
-
-
-def _mux(video: str, audio: str, out: str, dur: float) -> subprocess.CompletedProcess:
-    """Re-mux a video track with an audio track, padding the audio to `dur` seconds.
-
-    The video stream is copied untouched (-c:v copy); only the audio is (re)encoded.
-    """
-    return subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-i", video, "-i", audio,
-         "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac",
-         "-b:a", "256k", "-af", "apad", "-t", f"{dur:.3f}", out],
-        capture_output=True, text=True,
-    )
 
 
 def _manifest_exclude_spans(manifest_path, mix_wav, log):
@@ -156,30 +139,6 @@ def leakage_gate(mix_wav, vocals_path, manifest_path, work_dir, log):
         return mix_wav
 
 
-def ensure_video_length(original_video: str, out_path: str, log: Callable[[str], None]) -> None:
-    """🔒 Absolute guarantee: if the output video length differs from the original, rebuild using the original video untouched.
-
-    The Qwen dub export can come out shorter than the video (audio ends first). In that
-    case, re-mux the original video track + dubbed audio (silence-padded at the end)
-    into a finished file where not a single video frame has been touched.
-    """
-    try:
-        d_orig = _video_duration(original_video)
-        d_out = _video_duration(out_path)
-    except Exception as e:
-        log(f"   Warning: Length check failed ({str(e)[:60]}) — using the export result as is")
-        return
-    if abs(d_orig - d_out) <= 0.02:
-        return
-    log(f"   Video length correction: {d_out:.3f}s → {d_orig:.3f}s (lossless rebuild from original video)")
-    tmp = out_path + ".fix.mp4"
-    r = _mux(original_video, out_path, tmp, d_orig)
-    if r.returncode == 0 and os.path.exists(tmp):
-        os.replace(tmp, out_path)
-    else:
-        log(f"   Warning: Length correction failed — keeping the export result ({r.stderr[-80:]})")
-
-
 def _auto_translate_srt(
     source_cues: list,
     target_lang: str,
@@ -194,7 +153,7 @@ def _auto_translate_srt(
     always runs before this, so there is no more "ask the container for its own
     transcript" fallback). fit_translate() drafts a budget-stated translation, then
     re-requests any line outside its ±15% budget window -- too long OR too short --
-    close together (see app/len_fit.py; unifies what used to be a separate "too short"
+    close together (see app/text/length_fit.py; unifies what used to be a separate "too short"
     fill-the-slot pass here).
     """
     log = log or (lambda m: None)
