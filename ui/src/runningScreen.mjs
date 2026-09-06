@@ -114,7 +114,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     homeNoticeAndLog();
     // Set once -- assigning src on every poll would restart the download three
     // seconds in, forever. A link job has no input.mp4 yet when it starts (the
-    // video is downloaded inside the job thread, app/main.py:dub_start), so that
+    // video is downloaded inside the job thread, app/api/dub.py:dub_start), so that
     // first request 404s; the error handler below drops the src again and this
     // guard re-arms it on the next poll. Once a load succeeds no error fires, so
     // the src stays put and the request is not repeated.

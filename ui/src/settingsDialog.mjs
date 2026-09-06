@@ -142,7 +142,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
     // With a key saved and several workspaces, an unpicked "Choose a
     // workspace…" is the one thing standing between the user and a working
     // Perso setup -- paint it red so it can't be overlooked. The job-start
-    // preflight (app/main.py) is the backstop for anyone who skips it anyway.
+    // preflight (app/api/dub.py) is the backstop for anyone who skips it anyway.
     sel.classList.toggle("needs-choice",
       !sel.disabled && sel.value === "" && sel.options.length > 1);
   }

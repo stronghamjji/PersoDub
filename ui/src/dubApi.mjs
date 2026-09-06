@@ -26,7 +26,7 @@ export const LANGUAGES = [
 ];
 
 // Legacy direction -> the (language, language_code) pair the API expects
-// (both name the TARGET language; see app/main.py DubStartRequest / run_dub).
+// (both name the TARGET language; see app/api/dub.py dub_start / run_dub).
 // Not exported: buildDubFormData below is the only caller, and its own tests
 // cover both mappings through the form it builds.
 function directionToLanguage(direction) {
@@ -46,7 +46,7 @@ function qualityModeToNTakes(qualityMode) {
 /**
  * Build the multipart/form-data body for POST /api/dub/start from friendly
  * UI option values. This is the single source of truth for the field names
- * the backend expects (app/main.py:dub_start).
+ * the backend expects (app/api/dub.py:dub_start).
  *
  * @param {Object} opts
  * @param {File|Blob} opts.video - required video file
@@ -85,7 +85,7 @@ export function buildDubFormData(opts) {
   const nTakes = opts.nTakesOverride ?? qualityModeToNTakes(opts.qualityMode ?? "fast");
 
   const fd = new FormData();
-  // Exactly one source -- the server rejects both (app/main.py:dub_start).
+  // Exactly one source -- the server rejects both (app/api/dub.py:dub_start).
   if (opts.video) fd.append("video", opts.video);
   else fd.append("source_url", opts.sourceUrl);
   fd.append("language", language);

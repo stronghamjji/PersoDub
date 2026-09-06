@@ -130,8 +130,12 @@ sidecar, Ollama, Perso).
 ```
 app/
   main.py                FastAPI app: the routers below are mounted here
-  api/                   the endpoints, one router per area (results, clips, ...)
-  pipeline.py            run_dub(): orchestrates the whole pipeline
+  api/                   the endpoints, one router per area (dub, results, script,
+                         settings, models, clips, agent, misc; _shared.py for helpers)
+  state.py               WORKSPACE and the one JobStore, read at call time
+  jobs.py                JobStore: the job records, their logs, the one-at-a-time queue
+  stages.py              the six dubbing stages and their "N/6" log markers
+  pipeline.py            run_dub(): orchestrates the whole pipeline, one function per stage
   media.py               the ffmpeg helpers (lowest layer -- imports nothing from app/)
   qwen_pipeline.py       TTS dub path: voice registration -> synthesis -> line placement
   qwen_assemble.py       line placement, loudness matching, final audio assembly
@@ -149,10 +153,20 @@ app/
   logging_setup.py       the "persodub" logger: persodub.log + stderr, set up at startup
 desktop/                 Electron desktop shell (install, engine management, window)
 static/index.html        the web UI
-ui/src/                  UI plugin-layer JS modules (with node:test unit tests)
+ui/src/                  the page's ES modules, served at /js/ (each with a node:test file)
+  dubApi.mjs             the API layer: form data, polling, progress parsing, the stage table
   format.mjs             pure formatting helpers (durations, sizes, labels)
+  icons.mjs              the two SVG marks shared by screens
   modelsDialog.mjs       the AI-models catalog and the "download to dub?" dialog
   settingsDialog.mjs     the Settings sheet behind the topbar gear
+  newProject.mjs         the New project dialog (file/link source, trim, options)
+  projects.mjs           the Projects list and the Up-next line
+  runningScreen.mjs      the progress card, notices, failure card, Cancel
+  scriptTable.mjs        the editable script grid and remake-voice buttons
+  timeline.mjs           the finished screen's timeline, subtitle lane, pane grips
+  agentStrip.mjs         the Dub Agent strip (its own script block on the page)
+  updateBanner.mjs       the update pill's two states
+  check-inline.mjs (ui/) CI guard: parses the page's inline module blocks
 tests/                   unit tests
 ```
 

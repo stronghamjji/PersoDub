@@ -1,7 +1,7 @@
 """Dubbing pipeline orchestrator.
 
 Video + translated subtitles (SRT) -> finished dubbed video (mp4).
-If no subtitles are provided: transcribe -> Gemini translation -> dub (auto-translate mode).
+If no subtitles are provided: transcribe -> translate (the engine the job names) -> dub.
 Every stage runs locally or through our own Qwen3-TTS sidecar -- no third-party
 container anywhere in this app.
 """
@@ -131,8 +131,12 @@ _PERSO_NOTICE_ERRORS = (
 _GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError)
 
 
-def _raise_notice(e, log, on_notice) -> NoReturn:
+def raise_notice(e, log, on_notice) -> NoReturn:
     """Report a _NOTICE_ERRORS failure and fail the job with its message.
+
+    Public: app/dub_launch.py's cloud path fails the same three Perso errors
+    the same way, so it calls this rather than keeping its own copy of the
+    messages.
 
     Always raises. Logs one "   Error: …" line (with the link in parentheses
     when the exception carries one), hands on_notice the structured dict the UI
@@ -155,6 +159,10 @@ def _raise_notice(e, log, on_notice) -> NoReturn:
     if on_notice:
         on_notice(notice)
     raise RuntimeError(msg) from e
+
+
+# The name the stages below were written against.
+_raise_notice = raise_notice
 
 
 def _manifest_exclude_spans(manifest_path, mix_wav, log):
@@ -630,7 +638,7 @@ def run_dub(
     """Dub a single video and save it to out_path.
 
     If srt_path is given, use those translated subtitles as is.
-    If not, transcribe -> Gemini translation -> dub (auto-translate mode).
+    If not, transcribe -> translate with the engine the job names -> dub.
     Voice synthesis always runs through our own Qwen3-TTS sidecar
     (app/qwen_pipeline.run_qwen_dub) -- it is the app's only TTS engine.
     n_takes sets how many candidate takes per line the best-of-N selection
@@ -657,7 +665,9 @@ def run_dub(
     """
     log = log or (lambda m: None)
 
-    # 1. Local job workspace (uuid tag for scratch filenames; nothing is uploaded)
+    # The job's folder (uuid tag for scratch filenames; nothing is uploaded),
+    # then the stages in app/stages.py's order: separate, transcribe, translate,
+    # synthesize, check, build.
     job_id = uuid.uuid4().hex[:8]
     work_dir = os.path.dirname(out_path) or tempfile.gettempdir()
     os.makedirs(work_dir, exist_ok=True)
@@ -668,7 +678,7 @@ def run_dub(
 
     _check_cancel(cancel_check, log)
 
-    # 2. Transcription: Perso cloud STT if the user picked it, else local
+    # Transcription: Perso cloud STT if the user picked it, else local
     # Whisper. Whisper auto-detects the source language; capture it so the
     # result can surface it. Perso STT reports no language, so this stays None.
     detected_code = None
@@ -686,7 +696,7 @@ def run_dub(
 
     _check_cancel(cancel_check, log)
 
-    # 3. Prepare translated subtitles (provided or auto-translated)
+    # Translated subtitles (provided or auto-translated)
     segments, auto_translated = _stage_translate(
         srt_path, source_cues, language, translate_engine, translator,
         work_dir, on_notice, log)
@@ -703,7 +713,7 @@ def run_dub(
 
     _check_cancel(cancel_check, log)
 
-    # 5. Leakage gate: catch original speech bleeding through the dub.
+    # The check stage: catch original speech bleeding through the dub.
     audio_wav = leakage_gate(audio_wav, vocals_path,
                              os.path.join(work_dir, "nonverbal_manifest.json"),
                              work_dir, log)
