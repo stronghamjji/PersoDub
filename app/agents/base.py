@@ -9,6 +9,7 @@ vendor's format.
 A line that is not JSON is dropped. CLIs and their dependencies do print the odd
 banner or warning, and one stray line must not blank the panel mid-answer.
 """
+import contextlib
 import json
 import os
 import re
@@ -276,14 +277,13 @@ def _end(proc, grace: float = STOP_GRACE) -> None:
     if proc.poll() is not None:
         return
     if sys.platform == "win32":
-        try:
+        # A failed taskkill is fine: the kill below is the backstop.
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
             subprocess.run(
                 ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                 capture_output=True, timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
-        except (OSError, subprocess.SubprocessError):
-            pass  # the kill below is the backstop
     else:
         try:
             proc.terminate()
@@ -292,10 +292,8 @@ def _end(proc, grace: float = STOP_GRACE) -> None:
     try:
         proc.wait(timeout=grace)
     except subprocess.TimeoutExpired:
-        try:
+        with contextlib.suppress(OSError):
             proc.kill()
-        except OSError:
-            pass
 
 
 def _begin(turn: "_Turn") -> None:

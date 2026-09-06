@@ -12,8 +12,7 @@ import tempfile
 import uuid
 from typing import Callable, List, Optional
 
-from app import config
-from app import media
+from app import config, media
 from app.config import QWEN_N_TAKES
 from app.diar_campplus_client import diarize
 from app.engines.qwen_tts import QwenTTSEngine
@@ -45,7 +44,6 @@ from app.translate import (
     get_translator,
     script_ok,
 )
-
 
 # The ffmpeg helpers moved to app/media.py (lowest layer, no app imports) so
 # app/qwen_pipeline.py can reach them without importing this module back.

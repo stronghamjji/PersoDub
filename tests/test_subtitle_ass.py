@@ -2,7 +2,6 @@
 each drawn exactly as the plugin draws it -- colours, boxes, the rainbow's
 per-word palette, neon's halo-plus-fill pair -- with our own two overrides
 (vertical position, size) layered on top."""
-import pytest
 
 from app.subtitle_ass import PRESETS, build_ass
 

@@ -212,7 +212,8 @@ def test_subtitle_settings_survive_a_round_trip(monkeypatch, tmp_path):
 
 def test_subtitle_settings_refuse_nonsense(monkeypatch, tmp_path):
     ran, jid, work = _done_job(monkeypatch, tmp_path)
-    put = lambda b: client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=b).status_code
+    def put(b):
+        return client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=b).status_code
     assert put({"preset": "sparkle"}) == 422
     assert put({"pos": 140}) == 422
     assert put({"size": 30}) == 422
@@ -255,5 +256,5 @@ def test_the_stored_box_width_reaches_the_burn(monkeypatch, tmp_path):
     r = client.get(f"/api/dub/result/{jid}/subtitled")
     assert r.status_code == 200
     ass = _ass(work)
-    assert "\\p1" in ass.replace("\\\\", "\\") or "\p1" in ass
+    assert "\\p1" in ass.replace("\\\\", "\\") or r"\p1" in ass
     assert "l 960 " in ass          # 50% of the 1080p fallback canvas

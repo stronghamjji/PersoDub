@@ -10,7 +10,13 @@ import wave
 import pytest
 
 from app.dub_script import (
-    DUB_NAME, EDITED_NAME, ORIGINAL_NAME, edit_line, export_srt, load_lines, script_path,
+    DUB_NAME,
+    EDITED_NAME,
+    ORIGINAL_NAME,
+    edit_line,
+    export_srt,
+    load_lines,
+    script_path,
 )
 from app.text.srt import build_srt
 

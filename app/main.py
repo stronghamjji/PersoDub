@@ -14,7 +14,6 @@ from datetime import date
 from typing import List, Optional, Union
 from urllib.parse import urlparse
 
-import requests
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,24 +21,30 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app import config
-from app import media
+from app import config, media, perso_materialize
 from app import models as model_store
-from app import perso_materialize
+from app import setup as dub_setup
 from app.agents import base as agent_base
-from app.api import models as models_api
-from app.api import settings as settings_api
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
-from app.subtitle_ass import PRESETS as SUBTITLE_PRESETS, build_ass
-from app.config import (OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL,
-                        OLLAMA_QWEN_MODEL, PERSODUB_LOG_DIR,
-                        QWEN_N_TAKES, default_stt_engine)
-from app import setup as dub_setup
-from app.dub_script import (
-    DUB_NAME, EDITED_NAME, edit_line, line_wav_path, load_lines, script_path,
+from app.api import models as models_api
+from app.api import settings as settings_api
+from app.config import (
+    OLLAMA_GEMMA_MODEL,
+    OLLAMA_HUNYUAN_MODEL,
+    OLLAMA_QWEN_MODEL,
+    PERSODUB_LOG_DIR,
+    QWEN_N_TAKES,
+    default_stt_engine,
 )
-from app.text.srt import build_srt, parse_srt
+from app.dub_script import (
+    DUB_NAME,
+    EDITED_NAME,
+    edit_line,
+    line_wav_path,
+    load_lines,
+    script_path,
+)
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -58,19 +63,32 @@ from app.engines_status import (
     qwen_status,
 )
 from app.jobs import JobCancelled, JobStore
-from app.perso_client import (PersoClient, PersoCreditExhaustedError,
-                              PersoInvalidKeyError, PersoUnavailableError,
-                              APP_VERSION, list_dubbing_spaces,
-                              perso_to_cues)
+from app.perso_client import (
+    APP_VERSION,
+    PersoClient,
+    PersoCreditExhaustedError,
+    PersoInvalidKeyError,
+    PersoUnavailableError,
+    list_dubbing_spaces,
+    perso_to_cues,
+)
 from app.pipeline import _video_duration, run_dub
 from app.qwen_pipeline import rebuild_dub, resynth_one_line
-from app.text.naming import next_free, safe_name
-from app.settings_env import current_value
+
 # Kept on this module although nothing here calls it any more: the settings
 # routes moved to app/api/settings.py, and tests still redirect main.read_value.
-from app.settings_env import read_value  # noqa: F401
-from app.source_fetch import FetchError, fetch as fetch_source, probe as probe_source
+from app.settings_env import (
+    current_value,
+    read_value,  # noqa: F401
+)
+from app.source_fetch import FetchError
+from app.source_fetch import fetch as fetch_source
+from app.source_fetch import probe as probe_source
 from app.stt_local import transcribe_local
+from app.subtitle_ass import PRESETS as SUBTITLE_PRESETS
+from app.subtitle_ass import build_ass
+from app.text.naming import next_free, safe_name
+from app.text.srt import build_srt, parse_srt
 from app.translate import get_translator
 
 # Kept as module attributes on purpose: main's own call sites read these names
@@ -1423,7 +1441,7 @@ def dub_start(
         raise HTTPException(400, "Send both trim_start and trim_end, or neither.")
     if trim_start is not None and not (
         math.isfinite(trim_start) and math.isfinite(trim_end)
-        and 0 <= trim_start and trim_end - trim_start >= 0.5
+        and trim_start >= 0 and trim_end - trim_start >= 0.5
     ):
         raise HTTPException(
             400,

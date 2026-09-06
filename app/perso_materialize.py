@@ -11,6 +11,7 @@ that already exist, with no Perso re-billing.
 Verified live 2026-08-31 (project 409873): script via /script, per-sentence
 audio via each sentence's audioUrl, background via download?target=backgroundAudio.
 """
+import contextlib
 import json
 import os
 import shutil
@@ -61,10 +62,8 @@ def materialize(pc, project_seq: int, work_dir: str, language: str,
                 src = os.path.join(work_dir, "perso_line_%d.src" % n)
                 pc.download_media(s["audioUrl"], src)
                 to_wav(src, wav)
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(src)
-                except OSError:
-                    pass
             else:
                 # Happens right after a server-side change (e.g. a new
                 # speaker): Perso is still regenerating that sentence.
@@ -77,10 +76,8 @@ def materialize(pc, project_seq: int, work_dir: str, language: str,
         src = os.path.join(work_dir, "perso_background.src")
         pc.download_target(project_seq, "backgroundAudio", src)
         to_wav(src, bg)
-        try:
+        with contextlib.suppress(OSError):
             os.remove(src)
-        except OSError:
-            pass
 
     with open(os.path.join(work_dir, "translated.srt"), "w", encoding="utf-8") as f:
         f.write(build_srt(cues_t))

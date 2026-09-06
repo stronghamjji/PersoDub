@@ -7,19 +7,13 @@ returns the saved key VALUES (user decision 2026-08-06 -- see settings_get in
 app/main.py): this is a single-user desktop app bound to 127.0.0.1, and hiding
 a saved key behind a set/unset boolean only made it look like an empty field.
 """
-import os
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config
-from app import engines_status
-from app import main
-from app.api import settings as settings_api
-from app import perso_client
-from app import settings_env
+from app import config, engines_status, main, perso_client, settings_env, translate
 from app import setup as dub_setup
-from app import translate
+from app.api import settings as settings_api
 from app.settings_env import update_env_text
 
 client = TestClient(main.app, base_url="http://127.0.0.1")

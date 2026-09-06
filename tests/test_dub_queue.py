@@ -5,15 +5,14 @@ upload, Try again, a redub) goes through it, so none of them can run two
 pipelines at once on a laptop that can barely afford one.
 """
 import json
-import os
 import threading
 import time
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
-from app.jobs import JobStore
 import app.main as main
+from app.jobs import JobStore
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")

@@ -6,8 +6,8 @@ import json
 import os
 import time
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 import app.main as main
 from app.main import app

@@ -120,6 +120,7 @@ def test_original_download_is_refused_for_an_uploaded_file(tmp_path, monkeypatch
     # the user already has the file they uploaded.
     import pytest
     from fastapi import HTTPException
+
     from app import main
 
     job = _finished_job(tmp_path, from_link=False)

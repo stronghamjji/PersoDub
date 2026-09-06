@@ -3,11 +3,11 @@ import os
 import threading
 import time
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
-from app import jobs
 import app.main as main
+from app import jobs
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")

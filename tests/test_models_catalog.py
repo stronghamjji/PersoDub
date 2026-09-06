@@ -4,10 +4,8 @@ The 4-state model (ready / downloading / paused / not_downloaded) is what
 keeps the 2026-08-14 "install died halfway = broken forever" bug from coming
 back: a half-downloaded model shows Resume instead of being skipped.
 """
-import json
 import os
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app import models as models_module

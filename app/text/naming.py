@@ -6,7 +6,6 @@ nothing else present (docs/development.md).
 """
 import re
 import unicodedata
-from typing import Iterable, Optional
 
 # Characters a path cannot hold on macOS or Windows, plus the control range.
 _ILLEGAL = re.compile(r'[/\\:*?"<>|\x00-\x1f]')

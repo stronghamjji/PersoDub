@@ -174,8 +174,9 @@ def test_remaking_the_voices_is_a_handle_the_assistant_has():
 
 def test_a_job_is_refused_when_the_disk_is_nearly_full(monkeypatch):
     """Failing here beats failing three stages in with a half-written folder."""
-    import app.main as m
     from fastapi import HTTPException
+
+    import app.main as m
 
     monkeypatch.setattr(m, "free_bytes", lambda p: 100 * 1024 ** 2)  # 100 MB
     try:

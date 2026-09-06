@@ -4,6 +4,7 @@ Dubbing takes time, so when a request comes in it runs on a separate thread
 and its progress status (running/done/error/cancelling/cancelled) can be
 queried.
 """
+import contextlib
 import glob
 import hashlib
 import json
@@ -190,10 +191,8 @@ class JobStore:
         except Exception:
             # Best-effort, like the log mirror -- but don't leave the scratch
             # file behind to be mistaken for something.
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(tmp)
-            except OSError:
-                pass
 
     def restore(self, root: str) -> None:
         """Read every job.json under root back into the store.

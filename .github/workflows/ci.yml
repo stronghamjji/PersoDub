@@ -29,7 +29,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"  # matches the kit's interpreter (pyproject requires-python)
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt ruff
+      # Lint before tests: the rules in pyproject.toml are the ratchet list the
+      # project keeps green (2026-09-06: 0 findings on app/ and tests/).
+      - run: ruff check app tests
       - run: python -m pytest tests/ -q
 
   desktop:

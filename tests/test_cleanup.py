@@ -52,6 +52,7 @@ def test_delete_workspace_removes_the_folder(tmp_path, monkeypatch):
 def test_delete_workspace_refuses_a_path_outside_it(tmp_path, monkeypatch):
     import pytest
     from fastapi import HTTPException
+
     from app import main
 
     outside = tmp_path / "elsewhere"
@@ -70,6 +71,7 @@ def test_delete_workspace_refuses_a_path_outside_it(tmp_path, monkeypatch):
 def test_delete_workspace_refuses_while_the_job_runs(monkeypatch):
     import pytest
     from fastapi import HTTPException
+
     from app import main
 
     monkeypatch.setattr(main.job_store, "get", lambda jid: {"id": jid, "status": "running"})
@@ -118,6 +120,7 @@ def test_delete_workspace_refuses_a_work_dir_outside_it(tmp_path, monkeypatch):
     # not only on the out_path fallback the older test covers.
     import pytest
     from fastapi import HTTPException
+
     from app import main
 
     outside = tmp_path / "elsewhere"
@@ -138,6 +141,7 @@ def test_delete_workspace_refuses_a_work_dir_that_climbs_out(tmp_path, monkeypat
     # of it and walks out with "..".
     import pytest
     from fastapi import HTTPException
+
     from app import main
 
     ws = tmp_path / "workspace"

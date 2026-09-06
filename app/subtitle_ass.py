@@ -9,50 +9,50 @@ import re
 # The plugin's presets.json, minus the two karaoke ones. Fractions are of the
 # video height, so every style scales to any resolution.
 PRESETS = {
-    "clean": dict(name="Clean", bold=True, uppercase=False, fontFrac=0.032,
-                  outlineFrac=0.0018, shadowFrac=0.0016, position="lower",
-                  primary="FFFFFF", outline="000000", box=None, fx=None),
-    "bold-punch": dict(name="Bold Punch", bold=True, uppercase=True, fontFrac=0.052,
-                       outlineFrac=0.007, shadowFrac=0, position="center",
-                       primary="FFFFFF", outline="000000", box=None, fx=None),
-    "sticker": dict(name="Sticker", bold=True, uppercase=False, fontFrac=0.029,
-                    outlineFrac=0, shadowFrac=0, position="lower",
-                    primary="FFFFFF", outline="000000",
-                    box=dict(color="000000", opacity=0.6), fx=None),
-    "neon-yellow": dict(name="Neon Yellow", bold=True, uppercase=False, fontFrac=0.049,
-                        outlineFrac=0.006, shadowFrac=0, position="lower",
-                        primary="FFE600", outline="000000", box=None, fx=None),
-    "soft-card": dict(name="Soft Card", bold=False, uppercase=False, fontFrac=0.026,
-                      outlineFrac=0, shadowFrac=0, position="upper",
-                      primary="3A332C", outline="FFFFFF",
-                      box=dict(color="FFFFFF", opacity=0.85), fx=None),
-    "rainbow": dict(name="Rainbow", bold=True, uppercase=False, fontFrac=0.045,
-                    outlineFrac=0.005, shadowFrac=0, position="lower",
-                    primary="FFFFFF", outline="000000", box=None, fx="rainbow"),
-    "broadcast": dict(name="Broadcast", bold=False, uppercase=False, fontFrac=0.06,
-                      outlineFrac=0.003, shadowFrac=0.0033, position="bottom",
-                      primary="FFFFFF", outline="000000", box=None, fx=None),
-    "streaming": dict(name="Streaming", bold=False, uppercase=False, fontFrac=0.06,
-                      outlineFrac=0, shadowFrac=0.004, position="bottom",
-                      primary="FFFFFF", outline="000000", box=None, fx=None),
-    "lower-bar": dict(name="Lower Bar", bold=False, uppercase=False, fontFrac=0.06,
-                      outlineFrac=0, shadowFrac=0, position="bottom",
-                      primary="FFFFFF", outline="000000",
-                      box=dict(color="000000", opacity=0.6), fx=None),
-    "neon": dict(name="Neon", bold=True, uppercase=False, fontFrac=0.06,
-                 outlineFrac=0.004, shadowFrac=0, position="bottom",
-                 primary="00E5FF", outline="00E5FF", box=None, fx="neon"),
+    "clean": {"name": "Clean", "bold": True, "uppercase": False, "fontFrac": 0.032,
+                  "outlineFrac": 0.0018, "shadowFrac": 0.0016, "position": "lower",
+                  "primary": "FFFFFF", "outline": "000000", "box": None, "fx": None},
+    "bold-punch": {"name": "Bold Punch", "bold": True, "uppercase": True, "fontFrac": 0.052,
+                       "outlineFrac": 0.007, "shadowFrac": 0, "position": "center",
+                       "primary": "FFFFFF", "outline": "000000", "box": None, "fx": None},
+    "sticker": {"name": "Sticker", "bold": True, "uppercase": False, "fontFrac": 0.029,
+                    "outlineFrac": 0, "shadowFrac": 0, "position": "lower",
+                    "primary": "FFFFFF", "outline": "000000",
+                    "box": {"color": "000000", "opacity": 0.6}, "fx": None},
+    "neon-yellow": {"name": "Neon Yellow", "bold": True, "uppercase": False, "fontFrac": 0.049,
+                        "outlineFrac": 0.006, "shadowFrac": 0, "position": "lower",
+                        "primary": "FFE600", "outline": "000000", "box": None, "fx": None},
+    "soft-card": {"name": "Soft Card", "bold": False, "uppercase": False, "fontFrac": 0.026,
+                      "outlineFrac": 0, "shadowFrac": 0, "position": "upper",
+                      "primary": "3A332C", "outline": "FFFFFF",
+                      "box": {"color": "FFFFFF", "opacity": 0.85}, "fx": None},
+    "rainbow": {"name": "Rainbow", "bold": True, "uppercase": False, "fontFrac": 0.045,
+                    "outlineFrac": 0.005, "shadowFrac": 0, "position": "lower",
+                    "primary": "FFFFFF", "outline": "000000", "box": None, "fx": "rainbow"},
+    "broadcast": {"name": "Broadcast", "bold": False, "uppercase": False, "fontFrac": 0.06,
+                      "outlineFrac": 0.003, "shadowFrac": 0.0033, "position": "bottom",
+                      "primary": "FFFFFF", "outline": "000000", "box": None, "fx": None},
+    "streaming": {"name": "Streaming", "bold": False, "uppercase": False, "fontFrac": 0.06,
+                      "outlineFrac": 0, "shadowFrac": 0.004, "position": "bottom",
+                      "primary": "FFFFFF", "outline": "000000", "box": None, "fx": None},
+    "lower-bar": {"name": "Lower Bar", "bold": False, "uppercase": False, "fontFrac": 0.06,
+                      "outlineFrac": 0, "shadowFrac": 0, "position": "bottom",
+                      "primary": "FFFFFF", "outline": "000000",
+                      "box": {"color": "000000", "opacity": 0.6}, "fx": None},
+    "neon": {"name": "Neon", "bold": True, "uppercase": False, "fontFrac": 0.06,
+                 "outlineFrac": 0.004, "shadowFrac": 0, "position": "bottom",
+                 "primary": "00E5FF", "outline": "00E5FF", "box": None, "fx": "neon"},
     # Ours, not the plugin's: fully opaque grounds -- sticker and soft-card
     # are translucent, and nothing covered what sits under the text outright
     # (user, 2026-09-01).
-    "black-box": dict(name="Black Box", bold=True, uppercase=False, fontFrac=0.032,
-                      outlineFrac=0, shadowFrac=0, position="lower",
-                      primary="FFFFFF", outline="000000",
-                      box=dict(color="000000", opacity=1.0), fx=None),
-    "white-box": dict(name="White Box", bold=False, uppercase=False, fontFrac=0.03,
-                      outlineFrac=0, shadowFrac=0, position="lower",
-                      primary="3A332C", outline="FFFFFF",
-                      box=dict(color="FFFFFF", opacity=1.0), fx=None),
+    "black-box": {"name": "Black Box", "bold": True, "uppercase": False, "fontFrac": 0.032,
+                      "outlineFrac": 0, "shadowFrac": 0, "position": "lower",
+                      "primary": "FFFFFF", "outline": "000000",
+                      "box": {"color": "000000", "opacity": 1.0}, "fx": None},
+    "white-box": {"name": "White Box", "bold": False, "uppercase": False, "fontFrac": 0.03,
+                      "outlineFrac": 0, "shadowFrac": 0, "position": "lower",
+                      "primary": "3A332C", "outline": "FFFFFF",
+                      "box": {"color": "FFFFFF", "opacity": 1.0}, "fx": None},
 }
 
 # Alignment (numpad) and how far up from the edge, per named position.
@@ -186,11 +186,9 @@ def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
                              body))
             continue
         if p["fx"] == "rainbow":
-            i = 0
             words = []
-            for w in text.split():
+            for i, w in enumerate(text.split()):
                 words.append("{\\1c&H%s&}%s" % (RAINBOW[i % len(RAINBOW)], _text(w)))
-                i += 1
             events.append("Dialogue: 0,%s,%s,Base,,0,0,,%s" % (st, en, " ".join(words)))
         elif p["fx"] == "neon":
             fill = _color(p["primary"])
