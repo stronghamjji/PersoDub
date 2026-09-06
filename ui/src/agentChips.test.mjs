@@ -18,12 +18,16 @@ const STRIP = fileURLToPath(new URL("./agentStrip.mjs", import.meta.url));
 
 function chipSource() {
   const html = readFileSync(STRIP, "utf8");
-  const from = html.indexOf("const MARK_RUNNING");
-  const to = html.indexOf("function thinking(", from);
-  assert.ok(from > 0 && to > from, "the chip code was not found in ui/src/agentStrip.mjs");
-  // The module exports one of these helpers; inside new Function there is no
-  // module to export from, so the keyword comes off.
-  return html.slice(from, to).replace(/^export /gm, "");
+  // Two stretches now: the marks and chipText sit at module level, the chip
+  // state machine inside initAgentStrip. Both are lifted; the export keyword
+  // comes off because inside new Function there is no module to export from.
+  const a = html.indexOf("const MARK_RUNNING");
+  const aEnd = html.indexOf("\n}\n", html.indexOf("function chipText(", a)) + 3;
+  const b = html.indexOf("let run = null;", aEnd);
+  const bEnd = html.indexOf("function thinking(", b);
+  assert.ok(a > 0 && aEnd > a && b > aEnd && bEnd > b,
+    "the chip code was not found in ui/src/agentStrip.mjs");
+  return (html.slice(a, aEnd) + "\n" + html.slice(b, bEnd)).replace(/^export /gm, "");
 }
 
 // Just enough DOM for the chip code: an element that can hold children, take a
