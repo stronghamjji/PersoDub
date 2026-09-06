@@ -1951,6 +1951,7 @@
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips } from "/js/dubApi.mjs";
 import { gb, neededModelId, modelStatusLine, dubStartDialog, overallProgress, allReady } from "/js/modelsUi.mjs";
 import { updateBannerView } from "/js/updateBanner.mjs";
+import { fmtClock, fmtClockTenths, formatBytes, escapeHtml, errorText } from "/js/format.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -2825,22 +2826,6 @@ async function openLastScreen() {
 // Opens the moment a video or a link is ready, and is the only place a job can
 // be started from. Everything the first screen stopped asking for is in here.
 
-// 00:00:10 -- hours, minutes, seconds, two digits each.
-function fmtClock(sec) {
-  const t = Math.max(0, Math.floor(Number(sec) || 0));
-  return [Math.floor(t / 3600), Math.floor((t % 3600) / 60), t % 60]
-    .map((n) => String(n).padStart(2, "0")).join(":");
-}
-
-// 00:00:02.0 -- the same clock plus tenths, which is the unit the trim bar
-// works in (its sliders step by 0.1 s).
-function fmtClockTenths(sec) {
-  // Counted in whole tenths first: 0.3 is really 0.29999... in binary, and
-  // taking the fraction apart by hand would print it as 0.2.
-  const tenths = Math.round(Math.max(0, Number(sec) || 0) * 10);
-  return `${fmtClock(Math.floor(tenths / 10))}.${tenths % 10}`;
-}
-
 // Plays only [start, end] of a video and stops there. Shared: the trim bar
 // previews the chosen part with it, and the finished screen plays one line.
 // One range at a time per video -- a second press replaces the first press's
@@ -3168,12 +3153,6 @@ $("advancedBtn").addEventListener("click", () => {
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
 const videoInput = $("videoInput");
-
-function formatBytes(n) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 // One constant to change if the allowed size ever moves. The zone's own hint
 // spells the limit out in the markup -- keep the two in step.
@@ -3597,10 +3576,6 @@ $("cancelBtn").addEventListener("click", async () => {
 // beside its video, so GET /api/dub/jobs is the same list tomorrow morning as
 // it is now -- which is what the sidebar is for.
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
 // The line under a project's name: which way the dub goes and how long it is.
 // Length is only known for a job the user trimmed -- the record says what was
 // cut, never how long the film was -- so it is left out rather than guessed at.
@@ -3930,17 +3905,6 @@ async function startBatchDubbing(files) {
   } finally {
     $("startBtn").disabled = false;
   }
-}
-
-// Server errors arrive as the raw response body, so a FastAPI detail shows up
-// as JSON unless it is unwrapped here.
-function errorText(e) {
-  const raw = String((e && e.message) || e || "");
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.detail) return String(parsed.detail);
-  } catch { /* not JSON, use it as it is */ }
-  return raw;
 }
 
 function showIfOutOfSpace(e) {
@@ -5603,6 +5567,8 @@ openLastScreen();
      is one block to delete. It talks to /api/agent/chat and renders the five
      events the server sends: start, progress, text, done, error. -->
 <script type="module">
+import { escapeHtml } from "/js/format.mjs";
+
 const el = (id) => document.getElementById(id);
 const log = el("assistantLog"), input = el("assistantInput");
 const stateLine = el("assistantState");
@@ -6030,9 +5996,6 @@ async function loadAgents({ login = false } = {}) {
 // The assistant writes a little markdown. Escape the whole answer first, then
 // put back the three marks it actually uses -- so nothing an answer contains
 // can become a tag of its own, and no link or raw HTML ever survives.
-const escapeHtml = (s) =>
-  s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-
 function renderReply(node, text) {
   node.innerHTML = escapeHtml(text)
     .replace(/`([^`\n]+)`/g, "<code>$1</code>")
