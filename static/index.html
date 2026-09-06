@@ -334,7 +334,8 @@
      focus and locked behind a veil, and the progress card on the right stretched
      to whatever height that video block ends up. Showing the real video (rather
      than a placeholder box) is what makes the wait feel like it belongs to THIS
-     job. It never carries a time estimate -- see renderRunning(). */
+     job. It never carries a time estimate -- see paintRunning()
+     (ui/src/runningScreen.mjs). */
 
   /* margin:auto rather than justify/align-content: centred flex content that
      overflows its scroll container cannot be scrolled back to its start edge,
@@ -1314,7 +1315,7 @@
 
       <!-- ============ RUNNING ============ -->
       <!-- The job's own video, playable, next to a card that says which of
-           the four stages it is on. renderRunning() fills both. The original
+           the four stages it is on. ui/src/runningScreen.mjs fills both. The original
            used to sit blurred behind a spinner until the dub was done; the
            file is already on this machine, and the card beside it is the one
            place that says how far along the dub is (2026-08-28). -->
@@ -1704,7 +1705,7 @@
 
 <!-- ============ Out-of-credits / quota popup ============ -->
 <!-- Opened once per job when an exhaustion-type notice arrives (Perso credits,
-     Gemini quota, Gemini servers down -- see maybeShowCreditModal, which fills
+     Gemini quota, Gemini servers down -- see ui/src/runningScreen.mjs, which fills
      in the title/message/button per notice type). A dialog, not an inline
      line: the inline notice alone was missable, and this one costs the user
      money. -->
@@ -1955,6 +1956,7 @@ import { initModelsUi } from "/js/modelsDialog.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
 import { initProjectsUi } from "/js/projects.mjs";
+import { initRunningScreenUi } from "/js/runningScreen.mjs";
 import { updateBannerView } from "/js/updateBanner.mjs";
 import { fmtClock, fmtClockTenths, formatBytes, escapeHtml, errorText } from "/js/format.mjs";
 
@@ -2620,7 +2622,8 @@ function trimLabel(job, withLength = false) {
   return withLength ? `${range} · ${(trim.end - trim.start).toFixed(1)}s` : range;
 }
 
-// One short line. The WHY of a failure renders separately (renderNotices) --
+// One short line. The WHY of a failure renders separately (paintNotices,
+// ui/src/runningScreen.mjs) --
 // four competing failure messages meant the user read none of them
 // (feedback 2026-08-06).
 function jobStatusLine(job, progress) {
@@ -2659,9 +2662,7 @@ function resetForNewJob() {
   // be emptied too -- otherwise the last job's link is still sitting there.
   $("linkInput").value = "";
   clearLink();
-  $("jobNotice").hidden = true;
-  $("jobNotice").classList.remove("danger");
-  $("doneNotice").hidden = true;
+  runningScreen.reset();
   $("formError").textContent = "";
   releaseDoneVideo();
   homeNoticeAndLog();
@@ -2669,7 +2670,7 @@ function resetForNewJob() {
   renderTimeline([], 0);
   scriptSaving("");
   scriptJobId = null;
-  updateCancelButton();
+  runningScreen.paintCancel();
   showHome();
 }
 // The back arrow is the way out of a finished job -- the same "start another
@@ -2681,187 +2682,28 @@ function renderLog(job) {
 }
 
 // ---------------- Running screen ----------------
-// The four stages, in the order parseProgress numbers them (dubApi.mjs).
-const STAGE_NAMES = ["Separating audio", "Transcribing", "Translating", "Dubbing"];
-const CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-
-// The blurred original plus the progress card, redrawn on every poll.
-// NO time estimate, ever: the four stages take wildly different times on
-// different machines, so any "about N minutes left" we showed would be a
-// promise we break.
-function renderRunning(job, progress) {
-  // A job that failed took the raw log onto the done screen with it. This job's
-  // log has to be readable here, under this job's steps.
-  homeNoticeAndLog();
-  // Set once -- assigning src on every poll would restart the download three
-  // seconds in, forever. A link job has no input.mp4 yet when it starts (the
-  // video is downloaded inside the job thread, app/main.py:dub_start), so that
-  // first request 404s; the error handler below drops the src again and this
-  // guard re-arms it on the next poll. Once a load succeeds no error fires, so
-  // the src stays put and the request is not repeated.
-  const video = $("runningVideo");
-  // A link job is downloaded whole inside the job thread and only cut after
-  // that, so the picture above may be the untrimmed download. The first stage
-  // starting is the sign the cut has landed; the mark makes it a different URL
-  // exactly once, so the browser fetches the trimmed file and then settles.
-  const cut = job.from_link && job.trim && progress.stage > 0 ? "?cut=1" : "";
-  const src = `/api/dub/result/${job.id}/original${cut}`;
-  if (video.getAttribute("src") !== src) video.setAttribute("src", src);
-
-  $("runningTrim").textContent = trimLabel(job, true);
-
-  $("progressTitle").textContent = progress.label;
-  $("progressPct").textContent = `${progress.percent}%`;
-  $("progressFill").style.width = `${progress.percent}%`;
-  $("progressFill").parentElement.setAttribute("aria-valuenow", String(progress.percent));
-
-  $("progressSteps").innerHTML = STAGE_NAMES.map((name, i) => {
-    const n = i + 1;
-    const stepState = n < progress.stage ? "done" : n === progress.stage ? "current" : "todo";
-    // Only the voice stage counts lines, and only once the pipeline has
-    // logged how many there are AND finished at least one. A standard-quality
-    // run never logs a chosen take, so the counter would sit at "voice 0 of 5"
-    // for the whole stage and read like something stuck.
-    const counted = stepState === "current" && n === 4
-      && progress.voiceTotal && progress.voiceDone > 0;
-    const note = counted
-      ? ` <span class="step-note">· voice ${Math.min(progress.voiceDone, progress.voiceTotal)} of ${progress.voiceTotal}</span>`
-      : "";
-    const mark = stepState === "done" ? CHECK_ICON : "";
-    // "step-done", not the bare "done": .done is the finished screen's own
-    // layout class, and a step wearing it turned into a column -- tick above
-    // the name instead of beside it.
-    const cls = stepState === "done" ? "step-done" : stepState;
-    return `<li class="${cls}"><span class="step-mark ${cls}">${mark}</span>${escapeHtml(name)}${note}</li>`;
-  }).join("");
-}
-
-// Removing the attribute does not itself start a load, so this cannot loop:
-// it only puts the element back to "no source", which renderRunning notices on
-// the next poll (three seconds later) and tries again -- until the download
-// lands, after which there is no error and nothing to re-arm.
-$("runningVideo").addEventListener("error", (e) => e.target.removeAttribute("src"));
-
-// The single reason line. On a failed job it carries THE explanation
-// (job.error, with the notice's clickable Recharge link when the backend
-// attached one); on a running job it shows the latest notice. Everything else
-// stays short so this one message actually gets read -- splitting the story
-// across four banners meant none of them did.
-// It is written into both screens, because a job crosses from one to the other
-// and the reason has to survive the crossing: #jobNotice under the progress
-// steps while it runs, #doneNotice above the script once it is finished.
-// Failures the server records as a token rather than a sentence, because the
-// token is what the code elsewhere tests. Said in plain words here, where the
-// only audience is the person reading the screen.
-const ERROR_SENTENCES = {
-  interrupted: "The app was closed before this dub finished.",
-};
-
-function renderNotices(job) {
-  const notices = job.notices || [];
-  const n = notices.length ? notices[notices.length - 1] : null;
-  const failed = job.status === "error";
-  const message = failed
-    ? (ERROR_SENTENCES[job.error] || job.error || (n && n.message) || "Something went wrong. Try again, or use a shorter clip.")
-    : (n && n.message);
-  const linkText = n && CREDIT_MODALS[n.type] ? CREDIT_MODALS[n.type].button : "Recharge";
-  const html = (n && n.link && linkText)
-    ? `${escapeHtml(message)} <a href="${escapeHtml(n.link)}" target="_blank" rel="noopener">${linkText}</a>`
-    : escapeHtml(message || "");
-  for (const id of ["jobNotice", "doneNotice"]) {
-    const el = $(id);
-    // "danger" only ever comes from the poll loop's own failure below; a real
-    // notice replaces that message, so it drops the red with it.
-    el.classList.remove("danger");
-    el.hidden = !message;
-    el.innerHTML = message ? html : "";
-  }
-}
-
-// Out-of-credits / quota popup: pop once per job on the first exhaustion-type
-// notice. The inline yellow notice line above stays either way, so the reason
-// is still visible after the popup is dismissed. Per-type wording; button is
-// only shown when going somewhere actually helps (a 503 has nowhere to go).
-const CREDIT_MODALS = {
-  perso_credit_exhausted: {
-    title: "Out of credits",
-    message: "Perso credits are used up. Recharge, then run this job again.",
-    button: "Recharge",
-  },
-  perso_invalid_key: {
-    title: "Check your Perso key",
-    message: "Perso rejected the API key. Open Settings and check the key.",
-    button: "Open Settings",
-    action: "settings",  // in-app action instead of an external link
-  },
-  perso_unavailable: {
-    title: "Perso server busy",
-    message: "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again.",
-    button: null,
-  },
-  gemini_quota_exhausted: {
-    title: "Gemini quota used up",
-    message: "The Gemini key's free quota is used up. Upgrade its plan, or try again after the daily reset.",
-    button: "Upgrade",
-  },
-  gemini_unavailable: {
-    title: "Google server busy",
-    message: "Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again.",
-    button: null,
-  },
-};
-const creditModalShownFor = new Set();
-let creditModalAction = null;  // "settings" while the open popup's button is an in-app action
-function maybeShowCreditModal(job) {
-  const n = (job.notices || []).find((x) => CREDIT_MODALS[x.type]);
-  if (!n || creditModalShownFor.has(job.id)) return;
-  creditModalShownFor.add(job.id);
-  const cfg = CREDIT_MODALS[n.type];
-  $("creditTitle").textContent = cfg.title;
-  $("creditMessage").textContent = cfg.message;
-  creditModalAction = cfg.action || null;
-  const btn = $("creditRechargeBtn");
-  const show = cfg.button && (n.link || cfg.action);
-  btn.style.display = show ? "" : "none";
-  if (show) { btn.textContent = cfg.button; btn.href = n.link || "#"; }
-  $("creditOverlay").classList.add("open");
-}
-function closeCreditModal() { $("creditOverlay").classList.remove("open"); }
-$("creditCloseX").addEventListener("click", closeCreditModal);
-$("creditCloseBtn").addEventListener("click", closeCreditModal);
-$("creditRechargeBtn").addEventListener("click", (e) => {
-  // Link-type button: the link opens in a new tab and the popup closes.
-  // Action-type button ("Open Settings"): stay in the app and open Settings.
-  if (creditModalAction === "settings") { e.preventDefault(); settings.openSettings(); }
-  closeCreditModal();
-});
-$("creditOverlay").addEventListener("click", (e) => { if (e.target === $("creditOverlay")) closeCreditModal(); });
-
-// ---------------- Cancel button ----------------
-function updateCancelButton() {
-  const btn = $("cancelBtn");
-  const status = state.job ? state.job.status : null;
-  btn.hidden = !["running", "cancelling", "queued"].includes(status);
-  btn.disabled = status === "cancelling";
-  btn.textContent = status === "cancelling" ? "Cancelling…" : "Cancel";
-}
-
-$("cancelBtn").addEventListener("click", async () => {
-  if (!state.jobId) return;
-  if (!confirm("Cancel this dubbing job?")) return;
-  $("cancelBtn").disabled = true;
-  $("cancelBtn").textContent = "Cancelling…";
-  try {
-    await cancelDubJob(state.jobId);
-  } catch (e) {
-    // The job may already have finished between the confirm dialog and this
-    // call (backend returns 409) -- not fatal, the next poll shows the truth.
-    console.warn(e.message);
-    // Unless there is no next poll: if the server is unreachable the poll loop
-    // has already given up, so put the button back by hand rather than leaving
-    // it stuck on a disabled "Cancelling…".
-    updateCancelButton();
-  }
+// The blurred original, the progress card and its four stages, the one notice
+// line a job gets, the out-of-credits popup and the Cancel button are all
+// drawn by ui/src/runningScreen.mjs. What stays here is the job-state engine
+// that feeds it -- handleJobUpdate and runPollLoop below -- plus the two lines
+// the running screen borrows from elsewhere: trimLabel, which the top bar says
+// in its short form, and homeNoticeAndLog, which the failure card borrows the
+// notice and the raw log through.
+const runningScreen = initRunningScreenUi({
+  $,
+  parseProgress,
+  trimLabel,
+  homeNoticeAndLog,
+  // Read late: which job is open, and what it is doing, change all day under
+  // the button that offers to stop it.
+  getJobId: () => state.jobId,
+  getJobStatus: () => (state.job ? state.job.status : null),
+  onCancel: (jobId) => cancelDubJob(jobId),
+  onOpenSettings: () => settings.openSettings(),
+  // The popup's Recharge button is an anchor with target="_blank"; arming its
+  // href is all the opening it needs. Handed in so the desktop shell could one
+  // day open it its own way, and so a test can see the link offered.
+  openExternal: (a, url) => { a.href = url; },
 });
 
 // ---------------- Projects (the job list, read from the server) ----------------
@@ -3097,24 +2939,18 @@ function runPollLoop(jobId, myGeneration) {
     // The server stopped answering (app quit, machine slept). Say so, and keep
     // asking: the dub is very likely still running back there, so Cancel stays
     // exactly as it was and the loop only ends when the user leaves the job.
-    // The next answer redraws this line through renderNotices, which is what
+    // The next answer redraws this line through paintNotices, which is what
     // takes the red away again the moment the server is back.
     onUnreachable: (e) => {
       if (myGeneration !== state.pollGeneration) return;
-      const el = $("jobNotice");
-      el.textContent = `Could not reach the app server: ${errorText(e)} - still trying.`;
-      el.classList.add("danger");
-      el.hidden = false;
+      runningScreen.showNoticeError(`Could not reach the app server: ${errorText(e)} - still trying.`);
     },
   }).catch((e) => {
     // Leaving the job settles the loop without a word (it resolves, it does not
     // throw). What lands here is the server answering that this job is gone, and
     // that has to be said once rather than retried for ever.
     if (myGeneration !== state.pollGeneration) return;
-    const el = $("jobNotice");
-    el.textContent = errorText(e);
-    el.classList.add("danger");
-    el.hidden = false;
+    runningScreen.showNoticeError(errorText(e));
   });
 }
 
@@ -3141,12 +2977,11 @@ async function handleJobUpdate(job) {
     back: true,
   });
   renderLog(job);
-  renderNotices(job);
-  maybeShowCreditModal(job);
-  updateCancelButton();
+  runningScreen.paintNotices(job);
+  runningScreen.paintCancel();
 
   if (running) {
-    renderRunning(job, progress);
+    runningScreen.paintRunning(job);
     return;
   }
 
@@ -3581,6 +3416,10 @@ const UNDO_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="tr
 // or the app restarts. Which lines those are is kept here, per job and line,
 // because the table is redrawn after every remake.
 const REMAKE_ICON = '<svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>';
+// The tick that button wears once the voice is made. The running screen draws
+// the same one over a finished stage, from its own copy in
+// ui/src/runningScreen.mjs -- a nine-word path is not worth a shared module.
+const CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const freshLines = new Set();
 
 // Speaker labels are the diarizer's own ("SPEAKER_00"), which mean nothing to a
