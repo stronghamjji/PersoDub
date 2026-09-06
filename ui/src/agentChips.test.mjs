@@ -2,11 +2,11 @@
 // lists the lines: the assistant calls edit_script_line once per line, so twenty
 // rewritten lines used to leave twenty chips all reading "Rewriting a line".
 //
-// The code under test lives in the agent's inline module in static/index.html
-// (the whole feature is one block, so it stays there), so this test lifts that
-// one stretch of it out of the page and runs it against a hand-made DOM -- no
-// browser, no server, no agent. If the anchors below ever stop matching, the
-// test fails rather than quietly checking nothing.
+// The code under test lives in ui/src/agentStrip.mjs (the strip moved out of
+// static/index.html on 2026-09-06), so this test lifts that one stretch of it
+// out of the module and runs it against a hand-made DOM -- no browser, no
+// server, no agent. If the anchors below ever stop matching, the test fails
+// rather than quietly checking nothing.
 //
 // Run with: node --test ui/src/agentChips.test.mjs
 import test from "node:test";
@@ -14,14 +14,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const INDEX = fileURLToPath(new URL("../../static/index.html", import.meta.url));
+const STRIP = fileURLToPath(new URL("./agentStrip.mjs", import.meta.url));
 
 function chipSource() {
-  const html = readFileSync(INDEX, "utf8");
+  const html = readFileSync(STRIP, "utf8");
   const from = html.indexOf("const MARK_RUNNING");
   const to = html.indexOf("function thinking(", from);
-  assert.ok(from > 0 && to > from, "the chip code was not found in static/index.html");
-  return html.slice(from, to);
+  assert.ok(from > 0 && to > from, "the chip code was not found in ui/src/agentStrip.mjs");
+  // The module exports one of these helpers; inside new Function there is no
+  // module to export from, so the keyword comes off.
+  return html.slice(from, to).replace(/^export /gm, "");
 }
 
 // Just enough DOM for the chip code: an element that can hold children, take a

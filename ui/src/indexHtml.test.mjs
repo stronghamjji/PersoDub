@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 const INDEX = fileURLToPath(new URL("../../static/index.html", import.meta.url));
 // The timeline draws its own head and lane, so their ids live in the module.
 const TIMELINE = fileURLToPath(new URL("./timeline.mjs", import.meta.url));
+const STRIP = fileURLToPath(new URL("./agentStrip.mjs", import.meta.url));
 
 // The line number comes along so a failure says where in the page to look --
 // the block itself starts a couple of thousand lines in.
@@ -55,7 +56,7 @@ test("every inline module in static/index.html parses", () => {
 // the running answer to send it ("해" turns ending in Stopped, 2026-09-01).
 // The guard is the standard one; this pins it to the agent input's handler.
 test("the agent input ignores Enter pressed mid-composition", () => {
-  const html = readFileSync(INDEX, "utf8");
+  const html = readFileSync(STRIP, "utf8");
   const handler = html.match(/input\.addEventListener\("keydown"[\s\S]{0,600}/);
   assert.ok(handler, "the agent input's keydown handler is gone?");
   assert.match(handler[0], /isComposing/,
