@@ -71,6 +71,76 @@ def _check_cancel(cancel_check: Optional[Callable[[], bool]], log: Callable[[str
         raise JobCancelled("cancelled by user")
 
 
+# The provider failures every stage reports the same way: one short sentence in
+# the log, the same sentence as a structured notice for the UI popup, then the
+# job fails with that sentence as its error. The third field names the
+# exception attribute holding a clickable link, or None when the fix lives
+# inside the app (Settings) rather than on the web -- the wording of each
+# message is a user decision (2026-08-06), so change it here and nowhere else.
+_NOTICE_ERRORS = {
+    PersoCreditExhaustedError: (
+        "perso_credit_exhausted",
+        "Perso credits are used up. Recharge to continue.",
+        "link",
+    ),
+    PersoInvalidKeyError: (
+        "perso_invalid_key",
+        "Perso rejected the API key. Open Settings and check the key.",
+        None,
+    ),
+    PersoUnavailableError: (
+        "perso_unavailable",
+        "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again.",
+        None,
+    ),
+    GeminiQuotaExhaustedError: (
+        "gemini_quota_exhausted",
+        "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset.",
+        "link",
+    ),
+    GeminiUnavailableError: (
+        "gemini_unavailable",
+        "Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again.",
+        None,
+    ),
+}
+
+# Which of them each stage catches. Kept separate from the table so a Perso
+# stage still cannot swallow a Gemini failure (and the other way round): the
+# fall-through "except Exception" after these writes a stage-specific sentence,
+# and that is what an unexpected provider error must keep landing in.
+_PERSO_NOTICE_ERRORS = (
+    PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError,
+)
+_GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError)
+
+
+def _raise_notice(e, log, on_notice):
+    """Report a _NOTICE_ERRORS failure and fail the job with its message.
+
+    Always raises. Logs one "   Error: …" line (with the link in parentheses
+    when the exception carries one), hands on_notice the structured dict the UI
+    reads, then raises RuntimeError(message) chained from e -- exactly what
+    each hand-written except block did before.
+    """
+    for cls in type(e).__mro__:
+        entry = _NOTICE_ERRORS.get(cls)
+        if entry is not None:
+            break
+    else:  # pragma: no cover -- callers only pass types listed above
+        raise e
+    notice_type, msg, link_attr = entry
+    notice = {"type": notice_type, "message": msg}
+    if link_attr:
+        notice["link"] = getattr(e, link_attr)
+        log(f"   Error: {msg} ({notice['link']})")
+    else:
+        log(f"   Error: {msg}")
+    if on_notice:
+        on_notice(notice)
+    raise RuntimeError(msg) from e
+
+
 def _manifest_exclude_spans(manifest_path, mix_wav, log):
     """Whitelisted nonverbal spans to skip while measuring, or None.
 
@@ -260,24 +330,8 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
         sep_paths = pc.separate(video_path, work_dir)
     except JobCancelled:
         raise  # a user cancel is not a Perso failure -- don't rewrap it
-    except PersoCreditExhaustedError as e:
-        msg = "Perso credits are used up. Recharge to continue."
-        log(f"   Error: {msg} ({e.link})")
-        if on_notice:
-            on_notice({"type": "perso_credit_exhausted", "message": msg, "link": e.link})
-        raise RuntimeError(msg) from e
-    except PersoInvalidKeyError as e:
-        msg = "Perso rejected the API key. Open Settings and check the key."
-        log(f"   Error: {msg}")
-        if on_notice:
-            on_notice({"type": "perso_invalid_key", "message": msg})
-        raise RuntimeError(msg) from e
-    except PersoUnavailableError as e:
-        msg = "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
-        log(f"   Error: {msg}")
-        if on_notice:
-            on_notice({"type": "perso_unavailable", "message": msg})
-        raise RuntimeError(msg) from e
+    except _PERSO_NOTICE_ERRORS as e:
+        _raise_notice(e, log, on_notice)
     except Exception as e:
         msg = f"Perso separation failed ({str(e)[:80]}). Check Settings, or switch separation back to Local."
         log(f"   Error: {msg}")
@@ -292,6 +346,240 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
     except Exception:
         pass
     return sep_paths, pc
+
+
+def _stage_separate(video_path, work_dir, sep_engine, perso_client,
+                    cancel_check, on_notice, log):
+    """Stage 1/6 -- voice/background separation.
+
+    Local Demucs (default) or Perso cloud. Either way a failure fails the whole
+    job: no silent engine substitution (2026-08-06 rule), and no container
+    fallback. Returns (vocals_path, background_path, perso_client); the client
+    comes back because the Perso path may have created one, and the STT stage
+    reuses it so the same video is not uploaded twice.
+    """
+    if (sep_engine or "").lower() == "perso":
+        log("1/6 Separating background audio via Perso cloud…")
+        sep_paths, perso_client = _separate_with_perso(
+            video_path, work_dir, perso_client, cancel_check, on_notice, log)
+    else:
+        log("1/6 Separating background audio locally (Demucs)…")
+        try:
+            sep_paths = SeparationEngine().separate(video_path, work_dir)
+        except Exception as e:
+            raise RuntimeError(f"Local separation failed, aborting (no container fallback): {str(e)[:200]}")
+    return sep_paths["vocals"], sep_paths["background"], perso_client
+
+
+def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, log):
+    """Stage 2/6 -- Perso cloud STT (diarization & timestamps). Returns cues.
+
+    A failure FAILS the job -- the user picked Perso, and silently substituting
+    the local engine meant paid-quality was quietly downgraded with only a log
+    line to show for it (user decision 2026-08-06: no fallback; say what is
+    wrong and how to fix it instead).
+    """
+    try:
+        log("2/6 Running Perso STT (diarization & timestamps)…")
+        pc = perso_client or PersoClient()
+        # Let Cancel interrupt the Perso progress wait (up to an hour of
+        # polling); without this, "Cancelling…" hung until Perso finished.
+        pc.cancel_check = cancel_check
+        # Say which workspace is paying. A workspace picked in Settings
+        # applies only after a restart, so the active one here can differ
+        # from what the Settings screen shows -- this line is how the user
+        # finds that out (billed the wrong-workspace confusion of
+        # 2026-08-06). getattr: test fakes may not carry it.
+        ws = getattr(pc, "describe_workspace", lambda: None)()
+        if ws:
+            name = ws.get("name") or f"workspace {ws.get('seq')}"
+            log(f"   Perso workspace: {name} (#{ws.get('seq')})")
+        perso_cues = perso_to_cues(pc.transcribe(video_path))
+        if not perso_cues:
+            raise RuntimeError("Perso result is empty")
+        # What THIS job consumed (balance before minus after), not just the
+        # remaining balance (user feedback 2026-08-06). Log-only: by this
+        # point transcription has succeeded AND been billed, so a surprise
+        # in the credits payload must never discard the paid result.
+        try:
+            if ws and ws.get("credits") is not None:
+                after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
+                if after is not None:
+                    log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
+        except Exception:
+            pass
+        return perso_cues
+    except JobCancelled:
+        raise  # a user cancel is not a Perso failure -- don't rewrap it
+    except _PERSO_NOTICE_ERRORS as e:
+        _raise_notice(e, log, on_notice)
+    except Exception as e:
+        msg = (f"Perso STT failed ({str(e)[:80]}). Check Settings, "
+               f"or switch to Whisper (free, offline).")
+        log(f"   Error: {msg}")
+        raise RuntimeError(msg) from e
+
+
+def _stage_transcribe_local(video_path, source_language_code, diar_engine, log):
+    """Stage 2/6 -- local Whisper transcription (no container at all).
+
+    Returns (src_cues, detected_source_language_code, diar_engine): Whisper
+    auto-detects the source language, and it sets no speaker_id, so this path
+    also turns CAM++ on unless the caller already picked a diarization engine.
+    """
+    log("2/6 Transcribing locally (Whisper, no container)…")
+    detected = {"code": None}
+    try:
+        # NEVER pass language_code here: it names the TARGET language, and
+        # forcing it once made an en->ko job decode English speech as Korean
+        # phonetic gibberish. Only the UI's explicit SOURCE pick
+        # (source_language_code) may be given as a hint; None = auto-detect.
+        src_cues = transcribe_local(
+            video_path, language=source_language_code, log=log,
+            on_language=lambda c: detected.__setitem__("code", c),
+        )
+    except Exception as e:
+        log(f"   Error: Local STT failed ({str(e)[:120]})")
+        raise
+    # Local Whisper sets no speaker_id -- CAM++ can still label the cues it produced.
+    return src_cues, detected["code"], diar_engine or "campplus"
+
+
+def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log):
+    """Stage 2/6 -- local CAM++ diarization (opt-in). Relabels src_cues in place.
+
+    pyannote-era labels could collapse everyone to a single speaker; CAM++
+    re-labels each cue by clustering voice embeddings straight off the local
+    Demucs vocals track (diarize() resamples internally, so no separate 16k
+    extraction step is needed). It has NO VAD -- it only labels the cue spans
+    STT already produced, and a failure is a warning, not a job failure.
+    """
+    if diar_engine != "campplus" or not src_cues:
+        return
+    try:
+        log("2/6 Diarizing locally with CAM++ (campplus)…")
+        labeled = diarize(vocals_path, src_cues, num_speakers=num_speakers)
+        for cue, lab in zip(src_cues, labeled):
+            spk = lab.get("speaker")
+            if spk:
+                # cue_speaker() reads speaker_id first, then speaker. STT paths
+                # (Perso / local Whisper) may already set speaker_id, so we must
+                # overwrite THAT field or the CAM++ label is shadowed and does nothing.
+                cue["speaker_id"] = spk
+        n_spk = len({cue_speaker(c) for c in src_cues if cue_speaker(c)})
+        log(f"   CAM++ labeled {len(src_cues)} lines across {n_spk} speakers")
+    except Exception as e:
+        log(f"   Warning: CAM++ diarization failed ({str(e)[:80]}) — keeping existing labels")
+
+
+def _pick_source_cues(source_srt_path, perso_cues, src_cues):
+    """The cues stage 3 translates from, and the Qwen path clones voices from.
+
+    If source subtitles (a professional script) exist, their timing & sentences
+    are accurate, good for both translation and voice references. Otherwise use
+    whatever STT produced (Perso if it ran, else local Whisper).
+    """
+    if source_srt_path is None:
+        return perso_cues if perso_cues is not None else src_cues
+    with open(source_srt_path, encoding="utf-8-sig") as f:
+        source_cues = parse_srt(f.read())
+    # parse_srt returns bare {start,end,text} -- a script file carries no
+    # speaker labels. Diarization has already labelled the transcript, so
+    # carry those labels across by time; without this, ref_cues has no
+    # speakers at all and the Qwen path clones a single voice for the whole
+    # video (app/qwen_pipeline.py falls back to DEFAULT_SPEAKER).
+    _carry_speaker_labels(
+        source_cues, perso_cues if perso_cues is not None else src_cues
+    )
+    return source_cues
+
+
+def _stage_translate(srt_path, source_cues, language, translate_engine, translator,
+                     work_dir, on_notice, log):
+    """Stage 3/6 -- translated subtitles, provided or auto-translated.
+
+    Returns (segments, auto_translated): the dialogue lines the dub speaks, and
+    whether this run produced them itself. An empty result fails the job --
+    without that check the job runs to "done" and ships a video whose speech
+    was stripped by separation with no dub to replace it.
+    """
+    auto_translated = False
+    if srt_path is None:
+        tr = translator or get_translator(translate_engine)
+        # Name the engine (and model) that translated -- a Gemini run and a
+        # local Gemma run were indistinguishable in the log (user feedback
+        # 2026-08-06). getattr: test fakes may carry neither attribute.
+        tr_name = getattr(tr, "display_name", "") or type(tr).__name__
+        tr_model = getattr(tr, "model", None)
+        engine_label = f"{tr_name} — {tr_model}" if tr_model else tr_name
+        log(f"3/6 Translating from source subtitles ({len(source_cues)} lines, {engine_label})…")
+        # Same shape as the Perso credit handling above: a short sentence says
+        # what happened, the structured notice carries it (plus a link when one
+        # helps) to the UI popup. The raw HTTP error stays out of the screen.
+        try:
+            srt_path = _auto_translate_srt(
+                source_cues, language, tr, work_dir, log=log,
+            )
+        except _GEMINI_NOTICE_ERRORS as e:
+            _raise_notice(e, log, on_notice)
+        auto_translated = True
+    else:
+        log("3/6 Using the provided translated subtitles")
+
+    with open(srt_path, encoding="utf-8-sig") as f:
+        segments = parse_srt(f.read())
+    log(f"   {len(segments)} dialogue lines prepared")
+    if not segments:
+        raise RuntimeError("No dialogue lines were found in this video.")
+    return segments, auto_translated
+
+
+def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path,
+                      language, n_takes, qwen_engine, on_notice, log):
+    """Stage 4/6 -- cloning & synthesis (Qwen3-TTS, the app's only TTS engine).
+
+    Returns the path of the full-length dubbed audio.
+    """
+    effective_n_takes = n_takes if n_takes is not None else QWEN_N_TAKES
+    # Say which Voice-quality mode ran (user feedback 2026-08-06). <=1 is the
+    # "fast" UI mode: best-of-N selection is disabled (see config.QWEN_N_TAKES).
+    mode = ("fast, 1 take/line" if effective_n_takes <= 1
+            else f"high quality, best of {effective_n_takes} takes")
+    log(f"4/6 Cloning & synthesizing voices (Qwen3-TTS — {mode})…")
+    engine = qwen_engine or QwenTTSEngine()
+    # Say which device this is about to run on. Without it the only symptom of
+    # a CPU fallback is the wait, and the user has no way to tell that from the
+    # app being slow. Absent (not guessed) when the engine cannot say.
+    device = getattr(engine, "device_label", lambda: None)()
+    if device:
+        log(f"   synthesis device: {device}")
+
+    return run_qwen_dub(engine, segments, ref_cues, work_dir,
+                        vocals_path=vocals_path, background_path=background_path,
+                        language=language, n_takes=effective_n_takes, log=log,
+                        on_notice=on_notice)
+
+
+def _stage_finish(video_path, audio_wav, out_path, work_dir, log):
+    """Stage 6/6 -- mux the dub onto the video, then the length gate. -> None"""
+    log("6/6 Building the finished file…")
+    d_vid = _video_duration(video_path)
+    r = _mux(video_path, audio_wav, out_path, d_vid)
+    if r.returncode != 0:
+        raise RuntimeError(f"Qwen dub mux failed: {r.stderr[-200:]}")
+    ensure_video_length(video_path, out_path, log)
+    # Final assembly + length gate passed -- only now drop the losing take
+    # candidates that were kept for a possible reassembly pass (see
+    # qwen_pipeline.synth_lines / cleanup_takes).
+    cleanup_takes(work_dir, log)
+    # The per-line voices, the background bed and the speaker references stay.
+    # Rewriting one line and re-speaking only that line needs all three, and a
+    # rewrite is the normal thing to do after watching the dub back (user
+    # decision 2026-08-24, reversing the 0.3.6 cleanup). They cost disk, so
+    # app/main.py warns before a job that would not fit and points at the
+    # per-job delete button. cleanup_intermediates() is still here and is what
+    # that warning tells the user to reach for.
+    log("   keeping the per-line audio so single lines can be redone")
 
 
 def run_dub(
@@ -356,195 +644,33 @@ def run_dub(
     os.makedirs(work_dir, exist_ok=True)
 
     _check_cancel(cancel_check, log)
-
-    # 1b. Voice/background separation -- local Demucs (default) or Perso cloud.
-    # Either way a failure fails the whole job: no silent engine substitution
-    # (2026-08-06 rule), and no container fallback.
-    if (sep_engine or "").lower() == "perso":
-        log("1/6 Separating background audio via Perso cloud…")
-        sep_paths, perso_client = _separate_with_perso(
-            video_path, work_dir, perso_client, cancel_check, on_notice, log)
-    else:
-        log("1/6 Separating background audio locally (Demucs)…")
-        try:
-            sep_paths = SeparationEngine().separate(video_path, work_dir)
-        except Exception as e:
-            raise RuntimeError(f"Local separation failed, aborting (no container fallback): {str(e)[:200]}")
-    vocals_path, background_path = sep_paths["vocals"], sep_paths["background"]
+    vocals_path, background_path, perso_client = _stage_separate(
+        video_path, work_dir, sep_engine, perso_client, cancel_check, on_notice, log)
 
     _check_cancel(cancel_check, log)
 
-    # 2-0. Perso STT path: get diarization and timestamps from Perso. A failure
-    # FAILS the job -- the user picked Perso, and silently substituting the
-    # local engine meant paid-quality was quietly downgraded with only a log
-    # line to show for it (user decision 2026-08-06: no fallback; say what is
-    # wrong and how to fix it instead).
-    # Whisper auto-detects the source language; capture it so the result can
-    # surface it. Perso STT reports no language, so this stays None there.
-    detected_language = {"code": None}
+    # 2. Transcription: Perso cloud STT if the user picked it, else local
+    # Whisper. Whisper auto-detects the source language; capture it so the
+    # result can surface it. Perso STT reports no language, so this stays None.
+    detected_code = None
     perso_cues = None
     if stt_engine == "perso":
-        try:
-            log("2/6 Running Perso STT (diarization & timestamps)…")
-            pc = perso_client or PersoClient()
-            # Let Cancel interrupt the Perso progress wait (up to an hour of
-            # polling); without this, "Cancelling…" hung until Perso finished.
-            pc.cancel_check = cancel_check
-            # Say which workspace is paying. A workspace picked in Settings
-            # applies only after a restart, so the active one here can differ
-            # from what the Settings screen shows -- this line is how the user
-            # finds that out (billed the wrong-workspace confusion of
-            # 2026-08-06). getattr: test fakes may not carry it.
-            ws = getattr(pc, "describe_workspace", lambda: None)()
-            if ws:
-                name = ws.get("name") or f"workspace {ws.get('seq')}"
-                log(f"   Perso workspace: {name} (#{ws.get('seq')})")
-            perso_cues = perso_to_cues(pc.transcribe(video_path))
-            if not perso_cues:
-                raise RuntimeError("Perso result is empty")
-            # What THIS job consumed (balance before minus after), not just the
-            # remaining balance (user feedback 2026-08-06). Log-only: by this
-            # point transcription has succeeded AND been billed, so a surprise
-            # in the credits payload must never discard the paid result.
-            try:
-                if ws and ws.get("credits") is not None:
-                    after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
-                    if after is not None:
-                        log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
-            except Exception:
-                pass
-        except JobCancelled:
-            raise  # a user cancel is not a Perso failure -- don't rewrap it
-        except PersoCreditExhaustedError as e:
-            # Short on purpose (user feedback 2026-08-06): the sentence says
-            # what happened, the notice's clickable Recharge link says where
-            # to go -- the URL text itself stays out of the message.
-            msg = "Perso credits are used up. Recharge to continue."
-            log(f"   Error: {msg} ({e.link})")
-            if on_notice:
-                on_notice({"type": "perso_credit_exhausted", "message": msg, "link": e.link})
-            raise RuntimeError(msg) from e
-        except PersoInvalidKeyError as e:
-            # The fix lives in Settings, so the popup's button opens it (no
-            # link in the notice -- the action is inside the app).
-            msg = "Perso rejected the API key. Open Settings and check the key."
-            log(f"   Error: {msg}")
-            if on_notice:
-                on_notice({"type": "perso_invalid_key", "message": msg})
-            raise RuntimeError(msg) from e
-        except PersoUnavailableError as e:
-            msg = "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
-            log(f"   Error: {msg}")
-            if on_notice:
-                on_notice({"type": "perso_unavailable", "message": msg})
-            raise RuntimeError(msg) from e
-        except Exception as e:
-            msg = (f"Perso STT failed ({str(e)[:80]}). Check Settings, "
-                   f"or switch to Whisper (free, offline).")
-            log(f"   Error: {msg}")
-            raise RuntimeError(msg) from e
-
-    # 2. Local Whisper transcription (no container at all) -- skipped if Perso succeeded
+        perso_cues = _stage_transcribe_perso(
+            video_path, perso_client, cancel_check, on_notice, log)
     if perso_cues is None:
-        log("2/6 Transcribing locally (Whisper, no container)…")
-        try:
-            # NEVER pass language_code here: it names the TARGET language, and
-            # forcing it once made an en->ko job decode English speech as Korean
-            # phonetic gibberish. Only the UI's explicit SOURCE pick
-            # (source_language_code) may be given as a hint; None = auto-detect.
-            src_cues = transcribe_local(
-                video_path, language=source_language_code, log=log,
-                on_language=lambda c: detected_language.__setitem__("code", c),
-            )
-        except Exception as e:
-            log(f"   Error: Local STT failed ({str(e)[:120]})")
-            raise
-        # Local Whisper sets no speaker_id -- CAM++ can still label the cues it produced.
-        diar_engine = diar_engine or "campplus"
+        src_cues, detected_code, diar_engine = _stage_transcribe_local(
+            video_path, source_language_code, diar_engine, log)
     else:
         src_cues = perso_cues
-
-    # 2-1. Local CAM++ diarization (opt-in). pyannote-era labels could collapse
-    # everyone to a single speaker; CAM++ re-labels each cue by clustering voice
-    # embeddings straight off the local Demucs vocals track (diarize() resamples
-    # internally, so no separate 16k extraction step is needed).
-    # It has NO VAD -- it only labels the cue spans STT already produced.
-    if diar_engine == "campplus" and src_cues:
-        try:
-            log("2/6 Diarizing locally with CAM++ (campplus)…")
-            labeled = diarize(vocals_path, src_cues, num_speakers=num_speakers)
-            for cue, lab in zip(src_cues, labeled):
-                spk = lab.get("speaker")
-                if spk:
-                    # cue_speaker() reads speaker_id first, then speaker. STT paths
-                    # (Perso / local Whisper) may already set speaker_id, so we must
-                    # overwrite THAT field or the CAM++ label is shadowed and does nothing.
-                    cue["speaker_id"] = spk
-            n_spk = len({cue_speaker(c) for c in src_cues if cue_speaker(c)})
-            log(f"   CAM++ labeled {len(src_cues)} lines across {n_spk} speakers")
-        except Exception as e:
-            log(f"   Warning: CAM++ diarization failed ({str(e)[:80]}) — keeping existing labels")
-
-    # If source subtitles (a professional script) exist, their timing & sentences are
-    # accurate, good for both translation and voice references. Otherwise use whatever
-    # STT produced (Perso if it ran, else local Whisper).
-    if source_srt_path is not None:
-        with open(source_srt_path, encoding="utf-8-sig") as f:
-            source_cues = parse_srt(f.read())
-        # parse_srt returns bare {start,end,text} -- a script file carries no
-        # speaker labels. Diarization has already labelled the transcript, so
-        # carry those labels across by time; without this, ref_cues below has no
-        # speakers at all and the Qwen path clones a single voice for the whole
-        # video (app/qwen_pipeline.py falls back to DEFAULT_SPEAKER).
-        _carry_speaker_labels(
-            source_cues, perso_cues if perso_cues is not None else src_cues
-        )
-    else:
-        source_cues = perso_cues if perso_cues is not None else src_cues
+    _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log)
+    source_cues = _pick_source_cues(source_srt_path, perso_cues, src_cues)
 
     _check_cancel(cancel_check, log)
 
     # 3. Prepare translated subtitles (provided or auto-translated)
-    auto_translated = False
-    if srt_path is None:
-        tr = translator or get_translator(translate_engine)
-        # Name the engine (and model) that translated -- a Gemini run and a
-        # local Gemma run were indistinguishable in the log (user feedback
-        # 2026-08-06). getattr: test fakes may carry neither attribute.
-        tr_name = getattr(tr, "display_name", "") or type(tr).__name__
-        tr_model = getattr(tr, "model", None)
-        engine_label = f"{tr_name} — {tr_model}" if tr_model else tr_name
-        log(f"3/6 Translating from source subtitles ({len(source_cues)} lines, {engine_label})…")
-        # Same shape as the Perso credit handling above: a short sentence says
-        # what happened, the structured notice carries it (plus a link when one
-        # helps) to the UI popup. The raw HTTP error stays out of the screen.
-        try:
-            srt_path = _auto_translate_srt(
-                source_cues, language, tr, work_dir, log=log,
-            )
-        except GeminiQuotaExhaustedError as e:
-            msg = "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset."
-            log(f"   Error: {msg} ({e.link})")
-            if on_notice:
-                on_notice({"type": "gemini_quota_exhausted", "message": msg, "link": e.link})
-            raise RuntimeError(msg) from e
-        except GeminiUnavailableError as e:
-            msg = "Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again."
-            log(f"   Error: {msg}")
-            if on_notice:
-                on_notice({"type": "gemini_unavailable", "message": msg})
-            raise RuntimeError(msg) from e
-        auto_translated = True
-    else:
-        log("3/6 Using the provided translated subtitles")
-
-    with open(srt_path, encoding="utf-8-sig") as f:
-        segments = parse_srt(f.read())
-    log(f"   {len(segments)} dialogue lines prepared")
-    if not segments:
-        # Without this the job runs to "done" and ships a video whose speech
-        # was stripped by separation with no dub to replace it.
-        raise RuntimeError("No dialogue lines were found in this video.")
+    segments, auto_translated = _stage_translate(
+        srt_path, source_cues, language, translate_engine, translator,
+        work_dir, on_notice, log)
 
     # Preserve emotion & speaker -- the reference lines the Qwen path builds its
     # per-speaker voice samples from. (If source subtitles exist, their timing is
@@ -552,58 +678,25 @@ def run_dub(
     ref_cues = source_cues or src_cues
 
     _check_cancel(cancel_check, log)
-
-    # 4. Cloning & synthesis (Qwen3-TTS -- the app's only TTS engine)
-    effective_n_takes = n_takes if n_takes is not None else QWEN_N_TAKES
-    # Say which Voice-quality mode ran (user feedback 2026-08-06). <=1 is the
-    # "fast" UI mode: best-of-N selection is disabled (see config.QWEN_N_TAKES).
-    mode = ("fast, 1 take/line" if effective_n_takes <= 1
-            else f"high quality, best of {effective_n_takes} takes")
-    log(f"4/6 Cloning & synthesizing voices (Qwen3-TTS — {mode})…")
-    engine = qwen_engine or QwenTTSEngine()
-    # Say which device this is about to run on. Without it the only symptom of
-    # a CPU fallback is the wait, and the user has no way to tell that from the
-    # app being slow. Absent (not guessed) when the engine cannot say.
-    device = getattr(engine, "device_label", lambda: None)()
-    if device:
-        log(f"   synthesis device: {device}")
-
-    audio_wav = run_qwen_dub(engine, segments, ref_cues, work_dir,
-                             vocals_path=vocals_path, background_path=background_path,
-                             language=language, n_takes=effective_n_takes, log=log,
-                             on_notice=on_notice)
+    audio_wav = _stage_synthesize(
+        segments, ref_cues, work_dir, vocals_path, background_path,
+        language, n_takes, qwen_engine, on_notice, log)
 
     _check_cancel(cancel_check, log)
 
+    # 5. Leakage gate: catch original speech bleeding through the dub.
     audio_wav = leakage_gate(audio_wav, vocals_path,
                              os.path.join(work_dir, "nonverbal_manifest.json"),
                              work_dir, log)
 
-    log("6/6 Building the finished file…")
-    d_vid = _video_duration(video_path)
-    r = _mux(video_path, audio_wav, out_path, d_vid)
-    if r.returncode != 0:
-        raise RuntimeError(f"Qwen dub mux failed: {r.stderr[-200:]}")
-    ensure_video_length(video_path, out_path, log)
-    # Final assembly + length gate passed -- only now drop the losing take
-    # candidates that were kept for a possible reassembly pass (see
-    # qwen_pipeline.synth_lines / cleanup_takes).
-    cleanup_takes(work_dir, log)
-    # The per-line voices, the background bed and the speaker references stay.
-    # Rewriting one line and re-speaking only that line needs all three, and a
-    # rewrite is the normal thing to do after watching the dub back (user
-    # decision 2026-08-24, reversing the 0.3.6 cleanup). They cost disk, so
-    # app/main.py warns before a job that would not fit and points at the
-    # per-job delete button. cleanup_intermediates() is still here and is what
-    # that warning tells the user to reach for.
-    log("   keeping the per-line audio so single lines can be redone")
+    _stage_finish(video_path, audio_wav, out_path, work_dir, log)
     log("Done!")
     return {
         "job_id": job_id,
         "out_path": out_path,
         "num_segments": len(segments),
         "auto_translated": auto_translated,
-        "detected_source_language": detected_language["code"],
+        "detected_source_language": detected_code,
     }
 
 
