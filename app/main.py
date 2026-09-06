@@ -137,10 +137,10 @@ app.include_router(script_api.router)
 app.include_router(settings_api.router)
 
 
-# Serves the UI's plumbing-layer JS module (ui/src/dubApi.mjs) so static/index.html
-# can import it directly, e.g. <script type="module" src="/js/dubApi.mjs">. Mounted
-# straight from ui/src (not copied into static/) so there is a single source of
-# truth -- the same file the node:test unit tests in ui/src/dubApi.test.mjs cover.
+# Serves the page's ES modules (ui/src/*.mjs -- the screens, the API layer,
+# the formatting helpers) so static/index.html can import them as /js/<name>.mjs.
+# Mounted straight from ui/src rather than copied into static/ so there is one
+# source of truth: the same files the node:test suites in ui/src cover.
 app.mount("/js", StaticFiles(directory=os.path.join(state.APP_DIR, "ui", "src")), name="js")
 
 
