@@ -19,6 +19,26 @@ failed. Switching that stage to its local option (Whisper for transcription, Gem
 translation) is usually the fastest way to confirm whether the problem is the cloud
 service or the input file.
 
+**A job failed with "Unexpected error".** That wording means the failure was a bug, not
+something the app knows how to explain. The details are in that job's own log — see
+below.
+
+### Logs
+
+Two logs sit side by side in the app's `logs` folder:
+
+| File | What it holds |
+|---|---|
+| `job-<id>.log` | One dubbing job's progress, the same lines the screen shows, plus the full details of a failure |
+| `persodub.log` | The app itself: what it did at startup, and the whole story behind any "An internal error occurred" |
+
+`persodub.log` rolls over at about 2 MB and keeps three older copies
+(`persodub.log.1` and so on), so it never grows without limit. Both are plain text —
+attach them to a bug report.
+
+Set `PERSODUB_DEBUG=1` before starting the app to record much more detail in
+`persodub.log`; set `PERSODUB_LOG_DIR` to put both logs somewhere else.
+
 ## FAQ
 
 **Does my video leave my computer?**

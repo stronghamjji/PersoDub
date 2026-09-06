@@ -16,6 +16,7 @@ setting attributes on the module object, which every importer sees because
 there is only ever one module object.
 """
 import json
+import logging
 import math
 import os
 import re
@@ -40,6 +41,8 @@ from app.stt_local import transcribe_local
 from app.subtitle_ass import PRESETS as SUBTITLE_PRESETS
 from app.subtitle_ass import build_ass
 from app.text.srt import build_srt
+
+logger = logging.getLogger("persodub.api.results")
 
 router = APIRouter()
 
@@ -91,8 +94,11 @@ def subtitles_estimate(video_path: str, engine: str = "perso"):
     try:
         ws = perso_client.PersoClient().describe_workspace()
         balance = ws.get("credits") if ws else None
-    except Exception:
-        pass
+    except Exception as e:
+        # An estimate without a balance still answers the question that was
+        # asked; the type is all a bug report needs, and a Perso error's text
+        # can carry the request (and so the key).
+        logger.debug("No Perso credit balance for this estimate (%s)", type(e).__name__)
     return {"seconds": seconds,
             "credits_estimate": math.ceil(seconds / 5.0),
             "credits_balance": balance}
@@ -168,8 +174,9 @@ def _video_dims(path: str):
         w, h = (int(x) for x in out.strip().split(",")[:2])
         if w > 0 and h > 0:
             return w, h
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Could not read the video's size, falling back to 1920x1080 (%s)",
+                     type(e).__name__)
     return 1920, 1080
 
 

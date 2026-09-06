@@ -27,6 +27,7 @@ because there is only ever one module object. The names only this file reads
 list_dubbing_spaces -- are imported directly, and the tests that fake them
 patch this module.
 """
+import logging
 import math
 import os
 import re
@@ -60,6 +61,8 @@ from app.pipeline import run_dub
 from app.settings_env import current_value
 from app.source_fetch import fetch as fetch_source
 from app.text.naming import next_free, safe_name
+
+logger = logging.getLogger("persodub.api.dub")
 
 router = APIRouter()
 
@@ -309,8 +312,8 @@ def _run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_spea
             after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
             if after is not None:
                 log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("No credits line after the Perso cloud dub (%s)", type(e).__name__)
     return {"job_id": jid, "out_path": out_path, "num_segments": 0, "dub_mode": "perso"}
 
 

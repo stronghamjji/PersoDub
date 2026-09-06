@@ -16,9 +16,11 @@ answers, and the tests fake them by setting attributes ON that module object,
 which every importer sees because there is only ever one module object.
 """
 import json
+import logging
 import os
 from typing import List, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
@@ -34,6 +36,8 @@ from app.perso_client import APP_VERSION
 from app.source_fetch import FetchError
 from app.source_fetch import probe as probe_source
 from app.translate import get_translator
+
+logger = logging.getLogger("persodub.api.misc")
 
 router = APIRouter()
 
@@ -95,7 +99,27 @@ def tts_say(body: SayRequest):
         speed=body.speed,
         seed=body.seed,
     )
-    result = engine.synthesize(req)
+    # The three ways speaking one line is known to fail, each with its own
+    # answer -- without them any of the three left the caller a bare 500 and
+    # the UI nothing to say. The engine's own text is never passed on: its
+    # FileNotFoundError quotes body.ref_audio, and echoing a path the caller
+    # supplied back at them is how a probe learns what exists on this disk.
+    # Same vocabulary as app/api/dub.py's preflight: name the stage, then say
+    # what to do about it.
+    try:
+        result = engine.synthesize(req)
+    except FileNotFoundError as e:
+        raise HTTPException(404, "Sample voice file not found. Check the path and try again.") from e
+    except ValueError as e:
+        # The engine's own written-out sentence (e.g. Qwen's ICL clone needs a
+        # transcript). It carries no caller-supplied text, so it can go through.
+        raise HTTPException(422, str(e)) from e
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            503,
+            "The local speech engine is not answering. Wait for the app to finish "
+            "starting up, then try again.",
+        ) from e
     headers = {"x-engine-id": result.engine_id}
     if result.duration is not None:
         headers["x-audio-duration"] = str(result.duration)
@@ -117,8 +141,11 @@ def whats_new():
     try:
         with open(path, encoding="utf-8") as f:
             notes = [str(n) for n in (json.load(f).get("notes") or [])]
-    except Exception:
-        pass  # no notes is fine; the popup simply never shows
+    except Exception as e:
+        # No notes is fine; the popup simply never shows. Worth a line all the
+        # same -- the file ships with the release, so an unreadable one is a
+        # packaging fault nobody would otherwise hear about.
+        logger.warning("Could not read the release notes (%s)", type(e).__name__)
     return {"version": APP_VERSION, "notes": notes}
 
 
@@ -173,5 +200,13 @@ def translate_api(body: TranslateRequest):
             body.texts, body.target_lang, body.source_lang, body.durations
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Translation failed: {e}")
+        # The type name, never str(e) -- the same rule the Perso key routes
+        # follow (app/api/settings.py): a translation engine's error can echo
+        # the request, and a cloud request carries the API key.
+        logger.warning("Translation failed (%s)", type(e).__name__)
+        raise HTTPException(
+            status_code=500,
+            detail=(f"Translation failed ({type(e).__name__}). Check the translation "
+                    f"engine in Settings, or the app log for the details."),
+        ) from e
     return {"translations": out}

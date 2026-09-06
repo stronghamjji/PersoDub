@@ -74,6 +74,14 @@ blocks `.env`, `*.env`, and `config/`.
 | `SEP_PYTHON` / `SEP_MODEL_DIR` | `python3` / `models/demucs` | Interpreter and model path for local Demucs |
 | `DIAR_PYTHON` / `PERSODUB_CAMPPLUS_MODEL` | `python3` / `models/campplus/campplus.onnx` | Interpreter and model for local CAM++ |
 | `QWEN_SCORER_PYTHON` / `QWEN_N_TAKES` | `python3` / `4` | Take-scoring interpreter · candidates per line (best-of-N) |
+| `PERSODUB_LOG_DIR` | `logs` | Where `persodub.log` and the per-job `job-<id>.log` files are written |
+| `PERSODUB_DEBUG` | (unset) | `1` = DEBUG detail in `persodub.log` instead of INFO |
+| `PERSODUB_IGNORE_BAD_CONFIG` | (unset) | `1` = start even when a numeric setting above is unreadable, using the defaults |
+
+A number this table gives that the environment sets to something unreadable
+(`QWEN_N_TAKES=abc`) does not raise at import any more: `app/config.py` falls
+back to the default and records the reason in `CONFIG_ERRORS`, and startup
+prints every entry and refuses to run unless `PERSODUB_IGNORE_BAD_CONFIG=1`.
 
 ## Quality checks
 
@@ -138,6 +146,7 @@ app/
   scripts/suppress_vocal_echo.py  surgical removal of TTS reference echo
   engines/               TTS engine interface + the Qwen3-TTS adapter
   config.py              every environment variable, defined in one place
+  logging_setup.py       the "persodub" logger: persodub.log + stderr, set up at startup
 desktop/                 Electron desktop shell (install, engine management, window)
 static/index.html        the web UI
 ui/src/                  UI plugin-layer JS modules (with node:test unit tests)

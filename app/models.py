@@ -18,7 +18,7 @@ import json
 import logging
 import os
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("persodub.models")
 
 CATALOG_PATH = os.path.join(os.path.dirname(__file__), "models_catalog.json")
 

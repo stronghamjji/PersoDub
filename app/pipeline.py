@@ -6,6 +6,7 @@ Every stage runs locally or through our own Qwen3-TTS sidecar -- no third-party
 container anywhere in this app.
 """
 import json
+import logging
 import os
 import re
 import tempfile
@@ -44,6 +45,8 @@ from app.translate import (
     get_translator,
     script_ok,
 )
+
+logger = logging.getLogger("persodub.pipeline")
 
 # The ffmpeg helpers moved to app/media.py (lowest layer, no app imports) so
 # app/qwen_pipeline.py can reach them without importing this module back.
@@ -385,8 +388,8 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
             after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
             if after is not None:
                 log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("No credits line after Perso separation (%s)", type(e).__name__)
     return sep_paths, pc
 
 
@@ -448,8 +451,8 @@ def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, l
                 after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
                 if after is not None:
                     log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("No credits line after Perso STT (%s)", type(e).__name__)
         return perso_cues
     except JobCancelled:
         raise  # a user cancel is not a Perso failure -- don't rewrap it

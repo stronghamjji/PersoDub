@@ -13,16 +13,17 @@ startup the store is read back off disk and jobs that were queued when the app
 last closed are put back in line (app/api/dub.py's rearm_queued_jobs, which is
 where the work they are queued with is built).
 """
+import logging
 import os
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app import state
+from app import config, state
 from app.api import agent as agent_api
 from app.api import clips as clips_api
 from app.api import dub as dub_api
@@ -31,12 +32,22 @@ from app.api import models as models_api
 from app.api import results as results_api
 from app.api import script as script_api
 from app.api import settings as settings_api
+from app.logging_setup import configure_logging
 from app.perso_client import APP_VERSION
+
+log = logging.getLogger("persodub.main")
 
 
 @asynccontextmanager
 async def lifespan(_app):
-    """Jobs from before this launch.
+    """The app log, the settings check, and the jobs from before this launch.
+
+    The log first, so the settings check and the restore below have somewhere
+    to write. Then the settings: a value the environment got wrong (a typo in
+    a .env) no longer fails at import time with a traceback -- app/config.py
+    collects those and this is where they are reported, once, and where the
+    app refuses to start on them rather than running a dub with silently
+    different numbers. PERSODUB_IGNORE_BAD_CONFIG=1 is the way past it.
 
     The job store is a dictionary, so quitting the app used to lose every
     record even though the folders were all still there. Reading the job.json
@@ -48,8 +59,22 @@ async def lifespan(_app):
     -- a workspace that isn't there yet simply restores nothing, and one bad
     file is skipped rather than taking the app down.
     """
+    configure_logging()
+    # The first line of every run, so a log that goes on to say nothing at all
+    # still answers the first question asked of it: did the app start, and
+    # which build was it?
+    log.info("PersoDub %s starting up", APP_VERSION)
+    if config.CONFIG_ERRORS:
+        for problem in config.CONFIG_ERRORS:
+            log.error("Bad setting -- %s", problem)
+        if os.environ.get("PERSODUB_IGNORE_BAD_CONFIG") != "1":
+            raise SystemExit(
+                "PersoDub cannot start: %d setting(s) in the environment are not valid "
+                "(listed above). Fix them, or set PERSODUB_IGNORE_BAD_CONFIG=1 to start "
+                "anyway with the defaults." % len(config.CONFIG_ERRORS))
     state.job_store.restore(state.WORKSPACE)
     dub_api.rearm_queued_jobs()
+    log.info("Ready -- %d job(s) restored", len(state.job_store.all()))
     yield
 
 
@@ -62,6 +87,28 @@ app = FastAPI(title="PersoDub", version=APP_VERSION, lifespan=lifespan)
 # out. (Tests pass base_url="http://127.0.0.1" so no test-only host ships here.)
 app.add_middleware(TrustedHostMiddleware,
                    allowed_hosts=["127.0.0.1", "localhost"])
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception(request, exc):
+    """The one safety net under every route.
+
+    Without it a bug in a route reached the client as Starlette's own 500 --
+    an HTML page whose body is the traceback when the server runs with
+    debug on, and nothing at all when it does not. Either way the UI, which
+    only ever reads {"detail": ...}, showed the user nothing it could name.
+
+    The traceback goes to the app log (the whole point of having one) and the
+    response carries a fixed sentence: an exception's text can hold a file
+    path, a request or an API key, and none of that belongs on the screen.
+    HTTPException never arrives here -- FastAPI keeps its own handler for it,
+    so every deliberate 4xx/5xx detail in app/api/*.py is untouched.
+    """
+    log.exception("Unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal error occurred. Details are in the app log."},
+    )
 
 
 # TrustedHost can't stop cross-origin WRITES: a hostile page POSTing to

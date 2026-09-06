@@ -8,13 +8,17 @@ import contextlib
 import glob
 import hashlib
 import json
+import logging
 import os
 import threading
+import traceback
 import uuid
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from app.config import PERSODUB_LOG_DIR
+
+logger = logging.getLogger("persodub.jobs")
 
 # What a job.json holds. Deliberately not the whole record: `logs` runs to
 # thousands of lines, and `notices`/`cancel_requested` only mean anything while
@@ -54,6 +58,33 @@ class JobCancelled(Exception):
     """Raised by a job's target function (see app/pipeline.py's cancel_check
     checkpoints) to signal cooperative cancellation -- caught by JobStore's
     thread wrapper and turned into a "cancelled" status instead of "error"."""
+
+
+# The exception types whose message was WRITTEN for the user, and so can go
+# straight under the red bar on the done screen.
+#
+# RuntimeError is the whole of the pipeline's user-facing vocabulary: every
+# sentence app/pipeline.py hands a failed job comes out of _raise_notice or one
+# of its `raise RuntimeError(msg)` sites ("Perso credits are used up. Recharge
+# to continue.", "No dialogue lines were found in this video."), and the Perso
+# client's PersoCreditExhausted/InvalidKey/Unavailable errors, source_fetch's
+# FetchError and translate.py's Gemini errors are all RuntimeError subclasses.
+# ValueError is here because the engines raise it with a written-out sentence
+# too (app/engines/qwen_tts.py's ICL check) and tests/test_jobs.py pins that
+# text as what a failed job shows.
+#
+# Anything else -- an AttributeError, a KeyError, an OSError from a corner of
+# the code nobody wrote a message for -- is a bug, and its text is either
+# meaningless to the user ("'NoneType' object is not subscriptable") or holds a
+# path we would rather not put on screen.
+USER_FACING_ERRORS = (JobCancelled, RuntimeError, ValueError)
+
+
+def error_text_for_ui(exc: BaseException) -> str:
+    """The sentence a failed job shows the user, from the exception that ended it."""
+    if isinstance(exc, USER_FACING_ERRORS):
+        return str(exc) or type(exc).__name__
+    return "Unexpected error (%s) - see the job log" % type(exc).__name__
 
 
 class JobStore:
@@ -118,8 +149,10 @@ class JobStore:
             os.makedirs(self.log_dir, exist_ok=True)
             with open(os.path.join(self.log_dir, "job-%s.log" % jid), "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
-        except Exception:
-            pass
+        except Exception as e:
+            # The type only: this line's own message is a job log line, which
+            # can carry a file name the user chose.
+            logger.debug("Could not mirror a log line for job %s (%s)", jid, type(e).__name__)
 
     def append_log(self, jid: str, msg: str):
         with self._lock:
@@ -215,7 +248,7 @@ class JobStore:
                 jid = rec["id"]
             except Exception as e:
                 # One unreadable file must not cost the user every other job.
-                print("PersoDub: skipping %s (%s)" % (path, type(e).__name__))
+                logger.warning("Skipping %s (%s)", path, type(e).__name__)
                 continue
             if rec.get("status") in ("running", "cancelling"):
                 # The thread died with the process; nothing will ever finish it.
@@ -266,7 +299,7 @@ class JobStore:
                 )
             except Exception as e:
                 # Same promise as above: one odd folder is skipped, not fatal.
-                print("PersoDub: skipping %s (%s)" % (work, type(e).__name__))
+                logger.warning("Skipping %s (%s)", work, type(e).__name__)
                 continue
             with self._lock:
                 self._jobs.setdefault(jid, job)
@@ -417,7 +450,14 @@ class JobStore:
                 # "RuntimeError:" in front of a plain-language sentence only
                 # made it read like a crash.
                 log(f"Error: {type(e).__name__}: {e}")
-                self.update(jid, status="error", error=str(e) or type(e).__name__)
+                # An unexpected failure also gets its traceback in the job's
+                # own log, where the "see the job log" sentence is pointing;
+                # a failure with a written-out message (credits used up, no
+                # dialogue found) is not a bug and gets none, so the friendly
+                # sentence stays the last thing under the red bar.
+                if not isinstance(e, USER_FACING_ERRORS):
+                    log(traceback.format_exc())
+                self.update(jid, status="error", error=error_text_for_ui(e))
             # However it ended, the file beside the video now says so -- this is
             # the only moment the final status exists to be written down.
             work_dir = (self.get(jid) or {}).get("work_dir")

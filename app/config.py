@@ -1,5 +1,45 @@
 import os
 
+# Settings whose value in the environment could not be used. Filled in by the
+# two readers below, checked once at startup (app/main.py's lifespan), which is
+# what turns a typo in a .env file into one clear message instead of a stack
+# trace at import time -- or, worse, a number silently doing nothing like what
+# the user wrote.
+CONFIG_ERRORS = []
+
+
+def _env_int(name, default, minimum=None):
+    """int(os.environ[name]), except that a bad value is recorded, not raised.
+
+    Raising here would abort the import of app.config, which every module in
+    the app imports -- so one stray character in a .env file used to take the
+    whole app down with a traceback nobody could act on. The default is used
+    instead and the reason goes in CONFIG_ERRORS for startup to report.
+    """
+    return _env_number(int, "an integer", name, default, minimum)
+
+
+def _env_float(name, default, minimum=None):
+    """float(os.environ[name]) under the same rule as _env_int."""
+    return _env_number(float, "a number", name, default, minimum)
+
+
+def _env_number(cast, expected, name, default, minimum):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = cast(raw)
+    except (TypeError, ValueError):
+        CONFIG_ERRORS.append("%s: got %r, expected %s (default %s)" % (name, raw, expected, default))
+        return default
+    if minimum is not None and value < minimum:
+        CONFIG_ERRORS.append("%s: got %r, expected %s >= %s (default %s)"
+                             % (name, raw, expected, minimum, default))
+        return default
+    return value
+
+
 # Address of the Qwen3-TTS local sidecar (internal only).
 QWEN_TTS_URL = os.environ.get("QWEN_TTS_URL", "http://127.0.0.1:3901")
 
@@ -63,7 +103,7 @@ HUNYUAN_PARAMETERS = {
 # pre-selection behavior). The scorer runs as a subprocess under a separate
 # interpreter (QWEN_SCORER_PYTHON) because it needs onnxruntime/torchaudio,
 # which the app's own Python 3.8 venv does not have.
-QWEN_N_TAKES = int(os.environ.get("QWEN_N_TAKES", "4"))
+QWEN_N_TAKES = _env_int("QWEN_N_TAKES", 4, minimum=0)
 # Default "python3" only works if that interpreter has onnxruntime/torchaudio
 # installed. On a dev box with a dedicated venv for this, set QWEN_SCORER_PYTHON
 # to that venv's interpreter (see env.server.example).
@@ -96,7 +136,7 @@ DIAR_PYTHON = os.environ.get("DIAR_PYTHON", "python3")
 # unpadded gate can leave a sliver of the original-language audio audible
 # right at a line's edge. 0.25s default; raise it if leakage is still heard,
 # lower it if too much of the between-line "gap" gets muted.
-QWEN_GATE_PAD_SEC = float(os.environ.get("QWEN_GATE_PAD_SEC", "0.25"))
+QWEN_GATE_PAD_SEC = _env_float("QWEN_GATE_PAD_SEC", 0.25, minimum=0.0)
 
 # Gate ducking (app/qwen_assemble.py _gate_chunk/gate_vocals_chunks): a gated
 # span of the original vocals is attenuated by this many dB instead of hard-
@@ -107,7 +147,7 @@ QWEN_GATE_PAD_SEC = float(os.environ.get("QWEN_GATE_PAD_SEC", "0.25"))
 # presence bleed through at a low level (the original-language dialogue leaks
 # through too, at the same level -- keep this high enough that it reads as
 # ambience, not intelligible speech). 18dB default (~0.126x).
-QWEN_GATE_DUCK_DB = float(os.environ.get("QWEN_GATE_DUCK_DB", "18"))
+QWEN_GATE_DUCK_DB = _env_float("QWEN_GATE_DUCK_DB", 18.0)
 
 # Energy-VAD gate extension (app/qwen_assemble.detect_speech_regions +
 # place_lines): detect speech directly on the Demucs vocals stem (RMS envelope
@@ -117,20 +157,20 @@ QWEN_GATE_DUCK_DB = float(os.environ.get("QWEN_GATE_DUCK_DB", "18"))
 # the real speech, leaving the original voice audible at full level under or
 # next to the dub (observed on the 2026-07-30 edit60s delivery: a whole
 # 23.0-25.5s stretch of original dialogue had no STT cue at all). 1 = on.
-QWEN_GATE_VAD = int(os.environ.get("QWEN_GATE_VAD", "1"))
+QWEN_GATE_VAD = _env_int("QWEN_GATE_VAD", 1)
 
 # Two-tier ducking: a gated span that the energy VAD flagged as actual SPEECH
 # is ducked this deep (near-silent -- it's original-language dialogue, the one
 # thing that must never stay audible), while gated non-speech spans keep the
 # gentler QWEN_GATE_DUCK_DB ambience duck (room tone/breaths bleed through so
 # the mix doesn't fall into vacuum silence). 40dB default (~0.01x).
-QWEN_GATE_SPEECH_DUCK_DB = float(os.environ.get("QWEN_GATE_SPEECH_DUCK_DB", "40"))
+QWEN_GATE_SPEECH_DUCK_DB = _env_float("QWEN_GATE_SPEECH_DUCK_DB", 40.0)
 
 # A/B escape hatch: 1 = do NOT extend the gate with detected-speech-only
 # regions (things STT missed stay un-gated -- preserves laughter/shouts the
 # VAD may flag, at the cost of possible original-dialogue leakage). Detected
 # speech inside already-gated spans still gets the deep speech duck.
-QWEN_GATE_KEEP_NONSPEECH = int(os.environ.get("QWEN_GATE_KEEP_NONSPEECH", "0"))
+QWEN_GATE_KEEP_NONSPEECH = _env_int("QWEN_GATE_KEEP_NONSPEECH", 0)
 
 # Bed-residue duck (app/qwen_assemble.place_lines): Demucs' background stem is
 # not perfectly free of the original dialogue -- on dialogue-heavy clips it
@@ -141,7 +181,7 @@ QWEN_GATE_KEEP_NONSPEECH = int(os.environ.get("QWEN_GATE_KEEP_NONSPEECH", "0"))
 # of the bed's energy there), the bed is ducked too, at the speech duck depth.
 # Genuine music/effects under dialogue don't correlate with the vocals stem at
 # lag 0, so they are left untouched. 1 = on.
-QWEN_GATE_BED_RESIDUE = int(os.environ.get("QWEN_GATE_BED_RESIDUE", "1"))
+QWEN_GATE_BED_RESIDUE = _env_int("QWEN_GATE_BED_RESIDUE", 1)
 
 # Original-vocals gate mode (app/qwen_pipeline.run_qwen_dub ->
 # app/qwen_assemble.place_lines). "safe" (default): the original vocals track
@@ -178,7 +218,7 @@ PERSODUB_LEAKAGE_GATE = os.environ.get("PERSODUB_LEAKAGE_GATE", "on").strip().lo
 # non-speech vocal segments that a local-whisper veto verifies contain NO real
 # words are copied back into the mix at ORIGINAL volume (a copy of approved
 # pieces -- no ducking involved). 0 = plain safe mode, nothing copied.
-QWEN_KEEP_NONVERBAL = int(os.environ.get("QWEN_KEEP_NONVERBAL", "1"))
+QWEN_KEEP_NONVERBAL = _env_int("QWEN_KEEP_NONVERBAL", 1)
 # Interpreter for the whisper veto subprocess -- openai-whisper is not in the
 # app's own venv (same pattern as QWEN_SCORER_PYTHON/SEP_PYTHON). CPU is fine:
 # the veto only transcribes sub-second candidate clips. Default = the server
@@ -200,7 +240,7 @@ PERSODUB_LOG_DIR = os.environ.get("PERSODUB_LOG_DIR", "logs")
 # silence instead of voice; this cap just guards against an unusually quiet/
 # noisy take's envelope being misread as "all silence" and trimming far more
 # than that.
-QWEN_TRIM_LEAD_SEC = float(os.environ.get("QWEN_TRIM_LEAD_SEC", "1.0"))
+QWEN_TRIM_LEAD_SEC = _env_float("QWEN_TRIM_LEAD_SEC", 1.0, minimum=0.0)
 
 # Cap on the gain ratio allowed between two cue-adjacent lines in
 # match_line_gains. Each line's gain is individually "correct" for matching
@@ -208,7 +248,7 @@ QWEN_TRIM_LEAD_SEC = float(os.environ.get("QWEN_TRIM_LEAD_SEC", "1.0"))
 # still swing sharply from one line to the next (observed steps of -10dB/
 # +14.6dB) -- capping the step keeps loudness changing gradually, the way a
 # real actor's volume moves between adjacent lines rather than jumping.
-QWEN_GAIN_STEP_MAX = float(os.environ.get("QWEN_GAIN_STEP_MAX", "1.5"))
+QWEN_GAIN_STEP_MAX = _env_float("QWEN_GAIN_STEP_MAX", 1.5)
 
 
 # Ultra-short-line handling on the Qwen dub path (app/audio/merge.py): a line
@@ -217,11 +257,11 @@ QWEN_GAIN_STEP_MAX = float(os.environ.get("QWEN_GAIN_STEP_MAX", "1.5"))
 # one TTS call, then split back apart at the quiet energy valley between the
 # two sentences -- otherwise a slot this short can truncate the line's TTS
 # output mid-word (observed: "Where's Dent?" / "덴트는?" losing its tail).
-QWEN_SHORT_LINE_SEC = float(os.environ.get("QWEN_SHORT_LINE_SEC", "0.8"))
+QWEN_SHORT_LINE_SEC = _env_float("QWEN_SHORT_LINE_SEC", 0.8, minimum=0.0)
 # A short line only merges with its predecessor if the silence between them
 # is no more than this many seconds -- otherwise the merged take would carry
 # an unnaturally long pause baked into one continuous generation.
-QWEN_MERGE_MAX_GAP_SEC = float(os.environ.get("QWEN_MERGE_MAX_GAP_SEC", "1.5"))
+QWEN_MERGE_MAX_GAP_SEC = _env_float("QWEN_MERGE_MAX_GAP_SEC", 1.5, minimum=0.0)
 
 
 def default_stt_engine() -> str:

@@ -2,7 +2,8 @@ import json
 import threading
 import time
 
-from app.jobs import JobCancelled, JobStore
+from app.jobs import JobCancelled, JobStore, error_text_for_ui
+from app.perso_client import PersoCreditExhaustedError
 
 
 def _wait(store, jid):
@@ -387,3 +388,34 @@ def test_separation_choice_survives_persist_and_shows_in_the_list(tmp_path):
     store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
     assert store2.get(jid)["separation"] == "perso"
     assert store2.all()[0]["separation"] == "perso"
+
+
+# --- what a failed job shows the user --------------------------------------
+# A pipeline stage's RuntimeError carries a sentence written for the screen; an
+# AttributeError from a corner nobody wrote a message for carries a fragment of
+# Python. Only the first kind belongs under the red bar.
+
+def test_error_text_keeps_a_message_written_for_the_user():
+    assert error_text_for_ui(RuntimeError("No dialogue lines were found in this video.")) == \
+        "No dialogue lines were found in this video."
+    assert error_text_for_ui(PersoCreditExhaustedError("Perso credits are used up.")) == \
+        "Perso credits are used up."
+    assert error_text_for_ui(JobCancelled("cancelled by user")) == "cancelled by user"
+
+
+def test_error_text_hides_an_unexpected_failure_behind_its_type():
+    text = error_text_for_ui(AttributeError("'NoneType' object has no attribute 'x'"))
+    assert text == "Unexpected error (AttributeError) - see the job log"
+    assert "NoneType" not in text
+
+
+def test_a_failed_job_writes_its_traceback_to_the_job_log():
+    """The generic sentence above is only fair if the details are somewhere."""
+    store = JobStore()
+
+    def boom(log):
+        raise AttributeError("'NoneType' object has no attribute 'x'")
+
+    j = _wait(store, store.run_async(boom))
+    assert j["error"] == "Unexpected error (AttributeError) - see the job log"
+    assert any("Traceback (most recent call last)" in line for line in j["logs"])

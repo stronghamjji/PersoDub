@@ -16,9 +16,9 @@ reach through the instance to do the same thing. Nothing here is read off
 app.main, so there is no _main() seam: the tests patch this module.
 """
 import json
+import logging
 import os
 import queue
-import sys
 import threading
 import time
 from typing import Optional
@@ -32,6 +32,8 @@ from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
 from app.config import PERSODUB_LOG_DIR
+
+logger = logging.getLogger("persodub.api.agent")
 
 router = APIRouter()
 
@@ -82,7 +84,9 @@ def _login_refresh(key: str, binary: str) -> None:
         # line every minute would bury the rest of it.
         if key not in _login_broken:
             _login_broken.add(key)
-            print("PersoDub: could not check %s's login (%s)" % (key, e), file=sys.stderr)
+            # The type only, not the message: a CLI's error text can quote
+            # the command line it was given, tokens and all.
+            logger.warning("Could not check %s's login (%s)", key, type(e).__name__)
     finally:
         with _login_lock:
             _login_cache[key] = dict(state, at=time.monotonic())

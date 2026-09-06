@@ -9,18 +9,23 @@ genuine jobs.
 """
 import pytest
 
-from app import jobs, state
+from app import jobs, logging_setup, state
 
 
 @pytest.fixture(autouse=True)
 def isolate_job_logs(tmp_path, monkeypatch):
-    """Point per-job log files at a temp directory.
+    """Point the log files at a temp directory.
 
     app/jobs.py mirrors every progress line to PERSODUB_LOG_DIR/job-<id>.log.
     Without this, any test that starts a job drops a log file into the working
     tree -- the same silent, cumulative litter isolate_workspace exists to stop.
+
+    app/logging_setup.py writes the app's own persodub.log into the same
+    folder, and the one test that enters the lifespan (which is what installs
+    that handler) would otherwise start it in the working tree too.
     """
     monkeypatch.setattr(jobs, "PERSODUB_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setattr(logging_setup, "PERSODUB_LOG_DIR", str(tmp_path / "logs"))
 
 
 @pytest.fixture(autouse=True)
