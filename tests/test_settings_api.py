@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from app import config
 from app import engines_status
 from app import main
+from app.api import settings as settings_api
 from app import perso_client
 from app import settings_env
 from app import setup as dub_setup
@@ -218,7 +219,7 @@ def test_perso_spaces_lists_workspaces_for_the_saved_key(tmp_path, monkeypatch):
         seen["key"] = key
         return [{"seq": 114, "name": "EST", "tier": "enterprise", "credits": 3400}]
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", fake_list)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", fake_list)
     r = client.get("/api/perso/spaces")
     assert r.status_code == 200
     assert r.json() == {"spaces": [{"seq": 114, "name": "EST", "tier": "enterprise", "credits": 3400}]}
@@ -231,7 +232,7 @@ def test_perso_spaces_falls_back_to_process_env_key(monkeypatch):
     # process env there, and the picker endpoint must still work.
     monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
     monkeypatch.setenv("PERSO_API_KEY", "ENVKEY")
-    monkeypatch.setattr(main, "list_dubbing_spaces",
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces",
                         lambda key: [{"seq": 1, "name": "solo", "tier": None, "credits": None}])
     r = client.get("/api/perso/spaces")
     assert r.status_code == 200
@@ -244,7 +245,7 @@ def test_perso_spaces_upstream_failure_is_502_without_key_leak(tmp_path, monkeyp
     def boom(key):
         raise RuntimeError("connect timeout for SECRETKEY")
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", boom)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", boom)
     r = client.get("/api/perso/spaces")
     assert r.status_code == 502
     assert "SECRETKEY" not in r.text
@@ -307,14 +308,14 @@ def test_preview_rejects_an_empty_key():
 def test_preview_lists_workspaces_for_the_typed_key_without_saving_it(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch, BASE)          # nothing saved in kit.env
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
-    main._preview_last.update(key="", at=0.0, spaces=None)
+    settings_api._preview_last.update(key="", at=0.0, spaces=None)
     seen = {}
 
     def fake_list(key):
         seen["key"] = key
         return [{"seq": 7, "name": "EST", "tier": "pro", "credits": 10}]
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", fake_list)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", fake_list)
     r = client.post("/api/perso/spaces/preview", json={"api_key": "TYPEDKEY"})
     assert r.status_code == 200
     assert r.json() == {"spaces": [{"seq": 7, "name": "EST", "tier": "pro", "credits": 10}]}
@@ -326,12 +327,12 @@ def test_preview_lists_workspaces_for_the_typed_key_without_saving_it(tmp_path, 
 
 
 def test_preview_upstream_failure_is_502_without_key_leak(monkeypatch):
-    main._preview_last.update(key="", at=0.0, spaces=None)
+    settings_api._preview_last.update(key="", at=0.0, spaces=None)
 
     def boom(key):
         raise RuntimeError("connect timeout for TYPEDKEY")
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", boom)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", boom)
     r = client.post("/api/perso/spaces/preview", json={"api_key": "TYPEDKEY"})
     assert r.status_code == 502
     assert "TYPEDKEY" not in r.text
@@ -340,14 +341,14 @@ def test_preview_upstream_failure_is_502_without_key_leak(monkeypatch):
 def test_preview_reuses_the_last_answer_for_the_same_key(monkeypatch):
     # Paste, debounced typing and blur can all fire for one key -- Perso is
     # asked once, not three times.
-    main._preview_last.update(key="", at=0.0, spaces=None)
+    settings_api._preview_last.update(key="", at=0.0, spaces=None)
     calls = []
 
     def fake_list(key):
         calls.append(key)
         return [{"seq": 7, "name": "EST", "tier": None, "credits": None}]
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", fake_list)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", fake_list)
     for _ in range(3):
         assert client.post("/api/perso/spaces/preview", json={"api_key": "SAME"}).status_code == 200
     assert calls == ["SAME"]
@@ -463,7 +464,7 @@ def test_key_absent_from_kit_env_falls_back_to_the_process_env(tmp_path, monkeyp
     monkeypatch.delenv("STT_ENGINE", raising=False)
     assert settings_env.current_value("PERSO_API_KEY") == "ENVKEY"
     assert config.default_stt_engine() == "perso"
-    monkeypatch.setattr(main, "list_dubbing_spaces",
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces",
                         lambda key: [{"seq": 1, "name": "solo", "tier": None, "credits": None}])
     assert client.get("/api/perso/spaces").status_code == 200
 
