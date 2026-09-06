@@ -16,7 +16,11 @@ from typing import Callable, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from app.jobs import JobCancelled
-from app.pipeline import pre_stage_marker
+
+# The "0/6" prefix only, from the leaf module that owns the stage table --
+# never from app/pipeline.py, which would make "download a video" import the
+# whole orchestrator (TTS engine, diarizer, Qwen pipeline) for one string.
+from app.stages import pre_stage_marker
 
 YTDLP_BASE = [sys.executable, "-m", "yt_dlp", "--no-playlist"]
 FETCH_TIMEOUT = 1800

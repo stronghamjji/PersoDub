@@ -7,6 +7,7 @@ Perso, no credits, no confirm gate.
 """
 from fastapi.testclient import TestClient
 
+from app import media
 from app.api import clips as clips_api
 from app.main import app
 
@@ -37,7 +38,7 @@ class _Ran:
 def _wire(monkeypatch, tmp_path, duration=60.0):
     ran = _Ran()
     monkeypatch.setattr(clips_api.subprocess, "run", ran)
-    monkeypatch.setattr(clips_api, "_video_duration", lambda p: duration)
+    monkeypatch.setattr(media, "video_duration", lambda p: duration)
     video = tmp_path / "쇼츠 3편.mp4"
     video.write_bytes(b"not really a video")
     return ran, video

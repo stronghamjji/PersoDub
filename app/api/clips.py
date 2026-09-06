@@ -1,10 +1,10 @@
 """Cutting a stretch of a video into its own file -- the Dub Agent's cut_clip
 tool. Lifted out of app/main.py unchanged (2026-09-06).
 
-main._cut_video stays in main on purpose: it is the trim that runs inside a
-dub (start, retry, queued-job rearm), and nothing here calls it -- this route
-runs its own ffmpeg because it writes a new file beside the original rather
-than replacing it.
+media.cut_video (aliased into app/api/dub.py as _cut_video) is a different
+thing and is not called from here: that one is the trim that runs inside a dub
+(start, retry, queued-job rearm) and replaces the file it trims. This route
+runs its own ffmpeg because it writes a new file beside the original.
 """
 import os
 import subprocess
@@ -13,8 +13,8 @@ from typing import Union
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app import media
 from app.api._shared import free_path
-from app.pipeline import _video_duration
 
 router = APIRouter()
 
@@ -78,7 +78,7 @@ def clips_cut(body: ClipCutRequest):
     if start < 0 or end <= start:
         raise HTTPException(status_code=422, detail="The clip must start before it ends.")
     try:
-        duration = _video_duration(path)
+        duration = media.video_duration(path)
     except Exception:
         raise HTTPException(status_code=422,
                             detail="That file does not look like a video.")

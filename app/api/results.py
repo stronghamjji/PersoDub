@@ -7,13 +7,13 @@ One module because they are one job: the burn helpers below (_norm_preset,
 _write_burn_ass, _filter_path) draw the subtitles for the standalone burn, the
 subtitled export and the Export dialog's preview alike.
 
-Lifted out of app/main.py unchanged (2026-09-06). The four names it shares
-with other routers come from the module that owns each: the job store from
+Lifted out of app/main.py unchanged (2026-09-06). The names it shares with
+other routers come from the module that owns each: the job store from
 app/state.py, the Perso client from app.perso_client, the key check from
-app.engines_status, and work_dir_of from app/api/_shared.py. Those first three
-are imported as MODULES and read at call time -- the tests fake them by
-setting attributes on the module object, which every importer sees because
-there is only ever one module object.
+app.engines_status, the ffprobe call from app/media.py, and work_dir_of from
+app/api/_shared.py. All but the last are imported as MODULES and read at call
+time -- the tests fake them by setting attributes on the module object, which
+every importer sees because there is only ever one module object.
 """
 import json
 import logging
@@ -28,7 +28,7 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import engines_status, perso_client, state
+from app import engines_status, media, perso_client, state
 from app.api._shared import free_path, work_dir_of
 from app.perso_client import (
     PersoCreditExhaustedError,
@@ -36,7 +36,6 @@ from app.perso_client import (
     PersoUnavailableError,
     perso_to_cues,
 )
-from app.pipeline import _video_duration
 from app.stt_local import transcribe_local
 from app.subtitle_ass import PRESETS as SUBTITLE_PRESETS
 from app.subtitle_ass import build_ass
@@ -84,7 +83,7 @@ def subtitles_estimate(video_path: str, engine: str = "perso"):
     """
     path = _subtitle_video(video_path, engine)
     try:
-        seconds = _video_duration(path)
+        seconds = media.video_duration(path)
     except Exception:
         raise HTTPException(status_code=422,
                             detail="That file does not look like a video.")
@@ -178,6 +177,13 @@ def _video_dims(path: str):
         logger.debug("Could not read the video's size, falling back to 1920x1080 (%s)",
                      type(e).__name__)
     return 1920, 1080
+
+
+# One srt timing line, e.g. "00:00:01,500 --> 00:00:03,000". Both readers
+# below use it: _srt_cues to pull the cues out, _retimed_srt to write new ones
+# back in.
+_SRT_TIMING = re.compile(
+    r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)")
 
 
 def _srt_cues(path: str):
@@ -475,10 +481,6 @@ def subtitle_style_put(jid: str, body: dict):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(merged, f, ensure_ascii=False)
     return merged
-
-
-_SRT_TIMING = re.compile(
-    r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)")
 
 
 def _fmt_srt_time(sec: float) -> str:

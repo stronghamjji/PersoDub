@@ -124,3 +124,19 @@ def test_cloud_mode_needs_no_local_models(monkeypatch, _kit):
     monkeypatch.setattr(dub_api, "current_value", lambda k: "1" if k == "PERSO_SPACE_SEQ" else "x")
     r = _start({"dub_mode": "perso"})
     assert r.status_code == 200
+
+
+def test_an_stt_engine_name_we_do_not_have_is_a_422(monkeypatch, _kit):
+    """A saved STT_ENGINE nobody implements must be said out loud.
+
+    app/config.py's default_stt_engine hands an unrecognized value back
+    unchanged for exactly this: the alternative is dubbing with a different
+    engine than the one the settings file asks for, without telling anyone.
+    """
+    _put_whisper(_kit)
+    _put_tts(_kit)
+    monkeypatch.setenv("STT_ENGINE", "whisperx")
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
+    r = _start()
+    assert r.status_code == 422
+    assert "Unknown stt_engine: whisperx" in r.json()["detail"]

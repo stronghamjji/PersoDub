@@ -5,7 +5,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from app import engines_status
+from app import engines_status, state
 from app.api import dub as dub_api
 from app.main import app
 
@@ -64,9 +64,11 @@ def test_original_is_downloadable_for_a_link_job(monkeypatch):
     # _finished_job posts an uploaded file; stamping from_link makes the job
     # look like one that pulled its video from a URL, which is the only case
     # where the original is handed back.
-    from app.state import job_store
+    # state.job_store, not `from app.state import job_store`: the store is a
+    # module attribute other tests reassign, and a name bound at import time
+    # would keep pointing at whichever object existed then.
     jid = _finished_job(monkeypatch)
-    job_store._update(jid, from_link=True)
+    state.job_store._update(jid, from_link=True)
 
     r = client.get(f"/api/dub/result/{jid}/original")
     assert r.status_code == 200

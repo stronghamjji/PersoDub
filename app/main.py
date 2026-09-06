@@ -45,9 +45,12 @@ async def lifespan(_app):
     The log first, so the settings check and the restore below have somewhere
     to write. Then the settings: a value the environment got wrong (a typo in
     a .env) no longer fails at import time with a traceback -- app/config.py
-    collects those and this is where they are reported, once, and where the
-    app refuses to start on them rather than running a dub with silently
-    different numbers. PERSODUB_IGNORE_BAD_CONFIG=1 is the way past it.
+    collects those and this is where they are reported, once, at ERROR.
+    Reported and then passed over: app/config.py has already fallen back to
+    the documented default for each one, and refusing to start over an
+    optional tuning number would leave a desktop user with a window that never
+    opens and no way to read the reason, which is a worse failure than a dub
+    made with the default.
 
     The job store is a dictionary, so quitting the app used to lose every
     record even though the folders were all still there. Reading the job.json
@@ -64,14 +67,8 @@ async def lifespan(_app):
     # still answers the first question asked of it: did the app start, and
     # which build was it?
     log.info("PersoDub %s starting up", APP_VERSION)
-    if config.CONFIG_ERRORS:
-        for problem in config.CONFIG_ERRORS:
-            log.error("Bad setting -- %s", problem)
-        if os.environ.get("PERSODUB_IGNORE_BAD_CONFIG") != "1":
-            raise SystemExit(
-                "PersoDub cannot start: %d setting(s) in the environment are not valid "
-                "(listed above). Fix them, or set PERSODUB_IGNORE_BAD_CONFIG=1 to start "
-                "anyway with the defaults." % len(config.CONFIG_ERRORS))
+    for problem in config.CONFIG_ERRORS:
+        log.error("Bad setting, using the default instead -- %s", problem)
     state.job_store.restore(state.WORKSPACE)
     dub_api.rearm_queued_jobs()
     log.info("Ready -- %d job(s) restored", len(state.job_store.all()))

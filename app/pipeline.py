@@ -29,6 +29,12 @@ from app.qwen_pipeline import cleanup_takes, run_qwen_dub
 from app.scripts.check_leakage import _validate_manifest_spans, measure_leakage
 from app.scripts.suppress_vocal_echo import suppress_vocal_echo
 from app.separate import SeparationEngine
+
+# Re-exported, not merely used: the stage table lives in app/stages.py (a leaf
+# module app/source_fetch.py can import without dragging the orchestrator in),
+# and pipeline.STAGES / pipeline.stage_marker stay valid names because tests
+# and other modules already read them off this module.
+from app.stages import STAGES, pre_stage_marker, stage_marker  # noqa: F401
 from app.stt_local import transcribe_local
 from app.text.cues import cue_speaker, match_cue_index
 from app.text.length_fit import fit_translate
@@ -57,43 +63,9 @@ logger = logging.getLogger("persodub.pipeline")
 # one calls media.mux / media.video_duration directly. A test that stubs two of
 # the three and lets the third run really shells out to ffprobe: stub
 # ensure_video_length too.
-_stream_duration = media.stream_duration
 _video_duration = media.video_duration
 _mux = media.mux
 ensure_video_length = media.ensure_video_length
-
-
-# The pipeline's progress stages, in order. This tuple is the ONLY place the
-# "N/6" numbering lives: every stage log line below is built by _log_stage()
-# from a stage's position here, so inserting a stage renumbers all of them at
-# once instead of by hand in a dozen string literals.
-#
-# The second field is the coarser label the UI shows for the stage. Neighbouring
-# stages that share a label are folded into one step of the progress bar there
-# (the last three all read as "Dubbing" to the user), so this field is the
-# contract with ui/src/dubApi.mjs's own STAGES table --
-# tests/test_stage_tables_match.py fails if the two drift apart.
-STAGES = (
-    ("separate", "Separating audio"),
-    ("transcribe", "Transcribing"),
-    ("translate", "Translating"),
-    ("synthesize", "Dubbing"),
-    ("check", "Dubbing"),
-    ("build", "Dubbing"),
-)
-
-_STAGE_NUMBER = {name: i + 1 for i, (name, _label) in enumerate(STAGES)}
-
-
-def stage_marker(name: str) -> str:
-    """The "N/6" prefix a stage's log lines start with, e.g. "3/6"."""
-    return f"{_STAGE_NUMBER[name]}/{len(STAGES)}"
-
-
-def pre_stage_marker() -> str:
-    """The "0/6" prefix for progress logged before any stage above starts
-    (e.g. fetching the source video)."""
-    return f"0/{len(STAGES)}"
 
 
 def _log_stage(log: Callable[[str], None], name: str, text: str) -> None:
@@ -308,7 +280,8 @@ def _auto_translate_srt(
     # Keep the source script before the next line overwrites it in place -- past this
     # point the source is gone, and app/dub_script.py needs it to show a line's source
     # next to its translation. Named original.srt, not source.srt: source.srt already
-    # belongs to a caller-uploaded source script (app/main.py:388).
+    # belongs to a caller-uploaded source script (app/api/dub.py's dub_start
+    # writes the uploaded source_srt there).
     with open(os.path.join(work_dir, "original.srt"), "w", encoding="utf-8") as f:
         f.write(build_srt(cues))
 
@@ -622,7 +595,7 @@ def _stage_finish(video_path, audio_wav, out_path, work_dir, log):
     # Rewriting one line and re-speaking only that line needs all three, and a
     # rewrite is the normal thing to do after watching the dub back (user
     # decision 2026-08-24, reversing the 0.3.6 cleanup). They cost disk, so
-    # app/main.py warns before a job that would not fit and points at the
+    # app/api/dub.py's check_space warns before a job that would not fit and points at the
     # per-job delete button. cleanup_intermediates() is still here and is what
     # that warning tells the user to reach for.
     log("   keeping the per-line audio so single lines can be redone")
@@ -678,9 +651,9 @@ def run_dub(
     if given, is called with a structured {"type", "message", "link"} dict
     for events the caller may want to surface outside the plain log stream
     ("perso_credit_exhausted", "perso_invalid_key", "perso_unavailable",
-    "gemini_quota_exhausted", "gemini_unavailable" -- see app/main.py, which
-    wires it to JobStore.append_notice so the job status JSON carries it for
-    the UI).
+    "gemini_quota_exhausted", "gemini_unavailable" -- see app/api/dub.py,
+    which wires it to JobStore.append_notice so the job status JSON carries it
+    for the UI).
     """
     log = log or (lambda m: None)
 

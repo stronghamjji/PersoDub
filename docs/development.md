@@ -76,12 +76,12 @@ blocks `.env`, `*.env`, and `config/`.
 | `QWEN_SCORER_PYTHON` / `QWEN_N_TAKES` | `python3` / `4` | Take-scoring interpreter · candidates per line (best-of-N) |
 | `PERSODUB_LOG_DIR` | `logs` | Where `persodub.log` and the per-job `job-<id>.log` files are written |
 | `PERSODUB_DEBUG` | (unset) | `1` = DEBUG detail in `persodub.log` instead of INFO |
-| `PERSODUB_IGNORE_BAD_CONFIG` | (unset) | `1` = start even when a numeric setting above is unreadable, using the defaults |
 
 A number this table gives that the environment sets to something unreadable
 (`QWEN_N_TAKES=abc`) does not raise at import any more: `app/config.py` falls
 back to the default and records the reason in `CONFIG_ERRORS`, and startup
-prints every entry and refuses to run unless `PERSODUB_IGNORE_BAD_CONFIG=1`.
+logs every entry at ERROR and carries on with those defaults. The app always
+starts; check `persodub.log` for the line naming the setting.
 
 ## Quality checks
 

@@ -84,9 +84,10 @@ def _job(job_id: str) -> dict:
 def _work_dir(job: dict) -> str:
     """A job's workspace folder.
 
-    The folder name and the job id are two unrelated random strings (app/main.py:374
-    and :379), so the folder cannot be derived from the id -- it is read back out of
-    the result path, the same way app/main.py:516 does it.
+    The folder name and the job id are two unrelated strings (app/api/dub.py's
+    _job_dir names the folder after the title; JobStore.create makes the id),
+    so the folder cannot be derived from the id -- it is read back out of the
+    result path, the same way app/api/_shared.py's work_dir_of does it.
     """
     out = (job.get("result") or {}).get("out_path")
     if not out:
@@ -95,7 +96,8 @@ def _work_dir(job: dict) -> str:
 
 
 def _lang(job: dict) -> str:
-    """The dub's target language, stamped onto the job by app/main.py:396."""
+    """The dub's target language, stamped onto the job record by app/api/dub.py
+    (the language_code field it passes to launch_job)."""
     return job.get("language_code") or "en"
 
 

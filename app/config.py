@@ -280,11 +280,25 @@ def default_stt_engine() -> str:
     function's callers have always read as "nobody picked, use the free local
     engine".
 
+    A configured value that is neither engine (STT_ENGINE=whisperx, a typo) is
+    handed back untouched rather than quietly replaced: app/api/dub.py answers
+    422 "Unknown stt_engine: whisperx" on it, and a person who wrote a name we
+    do not have deserves to be told so instead of getting a dub made with a
+    different engine. setup.default_for cannot say this -- it treats anything
+    outside its own list as "not chosen" -- so the raw value is read here
+    first.
+
     Imported inside the function on purpose: app/setup.py imports this module,
     so importing it at the top would be a cycle.
     """
     from app import setup
+    from app.settings_env import current_value
 
+    # current_value already falls back to the process env for a key kit.env
+    # never mentions, so this one read covers both places a value can come from.
+    configured = (current_value("STT_ENGINE") or "").strip()
+    if configured and configured.lower() not in ("local", "perso"):
+        return configured
     return "" if setup.default_for("stt") == "local" else "perso"
 
 

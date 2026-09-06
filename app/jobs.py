@@ -61,7 +61,12 @@ class JobCancelled(Exception):
 
 
 # The exception types whose message was WRITTEN for the user, and so can go
-# straight under the red bar on the done screen.
+# straight under the red bar on the done screen. This table decides one thing
+# and one thing only: which sentence error_text_for_ui hands the red bar, and
+# whether the run wrapper below also appends a traceback to the job log. It is
+# not a privacy boundary -- the job log has always carried
+# `Error: <Type>: <text>` for every failure, unchanged by this branch, and
+# GET /api/dub/jobs/{jid} returns those lines.
 #
 # RuntimeError is the whole of the pipeline's user-facing vocabulary: every
 # sentence app/pipeline.py hands a failed job comes out of _raise_notice or one
@@ -74,9 +79,9 @@ class JobCancelled(Exception):
 # text as what a failed job shows.
 #
 # Anything else -- an AttributeError, a KeyError, an OSError from a corner of
-# the code nobody wrote a message for -- is a bug, and its text is either
-# meaningless to the user ("'NoneType' object is not subscriptable") or holds a
-# path we would rather not put on screen.
+# the code nobody wrote a message for -- is a bug, and its text is usually
+# meaningless as a sentence ("'NoneType' object is not subscriptable"), so the
+# red bar names the type and points at the job log instead.
 USER_FACING_ERRORS = (JobCancelled, RuntimeError, ValueError)
 
 
@@ -135,7 +140,9 @@ class JobStore:
             if jid in self._jobs:
                 self._jobs[jid].update(kw)
 
-    # Deprecated name, kept so callers written against it keep working.
+    # The old name of update(). No production code calls it any more -- it is
+    # kept for the tests that patch or call `_update` on a store, and it goes
+    # the day those move to `update`.
     # A method rather than `_update = update`: the class-body alias froze the
     # original function, so a test that replaced update on one store still had
     # _update calling the real thing.
@@ -248,7 +255,12 @@ class JobStore:
                 jid = rec["id"]
             except Exception as e:
                 # One unreadable file must not cost the user every other job.
-                logger.warning("Skipping %s (%s)", path, type(e).__name__)
+                # The job folder's name only, never the path: persodub.log is
+                # meant to be small enough to attach to a bug report, and a
+                # full path would put the user's whole folder tree in it. (The
+                # file itself is always job.json, which names nothing.)
+                logger.warning("Skipping %s (%s)", os.path.basename(os.path.dirname(path)),
+                               type(e).__name__)
                 continue
             if rec.get("status") in ("running", "cancelling"):
                 # The thread died with the process; nothing will ever finish it.
@@ -298,8 +310,10 @@ class JobStore:
                     result={"out_path": out},
                 )
             except Exception as e:
-                # Same promise as above: one odd folder is skipped, not fatal.
-                logger.warning("Skipping %s (%s)", work, type(e).__name__)
+                # Same promise as above, and the same rule about the path:
+                # one odd folder is skipped, not fatal, and only its own name
+                # goes in the log.
+                logger.warning("Skipping %s (%s)", os.path.basename(work), type(e).__name__)
                 continue
             with self._lock:
                 self._jobs.setdefault(jid, job)

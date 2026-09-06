@@ -9,7 +9,7 @@ import math
 
 from fastapi.testclient import TestClient
 
-from app import engines_status, perso_client
+from app import engines_status, media, perso_client
 from app.api import results as results_api
 from app.main import app
 
@@ -41,7 +41,7 @@ def _wire(monkeypatch, tmp_path, duration=10.0):
     fake = _FakePerso()
     monkeypatch.setattr(engines_status, "perso_available", lambda: True)
     monkeypatch.setattr(perso_client, "PersoClient", lambda: fake)
-    monkeypatch.setattr(results_api, "_video_duration", lambda p: duration)
+    monkeypatch.setattr(media, "video_duration", lambda p: duration)
     video = tmp_path / "쇼츠 3편.mp4"
     video.write_bytes(b"not really a video")
     return fake, video
@@ -79,7 +79,7 @@ def test_estimate_calls_a_file_ffprobe_cannot_read_not_a_video(monkeypatch, tmp_
 
     def broken(_):
         raise RuntimeError("no video stream")
-    monkeypatch.setattr(results_api, "_video_duration", broken)
+    monkeypatch.setattr(media, "video_duration", broken)
     r = client.get("/api/subtitles/estimate", params={"video_path": str(video)})
     assert r.status_code == 422
 
