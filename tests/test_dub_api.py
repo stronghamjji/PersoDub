@@ -6,6 +6,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+import app.api.script as script_api
 import app.main as main
 from app import jobs
 from app.main import app
@@ -1013,9 +1014,9 @@ def _dubbed_job(tmp_path, texts, edits=None, stale=()):
 
 def test_stale_voices_remakes_nothing_when_every_voice_is_current(monkeypatch, tmp_path):
     said, built = [], []
-    monkeypatch.setattr(main, "resynth_one_line",
+    monkeypatch.setattr(script_api, "resynth_one_line",
                         lambda *a: said.append(a) or "made.wav")
-    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: built.append(a))
     jid = _dubbed_job(tmp_path, ["one", "two", "three"])
 
     r = client.post(f"/api/dub/jobs/{jid}/voices/stale")
@@ -1027,9 +1028,9 @@ def test_stale_voices_remakes_nothing_when_every_voice_is_current(monkeypatch, t
 
 def test_stale_voices_remakes_only_the_rewritten_lines_and_rebuilds_once(monkeypatch, tmp_path):
     said, built = [], []
-    monkeypatch.setattr(main, "resynth_one_line",
+    monkeypatch.setattr(script_api, "resynth_one_line",
                         lambda *a: said.append(a) or "made.wav")
-    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: built.append(a))
     # Lines 1 and 3 were rewritten and their voices have not caught up; line 2
     # is untouched, and line 4 was rewritten but already respoken since.
     jid = _dubbed_job(tmp_path, ["one", "two", "three", "four"],
@@ -1056,9 +1057,9 @@ def test_one_line_voice_still_speaks_that_line_and_rebuilds(monkeypatch, tmp_pat
     # The sweep above and this share a helper now -- one line still goes
     # through, words and all.
     said, built = [], []
-    monkeypatch.setattr(main, "resynth_one_line",
+    monkeypatch.setattr(script_api, "resynth_one_line",
                         lambda *a: said.append(a) or "made.wav")
-    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: built.append(a))
     jid = _dubbed_job(tmp_path, ["one", "two"], edits={2: "TWO"})
 
     r = client.post(f"/api/dub/jobs/{jid}/script/2/voice")
@@ -1419,7 +1420,7 @@ def test_materialize_turns_a_perso_dub_editable(monkeypatch, tmp_path):
             f.write("1\n00:00:00,270 --> 00:00:06,210\n안녕\n")
         return {"lines": 1, "speakers": 1}
 
-    monkeypatch.setattr(main.perso_materialize, "materialize", fake_materialize)
+    monkeypatch.setattr(script_api.perso_materialize, "materialize", fake_materialize)
 
     r = client.post(
         "/api/dub/start",

@@ -1,51 +1,37 @@
 import json
 import math
 import os
-import queue
 import re
 import shutil
-import sys
-import threading
-import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app import config, media, perso_materialize
+from app import config, media
 from app import models as model_store
 from app import setup as dub_setup
-from app.agents import base as agent_base
-from app.agents import claude as claude_agent
-from app.agents import codex as codex_agent
+from app.api import agent as agent_api
 from app.api import clips as clips_api
 from app.api import models as models_api
 from app.api import results as results_api
+from app.api import script as script_api
 from app.api import settings as settings_api
 from app.config import (
     OLLAMA_GEMMA_MODEL,
     OLLAMA_HUNYUAN_MODEL,
     OLLAMA_QWEN_MODEL,
-    PERSODUB_LOG_DIR,
     QWEN_N_TAKES,
     default_stt_engine,
 )
-from app.dub_script import (
-    DUB_NAME,
-    EDITED_NAME,
-    edit_line,
-    line_wav_path,
-    load_lines,
-    script_path,
-)
+from app.dub_script import EDITED_NAME, script_path
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -73,7 +59,6 @@ from app.perso_client import (
     list_dubbing_spaces,
 )
 from app.pipeline import run_dub
-from app.qwen_pipeline import rebuild_dub, resynth_one_line
 
 # Kept on this module although nothing here calls it any more: the settings
 # routes moved to app/api/settings.py, and tests still redirect main.read_value.
@@ -85,7 +70,6 @@ from app.source_fetch import FetchError
 from app.source_fetch import fetch as fetch_source
 from app.source_fetch import probe as probe_source
 from app.text.naming import next_free, safe_name
-from app.text.srt import parse_srt
 from app.translate import get_translator
 
 # Kept as a module attribute on purpose: main's own call sites read this name
@@ -220,9 +204,11 @@ async def reject_cross_origin_writes(request, call_next):
 
 # Settings, the Perso workspace picker and the reveal-output button live in
 # app/api/settings.py; the URLs are unchanged.
+app.include_router(agent_api.router)
 app.include_router(clips_api.router)
 app.include_router(models_api.router)
 app.include_router(results_api.router)
+app.include_router(script_api.router)
 app.include_router(settings_api.router)
 
 # Register the installed TTS engine (Qwen3-TTS)
@@ -352,82 +338,6 @@ def dub_job(jid: str):
     return j
 
 
-@app.get("/api/dub/jobs/{jid}/script")
-def dub_job_script(jid: str):
-    """This job's script, line by line, with the source line beside each one.
-
-    The same reading app/mcp_server.py's get_script hands the assistant. Until
-    now only the assistant could see it: the page had no route to ask for the
-    original-language lines, so the export screen could only list the finished
-    subtitles with nothing to compare them against.
-    """
-    job = job_store.get(jid)
-    if job is None:
-        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if job.get("dub_mode") == "perso" and not _perso_is_materialized(job):
-        # A Perso dub's script lives on Perso's side; read it back live.
-        seq = job.get("perso_project_seq")
-        if not seq:
-            raise HTTPException(status_code=404, detail="No script was recorded for this job.")
-        try:
-            script = PersoClient().get_project_script(int(seq))
-        except Exception:
-            raise HTTPException(status_code=503,
-                                detail="Could not reach Perso for this job's script. Try again in a moment.")
-        lines = []
-        for n, sent in enumerate(script.get("sentences") or [], start=1):
-            start = (sent.get("offsetMs") or 0) / 1000.0
-            dur = (sent.get("durationMs") or 0) / 1000.0
-            lines.append({
-                "line": n,
-                "start": round(start, 2),
-                "end": round(start + dur, 2),
-                "slot": round(dur, 2),
-                "source": sent.get("originalText"),
-                "text": sent.get("translatedText") or "",
-                # The voice already exists and fills its slot exactly -- there
-                # is nothing to estimate and nothing stale.
-                "estimated": round(dur, 2),
-                "fits": True,
-                "speaker": sent.get("speakerOrderIndex"),
-                "audio_sec": None,
-                "voice_stale": False,
-                "edited": False,
-                "was": None,
-            })
-        # Read-only until editing Perso lines lands (the next stage).
-        return {"lines": lines, "edited": False, "readonly": True}
-    out = (job.get("result") or {}).get("out_path")
-    if not out:
-        raise HTTPException(status_code=409,
-                            detail="This job has no finished script yet.")
-    work_dir = os.path.dirname(out)
-    try:
-        lines = load_lines(work_dir, job.get("language_code") or "en")
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="No script was recorded for this job.")
-    # Mark which lines differ from what the translation produced, so the page can
-    # badge them and offer to put them back.
-    for line, original in zip(lines, _dubbed_texts(work_dir)):
-        line["was"] = original
-        line["edited"] = original is not None and original != line["text"]
-    return {"lines": lines,
-            "edited": any(l.get("edited") for l in lines)}
-
-
-def _dubbed_texts(work_dir: str) -> List[Optional[str]]:
-    """What the translation wrote, line by line, before anything was rewritten.
-
-    edit_line only ever changes a line's words, never the count or the timings,
-    so line N here is line N there.
-    """
-    path = os.path.join(work_dir, DUB_NAME)
-    if not os.path.exists(path):
-        return []
-    with open(path, encoding="utf-8-sig") as f:
-        return [c["text"] for c in parse_srt(f.read())]
-
-
 # A dub keeps its per-line voices now (app/pipeline.py), which is what makes
 # redoing a single line possible -- and what makes a job need room. Measured on
 # a real job 2026-08-21: the intermediates were about 61% of the folder.
@@ -461,12 +371,12 @@ def check_space(path: str) -> None:
     )
 
 
-class ScriptLineRequest(BaseModel):
-    text: str
-
-
 def _script_work_dir(jid: str) -> tuple:
-    """The job and its folder, or the right HTTP error."""
+    """The job and its folder, or the right HTTP error.
+
+    Shared: redub below starts from it, and every route in app/api/script.py
+    reads it back off this module (script._main()._script_work_dir).
+    """
     job = job_store.get(jid)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
@@ -474,126 +384,6 @@ def _script_work_dir(jid: str) -> tuple:
     if not out:
         raise HTTPException(status_code=409, detail="This job has no finished script yet.")
     return job, os.path.dirname(out)
-
-
-@app.post("/api/dub/jobs/{jid}/script/{line}")
-def dub_job_script_edit(jid: str, line: int, body: ScriptLineRequest):
-    """Rewrite one line. Same path the assistant takes -- edited.srt only."""
-    job, work_dir = _script_work_dir(jid)
-    try:
-        return edit_line(work_dir, line, body.text, job.get("language_code") or "en")
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="No script was recorded for this job.")
-
-
-@app.get("/api/dub/jobs/{jid}/script/{line}/audio")
-def dub_job_line_audio(jid: str, line: int):
-    """The voice that was made for one line, on its own."""
-    _job, work_dir = _script_work_dir(jid)
-    path = line_wav_path(work_dir, line)
-    if not os.path.exists(path):
-        raise HTTPException(
-            status_code=404,
-            detail=("This job has no per-line audio. Per-line audio has only "
-                    "been kept since 2026-08-24, so a job made before that "
-                    "has to be dubbed again before you can listen to it."))
-    return FileResponse(path, media_type="audio/wav")
-
-
-def _line_manifest(work_dir: str) -> dict:
-    """What the synthesizer recorded about each line, or the right HTTP error."""
-    manifest = os.path.join(work_dir, "lines.json")
-    if not os.path.exists(manifest):
-        raise HTTPException(status_code=409, detail=(
-            "This job cannot be remade one line at a time. It was made before "
-            "2026-08-24, so it has no line information -- remake the whole job."))
-    with open(manifest, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _remake_one_voice(work_dir: str, data: dict, line: int, text: str) -> None:
-    """Speak one line again, over its own old wav. The video is NOT rebuilt here.
-
-    Rebuilding is the caller's call: one line at a time rebuilds after each one,
-    a sweep of several rebuilds once at the end.
-    """
-    entries = data.get("lines") or []
-    if not 1 <= line <= len(entries):
-        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
-    try:
-        new_path = resynth_one_line(work_dir, entries[line - 1], text,
-                                    data.get("language") or "English")
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    if new_path is None:
-        raise HTTPException(status_code=502, detail="Could not make the voice.")
-
-
-@app.post("/api/dub/jobs/{jid}/script/{line}/voice")
-def dub_job_line_voice(jid: str, line: int):
-    """Speak ONE line again and rebuild the dub around it.
-
-    Everything else is reused: the other lines' audio, the background bed and
-    the speaker's cloned voice all stay on disk after a job (app/pipeline.py).
-    Rewriting two lines of ten should not cost a whole synthesis pass.
-    """
-    job, work_dir = _script_work_dir(jid)
-    data = _line_manifest(work_dir)
-    lines = load_lines(work_dir, job.get("language_code") or "en")
-    if not 1 <= line <= len(lines):
-        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
-
-    _remake_one_voice(work_dir, data, line, lines[line - 1]["text"])
-    rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
-                (job.get("result") or {}).get("out_path"))
-    return {"line": line, "ok": True}
-
-
-@app.post("/api/dub/jobs/{jid}/voices/stale")
-def dub_job_stale_voices(jid: str):
-    """Remake only the lines whose words changed since their voice was made.
-
-    Exactly the work the screen's filled wave buttons offer, in one press: each
-    such line is spoken again in place and the video is put back together once
-    at the end, instead of once per line. Nothing else moves -- no new job, no
-    new folder, no status change, and a line nobody rewrote keeps its voice.
-
-    Which lines those are is decided the same way the screen decides it
-    (static/index.html: `l.edited && l.voice_stale`), so one press does the set
-    of lines the buttons were offering and not a line more.
-    """
-    job, work_dir = _script_work_dir(jid)
-    if job.get("status") in ("running", "cancelling"):
-        raise HTTPException(status_code=409, detail="This job is still running.")
-    data = _line_manifest(work_dir)
-    lines = load_lines(work_dir, job.get("language_code") or "en")
-    stale = [
-        line for line, original in zip(lines, _dubbed_texts(work_dir))
-        if original is not None and original != line["text"] and line["voice_stale"]
-    ]
-    if not stale:
-        return {"remade": [], "skipped": len(lines)}
-
-    for line in stale:
-        _remake_one_voice(work_dir, data, line["line"], line["text"])
-    # Once, at the end: the rebuild is the slow half, and laying down five new
-    # lines five times over would spend it five times for the same video.
-    rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
-                (job.get("result") or {}).get("out_path"))
-    return {"remade": [line["line"] for line in stale],
-            "skipped": len(lines) - len(stale)}
-
-
-@app.post("/api/dub/jobs/{jid}/script/{line}/revert")
-def dub_job_script_revert(jid: str, line: int):
-    """Put one line back to what the translation wrote."""
-    job, work_dir = _script_work_dir(jid)
-    texts = _dubbed_texts(work_dir)
-    if not 1 <= line <= len(texts):
-        raise HTTPException(status_code=422, detail=f"There is no line {line}.")
-    return edit_line(work_dir, line, texts[line - 1], job.get("language_code") or "en")
 
 
 def _inherited_engines(job, keys):
@@ -882,76 +672,6 @@ def whats_new():
     except Exception:
         pass  # no notes is fine; the popup simply never shows
     return {"version": APP_VERSION, "notes": notes}
-
-
-class PersoSpeakerRequest(BaseModel):
-    line: int
-
-
-def _perso_is_materialized(job) -> bool:
-    """True once a Perso dub's parts were fetched for local editing -- from
-    then on its script (and every edit tool) runs on the local files."""
-    out = (job.get("result") or {}).get("out_path")
-    return bool(out and os.path.exists(os.path.join(os.path.dirname(out), DUB_NAME)))
-
-
-@app.post("/api/dub/jobs/{jid}/perso/materialize")
-def dub_job_perso_materialize(jid: str):
-    """Fetch a Perso dub's parts (script, per-line audio, background bed) and
-    write the local job files -- after this the dub edits like any other job.
-    Downloads only; no Perso credits are spent."""
-    job = job_store.get(jid)
-    if job is None:
-        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if job.get("dub_mode") != "perso" or not job.get("perso_project_seq"):
-        raise HTTPException(status_code=409, detail="Only Perso dubs can be fetched for editing.")
-    out = (job.get("result") or {}).get("out_path")
-    if not out:
-        raise HTTPException(status_code=409, detail="This job has no finished video yet.")
-    try:
-        summary = perso_materialize.materialize(
-            PersoClient(), int(job["perso_project_seq"]), os.path.dirname(out),
-            job.get("language") or "English",
-            log=lambda msg: job_store.append_log(jid, msg))
-    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=503,
-                            detail=f"Could not fetch this dub from Perso ({str(e)[:80]}).")
-    return summary
-
-
-@app.post("/api/dub/jobs/{jid}/perso/speaker")
-def dub_job_perso_speaker(jid: str, body: PersoSpeakerRequest):
-    """Give one line of a Perso dub a NEW speaker, on Perso's side.
-
-    The agent's change_speaker tool lands here. Line numbers are the same
-    1-based order the script endpoint serves. The write is verified the way
-    the official plugin does it: re-read the script and report what it says.
-    """
-    job = job_store.get(jid)
-    if job is None:
-        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
-    if job.get("dub_mode") != "perso" or not job.get("perso_project_seq"):
-        raise HTTPException(status_code=409, detail="Only Perso dubs have server-side speakers.")
-    seq = int(job["perso_project_seq"])
-    pc = PersoClient()
-    try:
-        sents = (pc.get_project_script(seq).get("sentences") or [])
-        if not 1 <= body.line <= len(sents):
-            raise HTTPException(status_code=422, detail=f"There is no line {body.line}.")
-        sent = sents[body.line - 1]
-        old = sent.get("speakerOrderIndex")
-        pc.add_speaker_from_sentence(seq, int(sent["seq"]))
-        after = pc.get_project_script(seq).get("sentences") or []
-        new = after[body.line - 1].get("speakerOrderIndex") if len(after) >= body.line else None
-    except HTTPException:
-        raise
-    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Perso did not accept the change ({str(e)[:80]}).")
-    return {"line": body.line, "old_speaker": old, "new_speaker": new}
 
 
 @app.get("/api/engines")
@@ -1467,231 +1187,3 @@ def _job_dir(title, lang_code):
     work = os.path.join(day, name)
     os.makedirs(work, exist_ok=True)
     return work
-
-
-# ---------------------------------------------------------------------------
-# The script assistant: a chat panel driving whichever CLI agent the user
-# already subscribes to. It reaches the script through the same five MCP tools
-# a terminal agent uses -- see app/mcp_server.py. Starting or cancelling a dub
-# is deliberately not among them.
-# ---------------------------------------------------------------------------
-
-AGENTS = {
-    # `login` is what the user types in a terminal to sign this CLI in. It is
-    # here rather than in the screen so one place names it: the failure message
-    # and the strip's status line both say the same command.
-    "claude": {"binary": "claude", "name": "Claude", "vendor": "Anthropic",
-               "driver": claude_agent, "login": "claude"},
-    "codex": {"binary": "codex", "name": "Codex", "vendor": "OpenAI",
-              "driver": codex_agent, "login": "codex login"},
-    # An assistant listed with "driver": None and a "reason" is offered but
-    # greyed out, with the reason printed under its name. Nothing is in that
-    # state today -- Gemini was, and was dropped rather than left on the list
-    # as a row nobody could pick -- but the next CLI to be added can be shown
-    # before it is wired up.
-}
-
-# Where the assistant's own files live. Never the user's global CLI config:
-# their everyday setup has to keep working exactly as it did.
-AGENT_DIR = os.path.join(PERSODUB_LOG_DIR, "agent")
-
-# --- Which account each CLI is signed in with -------------------------------
-# Asking costs a process, so the answer is kept for a minute -- and the asking
-# happens on a thread of its own. /api/agent/status answers from what is known
-# this instant: the picker has to open now, not when a CLI feels like replying.
-AGENT_LOGIN_TTL = 60.0
-_login_cache = {}          # agent id -> {"logged_in", "account", "at"}
-_login_busy = set()        # ids with a check already running
-_login_broken = set()      # ids whose check has already been complained about
-_login_lock = threading.Lock()
-
-
-def _login_refresh(key: str, binary: str) -> None:
-    """Ask one CLI, and write down whatever came of it -- including nothing.
-
-    The write and the clearing of the busy marker happen whatever the CLI does:
-    a check that threw used to leave its marker behind, and that assistant then
-    showed "not known" for the life of the app, with nothing on screen to say
-    why and no way back but a restart.
-    """
-    state = {"logged_in": None, "account": ""}
-    try:
-        state = agent_base.login_state(key, binary)
-    except Exception as e:   # noqa: BLE001 -- a CLI can fail in any way at all
-        # Once per assistant per run: this is for whoever reads the log, and a
-        # line every minute would bury the rest of it.
-        if key not in _login_broken:
-            _login_broken.add(key)
-            print("PersoDub: could not check %s's login (%s)" % (key, e), file=sys.stderr)
-    finally:
-        with _login_lock:
-            _login_cache[key] = dict(state, at=time.monotonic())
-            _login_busy.discard(key)
-
-
-def _login_of(key: str, binary: str, ask: bool) -> dict:
-    """What is known about this CLI's login right now, refreshing behind us.
-
-    `ask` is what allows a check to be started at all: every check is a child
-    process, and the first screen -- where the assistant is not even on show --
-    must not start one. The screen asks the first time the strip is visible.
-
-    None for `logged_in` means "we cannot say yet", never "signed out" -- the
-    screen shows nothing rather than an accusation it has not checked.
-    """
-    now = time.monotonic()
-    with _login_lock:
-        row = _login_cache.get(key)
-        stale = row is None or now - row["at"] >= AGENT_LOGIN_TTL
-        start = bool(ask and stale and binary and key not in _login_busy)
-        if start:
-            _login_busy.add(key)
-    if start:
-        threading.Thread(target=_login_refresh, args=(key, binary), daemon=True).start()
-    if row is None:
-        return {"logged_in": None, "account": ""}
-    return {"logged_in": row["logged_in"], "account": row["account"]}
-
-
-class AgentChatRequest(BaseModel):
-    message: str
-    agent: str = "claude"
-    resume: bool = True
-    # "" keeps whatever the CLI is set up to use.
-    model: str = ""
-    # The job the user is looking at. Every script tool needs one, and the user
-    # has no way of knowing the id -- the panel reads it off the page instead.
-    job_id: Optional[str] = None
-
-
-def _with_job(message: str, job_id: Optional[str]) -> str:
-    """Tell the assistant which job is on screen before it reads the question."""
-    if not job_id:
-        # The home screen has the strip too, and there no job is open. Said
-        # outright, or the assistant asks for a job number the user never sees.
-        return ("(No job is open on screen right now -- the user is on the "
-                "home screen.)\n\n%s" % message)
-    return "(The job open on screen right now: %s)\n\n%s" % (job_id, message)
-
-
-@app.get("/api/agent/status")
-def agent_status(login: int = 0):
-    """Which assistants are installed on this machine, and which are ready.
-
-    Only one of them is needed -- whichever the user subscribes to. The panel
-    greys out the rest rather than asking anyone to install both.
-    """
-    out = []
-    for key, meta in AGENTS.items():
-        path = agent_base.find_cli(meta["binary"])
-        driver = meta["driver"]
-        # Only asked of a CLI we would actually run, and only when the caller
-        # says the assistant is on screen (?login=1). `logged_in` is None until
-        # the answer lands, and this call never waits for it.
-        state = (_login_of(key, path, ask=bool(login)) if path and driver
-                 else {"logged_in": None, "account": ""})
-        out.append({
-            "id": key,
-            "name": meta["name"],
-            "vendor": meta["vendor"],
-            "installed": bool(path),
-            "supported": driver is not None,
-            # True, False, or None for "not known yet". The account is its KIND
-            # ("ChatGPT", "claude.ai") -- never an address, never a token.
-            "logged_in": state["logged_in"],
-            "account": state["account"],
-            # What to type in a terminal to sign in, said in one place.
-            "login_command": meta.get("login", ""),
-            # Why it is greyed out, in the picker's own words. Empty when the
-            # assistant is usable, and "not installed" is the panel's line.
-            "reason": "" if driver else meta.get("reason", ""),
-            "models": driver.MODELS if driver else [],
-        })
-    return {"agents": out}
-
-
-@app.post("/api/agent/stop")
-def agent_stop():
-    """End the turn on air, leaving the conversation there to carry on.
-
-    The CLI is asked to go rather than shot: it writes its session down on the
-    way out, and that is what the next message resumes from. `stopped` is False
-    when there was no turn running -- pressing Stop twice is not an error.
-    """
-    return {"stopped": agent_base.stop_turn()}
-
-
-@app.post("/api/agent/chat")
-async def agent_chat(body: AgentChatRequest, request: Request):
-    """One turn with the assistant, streamed back a line of JSON at a time.
-
-    Streaming is the point: a turn takes seconds, and a panel that sits blank
-    that whole time reads as broken. Each line is one of our five events.
-    """
-    meta = AGENTS.get(body.agent)
-    if meta is None:
-        raise HTTPException(status_code=422, detail="Unknown assistant: %s" % body.agent)
-    driver = meta["driver"]
-    if driver is None:
-        raise HTTPException(status_code=501, detail="%s: %s"
-                            % (meta["name"], meta.get("reason", "not wired up yet")))
-
-    binary = agent_base.find_cli(meta["binary"])
-    if not binary:
-        raise HTTPException(status_code=503,
-                            detail="%s is not installed." % meta["name"])
-
-    api_url = str(request.base_url).rstrip("/")
-    mcp_config = agent_base.write_mcp_config(AGENT_DIR, api_url)
-    work_dir = os.path.dirname(mcp_config)
-    # The question goes to the CLI over stdin, never argv: on Windows the CLIs
-    # are npm .cmd shims, and cmd.exe cuts a shim's command line at the first
-    # newline -- which this text always has between job context and question.
-    prompt = driver.stdin_text(_with_job(body.message, body.job_id))
-    try:
-        args = driver.command(mcp_config, body.resume, body.model)
-    except (OSError, ValueError, KeyError) as e:
-        # Everything else on this path answers with a bubble rather than a
-        # stack trace, and building the command line should not be the one
-        # place that hands the user a 500.
-        raise HTTPException(status_code=500,
-                            detail="Could not prepare the assistant: %s" % e)
-
-    async def stream():
-        # The runner blocks -- it reads the CLI's stdout a line at a time -- so
-        # it gets a thread of its own and posts what it reads here. That is what
-        # leaves this side free to notice the browser going away mid-answer: a
-        # closed tab used to leave the CLI running to the end, talking to
-        # nobody, with the next turn queued behind it.
-        events = queue.Queue()
-
-        def pump():
-            try:
-                for event in agent_base.run(binary, args, driver.translate,
-                                            cwd=work_dir, agent_name=meta["name"],
-                                            login_command=meta.get("login", ""),
-                                            input_text=prompt):
-                    events.put(event)
-            finally:
-                events.put(None)      # whatever happened, the turn is over
-
-        threading.Thread(target=pump, daemon=True).start()
-        finished = False
-        try:
-            while True:
-                try:
-                    event = await run_in_threadpool(events.get, True, 0.25)
-                except queue.Empty:
-                    if await request.is_disconnected():
-                        break
-                    continue
-                if event is None:
-                    finished = True
-                    break
-                yield json.dumps(event, ensure_ascii=False) + "\n"
-        finally:
-            # Stopped, or nobody left to read it. Either way the child goes.
-            if not finished:
-                agent_base.stop_turn()
-
-    return StreamingResponse(stream(), media_type="application/x-ndjson")

@@ -8,7 +8,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-import app.main as main
+import app.api.agent as agent_api
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -45,7 +45,7 @@ def test_an_assistant_that_cannot_answer_says_why(monkeypatch):
     reason printed under its name. Nothing is in that state today, so the
     mechanism is checked against one put there for the test -- an empty reason
     would be a dead end with no explanation."""
-    monkeypatch.setitem(main.AGENTS, "someday", {
+    monkeypatch.setitem(agent_api.AGENTS, "someday", {
         "binary": "someday", "name": "Someday", "vendor": "Nobody",
         "driver": None, "reason": "this one is not wired up yet",
     })
@@ -71,7 +71,7 @@ def test_status_never_starts_a_cli(monkeypatch):
     def boom(*a, **kw):
         raise AssertionError("agent_status must not run anything")
 
-    monkeypatch.setattr(main.agent_base, "run", boom)
+    monkeypatch.setattr(agent_api.agent_base, "run", boom)
     _rows()
 
 
@@ -81,7 +81,7 @@ def test_an_unknown_assistant_is_refused():
 
 
 def test_an_assistant_without_a_driver_is_refused_with_the_pickers_reason(monkeypatch):
-    monkeypatch.setitem(main.AGENTS, "someday", {
+    monkeypatch.setitem(agent_api.AGENTS, "someday", {
         "binary": "someday", "name": "Someday", "vendor": "Nobody",
         "driver": None, "reason": "this one is not wired up yet",
     })
@@ -106,12 +106,12 @@ def _capture(monkeypatch, tmp_path):
         seen["input_text"] = input_text
         yield {"kind": "done", "text": "ok"}
 
-    monkeypatch.setattr(main.agent_base, "run", fake_run)
-    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api.agent_base, "run", fake_run)
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
     # Without this the tests leave a real persodub-mcp.json in the user's own
     # log folder. Written where pytest cleans up instead.
-    real_write = main.agent_base.write_mcp_config
-    monkeypatch.setattr(main.agent_base, "write_mcp_config",
+    real_write = agent_api.agent_base.write_mcp_config
+    monkeypatch.setattr(agent_api.agent_base, "write_mcp_config",
                         lambda d, url: real_write(str(tmp_path), url))
     return seen
 
@@ -124,7 +124,7 @@ def test_a_turn_goes_to_the_backend_the_panel_named(monkeypatch, tmp_path):
     assert '"kind": "done"' in r.text or '"kind":"done"' in r.text
     assert seen["binary"].endswith("codex")
     assert seen["args"][0] == "exec"           # Codex's own command line
-    assert seen["translate"] is main.codex_agent.translate
+    assert seen["translate"] is agent_api.codex_agent.translate
     # The job on screen went with the question -- over stdin, never argv (a
     # newline in argv is where cmd.exe cut the .cmd shim's command line).
     assert "abc123" in seen["input_text"]
@@ -146,11 +146,11 @@ def test_claude_still_gets_claudes_command_line(monkeypatch, tmp_path):
     assert r.status_code == 200
     assert seen["binary"].endswith("claude")
     assert "--strict-mcp-config" in seen["args"]
-    assert seen["translate"] is main.claude_agent.translate
+    assert seen["translate"] is agent_api.claude_agent.translate
 
 
 def test_an_assistant_that_is_not_installed_says_so(monkeypatch):
-    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: None)
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: None)
     r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "codex"})
     assert r.status_code == 503
 
@@ -158,8 +158,8 @@ def test_an_assistant_that_is_not_installed_says_so(monkeypatch):
 def test_a_damaged_config_comes_back_as_a_message_not_a_stack_trace(monkeypatch):
     """command() reads a file inside the handler. A bad one must reach the user
     as something the panel can print in a bubble."""
-    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
-    monkeypatch.setattr(main.agent_base, "write_mcp_config",
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api.agent_base, "write_mcp_config",
                         lambda d, url: __import__("os").path.join(d, "missing.json"))
     r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "codex"})
     assert r.status_code == 500
@@ -179,10 +179,10 @@ def test_every_turn_asks_to_carry_on_the_conversation(monkeypatch, tmp_path):
 # must never be what makes the picker slow to open.
 
 def test_status_says_whether_each_assistant_is_signed_in(monkeypatch):
-    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
-    monkeypatch.setattr(main.agent_base, "login_state",
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api.agent_base, "login_state",
                         lambda kind, binary: {"logged_in": True, "account": "ChatGPT"})
-    main._login_cache.clear()
+    agent_api._login_cache.clear()
     rows = _settled("codex")
     assert rows["codex"]["logged_in"] is True
     assert rows["codex"]["account"] == "ChatGPT"
@@ -194,8 +194,8 @@ def test_status_says_whether_each_assistant_is_signed_in(monkeypatch):
 def test_an_assistant_we_cannot_run_is_never_called_signed_out(monkeypatch):
     """None means "we have not been able to ask". Showing that as "sign in"
     would send the user off to fix something that is not broken."""
-    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: None)
-    main._login_cache.clear()
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: None)
+    agent_api._login_cache.clear()
     rows = _rows()
     assert rows["codex"]["logged_in"] is None
     assert rows["claude"]["logged_in"] is None
@@ -204,14 +204,14 @@ def test_an_assistant_we_cannot_run_is_never_called_signed_out(monkeypatch):
 def test_status_answers_at_once_even_while_a_cli_is_thinking(monkeypatch):
     """The check runs on a thread of its own. A CLI that takes seconds to say
     whether it is signed in must not be what the picker waits for."""
-    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
 
     def slow(kind, binary):
         time.sleep(1.5)
         return {"logged_in": True, "account": "ChatGPT"}
 
-    monkeypatch.setattr(main.agent_base, "login_state", slow)
-    main._login_cache.clear()
+    monkeypatch.setattr(agent_api.agent_base, "login_state", slow)
+    agent_api._login_cache.clear()
     started = time.monotonic()
     rows = _rows(login=True)
     assert time.monotonic() - started < 0.5
@@ -221,14 +221,14 @@ def test_status_answers_at_once_even_while_a_cli_is_thinking(monkeypatch):
 def test_opening_the_app_does_not_start_a_single_cli(monkeypatch):
     """Every check is a child process. The first screen does not even show the
     assistant, so the screen asks for these only once the strip is visible."""
-    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
 
     def boom(kind, binary):
         raise AssertionError("no login check may start without being asked for")
 
-    monkeypatch.setattr(main.agent_base, "login_state", boom)
-    main._login_cache.clear()
-    main._login_busy.clear()
+    monkeypatch.setattr(agent_api.agent_base, "login_state", boom)
+    agent_api._login_cache.clear()
+    agent_api._login_busy.clear()
     rows = _rows()                      # no ?login=1 -- what the app asks at launch
     assert rows["codex"]["logged_in"] is None
     time.sleep(0.1)                     # a thread would have run by now
@@ -238,25 +238,25 @@ def test_opening_the_app_does_not_start_a_single_cli(monkeypatch):
 def test_a_login_check_that_blows_up_does_not_wedge_that_assistant(monkeypatch):
     """The check used to leave its "already running" marker behind when it threw,
     and that assistant then showed nothing for the life of the app."""
-    monkeypatch.setattr(main.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
-    monkeypatch.setattr(main, "AGENT_LOGIN_TTL", 0.0)   # ask again on the next look
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api, "AGENT_LOGIN_TTL", 0.0)   # ask again on the next look
 
     def boom(kind, binary):
         raise RuntimeError("the CLI exploded")
 
-    monkeypatch.setattr(main.agent_base, "login_state", boom)
-    main._login_cache.clear()
-    main._login_busy.clear()
+    monkeypatch.setattr(agent_api.agent_base, "login_state", boom)
+    agent_api._login_cache.clear()
+    agent_api._login_busy.clear()
     _rows(login=True)
     for _ in range(200):                # let the failing thread finish
-        if not main._login_busy:
+        if not agent_api._login_busy:
             break
         time.sleep(0.02)
-    assert main._login_busy == set(), "the busy marker outlived the check"
+    assert agent_api._login_busy == set(), "the busy marker outlived the check"
     assert _rows(login=True)["codex"]["logged_in"] is None
 
     # And the next check still runs.
-    monkeypatch.setattr(main.agent_base, "login_state",
+    monkeypatch.setattr(agent_api.agent_base, "login_state",
                         lambda kind, binary: {"logged_in": True, "account": "ChatGPT"})
     assert _settled("codex")["codex"]["logged_in"] is True
 

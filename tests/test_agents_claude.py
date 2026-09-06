@@ -152,7 +152,7 @@ def test_the_question_never_rides_the_command_line():
 def test_the_job_on_screen_is_handed_to_the_assistant():
     """The user cannot know a job id -- the panel reads it off the page and the
     server puts it in front of the question."""
-    from app.main import _with_job
+    from app.api.agent import _with_job
 
     out = _with_job("대본 읽어줘", "abc123")
     assert "abc123" in out
