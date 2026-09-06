@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -27,6 +27,7 @@ from app import media
 from app import models as model_store
 from app import perso_materialize
 from app.agents import base as agent_base
+from app.api import models as models_api
 from app.api import settings as settings_api
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
@@ -204,6 +205,7 @@ async def reject_cross_origin_writes(request, call_next):
 
 # Settings, the Perso workspace picker and the reveal-output button live in
 # app/api/settings.py; the URLs are unchanged.
+app.include_router(models_api.router)
 app.include_router(settings_api.router)
 
 # Register the installed TTS engine (Qwen3-TTS)
@@ -312,46 +314,6 @@ def tts_say(body: SayRequest):
     if result.seed is not None:
         headers["x-seed"] = str(result.seed)
     return Response(content=result.audio_bytes, media_type="audio/wav", headers=headers)
-
-
-@app.get("/api/setup")
-def setup_get():
-    """One picture of the dub setup for the screen and the Dub Agent: the
-    choice in force for every stage, every optional model's download state,
-    and which cloud keys are saved. Defaults come from kit.env at call time.
-
-    The keys are read with current_value (kit.env first, process env second) --
-    the very same source the stage defaults use. read_key_status sees kit.env
-    alone, so on a server deployment (key in the env, no kit) this report said
-    stt: "perso" beside keys.perso: false and read as a contradiction."""
-    return {
-        "defaults": dub_setup.defaults(),
-        "choices": {stage: list(spec[1]) for stage, spec in dub_setup.STAGES.items()},
-        "models": model_store.status_rows(),
-        "keys": {"perso": bool(current_value("PERSO_API_KEY")),
-                 "gemini": bool(current_value("GEMINI_API_KEY"))},
-    }
-
-
-class SetupRequest(BaseModel):
-    dub_mode: Optional[str] = None
-    separation: Optional[str] = None
-    stt: Optional[str] = None
-    translator: Optional[str] = None
-    voice_quality: Optional[str] = None
-
-
-@app.post("/api/setup")
-def setup_post(body: SetupRequest):
-    """Save new per-stage defaults into kit.env. Fields left out stay as they
-    are. In force for the next dub without a restart."""
-    try:
-        new = dub_setup.set_defaults(body.model_dump())
-    except FileNotFoundError:
-        raise HTTPException(503, "Settings need a desktop install (no kit.env found)")
-    except ValueError as e:
-        raise HTTPException(422, str(e))
-    return {"defaults": new}
 
 
 @app.get("/api/dub/jobs")
@@ -903,53 +865,6 @@ def whats_new():
     except Exception:
         pass  # no notes is fine; the popup simply never shows
     return {"version": APP_VERSION, "notes": notes}
-
-
-@app.get("/api/models")
-def models_list():
-    """The model catalog with each model's download state -- what the
-    Settings catalog, the advanced-options status lines and the dub-start
-    warning dialog all render from. Always-installed models stay out: the
-    install itself guarantees them and there is nothing to manage."""
-    return {"models": model_store.status_rows()}
-
-
-def _model_or_404(mid: str):
-    entry = model_store.find(mid)
-    if entry is None or entry["role"] == "always":
-        raise HTTPException(404, f"Unknown model: {mid}")
-    return entry
-
-
-@app.post("/api/models/{mid}/download")
-def model_download(mid: str):
-    entry = _model_or_404(mid)
-    free = model_store.free_bytes_at(model_store.kit_dir())
-    if free is not None and free < entry["bytes"] * 1.1:
-        raise HTTPException(409, "Not enough space: needs %.1f GB, %.1f GB free"
-                                 % (entry["bytes"] / 1024**3, free / 1024**3))
-    started = model_store.request_download(entry)
-    # 202 for a fresh start, 200 when it was already running -- a double-click
-    # must never error or start a second download.
-    return JSONResponse({"state": "downloading"}, status_code=202 if started == "started" else 200)
-
-
-@app.post("/api/models/{mid}/cancel")
-def model_cancel(mid: str):
-    _model_or_404(mid)
-    model_store.cancel_download(mid)
-    # The pieces stay on disk -- the next GET shows "paused" with Resume.
-    return {"state": "cancelling"}
-
-
-@app.delete("/api/models/{mid}")
-def model_remove(mid: str):
-    entry = _model_or_404(mid)
-    if model_store.dub_in_progress():
-        raise HTTPException(409, "A dub is running right now. Wait for it to finish, then remove the model.")
-    model_store.cancel_download(mid)
-    model_store.remove_model(entry)
-    return {"removed": mid}
 
 
 class PersoSpeakerRequest(BaseModel):
