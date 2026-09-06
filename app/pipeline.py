@@ -60,6 +60,38 @@ _mux = media.mux
 ensure_video_length = media.ensure_video_length
 
 
+# The pipeline's progress stages, in order. This tuple is the ONLY place the
+# "N/6" numbering lives: every stage log line below is built by _log_stage()
+# from a stage's position here, so inserting a stage renumbers all of them at
+# once instead of by hand in a dozen string literals.
+#
+# The second field is the coarser label the UI shows for the stage. Neighbouring
+# stages that share a label are folded into one step of the progress bar there
+# (the last three all read as "Dubbing" to the user), so this field is the
+# contract with ui/src/dubApi.mjs's own STAGES table --
+# tests/test_stage_tables_match.py fails if the two drift apart.
+STAGES = (
+    ("separate", "Separating audio"),
+    ("transcribe", "Transcribing"),
+    ("translate", "Translating"),
+    ("synthesize", "Dubbing"),
+    ("check", "Dubbing"),
+    ("build", "Dubbing"),
+)
+
+_STAGE_NUMBER = {name: i + 1 for i, (name, _label) in enumerate(STAGES)}
+
+
+def stage_marker(name: str) -> str:
+    """The "N/6" prefix a stage's log lines start with, e.g. "3/6"."""
+    return f"{_STAGE_NUMBER[name]}/{len(STAGES)}"
+
+
+def _log_stage(log: Callable[[str], None], name: str, text: str) -> None:
+    """Log one stage line: the stage's marker, a space, then the given text."""
+    log(f"{stage_marker(name)} {text}")
+
+
 def _check_cancel(cancel_check: Optional[Callable[[], bool]], log: Callable[[str], None]) -> None:
     """Cooperative cancellation checkpoint, called between pipeline stages.
 
@@ -184,9 +216,10 @@ def leakage_gate(mix_wav, vocals_path, manifest_path, work_dir, log):
     if mode not in ("off", "measure", "on"):
         mode = "on"
     if mode == "off":
-        log("5/6 Checking for original-voice leakage… skipped (PERSODUB_LEAKAGE_GATE=off)")
+        _log_stage(log, "check",
+                   "Checking for original-voice leakage… skipped (PERSODUB_LEAKAGE_GATE=off)")
         return mix_wav
-    log("5/6 Checking for original-voice leakage…")
+    _log_stage(log, "check", "Checking for original-voice leakage…")
     try:
         spans = _manifest_exclude_spans(manifest_path, mix_wav, log)
         r = measure_leakage(mix_wav, vocals_path, exclude_spans=spans)
@@ -362,11 +395,11 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
     reuses it so the same video is not uploaded twice.
     """
     if (sep_engine or "").lower() == "perso":
-        log("1/6 Separating background audio via Perso cloud…")
+        _log_stage(log, "separate", "Separating background audio via Perso cloud…")
         sep_paths, perso_client = _separate_with_perso(
             video_path, work_dir, perso_client, cancel_check, on_notice, log)
     else:
-        log("1/6 Separating background audio locally (Demucs)…")
+        _log_stage(log, "separate", "Separating background audio locally (Demucs)…")
         try:
             sep_paths = SeparationEngine().separate(video_path, work_dir)
         except Exception as e:
@@ -383,7 +416,7 @@ def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, l
     wrong and how to fix it instead).
     """
     try:
-        log("2/6 Running Perso STT (diarization & timestamps)…")
+        _log_stage(log, "transcribe", "Running Perso STT (diarization & timestamps)…")
         pc = perso_client or PersoClient()
         # Let Cancel interrupt the Perso progress wait (up to an hour of
         # polling); without this, "Cancelling…" hung until Perso finished.
@@ -430,7 +463,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log):
     auto-detects the source language, and it sets no speaker_id, so this path
     also turns CAM++ on unless the caller already picked a diarization engine.
     """
-    log("2/6 Transcribing locally (Whisper, no container)…")
+    _log_stage(log, "transcribe", "Transcribing locally (Whisper, no container)…")
     detected = {"code": None}
     try:
         # NEVER pass language_code here: it names the TARGET language, and
@@ -460,7 +493,7 @@ def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log):
     if diar_engine != "campplus" or not src_cues:
         return
     try:
-        log("2/6 Diarizing locally with CAM++ (campplus)…")
+        _log_stage(log, "transcribe", "Diarizing locally with CAM++ (campplus)…")
         labeled = diarize(vocals_path, src_cues, num_speakers=num_speakers)
         for cue, lab in zip(src_cues, labeled):
             spk = lab.get("speaker")
@@ -515,7 +548,8 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
         tr_name = getattr(tr, "display_name", "") or type(tr).__name__
         tr_model = getattr(tr, "model", None)
         engine_label = f"{tr_name} — {tr_model}" if tr_model else tr_name
-        log(f"3/6 Translating from source subtitles ({len(source_cues)} lines, {engine_label})…")
+        _log_stage(log, "translate",
+                   f"Translating from source subtitles ({len(source_cues)} lines, {engine_label})…")
         # Same shape as the Perso credit handling above: a short sentence says
         # what happened, the structured notice carries it (plus a link when one
         # helps) to the UI popup. The raw HTTP error stays out of the screen.
@@ -527,7 +561,7 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
             _raise_notice(e, log, on_notice)
         auto_translated = True
     else:
-        log("3/6 Using the provided translated subtitles")
+        _log_stage(log, "translate", "Using the provided translated subtitles")
 
     with open(srt_path, encoding="utf-8-sig") as f:
         segments = parse_srt(f.read())
@@ -548,7 +582,7 @@ def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path
     # "fast" UI mode: best-of-N selection is disabled (see config.QWEN_N_TAKES).
     mode = ("fast, 1 take/line" if effective_n_takes <= 1
             else f"high quality, best of {effective_n_takes} takes")
-    log(f"4/6 Cloning & synthesizing voices (Qwen3-TTS — {mode})…")
+    _log_stage(log, "synthesize", f"Cloning & synthesizing voices (Qwen3-TTS — {mode})…")
     engine = qwen_engine or QwenTTSEngine()
     # Say which device this is about to run on. Without it the only symptom of
     # a CPU fallback is the wait, and the user has no way to tell that from the
@@ -565,7 +599,7 @@ def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path
 
 def _stage_finish(video_path, audio_wav, out_path, work_dir, log):
     """Stage 6/6 -- mux the dub onto the video, then the length gate. -> None"""
-    log("6/6 Building the finished file…")
+    _log_stage(log, "build", "Building the finished file…")
     d_vid = _video_duration(video_path)
     r = _mux(video_path, audio_wav, out_path, d_vid)
     if r.returncode != 0:
