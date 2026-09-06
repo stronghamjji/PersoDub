@@ -227,22 +227,25 @@ QWEN_MERGE_MAX_GAP_SEC = float(os.environ.get("QWEN_MERGE_MAX_GAP_SEC", "1.5"))
 def default_stt_engine() -> str:
     """Resolve the STT engine to use when the caller doesn't pick one explicitly.
 
-    STT_ENGINE from kit.env wins, then the env var. Otherwise: "perso" when a Perso API key is
-    configured (best quality in our comparisons),
-    else "" (local Whisper, optionally + diar_engine="campplus") so the app keeps
-    working with zero setup and no paid key. Read live (not cached at import time)
-    so tests can monkeypatch the env per case.
+    The rule itself lives in app/setup.py, which owns every stage's default:
+    STT_ENGINE from kit.env wins (the Settings screen and the Dub Agent write
+    it there), then the process env, then "perso" when a Perso API key is
+    configured (best quality in our comparisons), else the local engine. The
+    key is read live (not cached at import time), so a key just saved in
+    Settings picks Perso for the very next dub instead of waiting for a
+    restart, and tests can monkeypatch the env per case.
 
-    The key comes from current_value (kit.env first, process env second), so a
-    key just saved in Settings picks Perso for the very next dub instead of
-    waiting for a restart.
+    Only the word for "local" differs: setup says "local", this answers ""
+    (local Whisper, optionally + diar_engine="campplus"), which is what this
+    function's callers have always read as "nobody picked, use the free local
+    engine".
+
+    Imported inside the function on purpose: app/setup.py imports this module,
+    so importing it at the top would be a cycle.
     """
-    from app.settings_env import current_value
+    from app import setup
 
-    # STT_ENGINE from kit.env first (the Settings screen and the Dub Agent
-    # write it there; app/setup.py), then the process env, then the key rule.
-    return current_value("STT_ENGINE") or os.environ.get("STT_ENGINE") or (
-        "perso" if current_value("PERSO_API_KEY") else "")
+    return "" if setup.default_for("stt") == "local" else "perso"
 
 
 # The ten languages the bundled voice model speaks, by code -- the same table

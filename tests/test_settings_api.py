@@ -17,6 +17,7 @@ from app import engines_status
 from app import main
 from app import perso_client
 from app import settings_env
+from app import setup as dub_setup
 from app import translate
 from app.settings_env import update_env_text
 
@@ -371,6 +372,24 @@ def test_default_stt_engine_stays_local_without_any_key(tmp_path, monkeypatch):
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
     monkeypatch.delenv("STT_ENGINE", raising=False)
     assert config.default_stt_engine() == ""
+
+
+@pytest.mark.parametrize("envtext, expected_setup, expected_config", [
+    (BASE, "local", ""),                                    # no key at all
+    (BASE + "PERSO_API_KEY=SAVEDKEY\n", "perso", "perso"),  # key saved
+    (BASE + "STT_ENGINE=local\n", "local", ""),             # local chosen and saved
+    (BASE + "STT_ENGINE=perso\n", "perso", "perso"),        # perso chosen and saved
+])
+def test_the_stt_default_has_one_owner(tmp_path, monkeypatch, envtext,
+                                       expected_setup, expected_config):
+    # setup.default_for("stt") is the rule; config.default_stt_engine only
+    # renames its "local" to the "" its callers read. Two vocabularies for one
+    # rule is how they drifted apart before -- this pins them together.
+    _kit(tmp_path, monkeypatch, envtext)
+    monkeypatch.delenv("PERSO_API_KEY", raising=False)
+    monkeypatch.delenv("STT_ENGINE", raising=False)
+    assert dub_setup.default_for("stt") == expected_setup
+    assert config.default_stt_engine() == expected_config
 
 
 def test_perso_client_uses_a_key_and_workspace_saved_after_startup(tmp_path, monkeypatch):

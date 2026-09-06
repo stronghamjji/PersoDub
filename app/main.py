@@ -395,13 +395,18 @@ def _open_folder(path: str) -> None:
 def setup_get():
     """One picture of the dub setup for the screen and the Dub Agent: the
     choice in force for every stage, every optional model's download state,
-    and which cloud keys are saved. Defaults come from kit.env at call time."""
-    keys = read_key_status() or {}
+    and which cloud keys are saved. Defaults come from kit.env at call time.
+
+    The keys are read with current_value (kit.env first, process env second) --
+    the very same source the stage defaults use. read_key_status sees kit.env
+    alone, so on a server deployment (key in the env, no kit) this report said
+    stt: "perso" beside keys.perso: false and read as a contradiction."""
     return {
         "defaults": dub_setup.defaults(),
         "choices": {stage: list(spec[1]) for stage, spec in dub_setup.STAGES.items()},
         "models": model_store.status_rows(),
-        "keys": {"perso": bool(keys.get("PERSO_API_KEY")), "gemini": bool(keys.get("GEMINI_API_KEY"))},
+        "keys": {"perso": bool(current_value("PERSO_API_KEY")),
+                 "gemini": bool(current_value("GEMINI_API_KEY"))},
     }
 
 

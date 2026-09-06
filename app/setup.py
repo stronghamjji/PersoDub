@@ -29,8 +29,9 @@ N_TAKES = {"fast": 1, "high": 4}
 
 def _fallback(stage: str) -> str:
     if stage == "stt":
-        # Perso when a key is saved, else the free local engine -- the rule
-        # config.default_stt_engine has always applied.
+        # Perso when a key is saved, else the free local engine. This is the
+        # one place the rule lives: config.default_stt_engine asks here and
+        # only translates "local" into the "" its callers read.
         return "perso" if current_value("PERSO_API_KEY") else "local"
     if stage == "translator":
         return config.TRANSLATE_ENGINE_DEFAULT

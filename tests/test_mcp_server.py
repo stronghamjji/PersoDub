@@ -479,8 +479,41 @@ def test_get_setup_reports_stages_models_and_keys(monkeypatch):
     out = mcp_server.get_setup()
     assert out["defaults"]["translator"] == "hunyuan"
     assert out["models"][0]["gb"] == 7.6
-    assert out["models"][0]["state"] == "downloading 41%"
+    # state keeps the app's own word -- the same one download_model answers
+    # with -- and the percentage rides beside it. Rewriting state to
+    # "downloading 41%" left the two tools speaking different languages about
+    # the same model.
+    assert out["models"][0]["state"] == "downloading"
+    assert out["models"][0]["progress_text"] == "downloading 41%"
     assert out["keys"] == {"perso": True, "gemini": False}
+
+
+def test_get_setup_leaves_a_state_without_progress_alone(monkeypatch):
+    payload = {"models": [{"id": "whisper", "name": "Whisper", "bytes": 3000000000,
+                           "state": "not_downloaded"}]}
+    monkeypatch.setattr(mcp_server.httpx, "get",
+                        lambda url, params=None, timeout=None: _Response(200, payload))
+    out = mcp_server.get_setup()
+    assert out["models"][0]["state"] == "not_downloaded"
+    assert "progress_text" not in out["models"][0]
+
+
+@pytest.mark.parametrize("tool", [
+    lambda: mcp_server.get_setup(),
+    lambda: mcp_server.set_default("translator", "gemma"),
+    lambda: mcp_server.download_model("gemma"),
+])
+def test_the_setup_tools_say_the_app_is_closed(monkeypatch, tool):
+    # The tools reach the app over HTTP on this machine, so a refused
+    # connection means PersoDub itself is not open. Saying that beats handing
+    # the assistant a raw httpx error to guess at.
+    def refuse(*a, **kw):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(mcp_server.httpx, "get", refuse)
+    monkeypatch.setattr(mcp_server.httpx, "post", refuse)
+    with pytest.raises(ValueError, match="PersoDub is not running"):
+        tool()
 
 
 def test_set_default_posts_one_stage_and_relays_a_refusal(monkeypatch):

@@ -15,6 +15,11 @@ def _kit(tmp_path, monkeypatch, text="PERSODUB_KIT_DIR=/x\n# PERSO_API_KEY=\n"):
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
     monkeypatch.delenv("TRANSLATE_ENGINE", raising=False)
     monkeypatch.delenv("STT_ENGINE", raising=False)
+    # The report reads the keys the way the stage defaults do (kit.env first,
+    # then the process env), so a key exported on the developer's own machine
+    # would otherwise decide these tests.
+    monkeypatch.delenv("PERSO_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setattr(main.model_store, "status_rows", lambda: [])
     return kit
 
@@ -28,6 +33,27 @@ def test_get_reports_hunyuan_and_local_as_the_untouched_defaults(tmp_path, monke
                  "translator": "hunyuan", "voice_quality": "fast"}
     assert r.json()["keys"] == {"perso": False, "gemini": False}
     assert "translator" in r.json()["choices"]
+
+
+def test_the_keys_and_the_stt_default_read_the_same_source(tmp_path, monkeypatch):
+    # A key that lives in the process env only (a server deployment, or a kit
+    # that never mentions the key): the stt default has always seen it, so the
+    # report must not say stt "perso" beside keys.perso false.
+    _kit(tmp_path, monkeypatch)
+    monkeypatch.setenv("PERSO_API_KEY", "ENVKEY")
+    body = client.get("/api/setup").json()
+    assert body["defaults"]["stt"] == "perso"
+    assert body["keys"]["perso"] is True
+
+
+def test_a_key_cleared_in_kit_env_reads_as_no_key(tmp_path, monkeypatch):
+    # ...and the other way round: cleared in Settings beats the key the app
+    # happened to start with, for the report exactly as for the default.
+    _kit(tmp_path, monkeypatch, "PERSODUB_KIT_DIR=/x\nPERSO_API_KEY=\n")
+    monkeypatch.setenv("PERSO_API_KEY", "STARTUPKEY")
+    body = client.get("/api/setup").json()
+    assert body["defaults"]["stt"] == "local"
+    assert body["keys"]["perso"] is False
 
 
 def test_post_saves_a_default_and_the_next_read_sees_it(tmp_path, monkeypatch):

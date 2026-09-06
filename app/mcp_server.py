@@ -366,23 +366,37 @@ def _dub_refusal_text(detail) -> str:
             % names)
 
 
+def _offline() -> ValueError:
+    """The app itself is not answering. Every setup tool talks to the local
+    app over HTTP, so a refused connection means PersoDub is closed -- say so,
+    instead of handing the assistant a raw connection error to guess at."""
+    return ValueError("PersoDub is not running")
+
+
 @mcp.tool()
 def get_setup() -> dict:
     """How the app is set up right now, stage by stage: which engine each
     stage uses when nobody chooses (dub_mode, separation, stt, translator,
     voice_quality), the choices each stage offers, every optional model with
-    its download state (ready / downloading N% / paused / not_downloaded) and
+    its download state (ready / downloading / paused / not_downloaded), how
+    far a download has got (progress_text, e.g. "downloading 41%") and its
     size, and whether a Perso or Gemini key is saved. Read this before
     answering "what does each step use?", before changing a default, and to
     follow a download's progress.
     """
-    r = httpx.get("%s/api/setup" % API, timeout=10.0)
+    try:
+        r = httpx.get("%s/api/setup" % API, timeout=10.0)
+    except httpx.ConnectError as e:
+        raise _offline() from e
     r.raise_for_status()
     data = r.json()
     for m in data.get("models", []):
         m["gb"] = round((m.get("bytes") or 0) / 1e9, 1)
+        # state stays the app's own word (the same one download_model answers
+        # with) -- the percentage rides alongside it, so the two tools never
+        # describe the same model in two vocabularies.
         if m.get("state") == "downloading" and m.get("progress") is not None:
-            m["state"] = "downloading %d%%" % m["progress"]
+            m["progress_text"] = "downloading %d%%" % m["progress"]
     return data
 
 
@@ -396,7 +410,10 @@ def set_default(stage: str, choice: str) -> dict:
     downloaded is not a reason to refuse -- download_model handles that.
     Returns the defaults now in force.
     """
-    r = httpx.post("%s/api/setup" % API, json={stage: choice}, timeout=10.0)
+    try:
+        r = httpx.post("%s/api/setup" % API, json={stage: choice}, timeout=10.0)
+    except httpx.ConnectError as e:
+        raise _offline() from e
     if r.status_code in (422, 503):
         raise ValueError(r.json().get("detail", "could not change that setting"))
     r.raise_for_status()
@@ -413,7 +430,10 @@ def download_model(model_id: str, confirm: bool = False) -> dict:
     progress, and a dub that needs the model can be queued as soon as it
     reads ready.
     """
-    r = httpx.get("%s/api/models" % API, timeout=10.0)
+    try:
+        r = httpx.get("%s/api/models" % API, timeout=10.0)
+    except httpx.ConnectError as e:
+        raise _offline() from e
     r.raise_for_status()
     # GET /api/models answers {"models": [...]} -- the same shape the screen's
     # catalog reads. Assuming a bare list here crashed the first live call.
