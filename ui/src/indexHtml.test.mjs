@@ -14,6 +14,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const INDEX = fileURLToPath(new URL("../../static/index.html", import.meta.url));
+// The timeline draws its own head and lane, so their ids live in the module.
+const TIMELINE = fileURLToPath(new URL("./timeline.mjs", import.meta.url));
 
 // The line number comes along so a failure says where in the page to look --
 // the block itself starts a couple of thousand lines in.
@@ -91,8 +93,9 @@ test("the agent column sits beside the work and the grips point the right way", 
 // (mockup approved 2026-09-01 afternoon).
 test("timeline zoom controls, Dub Agent heading and English video tabs are in place", () => {
   const html = readFileSync(INDEX, "utf8");
+  const timeline = readFileSync(TIMELINE, "utf8");
   for (const id of ["tlZoomOut", "tlZoomIn", "tlZoomFit"]) {
-    assert.ok(html.includes(`id="${id}"`), `${id} is missing from the timeline head`);
+    assert.ok(timeline.includes(`id="${id}"`), `${id} is missing from the timeline head`);
   }
   assert.ok(html.includes(">Original<") && html.includes(">Dubbing<"),
     "the video tabs must read Original/Dubbing -- the app speaks English (user, 2026-09-02)");
@@ -106,8 +109,9 @@ test("the subtitle overlay, toolbar and timeline lane are wired in", () => {
   for (const id of ["subOverlay", "subToolbar", "subStyleMenu"]) {
     assert.ok(html.includes(`id="${id}"`), `${id} is missing from the player`);
   }
-  assert.ok(html.includes("tlSubEye"), "the timeline needs its subtitle eye toggle");
-  assert.ok(html.includes("tl-cap"), "the timeline needs its subtitle lane blocks");
+  const timeline = readFileSync(TIMELINE, "utf8");
+  assert.ok(timeline.includes("tlSubEye"), "the timeline needs its subtitle eye toggle");
+  assert.ok(timeline.includes("tl-cap"), "the timeline needs its subtitle lane blocks");
 });
 
 test("after an update the page says so in one line and keeps the What's new sheet for the link", () => {
