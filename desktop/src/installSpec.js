@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import { KIT_ENV } from "./kitEnv.js";
-import { IS_WIN, venvBin, standalonePython, exeName, TTS_DEVICE } from "./platform.js";
+import { IS_WIN, venvBin, standalonePython, exeName, TTS_DEVICE, TORCH_VARIANT } from "./platform.js";
 
 // Standalone CPython, per platform. macOS uses the Apple Silicon build; Windows
 // the x86_64 MSVC build (root layout python\python.exe, no bin/). Same upstream
@@ -177,9 +177,29 @@ const KIT_ENV_MANAGED_ADDITIONS = [
     comment: "# Mac-CPU-calibrated diarization timeout (backend default: 600s).",
     line: "PERSODUB_DIAR_TIMEOUT=1800",
   },
+  {
+    key: "PERSODUB_TORCH_VARIANT",
+    comment: "# Which torch build venv-engines installed (cpu/cu128/mps) -- read by app/models.py's platform_key().",
+    // The value for a kit.env from before this key existed: those kits
+    // installed the only build there was (CUDA on Windows, MPS on macOS),
+    // whatever the machine's GPU -- recording the hardware guess instead
+    // would reopen the engines step and reinstall gigabytes on update.
+    line: `PERSODUB_TORCH_VARIANT=${IS_WIN ? "cu128" : "mps"}`,
+  },
 ];
 
-export function writeKitEnv({ kitDir }) {
+// The torch build this kit's engines venv has, or should get: what its
+// kit.env records if it has one (an installed kit keeps its build -- see the
+// managed addition above), else the hardware guess for a fresh install.
+export function torchVariantFor(kitDir) {
+  try {
+    const m = /^PERSODUB_TORCH_VARIANT=(\S+)/m.exec(readFileSync(join(kitDir, KIT_ENV), "utf8"));
+    if (m && ["cpu", "cu128", "mps"].includes(m[1])) return m[1];
+  } catch { /* no kit.env yet: a fresh install */ }
+  return TORCH_VARIANT;
+}
+
+export function writeKitEnv({ kitDir, torchVariant = torchVariantFor(kitDir) }) {
   const k = (...p) => join(kitDir, ...p);
   const enginesPy = venvBin(k("engines_venv"), "python");
   return [
@@ -210,6 +230,9 @@ export function writeKitEnv({ kitDir }) {
     "PERSODUB_TTS_TIMEOUT=900",
     // Mac-CPU-calibrated diarization timeout (backend default: 600s).
     "PERSODUB_DIAR_TIMEOUT=1800",
+    // Which torch build venv-engines installed (cpu/cu128/mps) -- read by
+    // app/models.py's platform_key().
+    `PERSODUB_TORCH_VARIANT=${torchVariant}`,
     // No PERSO_SPACE_SEQ / PERSO_MEDIA_HOST here: the backend resolves the
     // workspace id from the API key itself (app/perso_client.py, the way the
     // official perso-dubbing-plugin does) and the media host has a public
@@ -226,7 +249,7 @@ export function writeKitEnv({ kitDir }) {
 // preserving every existing line untouched -- app/settings_env.py writes user
 // API keys into this same file and they must survive an upgrade. A no-op
 // (returns text unchanged) once all managed keys are already present.
-function withMissingKitEnvKeys(text) {
+export function withMissingKitEnvKeys(text) {
   const missing = KIT_ENV_MANAGED_ADDITIONS.filter((a) => !text.includes(`${a.key}=`));
   if (missing.length === 0) return text;
   const sep = text.endsWith("\n") ? "" : "\n";
@@ -239,7 +262,9 @@ const GB = 1024 ** 3;
 // merged list (MPS torch 0.4 GB + the rest); Windows measured 2026-09-02 on
 // the CUDA torch alone (8.4 GB per venv) plus the voice packages that now
 // share it. Re-measure after the first Windows install of the merged venv.
-const VENV_ENGINES = IS_WIN ? 9 * GB : 2 * GB;
+// A Windows machine with no NVIDIA GPU (torch variant "cpu") installs the
+// much smaller CPU-only wheel instead, budgeted here as 1.5 GB.
+const venvEnginesBytes = (variant) => (IS_WIN ? (variant === "cpu" ? 1.5 * GB : 9 * GB) : 2 * GB);
 
 /** How much room the steps that have not run yet still need. */
 export async function bytesStillNeeded(steps) {
@@ -271,11 +296,20 @@ export function buildSteps(ctx) {
   // Per-platform pinned dependency list (bundled by collect-payload.mjs).
   const reqSuffix = IS_WIN ? "win" : "mac";
   const reqEngines = `requirements_engines_${reqSuffix}.txt`;
-  // On Windows, torch/torchaudio come from PyPI as CPU-only wheels; the CUDA
-  // build lives on a dedicated index, installed before the rest so the GPU is
-  // usable. macOS gets the MPS wheel automatically, so no extra install.
+  // On Windows, torch/torchaudio come from a dedicated index: the CUDA build
+  // when an NVIDIA GPU is present, else PyPI's own CPU-only wheel -- either
+  // way installed before the rest of the engines list. macOS gets the MPS
+  // wheel automatically, so no extra install. This index URL is part of the
+  // venv step's pip-argument fingerprint (see pipFingerprint below), so a
+  // machine that gains a GPU later re-opens the step on its own.
+  // An installed kit keeps the build it has (torchVariantFor): only a fresh
+  // install follows the hardware guess.
+  const torchVariant = ctx.torchVariant ?? torchVariantFor(ctx.kitDir);
   const torchCuda = IS_WIN
-    ? [["torch==2.8.0", "torchaudio==2.8.0", "--index-url", "https://download.pytorch.org/whl/cu128"]]
+    ? [["torch==2.8.0", "torchaudio==2.8.0", "--index-url",
+        torchVariant === "cpu"
+          ? "https://download.pytorch.org/whl/cpu"
+          : "https://download.pytorch.org/whl/cu128"]]
     : [];
   const okPath = (id) => k(".install", `${id}.ok`);
   const markOk = (id, note = "") => {
@@ -436,7 +470,7 @@ export function buildSteps(ctx) {
     // qwen) because the original Linux host had Python 3.8 for some of them;
     // on macOS/Windows with one 3.11 that split only bought a second copy of
     // torch (0.4 GB on macOS, 8 GB of CUDA wheels on Windows).
-    venvStep("venv-engines", "Installing AI engines", VENV_ENGINES, "engines_venv", [
+    venvStep("venv-engines", "Installing AI engines", venvEnginesBytes(torchVariant), "engines_venv", [
       ...torchCuda,
       ["-r", k(reqEngines)],
     ]),
@@ -538,7 +572,7 @@ export function buildSteps(ctx) {
         const path = k(KIT_ENV);
         if (!existsSync(path)) {
           report(null, "Writing kit.env");
-          writeFileSync(path, writeKitEnv({ kitDir: ctx.kitDir }));
+          writeFileSync(path, writeKitEnv({ kitDir: ctx.kitDir, torchVariant }));
           return;
         }
         // Existing kit (installed before these keys existed): merge, never
