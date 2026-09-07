@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
@@ -8,6 +8,7 @@ import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, PACKS } from "./src/installSpec.js";
 import { runInstall, openSteps } from "./src/installer.js";
+import { cancelCurrent } from "./src/exec.js";
 import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
@@ -19,6 +20,9 @@ import { IS_WIN } from "./src/platform.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
+// The boot's install context (kit, bundled payload, downloader), kept so the
+// pack IPC below can run a pack's steps from the same table later.
+let installCtx = null;
 let updateDownloaded = false;
 // The update as last announced -- re-sent to the page on every load, so a
 // page that arrives after the check (boot) or reloads mid-download still
@@ -237,7 +241,8 @@ async function boot(win) {
     // ollama-runtime keep being refreshed the way they always were; a pack
     // that was never installed is left alone here -- a later task adds the
     // IPC to install one on demand.
-    const all = payload ? buildSteps({ kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run }) : null;
+    installCtx = payload ? { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run } : null;
+    const all = installCtx ? buildSteps(installCtx) : null;
     const toRun = all && [
       ...baseSteps(all),
       ...PACKS.filter((p) => packInstalled(cfg.kitDir, p.id)).flatMap((p) => packSteps(all, p.id)),
@@ -457,6 +462,59 @@ app.whenReady().then(() => {
       bootedKitDir,
       status === "error" ? classifyError(String((msg && msg.detail) || "")) : undefined,
     );
+  });
+
+  // Packs: the heavy bundles (the engines venv with Demucs, the Ollama
+  // runtime) the first install leaves out. The page asks for one when a dub
+  // needs it; the install runs the pack's own steps from the table the boot
+  // install uses, reports on the same progress channel tagged with the pack,
+  // then starts the pack's process -- so dubbing goes on without a restart.
+  let packCancelled = false;
+  ipcMain.handle("shell:install-pack", async (_e, id) => {
+    if (!PACKS.some((p) => p.id === id)) return { ok: false, reason: `Unknown pack: ${id}` };
+    if (!installCtx) return { ok: false, reason: "This build carries no bundled files to install from." };
+    const steps = packSteps(buildSteps(installCtx), id);
+    const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(installCtx.kitDir));
+    if (noRoom) return { ok: false, reason: noRoom };
+    packCancelled = false;
+    try {
+      await runInstall(steps, {
+        onProgress: (p) => { if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id }); },
+      });
+    } catch (err) {
+      return { ok: false, reason: packCancelled ? "Cancelled." : String((err && err.message) || err) };
+    }
+    if (engines && engines.startPack) {
+      try { await engines.startPack(id); }
+      catch (err) { return { ok: false, reason: `Installed, but it could not start: ${String((err && err.message) || err)}` }; }
+    }
+    return { ok: true };
+  });
+  ipcMain.handle("shell:cancel-pack", async () => {
+    packCancelled = true;
+    cancelCurrent();   // the step's process dies, runInstall rejects, install-pack answers Cancelled
+  });
+  ipcMain.handle("shell:remove-pack", async (_e, id) => {
+    const pack = PACKS.find((p) => p.id === id);
+    const kitDir = installCtx ? installCtx.kitDir : bootedKitDir;
+    if (!pack) return { ok: false, reason: `Unknown pack: ${id}` };
+    if (!kitDir) return { ok: false, reason: "No kit to remove it from." };
+    if (engines && engines.stopPack) engines.stopPack(id);
+    // The pack's folders and its steps' done-stamps, so a later install runs
+    // the steps again rather than skipping them on a stale stamp. Models
+    // pulled through Ollama stay: they are listed and removed as models.
+    const dirs = id === "engine" ? ["engines_venv", join("models", "demucs")] : ["ollama"];
+    try {
+      for (const d of dirs) rmSync(join(kitDir, d), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      for (const step of pack.steps) rmSync(join(kitDir, ".install", `${step}.ok`), { force: true });
+    } catch (err) {
+      return { ok: false, reason: String((err && err.message) || err) };
+    }
+    return { ok: true };
+  });
+  ipcMain.handle("shell:pack-status", async () => {
+    const kitDir = installCtx ? installCtx.kitDir : bootedKitDir;
+    return Object.fromEntries(PACKS.map((p) => [p.id, kitDir && packInstalled(kitDir, p.id) ? "ready" : "missing"]));
   });
 
   ipcMain.on("shell:retry", guardedBoot);

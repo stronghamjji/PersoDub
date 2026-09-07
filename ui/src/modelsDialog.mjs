@@ -26,16 +26,72 @@ import { gb, modelStatusLine, dubStartDialog, overallProgress, allReady } from "
  *        and labelled in the returned object, so pruning this surface later
  *        does not have to guess which member has a caller off the page.
  */
-export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged }) {
+export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged, shell = null }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
   // ui/src/settingsDialog.mjs. A missing id is a broken page, and a crash on
   // the first paint says so far louder than a silent half-drawn dialog.
   let modelRows = [];
   let modelsPolling = false;
-  let pendingDub = null;   // { ids, downloading } while the dialog drives a dub
+  let pendingDub = null;   // { ids, packs, models, downloading } while the dialog drives a dub
+  // The pack the desktop app is installing right now, with its latest
+  // progress line. Packs (the engines venv, the Ollama runtime) are the
+  // shell's to install: this page asks over `shell` (window.persodubShell,
+  // absent in a plain browser) and follows the progress events it sends.
+  let packBusy = null;     // { id, name, line }
+  const PACK_HINT = "Installed by the desktop app";
 
   const modelRow = (id) => modelRows.find((m) => m.id === id) || null;
+
+  if (shell && shell.onInstallProgress) {
+    shell.onInstallProgress((p) => {
+      if (!p || !p.pack || !packBusy || packBusy.id !== p.pack) return;
+      packBusy.line = p.state === "progress" && p.detail ? `${p.title}: ${p.detail}` : (p.title || "");
+      paintModelsDialog();
+      renderModelsList();
+    });
+  }
+
+  function showPackError(text) {
+    $("mnError").textContent = text;
+    $("modelsError").textContent = text;
+  }
+
+  // Resolves true once the pack is on disk and its process is up. A failure
+  // (no desktop app, no room, a step that died, Cancel) is told in the dialog
+  // and the Settings catalog alike, and nothing else is started.
+  async function installPack(id) {
+    const name = (modelRow(id) || {}).name || id;
+    if (!shell || !shell.installPack) {
+      showPackError(`${name}: ${PACK_HINT}.`);
+      return false;
+    }
+    packBusy = { id, name, line: "" };
+    paintModelsDialog();
+    renderModelsList();
+    let res;
+    try { res = await shell.installPack(id); }
+    catch (e) { res = { ok: false, reason: String((e && e.message) || e) }; }
+    packBusy = null;
+    await fetchModels();
+    repaint();
+    if (!res || !res.ok) {
+      showPackError(`${name}: ${(res && res.reason) || "The install could not finish."}`);
+      return false;
+    }
+    return true;
+  }
+  async function cancelPack(id) {
+    if (shell && shell.cancelPack) await shell.cancelPack(id);
+  }
+  async function removePack(id) {
+    $("modelsError").textContent = "";
+    if (!shell || !shell.removePack) { $("modelsError").textContent = PACK_HINT + "."; return; }
+    const res = await shell.removePack(id).catch((e) => ({ ok: false, reason: String((e && e.message) || e) }));
+    if (!res || !res.ok) $("modelsError").textContent = (res && res.reason) || "Could not remove it.";
+    await fetchModels();
+    repaint();
+  }
 
   async function fetchModels() {
     try {
@@ -73,6 +129,8 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged 
     tick();
   }
   async function downloadModel(id) {
+    const row = modelRow(id);
+    if (row && row.role === "pack") { await installPack(id); return; }
     try { await fetch(`/api/models/${id}/download`, { method: "POST" }); } catch { /* poll shows it */ }
     startPolling();
   }
@@ -113,14 +171,25 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged 
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btn btn-outline model-btn";
-      if (m.state === "ready") { btn.textContent = "Remove"; btn.onclick = () => removeModel(m.id); }
+      if (m.role === "pack") {
+        // The desktop app installs and removes packs; a plain browser can only look.
+        if (packBusy && packBusy.id === m.id) {
+          status.textContent = packBusy.line || "Installing…";
+          btn.textContent = "Cancel"; btn.onclick = () => cancelPack(m.id);
+        } else if (!shell) {
+          if (m.state !== "ready") status.textContent = PACK_HINT;
+          btn.textContent = m.state === "ready" ? "Remove" : "Download";
+          btn.disabled = true; btn.title = PACK_HINT;
+        } else if (m.state === "ready") { btn.textContent = "Remove"; btn.onclick = () => removePack(m.id); }
+        else { btn.textContent = m.state === "paused" ? "Resume" : "Download"; btn.onclick = () => installPack(m.id); }
+      } else if (m.state === "ready") { btn.textContent = "Remove"; btn.onclick = () => removeModel(m.id); }
       else if (m.state === "downloading") { btn.textContent = "Cancel"; btn.onclick = () => cancelModel(m.id); }
       else if (m.state === "paused") { btn.textContent = "Resume"; btn.onclick = () => downloadModel(m.id); }
       else { btn.textContent = "Download"; btn.onclick = () => downloadModel(m.id); }
       row.append(name, size, status, btn);
       list.append(row);
     }
-    const busy = modelRows.some((m) => m.state === "downloading" || m.state === "paused");
+    const busy = !!packBusy || modelRows.some((m) => m.state === "downloading" || m.state === "paused");
     $("modelsSummary").textContent =
       `${modelRows.length} models · ${gb(onDisk)} GB on this computer`
       + (busy ? " · attention needed" : "");
@@ -131,7 +200,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged 
   // -- the dub-start dialog (dub_start's 409) ------------------------------
   function showModelsDialog(detail) {
     const d = dubStartDialog(detail);
-    pendingDub = { ids: d.ids, downloading: false };
+    pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false };
     $("mnTitle").textContent = d.title;
     $("mnLine").textContent = d.line;
     $("mnError").textContent = "";
@@ -145,6 +214,11 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged 
     if (!pendingDub || !pendingDub.downloading) return;
     const pct = overallProgress(modelRows, pendingDub.ids);
     $("mnBar").style.width = pct + "%";
+    if (packBusy) {
+      $("mnTitle").textContent = `Installing ${packBusy.name}`;
+      $("mnLine").textContent = packBusy.line || "Starting…";
+      return;
+    }
     $("mnTitle").textContent = "Downloading AI models";
     $("mnLine").textContent = `${pct}%. Dubbing starts when they finish.`;
     const failed = pendingDub.ids.map(modelRow).find((r) => r && r.state === "paused");
@@ -164,19 +238,38 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged 
 
   $("mnDownload").addEventListener("click", () => {
     if (!pendingDub) return;
-    pendingDub.downloading = true;
+    const dub = pendingDub;
+    dub.downloading = true;
+    $("mnError").textContent = "";
     $("mnDownload").hidden = true;
     $("mnSettings").hidden = true;
     $("mnHide").hidden = false;
     $("mnProgress").hidden = false;
-    for (const id of pendingDub.ids) {
-      const r = modelRow(id);
-      if (!r || r.state !== "ready") downloadModel(id);
-    }
+    (async () => {
+      // Packs first, one after another (the desktop app installs one at a
+      // time); a pack that fails stops here, with its reason in the dialog
+      // and the button back for another go. Then the models, all at once,
+      // the way it always went -- the poll starts the dub when all are ready.
+      for (const id of dub.packs || []) {
+        const r = modelRow(id);
+        if (r && r.state === "ready") continue;
+        if (!(await installPack(id))) {
+          if (pendingDub === dub) { dub.downloading = false; $("mnDownload").hidden = false; $("mnHide").hidden = true; }
+          return;
+        }
+        if (pendingDub !== dub) return;   // cancelled meanwhile
+      }
+      for (const id of dub.models || dub.ids) {
+        const r = modelRow(id);
+        if (!r || r.state !== "ready") downloadModel(id);
+      }
+      startPolling();
+    })();
   });
   $("mnSettings").addEventListener("click", () => onOpenSettings());
   $("mnHide").addEventListener("click", () => $("modelsNeededOverlay").classList.remove("open"));
   $("mnCancel").addEventListener("click", () => {
+    if (packBusy) cancelPack(packBusy.id);
     if (pendingDub && pendingDub.downloading) {
       // The dub is off; the downloads stop too. Their pieces stay (Paused).
       for (const id of pendingDub.ids) {
@@ -194,6 +287,6 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged 
     repaint, reopenDialogOrSettings,
     // used by tests only -- Remove is drawn by this file and clicked through
     // its own row, so the page never names it. Reachable so the test can.
-    removeModel,
+    removeModel, installPack, removePack,
   };
 }

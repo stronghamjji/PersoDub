@@ -43,15 +43,36 @@ export function dubStartDialog(detail) {
   const missing = detail.missing || [];
   const total = detail.total_bytes ?? missing.reduce((n, m) => n + m.bytes, 0);
   const one = missing.length === 1 ? missing[0] : null;
+  // The desktop app installs packs (kind "pack": the AI engine, the
+  // translation runtime); this page downloads models. The 409 lists packs
+  // first, and Download and Start takes them in that order.
+  const packs = missing.filter((m) => m.kind === "pack").map((m) => m.id);
+  const models = missing.filter((m) => m.kind !== "pack").map((m) => m.id);
   return {
-    // One model gets its own name; several get the total (mockup rule).
+    // One item gets its own name; several get the total (mockup rule).
     title: one
       ? `Download ${one.name} (${gb(one.bytes)} GB) to dub?`
-      : `Download ${gb(total)} GB of AI models to dub?`,
-    line: "They are saved on this computer and only download once.",
+      : packs.length
+        ? `Download ${gb(total)} GB to dub?`
+        : `Download ${gb(total)} GB of AI models to dub?`,
+    line: packs.length
+      ? "The AI engine and models are saved on this computer and only download once."
+      : "They are saved on this computer and only download once.",
     ids: missing.map((m) => m.id),
+    packs,
+    models,
     totalBytes: total,
   };
+}
+
+/** The packs a dropdown choice needs, alongside the model neededModelId
+ * names: local STT and the voice run in the engine pack; Gemma and Hunyuan
+ * run in the translation runtime. */
+export function neededPackIds(role, value) {
+  if (role === "stt") return value === "perso" ? [] : ["engine"];
+  if (role === "translate") return value === "gemma" || value === "hunyuan" ? ["ollama-runtime"] : [];
+  if (role === "voice") return ["engine"];
+  return [];
 }
 
 /** One number for the dialog's single progress bar: byte-weighted percent

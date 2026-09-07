@@ -1,7 +1,7 @@
 // Run with: node --test ui/src/modelsUi.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { gb, neededModelId, modelStatusLine, dubStartDialog, overallProgress, allReady } from "./modelsUi.mjs";
+import { gb, neededModelId, neededPackIds, modelStatusLine, dubStartDialog, overallProgress, allReady } from "./modelsUi.mjs";
 
 test("neededModelId maps each dropdown choice to its catalog model", () => {
   assert.equal(neededModelId("stt", "local"), "whisper");
@@ -41,6 +41,35 @@ test("dubStartDialog: several models get the total, one gets its name", () => {
 
   const one = dubStartDialog({ missing: [{ id: "gemma", name: "Gemma 3", bytes: 7.6 * 1024 ** 3 }] });
   assert.equal(one.title, "Download Gemma 3 (7.6 GB) to dub?");
+});
+
+test("dubStartDialog splits packs from models and keeps the 409's order", () => {
+  const d = dubStartDialog({ missing: [
+    { id: "engine", kind: "pack", name: "AI engine", bytes: 2.0 * 1024 ** 3 },
+    { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9 * 1024 ** 3 },
+  ] });
+  assert.deepEqual(d.packs, ["engine"]);
+  assert.deepEqual(d.models, ["whisper"]);
+  assert.deepEqual(d.ids, ["engine", "whisper"]);
+  assert.equal(d.title, "Download 4.9 GB to dub?");
+  assert.match(d.line, /AI engine/);
+  const one = dubStartDialog({ missing: [{ id: "engine", kind: "pack", name: "AI engine", bytes: 2.0 * 1024 ** 3 }] });
+  assert.equal(one.title, "Download AI engine (2.0 GB) to dub?");
+  // Models-only 409s (every 0.5.2 kit) keep their wording.
+  const old = dubStartDialog({ missing: [
+    { id: "qwen3-tts", kind: "model", name: "Qwen3-TTS", bytes: 4.3 * 1024 ** 3 },
+    { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9 * 1024 ** 3 },
+  ] });
+  assert.deepEqual(old.packs, []);
+  assert.equal(old.title, "Download 7.2 GB of AI models to dub?");
+});
+
+test("neededPackIds names the pack behind each dropdown choice", () => {
+  assert.deepEqual(neededPackIds("stt", "local"), ["engine"]);
+  assert.deepEqual(neededPackIds("stt", "perso"), []);
+  assert.deepEqual(neededPackIds("translate", "hunyuan"), ["ollama-runtime"]);
+  assert.deepEqual(neededPackIds("translate", "gemini"), []);
+  assert.deepEqual(neededPackIds("voice", "qwen3"), ["engine"]);
 });
 
 test("overallProgress is byte-weighted and treats ready as done", () => {

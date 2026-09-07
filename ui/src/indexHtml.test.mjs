@@ -231,3 +231,13 @@ test("the player draws subtitles in the burn's font at its natural line height",
   assert.match(html, /weight: r\.weight/);
   assert.match(html, /id="subMeasure"/);
 });
+
+// Packs (the AI engine, the translation runtime) are the desktop app's to
+// install: the page hands its bridge to the models controller and, in the
+// dropdown hints, names the pack before the model while the pack is missing.
+test("the page hands the desktop bridge to the models controller and hints name packs first", () => {
+  const html = readFileSync(INDEX, "utf8");
+  assert.match(html, /shell: window\.persodubShell \|\| null/);
+  assert.match(html, /function hintRow\(role, value\)/);
+  assert.match(html, /neededPackIds/);
+});

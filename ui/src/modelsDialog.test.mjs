@@ -32,7 +32,7 @@ function makeEl(id) {
 
 /** A page, a fetch log and a stopped clock. `fetchModels` is the rows the next
  * GET /api/models answers with; `write` records every other call. */
-function harness({ rows = [] } = {}) {
+function harness({ rows = [], shell = null } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -61,9 +61,28 @@ function harness({ rows = [] } = {}) {
     onStartDubbing: () => { state.started += 1; },
     onOpenSettings: () => { state.settings += 1; },
     onRowsChanged: (r) => { state.painted.push(r); },
+    shell,
   });
   return { $, api, state };
 }
+
+/** A stand-in for window.persodubShell: records what the page asked of the
+ * desktop app, answers installs from a script, and can send progress. */
+function fakeShell({ install = async () => ({ ok: true }) } = {}) {
+  const shell = { asked: [], progress: null };
+  shell.installPack = async (id) => { shell.asked.push(`install ${id}`); return install(id); };
+  shell.cancelPack = async (id) => { shell.asked.push(`cancel ${id}`); };
+  shell.removePack = async (id) => { shell.asked.push(`remove ${id}`); return { ok: true }; };
+  shell.onInstallProgress = (cb) => { shell.progress = cb; };
+  return shell;
+}
+
+const ENGINE = { id: "engine", role: "pack", name: "AI engine", bytes: 2e9, state: "not_downloaded" };
+const WHISPER = { id: "whisper", role: "stt", name: "Whisper", bytes: 2.9e9, state: "not_downloaded" };
+const PACK_409 = { missing: [
+  { id: "engine", kind: "pack", name: "AI engine", bytes: 2e9 },
+  { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9e9 },
+] };
 
 /** Let the module's own awaits run out (its fetches resolve immediately). */
 const settle = () => new Promise((r) => setImmediate(r));
@@ -350,4 +369,91 @@ test("downloadModel and cancelModel hit their endpoints and start the poll", asy
   await settle();
   assert.equal(h.state.calls.includes("POST /api/models/whisper/cancel"), true);
   assert.deepEqual(h.state.timers, []);
+});
+
+
+// ── packs: the desktop app installs them, then the models download ─────────
+test("Download and Start installs the packs through the desktop app first, then downloads the models", async (t) => {
+  const shell = fakeShell({ install: async (id) => {
+    // The pack lands on disk: the next GET /api/models says so.
+    h.state.rows = [{ ...ENGINE, state: "ready" }, WHISPER];
+    return { ok: true };
+  } });
+  const h = harness({ rows: [ENGINE, WHISPER], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  h.api.showModelsDialog(PACK_409);
+  assert.equal(h.$("mnTitle").textContent, "Download 4.6 GB to dub?");   // 4.9e9 bytes
+  h.$("mnDownload").click();
+  await settle(); await settle(); await settle();
+  assert.deepEqual(shell.asked, ["install engine"]);
+  // The model's download went out only after the pack was in.
+  const order = h.state.calls.filter((c) => c.startsWith("POST"));
+  assert.deepEqual(order, ["POST /api/models/whisper/download"]);
+  assert.equal(h.state.started, 0, "the dub waits for the model");
+});
+
+test("while a pack installs the dialog shows its progress line, and Cancel stops it through the desktop app", async (t) => {
+  let finish;
+  const shell = fakeShell({ install: () => new Promise((r) => { finish = r; }) });
+  const h = harness({ rows: [ENGINE], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  h.api.showModelsDialog({ missing: [PACK_409.missing[0]] });
+  h.$("mnDownload").click();
+  await settle();
+  assert.equal(h.$("mnTitle").textContent, "Installing AI engine");
+  shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing AI engines", state: "progress", detail: "torch 40%" });
+  assert.equal(h.$("mnLine").textContent, "Installing AI engines: torch 40%");
+  h.$("mnCancel").click();
+  assert.deepEqual(shell.asked, ["install engine", "cancel engine"]);
+  finish({ ok: false, reason: "Cancelled." });
+  await settle(); await settle();
+});
+
+test("a pack the desktop app could not install stops the dub and says why, with the button back", async (t) => {
+  const shell = fakeShell({ install: async () => ({ ok: false, reason: "Not enough space: needs 2.0 GB." }) });
+  const h = harness({ rows: [ENGINE, WHISPER], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  h.api.showModelsDialog(PACK_409);
+  h.$("mnDownload").click();
+  await settle(); await settle(); await settle();
+  assert.equal(h.$("mnError").textContent, "AI engine: Not enough space: needs 2.0 GB.");
+  assert.equal(h.$("mnDownload").hidden, false);
+  assert.ok(!h.state.calls.some((c) => c.startsWith("POST")), "no model download was started");
+});
+
+test("without the desktop app a pack cannot be installed from the page, and the dialog says so", async (t) => {
+  const h = harness({ rows: [ENGINE, WHISPER] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  h.api.showModelsDialog(PACK_409);
+  h.$("mnDownload").click();
+  await settle(); await settle();
+  assert.equal(h.$("mnError").textContent, "AI engine: Installed by the desktop app.");
+  assert.ok(!h.state.calls.some((c) => c.startsWith("POST")));
+});
+
+test("the Settings catalog's pack rows ask the desktop app to install or remove, and are read-only without it", async (t) => {
+  const shell = fakeShell();
+  const h = harness({ rows: [ENGINE, { ...ENGINE, id: "ollama-runtime", name: "Translation runtime", state: "ready" }], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const [engineRow, runtimeRow] = h.$("modelsList").children;
+  const btn = (row) => row.children[3];
+  assert.equal(btn(engineRow).textContent, "Download");
+  btn(engineRow).onclick();
+  await settle(); await settle();
+  assert.equal(btn(runtimeRow).textContent, "Remove");
+  btn(runtimeRow).onclick();
+  await settle(); await settle();
+  assert.deepEqual(shell.asked, ["install engine", "remove ollama-runtime"]);
+
+  const bare = harness({ rows: [ENGINE] });
+  t.after(bare.state.restore);
+  await bare.api.refreshModels();
+  const row = bare.$("modelsList").children[0];
+  assert.equal(btn(row).disabled, true);
+  assert.equal(row.children[2].textContent, "Installed by the desktop app");
 });

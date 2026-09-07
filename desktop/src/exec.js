@@ -6,11 +6,21 @@ import { spawn } from "node:child_process";
 // -- its last line read "2h13m[K[?25h[?2026l" through the whole 8 GB pull.
 const CONTROL_SEQUENCES = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 
+// The process run() is driving right now, so a pack install can be stopped
+// from the page: killing it makes run() reject, which unwinds the installer.
+// The steps run one after another, so there is at most one.
+let current = null;
+
+export function cancelCurrent() {
+  if (current) current.kill();
+}
+
 export function run(argv, { cwd, env, onLine = () => {} } = {}) {
   return new Promise((resolve, reject) => {
     // windowsHide: the installer runs console programs (tar, pip, hf...) from
     // a GUI process, and without it each one opened its own console window.
     const child = spawn(argv[0], argv.slice(1), { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    current = child;
     const recent = [];
     const feed = (buf) => {
       // Split on \r as well as \n: a progress bar redraws its line with a bare
@@ -26,8 +36,9 @@ export function run(argv, { cwd, env, onLine = () => {} } = {}) {
     };
     child.stdout.on("data", feed);
     child.stderr.on("data", feed);
-    child.on("error", reject);
+    child.on("error", (err) => { current = null; reject(err); });
     child.on("close", (code) => {
+      current = null;
       if (code === 0) resolve();
       else reject(new Error(`${argv[0]} exit ${code}\n${recent.join("\n")}`));
     });

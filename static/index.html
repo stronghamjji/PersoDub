@@ -1960,7 +1960,7 @@
 
 <script type="module">
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips } from "/js/dubApi.mjs";
-import { gb, neededModelId, modelStatusLine } from "/js/modelsUi.mjs";
+import { gb, neededModelId, neededPackIds, modelStatusLine } from "/js/modelsUi.mjs";
 import { initModelsUi } from "/js/modelsDialog.mjs";
 import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
@@ -2216,7 +2216,20 @@ const models = initModelsUi({
   onStartDubbing: startDubbing,
   onOpenSettings: settings.openSettings,
   onRowsChanged: paintModelStatusLines,
+  // The desktop app's bridge (absent in a plain browser): packs are its to install.
+  shell: window.persodubShell || null,
 });
+
+// The row a dropdown's hint line is about: the pack the choice runs in, while
+// that pack is not on disk (it comes first, as in the dub's own 409), else the
+// choice's model.
+function hintRow(role, value) {
+  for (const id of neededPackIds(role, value)) {
+    const r = models.modelRow(id);
+    if (r && r.state !== "ready") return r;
+  }
+  return models.modelRow(neededModelId(role, value));
+}
 
 function paintHint(el, row) {
   const line = modelStatusLine(row);
@@ -2247,9 +2260,9 @@ function paintModelStatusLines(rows) {
   // Cloud dubbing needs no local models -- their download lines would only
   // confuse; the per-stage dropdowns are greyed by paintDubMode below.
   const cloud = $("dubModeSelect").value === "perso";
-  paintHint($("sttModelHint"), cloud ? null : models.modelRow(neededModelId("stt", $("sttSelect").value)));
-  paintHint($("translateModelHint"), cloud ? null : models.modelRow(neededModelId("translate", $("translateSelect").value)));
-  paintHint($("voiceModelHint"), cloud ? null : models.modelRow(neededModelId("voice", $("voiceSelect").value)));
+  paintHint($("sttModelHint"), cloud ? null : hintRow("stt", $("sttSelect").value));
+  paintHint($("translateModelHint"), cloud ? null : hintRow("translate", $("translateSelect").value));
+  paintHint($("voiceModelHint"), cloud ? null : hintRow("voice", $("voiceSelect").value));
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
           || rows.find((m) => m.state === "downloading");
   $("topbarDl").hidden = !dl;
