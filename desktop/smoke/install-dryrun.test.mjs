@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
-import { buildSteps } from "../src/installSpec.js";
+import { buildSteps, baseSteps, packSteps, packInstalled, PACKS } from "../src/installSpec.js";
 import { runInstall } from "../src/installer.js";
 import { checkKit } from "../src/engineCheck.js";
 import { IS_WIN, venvBin, exeName } from "../src/platform.js";
@@ -80,19 +80,30 @@ test("full install dry run completes, satisfies checkKit, and resumes as all-ski
     },
   };
 
+  // What the boot flow actually runs (main.js): the base steps, plus only
+  // the packs already on this kit's disk. This fake kit never gets a pack
+  // installed, so toRun is the 6 base steps on both runs -- the whole point
+  // being that a light install (and its resume check) never touches the
+  // engine/ollama-runtime packs at all.
+  const toRun = (all) => [
+    ...baseSteps(all),
+    ...PACKS.filter((p) => packInstalled(kitDir, p.id)).flatMap((p) => packSteps(all, p.id)),
+  ];
+
   const prevXdg = process.env.XDG_CACHE_HOME;
   process.env.XDG_CACHE_HOME = cacheDir;
   try {
     const events1 = [];
-    await runInstall(buildSteps(ctx), { onProgress: (e) => events1.push(e) });
+    await runInstall(toRun(buildSteps(ctx)), { onProgress: (e) => events1.push(e) });
     assert.equal(checkKit(kitDir, KIT_VERSION).ok, true, "installed kit must satisfy Phase-1 checkKit");
     assert.ok(existsSync(join(kitDir, "bin", exeName("ffmpeg"))));
     assert.ok(existsSync(join(kitDir, "kit.env")));
 
     const events2 = [];
-    await runInstall(buildSteps(ctx), { onProgress: (e) => events2.push(e) });
+    const secondRun = toRun(buildSteps(ctx));
+    await runInstall(secondRun, { onProgress: (e) => events2.push(e) });
     assert.ok(events2.every((e) => e.state === "skipped"), "second run must skip every step");
-    assert.equal(events2.length, 10);
+    assert.equal(events2.length, secondRun.length);
   } finally {
     if (prevXdg === undefined) delete process.env.XDG_CACHE_HOME;
     else process.env.XDG_CACHE_HOME = prevXdg;

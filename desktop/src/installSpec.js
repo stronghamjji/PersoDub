@@ -63,6 +63,33 @@ export const STEP_IDS = [
   "models", "ollama-runtime", "nonverbal-weights", "kit-env",
 ];
 
+// The steps that leave the base install (payload, python, venv-app, ffmpeg,
+// cleanup, kit-env) add up to under a gigabyte; everything else belongs to a
+// pack, installed later on demand (a later task adds the IPC for that). The
+// boot flow (main.js) only refreshes a pack that is already on disk.
+export const PACKS = [
+  { id: "engine", steps: ["venv-engines", "models", "nonverbal-weights"] },
+  { id: "ollama-runtime", steps: ["ollama-runtime"] },
+];
+
+/** The steps with no pack tag -- what the first install downloads. */
+export function baseSteps(steps) {
+  return steps.filter((s) => s.pack === undefined);
+}
+
+/** The steps belonging to one pack, in buildSteps' order. */
+export function packSteps(steps, id) {
+  return steps.filter((s) => s.pack === id);
+}
+
+// Whether a pack is on disk -- read from the filesystem, never a marker, so
+// this agrees with isDone()/checkKit() about what "installed" means.
+export function packInstalled(kitDir, id) {
+  if (id === "engine") return existsSync(join(kitDir, "engines_venv"));
+  if (id === "ollama-runtime") return existsSync(join(kitDir, "ollama", exeName("ollama")));
+  return false;
+}
+
 // Each model is pinned to a HuggingFace commit (--revision) the way the
 // Python/CAM++/Ollama downloads are pinned by SHA-256: an upstream repo
 // takeover or force-push must not change what lands on user machines.
@@ -311,7 +338,7 @@ export function buildSteps(ctx) {
     },
   });
 
-  return [
+  const steps = [
     {
       id: "payload",
       title: "Copying bundled files",
@@ -522,4 +549,10 @@ export function buildSteps(ctx) {
       },
     },
   ];
+  for (const p of PACKS) {
+    for (const s of steps) {
+      if (p.steps.includes(s.id)) s.pack = p.id;
+    }
+  }
+  return steps;
 }

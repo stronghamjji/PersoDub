@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import {
   buildSteps, writeKitEnv, PYTHON_URL, PYTHON_SHA256, CAMPPLUS_SHA256,
   OLLAMA_TGZ_SHA256, bytesStillNeeded, STEP_IDS, MODEL_MARKERS,
-  OPTIONAL_MODEL_MARKERS,
+  OPTIONAL_MODEL_MARKERS, baseSteps, packSteps, packInstalled,
 } from "./installSpec.js";
 import { runInstall } from "./installer.js";
 import { IS_WIN, venvBin, exeName, TTS_DEVICE } from "./platform.js";
@@ -42,6 +42,25 @@ test("returns the 10 steps in install order", () => {
     "models", "ollama-runtime", "nonverbal-weights", "kit-env",
   ]);
   assert.deepEqual(ids, STEP_IDS);
+});
+
+test("PACKS names the steps that leave the base install", () => {
+  const steps = buildSteps(freshCtx());
+  const tagged = Object.fromEntries(steps.map((s) => [s.id, s.pack]));
+  assert.deepEqual(baseSteps(steps).map((s) => s.id), ["payload", "python", "venv-app", "ffmpeg", "cleanup", "kit-env"]);
+  assert.deepEqual(packSteps(steps, "engine").map((s) => s.id), ["venv-engines", "models", "nonverbal-weights"]);
+  assert.deepEqual(packSteps(steps, "ollama-runtime").map((s) => s.id), ["ollama-runtime"]);
+  assert.equal(tagged.payload, undefined);
+});
+test("the base install adds up to under a gigabyte", () => {
+  const total = baseSteps(buildSteps(freshCtx())).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
+  assert.ok(total < 1.0, `base is ${total.toFixed(2)} GB`);
+});
+test("packInstalled reads the disk, not a marker", () => {
+  const ctx = freshCtx();
+  assert.equal(packInstalled(ctx.kitDir, "engine"), false);
+  mkdirSync(join(ctx.kitDir, "engines_venv"), { recursive: true });
+  assert.equal(packInstalled(ctx.kitDir, "engine"), true);
 });
 
 test("ollama-runtime step downloads and extracts the runtime, never pulls a model", async () => {

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
-import { buildSteps, bytesStillNeeded } from "./src/installSpec.js";
+import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, PACKS } from "./src/installSpec.js";
 import { runInstall, openSteps } from "./src/installer.js";
 import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
@@ -232,9 +232,18 @@ async function boot(win) {
     // it, and it skips everything already done.
     const kitOk = checkKit(cfg.kitDir, kitVersion).ok;
     let unfinished = false;
+    // The boot install: the base steps every launch needs, plus only the
+    // packs already on this kit's disk. An existing user's engine/
+    // ollama-runtime keep being refreshed the way they always were; a pack
+    // that was never installed is left alone here -- a later task adds the
+    // IPC to install one on demand.
+    const all = payload ? buildSteps({ kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run }) : null;
+    const toRun = all && [
+      ...baseSteps(all),
+      ...PACKS.filter((p) => packInstalled(cfg.kitDir, p.id)).flatMap((p) => packSteps(all, p.id)),
+    ];
     if (kitOk && payload) {
-      const probe = buildSteps({ kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run });
-      const open = await openSteps(probe);
+      const open = await openSteps(toRun);
       unfinished = open.length > 0;
       if (unfinished) console.log(`PERSODUB_KIT resuming an unfinished install: ${open.map((s) => s.id).join(", ")}`);
     }
@@ -258,13 +267,11 @@ async function boot(win) {
         });
         return;
       }
-      const ctx = { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run };
-      const steps = buildSteps(ctx);
       // The other preflight, and for the same reason: five machines reported a
       // disk-full from deep inside a step, after gigabytes had already been
       // downloaded. Only the steps still missing are counted, so a half-done
       // install asks for the remainder rather than the whole kit again.
-      const stillNeeded = await bytesStillNeeded(steps);
+      const stillNeeded = await bytesStillNeeded(toRun);
       const noRoom = notEnoughSpace(stillNeeded, await freeSpaceAt(cfg.kitDir));
       if (noRoom) {
         countUsage("install_failure", cfg.kitDir, "disk-full");
@@ -286,7 +293,7 @@ async function boot(win) {
       // four real install failures unactionable.
       let failedStep;
       try {
-        await runInstall(steps, {
+        await runInstall(toRun, {
           onProgress: (p) => {
             if (p.state === "error") failedStep = p.stepId;
             win.webContents.send("shell:install-progress", p);
