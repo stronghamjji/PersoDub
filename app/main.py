@@ -15,12 +15,13 @@ where the work they are queued with is built).
 """
 import logging
 import os
+import re
+import secrets
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import config, state
@@ -137,18 +138,48 @@ app.include_router(script_api.router)
 app.include_router(settings_api.router)
 
 
-# Serves the page's ES modules (ui/src/*.mjs -- the screens, the API layer,
-# the formatting helpers) so static/index.html can import them as /js/<name>.mjs.
-# Mounted straight from ui/src rather than copied into static/ so there is one
-# source of truth: the same files the node:test suites in ui/src cover.
-app.mount("/js", StaticFiles(directory=os.path.join(state.APP_DIR, "ui", "src")), name="js")
+# The page's ES modules (ui/src/*.mjs -- the screens, the API layer, the
+# formatting helpers), imported by static/index.html as /js/<name>.mjs and by
+# each other as ./<name>.mjs. Served straight from ui/src rather than copied
+# into static/ so there is one source of truth: the same files the node:test
+# suites in ui/src cover.
+#
+# Every launch stamps a fresh token onto every module URL (in the page and
+# inside the modules' own imports) and answers with Cache-Control: no-cache.
+# Without that a browser keeps a module for days on its own heuristics, and
+# the first launch after an update ran the new page against a module cached
+# from the version before -- one missing export, and every button on the
+# page was dead (2026-09-07). A new URL per launch cannot hit an old entry.
+ASSET_TOKEN = secrets.token_hex(4)
+_MODULE_DIR = os.path.join(state.APP_DIR, "ui", "src")
+_MODULE_NAME = re.compile(r"^[A-Za-z0-9_-]+\.mjs$")
+_MODULE_IMPORT = re.compile(r'(from\s+["\'])(\./|/js/)([A-Za-z0-9_-]+\.mjs)(["\'])')
+_NO_CACHE = {"Cache-Control": "no-cache"}
+
+
+def stamp_module_imports(text: str) -> str:
+    """Every module import in `text` gets this launch's token as its query."""
+    return _MODULE_IMPORT.sub(lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}?v={ASSET_TOKEN}{m.group(4)}", text)
+
+
+@app.get("/js/{name}", include_in_schema=False)
+def page_module(name: str):
+    if not _MODULE_NAME.match(name):
+        raise HTTPException(404, "No such module")
+    path = os.path.join(_MODULE_DIR, name)
+    if not os.path.isfile(path):
+        raise HTTPException(404, "No such module")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    return Response(stamp_module_imports(text), media_type="text/javascript; charset=utf-8",
+                    headers=_NO_CACHE)
 
 
 @app.get("/", response_class=HTMLResponse)
 def index():
     """Dubbing app screen."""
     with open(os.path.join(state.STATIC_DIR, "index.html"), encoding="utf-8") as f:
-        return f.read()
+        return HTMLResponse(stamp_module_imports(f.read()), headers=_NO_CACHE)
 
 
 @app.get("/health")
