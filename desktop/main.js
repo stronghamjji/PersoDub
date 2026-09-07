@@ -477,17 +477,29 @@ app.whenReady().then(() => {
     const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(installCtx.kitDir));
     if (noRoom) return { ok: false, reason: noRoom };
     packCancelled = false;
+    // Logged like the boot install: a pack install is the one thing a support
+    // log otherwise says nothing about, and its reason lives only in a dialog.
+    console.log(`PERSODUB_PACK install ${id}: ${steps.map((s) => s.id).join(", ")}`);
     try {
       await runInstall(steps, {
-        onProgress: (p) => { if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id }); },
+        onProgress: (p) => {
+          if (p.state === "start" || p.state === "done" || p.state === "error") console.log(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail : ""}`);
+          if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id });
+        },
       });
     } catch (err) {
-      return { ok: false, reason: packCancelled ? "Cancelled." : String((err && err.message) || err) };
+      const reason = packCancelled ? "Cancelled." : String((err && err.message) || err);
+      console.log(`PERSODUB_PACK install ${id} failed: ${reason}`);
+      return { ok: false, reason };
     }
     if (engines && engines.startPack) {
       try { await engines.startPack(id); }
-      catch (err) { return { ok: false, reason: `Installed, but it could not start: ${String((err && err.message) || err)}` }; }
+      catch (err) {
+        console.log(`PERSODUB_PACK ${id} installed but did not start: ${String((err && err.message) || err)}`);
+        return { ok: false, reason: `Installed, but it could not start: ${String((err && err.message) || err)}` };
+      }
     }
+    console.log(`PERSODUB_PACK install ${id} ok`);
     return { ok: true };
   });
   ipcMain.handle("shell:cancel-pack", async () => {

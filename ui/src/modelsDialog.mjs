@@ -38,7 +38,8 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   // progress line. Packs (the engines venv, the Ollama runtime) are the
   // shell's to install: this page asks over `shell` (window.persodubShell,
   // absent in a plain browser) and follows the progress events it sends.
-  let packBusy = null;     // { id, name, line }
+  let packBusy = null;     // { id, name, line, pct }
+  let packFailed = null;   // { id, reason } until the next attempt or refresh clears it
   const PACK_HINT = "Installed by the desktop app";
 
   const modelRow = (id) => modelRows.find((m) => m.id === id) || null;
@@ -47,8 +48,8 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     shell.onInstallProgress((p) => {
       if (!p || !p.pack || !packBusy || packBusy.id !== p.pack) return;
       packBusy.line = p.state === "progress" && p.detail ? `${p.title}: ${p.detail}` : (p.title || "");
-      paintModelsDialog();
-      renderModelsList();
+      if (p.state === "progress" && p.pct != null) packBusy.pct = p.pct;
+      repaint();
     });
   }
 
@@ -66,17 +67,18 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       showPackError(`${name}: ${PACK_HINT}.`);
       return false;
     }
-    packBusy = { id, name, line: "" };
-    paintModelsDialog();
-    renderModelsList();
+    packBusy = { id, name, line: "", pct: null };
+    packFailed = null;
+    repaint();
     let res;
     try { res = await shell.installPack(id); }
     catch (e) { res = { ok: false, reason: String((e && e.message) || e) }; }
     packBusy = null;
+    if (!res || !res.ok) packFailed = { id, reason: (res && res.reason) || "The install could not finish." };
     await fetchModels();
     repaint();
-    if (!res || !res.ok) {
-      showPackError(`${name}: ${(res && res.reason) || "The install could not finish."}`);
+    if (packFailed) {
+      showPackError(`${name}: ${packFailed.reason}`);
       return false;
     }
     return true;
@@ -110,11 +112,25 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     return modelRows;
   }
 
+  // The rows as the page should paint them: a pack the desktop app is
+  // installing reads as "downloading" with its progress, and one whose install
+  // just failed as "paused" with the reason -- so the dropdown hints, the
+  // topbar chip and Settings show the pack the way they show a model, wherever
+  // the install was started from. The engine's own rows never say either: it
+  // does not install packs.
+  function rowsToPaint() {
+    return modelRows.map((r) => {
+      if (packBusy && r.id === packBusy.id) return { ...r, state: "downloading", progress: packBusy.pct ?? null };
+      if (packFailed && r.id === packFailed.id && r.state !== "ready") return { ...r, state: "paused", error: packFailed.reason };
+      return r;
+    });
+  }
+
   // Everything that paints from the rows, in the order the page shows it:
   // the caller's dropdown hints and chip first, then the catalog, then the
   // dialog (which is also where a finished download starts the dub).
   function repaint() {
-    onRowsChanged(modelRows);
+    onRowsChanged(rowsToPaint());
     renderModelsList();
     paintModelsDialog();
   }
@@ -152,6 +168,8 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     startPolling();
   }
   async function cancelModel(id) {
+    const row = modelRow(id);
+    if (row && row.role === "pack") { await cancelPack(id); return; }
     try { await fetch(`/api/models/${id}/cancel`, { method: "POST" }); } catch { /* poll shows it */ }
     startPolling();
   }
@@ -172,7 +190,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     const list = $("modelsList");
     list.replaceChildren();
     let onDisk = 0;
-    for (const m of modelRows) {
+    for (const m of rowsToPaint()) {
       if (m.state === "ready") onDisk += m.bytes;
       const row = document.createElement("div");
       row.className = "settings-row model-row";
@@ -200,6 +218,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
         if (packBusy && packBusy.id === m.id) {
           status.textContent = packBusy.line || "Installing…";
           btn.textContent = "Cancel"; btn.onclick = () => cancelPack(m.id);
+        } else if (packFailed && packFailed.id === m.id) {
+          status.textContent = `Stopped: ${packFailed.reason}`;
+          btn.textContent = "Resume"; btn.onclick = () => installPack(m.id);
         } else if (!shell) {
           if (m.state !== "ready") status.textContent = PACK_HINT;
           btn.textContent = m.state === "ready" ? "Remove" : "Download";
@@ -213,7 +234,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       row.append(name, size, status, btn);
       list.append(row);
     }
-    const busy = !!packBusy || modelRows.some((m) => m.state === "downloading" || m.state === "paused");
+    const busy = !!packBusy || rowsToPaint().some((m) => m.state === "downloading" || m.state === "paused");
     $("modelsSummary").textContent =
       `${modelRows.length} models · ${gb(onDisk)} GB on this computer`
       + (busy ? " · attention needed" : "");

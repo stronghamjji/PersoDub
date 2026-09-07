@@ -499,3 +499,29 @@ test("a catalog row says what the thing is for, under its name", async (t) => {
   assert.equal(name.children[0].className, "model-hint");
   assert.equal(name.children[0].textContent, "Runs local dubbing on this computer.");
 });
+
+test("a pack being installed reads as downloading in the rows the page paints, and a failed one as paused with the reason", async (t) => {
+  let finish;
+  const shell = fakeShell({ install: () => new Promise((r) => { finish = r; }) });
+  const h = harness({ rows: [ENGINE], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  // Started from a dropdown hint (downloadModel), not the dialog: the hints
+  // and the topbar chip only know rows, so the pack must show up as one.
+  const p = h.api.downloadModel("engine");
+  await settle();
+  let painted = h.state.painted.at(-1).find((r) => r.id === "engine");
+  assert.equal(painted.state, "downloading");
+  shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing AI engines", state: "progress", pct: 42, detail: "torch" });
+  painted = h.state.painted.at(-1).find((r) => r.id === "engine");
+  assert.equal(painted.progress, 42);
+  finish({ ok: false, reason: "Health check timed out" });
+  await p; await settle();
+  painted = h.state.painted.at(-1).find((r) => r.id === "engine");
+  assert.equal(painted.state, "paused");
+  assert.equal(painted.error, "Health check timed out");
+  // Settings says the same, with Resume.
+  const row = h.$("modelsList").children[0];
+  assert.equal(row.children[2].textContent, "Stopped: Health check timed out");
+  assert.equal(row.children[3].textContent, "Resume");
+});
