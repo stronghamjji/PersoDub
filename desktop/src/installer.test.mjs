@@ -84,3 +84,14 @@ test("openSteps names the steps still to run, ignoring housekeeping ones", async
 test("openSteps is empty for a finished kit", async () => {
   assert.deepEqual(await openSteps([{ id: "a", isDone: () => true }]), []);
 });
+
+import { packPercent } from "./installer.js";
+
+test("packPercent weighs the steps by size and moves from step to step even without an inner percent", () => {
+  const steps = [{ id: "venv-engines", bytes: 800 }, { id: "models", bytes: 150 }, { id: "nonverbal-weights", bytes: 50 }];
+  assert.equal(packPercent(steps, new Set(), "venv-engines", null), 0);
+  assert.equal(packPercent(steps, new Set(["venv-engines"]), "models", null), 80);
+  assert.equal(packPercent(steps, new Set(["venv-engines"]), "models", 50), 88);   // 800 + 75 of 1000
+  assert.equal(packPercent(steps, new Set(["venv-engines", "models", "nonverbal-weights"]), null, null), 100);
+  assert.equal(packPercent([{ id: "x", bytes: 0 }], new Set(), "x", 10), null, "no sizes, no figure");
+});

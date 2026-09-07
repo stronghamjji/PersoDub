@@ -7,7 +7,7 @@ import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, fr
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, PACKS } from "./src/installSpec.js";
-import { runInstall, openSteps } from "./src/installer.js";
+import { runInstall, openSteps, packPercent } from "./src/installer.js";
 import { cancelCurrent } from "./src/exec.js";
 import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
@@ -480,11 +480,16 @@ app.whenReady().then(() => {
     // Logged like the boot install: a pack install is the one thing a support
     // log otherwise says nothing about, and its reason lives only in a dialog.
     console.log(`PERSODUB_PACK install ${id}: ${steps.map((s) => s.id).join(", ")}`);
+    // The page gets the pack's overall percent on every event (installer.js
+    // packPercent), not the running step's own -- a pip step has none.
+    const done = new Set();
     try {
       await runInstall(steps, {
         onProgress: (p) => {
           if (p.state === "start" || p.state === "done" || p.state === "error") console.log(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail : ""}`);
-          if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id });
+          if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
+          const pct = packPercent(steps, done, p.stepId, p.state === "progress" ? p.pct : null);
+          if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id, pct });
         },
       });
     } catch (err) {

@@ -48,7 +48,8 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     shell.onInstallProgress((p) => {
       if (!p || !p.pack || !packBusy || packBusy.id !== p.pack) return;
       packBusy.line = p.state === "progress" && p.detail ? `${p.title}: ${p.detail}` : (p.title || "");
-      if (p.state === "progress" && p.pct != null) packBusy.pct = p.pct;
+      // The shell sends the pack's overall percent on every event.
+      if (p.pct != null) packBusy.pct = p.pct;
       repaint();
     });
   }
