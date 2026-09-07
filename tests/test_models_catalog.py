@@ -109,8 +109,8 @@ def test_api_models_lists_optional_models_with_states(monkeypatch, tmp_path):
 # ── free space ─────────────────────────────────────────────────────────────
 def test_free_space_measures_a_folder_that_does_not_exist_yet(tmp_path):
     """Both callers ask before the folder is there: the kit before a download,
-    and a job's workspace before the job exists. statvfs on a path that is not
-    on disk says nothing, so this walks up to the nearest parent that is."""
+    and a job's workspace before the job exists. Asking about a path that is
+    not on disk says nothing, so this walks up to the nearest parent that is."""
     on_disk = models_module.free_bytes_at(str(tmp_path))
     assert on_disk and on_disk > 0
     assert models_module.free_bytes_at(str(tmp_path / "not" / "made" / "yet")) == on_disk
@@ -122,5 +122,5 @@ def test_free_space_is_none_when_the_disk_will_not_say(monkeypatch, tmp_path):
     def boom(_path):
         raise OSError("no")
 
-    monkeypatch.setattr(models_module.os, "statvfs", boom)
+    monkeypatch.setattr(models_module.shutil, "disk_usage", boom)
     assert models_module.free_bytes_at(str(tmp_path)) is None

@@ -17,6 +17,7 @@ never silently "done" and never a dead end.
 import json
 import logging
 import os
+import shutil
 
 log = logging.getLogger("persodub.models")
 
@@ -109,9 +110,12 @@ def free_bytes_at(path):
     fails).
 
     Walks up to the nearest existing parent first: the kit folder and a job's
-    workspace are both asked about before they are made, and statvfs on a path
-    that does not exist yet answers nothing at all when the disk under it is
-    the thing being asked about.
+    workspace are both asked about before they are made, and asking about a
+    path that does not exist yet answers nothing at all when the disk under it
+    is the thing being asked about.
+
+    shutil.disk_usage, not os.statvfs: statvfs is not on Windows, where the
+    dub's space check silently passed everything (CI, 2026-09-07).
     """
     path = path or "."
     while path and not os.path.exists(path):
@@ -120,8 +124,7 @@ def free_bytes_at(path):
             break
         path = parent
     try:
-        st = os.statvfs(path or "/")
-        return st.f_bavail * st.f_frsize
+        return shutil.disk_usage(path or "/").free
     except Exception:
         return None
 
