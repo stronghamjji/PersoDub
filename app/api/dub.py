@@ -376,12 +376,17 @@ def dub_job_redub(jid: str):
     language_code = job.get("language_code") or "en"
     project = job.get("project") or os.path.basename(work_dir)
     check_space(state.WORKSPACE)
+    script = script_path(work_dir)
+    if not os.path.exists(script):
+        # A job that finished without a script (a cloud dub, a folder carried
+        # over from an old install) has nothing to re-voice from.
+        raise HTTPException(409, "No script was recorded for this job, so its voices cannot be made again.")
     work = _job_dir(project, language_code)
     video_path = os.path.join(work, "input.mp4")
     shutil.copyfile(source_video, video_path)
     # "sub.srt" because that is the name a ready-made script has in a job's
     # folder, whichever door put it there -- the work builder looks for it.
-    shutil.copyfile(script_path(work_dir), os.path.join(work, "sub.srt"))
+    shutil.copyfile(script, os.path.join(work, "sub.srt"))
 
     engines = _inherited_engines(job, ("stt_engine", "translator", "tts", "quality"))
 
