@@ -4,9 +4,9 @@
 
 ## Troubleshooting
 
-**The first launch seems to take forever.** It is downloading the models and runtimes —
-roughly 3 GB on macOS, about 12 GB on Windows. This happens once; later launches start
-immediately.
+**The first launch seems to take forever.** It is setting up the app — roughly 0.6 GB on
+macOS, 0.9 GB on Windows. The AI engine, translation runtime, and models download when
+you first dub. Later launches start immediately.
 
 **A cloud engine is greyed out in the dropdown.** Save the corresponding API key in
 Settings, then restart the app. Engine availability is evaluated at startup.
@@ -56,10 +56,9 @@ an Intel Mac has no equivalent path and would run every stage on the processor. 
 on the [roadmap](roadmap.md) but has no date.
 
 **Why is the first-run download so large?**
-PersoDub ships no AI models. On first launch it downloads the separation, recognition,
-diarization, translation and speech-synthesis models — roughly 3 GB on macOS, about
-12 GB on Windows, which also carries the CUDA build of PyTorch — so that everything can
-run offline afterwards. It happens once.
+The first setup downloads only the app and Python — roughly 0.6 GB on macOS, 0.9 GB on
+Windows. The AI engine, translation runtime, and models download when you first dub, so
+you get only what you choose. Everything still runs offline afterwards.
 
 **Do I need a GPU?**
 On a Mac, no — PersoDub uses the acceleration built into Apple Silicon. On Windows, an

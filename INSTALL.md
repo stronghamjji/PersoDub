@@ -25,10 +25,11 @@ Both end in the same place — [After installing](#after-installing).
 4. Launch **PersoDub** from Applications. The app is signed and notarized, so it opens
    with a normal double-click — no security warnings.
 
-On a first install, a "Setting up PersoDub" screen appears and the engines install
-automatically (30 minutes to 2 hours). It is safe to quit during this — reopening the
-app resumes where it left off. Installed this way, the app also keeps itself up to
-date: on launch it checks for a newer release and offers to install it.
+On a first install, a "Setting up PersoDub" screen appears (roughly 0.6 GB). The AI
+engine, translation runtime, and models download when you first dub. It is safe to
+quit at any time — reopening the app resumes where it left off. Installed this way, the
+app also keeps itself up to date: on launch it checks for a newer release and offers to
+install it.
 
 Next: [After installing](#after-installing).
 
@@ -83,7 +84,7 @@ Progress is shown as `[1/7]`, `[2/7]`, and so on. **It takes 10–20 minutes —
 
 - The app opens automatically at the end.
 - **If you see an "unidentified developer" warning**: System Settings → Privacy & Security → click **"Open Anyway"** at the bottom (needed only once).
-- On a first install, a "Setting up PersoDub" screen appears and the engines install automatically (30 minutes to 2 hours). It is safe to quit during this — reopening the app resumes where it left off.
+- On a first install, a "Setting up PersoDub" screen appears (roughly 0.6 GB). The AI engine, translation runtime, and models download when you first dub. It is safe to quit at any time — reopening the app resumes where it left off.
 
 Next: [After installing](#after-installing).
 
@@ -124,9 +125,7 @@ and a desktop shortcut, and registers an uninstaller.
 
 ### First launch
 
-The first time you open PersoDub, it downloads the engine kit into
-`%LOCALAPPDATA%\PersoDub` — about **12 GB**, roughly **8 minutes** on a fast
-connection. This happens once.
+The first time you open PersoDub, a "Setting up PersoDub" screen appears — roughly **0.9 GB**. The AI engine, translation runtime, and models download when you first dub.
 
 Leave the app open while it downloads. If it closes, open it again — setup resumes where
 it left off.
@@ -142,7 +141,7 @@ The measured numbers are in [Speed without a GPU](README.md#speed-without-a-gpu)
 
 Use the uninstaller in the **Start menu**, or **Settings > Apps**.
 
-> **That removes the app, but not the engine kit.** The roughly 12 GB in
+> **That removes the app, but not the packs and models.** What you downloaded in
 > `%LOCALAPPDATA%\PersoDub` stays on your disk. To get that space back, open that folder
 > and delete it yourself.
 
