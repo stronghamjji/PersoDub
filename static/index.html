@@ -2256,7 +2256,11 @@ function paintHint(el, needs, ready) {
   if (active) {
     const line = modelStatusLine(active);
     el.className = "settings-hint model-line " + line.cls;
-    span.textContent = line.text;
+    // A stopped one is named: "Paused" alone under a dropdown says nothing
+    // about which of the things the choice needs it is.
+    span.textContent = active.state === "paused"
+      ? `${active.name} paused${active.error ? `: ${active.error}` : ""}`
+      : line.text;
     btn.textContent = line.button === "cancel" ? "Cancel" : "Resume";
     btn.addEventListener("click", () =>
       line.button === "cancel" ? models.cancelModel(active.id) : models.downloadAll(ids));
