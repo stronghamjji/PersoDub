@@ -234,7 +234,7 @@ def command(mcp_config: str, resume: bool, model: str = "") -> List[str]:
         "mcp_servers.persodub.env=%s" % _toml(server["env"]),
     ]
 
-    if resume:
+    if resume:  # noqa: SIM108 -- the branch carries the reasoning below; a ternary would not
         # --last is filtered by working directory, and ours is the app's own
         # agent folder -- so this cannot pick up the user's own Codex session.
         # Every turn asks to resume (the panel never sends the field, so the

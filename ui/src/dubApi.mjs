@@ -26,7 +26,7 @@ export const LANGUAGES = [
 ];
 
 // Legacy direction -> the (language, language_code) pair the API expects
-// (both name the TARGET language; see app/main.py DubStartRequest / run_dub).
+// (both name the TARGET language; see app/api/dub.py dub_start / run_dub).
 // Not exported: buildDubFormData below is the only caller, and its own tests
 // cover both mappings through the form it builds.
 function directionToLanguage(direction) {
@@ -46,7 +46,7 @@ function qualityModeToNTakes(qualityMode) {
 /**
  * Build the multipart/form-data body for POST /api/dub/start from friendly
  * UI option values. This is the single source of truth for the field names
- * the backend expects (app/main.py:dub_start).
+ * the backend expects (app/api/dub.py:dub_start).
  *
  * @param {Object} opts
  * @param {File|Blob} opts.video - required video file
@@ -85,7 +85,7 @@ export function buildDubFormData(opts) {
   const nTakes = opts.nTakesOverride ?? qualityModeToNTakes(opts.qualityMode ?? "fast");
 
   const fd = new FormData();
-  // Exactly one source -- the server rejects both (app/main.py:dub_start).
+  // Exactly one source -- the server rejects both (app/api/dub.py:dub_start).
   if (opts.video) fd.append("video", opts.video);
   else fd.append("source_url", opts.sourceUrl);
   fd.append("language", language);
@@ -208,17 +208,73 @@ export async function probeSource(url, { baseUrl = "" } = {}) {
   return res.json();
 }
 
-// The pipeline logs six "N/6 ..." stages, but the UI shows four: stages 4-6
-// (voice synthesis, the skipped leakage check, and file-building) all read
-// as "Dubbing" to the user.
-const STAGE_OF = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 4, 6: 4 };
-const STAGE_LABELS4 = { 1: "Separating audio", 2: "Transcribing", 3: "Translating", 4: "Dubbing" };
-const STAGE_WEIGHT = { 1: 10, 2: 25, 3: 20, 4: 45 }; // sums to 100
+/**
+ * The pipeline's progress stages, in the order it logs them -- the twin of
+ * app/pipeline.py's own STAGES table (tests/test_stage_tables_match.py fails
+ * if the two ever drift apart). This array is the only place the stage count
+ * lives on this side: the "N/6" marker pattern, the bar's steps and their
+ * weights are all derived from it below, so a seventh pipeline stage needs one
+ * row here and nothing else.
+ *
+ * label  - what the user is told. Neighbouring stages that share a label are
+ *          one step of the bar, which is why the pipeline's six stages show as
+ *          four: synthesis, the leakage check and file-building all read as
+ *          "Dubbing".
+ * weight - the step's share of the 100 percent. Summed per label, so only the
+ *          stage that opens a step carries it and the ones folded into it add 0.
+ * kind   - "synthesis" marks the stage whose per-line "line N: chose take"
+ *          logs drive the fine-grained progress inside its step.
+ * floor  - a percent this stage's arrival guarantees. The stages after
+ *          synthesis land when every voice line is already done, so they nudge
+ *          the bar up rather than ever snapping it back down.
+ */
+export const STAGES = [
+  { name: "separate",   label: "Separating audio", weight: 10 },
+  { name: "transcribe", label: "Transcribing",     weight: 25 },
+  { name: "translate",  label: "Translating",      weight: 20 },
+  { name: "synthesize", label: "Dubbing",          weight: 45, kind: "synthesis" },
+  { name: "check",      label: "Dubbing",          weight: 0, floor: 96 },
+  { name: "build",      label: "Dubbing",          weight: 0, floor: 97 },
+];
+
+/**
+ * The "N/<count>" log-marker pattern for a stage table of this size, with the
+ * stage number captured. Takes the table (not a count) so a caller cannot pass
+ * a length that disagrees with the stages it is parsing for. Single-digit stage
+ * numbers only -- fine for any table the pipeline could plausibly grow to.
+ */
+export function stagePattern(stages) {
+  return new RegExp(`^(\\d)\\/${stages.length}\\s`);
+}
+
+/**
+ * The bar's steps for a stage table: its labels in order, with neighbouring
+ * stages that share one folded into a single step. Takes the table (not the
+ * module's own STAGES) so the running screen draws the same steps this file
+ * counts, and so a seventh stage can be tried in a test without editing the
+ * table. The progress card imports this -- a second hardcoded list of names is
+ * how the card and the percentages drift apart.
+ */
+export function stepLabels(stages) {
+  return stages.map((s) => s.label).filter((label, i, all) => label !== all[i - 1]);
+}
+
+// The bar's steps for the table this file parses for.
+const STEP_LABELS = stepLabels(STAGES);
+// Which step (1-based) each stage belongs to, by stage index.
+const STEP_OF = STAGES.map((s) => STEP_LABELS.indexOf(s.label) + 1);
+// Each step's share of the 100 percent, its stages' weights added up.
+const STEP_WEIGHT = STEP_LABELS.map((label) => STAGES
+  .filter((s) => s.label === label)
+  .reduce((sum, s) => sum + (s.weight || 0), 0));
+// The step the per-line voice math runs inside. Exported for the running
+// screen, whose voice counter sits on the same step.
+export const SYNTH_STEP = STEP_OF[STAGES.findIndex((s) => s.kind === "synthesis")];
 // The voice-line math only ever fills 40 of Dubbing's 45 points (not the full
-// 45) so that raw 5 (Check) and raw 6 (Build) -- which land after every voice
-// line is already done -- still have room to nudge percent up (96, then 97)
-// instead of ever having to snap it back down. 100 is reserved for the UI to
-// set once the job's status is actually "done".
+// 45) so that the stages carrying a `floor` above -- which land after every
+// voice line is already done -- still have room to nudge percent up (96, then
+// 97) instead of ever having to snap it back down. 100 is reserved for the UI
+// to set once the job's status is actually "done".
 const VOICE_CAP = 40;
 
 /**
@@ -251,21 +307,25 @@ export function parseProgress(logs, { lineCount = null } = {}) {
     return { stage: cloud, total: 3, label, percent, voiceDone: 0, voiceTotal: null, raw: 0 };
   }
   let raw = 0, voiceDone = 0, loggedTotal = null;
+  const marker = stagePattern(STAGES);
   for (const line of logs || []) {
-    const m = /^(\d)\/6\s/.exec(String(line).trim());
+    const m = marker.exec(String(line).trim());
     if (m) raw = Math.max(raw, parseInt(m[1], 10));
     if (/^\s*line \d+: chose take/.test(line)) voiceDone += 1;
     const t = /^\s*(\d+) dialogue lines prepared/.exec(line);
     if (t) loggedTotal = parseInt(t[1], 10);
   }
-  const stage = STAGE_OF[raw] || 0;
+  const stage = STEP_OF[raw - 1] || 0;
   const voiceTotal = lineCount ?? loggedTotal;
   let percent = 0;
-  for (let s = 1; s < stage; s++) percent += STAGE_WEIGHT[s];
-  if (stage === 4 && voiceTotal) percent += Math.round(VOICE_CAP * Math.min(voiceDone, voiceTotal) / voiceTotal);
-  else if (stage >= 1) percent += Math.round(STAGE_WEIGHT[stage] * 0.3);
-  if (raw >= 5) percent = Math.max(percent, raw === 6 ? 97 : 96);
-  return { stage, total: 4, label: STAGE_LABELS4[stage] || "Waiting to start", percent, voiceDone, voiceTotal, raw };
+  for (let s = 1; s < stage; s++) percent += STEP_WEIGHT[s - 1];
+  if (stage === SYNTH_STEP && voiceTotal) percent += Math.round(VOICE_CAP * Math.min(voiceDone, voiceTotal) / voiceTotal);
+  else if (stage >= 1) percent += Math.round(STEP_WEIGHT[stage - 1] * 0.3);
+  for (let i = 0; i < Math.min(raw, STAGES.length); i++) {
+    if (STAGES[i].floor) percent = Math.max(percent, STAGES[i].floor);
+  }
+  return { stage, total: STEP_LABELS.length, label: STEP_LABELS[stage - 1] || "Waiting to start",
+    percent, voiceDone, voiceTotal, raw };
 }
 
 /**

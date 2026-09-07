@@ -1,5 +1,5 @@
 """Ultra-short-line merge grouping + energy-valley audio splitting
-(app/qwen_merge.py) -- pure logic + synthetic-audio tests, no TTS/network."""
+(app/audio/merge.py) -- pure logic + synthetic-audio tests, no TTS/network."""
 import struct
 import wave
 

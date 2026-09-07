@@ -9,7 +9,9 @@ vendor's format.
 A line that is not JSON is dropped. CLIs and their dependencies do print the odd
 banner or warning, and one stray line must not blank the panel mid-answer.
 """
+import contextlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -18,6 +20,9 @@ import sys
 import threading
 import time
 from typing import Callable, Iterator, List, Optional
+
+logger = logging.getLogger("persodub.agents.base")
+
 
 # A GUI app does not inherit the login shell's PATH, so `claude` can be on the
 # PATH in Terminal and missing here. Look where these installers actually put
@@ -276,14 +281,13 @@ def _end(proc, grace: float = STOP_GRACE) -> None:
     if proc.poll() is not None:
         return
     if sys.platform == "win32":
-        try:
+        # A failed taskkill is fine: the kill below is the backstop.
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
             subprocess.run(
                 ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                 capture_output=True, timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
-        except (OSError, subprocess.SubprocessError):
-            pass  # the kill below is the backstop
     else:
         try:
             proc.terminate()
@@ -292,10 +296,8 @@ def _end(proc, grace: float = STOP_GRACE) -> None:
     try:
         proc.wait(timeout=grace)
     except subprocess.TimeoutExpired:
-        try:
+        with contextlib.suppress(OSError):
             proc.kill()
-        except OSError:
-            pass
 
 
 def _begin(turn: "_Turn") -> None:
@@ -402,8 +404,10 @@ def _run_once(binary: str, args: List[str], translate: Callable[[dict], List[dic
             proc.stdin.reconfigure(newline="\n")
             proc.stdin.write(input_text)
             proc.stdin.close()
-        except OSError:
-            pass  # the CLI died before reading; its exit code says so below
+        except OSError as e:
+            # The CLI died before reading; its exit code says so below.
+            logger.debug("The assistant closed its input before the prompt landed (%s)",
+                         type(e).__name__)
 
     turn = _Turn(proc)
     _begin(turn)

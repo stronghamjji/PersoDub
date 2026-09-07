@@ -8,12 +8,15 @@ constructor if missing). The workspace id resolves from the key itself when
 PERSO_SPACE_SEQ is unset -- see _resolve_space_seq. The key value must never
 be exposed in code or logs.
 """
+import logging
 import os
 import sys
 import time
 from typing import List, Optional
 
 import httpx
+
+logger = logging.getLogger("persodub.perso_client")
 
 BASE_URL = "https://api.perso.ai"
 # Client identity sent on every Perso API call so Perso can attribute usage to this app.
@@ -190,8 +193,11 @@ def list_dubbing_spaces(api_key: str, base_url: str = BASE_URL) -> list:
                 res = (pr.json() or {}).get("result") or {}
                 rq = res.get("remainingQuota")
                 credits = rq.get("remainingQuota") if isinstance(rq, dict) else rq
-        except Exception:
-            pass
+        except Exception as e:
+            # Credits are decoration on a workspace row; the type is all we
+            # need, and an httpx error's text can carry the request (and so
+            # the key) with it.
+            logger.debug("No credit count for Perso workspace %s (%s)", seq, type(e).__name__)
         out.append({"seq": seq,
                     "name": s.get("spaceName") or s.get("name") or f"space {seq}",
                     "tier": s.get("tier"), "credits": credits})
@@ -273,8 +279,8 @@ class PersoClient:
                 if int(s.get("spaceSeq", -1)) == self.space_seq:
                     name = s.get("spaceName") or s.get("name")
                     break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not name Perso workspace %s (%s)", self.space_seq, type(e).__name__)
         try:
             r = httpx.get(
                 f"{self.base_url}/video-translator/api/v1/projects/spaces/{self.space_seq}/plan/status",
@@ -283,8 +289,9 @@ class PersoClient:
             if r.status_code == 200:
                 rq = ((r.json() or {}).get("result") or {}).get("remainingQuota")
                 credits = rq.get("remainingQuota") if isinstance(rq, dict) else rq
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not read credits for Perso workspace %s (%s)",
+                         self.space_seq, type(e).__name__)
         return {"seq": self.space_seq, "name": name, "credits": credits}
 
     def _upload_media(self, video_path: str, space: int) -> int:
@@ -415,7 +422,7 @@ class PersoClient:
         # Kept on the client so the caller can stamp it on the job record --
         # the script viewer reads the project back through it later.
         self.last_dub_project_seq = project_seq
-        print(f"Perso dubbing project {project_seq} (workspace {space})", file=sys.stderr)
+        logger.info("Perso dubbing project %s (workspace %s)", project_seq, space)
 
         self._wait_completed(project_seq, space, what="Perso dubbing")
         log("   Downloading the finished video…")

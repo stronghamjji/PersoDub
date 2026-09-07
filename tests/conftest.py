@@ -7,20 +7,41 @@ own workspace/ and never clean it up (one run of tests/test_dub_api.py leaves 10
 behind). By 2026-08-02 that had accumulated 559 litter directories against 4
 genuine jobs.
 """
+import logging
+
 import pytest
 
-from app import jobs, main
+from app import jobs, logging_setup, state
 
 
 @pytest.fixture(autouse=True)
 def isolate_job_logs(tmp_path, monkeypatch):
-    """Point per-job log files at a temp directory.
+    """Point the log files at a temp directory.
 
     app/jobs.py mirrors every progress line to PERSODUB_LOG_DIR/job-<id>.log.
     Without this, any test that starts a job drops a log file into the working
     tree -- the same silent, cumulative litter isolate_workspace exists to stop.
+
+    app/logging_setup.py writes the app's own persodub.log into the same
+    folder, and a test that enters the lifespan (which is what installs that
+    handler) would otherwise start it in the working tree too.
+
+    Tearing the handlers down again is the other half. configure_logging is
+    idempotent -- it returns early when the logger already has handlers -- and
+    "persodub" is one process-wide logger, so the first test to enter the
+    lifespan would otherwise nail the file handler to ITS tmp_path for the
+    whole session and every later redirect here would be a no-op. Removing
+    them (closing the file ones, so no descriptor leaks over a thousand tests)
+    puts the logger back the way this fixture found it.
     """
     monkeypatch.setattr(jobs, "PERSODUB_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setattr(logging_setup, "PERSODUB_LOG_DIR", str(tmp_path / "logs"))
+    yield
+    logger = logging.getLogger(logging_setup.LOGGER_NAME)
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        if isinstance(handler, logging.FileHandler):
+            handler.close()
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +55,7 @@ def isolate_workspace(tmp_path, monkeypatch):
     """
     ws = tmp_path / "workspace"
     ws.mkdir()
-    monkeypatch.setattr(main, "WORKSPACE", str(ws))
+    monkeypatch.setattr(state, "WORKSPACE", str(ws))
 
 
 @pytest.fixture

@@ -4,16 +4,21 @@ Dubbing takes time, so when a request comes in it runs on a separate thread
 and its progress status (running/done/error/cancelling/cancelled) can be
 queried.
 """
+import contextlib
 import glob
 import hashlib
 import json
+import logging
 import os
 import threading
+import traceback
 import uuid
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from app.config import PERSODUB_LOG_DIR
+
+logger = logging.getLogger("persodub.jobs")
 
 # What a job.json holds. Deliberately not the whole record: `logs` runs to
 # thousands of lines, and `notices`/`cancel_requested` only mean anything while
@@ -55,6 +60,38 @@ class JobCancelled(Exception):
     thread wrapper and turned into a "cancelled" status instead of "error"."""
 
 
+# The exception types whose message was WRITTEN for the user, and so can go
+# straight under the red bar on the done screen. This table decides one thing
+# and one thing only: which sentence error_text_for_ui hands the red bar, and
+# whether the run wrapper below also appends a traceback to the job log. It is
+# not a privacy boundary -- the job log has always carried
+# `Error: <Type>: <text>` for every failure, unchanged by this branch, and
+# GET /api/dub/jobs/{jid} returns those lines.
+#
+# RuntimeError is the whole of the pipeline's user-facing vocabulary: every
+# sentence app/pipeline.py hands a failed job comes out of _raise_notice or one
+# of its `raise RuntimeError(msg)` sites ("Perso credits are used up. Recharge
+# to continue.", "No dialogue lines were found in this video."), and the Perso
+# client's PersoCreditExhausted/InvalidKey/Unavailable errors, source_fetch's
+# FetchError and translate.py's Gemini errors are all RuntimeError subclasses.
+# ValueError is here because the engines raise it with a written-out sentence
+# too (app/engines/qwen_tts.py's ICL check) and tests/test_jobs.py pins that
+# text as what a failed job shows.
+#
+# Anything else -- an AttributeError, a KeyError, an OSError from a corner of
+# the code nobody wrote a message for -- is a bug, and its text is usually
+# meaningless as a sentence ("'NoneType' object is not subscriptable"), so the
+# red bar names the type and points at the job log instead.
+USER_FACING_ERRORS = (JobCancelled, RuntimeError, ValueError)
+
+
+def error_text_for_ui(exc: BaseException) -> str:
+    """The sentence a failed job shows the user, from the exception that ended it."""
+    if isinstance(exc, USER_FACING_ERRORS):
+        return str(exc) or type(exc).__name__
+    return "Unexpected error (%s) - see the job log" % type(exc).__name__
+
+
 class JobStore:
     def __init__(self, log_dir: Optional[str] = None):
         self._jobs: Dict[str, dict] = {}
@@ -67,7 +104,7 @@ class JobStore:
 
     @property
     def log_dir(self) -> str:
-        # Resolved on every read, not in __init__: app/main.py builds its store
+        # Resolved on every read, not in __init__: app/state.py builds its store
         # at import time, before test fixtures can redirect PERSODUB_LOG_DIR --
         # a snapshot taken then would litter the real logs/ on every test run.
         return self._log_dir or PERSODUB_LOG_DIR
@@ -98,10 +135,19 @@ class JobStore:
             self._jobs[jid] = self._blank(jid)
         return jid
 
-    def _update(self, jid: str, **kw):
+    def update(self, jid: str, **kw):
         with self._lock:
             if jid in self._jobs:
                 self._jobs[jid].update(kw)
+
+    # The old name of update(). No production code calls it any more -- it is
+    # kept for the tests that patch or call `_update` on a store, and it goes
+    # the day those move to `update`.
+    # A method rather than `_update = update`: the class-body alias froze the
+    # original function, so a test that replaced update on one store still had
+    # _update calling the real thing.
+    def _update(self, jid: str, **kw):
+        return self.update(jid, **kw)
 
     def _write_log_line(self, jid: str, msg: str):
         """Mirror a log line to log_dir/job-<jid>.log. Best-effort: a logging
@@ -110,8 +156,10 @@ class JobStore:
             os.makedirs(self.log_dir, exist_ok=True)
             with open(os.path.join(self.log_dir, "job-%s.log" % jid), "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
-        except Exception:
-            pass
+        except Exception as e:
+            # The type only: this line's own message is a job log line, which
+            # can carry a file name the user chose.
+            logger.debug("Could not mirror a log line for job %s (%s)", jid, type(e).__name__)
 
     def append_log(self, jid: str, msg: str):
         with self._lock:
@@ -124,7 +172,7 @@ class JobStore:
         """Record a structured mid-job event (e.g. {"type": "perso_credit_exhausted",
         "message": ..., "link": ...}) in the job status JSON -- for events the UI
         needs to render specially (a message + link), not just as a plain log line.
-        See app/pipeline.py's on_notice parameter and app/main.py, which wires it here.
+        See app/pipeline.py's on_notice parameter and app/api/dub.py, which wires it here.
         """
         with self._lock:
             if jid in self._jobs:
@@ -187,10 +235,8 @@ class JobStore:
         except Exception:
             # Best-effort, like the log mirror -- but don't leave the scratch
             # file behind to be mistaken for something.
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(tmp)
-            except OSError:
-                pass
 
     def restore(self, root: str) -> None:
         """Read every job.json under root back into the store.
@@ -209,7 +255,12 @@ class JobStore:
                 jid = rec["id"]
             except Exception as e:
                 # One unreadable file must not cost the user every other job.
-                print("PersoDub: skipping %s (%s)" % (path, type(e).__name__))
+                # The job folder's name only, never the path: persodub.log is
+                # meant to be small enough to attach to a bug report, and a
+                # full path would put the user's whole folder tree in it. (The
+                # file itself is always job.json, which names nothing.)
+                logger.warning("Skipping %s (%s)", os.path.basename(os.path.dirname(path)),
+                               type(e).__name__)
                 continue
             if rec.get("status") in ("running", "cancelling"):
                 # The thread died with the process; nothing will ever finish it.
@@ -259,8 +310,10 @@ class JobStore:
                     result={"out_path": out},
                 )
             except Exception as e:
-                # Same promise as above: one odd folder is skipped, not fatal.
-                print("PersoDub: skipping %s (%s)" % (work, type(e).__name__))
+                # Same promise as above, and the same rule about the path:
+                # one odd folder is skipped, not fatal, and only its own name
+                # goes in the log.
+                logger.warning("Skipping %s (%s)", os.path.basename(work), type(e).__name__)
                 continue
             with self._lock:
                 self._jobs.setdefault(jid, job)
@@ -326,7 +379,7 @@ class JobStore:
         GPU and memory. A queued job starts by itself the moment the one
         before it ends, however that one ends. Used instead of run_async when
         the caller needs the job id before the thread starts (e.g. to build a
-        cancel_check closure bound to that id -- see app/main.py).
+        cancel_check closure bound to that id -- see app/api/dub.py).
 
         `parallel` is for work another machine does (a Perso cloud dub): it
         starts at once beside whatever is on air, never takes the air, and
@@ -334,7 +387,7 @@ class JobStore:
         idled both machines.
         """
         if parallel:
-            self._update(jid, status="running")
+            self.update(jid, status="running")
             self._launch(jid, target, holds_air=False)
             return
         with self._lock:
@@ -404,14 +457,21 @@ class JobStore:
                         if detected and not self._jobs[jid].get("source_lang"):
                             self._jobs[jid]["source_lang"] = detected
             except JobCancelled:
-                self._update(jid, status="cancelled")
+                self.update(jid, status="cancelled")
             except Exception as e:
                 # The class name stays in the log for debugging; the stored
                 # error is what the UI shows the user under the red bar, and
                 # "RuntimeError:" in front of a plain-language sentence only
                 # made it read like a crash.
                 log(f"Error: {type(e).__name__}: {e}")
-                self._update(jid, status="error", error=str(e) or type(e).__name__)
+                # An unexpected failure also gets its traceback in the job's
+                # own log, where the "see the job log" sentence is pointing;
+                # a failure with a written-out message (credits used up, no
+                # dialogue found) is not a bug and gets none, so the friendly
+                # sentence stays the last thing under the red bar.
+                if not isinstance(e, USER_FACING_ERRORS):
+                    log(traceback.format_exc())
+                self.update(jid, status="error", error=error_text_for_ui(e))
             # However it ended, the file beside the video now says so -- this is
             # the only moment the final status exists to be written down.
             work_dir = (self.get(jid) or {}).get("work_dir")

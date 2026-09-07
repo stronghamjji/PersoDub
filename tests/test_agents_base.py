@@ -13,7 +13,6 @@ import pytest
 
 from app.agents import base
 
-
 # --- the failure sentences --------------------------------------------------
 # The panel used to print an exit code and 300 characters of stderr. What a
 # person needs is which of the three usual things went wrong, and what to do.

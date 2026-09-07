@@ -17,6 +17,11 @@ from urllib.parse import urlparse
 
 from app.jobs import JobCancelled
 
+# The "0/6" prefix only, from the leaf module that owns the stage table --
+# never from app/pipeline.py, which would make "download a video" import the
+# whole orchestrator (TTS engine, diarizer, Qwen pipeline) for one string.
+from app.stages import pre_stage_marker
+
 YTDLP_BASE = [sys.executable, "-m", "yt_dlp", "--no-playlist"]
 FETCH_TIMEOUT = 1800
 
@@ -181,10 +186,10 @@ def _download_once(url: str, dest: str, log, cancel_check) -> None:
     def on_line(line: str) -> None:
         m = _PERCENT.search(line)
         if m and log:
-            # "0/6 ..." is deliberate: parseProgress only advances on a matching
+            # "0/N ..." is deliberate: parseProgress only advances on a matching
             # stage number, and STAGE_LABELS has no 0, so this shows the text
             # as-is with no stage dot lit.
-            log("0/6 Fetching video… %s%%" % m.group(1).split(".")[0])
+            log("%s Fetching video… %s%%" % (pre_stage_marker(), m.group(1).split(".")[0]))
 
     code, _out, err = _run(
         YTDLP_BASE + [
@@ -218,7 +223,7 @@ def fetch(url: str, dest: str, log=None, cancel_check=None) -> None:
             # the user another couple of minutes to learn nothing.
             raise
         if log:
-            log("0/6 Updating the downloader…")
+            log(f"{pre_stage_marker()} Updating the downloader…")
         try:
             _upgrade()
         except Exception:

@@ -1,4 +1,4 @@
-"""Unit tests for app/company_gate.py -- the company-style ambience layer.
+"""Unit tests for app/audio/ambience.py -- the company-style ambience layer.
 
 Fake wavs only; whisper is NEVER run here (the veto is injected as a callable).
 """

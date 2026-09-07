@@ -188,8 +188,9 @@ def _inside_job(work_dir: str, out_path: str) -> str:
 def export_srt(work_dir: str, out_path: str) -> str:
     """Copy the script that currently counts to out_path, and return that path.
 
-    Feeding this file back in as a ready-made translated SRT (app/main.py:303) skips
-    transcription and translation, so only the voices are made again.
+    Feeding this file back in as a ready-made translated SRT (the `srt` upload
+    on app/api/dub.py's POST /api/dub/start) skips transcription and
+    translation, so only the voices are made again.
     """
     out_path = _inside_job(work_dir, out_path)
     # A folder that is not there is not made here: writing into it would raise

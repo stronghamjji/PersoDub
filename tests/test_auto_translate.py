@@ -13,8 +13,8 @@ import json
 import pytest
 
 from app import pipeline
-from app.translate import GEMINI_UPGRADE_URL, GeminiQuotaExhaustedError, GeminiUnavailableError
 from app.text.srt import parse_srt
+from app.translate import GEMINI_UPGRADE_URL, GeminiQuotaExhaustedError, GeminiUnavailableError
 
 
 def j(arr):

@@ -2,20 +2,18 @@
 
 Until now the modal stored keys in localStorage only -- the engines never saw
 them (they read kit.env at startup), so users followed the UI and nothing
-happened. The backend now owns reading/writing the file. Keys are NEVER
-returned to the client -- only set/unset booleans.
+happened. The backend now owns reading/writing the file. GET /api/settings
+returns the saved key VALUES (user decision 2026-08-06 -- see settings_get in
+app/api/settings.py): this is a single-user desktop app bound to 127.0.0.1, and hiding
+a saved key behind a set/unset boolean only made it look like an empty field.
 """
-import os
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config
-from app import engines_status
-from app import main
-from app import perso_client
-from app import settings_env
-from app import translate
+from app import config, engines_status, main, perso_client, settings_env, state, translate
+from app import setup as dub_setup
+from app.api import settings as settings_api
 from app.settings_env import update_env_text
 
 client = TestClient(main.app, base_url="http://127.0.0.1")
@@ -64,7 +62,7 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     assert body.pop("app_version") == perso_client.APP_VERSION
     # Where the finished videos actually are. The screen used to guess at this
     # path; it comes from the server now, so a moved workspace still reads true.
-    assert body.pop("workspace") == main.WORKSPACE
+    assert body.pop("workspace") == state.WORKSPACE
     assert body == {"gemini_key_set": False, "perso_key_set": False,
                     "gemini_api_key": None, "perso_api_key": None,
                     "perso_space_seq": None, "analytics_off": False}
@@ -215,7 +213,7 @@ def test_perso_spaces_lists_workspaces_for_the_saved_key(tmp_path, monkeypatch):
         seen["key"] = key
         return [{"seq": 114, "name": "EST", "tier": "enterprise", "credits": 3400}]
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", fake_list)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", fake_list)
     r = client.get("/api/perso/spaces")
     assert r.status_code == 200
     assert r.json() == {"spaces": [{"seq": 114, "name": "EST", "tier": "enterprise", "credits": 3400}]}
@@ -228,7 +226,7 @@ def test_perso_spaces_falls_back_to_process_env_key(monkeypatch):
     # process env there, and the picker endpoint must still work.
     monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
     monkeypatch.setenv("PERSO_API_KEY", "ENVKEY")
-    monkeypatch.setattr(main, "list_dubbing_spaces",
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces",
                         lambda key: [{"seq": 1, "name": "solo", "tier": None, "credits": None}])
     r = client.get("/api/perso/spaces")
     assert r.status_code == 200
@@ -241,7 +239,7 @@ def test_perso_spaces_upstream_failure_is_502_without_key_leak(tmp_path, monkeyp
     def boom(key):
         raise RuntimeError("connect timeout for SECRETKEY")
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", boom)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", boom)
     r = client.get("/api/perso/spaces")
     assert r.status_code == 502
     assert "SECRETKEY" not in r.text
@@ -304,14 +302,14 @@ def test_preview_rejects_an_empty_key():
 def test_preview_lists_workspaces_for_the_typed_key_without_saving_it(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch, BASE)          # nothing saved in kit.env
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
-    main._preview_last.update(key="", at=0.0, spaces=None)
+    settings_api._preview_last.update(key="", at=0.0, spaces=None)
     seen = {}
 
     def fake_list(key):
         seen["key"] = key
         return [{"seq": 7, "name": "EST", "tier": "pro", "credits": 10}]
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", fake_list)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", fake_list)
     r = client.post("/api/perso/spaces/preview", json={"api_key": "TYPEDKEY"})
     assert r.status_code == 200
     assert r.json() == {"spaces": [{"seq": 7, "name": "EST", "tier": "pro", "credits": 10}]}
@@ -323,12 +321,12 @@ def test_preview_lists_workspaces_for_the_typed_key_without_saving_it(tmp_path, 
 
 
 def test_preview_upstream_failure_is_502_without_key_leak(monkeypatch):
-    main._preview_last.update(key="", at=0.0, spaces=None)
+    settings_api._preview_last.update(key="", at=0.0, spaces=None)
 
     def boom(key):
         raise RuntimeError("connect timeout for TYPEDKEY")
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", boom)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", boom)
     r = client.post("/api/perso/spaces/preview", json={"api_key": "TYPEDKEY"})
     assert r.status_code == 502
     assert "TYPEDKEY" not in r.text
@@ -337,14 +335,14 @@ def test_preview_upstream_failure_is_502_without_key_leak(monkeypatch):
 def test_preview_reuses_the_last_answer_for_the_same_key(monkeypatch):
     # Paste, debounced typing and blur can all fire for one key -- Perso is
     # asked once, not three times.
-    main._preview_last.update(key="", at=0.0, spaces=None)
+    settings_api._preview_last.update(key="", at=0.0, spaces=None)
     calls = []
 
     def fake_list(key):
         calls.append(key)
         return [{"seq": 7, "name": "EST", "tier": None, "credits": None}]
 
-    monkeypatch.setattr(main, "list_dubbing_spaces", fake_list)
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces", fake_list)
     for _ in range(3):
         assert client.post("/api/perso/spaces/preview", json={"api_key": "SAME"}).status_code == 200
     assert calls == ["SAME"]
@@ -369,6 +367,24 @@ def test_default_stt_engine_stays_local_without_any_key(tmp_path, monkeypatch):
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
     monkeypatch.delenv("STT_ENGINE", raising=False)
     assert config.default_stt_engine() == ""
+
+
+@pytest.mark.parametrize("envtext, expected_setup, expected_config", [
+    (BASE, "local", ""),                                    # no key at all
+    (BASE + "PERSO_API_KEY=SAVEDKEY\n", "perso", "perso"),  # key saved
+    (BASE + "STT_ENGINE=local\n", "local", ""),             # local chosen and saved
+    (BASE + "STT_ENGINE=perso\n", "perso", "perso"),        # perso chosen and saved
+])
+def test_the_stt_default_has_one_owner(tmp_path, monkeypatch, envtext,
+                                       expected_setup, expected_config):
+    # setup.default_for("stt") is the rule; config.default_stt_engine only
+    # renames its "local" to the "" its callers read. Two vocabularies for one
+    # rule is how they drifted apart before -- this pins them together.
+    _kit(tmp_path, monkeypatch, envtext)
+    monkeypatch.delenv("PERSO_API_KEY", raising=False)
+    monkeypatch.delenv("STT_ENGINE", raising=False)
+    assert dub_setup.default_for("stt") == expected_setup
+    assert config.default_stt_engine() == expected_config
 
 
 def test_perso_client_uses_a_key_and_workspace_saved_after_startup(tmp_path, monkeypatch):
@@ -442,7 +458,7 @@ def test_key_absent_from_kit_env_falls_back_to_the_process_env(tmp_path, monkeyp
     monkeypatch.delenv("STT_ENGINE", raising=False)
     assert settings_env.current_value("PERSO_API_KEY") == "ENVKEY"
     assert config.default_stt_engine() == "perso"
-    monkeypatch.setattr(main, "list_dubbing_spaces",
+    monkeypatch.setattr(settings_api, "list_dubbing_spaces",
                         lambda key: [{"seq": 1, "name": "solo", "tier": None, "credits": None}])
     assert client.get("/api/perso/spaces").status_code == 200
 

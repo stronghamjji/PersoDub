@@ -134,7 +134,7 @@ class TranslationEngine:
     display_name: str = ""
 
     # How many "still outside the ±15% budget window" retry rounds app.text.length_fit.fit_translate
-    # may spend re-asking a line (see app/len_fit.py MAX_RETRY). Default 3, for local/free
+    # may spend re-asking a line (see app/text/length_fit.py MAX_RETRY). Default 3, for local/free
     # engines -- paid Google engines override this to 0 (cost/429-driven, see GeminiTranslator).
     max_budget_retries: int = 3
 
@@ -352,20 +352,26 @@ class OllamaTranslator(TranslationEngine):
         )
 
 
+# Engine name -> how to build that translator. Each entry is a lambda rather
+# than the built instance (or the bare class) so nothing is decided at import
+# time: the names inside are looked up on this module when get_translator is
+# actually called, which is what lets a test swap a class here and get its own
+# class back.
+TRANSLATORS = {
+    "gemini": lambda: GeminiTranslator(),
+    "vertex": lambda: VertexTranslator(),
+    "qwen": lambda: OllamaTranslator(model=OLLAMA_QWEN_MODEL),
+    "gemma": lambda: OllamaTranslator(model=OLLAMA_GEMMA_MODEL),
+    "hunyuan": lambda: OllamaTranslator(model=OLLAMA_HUNYUAN_MODEL),
+}
+
+
 # Picks a translator based on the setting (TRANSLATE_ENGINE). If engine is given, it takes precedence.
 def get_translator(engine=None):
     picked = (engine or TRANSLATE_ENGINE or "").lower()
-    if picked == "gemini":
-        return GeminiTranslator()
-    if picked == "vertex":
-        return VertexTranslator()
-    if picked == "qwen":
-        return OllamaTranslator(model=OLLAMA_QWEN_MODEL)
-    if picked == "gemma":
-        return OllamaTranslator(model=OLLAMA_GEMMA_MODEL)
-    if picked == "hunyuan":
-        return OllamaTranslator(model=OLLAMA_HUNYUAN_MODEL)
-    return OllamaTranslator()
+    # Unknown or empty name -> the local Ollama engine on its default model,
+    # the free path that works with no key and no setting.
+    return TRANSLATORS.get(picked, lambda: OllamaTranslator())()
 
 
 # --- Two-pass dubbing translation (draft meaning-first, then length-fit) ---

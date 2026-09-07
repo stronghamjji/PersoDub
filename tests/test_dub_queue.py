@@ -5,15 +5,15 @@ upload, Try again, a redub) goes through it, so none of them can run two
 pipelines at once on a laptop that can barely afford one.
 """
 import json
-import os
 import threading
 import time
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
+from app import engines_status
+from app.api import dub as dub_api
 from app.jobs import JobStore
-import app.main as main
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -21,13 +21,13 @@ client = TestClient(app, base_url="http://127.0.0.1")
 
 @pytest.fixture(autouse=True)
 def _all_engines_available(monkeypatch):
-    monkeypatch.setattr(main, "gemma_available", lambda: True)
-    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "gemini_available", lambda: True)
-    monkeypatch.setattr(main, "perso_available", lambda: True)
-    monkeypatch.setattr(main, "_missing_models", lambda *a, **kw: [])
+    monkeypatch.setattr(engines_status, "gemma_available", lambda: True)
+    monkeypatch.setattr(engines_status, "hunyuan_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
+    monkeypatch.setattr(dub_api, "_missing_models", lambda *a, **kw: [])
 
 
 def _start(name="v.mp4"):
@@ -64,7 +64,7 @@ def slow_dub(monkeypatch):
         gate.wait(timeout=10)
         return {"out_path": kw["out_path"]}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     yield gate, ran
     gate.set()          # never leave a later test queued behind this one
     time.sleep(0.05)
@@ -162,8 +162,8 @@ def test_a_restored_queued_job_is_rearmed_from_its_record(monkeypatch, tmp_path)
         seen.update(kw)
         return {"out_path": kw["out_path"]}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
-    target = main._dub_target_for(job)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
+    target = dub_api._dub_target_for(job)
     target(lambda msg: None)
     assert seen["video_path"] == str(work / "input.mp4")
     assert seen["language"] == "Korean"
@@ -180,14 +180,14 @@ def test_a_perso_cloud_dub_skips_the_local_line(slow_dub, monkeypatch):
     local one would idle both machines. It starts at once, and its ending must
     not free the seat the local job is still sitting in."""
     gate, ran = slow_dub
-    monkeypatch.setattr(main, "current_value", lambda k: "1")
+    monkeypatch.setattr(dub_api, "current_value", lambda k: "1")
     cloud = []
 
     def fake_cloud(jid, video_path, out_path, source, language_code, num_speakers, log):
         cloud.append(jid)
         return {"out_path": out_path}
 
-    monkeypatch.setattr(main, "_run_cloud_dub", fake_cloud)
+    monkeypatch.setattr(dub_api, "_run_cloud_dub", fake_cloud)
 
     first = _start("로컬.mp4")
     r = client.post(

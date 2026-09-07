@@ -3,11 +3,13 @@ import os
 import threading
 import time
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
-from app import jobs
+import app.api.script as script_api
 import app.main as main
+from app import engines_status, jobs, perso_client, state
+from app.api import dub as dub_api
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -25,17 +27,17 @@ def _all_engines_available(monkeypatch):
     model) -- gemma_available/qwen_available are also patched since GET
     /api/engines still reports those plain booleans.
     """
-    monkeypatch.setattr(main, "gemma_available", lambda: True)
-    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
-    monkeypatch.setattr(main, "qwen_available", lambda: True)
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "qwen_status", lambda: "available")
-    monkeypatch.setattr(main, "gemini_available", lambda: True)
-    monkeypatch.setattr(main, "perso_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_available", lambda: True)
+    monkeypatch.setattr(engines_status, "hunyuan_available", lambda: True)
+    monkeypatch.setattr(engines_status, "qwen_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "qwen_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
     # Model files live in a kit these tests never build -- the missing-model
     # preflight (409) is exercised in tests/test_dub_start_preflight.py.
-    monkeypatch.setattr(main, "_missing_models", lambda *a, **kw: [])
+    monkeypatch.setattr(dub_api, "_missing_models", lambda *a, **kw: [])
 
 
 def test_dub_run_endpoint_is_gone():
@@ -68,7 +70,7 @@ def test_dub_start_upload(monkeypatch, tmp_path):
         out_file.write_bytes(b"FAKEMP4")
         return {"job_id": "x", "out_path": str(out_file), "num_segments": 2}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -103,7 +105,7 @@ def test_dub_start_with_n_takes(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -128,7 +130,7 @@ def test_dub_start_n_takes_defaults_to_none(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -136,6 +138,11 @@ def test_dub_start_n_takes_defaults_to_none(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 200
+    jid = r.json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
     assert captured["n_takes"] is None
 
 
@@ -147,7 +154,7 @@ def test_dub_start_with_stt_engine(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
     monkeypatch.delenv("STT_ENGINE", raising=False)
 
@@ -171,8 +178,7 @@ def test_dub_start_perso_without_pin_rejects_multi_workspace_accounts(monkeypatc
     # minutes of separation work. The preflight must refuse up front and send
     # the user to Settings.
     monkeypatch.delenv("PERSO_SPACE_SEQ", raising=False)
-    monkeypatch.setattr(main, "read_value", lambda k: "k-123" if k == "PERSO_API_KEY" else None)
-    monkeypatch.setattr(main, "list_dubbing_spaces",
+    monkeypatch.setattr(dub_api, "list_dubbing_spaces",
                         lambda key: [{"seq": 1, "name": "A"}, {"seq": 2, "name": "B"}])
     r = client.post(
         "/api/dub/start",
@@ -188,10 +194,9 @@ def test_dub_start_perso_without_pin_allows_single_workspace_accounts(monkeypatc
     def fake_run_dub(**kw):
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     monkeypatch.delenv("PERSO_SPACE_SEQ", raising=False)
-    monkeypatch.setattr(main, "read_value", lambda k: "k-123" if k == "PERSO_API_KEY" else None)
-    monkeypatch.setattr(main, "list_dubbing_spaces", lambda key: [{"seq": 1, "name": "A"}])
+    monkeypatch.setattr(dub_api, "list_dubbing_spaces", lambda key: [{"seq": 1, "name": "A"}])
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -203,7 +208,7 @@ def test_dub_start_perso_without_pin_allows_single_workspace_accounts(monkeypatc
 def test_dub_start_normalizes_stt_engine_case(monkeypatch):
     # "Perso" (capital P) used to skip both the preflight and the Perso branch
     # and silently run the free local engine. Now it must hit the preflight.
-    monkeypatch.setattr(main, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -214,7 +219,7 @@ def test_dub_start_normalizes_stt_engine_case(monkeypatch):
 
 
 def test_dub_start_rejects_unknown_stt_engine(monkeypatch):
-    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: None)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -231,7 +236,7 @@ def test_dub_start_stt_engine_defaults_to_local_without_key(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
     monkeypatch.delenv("STT_ENGINE", raising=False)
 
@@ -252,7 +257,7 @@ def test_dub_start_with_translate_engine(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -274,17 +279,17 @@ def test_dub_start_translate_engine_blank_means_the_saved_default(monkeypatch):
     # app/setup.py), not None -- run_dub's own fallback is the process env,
     # frozen at launch, so None would let the preflight judge one engine and
     # the job run another (2026-09-04 review).
-    monkeypatch.setattr(main.dub_setup, "default_for",
-                        lambda stage, _real=main.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(dub_api.dub_setup, "default_for",
+                        lambda stage, _real=dub_api.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
     captured = {}
 
     def fake_run_dub(**kw):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -303,7 +308,7 @@ def test_dub_start_stt_engine_defaults_to_perso_with_key(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     monkeypatch.setenv("PERSO_API_KEY", "dummy-for-test")
     monkeypatch.delenv("STT_ENGINE", raising=False)
 
@@ -313,6 +318,13 @@ def test_dub_start_stt_engine_defaults_to_perso_with_key(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 200
+    # The job runs on its own thread: wait for it, as the tests above do, or
+    # the kwargs are read before the fake has been called (Linux CI).
+    jid = r.json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
     assert captured["stt_engine"] == "perso"
 
 
@@ -328,7 +340,7 @@ def test_dub_result_srt_finds_auto_translated_file(monkeypatch, tmp_path):
         out_file.write_bytes(b"FAKEMP4")
         return {"job_id": "x", "out_path": str(out_file), "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")})
     jid = r.json()["job_id"]
@@ -361,7 +373,7 @@ def _start_upload_job(monkeypatch):
             f.write(b"FAKEMP4")
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")})
     jid = r.json()["job_id"]
     for _ in range(100):
@@ -392,7 +404,7 @@ def test_original_video_is_served_while_the_job_still_runs(monkeypatch):
             f.write(b"FAKEMP4")
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")})
     jid = r.json()["job_id"]
     assert started.wait(2), "fake job never started"
@@ -437,7 +449,7 @@ def test_dub_cancel_stops_a_running_job(monkeypatch):
             time.sleep(0.01)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -477,7 +489,7 @@ def test_dub_retry_starts_a_new_job_from_the_saved_video(monkeypatch):
         calls.append(kw)
         raise RuntimeError("no dub today")
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     jid = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -520,7 +532,7 @@ def test_dub_retry_refuses_a_running_job(monkeypatch):
         release.wait(5)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     jid = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -536,7 +548,7 @@ def test_dub_retry_refuses_a_running_job(monkeypatch):
 
 
 def test_dub_retry_says_so_when_the_video_is_gone(monkeypatch):
-    monkeypatch.setattr(main, "run_dub",
+    monkeypatch.setattr(dub_api, "run_dub",
                         lambda **kw: {"job_id": "x", "out_path": kw["out_path"]})
     jid = client.post(
         "/api/dub/start",
@@ -565,7 +577,7 @@ def test_deleting_a_cancelling_job_is_refused(monkeypatch):
         release.wait(5)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     jid = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -591,7 +603,7 @@ def test_dub_start_surfaces_perso_credit_notice_in_job_status(monkeypatch):
         })
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -616,7 +628,7 @@ def test_dub_cancel_finished_job_returns_409(monkeypatch):
     def fake_run_dub(**kw):
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -640,7 +652,7 @@ def test_dub_start_logs_the_video_filename(monkeypatch):
     # Job logs are named job-<id>.log, so without this first line there is no
     # way to tell which video a log file belongs to.
     monkeypatch.setattr(
-        main, "run_dub",
+        dub_api, "run_dub",
         lambda **kw: {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1},
     )
     r = client.post(
@@ -667,7 +679,7 @@ def test_dub_start_passes_source_language_hint(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"b", "video/mp4")},
@@ -690,7 +702,7 @@ def test_dub_start_source_language_hint_absent_is_none(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"b", "video/mp4")},
@@ -721,7 +733,7 @@ def test_dub_start_rejects_a_language_code_that_is_not_one():
 
 def test_dub_start_still_takes_the_language_codes_people_use():
     # The guard must not turn away real codes -- BCP-47 tags carry hyphens.
-    from app.main import _valid_language_code
+    from app.api.dub import _valid_language_code
 
     for good in ["ko", "en", "ja", "zh-CN", "pt_BR", "es-419"]:
         assert _valid_language_code(good), good
@@ -735,7 +747,7 @@ def test_job_record_keeps_the_chosen_source_language(monkeypatch):
         open(kw["out_path"], "wb").write(b"FAKEMP4")
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     told = client.post(
         "/api/dub/start",
@@ -764,7 +776,7 @@ def test_result_srt_answers_head(monkeypatch, tmp_path):
         open(kw["out_path"], "wb").write(b"FAKEMP4")
         return {"job_id": "x", "out_path": str(work / "dubbed.mp4"), "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     jid = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -785,7 +797,7 @@ def test_jobs_list_carries_the_finished_job_without_its_logs(monkeypatch):
         open(kw["out_path"], "wb").write(b"FAKEMP4")
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     jid = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -814,7 +826,7 @@ def test_a_finished_job_writes_job_json_next_to_the_video(monkeypatch):
         open(kw["out_path"], "wb").write(b"FAKEMP4")
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     jid = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -850,7 +862,7 @@ def test_starting_the_app_restores_yesterdays_jobs(monkeypatch):
     # import time would scan whichever workspace was current when the module
     # loaded -- before a test (or the desktop shell) can point WORKSPACE
     # anywhere else -- and Projects would come up empty for the user.
-    folder = os.path.join(main.WORKSPACE, "2026-08-26", "yesterday_ko")
+    folder = os.path.join(state.WORKSPACE, "2026-08-26", "yesterday_ko")
     os.makedirs(folder)
     with open(os.path.join(folder, "job.json"), "w", encoding="utf-8") as f:
         json.dump({"id": "restored-1", "status": "done", "project": "yesterday",
@@ -858,7 +870,7 @@ def test_starting_the_app_restores_yesterdays_jobs(monkeypatch):
                    "created": "2026-08-26T10:00:00"}, f)
     # A store of its own, so this asserts on what startup read rather than on
     # jobs other tests in this file left in the shared one.
-    monkeypatch.setattr(main, "job_store", jobs.JobStore())
+    monkeypatch.setattr(state, "job_store", jobs.JobStore())
 
     with TestClient(main.app, base_url="http://127.0.0.1") as c:
         rows = c.get("/api/dub/jobs").json()["jobs"]
@@ -878,8 +890,8 @@ def _restored_job(tmp_path, **fields):
     work = tmp_path / "restored"
     work.mkdir(exist_ok=True)
     (work / "input.mp4").write_bytes(b"vid")
-    jid = main.job_store.create()
-    main.job_store._update(jid, status="error", work_dir=str(work),
+    jid = state.job_store.create()
+    state.job_store._update(jid, status="error", work_dir=str(work),
                            project="restored", **fields)
     return jid
 
@@ -897,7 +909,7 @@ def test_dub_retry_of_a_restored_job_sends_the_language_name_not_its_code(monkey
     # run_dub's language goes into the translation prompt and to the voice
     # sidecar -- both of which want "Korean".
     calls = []
-    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: calls.append(kw))
     jid = _restored_job(tmp_path, language_code="ko")
 
     assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
@@ -907,7 +919,7 @@ def test_dub_retry_of_a_restored_job_sends_the_language_name_not_its_code(monkey
 def test_dub_retry_keeps_the_language_name_the_job_was_saved_with(monkeypatch, tmp_path):
     # And a name that was saved wins over the one the code maps to.
     calls = []
-    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: calls.append(kw))
     jid = _restored_job(tmp_path, language_code="pt", language="Brazilian Portuguese")
 
     assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
@@ -918,8 +930,8 @@ def test_dub_retry_uses_the_apps_own_speech_to_text_setting(monkeypatch, tmp_pat
     # Left out, run_dub falls back to local Whisper -- so a Perso job came back
     # transcribed by something else, with nothing on screen to say so.
     calls = []
-    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
-    monkeypatch.setattr(main, "default_stt_engine", lambda: "perso")
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(dub_api, "default_stt_engine", lambda: "perso")
     jid = _restored_job(tmp_path, language_code="ko")
 
     assert client.post(f"/api/dub/jobs/{jid}/retry").status_code == 200
@@ -931,8 +943,8 @@ def test_dub_retry_cuts_a_link_job_whose_video_was_never_cut(monkeypatch, tmp_pa
     # the cut still holds the whole video -- and its second run would dub every
     # minute the user cut away.
     cuts = []
-    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
-    monkeypatch.setattr(main, "_cut_video", lambda p, s, e: cuts.append((s, e)))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(dub_api, "_cut_video", lambda p, s, e: cuts.append((s, e)))
     jid = _restored_job(tmp_path, language_code="ko", from_link=True,
                         trim={"start": 5, "end": 20}, trim_pending=True)
 
@@ -945,8 +957,8 @@ def test_dub_retry_cuts_a_link_job_whose_video_was_never_cut(monkeypatch, tmp_pa
 
 def test_dub_retry_does_not_cut_a_video_that_was_already_cut(monkeypatch, tmp_path):
     cuts = []
-    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
-    monkeypatch.setattr(main, "_cut_video", lambda p, s, e: cuts.append((s, e)))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(dub_api, "_cut_video", lambda p, s, e: cuts.append((s, e)))
     jid = _restored_job(tmp_path, language_code="ko",
                         trim={"start": 5, "end": 20}, trim_pending=False)
 
@@ -960,8 +972,8 @@ def test_dub_retry_of_a_job_saved_before_the_marker_existed_does_not_cut(monkeyp
     # a link job's cut is the same second as its download), and cutting a cut
     # video again gives the user the wrong seconds -- worse than not cutting.
     cuts = []
-    monkeypatch.setattr(main, "run_dub", lambda **kw: None)
-    monkeypatch.setattr(main, "_cut_video", lambda p, s, e: cuts.append((s, e)))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(dub_api, "_cut_video", lambda p, s, e: cuts.append((s, e)))
     jid = _restored_job(tmp_path, language_code="ko", from_link=True,
                         trim={"start": 5, "end": 20})   # no trim_pending at all
 
@@ -996,7 +1008,7 @@ def _dubbed_job(tmp_path, texts, edits=None, stale=()):
                   for i, c in enumerate(cues)],
     }), encoding="utf-8")
 
-    script = os.path.getmtime(main.script_path(str(work)))
+    script = os.path.getmtime(dub_api.script_path(str(work)))
     for i in range(len(texts)):
         wav = work / ("qwen_line_%d.wav" % i)
         wav.write_bytes(b"")
@@ -1004,8 +1016,8 @@ def _dubbed_job(tmp_path, texts, edits=None, stale=()):
         # made after the last edit and has nothing to catch up on.
         os.utime(wav, (script, script + (-10 if (i + 1) in stale else 10)))
 
-    jid = main.job_store.create()
-    main.job_store._update(jid, status="done", work_dir=str(work), project="dubbed",
+    jid = state.job_store.create()
+    state.job_store._update(jid, status="done", work_dir=str(work), project="dubbed",
                            language_code="ko", language="Korean",
                            result={"out_path": str(work / "dubbed.mp4")})
     return jid
@@ -1013,9 +1025,9 @@ def _dubbed_job(tmp_path, texts, edits=None, stale=()):
 
 def test_stale_voices_remakes_nothing_when_every_voice_is_current(monkeypatch, tmp_path):
     said, built = [], []
-    monkeypatch.setattr(main, "resynth_one_line",
+    monkeypatch.setattr(script_api, "resynth_one_line",
                         lambda *a: said.append(a) or "made.wav")
-    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: built.append(a))
     jid = _dubbed_job(tmp_path, ["one", "two", "three"])
 
     r = client.post(f"/api/dub/jobs/{jid}/voices/stale")
@@ -1027,9 +1039,9 @@ def test_stale_voices_remakes_nothing_when_every_voice_is_current(monkeypatch, t
 
 def test_stale_voices_remakes_only_the_rewritten_lines_and_rebuilds_once(monkeypatch, tmp_path):
     said, built = [], []
-    monkeypatch.setattr(main, "resynth_one_line",
+    monkeypatch.setattr(script_api, "resynth_one_line",
                         lambda *a: said.append(a) or "made.wav")
-    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: built.append(a))
     # Lines 1 and 3 were rewritten and their voices have not caught up; line 2
     # is untouched, and line 4 was rewritten but already respoken since.
     jid = _dubbed_job(tmp_path, ["one", "two", "three", "four"],
@@ -1046,7 +1058,7 @@ def test_stale_voices_remakes_only_the_rewritten_lines_and_rebuilds_once(monkeyp
 
 def test_stale_voices_refuses_a_job_that_is_still_running(tmp_path):
     jid = _dubbed_job(tmp_path, ["one"], edits={1: "ONE"}, stale=(1,))
-    main.job_store._update(jid, status="running")
+    state.job_store._update(jid, status="running")
 
     r = client.post(f"/api/dub/jobs/{jid}/voices/stale")
     assert r.status_code == 409
@@ -1056,9 +1068,9 @@ def test_one_line_voice_still_speaks_that_line_and_rebuilds(monkeypatch, tmp_pat
     # The sweep above and this share a helper now -- one line still goes
     # through, words and all.
     said, built = [], []
-    monkeypatch.setattr(main, "resynth_one_line",
+    monkeypatch.setattr(script_api, "resynth_one_line",
                         lambda *a: said.append(a) or "made.wav")
-    monkeypatch.setattr(main, "rebuild_dub", lambda *a: built.append(a))
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: built.append(a))
     jid = _dubbed_job(tmp_path, ["one", "two"], edits={2: "TWO"})
 
     r = client.post(f"/api/dub/jobs/{jid}/script/2/voice")
@@ -1075,7 +1087,7 @@ def test_one_line_voice_still_speaks_that_line_and_rebuilds(monkeypatch, tmp_pat
 def _start_and_settle(monkeypatch, **form):
     # A pinned Perso workspace, so asking for Perso gets past the preflight.
     monkeypatch.setenv("PERSO_SPACE_SEQ", "1")
-    monkeypatch.setattr(main, "run_dub",
+    monkeypatch.setattr(dub_api, "run_dub",
                         lambda **kw: {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1})
     data = {"language": "Korean", "language_code": "ko"}
     data.update(form)
@@ -1099,7 +1111,7 @@ def test_dub_start_records_the_engines_the_job_was_made_with(monkeypatch, tmp_pa
     assert job["quality"] == 4
 
     # And they are in the file beside the video, so a restart still knows them.
-    with open(os.path.join(main.job_store.get(jid)["work_dir"], "job.json"), encoding="utf-8") as f:
+    with open(os.path.join(state.job_store.get(jid)["work_dir"], "job.json"), encoding="utf-8") as f:
         saved = json.load(f)
     assert saved["stt_engine"] == "perso" and saved["translator"] == "gemini"
     assert saved["tts"] == "qwen3" and saved["quality"] == 4
@@ -1108,13 +1120,13 @@ def test_dub_start_records_the_engines_the_job_was_made_with(monkeypatch, tmp_pa
 def test_dub_start_records_what_the_defaults_resolved_to_not_the_blank(monkeypatch):
     # The form left every choice out, so what is saved has to be the answer the
     # app gave -- otherwise the finished screen has nothing to show.
-    monkeypatch.setattr(main, "default_stt_engine", lambda: "")
+    monkeypatch.setattr(dub_api, "default_stt_engine", lambda: "")
     jid = _start_and_settle(monkeypatch)
 
     job = client.get(f"/api/dub/jobs/{jid}").json()
     assert job["stt_engine"] == "whisper"          # local Whisper, named
-    assert job["translator"] == main.dub_setup.default_for("translator")
-    assert job["quality"] == main.QWEN_N_TAKES
+    assert job["translator"] == dub_api.dub_setup.default_for("translator")
+    assert job["quality"] == dub_api.QWEN_N_TAKES
 
 
 def test_dub_start_names_the_local_engine_whisper_however_it_was_asked_for(monkeypatch):
@@ -1135,8 +1147,8 @@ def test_dub_retry_repeats_the_first_runs_engines(monkeypatch, tmp_path):
     # transcribed by local Whisper with nothing on screen to say the choice
     # had changed.
     calls = []
-    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
-    monkeypatch.setattr(main, "default_stt_engine", lambda: "")
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(dub_api, "default_stt_engine", lambda: "")
     jid = _restored_job(tmp_path, language_code="ko", stt_engine="perso",
                         translator="gemini", tts="qwen3", quality=4)
 
@@ -1155,8 +1167,8 @@ def test_dub_retry_of_a_job_saved_before_the_engines_were_kept(monkeypatch, tmp_
     # Nothing to inherit, so the app's own setting decides -- and the new job
     # records what that turned out to be.
     calls = []
-    monkeypatch.setattr(main, "run_dub", lambda **kw: calls.append(kw))
-    monkeypatch.setattr(main, "default_stt_engine", lambda: "perso")
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(dub_api, "default_stt_engine", lambda: "perso")
     jid = _restored_job(tmp_path, language_code="ko")
 
     r = client.post(f"/api/dub/jobs/{jid}/retry")
@@ -1174,7 +1186,7 @@ def test_dub_start_sep_engine_perso_forwarded(monkeypatch):
         captured.update(kw)
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -1196,7 +1208,7 @@ def test_dub_start_sep_engine_defaults_to_demucs(monkeypatch):
     def fake_run_dub(**kw):
         return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -1217,7 +1229,7 @@ def test_dub_start_sep_engine_unknown_is_422():
 
 
 def test_dub_start_sep_perso_without_key_is_422(monkeypatch):
-    monkeypatch.setattr(main, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -1256,12 +1268,12 @@ def _wait_done(jid):
 
 def test_dub_start_cloud_mode_skips_local_pipeline(monkeypatch):
     _FakeCloudClient.calls = []
-    monkeypatch.setattr(main, "PersoClient", _FakeCloudClient)
+    monkeypatch.setattr(perso_client, "PersoClient", _FakeCloudClient)
 
     def never(**kw):
         raise AssertionError("run_dub must not run in cloud mode")
 
-    monkeypatch.setattr(main, "run_dub", never)
+    monkeypatch.setattr(dub_api, "run_dub", never)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -1289,7 +1301,7 @@ def test_dub_start_cloud_mode_unknown_value_is_422():
 
 
 def test_dub_start_cloud_mode_without_key_is_422(monkeypatch):
-    monkeypatch.setattr(main, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -1306,7 +1318,7 @@ def test_dub_start_cloud_mode_credit_exhaustion_fails_with_notice(monkeypatch):
         def dub_video(self, *a, **kw):
             raise PersoCreditExhaustedError()
 
-    monkeypatch.setattr(main, "PersoClient", BrokeClient)
+    monkeypatch.setattr(perso_client, "PersoClient", BrokeClient)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -1339,7 +1351,7 @@ class _ScriptedCloudClient(_FakeCloudClient):
 
 
 def test_cloud_job_keeps_its_project_and_serves_the_perso_script(monkeypatch):
-    monkeypatch.setattr(main, "PersoClient", _ScriptedCloudClient)
+    monkeypatch.setattr(perso_client, "PersoClient", _ScriptedCloudClient)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -1363,7 +1375,7 @@ def test_cloud_job_keeps_its_project_and_serves_the_perso_script(monkeypatch):
 
 
 def test_cloud_job_without_a_recorded_project_404s_the_script(monkeypatch):
-    monkeypatch.setattr(main, "PersoClient", _FakeCloudClient)
+    monkeypatch.setattr(perso_client, "PersoClient", _FakeCloudClient)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -1389,7 +1401,7 @@ def test_perso_speaker_change_maps_the_line_and_verifies(monkeypatch):
             return script
 
     SpeakerClient.added = []
-    monkeypatch.setattr(main, "PersoClient", SpeakerClient)
+    monkeypatch.setattr(perso_client, "PersoClient", SpeakerClient)
     r = client.post(
         "/api/dub/start",
         files={"video": ("v.mp4", b"vid", "video/mp4")},
@@ -1409,7 +1421,7 @@ def test_perso_speaker_change_maps_the_line_and_verifies(monkeypatch):
 
 
 def test_materialize_turns_a_perso_dub_editable(monkeypatch, tmp_path):
-    monkeypatch.setattr(main, "PersoClient", _ScriptedCloudClient)
+    monkeypatch.setattr(perso_client, "PersoClient", _ScriptedCloudClient)
 
     def fake_materialize(pc, seq, work_dir, language, **kw):
         assert seq == 409873
@@ -1419,7 +1431,7 @@ def test_materialize_turns_a_perso_dub_editable(monkeypatch, tmp_path):
             f.write("1\n00:00:00,270 --> 00:00:06,210\n안녕\n")
         return {"lines": 1, "speakers": 1}
 
-    monkeypatch.setattr(main.perso_materialize, "materialize", fake_materialize)
+    monkeypatch.setattr(script_api.perso_materialize, "materialize", fake_materialize)
 
     r = client.post(
         "/api/dub/start",

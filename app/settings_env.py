@@ -71,7 +71,7 @@ def read_key_status() -> Optional[Dict[str, bool]]:
     path = env_path()
     if not path or not os.path.exists(path):
         return None
-    status = {k: False for k in MANAGED_KEYS}
+    status = dict.fromkeys(MANAGED_KEYS, False)
     with open(path, encoding="utf-8") as f:
         lines = f.readlines()
     for raw in lines:

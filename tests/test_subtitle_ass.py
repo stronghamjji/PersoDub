@@ -2,7 +2,8 @@
 each drawn exactly as the plugin draws it -- colours, boxes, the rainbow's
 per-word palette, neon's halo-plus-fill pair -- with our own two overrides
 (vertical position, size) layered on top."""
-import pytest
+
+import re
 
 from app.subtitle_ass import PRESETS, build_ass
 
@@ -119,3 +120,92 @@ def test_a_narrow_box_wraps_its_words():
     ass = build_ass(long, "black-box", width=1920, height=1080, box_width=30)
     event = [l for l in ass.splitlines() if l.startswith("Dialogue: 1,")][0]
     assert "\\N" in event
+
+
+# ---- The page's own layout -----------------------------------------------------
+# The player draws the subtitle with the real font, so it knows exactly where the
+# words broke and how big the box came out. It saves that as `layout`, and the
+# burn draws it as it was shown -- the estimate above is only for jobs saved
+# before the page could measure (user, 2026-09-07: "same as the screen").
+SOUL = "That jerk didn't even hurt a single soul"
+SOUL_CUE = [{"start": 0.0, "end": 2.0, "text": SOUL}]
+SOUL_LAYOUT = {"1": {"text": SOUL, "lines": [SOUL], "w": 19.2, "h": 1.62}}
+
+
+def _pos_y(event):
+    import re
+    return int(re.search(r"\\pos\(\d+,(\d+)\)", event).group(1))
+
+
+def test_the_pages_layout_is_drawn_as_the_page_showed_it():
+    ass = build_ass(SOUL_CUE, "black-box", width=1920, height=1080, size=150,
+                    layout=SOUL_LAYOUT)
+    # font 52 px: a 19.2 em box is 998 px wide, 1.62 em is 84 px tall
+    assert "l 998 0 l 998 84 l 0 84" in ass
+    rect = [l for l in ass.splitlines() if l.startswith("Dialogue: 0,")][0]
+    words = [l for l in ass.splitlines() if l.startswith("Dialogue: 1,")][0]
+    assert "\\N" not in words                       # one line, as on screen
+    assert "\\an5" in words                         # centred in the box...
+    assert _pos_y(words) == _pos_y(rect) - 42       # ...half the box up from its bottom
+
+
+def test_the_layout_breaks_lines_exactly_where_the_page_did():
+    lay = {"1": {**SOUL_LAYOUT["1"],
+                 "lines": ["That jerk didn't even hurt", "a single soul"], "h": 3.0}}
+    ass = build_ass(SOUL_CUE, "black-box", width=1920, height=1080, size=150, layout=lay)
+    words = [l for l in ass.splitlines() if l.startswith("Dialogue: 1,")][0]
+    assert "hurt\\Na single" in words
+    assert "l 998 156 l 0 156" in ass               # 3.0 em tall
+
+
+def test_a_layout_for_other_words_is_ignored():
+    # The line was rewritten after the page last measured: the estimate draws it.
+    lay = {"1": {**SOUL_LAYOUT["1"], "text": "old words"}}
+    ass = build_ass(SOUL_CUE, "black-box", width=1920, height=1080, size=150,
+                    box_width=52, layout=lay)
+    assert "l 998 0 l 998 176 l 0 176" in ass       # the estimate's own box
+
+
+def test_a_layout_without_a_box_still_keeps_the_pages_lines():
+    lay = {"1": {**SOUL_LAYOUT["1"],
+                 "lines": ["That jerk didn't even hurt", "a single soul"]}}
+    ass = build_ass(SOUL_CUE, "clean", width=1920, height=1080, layout=lay)
+    assert "\\p1" not in ass
+    assert "hurt\\Na single" in ass
+
+
+def test_rainbow_keeps_the_pages_lines():
+    lay = {"1": {"text": "one two three", "lines": ["one two", "three"], "w": 5, "h": 1.5}}
+    ass = build_ass([{"start": 0, "end": 2, "text": "one two three"}], "rainbow",
+                    width=1920, height=1080, layout=lay)
+    assert "two\\N{" in ass
+
+
+def test_layout_lines_cannot_smuggle_override_tags():
+    lay = {"1": {**SOUL_LAYOUT["1"], "lines": ["a{\\pos(0,0)}b", "c"]}}
+    ass = build_ass(SOUL_CUE, "black-box", width=1920, height=1080, layout=lay)
+    assert "{\\pos(0,0)}" not in ass.split("[Events]")[1].replace("{\\an5\\pos(960,", "")
+    assert "apos(0,0)b\\Nc" in ass          # braces and backslashes stripped, as ever
+
+
+# The page draws each look at its own font weight (White Box at 600, Neon at
+# 800...); the burn's preset knew only bold-or-not, so White Box came out
+# thinner in the video than on screen (user, 2026-09-07). The measured weight
+# travels with the layout, and libass honours it as \b<weight>.
+def test_the_layouts_weight_reaches_the_words():
+    lay = {"1": {**SOUL_LAYOUT["1"], "weight": 600}}
+    ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, layout=lay)
+    words = [l for l in ass.splitlines() if l.startswith("Dialogue: 1,")][0]
+    assert "\\b600" in words.split("}")[0]
+    # No weight measured: the preset's own bold flag stands, and no \b appears.
+    ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, layout=SOUL_LAYOUT)
+    assert not re.search(r"\\\\b\\d", ass.split("[Events]")[1])   # \bord is not a weight
+
+
+def test_the_weight_reaches_every_look():
+    lay = {"1": {"text": "one two", "lines": ["one two"], "w": 5, "h": 1.5, "weight": 800}}
+    cue = [{"start": 0, "end": 2, "text": "one two"}]
+    for preset in ("clean", "rainbow", "neon"):
+        ass = build_ass(cue, preset, width=1920, height=1080, layout=lay)
+        events = [l for l in ass.splitlines() if l.startswith("Dialogue:")]
+        assert all("\\b800" in e for e in events), preset

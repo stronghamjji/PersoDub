@@ -164,6 +164,48 @@ def test_get_translator_selects_engine():
     assert isinstance(get_translator("gemini"), GeminiTranslator)
 
 
+def test_get_translator_gives_every_name_its_own_engine(monkeypatch):
+    # One table now answers every name (translate.TRANSLATORS). Each name must
+    # still hand back the same class and model it did as an if-chain, and a
+    # name nobody knows must still fall back to the free local engine.
+    monkeypatch.setattr(
+        translate.service_account.Credentials, "from_service_account_file",
+        lambda *a, **k: _FakeCreds()
+    )
+    expected = {
+        "gemini": (GeminiTranslator, translate.GEMINI_MODEL),
+        "vertex": (VertexTranslator, translate.VERTEX_MODEL),
+        "qwen": (OllamaTranslator, translate.OLLAMA_QWEN_MODEL),
+        "gemma": (OllamaTranslator, translate.OLLAMA_GEMMA_MODEL),
+        "hunyuan": (OllamaTranslator, translate.OLLAMA_HUNYUAN_MODEL),
+    }
+    for name, (cls, model) in expected.items():
+        t = get_translator(name)
+        assert type(t) is cls, name
+        assert t.model == model, name
+        # Upper case reaches the same row -- the name is lowered before lookup.
+        assert type(get_translator(name.upper())) is cls, name
+
+    # With no setting either, an unknown or empty name lands on Ollama's own
+    # default model.
+    monkeypatch.setattr(translate, "TRANSLATE_ENGINE", "")
+    for unknown in ("", "llama", None):
+        t = get_translator(unknown)
+        assert type(t) is OllamaTranslator, unknown
+        assert t.model == translate.OLLAMA_MODEL, unknown
+
+
+def test_get_translator_reads_the_class_at_call_time(monkeypatch):
+    # The table holds lambdas, not classes captured at import: a test that swaps
+    # a translator class on the module must get its own class back.
+    class FakeOllama(OllamaTranslator):
+        pass
+
+    monkeypatch.setattr(translate, "OllamaTranslator", FakeOllama)
+    assert type(get_translator("gemma")) is FakeOllama
+    assert type(get_translator("nothing-like-this")) is FakeOllama
+
+
 def test_ollama_ask_pins_sampling_options(monkeypatch):
     # The server's gemma-dub carries no sampling parameters, so it ran on
     # Ollama's defaults. The public gemma3:12b bakes in top_k 64 / top_p 0.95,

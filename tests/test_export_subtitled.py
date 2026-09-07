@@ -7,7 +7,9 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import app.main as main
+from app import engines_status
+from app.api import dub as dub_api
+from app.api import results as results_api
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -17,15 +19,15 @@ client = TestClient(app, base_url="http://127.0.0.1")
 def _all_engines_available(monkeypatch):
     # Same bypass as tests/test_dub_api.py: these tests exercise the export
     # routes, not the model preflight.
-    monkeypatch.setattr(main, "gemma_available", lambda: True)
-    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
-    monkeypatch.setattr(main, "qwen_available", lambda: True)
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "qwen_status", lambda: "available")
-    monkeypatch.setattr(main, "gemini_available", lambda: True)
-    monkeypatch.setattr(main, "perso_available", lambda: True)
-    monkeypatch.setattr(main, "_missing_models", lambda *a, **kw: [])
+    monkeypatch.setattr(engines_status, "gemma_available", lambda: True)
+    monkeypatch.setattr(engines_status, "hunyuan_available", lambda: True)
+    monkeypatch.setattr(engines_status, "qwen_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "qwen_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
+    monkeypatch.setattr(dub_api, "_missing_models", lambda *a, **kw: [])
 
 
 class _Ran:
@@ -50,7 +52,7 @@ def _ass(work):
 
 def _done_job(monkeypatch, tmp_path):
     ran = _Ran()
-    monkeypatch.setattr(main.subprocess, "run", ran)
+    monkeypatch.setattr(results_api.subprocess, "run", ran)
     out_file = tmp_path / "dubbed.mp4"
     (tmp_path / "translated.srt").write_text(
         "1\n00:00:02,000 --> 00:00:04,000\n원래 번역\n", encoding="utf-8")
@@ -59,7 +61,7 @@ def _done_job(monkeypatch, tmp_path):
         out_file.write_bytes(b"FAKEMP4")
         return {"job_id": "x", "out_path": str(out_file), "num_segments": 1}
 
-    monkeypatch.setattr(main, "run_dub", fake_run_dub)
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
                     data={"language": "Korean", "language_code": "ko"})
     jid = r.json()["job_id"]
@@ -197,14 +199,17 @@ def test_subtitle_settings_start_with_the_defaults(monkeypatch, tmp_path):
     r = client.get(f"/api/dub/jobs/{jid}/subtitle_style")
     assert r.status_code == 200
     assert r.json() == {"enabled": True, "preset": "clean", "pos": None,
-                        "size": None, "cues": {}, "boxWidth": None, "widths": {}}
+                        "size": None, "cues": {}, "boxWidth": None, "widths": {},
+                        "layout": {}}
 
 
 def test_subtitle_settings_survive_a_round_trip(monkeypatch, tmp_path):
     ran, jid, work = _done_job(monkeypatch, tmp_path)
     body = {"enabled": False, "preset": "variety", "pos": 30, "size": 120,
             "cues": {"1": {"start": 0.5, "end": 3.0}},
-            "boxWidth": 62, "widths": {"2": 84}}
+            "boxWidth": 62, "widths": {"2": 84},
+            "layout": {"1": {"text": "원래 번역", "lines": ["원래", "번역"], "w": 3.1, "h": 2.9,
+                             "weight": 600}}}
     assert client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=body).status_code == 200
     assert client.get(f"/api/dub/jobs/{jid}/subtitle_style").json() == {
         **body, "preset": "neon-yellow"}
@@ -212,7 +217,8 @@ def test_subtitle_settings_survive_a_round_trip(monkeypatch, tmp_path):
 
 def test_subtitle_settings_refuse_nonsense(monkeypatch, tmp_path):
     ran, jid, work = _done_job(monkeypatch, tmp_path)
-    put = lambda b: client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=b).status_code
+    def put(b):
+        return client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=b).status_code
     assert put({"preset": "sparkle"}) == 422
     assert put({"pos": 140}) == 422
     assert put({"size": 30}) == 422
@@ -220,6 +226,15 @@ def test_subtitle_settings_refuse_nonsense(monkeypatch, tmp_path):
     assert put({"boxWidth": 5}) == 422
     assert put({"widths": {"2": 200}}) == 422
     assert put({"cues": {"1": {"start": 5, "end": 2}}}) == 422
+    # The page's layout: words, the lines they broke into, a box in em.
+    assert put({"layout": []}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": "a", "w": 1, "h": 1}}}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": "wide", "h": 1}}}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 0, "h": 1}}}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6}}}) == 200
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6, "weight": 600}}}) == 200
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6, "weight": "bold"}}}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6, "weight": 50}}}) == 422
 
 
 def test_subtitled_reads_the_stored_settings(monkeypatch, tmp_path):
@@ -255,5 +270,21 @@ def test_the_stored_box_width_reaches_the_burn(monkeypatch, tmp_path):
     r = client.get(f"/api/dub/result/{jid}/subtitled")
     assert r.status_code == 200
     ass = _ass(work)
-    assert "\\p1" in ass.replace("\\\\", "\\") or "\p1" in ass
+    assert "\\p1" in ass.replace("\\\\", "\\") or r"\p1" in ass
     assert "l 960 " in ass          # 50% of the 1080p fallback canvas
+
+
+def test_the_pages_layout_reaches_the_burn(monkeypatch, tmp_path):
+    # The player measured the line with the real font: the burn draws that box
+    # and those line breaks, not its own estimate (user, 2026-09-07).
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    client.put(f"/api/dub/jobs/{jid}/subtitle_style",
+               json={"preset": "black-box", "boxWidth": 50,
+                     "layout": {"1": {"text": "원래 번역", "lines": ["원래", "번역"],
+                                      "w": 10.0, "h": 3.0}}})
+    r = client.get(f"/api/dub/result/{jid}/subtitled")
+    assert r.status_code == 200
+    ass = _ass(work)
+    # font 35 px on the 1080p fallback canvas: 10 em = 350 wide, 3 em = 105 tall
+    assert "l 350 0 l 350 105 l 0 105" in ass
+    assert "원래\\N번역" in ass

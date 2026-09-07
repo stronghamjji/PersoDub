@@ -9,7 +9,8 @@ These checks let the UI/backend fail fast instead.
 import requests
 from fastapi.testclient import TestClient
 
-from app import config, engines_status, main
+from app import config, engines_status
+from app.api import dub as dub_api
 from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
@@ -22,7 +23,7 @@ import pytest
 def _models_ready(monkeypatch):
     # Whisper/TTS markers live in a kit these tests never build; the 409
     # missing-model preflight has its own suite (test_dub_start_preflight.py).
-    monkeypatch.setattr(main, "_missing_models", lambda *a, **kw: [])
+    monkeypatch.setattr(dub_api, "_missing_models", lambda *a, **kw: [])
 
 
 class _FakeResponse:
@@ -214,11 +215,11 @@ def test_perso_available_false_when_key_missing(monkeypatch):
 # --- GET /api/engines ---------------------------------------------------
 
 def test_engines_endpoint_all_unavailable(monkeypatch):
-    monkeypatch.setattr(main, "gemma_available", lambda: False)
-    monkeypatch.setattr(main, "qwen_available", lambda: False)
-    monkeypatch.setattr(main, "hunyuan_available", lambda: False)
-    monkeypatch.setattr(main, "gemini_available", lambda: False)
-    monkeypatch.setattr(main, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "gemma_available", lambda: False)
+    monkeypatch.setattr(engines_status, "qwen_available", lambda: False)
+    monkeypatch.setattr(engines_status, "hunyuan_available", lambda: False)
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: False)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
 
     r = client.get("/api/engines")
     assert r.status_code == 200
@@ -232,12 +233,12 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
 
 
 def test_engines_endpoint_all_available(monkeypatch):
-    monkeypatch.setattr(main, "gemma_available", lambda: True)
-    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
-    monkeypatch.setattr(main, "qwen_available", lambda: True)
-    monkeypatch.setattr(main, "hunyuan_available", lambda: True)
-    monkeypatch.setattr(main, "gemini_available", lambda: True)
-    monkeypatch.setattr(main, "perso_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemma_available", lambda: True)
+    monkeypatch.setattr(engines_status, "hunyuan_available", lambda: True)
+    monkeypatch.setattr(engines_status, "qwen_available", lambda: True)
+    monkeypatch.setattr(engines_status, "hunyuan_available", lambda: True)
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
 
     r = client.get("/api/engines")
     assert r.status_code == 200
@@ -251,7 +252,7 @@ def test_engines_endpoint_all_available(monkeypatch):
 
 
 def test_dub_start_gemma_unreachable_422_message(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "unreachable")
 
     r = client.post(
         "/api/dub/start",
@@ -267,9 +268,9 @@ def test_dub_start_gemma_unreachable_422_message(monkeypatch):
 
 
 def test_dub_start_gemma_available_job_starts(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -281,7 +282,7 @@ def test_dub_start_gemma_available_job_starts(monkeypatch):
 
 
 def test_dub_start_qwen_model_missing_422(monkeypatch):
-    monkeypatch.setattr(main, "qwen_status", lambda: "model_missing")
+    monkeypatch.setattr(engines_status, "qwen_status", lambda: "model_missing")
 
     r = client.post(
         "/api/dub/start",
@@ -293,7 +294,7 @@ def test_dub_start_qwen_model_missing_422(monkeypatch):
 
 
 def test_dub_start_qwen_unreachable_422_message(monkeypatch):
-    monkeypatch.setattr(main, "qwen_status", lambda: "unreachable")
+    monkeypatch.setattr(engines_status, "qwen_status", lambda: "unreachable")
 
     r = client.post(
         "/api/dub/start",
@@ -307,8 +308,8 @@ def test_dub_start_qwen_unreachable_422_message(monkeypatch):
 
 
 def test_dub_start_qwen_available_job_starts(monkeypatch):
-    monkeypatch.setattr(main, "qwen_status", lambda: "available")
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(engines_status, "qwen_status", lambda: "available")
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -319,7 +320,7 @@ def test_dub_start_qwen_available_job_starts(monkeypatch):
 
 
 def test_dub_start_gemini_unavailable_422_message(monkeypatch):
-    monkeypatch.setattr(main, "gemini_available", lambda: False)
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: False)
 
     r = client.post(
         "/api/dub/start",
@@ -333,8 +334,8 @@ def test_dub_start_gemini_unavailable_422_message(monkeypatch):
 
 
 def test_dub_start_gemini_available_job_starts(monkeypatch):
-    monkeypatch.setattr(main, "gemini_available", lambda: True)
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -349,9 +350,9 @@ def test_dub_start_default_engine_path_is_preflighted(monkeypatch):
     # which must still be preflighted (not silently skipped). Unreachable is
     # the status that still 422s here; a missing model is the 409 dialog's
     # business (tests/test_dub_start_preflight.py).
-    monkeypatch.setattr(main.dub_setup, "default_for",
-                        lambda stage, _real=main.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
-    monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
+    monkeypatch.setattr(dub_api.dub_setup, "default_for",
+                        lambda stage, _real=dub_api.dub_setup.default_for: "gemma" if stage == "translator" else _real(stage))
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "unreachable")
 
     r = client.post(
         "/api/dub/start",
@@ -363,7 +364,7 @@ def test_dub_start_default_engine_path_is_preflighted(monkeypatch):
 
 
 def test_dub_start_translate_engine_case_insensitive(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "unreachable")
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "unreachable")
 
     r = client.post(
         "/api/dub/start",
@@ -376,10 +377,10 @@ def test_dub_start_translate_engine_case_insensitive(monkeypatch):
 def test_dub_start_vertex_engine_skips_preflight(monkeypatch):
     # vertex (and anything else not gemma/qwen/gemini) is out of scope for
     # preflight -- the job must start even when every check is False.
-    monkeypatch.setattr(main, "gemma_available", lambda: False)
-    monkeypatch.setattr(main, "qwen_available", lambda: False)
-    monkeypatch.setattr(main, "gemini_available", lambda: False)
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(engines_status, "gemma_available", lambda: False)
+    monkeypatch.setattr(engines_status, "qwen_available", lambda: False)
+    monkeypatch.setattr(engines_status, "gemini_available", lambda: False)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -390,9 +391,9 @@ def test_dub_start_vertex_engine_skips_preflight(monkeypatch):
 
 
 def test_dub_start_perso_stt_without_key_422_message(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
 
     r = client.post(
         "/api/dub/start",
@@ -407,10 +408,10 @@ def test_dub_start_perso_stt_without_key_422_message(monkeypatch):
 
 
 def test_dub_start_perso_stt_with_key_job_starts(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "perso_available", lambda: True)
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "perso_available", lambda: True)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -421,10 +422,10 @@ def test_dub_start_perso_stt_with_key_job_starts(monkeypatch):
 
 
 def test_dub_start_no_stt_engine_skips_perso_preflight(monkeypatch):
-    monkeypatch.setattr(main, "gemma_status", lambda: "available")
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "perso_available", lambda: False)
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(engines_status, "gemma_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(engines_status, "perso_available", lambda: False)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
 
     r = client.post(
         "/api/dub/start",
@@ -467,8 +468,8 @@ def test_hunyuan_status_checks_the_configured_ollama_hunyuan_model(monkeypatch):
 
 
 def test_dub_start_hunyuan_available_job_starts(monkeypatch):
-    monkeypatch.setattr(main, "hunyuan_status", lambda: "available")
-    monkeypatch.setattr(main, "run_dub", _fake_run_dub)
+    monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "available")
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
 
     r = client.post(
         "/api/dub/start",

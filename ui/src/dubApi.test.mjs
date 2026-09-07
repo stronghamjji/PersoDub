@@ -4,6 +4,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   LANGUAGES,
+  STAGES,
+  stagePattern,
+  stepLabels,
   buildDubFormData,
   parseProgress,
   pollDubJob,
@@ -470,4 +473,58 @@ test("pollDubJob keeps watching a queued job until it runs and finishes", async 
   const job = await pollDubJob("j1", { intervalMs: 1, onUpdate: (j) => seen.push(j.status) });
   assert.equal(job.status, "done");
   assert.deepEqual(seen, ["queued", "running", "done"]);
+});
+
+// ---- The stage table is the single source of the "N/6" numbering ------------
+// Everything parseProgress knows about stages now comes from STAGES, so adding
+// the seventh stage (subtitle removal) means adding one row -- not editing a
+// regex, two weight tables and a dozen Python literals. These tests build a
+// pretend seven-stage table and check the derivations follow it.
+
+test("stagePattern reads the stage count off the table it is given", () => {
+  assert.ok(stagePattern(STAGES).test("3/6 Translating…"));
+
+  const seven = [...STAGES, { name: "desubtitle", label: "Cleaning up", weight: 0 }];
+  const p7 = stagePattern(seven);
+  assert.ok(p7.test("7/7 Removing burned-in subtitles…"), "a 7-stage table matches 7/7 lines");
+  assert.ok(p7.test("1/7 Separating background audio locally (Demucs)…"));
+  assert.equal(p7.exec("4/7 Cloning & synthesizing voices…")[1], "4", "the stage number is captured");
+  assert.ok(!p7.test("3/6 Translating…"), "and no longer matches the old six-stage marker");
+});
+
+test("a stage with a label of its own is one more step on the progress card", () => {
+  // The card (ui/src/runningScreen.mjs) draws one step per name this returns, so
+  // a seventh stage must arrive there by adding a row here and nothing else.
+  assert.deepEqual(stepLabels(STAGES),
+    ["Separating audio", "Transcribing", "Translating", "Dubbing"]);
+
+  const seven = [...STAGES, { name: "desubtitle", label: "Cleaning up", weight: 0 }];
+  assert.deepEqual(stepLabels(seven), [...stepLabels(STAGES), "Cleaning up"]);
+  assert.equal(stepLabels(seven).length, stepLabels(STAGES).length + 1);
+  // A stage that reuses its neighbour's label is folded into it instead --
+  // which is how the pipeline's six stages read as four.
+  assert.deepEqual(stepLabels([...STAGES, { name: "verify", label: "Dubbing", weight: 0 }]),
+    stepLabels(STAGES));
+});
+
+test("the stage table describes the four bar steps the UI shows", () => {
+  // One step per distinct label, in order, and the weights add up to 100.
+  const labels = [...new Set(STAGES.map((s) => s.label))];
+  assert.deepEqual(labels, ["Separating audio", "Transcribing", "Translating", "Dubbing"]);
+  assert.equal(STAGES.reduce((n, s) => n + (s.weight || 0), 0), 100);
+  // Exactly one stage drives the per-line voice math, and the stages that
+  // floor the bar come after it.
+  const synth = STAGES.findIndex((s) => s.kind === "synthesis");
+  assert.equal(STAGES.filter((s) => s.kind === "synthesis").length, 1);
+  assert.ok(STAGES.every((s, i) => !s.floor || i > synth), "floors only after synthesis");
+});
+
+test("every stage's own marker parses back to that stage", () => {
+  // The contract with app/pipeline.py's stage_marker(): stage i logs "i+1/6".
+  STAGES.forEach((s, i) => {
+    const p = parseProgress([`${i + 1}/${STAGES.length} ${s.label}…`]);
+    assert.equal(p.raw, i + 1, `${s.name} should parse as raw ${i + 1}`);
+    assert.equal(p.label, s.label, `${s.name} should show as "${s.label}"`);
+    assert.ok(p.stage >= 1 && p.stage <= p.total);
+  });
 });

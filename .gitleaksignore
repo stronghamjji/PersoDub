@@ -1,0 +1,5 @@
+# gitleaks fingerprints of findings judged false positives (commit:file:rule:line).
+# The value in this test fixture was a made-up key with a digit run in it;
+# the fixture now reads as words, but the commit that carried the old value
+# stays in history and the scan reads history (2026-09-07).
+07d483214defc8c5839061c0ccd37f5ab383bd16:ui/src/settingsDialog.test.mjs:generic-api-key:94

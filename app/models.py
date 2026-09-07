@@ -17,8 +17,9 @@ never silently "done" and never a dead end.
 import json
 import logging
 import os
+import shutil
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("persodub.models")
 
 CATALOG_PATH = os.path.join(os.path.dirname(__file__), "models_catalog.json")
 
@@ -104,20 +105,35 @@ def reset_downloads_for_tests():
 
 
 def free_bytes_at(path):
-    """Bytes free on the kit's volume, or None when unreadable (a preflight
-    that cannot read the disk must not become the reason a download fails)."""
+    """Bytes free on the volume holding path, or None when unreadable (a
+    preflight that cannot read the disk must not become the reason a download
+    fails).
+
+    Walks up to the nearest existing parent first: the kit folder and a job's
+    workspace are both asked about before they are made, and asking about a
+    path that does not exist yet answers nothing at all when the disk under it
+    is the thing being asked about.
+
+    shutil.disk_usage, not os.statvfs: statvfs is not on Windows, where the
+    dub's space check silently passed everything (CI, 2026-09-07).
+    """
+    path = path or "."
+    while path and not os.path.exists(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            break
+        path = parent
     try:
-        st = os.statvfs(path or ".")
-        return st.f_bavail * st.f_frsize
+        return shutil.disk_usage(path or "/").free
     except Exception:
         return None
 
 
 def dub_in_progress() -> bool:
     """True while any dub job runs -- removal is refused then (409)."""
-    from app.main import job_store  # late import: app.main imports this module
+    from app import state  # late import: read the store as it stands right now
     try:
-        return any(j.get("status") == "running" for j in job_store.all())
+        return any(j.get("status") == "running" for j in state.job_store.all())
     except Exception:
         return False
 

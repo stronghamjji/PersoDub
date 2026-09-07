@@ -287,7 +287,7 @@ def test_synth_lines_n_takes_selection_picks_scored_winner(tmp_path, monkeypatch
     assert os.path.exists(os.path.join(str(tmp_path), "qwen_line_0_t1.wav"))
 
 
-# --- synth_lines: ultra-short-line merge wiring (app/qwen_merge.py) --------
+# --- synth_lines: ultra-short-line merge wiring (app/audio/merge.py) -------
 
 def test_synth_lines_merges_ultra_short_line_into_one_engine_call(tmp_path, monkeypatch):
     # line 1 is ultra-short (0.3s), same speaker, adjacent to line 0 -> must

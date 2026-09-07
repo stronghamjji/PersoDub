@@ -1,0 +1,4 @@
+# Tools the checks run, but the app never imports -- pinned so CI and a
+# developer's machine flag the same lines (an unpinned linter changes its mind
+# on its own schedule).
+ruff==0.16.6
