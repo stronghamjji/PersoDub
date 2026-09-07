@@ -91,7 +91,7 @@ function harness({ responses = {} } = {}) {
 
 const ok = (body) => ({ ok: true, status: 200, json: async () => body });
 const SAVED = {
-  perso_api_key: "perso-key-0123456789abcdef",
+  perso_api_key: "perso-key-for-this-test",
   gemini_api_key: "gem-key",
   perso_space_seq: "7",
   perso_signup_link: "https://developers.perso.ai/api-keys?utm=x",
@@ -177,12 +177,12 @@ test("a key that has only been typed is previewed: the key is posted, its spaces
   const h = harness({ responses: { "/api/perso/spaces/preview": ok(preview) } });
   t.after(h.state.restore);
 
-  h.$("persoKeyInput").value = "another-key-0123456789abc";
+  h.$("persoKeyInput").value = "another-key-for-this-test";
   await h.$("persoKeyInput").fire("blur");
   await settle();
 
   assert.deepEqual(h.state.bodies.map((b) => b.url), ["/api/perso/spaces/preview"]);
-  assert.deepEqual(h.state.bodies[0].body, { api_key: "another-key-0123456789abc" });
+  assert.deepEqual(h.state.bodies[0].body, { api_key: "another-key-for-this-test" });
   const sel = h.$("persoSpaceSelect");
   assert.deepEqual(sel.children.map((o) => o.textContent),
     ["Choose a workspace…", "Team (Pro, 9 credits left)", "Solo (Free, 0 credits left)"]);
@@ -226,7 +226,7 @@ test("an edited key posts the change with the workspace chosen for it, then tell
   await h.api.loadSavedSetup();
   await settle();
 
-  h.$("persoKeyInput").value = "another-key-0123456789abc";
+  h.$("persoKeyInput").value = "another-key-for-this-test";
   await h.$("persoKeyInput").fire("blur");   // previews, so the picker holds seq 3
   await settle();
   h.$("geminiKeyInput").value = "new-gem";
@@ -235,7 +235,7 @@ test("an edited key posts the change with the workspace chosen for it, then tell
   const post = h.state.bodies.find((b) => b.url === "/api/settings");
   assert.deepEqual(post.body, {
     gemini_api_key: "new-gem",
-    perso_api_key: "another-key-0123456789abc",
+    perso_api_key: "another-key-for-this-test",
     perso_space_seq: "3",
   });
   assert.equal(h.$("settingsSaveError").style.display, "none");
