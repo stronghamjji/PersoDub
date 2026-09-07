@@ -1062,8 +1062,12 @@
   .settings-hint { font-size: 0.74rem; color: var(--muted-foreground); margin-top: 4px; }
   .settings-hint.model-busy { color: var(--destructive); font-weight: 600; }
   .settings-hint.model-ok { color: #2a8a4a; font-weight: 600; }
+  /* The sentence takes the room and wraps; the button keeps to one line at
+     the same size as its neighbours -- a wrapped "Download (1.0 GB)" stood
+     twice as tall as the Resume beside it (user, 2026-09-07). */
   .model-line { display: flex; align-items: center; gap: 8px; }
-  .model-line .keys-link { margin: 0; }
+  .model-line > span { flex: 1 1 auto; min-width: 0; }
+  .model-line .keys-link { margin: 0; flex: none; white-space: nowrap; }
   .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: #fff;
                font-size: 0.74rem; font-weight: 600; padding: 4px 10px; cursor: pointer; }
   #modelsFold > summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
@@ -2268,7 +2272,7 @@ function paintHint(el, needs, ready) {
     const total = needs.reduce((n, r) => n + r.bytes, 0);
     el.className = "settings-hint model-line";
     span.textContent = `Needs ${needs.map((r) => r.name).join(" + ")} · ${gb(total)} GB`;
-    btn.textContent = `Download (${gb(total)} GB)`;
+    btn.textContent = "Download";   // the size is in the sentence beside it
     btn.addEventListener("click", () => models.downloadAll(ids));
   }
   el.append(span, btn);
