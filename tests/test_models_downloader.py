@@ -113,6 +113,7 @@ def test_a_failed_hf_download_carries_the_tools_last_words(monkeypatch, tmp_path
             return 1
 
     monkeypatch.setattr(models_module._subprocess, "Popen", lambda argv, **kw: FakeProc())
+    monkeypatch.setattr(models_module, "HF_ATTEMPTS", 1)   # the error text, not the retries, is under test
     entry = {"id": "qwen3-tts", "dir": "models/qwen3-tts",
              "source": {"kind": "hf", "repo": "Qwen/x", "rev": "abc"}}
     import pytest
