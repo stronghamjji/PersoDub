@@ -69,7 +69,13 @@ def test_download_reports_progress_and_double_post_is_200(monkeypatch):
     gate = threading.Event()
     _install_fake_downloader(monkeypatch, gate=gate)
     assert client.post("/api/models/whisper/download").status_code == 202
+    # The state flips to downloading a moment before the fake reports 50%:
+    # wait for the number too, or a slow runner reads it as 0 (Windows CI).
+    deadline = time.time() + 5.0
     row = _wait_state("whisper", ("downloading",))
+    while row["progress"] != 50 and time.time() < deadline:
+        time.sleep(0.05)
+        row = _wait_state("whisper", ("downloading",))
     assert row["state"] == "downloading" and row["progress"] == 50
     assert client.post("/api/models/whisper/download").status_code == 200
     gate.set()
