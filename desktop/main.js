@@ -531,6 +531,9 @@ app.whenReady().then(() => {
         return { ok: false, reason: packCancelled ? "Cancelled." : lastReason(full) };
       }
       if (engines && engines.startPack) {
+        // The last step's line would sit in the dialog for the ~40 s the
+        // process takes to answer; say what is happening instead.
+        if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { pack: id, stepId: "start", title: "Installed. Starting it up", state: "progress", pct: 100 });
         try {
           await engines.startPack(id);
           shellLog(`PERSODUB_PACK ${id} process up: ${JSON.stringify(readRuntime(installCtx.kitDir))}`);

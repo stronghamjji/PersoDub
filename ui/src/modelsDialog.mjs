@@ -312,7 +312,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   }
   function paintModelsDialog() {
     if (!pendingDub || !pendingDub.downloading) return;
-    const pct = overallProgress(modelRows, pendingDub.ids);
+    // The painted rows, not the raw ones: a pack's percent lives on the
+    // painted row (rowsToPaint), the engine's own row has none.
+    const pct = overallProgress(rowsToPaint(), pendingDub.ids);
     $("mnBar").style.width = pct + "%";
     $("mnItems").hidden = true;   // the list said what; the bar now says how far
     $("mnAlt").hidden = true;
