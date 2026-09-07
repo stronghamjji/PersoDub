@@ -94,7 +94,7 @@ def clips_cut(body: ClipCutRequest):
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
            "-movflags", "+faststart", out]
-    run = subprocess.run(cmd, capture_output=True, text=True)
+    run = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if run.returncode != 0:
         raise HTTPException(status_code=503,
                             detail="ffmpeg could not cut this video (%s)."

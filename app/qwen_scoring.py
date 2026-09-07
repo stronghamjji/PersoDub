@@ -78,7 +78,7 @@ def score_takes(
     try:
         r = subprocess.run(
             [py, SCRIPT_PATH, "--input", in_path, "--output", out_path],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
         )
     except Exception as e:
         log("   Warning: take scorer failed to run (%s) -- skipping take selection" % str(e)[:120])

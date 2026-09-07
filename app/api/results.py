@@ -169,7 +169,7 @@ def _video_dims(path: str):
         out = subprocess.check_output(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
-            text=True, timeout=30)
+            text=True, encoding="utf-8", errors="replace", timeout=30)
         w, h = (int(x) for x in out.strip().split(",")[:2])
         if w > 0 and h > 0:
             return w, h
@@ -267,7 +267,7 @@ def subtitles_burn(body: SubtitleBurnRequest):
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
            "-pix_fmt", "yuv420p", "-c:a", "copy",
            "-movflags", "+faststart", out]
-    run = subprocess.run(cmd, capture_output=True, text=True)
+    run = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if run.returncode != 0:
         raise HTTPException(status_code=503,
                             detail="ffmpeg could not subtitle this video (%s)."
@@ -410,7 +410,7 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
              "-pix_fmt", "yuv420p", "-c:a", "copy",
              "-movflags", "+faststart", built],
-            capture_output=True, text=True)
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if run.returncode != 0:
             raise HTTPException(status_code=503,
                                 detail="ffmpeg could not subtitle this video (%s)."
@@ -580,7 +580,7 @@ def dub_result_subtitle_preview(jid: str, preset: Optional[str] = None,
              "-ss", "%.3f" % at, "-copyts", "-i", out,
              "-vf", "ass=filename='%s',scale=480:-2" % _filter_path(ass),
              "-frames:v", "1", "-q:v", "5", built],
-            capture_output=True, text=True)
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if run.returncode != 0:
             raise HTTPException(status_code=503,
                                 detail="ffmpeg could not draw the preview (%s)."

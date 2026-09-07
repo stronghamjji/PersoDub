@@ -62,7 +62,7 @@ def transcribe_local(
             cmd += ["--word-timestamps"]
 
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         except Exception as e:
             raise RuntimeError("local STT failed to run (%s)" % str(e)[:200]) from e
 

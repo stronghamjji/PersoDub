@@ -22,7 +22,7 @@ class _Ran:
         self.returncode = 0
         self.stderr = ""
 
-    def __call__(self, cmd, capture_output=True, text=True):
+    def __call__(self, cmd, capture_output=True, text=True, **_kw):
         self.calls.append(cmd)
         if self.returncode == 0:
             # A real ffmpeg leaves a file behind; the no-overwrite rule below

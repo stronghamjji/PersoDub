@@ -60,7 +60,7 @@ class SeparationEngine:
         try:
             r = subprocess.run(
                 [py, SCRIPT_PATH, "--input", in_path, "--output", out_path],
-                capture_output=True, text=True, timeout=self.timeout,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=self.timeout,
             )
         except Exception as e:
             raise RuntimeError("local separation failed to run (%s)" % str(e)[:120])

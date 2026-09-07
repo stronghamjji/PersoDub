@@ -178,7 +178,7 @@ def _upgrade() -> None:
     """
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
-        capture_output=True, text=True, timeout=UPGRADE_TIMEOUT,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=UPGRADE_TIMEOUT,
     )
 
 

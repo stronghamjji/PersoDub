@@ -180,7 +180,7 @@ def _transcribe_batch_local(paths, language, timeout=600):
         if language:
             cmd += ["--language", language]
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         except Exception:
             return {}
         if r.returncode != 0 or not os.path.exists(out_path):

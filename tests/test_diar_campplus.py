@@ -186,7 +186,7 @@ def test_diarize_raises_when_worker_reports_failure(monkeypatch):
         returncode = 0
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         _write_worker_output(cmd[cmd.index("--output") + 1], {"ok": False, "error": "campplus.onnx not found"})
         return _R()
 
@@ -204,7 +204,7 @@ def test_diarize_raises_on_invalid_json_output(monkeypatch):
         returncode = 0
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         with open(cmd[cmd.index("--output") + 1], "w") as f:
             f.write("{not json")
         return _R()
@@ -223,7 +223,7 @@ def test_diarize_raises_on_mismatched_speaker_count(monkeypatch):
         returncode = 0
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         # worker reports ok, but only 2 labels for 3 cues
         _write_worker_output(cmd[cmd.index("--output") + 1], {"ok": True, "speakers": ["SPK0", "SPK1"]})
         return _R()
@@ -245,7 +245,7 @@ def test_diarize_returns_cues_with_speaker_labels_on_success(monkeypatch):
     captured_input = {}
     captured_cmd = {}
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         captured_cmd["argv0"] = cmd[0]
         with open(cmd[cmd.index("--input") + 1], encoding="utf-8") as f:
             captured_input.update(json.load(f))
