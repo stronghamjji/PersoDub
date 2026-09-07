@@ -198,7 +198,8 @@ test("venv-app runs venv + pip installs and marks done", async () => {
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
   assert.ok(argvs.some((a) => a.includes("-m venv") && a.includes("app_venv")));
-  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir -r") && a.includes("requirements.txt")));
+  // --progress-bar raw for a byte-based percent, --retries/--timeout for a flaky line (2026-09-07).
+  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir --progress-bar raw --retries 10 --timeout 60 -r") && a.includes("requirements.txt")));
   assert.equal(await step.isDone(), true);
 });
 
@@ -680,4 +681,17 @@ test("an installed kit's recorded torch variant wins over the hardware guess", (
   // a GPU-less Windows machine says "cpu" and would reinstall the venv twice).
   writeFileSync(join(ctx.kitDir, "kit.env"), "PERSODUB_KIT_DIR=x\n");
   assert.equal(torchVariantFor(ctx.kitDir), IS_WIN ? "cu128" : "mps");
+});
+
+import { pipProgress } from "./installSpec.js";
+
+test("pipProgress turns pip's raw progress lines into a percent of the step's budget", () => {
+  const p = pipProgress(1000);
+  assert.deepEqual(p("Collecting torch"), [0, "Collecting torch"]);
+  assert.deepEqual(p("Progress 250 of 500"), [25, "Collecting torch"]);
+  assert.deepEqual(p("Progress 500 of 500"), [50, "Collecting torch"]);
+  assert.deepEqual(p("Progress 100 of 300"), [60, "Collecting torch"]);   // next file: the first counts in full
+  assert.deepEqual(p("Installing collected packages"), [60, "Installing collected packages"]);
+  assert.deepEqual(p("Progress 900 of 900"), [99, "Installing collected packages"], "never 100 from here");
+  assert.deepEqual(pipProgress(0)("Progress 1 of 2"), [null, ""], "no budget, no figure");
 });

@@ -62,6 +62,7 @@ function harness({ rows = [], shell = null } = {}) {
     onOpenSettings: () => { state.settings += 1; },
     onRowsChanged: (r) => { state.painted.push(r); },
     shell,
+    keepPolling: () => state.keepPolling === true,
   });
   return { $, api, state };
 }
@@ -564,4 +565,21 @@ test("the dub dialog lists what it will download, by name, size and purpose, and
   h.$("mnDownload").click();
   await settle();
   assert.equal(h.$("mnItems").hidden, true);
+});
+
+
+test("the poll keeps running while the page says so, and a paint that throws does not end it", async (t) => {
+  const h = harness({ rows: [WHISPER] });
+  t.after(h.state.restore);
+  h.state.keepPolling = true;
+  h.api.startPolling();
+  await settle();
+  assert.equal(h.state.timers.length, 1, "scheduled again with nothing downloading");
+  const realErr = console.error; console.error = () => {};
+  t.after(() => { console.error = realErr; });
+  const origPush = h.state.painted.push;
+  h.state.painted.push = () => { throw new Error("paint boom"); };
+  await h.state.timers[0].fn();
+  h.state.painted.push = origPush;
+  assert.equal(h.state.timers.length, 2, "still scheduled after the throw");
 });

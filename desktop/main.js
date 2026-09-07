@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
@@ -23,6 +23,27 @@ let engines = null;
 // The boot's install context (kit, bundled payload, downloader), kept so the
 // pack IPC below can run a pack's steps from the same table later.
 let installCtx = null;
+
+// The shell's own lines go to a file as well as the console: a packaged app
+// has no console, and the one question a support log could not answer on
+// Windows (2026-09-07) was why a pack's process did not start.
+function shellLog(line) {
+  console.log(line);
+  try {
+    const dir = join(app.getPath("userData"), "logs");
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(join(dir, "shell.log"), `${new Date().toISOString()} ${line}\n`);
+  } catch { /* logging never breaks the app */ }
+}
+
+// The last line a person can act on, out of a tool's whole transcript: the
+// page showed two screens of pip output in red (Windows, 2026-09-07).
+function lastReason(message) {
+  const lines = String(message || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return "The install could not finish.";
+  const err = [...lines].reverse().find((l) => /error/i.test(l) && !/^WARNING/.test(l));
+  return (err || lines[lines.length - 1]).slice(0, 200);
+}
 let updateDownloaded = false;
 // The update as last announced -- re-sent to the page on every load, so a
 // page that arrives after the check (boot) or reloads mid-download still
@@ -334,7 +355,7 @@ async function boot(win) {
     });
     rememberPorts({ backend: engines.port });
     await win.loadURL(engines.url);
-    console.log(`PERSODUB_READY ${engines.url}`);
+    shellLog(`PERSODUB_READY ${engines.url}`);
     bootedKitDir = cfg.kitDir;
     countUsage("app_launch", cfg.kitDir);
   } catch (err) {
@@ -470,42 +491,47 @@ app.whenReady().then(() => {
   // install uses, reports on the same progress channel tagged with the pack,
   // then starts the pack's process -- so dubbing goes on without a restart.
   let packCancelled = false;
+  let packInFlight = null;   // one pack at a time: two at once shared one progress and one Cancel
   ipcMain.handle("shell:install-pack", async (_e, id) => {
     if (!PACKS.some((p) => p.id === id)) return { ok: false, reason: `Unknown pack: ${id}` };
     if (!installCtx) return { ok: false, reason: "This build carries no bundled files to install from." };
+    if (packInFlight) return { ok: false, reason: `${packInFlight} is still installing. Wait for it to finish.` };
     const steps = packSteps(buildSteps(installCtx), id);
     const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(installCtx.kitDir));
     if (noRoom) return { ok: false, reason: noRoom };
     packCancelled = false;
-    // Logged like the boot install: a pack install is the one thing a support
-    // log otherwise says nothing about, and its reason lives only in a dialog.
-    console.log(`PERSODUB_PACK install ${id}: ${steps.map((s) => s.id).join(", ")}`);
-    // The page gets the pack's overall percent on every event (installer.js
-    // packPercent), not the running step's own -- a pip step has none.
-    const done = new Set();
+    packInFlight = id;
     try {
-      await runInstall(steps, {
-        onProgress: (p) => {
-          if (p.state === "start" || p.state === "done" || p.state === "error") console.log(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail : ""}`);
-          if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
-          const pct = packPercent(steps, done, p.stepId, p.state === "progress" ? p.pct : null);
-          if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id, pct });
-        },
-      });
-    } catch (err) {
-      const reason = packCancelled ? "Cancelled." : String((err && err.message) || err);
-      console.log(`PERSODUB_PACK install ${id} failed: ${reason}`);
-      return { ok: false, reason };
-    }
-    if (engines && engines.startPack) {
-      try { await engines.startPack(id); }
-      catch (err) {
-        console.log(`PERSODUB_PACK ${id} installed but did not start: ${String((err && err.message) || err)}`);
-        return { ok: false, reason: `Installed, but it could not start: ${String((err && err.message) || err)}` };
+      shellLog(`PERSODUB_PACK install ${id}: ${steps.map((s) => s.id).join(", ")}`);
+      // The page gets the pack's overall percent on every event (installer.js
+      // packPercent), not the running step's own -- a pip step has none.
+      const done = new Set();
+      try {
+        await runInstall(steps, {
+          onProgress: (p) => {
+            if (p.state === "start" || p.state === "done" || p.state === "error") shellLog(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail.slice(0, 300) : ""}`);
+            if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
+            const pct = packPercent(steps, done, p.stepId, p.state === "progress" ? p.pct : null);
+            if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id, pct });
+          },
+        });
+      } catch (err) {
+        const full = String((err && err.message) || err);
+        shellLog(`PERSODUB_PACK install ${id} failed: ${full}`);
+        return { ok: false, reason: packCancelled ? "Cancelled." : lastReason(full) };
       }
+      if (engines && engines.startPack) {
+        try { await engines.startPack(id); }
+        catch (err) {
+          shellLog(`PERSODUB_PACK ${id} installed but did not start: ${String((err && err.message) || err)}`);
+          return { ok: false, reason: `Installed, but it could not start: ${lastReason(String((err && err.message) || err))}` };
+        }
+      }
+      shellLog(`PERSODUB_PACK install ${id} ok`);
+      return { ok: true };
+    } finally {
+      packInFlight = null;
     }
-    console.log(`PERSODUB_PACK install ${id} ok`);
-    return { ok: true };
   });
   ipcMain.handle("shell:cancel-pack", async () => {
     packCancelled = true;

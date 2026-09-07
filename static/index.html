@@ -1075,6 +1075,9 @@
   .model-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 10px; }
   .model-hint { display: block; font-size: 0.72rem; color: var(--muted-foreground); font-weight: 400; margin-top: 2px; }
   .model-size { color: var(--muted-foreground); font-size: 0.8rem; }
+  /* A long status ("Stopped: …") must not squeeze the name into one word per
+     line: it keeps to its column and trims with an ellipsis. */
+  .model-row > .settings-hint { max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-btn { height: 30px; padding: 0 12px; font-size: 0.78rem; }
   /* What the dub will download, by name: the one place a first-time user
      learns what each thing is before it costs gigabytes. */
@@ -2231,6 +2234,8 @@ const models = initModelsUi({
   onRowsChanged: paintModelStatusLines,
   // The desktop app's bridge (absent in a plain browser): packs are its to install.
   shell: window.persodubShell || null,
+  // Keep the catalog fresh while Settings shows it.
+  keepPolling: () => $("settingsOverlay").classList.contains("open"),
 });
 
 // Everything a dropdown choice needs, in the order it downloads: the pack it
@@ -2906,6 +2911,19 @@ function langsLabel() {
 
 // Lives in the New project dialog, which is where the whole start-a-job
 // decision now sits.
+// The voice engine's pack is on disk but its process is not up (its start
+// after an on-demand install timed out, or it died): the desktop app can start
+// it again, and the dub goes on -- no "quit and reopen" for the user.
+let engineRestartTried = false;
+async function restartVoiceEngine() {
+  const shell = window.persodubShell;
+  if (!shell || !shell.installPack || engineRestartTried) return false;
+  engineRestartTried = true;
+  $("projectError").textContent = "Starting the voice engine…";
+  const r = await shell.installPack("engine").catch(() => ({ ok: false }));
+  return !!(r && r.ok);
+}
+
 async function startDubbing() {
   $("projectError").textContent = "";
   const np = state.newProject;
@@ -2939,6 +2957,9 @@ async function startDubbing() {
     if (e && e.status === 409 && e.detail && e.detail.missing) {
       await models.refreshModels();
       models.showModelsDialog(e.detail);
+    } else if (e && e.status === 422 && /voice engine is not running/.test(errorText(e)) && await restartVoiceEngine()) {
+      engineRestartTried = false;
+      return startDubbing();
     } else if (!showIfOutOfSpace(e)) {
       $("projectError").textContent = errorText(e);
     }

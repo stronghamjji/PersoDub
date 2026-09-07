@@ -244,3 +244,12 @@ test("the page hands the desktop bridge to the models controller and hints name 
   assert.match(html, /models\.downloadAll\(ids\)/);
   assert.match(html, /neededPackIds/);
 });
+
+// The voice engine's pack on disk but its process down: the page asks the
+// desktop app to start it and tries the dub again, once.
+test("a dub refused because the voice engine is not running is retried after the desktop app starts it", () => {
+  const html = readFileSync(INDEX, "utf8");
+  assert.match(html, /async function restartVoiceEngine\(\)/);
+  assert.match(html, /voice engine is not running\/\.test\(errorText\(e\)\) && await restartVoiceEngine\(\)/);
+  assert.match(html, /keepPolling: \(\) => \$\("settingsOverlay"\)\.classList\.contains\("open"\)/);
+});

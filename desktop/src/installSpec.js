@@ -199,6 +199,25 @@ const KIT_ENV_MANAGED_ADDITIONS = [
 // The torch build this kit's engines venv has, or should get: what its
 // kit.env records if it has one (an installed kit keeps its build -- see the
 // managed addition above), else the hardware guess for a fresh install.
+// Turns pip's "--progress-bar raw" lines ("Progress <got> of <total>", one
+// file at a time) into a percent of `budget` bytes, keeping the last ordinary
+// line as the detail. Files finish when their total changes; the percent
+// never claims 100 -- the step's own done stamp says that.
+export function pipProgress(budget) {
+  let done = 0, curTotal = 0, curGot = 0, last = "";
+  return (line) => {
+    const m = /^Progress (\d+) of (\d+)$/.exec(line.trim());
+    if (!m) {
+      last = line.slice(0, 120);
+      return [budget ? Math.min(99, Math.round((100 * (done + curGot)) / budget)) : null, last];
+    }
+    const got = Number(m[1]), total = Number(m[2]);
+    if (total !== curTotal) { done += curTotal; curTotal = total; }
+    curGot = got;
+    return [budget ? Math.min(99, Math.round((100 * (done + curGot)) / budget)) : null, last];
+  };
+}
+
 export function torchVariantFor(kitDir) {
   const envPath = join(kitDir, KIT_ENV);
   if (!existsSync(envPath)) return TORCH_VARIANT;   // a fresh install: the hardware guess
@@ -367,6 +386,7 @@ export function buildSteps(ctx) {
       && readFileSync(okPath(id), "utf8").trim() === pipFingerprint(pipInstalls),
     run: async (report) => {
       const venvDir = k(venvName);
+      const budget = existsSync(venvDir) ? Math.min(bytes, 0.5 * GB) : bytes;
       report(null, `Creating ${venvName}`);
       await ctx.run([py, "-m", "venv", venvDir]);
       // Upgrade pip via `python -m pip`, not `pip.exe`: on Windows pip.exe is
@@ -375,12 +395,20 @@ export function buildSteps(ctx) {
       // both platforms.
       const venvPy = venvBin(venvDir, "python");
       await ctx.run([venvPy, "-m", "pip", "install", "--upgrade", "pip"], { onLine: (l) => report(null, l.slice(0, 120)) });
+      // pip's own progress, as bytes: with --progress-bar raw it prints
+      // "Progress <got> of <total>" per file even without a terminal, and the
+      // sum against this step's budget is the percent the page shows -- the
+      // pip step used to sit at 0% through a 3.5 GB torch (Windows, 2026-09-07).
+      // --retries/--timeout: a flaky line dropped a 3.5 GB wheel five times in
+      // one pip run; pip resumes the same download, so more patience is cheap.
+      const progress = pipProgress(budget);
       for (const args of pipInstalls) {
         // `venvPy -m pip`, not the bin/pip shim: the shim carries an absolute
         // shebang, so it is the one file in a venv that a moved or repaired
         // environment can no longer run.
-        await ctx.run([venvPy, "-m", "pip", "install", "--no-cache-dir", ...args],
-                      { onLine: (l) => report(null, l.slice(0, 120)) });
+        await ctx.run([venvPy, "-m", "pip", "install", "--no-cache-dir", "--progress-bar", "raw",
+                       "--retries", "10", "--timeout", "60", ...args],
+                      { onLine: (l) => report(...progress(l)) });
       }
       markOk(id, pipFingerprint(pipInstalls));
     },
@@ -533,20 +561,20 @@ export function buildSteps(ctx) {
       // the in-app model catalog (downloaded by the Python server on first
       // use), which is what makes this a light install.
       id: "ollama-runtime",
-      title: "Downloading the translation runtime (~120 MB)",
+      title: "Downloading the translation runtime",
       bytes: 0.5 * GB,
       isDone: () => existsSync(k("ollama", exeName("ollama"))),
       run: async (report) => {
         // Resume: an already-extracted binary needs no second download.
         if (existsSync(k("ollama", exeName("ollama")))) return;
-        report(null, "Downloading Ollama runtime (~120 MB)");
+        report(null, "Downloading the translation runtime");
         mkdirSync(k("downloads"), { recursive: true });
         const archive = k("downloads", IS_WIN ? "ollama.zip" : "ollama.tgz");
         await ctx.download(OLLAMA_TGZ_URL, archive, {
           sha256: OLLAMA_TGZ_SHA256,
-          onProgress: (p) => report(p.total ? Math.round((100 * p.received) / p.total) : null, "Downloading Ollama runtime"),
+          onProgress: (p) => report(p.total ? Math.round((100 * p.received) / p.total) : null, "Downloading the translation runtime"),
         });
-        report(null, "Extracting Ollama runtime");
+        report(null, "Unpacking the translation runtime");
         await ctx.extract(archive, k("ollama"));
         // Best-effort, same reasoning as the python step above.
         try {

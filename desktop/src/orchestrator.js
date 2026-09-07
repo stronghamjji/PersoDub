@@ -88,7 +88,7 @@ export function sidecarArgv(kitDir, port) {
 // through <kit>/runtime.json (runtimeFile.js), which the backend reads at use
 // time (app/runtime.py) -- never through the backend's environment, which is
 // fixed at its launch. Returns the children it started (for stopPack).
-export async function startPackProcesses(cfg, packId, { logDir, env, children, record }) {
+export async function startPackProcesses(cfg, packId, { logDir, env, children, record, healthTimeoutMs }) {
   if (packId === "ollama-runtime") {
     // Local translation runs through an Ollama server owned by this app:
     // kit-contained binary and models dir, free port (never fights a user's
@@ -134,7 +134,7 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
   async function announceWhenUp(url, predicate, announce) {
     const child = children[children.length - 1];
     try {
-      await waitForHealth(url, { timeoutMs: cfg.sidecarHealthTimeoutMs, predicate });
+      await waitForHealth(url, { timeoutMs: healthTimeoutMs ?? cfg.sidecarHealthTimeoutMs, predicate });
     } catch (err) {
       stopChild(child);
       children.pop();
@@ -221,7 +221,10 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
       const key = id === "engine" ? "tts_url" : "ollama_url";
       if (packChildren.has(id) && readRuntime(cfg.kitDir)[key]) return;
       packChildren.delete(id);
-      packChildren.set(id, await startPackProcesses(cfg, id, packOpts));
+      // A pack started right after its install imports torch cold, on a disk
+      // that just wrote gigabytes: the boot's two minutes were not enough on
+      // Windows (2026-09-07), and a start that gives up leaves the dub refused.
+      packChildren.set(id, await startPackProcesses(cfg, id, { ...packOpts, healthTimeoutMs: 5 * 60 * 1000 }));
     };
     const stopPack = (id) => {
       for (const c of packChildren.get(id) || []) {

@@ -26,7 +26,7 @@ import { gb, modelStatusLine, dubStartDialog, overallProgress, allReady } from "
  *        and labelled in the returned object, so pruning this surface later
  *        does not have to guess which member has a caller off the page.
  */
-export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged, shell = null }) {
+export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged, shell = null, keepPolling = () => false }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
   // ui/src/settingsDialog.mjs. A missing id is a broken page, and a crash on
@@ -143,13 +143,21 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   }
 
   function anyDownloading() { return modelRows.some((m) => m.state === "downloading"); }
+  // Polls while anything is on its way, while a dub waits on downloads, and
+  // while the page says so (Settings open: its rows went stale on screen
+  // while a model finished behind them, Windows 2026-09-07). A paint that
+  // throws must not end the poll -- it did, silently, once.
   function startPolling() {
     if (modelsPolling) return;
     modelsPolling = true;
     const tick = async () => {
-      await fetchModels();
-      repaint();
-      if (anyDownloading() || (pendingDub && pendingDub.downloading)) { setTimeout(tick, 2000); return; }
+      try {
+        await fetchModels();
+        repaint();
+      } catch (e) {
+        console.error("models poll:", e);
+      }
+      if (anyDownloading() || (pendingDub && pendingDub.downloading) || keepPolling()) { setTimeout(tick, 2000); return; }
       modelsPolling = false;
     };
     tick();
@@ -234,7 +242,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       if (m.role === "pack") {
         // The desktop app installs and removes packs; a plain browser can only look.
         if (packBusy && packBusy.id === m.id) {
-          status.textContent = packBusy.line || "Installing…";
+          status.textContent = st.text + (packBusy.line ? ` · ${packBusy.line}` : "");
           btn.textContent = "Cancel"; btn.onclick = () => cancelPack(m.id);
         } else if (packFailed && packFailed.id === m.id) {
           status.textContent = `Stopped: ${packFailed.reason}`;
@@ -374,7 +382,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   return {
     // used by the page
     showModelsDialog, refreshModels, modelRow, downloadModel, downloadAll, cancelModel,
-    repaint, reopenDialogOrSettings,
+    repaint, reopenDialogOrSettings, startPolling,
     // used by tests only -- Remove is drawn by this file and clicked through
     // its own row, so the page never names it. Reachable so the test can.
     removeModel, installPack, removePack,
