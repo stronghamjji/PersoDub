@@ -138,6 +138,11 @@ def test_dub_start_n_takes_defaults_to_none(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 200
+    jid = r.json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
     assert captured["n_takes"] is None
 
 
@@ -313,6 +318,13 @@ def test_dub_start_stt_engine_defaults_to_perso_with_key(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 200
+    # The job runs on its own thread: wait for it, as the tests above do, or
+    # the kwargs are read before the fake has been called (Linux CI).
+    jid = r.json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
     assert captured["stt_engine"] == "perso"
 
 
