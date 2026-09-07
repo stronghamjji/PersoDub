@@ -310,12 +310,20 @@ def _pull_hf(entry, kit, progress, cancelled):
     src = entry["source"]
     argv = [_hf_cli(kit), "download", src["repo"], *src.get("files", []),
             "--revision", src["rev"], "--local-dir", dest]
-    proc = _subprocess.Popen(argv, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT, text=True)
+    # utf-8 with replacement: the tool draws its progress bars in UTF-8, and a
+    # Korean Windows console's default (cp949) choked on them mid-stream.
+    proc = _subprocess.Popen(argv, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT,
+                             text=True, encoding="utf-8", errors="replace")
     pct_re = _re.compile(r"(\d{1,3})%")
+    recent = []   # the tool's last words, for the error a failure carries
     for line in proc.stdout:
         if cancelled():
             _end(proc)
             return
+        line = line.strip()
+        if line:
+            recent.append(line)
+            del recent[:-6]
         m = pct_re.search(line)
         if m:
             progress(min(100, int(m.group(1))))
@@ -323,7 +331,11 @@ def _pull_hf(entry, kit, progress, cancelled):
     if cancelled():
         return
     if rc != 0:
-        raise RuntimeError(f"hf download exited {rc}")
+        # The exit code alone said nothing ("hf download exited 1", Windows,
+        # 2026-09-07); the tool's own last lines say what went wrong.
+        tail = " | ".join(recent[-3:])
+        log.warning("hf download of %s exited %s: %s", entry["id"], rc, " | ".join(recent))
+        raise RuntimeError(f"hf download exited {rc}" + (f": {tail}" if tail else ""))
 
 
 def _pull_ollama(entry, progress, cancelled):
