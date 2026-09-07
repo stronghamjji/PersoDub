@@ -204,12 +204,12 @@ def _srt_cues(path: str):
 
 
 def _write_burn_ass(srt: str, preset: str, pos, size, work: str, video: str,
-                    box_width=None, line_widths=None) -> str:
+                    box_width=None, line_widths=None, layout=None) -> str:
     """The styled .ass beside the job, rebuilt for every burn (cheap)."""
     w, h = _video_dims(video)
     ass = build_ass(_srt_cues(srt), preset, width=w, height=h,
                     pos=pos, size=size, font=_BURN_FONT,
-                    box_width=box_width, line_widths=line_widths)
+                    box_width=box_width, line_widths=line_widths, layout=layout)
     out = os.path.join(work, "subtitle_render.ass")
     with open(out, "w", encoding="utf-8") as f:
         f.write(ass)
@@ -403,7 +403,7 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
     built = os.path.join(work, "subtitled-%s%s.mp4" % (preset, _pos_size_suffix(pos, size)))
     if _stale(built, *sources):
         ass = _write_burn_ass(srt, preset, pos, size, work, out,
-                              stored["boxWidth"], stored["widths"])
+                              stored["boxWidth"], stored["widths"], stored["layout"])
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-i", out, "-vf", "ass=filename='%s'" % _filter_path(ass),
@@ -423,7 +423,24 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
 
 _SUBTITLE_STYLE_DEFAULTS = {"enabled": True, "preset": "clean",
                             "pos": None, "size": None, "cues": {},
-                            "boxWidth": None, "widths": {}}
+                            "boxWidth": None, "widths": {}, "layout": {}}
+
+
+def _check_layout(layout) -> None:
+    """The player's measurement of each line -- the words it measured, the
+    lines they broke into, and the box in em of the font size. Shape only:
+    the burn ignores an entry whose words the script no longer says."""
+    if not isinstance(layout, dict):
+        raise HTTPException(status_code=422, detail="layout must be an object")
+    for k, lay in layout.items():
+        ok = (isinstance(lay, dict) and isinstance(lay.get("text"), str)
+              and isinstance(lay.get("lines"), list)
+              and all(isinstance(l, str) for l in lay["lines"])
+              and isinstance(lay.get("w"), (int, float)) and isinstance(lay.get("h"), (int, float))
+              and 0 < lay["w"] <= 1000 and 0 < lay["h"] <= 1000)
+        if not ok:
+            raise HTTPException(status_code=422,
+                                detail=f"layout {k} needs text, lines, and a box (w, h) in em")
 
 
 def _subtitle_style_file(jid: str) -> str:
@@ -478,6 +495,7 @@ def subtitle_style_put(jid: str, body: dict):
             raise HTTPException(status_code=422, detail=f"cue {k} needs start and end")
         if not 0 <= start < end:
             raise HTTPException(status_code=422, detail=f"cue {k} must start before it ends")
+    _check_layout(merged["layout"])
     with open(path, "w", encoding="utf-8") as f:
         json.dump(merged, f, ensure_ascii=False)
     return merged
@@ -553,7 +571,7 @@ def dub_result_subtitle_preview(jid: str, preset: Optional[str] = None,
     if _stale(built, *sources):
         at = _first_srt_second(srt) + 0.5
         ass = _write_burn_ass(srt, preset, pos, size, work, out,
-                              stored["boxWidth"], stored["widths"])
+                              stored["boxWidth"], stored["widths"], stored["layout"])
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-ss", "%.3f" % at, "-copyts", "-i", out,

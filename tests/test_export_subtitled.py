@@ -199,14 +199,16 @@ def test_subtitle_settings_start_with_the_defaults(monkeypatch, tmp_path):
     r = client.get(f"/api/dub/jobs/{jid}/subtitle_style")
     assert r.status_code == 200
     assert r.json() == {"enabled": True, "preset": "clean", "pos": None,
-                        "size": None, "cues": {}, "boxWidth": None, "widths": {}}
+                        "size": None, "cues": {}, "boxWidth": None, "widths": {},
+                        "layout": {}}
 
 
 def test_subtitle_settings_survive_a_round_trip(monkeypatch, tmp_path):
     ran, jid, work = _done_job(monkeypatch, tmp_path)
     body = {"enabled": False, "preset": "variety", "pos": 30, "size": 120,
             "cues": {"1": {"start": 0.5, "end": 3.0}},
-            "boxWidth": 62, "widths": {"2": 84}}
+            "boxWidth": 62, "widths": {"2": 84},
+            "layout": {"1": {"text": "원래 번역", "lines": ["원래", "번역"], "w": 3.1, "h": 2.9}}}
     assert client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=body).status_code == 200
     assert client.get(f"/api/dub/jobs/{jid}/subtitle_style").json() == {
         **body, "preset": "neon-yellow"}
@@ -223,6 +225,12 @@ def test_subtitle_settings_refuse_nonsense(monkeypatch, tmp_path):
     assert put({"boxWidth": 5}) == 422
     assert put({"widths": {"2": 200}}) == 422
     assert put({"cues": {"1": {"start": 5, "end": 2}}}) == 422
+    # The page's layout: words, the lines they broke into, a box in em.
+    assert put({"layout": []}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": "a", "w": 1, "h": 1}}}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": "wide", "h": 1}}}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 0, "h": 1}}}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6}}}) == 200
 
 
 def test_subtitled_reads_the_stored_settings(monkeypatch, tmp_path):
@@ -260,3 +268,19 @@ def test_the_stored_box_width_reaches_the_burn(monkeypatch, tmp_path):
     ass = _ass(work)
     assert "\\p1" in ass.replace("\\\\", "\\") or r"\p1" in ass
     assert "l 960 " in ass          # 50% of the 1080p fallback canvas
+
+
+def test_the_pages_layout_reaches_the_burn(monkeypatch, tmp_path):
+    # The player measured the line with the real font: the burn draws that box
+    # and those line breaks, not its own estimate (user, 2026-09-07).
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    client.put(f"/api/dub/jobs/{jid}/subtitle_style",
+               json={"preset": "black-box", "boxWidth": 50,
+                     "layout": {"1": {"text": "원래 번역", "lines": ["원래", "번역"],
+                                      "w": 10.0, "h": 3.0}}})
+    r = client.get(f"/api/dub/result/{jid}/subtitled")
+    assert r.status_code == 200
+    ass = _ass(work)
+    # font 35 px on the 1080p fallback canvas: 10 em = 350 wide, 3 em = 105 tall
+    assert "l 350 0 l 350 105 l 0 105" in ass
+    assert "원래\\N번역" in ass

@@ -712,9 +712,14 @@
   /* The container is synced by script to the video's own box, so the text
      sits on the picture, not on the letterbox around it. */
   .sub-overlay { position: absolute; pointer-events: none; text-align: center; }
+  /* Drawn in the font ffmpeg burns with (app/api/results.py, _BURN_FONT: one
+     of these per platform) at the font's own line height, so what the player
+     measures here is what the export draws. max-width 92% is SUB_MAX_WIDTH
+     in the script below. */
   .sub-ov-text { position: absolute; left: 0; right: 0; margin: 0 auto;
     width: max-content; max-width: 92%; pointer-events: auto; cursor: grab;
-    user-select: none; touch-action: none; font-weight: 700; line-height: 1.25;
+    user-select: none; touch-action: none; font-weight: 700; line-height: normal;
+    font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", sans-serif;
     white-space: pre-wrap; }
   .sub-ov-text.sel { outline: 2px dashed var(--primary); outline-offset: 5px;
     border-radius: 4px; }
@@ -1363,6 +1368,10 @@
                   <div class="sub-overlay" id="subOverlay" hidden>
                     <span class="sub-ov-text" id="subOverlayText"></span>
                   </div>
+                  <!-- The ruler's stand-in: wears a look's class so its padding,
+                       weight and line height can be read off the CSS. -->
+                  <span class="sub-ov-text" id="subMeasure" aria-hidden="true"
+                        style="visibility:hidden;pointer-events:none;top:-9999px;font-size:100px;max-width:none;white-space:pre"></span>
                   <button class="video-bigplay" id="bigPlay" type="button" aria-label="Play">
                     <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:4px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
                   </button>
@@ -1953,6 +1962,7 @@
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips } from "/js/dubApi.mjs";
 import { gb, neededModelId, modelStatusLine } from "/js/modelsUi.mjs";
 import { initModelsUi } from "/js/modelsDialog.mjs";
+import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
 import { initProjectsUi } from "/js/projects.mjs";
@@ -3400,7 +3410,10 @@ const scriptTable = initScriptTableUi({
   // Reached for when it is called, not now: the timeline is wired up further
   // down this file, and naming it here would read a const that does not exist
   // yet.
-  renderTimeline: (lines, duration) => timeline.renderTimeline(lines, duration),
+  renderTimeline: (lines, duration) => {
+    timeline.renderTimeline(lines, duration);
+    subLinesChanged();   // new words: the subtitles' layout is measured again
+  },
   paintPlayhead,
   getVideo: () => doneVideo,
   showVideoSource,
@@ -3414,7 +3427,8 @@ const scriptTable = initScriptTableUi({
 // retimed on the timeline. The overlay, the timeline lane and the Export
 // dialog all read and write it; saves are debounced PUTs.
 let subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {},
-                 boxWidth: null, widths: {} };
+                 boxWidth: null, widths: {}, layout: {} };
+let subStyleLoaded = false;   // a save before the load answers would wipe the file
 let subScope = "all";     // what a width drag changes: every line, or this one
 let subNowIdx = 0;        // the line the overlay is showing right now
 let subStyleJobId = null;
@@ -3447,6 +3461,9 @@ function saveSubStyle() {
   clearTimeout(subStyleTimer);
   subStyleTimer = setTimeout(() => {
     if (!subStyleJobId) return;
+    // What the player showed goes with the settings, so the burn draws that.
+    const lay = subLayoutAll();
+    if (lay) subStyle.layout = lay;
     fetch(`/api/dub/jobs/${subStyleJobId}/subtitle_style`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(subStyle),
@@ -3457,15 +3474,20 @@ function saveSubStyle() {
 async function loadSubStyle(jobId) {
   if (subStyleJobId === jobId) return;
   subStyleJobId = jobId;
+  subStyleLoaded = false;
   subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {},
-               boxWidth: null, widths: {} };
+               boxWidth: null, widths: {}, layout: {} };
   try {
     subStyle = await (await fetch(`/api/dub/jobs/${jobId}/subtitle_style`)).json();
   } catch { /* defaults stand */ }
+  if (subStyleJobId !== jobId) return;   // another job was opened meanwhile
+  subStyleLoaded = true;
   subStyle.preset = SUB_LEGACY[subStyle.preset] || subStyle.preset;
   if (!SUB_META[subStyle.preset]) subStyle.preset = "clean";
+  if (!subStyle.layout) subStyle.layout = {};
   if (timeline.getLines().length) timeline.redraw();
   updateSubtitleNow();
+  subLinesChanged();
 }
 
 // The user's retimed window for a line, else the line's own.
@@ -3481,11 +3503,88 @@ let subSelected = false;
 // The overlay box follows the video's own box, so text sits on the picture
 // rather than on the dark around it.
 function syncSubOverlayBox() {
-  subOverlay.style.left = doneVideo.offsetLeft + "px";
-  subOverlay.style.top = doneVideo.offsetTop + "px";
-  subOverlay.style.width = doneVideo.offsetWidth + "px";
-  subOverlay.style.height = doneVideo.offsetHeight + "px";
+  const pic = pictureRect({ left: doneVideo.offsetLeft, top: doneVideo.offsetTop,
+                            width: doneVideo.offsetWidth, height: doneVideo.offsetHeight,
+                            videoWidth: doneVideo.videoWidth, videoHeight: doneVideo.videoHeight });
+  subOverlay.style.left = pic.left + "px";
+  subOverlay.style.top = pic.top + "px";
+  subOverlay.style.width = pic.width + "px";
+  subOverlay.style.height = pic.height + "px";
+  return pic;
 }
+
+// ---- The ruler: the burn's font, measured by the browser ----
+// One canvas measures text in the font ffmpeg will draw with, at 100 px, so
+// every number is em x 100. The padding, weight and line height are read off
+// the hidden measuring span wearing the look's own class -- the CSS is the one
+// place that says what each look is.
+const SUB_MAX_WIDTH = 0.92;   // .sub-ov-text's max-width
+const subRulerCtx = document.createElement("canvas").getContext("2d");
+const subMeasure = $("subMeasure");
+const subRulers = {};
+function subRulerFor(preset) {
+  if (subRulers[preset]) return subRulers[preset];
+  subMeasure.className = "sub-ov-text sub-ov-" + preset;
+  subMeasure.textContent = "가A";
+  const cs = getComputedStyle(subMeasure);
+  const padX = parseFloat(cs.paddingLeft) || 0, padY = parseFloat(cs.paddingTop) || 0;
+  const lineHeight = subMeasure.offsetHeight - 2 * padY;
+  if (!(lineHeight > 0)) return null;   // not on screen: nothing to measure by
+  const upper = cs.textTransform === "uppercase";
+  const font = `${cs.fontWeight} 100px ${SUB_FONT_CSS}`;
+  const ruler = (t) => {
+    subRulerCtx.font = font;
+    return subRulerCtx.measureText(upper ? t.toUpperCase() : t).width;
+  };
+  return (subRulers[preset] = { ruler, padX, padY, lineHeight });
+}
+
+// What the player shows for line idx, in em of the font: the lines the words
+// break into and the box around them -- the same numbers the burn draws from.
+// null while there is nothing to measure by (no video size yet, screen down).
+function subLayoutFor(idx, lines = timeline.getLines()) {
+  const l = lines[idx];
+  const vw = doneVideo.videoWidth, vh = doneVideo.videoHeight;
+  if (!l || !vw || !vh) return null;
+  const r = subRulerFor(subStyle.preset);
+  if (!r) return null;
+  const meta = SUB_META[subStyle.preset] || SUB_META.clean;
+  const k = 100 / (vh * meta.frac * ((subStyle.size == null ? 100 : subStyle.size) / 100));
+  let pct = null;
+  if (SUB_BOXED.has(subStyle.preset)) {
+    const linePct = subStyle.widths[String(idx + 1)];
+    pct = linePct != null ? linePct : subStyle.boxWidth;
+  }
+  const lay = layoutOf({ text: l.text || "", ruler: r.ruler,
+                         boxWidth: pct == null ? null : pct / 100 * vw * k,
+                         cap: SUB_MAX_WIDTH * vw * k,
+                         padX: r.padX, padY: r.padY, lineHeight: r.lineHeight });
+  return { text: l.text || "", lines: lay.lines,
+           w: Math.round(lay.w) / 100, h: Math.round(lay.h) / 100 };
+}
+
+function subLayoutAll() {
+  const lines = timeline.getLines();
+  if (!lines.length) return null;
+  const out = {};
+  for (let i = 0; i < lines.length; i++) {
+    const lay = subLayoutFor(i, lines);
+    if (!lay) return null;
+    out[String(i + 1)] = lay;
+  }
+  return out;
+}
+
+// The words changed (a job opened, a line edited or rewritten) or the video's
+// size just became known: measure again, and save when the answer moved.
+function subLinesChanged() {
+  if (!subStyleJobId || !subStyleLoaded) return;
+  const lay = subLayoutAll();
+  if (!lay || JSON.stringify(lay) === JSON.stringify(subStyle.layout)) return;
+  subStyle.layout = lay;
+  saveSubStyle();
+}
+doneVideo.addEventListener("loadedmetadata", subLinesChanged);
 
 function updateSubtitleNow() {
   // The lines the timeline is drawing, by reference -- the same array this used
@@ -3506,8 +3605,11 @@ function updateSubtitleNow() {
   if (idx < 0 && doneVideo.paused && t <= subCueOf(lines[0], 0).start) idx = 0;
   if (idx < 0) { subOverlay.hidden = true; return; }
   subNowIdx = idx;
-  syncSubOverlayBox();
-  subOvText.textContent = lines[idx].text || "";
+  const pic = syncSubOverlayBox();
+  // The lines as measured, so the screen and the burn break them alike; the
+  // words as they are until there is a video size to measure against.
+  const lay = subLayoutFor(idx, lines);
+  subOvText.textContent = lay ? lay.lines.join("\n") : (lines[idx].text || "");
   const boxed = SUB_BOXED.has(subStyle.preset);
   const linePct = subStyle.widths[String(idx + 1)];
   const pct = linePct != null ? linePct : subStyle.boxWidth;
@@ -3527,7 +3629,7 @@ function updateSubtitleNow() {
   }
   subOvText.className = "sub-ov-text sub-ov-" + subStyle.preset
     + (subSelected ? " sel" : "");
-  const h = doneVideo.offsetHeight || 1;
+  const h = pic.height || 1;
   const meta = SUB_META[subStyle.preset] || SUB_META.clean;
   const scale = (subStyle.size == null ? 100 : subStyle.size) / 100;
   subOvText.style.fontSize = (h * meta.frac * scale) + "px";

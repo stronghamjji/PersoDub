@@ -208,3 +208,24 @@ test("dragging a subtitle width handle keeps following the pointer after the box
   send(handle, "pointermove", ev(190));
   assert.equal(subStyle.boxWidth, 70, "a drag that was let go must not keep following");
 });
+
+// The player's subtitle is the ruler for the export: the page measures with
+// the same font ffmpeg burns with, at the font's own line height, and sends
+// the result as `layout`. These pin the CSS side of that contract to the
+// module and the backend it must agree with (user, 2026-09-07).
+test("the player draws subtitles in the burn's font at its natural line height", async () => {
+  const html = readFileSync(INDEX, "utf8");
+  const { SUB_FONT_STACK } = await import("./subtitleLayout.mjs");
+  const rule = html.match(/\.sub-ov-text \{[^}]*\}/)[0];
+  assert.match(rule, new RegExp(SUB_FONT_STACK.map((f) => `"${f}"`).join(", ")),
+    "the overlay's font-family must list the burn's fonts in the burn's order");
+  assert.match(rule, /line-height: normal/);
+  assert.match(rule, /max-width: 92%/);
+  assert.match(html, /const SUB_MAX_WIDTH = 0\.92;/, "the script's cap must be the CSS max-width");
+  // The backend's per-platform font is one of the same three.
+  const results = readFileSync(fileURLToPath(new URL("../../app/api/results.py", import.meta.url)), "utf8");
+  for (const f of SUB_FONT_STACK) assert.ok(results.includes(`"${f}"`), `${f} is not a burn font`);
+  // The measured layout goes out with the settings.
+  assert.match(html, /subStyle\.layout = lay;/);
+  assert.match(html, /id="subMeasure"/);
+});
