@@ -46,6 +46,10 @@ def load_catalog():
             raise ValueError("catalog is not a non-empty list")
         for m in cat:
             for key in _REQUIRED_FIELDS:
+                # A pack has no source: the desktop shell installs it, not this
+                # process (see PACKS in desktop/src/installSpec.js).
+                if key == "source" and m.get("role") == "pack":
+                    continue
                 if key not in m:
                     raise ValueError(f"entry {m.get('id')!r} lacks {key!r}")
         return cat
@@ -60,9 +64,39 @@ def kit_dir() -> str:
     return os.environ.get("PERSODUB_KIT_DIR", "")
 
 
+def platform_key() -> str:
+    """Which of a pack's sizes applies here: "mac", or on Windows "win-gpu" /
+    "win-cpu" by the torch variant the desktop shell chose at install
+    (PERSODUB_TORCH_VARIANT in kit.env; absent means the GPU build, which is
+    what every kit before the variant existed installed)."""
+    if not _sys.platform.startswith("win"):
+        return "mac"
+    variant = os.environ.get("PERSODUB_TORCH_VARIANT", "").strip().lower()
+    return "win-cpu" if variant == "cpu" else "win-gpu"
+
+
+def _pack_bytes(entry):
+    """A pack's size on this platform; a model's size is one number already."""
+    b = entry["bytes"]
+    return b.get(platform_key(), 0) if isinstance(b, dict) else b
+
+
 def model_state(entry, kit: str) -> str:
     """"ready" | "paused" | "not_downloaded" for one catalog entry."""
     base = os.path.join(kit, *entry["dir"].split("/"))
+    if entry["role"] == "pack":
+        # Pack markers are kit-relative (they span folders: the installer's
+        # own .ok stamp plus the pack's files); the Ollama binary carries the
+        # platform's suffix, as the shell writes it.
+        markers = []
+        for m in entry["markers"]:
+            rel = m.split("/")
+            if _sys.platform.startswith("win") and rel[-1] == "ollama":
+                rel[-1] += ".exe"
+            markers.append(os.path.join(kit, *rel))
+        if markers and all(os.path.exists(p) for p in markers):
+            return "ready"
+        return "paused" if os.path.isdir(base) else "not_downloaded"
     markers = [os.path.join(base, *m.split("/")) for m in entry["markers"]]
     if markers and all(os.path.exists(p) for p in markers):
         return "ready"
@@ -154,7 +188,7 @@ def status_rows():
     for m in load_catalog():
         if m["role"] == "always":
             continue
-        row = {"id": m["id"], "role": m["role"], "name": m["name"], "bytes": m["bytes"]}
+        row = {"id": m["id"], "role": m["role"], "name": m["name"], "bytes": _pack_bytes(m)}
         with _lock:
             rt = dict(_downloads.get(m["id"]) or {})
         if rt.get("state") in ("queued", "downloading"):
@@ -169,9 +203,14 @@ def status_rows():
     return rows
 
 
+PACKS_ARE_THE_SHELLS = "Packs are installed by the desktop app"
+
+
 def request_download(entry) -> str:
     """"started" | "already". Queues the model; one download runs at a time."""
     global _worker
+    if entry["role"] == "pack":
+        raise ValueError(PACKS_ARE_THE_SHELLS)
     with _lock:
         state = (_downloads.get(entry["id"]) or {}).get("state")
         if state in ("queued", "downloading"):
@@ -197,6 +236,8 @@ def cancel_download(mid):
 
 
 def remove_model(entry):
+    if entry["role"] == "pack":
+        raise ValueError(PACKS_ARE_THE_SHELLS)
     kit = kit_dir()
     if entry["source"].get("kind") == "ollama":
         # The blob store is shared across Ollama models: deleting through the

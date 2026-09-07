@@ -82,6 +82,10 @@ def _model_or_404(mid: str):
 @router.post("/api/models/{mid}/download")
 def model_download(mid: str):
     entry = _model_or_404(mid)
+    if entry["role"] == "pack":
+        # The desktop shell installs packs (its install-pack IPC); this
+        # process has neither the installer nor the right to run it.
+        raise HTTPException(409, model_store.PACKS_ARE_THE_SHELLS)
     free = model_store.free_bytes_at(model_store.kit_dir())
     if free is not None and free < entry["bytes"] * 1.1:
         raise HTTPException(409, "Not enough space: needs %.1f GB, %.1f GB free"
@@ -103,6 +107,8 @@ def model_cancel(mid: str):
 @router.delete("/api/models/{mid}")
 def model_remove(mid: str):
     entry = _model_or_404(mid)
+    if entry["role"] == "pack":
+        raise HTTPException(409, model_store.PACKS_ARE_THE_SHELLS)
     if model_store.dub_in_progress():
         raise HTTPException(409, "A dub is running right now. Wait for it to finish, then remove the model.")
     model_store.cancel_download(mid)

@@ -28,8 +28,10 @@ def test_catalog_has_the_first_models_and_required_fields():
     for want in ("qwen3-tts", "whisper", "gemma", "hunyuan", "demucs"):
         assert want in ids, ids
     for m in cat:
-        for key in ("id", "role", "name", "bytes", "dir", "markers", "source"):
+        for key in ("id", "role", "name", "bytes", "dir", "markers"):
             assert key in m, (m.get("id"), key)
+        # A pack has no source -- the desktop app installs it, not this process.
+        assert ("source" in m) == (m["role"] != "pack"), m["id"]
 
 
 def test_broken_catalog_falls_back_to_always_only(monkeypatch, tmp_path):
@@ -124,3 +126,63 @@ def test_free_space_is_none_when_the_disk_will_not_say(monkeypatch, tmp_path):
 
     monkeypatch.setattr(models_module.shutil, "disk_usage", boom)
     assert models_module.free_bytes_at(str(tmp_path)) is None
+
+
+# ── packs ──────────────────────────────────────────────────────────────────
+# The two heavy bundles the desktop app installs on demand (engines venv +
+# Demucs, the Ollama runtime). They sit in the catalog so the screen's
+# "Download N GB to dub?" dialog and Settings > Models can show them next to
+# the models, but the shell installs them, not this process.
+def _put_engine_pack(kit):
+    _mk(kit, ".install", "venv-engines.ok")
+    _mk(kit, "models", "demucs", "HTDemucs", "955717e8.safetensors")
+
+
+def test_catalog_lists_the_two_packs_without_a_source():
+    by_id = {m["id"]: m for m in models_module.load_catalog()}
+    assert by_id["engine"]["role"] == "pack" and by_id["engine"]["name"] == "AI engine"
+    assert by_id["ollama-runtime"]["role"] == "pack"
+    assert set(by_id["engine"]["bytes"]) == {"mac", "win-gpu", "win-cpu"}
+    assert "source" not in by_id["engine"]
+
+
+def test_platform_key_reads_the_torch_variant_on_windows(monkeypatch):
+    monkeypatch.setattr(models_module._sys, "platform", "darwin")
+    assert models_module.platform_key() == "mac"
+    monkeypatch.setattr(models_module._sys, "platform", "win32")
+    monkeypatch.setenv("PERSODUB_TORCH_VARIANT", "cpu")
+    assert models_module.platform_key() == "win-cpu"
+    monkeypatch.setenv("PERSODUB_TORCH_VARIANT", "cu128")
+    assert models_module.platform_key() == "win-gpu"
+    monkeypatch.delenv("PERSODUB_TORCH_VARIANT")
+    assert models_module.platform_key() == "win-gpu"   # the shell's default variant
+
+
+def test_a_pack_is_ready_paused_or_missing_by_its_root_markers(tmp_path):
+    kit = str(tmp_path)
+    engine = models_module.find("engine")
+    assert models_module.model_state(engine, kit) == "not_downloaded"
+    os.makedirs(os.path.join(kit, "engines_venv"))
+    assert models_module.model_state(engine, kit) == "paused"     # folder there, not finished
+    _put_engine_pack(kit)
+    assert models_module.model_state(engine, kit) == "ready"
+
+
+def test_api_models_shows_the_packs_with_this_platforms_size(monkeypatch, tmp_path):
+    kit = str(tmp_path)
+    monkeypatch.setenv("PERSODUB_KIT_DIR", kit)
+    monkeypatch.setattr(models_module._sys, "platform", "darwin")
+    _put_engine_pack(kit)
+    rows = {m["id"]: m for m in client.get("/api/models").json()["models"]}
+    assert rows["engine"]["role"] == "pack"
+    assert rows["engine"]["bytes"] == 2000000000
+    assert rows["engine"]["state"] == "ready"
+    assert rows["ollama-runtime"]["state"] == "not_downloaded"
+
+
+def test_packs_are_not_downloaded_or_removed_through_the_backend(monkeypatch, tmp_path):
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    r = client.post("/api/models/engine/download")
+    assert r.status_code == 409 and r.json()["detail"] == "Packs are installed by the desktop app"
+    r = client.delete("/api/models/ollama-runtime")
+    assert r.status_code == 409 and r.json()["detail"] == "Packs are installed by the desktop app"

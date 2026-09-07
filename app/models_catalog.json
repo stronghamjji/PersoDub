@@ -11,6 +11,12 @@
   {"id": "hunyuan", "role": "translate", "name": "Hunyuan", "bytes": 1100000000,
    "source": {"kind": "ollama", "pull": "hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M", "tag": "hy-mt2:1.8b", "needs_template": true},
    "dir": "models/ollama", "markers": ["manifests/registry.ollama.ai/library/hy-mt2/1.8b"]},
+  {"id": "engine", "role": "pack", "name": "AI engine",
+   "bytes": {"mac": 2000000000, "win-gpu": 9000000000, "win-cpu": 1500000000},
+   "dir": "engines_venv", "markers": [".install/venv-engines.ok", "models/demucs/HTDemucs/955717e8.safetensors"]},
+  {"id": "ollama-runtime", "role": "pack", "name": "Translation runtime",
+   "bytes": {"mac": 460000000, "win-gpu": 1900000000, "win-cpu": 1900000000},
+   "dir": "ollama", "markers": ["ollama/ollama"]},
   {"id": "demucs", "role": "always", "name": "Sound separation", "bytes": 81000000,
    "source": {"kind": "hf", "repo": "adefossez/HTDemucs", "rev": "bf35a81b663819a8255c8fefee17f9d812b786b5", "files": ["htdemucs.yaml", "955717e8.safetensors"]},
    "dir": "models/demucs/HTDemucs", "markers": ["955717e8.safetensors"]}
