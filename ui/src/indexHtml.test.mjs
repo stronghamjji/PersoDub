@@ -138,3 +138,73 @@ test("after an update the page says so in one line and keeps the What's new shee
   assert.match(check, /showUpdatedNotice\(\)/);
   assert.doesNotMatch(check, /showWhatsNew\(\)/);
 });
+
+// The boxed subtitle's width handles sit inside the subtitle's own text box.
+// Every move of a drag redraws that box, and the redraw writes the text afresh,
+// which throws the handles away and makes new ones. A drag whose listeners and
+// pointer capture hang on the handle itself therefore hears exactly one move:
+// the handle it held is gone, and later moves land on the new one, which
+// listens to nothing. On screen that was "the box widens one notch per click"
+// (user, 2026-09-07). The drag has to live on the box, which survives.
+test("dragging a subtitle width handle keeps following the pointer after the box is redrawn", () => {
+  const html = readFileSync(INDEX, "utf8");
+  const start = html.indexOf("// The side handles: drag to set the box's width");
+  assert.ok(start > 0, "the width-handle drag is gone?");
+  const src = html.slice(start, html.indexOf("}, true);", start) + "}, true);".length);
+
+  // Just enough of a page: elements with listeners and a parent, events that
+  // bubble to the parent, and closest() for the handle class.
+  function el(name, parent = null) {
+    const e = { name, parent, listeners: {}, children: [], captured: [] };
+    e.addEventListener = (t, fn) => { (e.listeners[t] ||= []).push(fn); };
+    e.removeEventListener = (t, fn) => {
+      e.listeners[t] = (e.listeners[t] || []).filter((f) => f !== fn);
+    };
+    e.setPointerCapture = (pid) => { e.captured.push(pid); };
+    e.closest = (sel) => (sel === ".sub-wh" && e.name === "handle" ? e : null);
+    if (parent) parent.children.push(e);
+    return e;
+  }
+  // The browser sends a pointer event to the element under (or capturing) the
+  // pointer and lets it bubble; an element thrown out of the page hears nothing.
+  function send(target, type, ev) {
+    for (let n = target; n; n = n.parent) {
+      for (const fn of [...(n.listeners[type] || [])]) fn(ev);
+    }
+  }
+  const subOvText = el("box");
+  let handle = el("handle", subOvText);
+  const subStyle = { boxWidth: 80, widths: {} };
+  // What updateSubtitleNow does to the handles: the old ones are gone from the
+  // page, new ones take their place.
+  const updateSubtitleNow = () => {
+    for (const kid of subOvText.children) kid.parent = null;
+    subOvText.children = [];
+    handle = el("handle", subOvText);
+  };
+  let saved = 0, redrawn = 0;
+  new Function("subOvText", "doneVideo", "subStyle", "subScope", "subNowIdx",
+    "updateSubtitleNow", "saveSubStyle", "timeline", src)(
+    subOvText, { getBoundingClientRect: () => ({ left: 0, width: 200 }) }, subStyle,
+    "all", 0, updateSubtitleNow, () => { saved++; },
+    { drawTimelineTrack() { redrawn++; } });
+
+  const ev = (clientX) => ({
+    target: handle, clientX, pointerId: 3,
+    preventDefault() {}, stopPropagation() {},
+  });
+  // Pressed on the handle at 150 px from the picture's left edge -- and the
+  // video is 200 px wide, so x = 150 means a box 50 % wide, x = 170 means 70 %.
+  send(handle, "pointerdown", ev(150));
+  send(handle, "pointermove", ev(150));
+  send(handle, "pointermove", ev(160));
+  send(handle, "pointermove", ev(170));
+  assert.equal(subStyle.boxWidth, 70,
+    "the box must follow every move of one drag, not just the first");
+  send(handle, "pointerup", ev(170));
+  assert.equal(saved, 1, "letting go remembers the width once");
+  assert.equal(redrawn, 1, "letting go redraws the timeline once");
+  // And letting go ends the drag: a move afterwards changes nothing.
+  send(handle, "pointermove", ev(190));
+  assert.equal(subStyle.boxWidth, 70, "a drag that was let go must not keep following");
+});

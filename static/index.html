@@ -3614,9 +3614,11 @@ $("subStyleBtn").addEventListener("click", (e) => {
 
 // The side handles: drag to set the box's width -- every line, or (with
 // "This line") just this one, which then keeps its own width.
+// The drag is captured on the text box, not the handle: every move redraws
+// the box, and the redraw throws the handles away and makes new ones. A
+// capture on the handle went with it, so the box widened one notch per click.
 subOvText.addEventListener("pointerdown", (e) => {
-  const wh = e.target.closest?.(".sub-wh");
-  if (!wh) return;
+  if (!e.target.closest?.(".sub-wh")) return;
   e.preventDefault(); e.stopPropagation();
   let dragged = false;
   const move = (ev) => {
@@ -3630,15 +3632,15 @@ subOvText.addEventListener("pointerdown", (e) => {
     updateSubtitleNow();
   };
   const up = () => {
-    wh.removeEventListener("pointermove", move);
-    wh.removeEventListener("pointerup", up);
-    wh.removeEventListener("pointercancel", up);
+    subOvText.removeEventListener("pointermove", move);
+    subOvText.removeEventListener("pointerup", up);
+    subOvText.removeEventListener("pointercancel", up);
     if (dragged) { saveSubStyle(); timeline.drawTimelineTrack(); }
   };
-  wh.addEventListener("pointermove", move);
-  wh.addEventListener("pointerup", up);
-  wh.addEventListener("pointercancel", up);
-  wh.setPointerCapture(e.pointerId);
+  subOvText.addEventListener("pointermove", move);
+  subOvText.addEventListener("pointerup", up);
+  subOvText.addEventListener("pointercancel", up);
+  subOvText.setPointerCapture(e.pointerId);
 }, true);
 
 // Click the subtitles to select them; drag to move them up and down.
