@@ -238,6 +238,9 @@ test("the player draws subtitles in the burn's font at its natural line height",
 test("the page hands the desktop bridge to the models controller and hints name packs first", () => {
   const html = readFileSync(INDEX, "utf8");
   assert.match(html, /shell: window\.persodubShell \|\| null/);
-  assert.match(html, /function hintRow\(role, value\)/);
+  assert.match(html, /function hintNeeds\(role, value\)/);
+  // One line names everything the choice needs, one button fetches it all.
+  assert.match(html, /Needs \$\{needs\.map\(\(r\) => r\.name\)\.join\(" \+ "\)\}/);
+  assert.match(html, /models\.downloadAll\(ids\)/);
   assert.match(html, /neededPackIds/);
 });

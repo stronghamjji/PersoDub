@@ -167,6 +167,23 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     } catch { /* poll shows it */ }
     startPolling();
   }
+  // Everything a choice needs, in order: the packs one after another through
+  // the desktop app (a failure stops here, with its reason shown), then the
+  // models all at once -- the same sequence Download and Start runs.
+  async function downloadAll(ids) {
+    const packs = ids.filter((id) => (modelRow(id) || {}).role === "pack");
+    const rest = ids.filter((id) => !packs.includes(id));
+    for (const id of packs) {
+      const r = modelRow(id);
+      if (r && r.state === "ready") continue;
+      if (!(await installPack(id))) return false;
+    }
+    for (const id of rest) {
+      const r = modelRow(id);
+      if (!r || r.state !== "ready") downloadModel(id);
+    }
+    return true;
+  }
   async function cancelModel(id) {
     const row = modelRow(id);
     if (row && row.role === "pack") { await cancelPack(id); return; }
@@ -333,7 +350,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
 
   return {
     // used by the page
-    showModelsDialog, refreshModels, modelRow, downloadModel, cancelModel,
+    showModelsDialog, refreshModels, modelRow, downloadModel, downloadAll, cancelModel,
     repaint, reopenDialogOrSettings,
     // used by tests only -- Remove is drawn by this file and clicked through
     // its own row, so the page never names it. Reachable so the test can.

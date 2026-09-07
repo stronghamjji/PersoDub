@@ -2221,38 +2221,53 @@ const models = initModelsUi({
   shell: window.persodubShell || null,
 });
 
-// The row a dropdown's hint line is about: the pack the choice runs in, while
-// that pack is not on disk (it comes first, as in the dub's own 409), else the
-// choice's model.
-function hintRow(role, value) {
-  for (const id of neededPackIds(role, value)) {
-    const r = models.modelRow(id);
-    if (r && r.state !== "ready") return r;
-  }
-  return models.modelRow(neededModelId(role, value));
+// Everything a dropdown choice needs, in the order it downloads: the pack it
+// runs in first (as in the dub's own 409), then its model. Only the rows
+// that are not ready -- an empty list means the choice is good to go.
+function hintNeeds(role, value) {
+  const ids = [...neededPackIds(role, value), neededModelId(role, value)].filter(Boolean);
+  return ids.map((id) => models.modelRow(id)).filter((r) => r && r.state !== "ready");
 }
 
-function paintHint(el, row) {
-  const line = modelStatusLine(row);
-  if (line.cls === "model-busy") el.dataset.everBusy = "1";
-  // A quiet machine stays quiet: Ready only shows after this session saw the
-  // model busy -- three green lines on a fully-installed machine are noise.
-  if (!row || (row.state === "ready" && !el.dataset.everBusy)) { el.hidden = true; return; }
+// One line under the dropdown, one button. Nothing missing: hidden (or Ready,
+// once this session saw it busy). Something downloading or stopped: that
+// row's own status, with Cancel or Resume. Otherwise every missing thing by
+// name -- "Needs Translation runtime + Hunyuan · 1.4 GB" -- and one Download
+// that fetches them all, in order, so a pack never arrives without a word
+// about what it is or why (user, 2026-09-07).
+function paintHint(el, needs, ready) {
+  const active = needs.find((r) => r.state === "downloading") || needs.find((r) => r.state === "paused");
+  if (active) el.dataset.everBusy = "1";
+  if (!needs.length) {
+    if (ready && el.dataset.everBusy) {
+      el.hidden = false;
+      el.className = "settings-hint model-line model-ok";
+      el.replaceChildren(document.createTextNode("Ready"));
+    } else el.hidden = true;
+    return;
+  }
   el.hidden = false;
-  el.className = "settings-hint model-line" + (line.cls ? " " + line.cls : "");
   el.replaceChildren();
   const span = document.createElement("span");
-  span.textContent = line.text;
-  el.append(span);
-  if (!line.button) return;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "keys-link";
-  btn.textContent = line.button === "download" ? `Download (${gb(row.bytes)} GB)`
-                  : line.button === "resume" ? "Resume" : "Cancel";
-  btn.addEventListener("click", () =>
-    line.button === "cancel" ? models.cancelModel(row.id) : models.downloadModel(row.id));
-  el.append(btn);
+  const ids = needs.map((r) => r.id);
+  if (active) {
+    const line = modelStatusLine(active);
+    el.className = "settings-hint model-line " + line.cls;
+    span.textContent = line.text;
+    btn.textContent = line.button === "cancel" ? "Cancel" : "Resume";
+    btn.addEventListener("click", () =>
+      line.button === "cancel" ? models.cancelModel(active.id) : models.downloadAll(ids));
+  } else {
+    const total = needs.reduce((n, r) => n + r.bytes, 0);
+    el.className = "settings-hint model-line";
+    span.textContent = `Needs ${needs.map((r) => r.name).join(" + ")} · ${gb(total)} GB`;
+    btn.textContent = `Download (${gb(total)} GB)`;
+    btn.addEventListener("click", () => models.downloadAll(ids));
+  }
+  el.append(span, btn);
 }
 
 // The parts of the model UI this page owns: the three dropdown hints and the
@@ -2261,9 +2276,13 @@ function paintModelStatusLines(rows) {
   // Cloud dubbing needs no local models -- their download lines would only
   // confuse; the per-stage dropdowns are greyed by paintDubMode below.
   const cloud = $("dubModeSelect").value === "perso";
-  paintHint($("sttModelHint"), cloud ? null : hintRow("stt", $("sttSelect").value));
-  paintHint($("translateModelHint"), cloud ? null : hintRow("translate", $("translateSelect").value));
-  paintHint($("voiceModelHint"), cloud ? null : hintRow("voice", $("voiceSelect").value));
+  for (const [role, sel, hint] of [["stt", "sttSelect", "sttModelHint"],
+                                    ["translate", "translateSelect", "translateModelHint"],
+                                    ["voice", "voiceSelect", "voiceModelHint"]]) {
+    const value = $(sel).value;
+    const needsAnything = !cloud && (neededPackIds(role, value).length || neededModelId(role, value));
+    paintHint($(hint), cloud ? [] : hintNeeds(role, value), !!needsAnything);
+  }
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
           || rows.find((m) => m.state === "downloading");
   $("topbarDl").hidden = !dl;

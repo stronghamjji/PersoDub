@@ -525,3 +525,23 @@ test("a pack being installed reads as downloading in the rows the page paints, a
   assert.equal(row.children[2].textContent, "Stopped: Health check timed out");
   assert.equal(row.children[3].textContent, "Resume");
 });
+
+test("downloadAll installs the packs first, one after another, then downloads the models", async (t) => {
+  const shell = fakeShell({ install: async () => { h.state.rows = [{ ...ENGINE, state: "ready" }, WHISPER]; return { ok: true }; } });
+  const h = harness({ rows: [ENGINE, WHISPER], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  await h.api.downloadAll(["engine", "whisper"]);
+  await settle();
+  assert.deepEqual(shell.asked, ["install engine"]);
+  assert.ok(h.state.calls.includes("POST /api/models/whisper/download"));
+});
+
+test("downloadAll stops at a pack that failed and downloads no model", async (t) => {
+  const shell = fakeShell({ install: async () => ({ ok: false, reason: "Cancelled." }) });
+  const h = harness({ rows: [ENGINE, WHISPER], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  assert.equal(await h.api.downloadAll(["engine", "whisper"]), false);
+  assert.ok(!h.state.calls.some((c) => c.startsWith("POST")));
+});
