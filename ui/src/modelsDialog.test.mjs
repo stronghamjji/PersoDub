@@ -583,3 +583,25 @@ test("the poll keeps running while the page says so, and a paint that throws doe
   h.state.painted.push = origPush;
   assert.equal(h.state.timers.length, 2, "still scheduled after the throw");
 });
+
+
+test("a second pack pressed while one installs waits: the first keeps its place, the other button is locked, the notice clears when the first finishes", async (t) => {
+  let finish;
+  const shell = fakeShell({ install: () => new Promise((r) => { finish = r; }) });
+  const RUNTIME = { id: "ollama-runtime", role: "pack", name: "Translation runtime", bytes: 4.6e8, state: "not_downloaded" };
+  const h = harness({ rows: [ENGINE, RUNTIME], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const first = h.api.installPack("engine");
+  await settle();
+  assert.equal(await h.api.installPack("ollama-runtime"), false);
+  assert.deepEqual(shell.asked, ["install engine"], "the desktop app was not asked twice");
+  assert.equal(h.$("modelsError").textContent, "AI engine is still installing. Wait for it to finish.");
+  const painted = h.state.painted.at(-1).find((r) => r.id === "engine");
+  assert.equal(painted.state, "downloading", "the first keeps its busy state");
+  const runtimeBtn = h.$("modelsList").children[1].children[3];
+  assert.equal(runtimeBtn.disabled, true);
+  finish({ ok: true });
+  await first; await settle();
+  assert.equal(h.$("modelsError").textContent, "", "the notice is gone once the first is done");
+});

@@ -9,6 +9,7 @@ import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, PACKS } from "./src/installSpec.js";
 import { runInstall, openSteps, packPercent } from "./src/installer.js";
 import { cancelCurrent } from "./src/exec.js";
+import { readRuntime } from "./src/runtimeFile.js";
 import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
@@ -39,9 +40,13 @@ function shellLog(line) {
 // The last line a person can act on, out of a tool's whole transcript: the
 // page showed two screens of pip output in red (Windows, 2026-09-07).
 function lastReason(message) {
-  const lines = String(message || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = String(message || "").split("\n").map((l) => l.trim())
+    // Traceback scaffolding names files, not causes.
+    .filter((l) => l && !/^File "/.test(l) && !/^Traceback/.test(l) && !/^\^+$/.test(l));
   if (!lines.length) return "The install could not finish.";
-  const err = [...lines].reverse().find((l) => /error/i.test(l) && !/^WARNING/.test(l));
+  // The sentence that names the error: "ERROR: …", "OSError: …",
+  // "ConnectionResetError(…)" -- a path that merely contains "error" is not one.
+  const err = [...lines].reverse().find((l) => /^ERROR\b|[A-Za-z]+Error\b|\bError:/.test(l) && !/^WARNING/.test(l));
   return (err || lines[lines.length - 1]).slice(0, 200);
 }
 let updateDownloaded = false;
@@ -521,8 +526,10 @@ app.whenReady().then(() => {
         return { ok: false, reason: packCancelled ? "Cancelled." : lastReason(full) };
       }
       if (engines && engines.startPack) {
-        try { await engines.startPack(id); }
-        catch (err) {
+        try {
+          await engines.startPack(id);
+          shellLog(`PERSODUB_PACK ${id} process up: ${JSON.stringify(readRuntime(installCtx.kitDir))}`);
+        } catch (err) {
           shellLog(`PERSODUB_PACK ${id} installed but did not start: ${String((err && err.message) || err)}`);
           return { ok: false, reason: `Installed, but it could not start: ${lastReason(String((err && err.message) || err))}` };
         }

@@ -219,8 +219,16 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
       // Started already and still announced: nothing to do. A pack whose
       // start failed earlier left no address behind, so it is tried again.
       const key = id === "engine" ? "tts_url" : "ollama_url";
-      if (packChildren.has(id) && readRuntime(cfg.kitDir)[key]) return;
+      const alive = (packChildren.get(id) || []).some((c) => c && c.exitCode == null && !c.killed);
+      if (alive && readRuntime(cfg.kitDir)[key]) return;
+      // Not running (never started, or it died after announcing itself): its
+      // stale address goes first, so nothing reads it while the new one comes up.
+      for (const c of packChildren.get(id) || []) {
+        const i = children.indexOf(c);
+        if (i >= 0) children.splice(i, 1);
+      }
       packChildren.delete(id);
+      clearRuntime(cfg.kitDir, [key]);
       // A pack started right after its install imports torch cold, on a disk
       // that just wrote gigabytes: the boot's two minutes were not enough on
       // Windows (2026-09-07), and a start that gives up leaves the dub refused.

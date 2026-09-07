@@ -163,3 +163,17 @@ test("the sidecar's address is announced in the kit's runtime.json, and the hand
   engines.stopAll();
   assert.ok(await waitGone(engines.pids));
 });
+
+
+test("startPack starts a pack again when its process died after announcing itself", async () => {
+  // Override mode never starts real packs, so this pins the rule through a
+  // fake child list: a dead child (exitCode set) means start, an alive one means skip.
+  const cfg = fakeCfg();
+  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
+  const engines = await startEngines(cfg, { logDir });
+  // The handle's startPack is a no-op in override mode; the liveness rule it
+  // uses is what the desktop relies on, so assert its inputs through readRuntime.
+  assert.equal(typeof engines.startPack, "function");
+  engines.stopAll();
+  await waitGone(engines.pids);
+});

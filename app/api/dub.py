@@ -41,6 +41,7 @@ import uuid
 from datetime import date
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app import dub_launch, engines_status, media, runtime, state
@@ -240,11 +241,25 @@ def _translate_model_missing_on_disk(translator):
     return translator if model_store.model_state(entry, model_store.kit_dir()) != "ready" else None
 
 
+def _voice_engine_answers(url: str) -> bool:
+    """Whether the announced voice engine is actually up: a process that died
+    after announcing itself left the address behind (Windows, 2026-09-07), and
+    the dub then failed minutes in at the voice stage instead of here."""
+    try:
+        return httpx.get(f"{url}/health", timeout=2).status_code == 200
+    except Exception:
+        return False
+
+
 def _require_voice_engine_running() -> None:
     """The engine pack is on disk, so the preflight let a local dub through --
-    but its process is not announced (its start failed, or it died). Without
-    this the voice stage fails on an empty URL with a raw library error."""
-    if model_store.kit_dir() and not runtime.url("tts"):
+    but its process is not announced (its start failed) or not answering (it
+    died). Without this the voice stage fails with a raw library error; with
+    it the page asks the desktop app to start the engine again."""
+    if not model_store.kit_dir():
+        return
+    url = runtime.url("tts")
+    if not url or not _voice_engine_answers(url):
         raise HTTPException(422, "The voice engine is not running. Quit and reopen PersoDub.")
 
 

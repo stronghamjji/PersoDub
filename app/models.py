@@ -357,6 +357,15 @@ def _pull_hf(entry, kit, progress, cancelled):
         # a Korean Windows console's default (cp949) choked on them mid-stream.
         proc = _subprocess.Popen(argv, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT,
                                  text=True, encoding="utf-8", errors="replace", env=env)
+        # The percent is measured on its own clock, not on the tool's output:
+        # without a terminal the tool prints almost nothing while a file
+        # streams in, and the figure sat at 10% for a whole 2.9 GB (Windows).
+        stop_meter = _threading.Event()
+
+        def meter():
+            while not stop_meter.wait(1.0):
+                report_from_disk(force=True)
+        _threading.Thread(target=meter, daemon=True).start()
         try:
             for line in proc.stdout:
                 if cancelled():
@@ -366,11 +375,12 @@ def _pull_hf(entry, kit, progress, cancelled):
                 if line:
                     recent.append(line)
                     del recent[:-6]
-                report_from_disk()
             rc = proc.wait()
         except BaseException:
             _end(proc)   # never leave the tool downloading on its own
             raise
+        finally:
+            stop_meter.set()
         if cancelled():
             return
         report_from_disk(force=True)

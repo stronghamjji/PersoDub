@@ -68,6 +68,12 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       showPackError(`${name}: ${PACK_HINT}.`);
       return false;
     }
+    if (packBusy) {
+      // One at a time, and the one running keeps its place on screen: a second
+      // press used to take over the busy slot and show the first as paused.
+      if (packBusy.id !== id) showPackError(`${packBusy.name} is still installing. Wait for it to finish.`);
+      return false;
+    }
     packBusy = { id, name, line: "", pct: null };
     packFailed = null;
     repaint();
@@ -82,6 +88,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       showPackError(`${name}: ${packFailed.reason}`);
       return false;
     }
+    showPackError("");   // a "still installing" notice from a second press is over
     return true;
   }
   async function cancelPack(id) {
@@ -251,6 +258,10 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
           if (m.state !== "ready") status.textContent = PACK_HINT;
           btn.textContent = m.state === "ready" ? "Remove" : "Download";
           btn.disabled = true; btn.title = PACK_HINT;
+        } else if (packBusy) {
+          // Another pack is installing: this one waits its turn.
+          btn.textContent = m.state === "ready" ? "Remove" : "Download";
+          btn.disabled = true; btn.title = `${packBusy.name} is still installing`;
         } else if (m.state === "ready") { btn.textContent = "Remove"; btn.onclick = () => removePack(m.id); }
         else { btn.textContent = m.state === "paused" ? "Resume" : "Download"; btn.onclick = () => installPack(m.id); }
       } else if (m.state === "ready") { btn.textContent = "Remove"; btn.onclick = () => removeModel(m.id); }

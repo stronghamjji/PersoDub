@@ -59,6 +59,7 @@ def _kit(monkeypatch, tmp_path):
     import json
     with open(os.path.join(kit, "runtime.json"), "w") as f:
         json.dump({"version": 1, "tts_url": "http://127.0.0.1:1", "ollama_url": "http://127.0.0.1:1"}, f)
+    monkeypatch.setattr(dub_api, "_voice_engine_answers", lambda url: True)
     yield kit
 
 
@@ -237,3 +238,8 @@ def test_an_engine_pack_whose_process_is_not_running_is_told_plainly(monkeypatch
     with open(os.path.join(_kit, "runtime.json"), "w") as f:
         json.dump({"version": 1, "tts_url": "http://127.0.0.1:1"}, f)
     assert _start().status_code == 200
+    # Announced but dead (the process was killed after it wrote its address):
+    # the same sentence, from a 2-second health probe.
+    monkeypatch.setattr(dub_api, "_voice_engine_answers", lambda url: False)
+    r = _start()
+    assert r.status_code == 422 and "voice engine is not running" in r.json()["detail"]
