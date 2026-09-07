@@ -87,6 +87,7 @@ import threading as _threading
 import requests as _requests
 
 from app import config as _config
+from app import runtime as _runtime
 
 _downloads = {}   # id -> {"state": "queued"|"downloading"|"failed", "pct", "error"}
 _queue = []
@@ -201,7 +202,10 @@ def remove_model(entry):
         # The blob store is shared across Ollama models: deleting through the
         # server removes exactly this model's layers, an rmtree would take
         # every other model with it.
-        _requests.delete(f"{_config.OLLAMA_URL}/api/delete",
+        ollama_url = _runtime.url("ollama")
+        if not ollama_url:
+            return   # no translation pack running: nothing it holds can be removed
+        _requests.delete(f"{ollama_url}/api/delete",
                          json={"model": entry["source"]["tag"]}, timeout=60)
     else:
         _shutil.rmtree(os.path.join(kit, *entry["dir"].split("/")), ignore_errors=True)
@@ -278,7 +282,8 @@ def _pull_ollama(entry, progress, cancelled):
     create call on top -- the same two-step flow verified 2026-08-31."""
     src = entry["source"]
     pull_name = src.get("pull") or src["tag"]
-    r = _requests.post(f"{_config.OLLAMA_URL}/api/pull",
+    ollama_url = _runtime.url("ollama")
+    r = _requests.post(f"{ollama_url}/api/pull",
                        json={"model": pull_name, "stream": True}, stream=True, timeout=600)
     r.raise_for_status()
     for line in r.iter_lines():
@@ -295,7 +300,7 @@ def _pull_ollama(entry, progress, cancelled):
     if cancelled():
         return
     if src.get("needs_template"):
-        cr = _requests.post(f"{_config.OLLAMA_URL}/api/create",
+        cr = _requests.post(f"{ollama_url}/api/create",
                             json={"model": src["tag"], "from": pull_name,
                                   "template": _config.HUNYUAN_TEMPLATE,
                                   "parameters": _config.HUNYUAN_PARAMETERS,

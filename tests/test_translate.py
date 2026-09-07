@@ -69,7 +69,10 @@ def test_shared_parse_extracts_array():
     assert parse_json_array('```json\n["가", "나"]\n```', 2) == ["가", "나"]
 
 
-def test_ollama_translator_metadata():
+def test_ollama_translator_metadata(monkeypatch):
+    # No kit here (no PERSODUB_KIT_DIR/runtime.json), so runtime.url("ollama")
+    # is config.OLLAMA_URL -- the dev-run-without-the-shell path.
+    monkeypatch.setenv("OLLAMA_URL", "http://127.0.0.1:11434")
     t = OllamaTranslator()
     assert t.id == "ollama"
     assert t.url.startswith("http")
