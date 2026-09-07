@@ -107,10 +107,16 @@ def model_cancel(mid: str):
 @router.delete("/api/models/{mid}")
 def model_remove(mid: str):
     entry = _model_or_404(mid)
-    if entry["role"] == "pack":
-        raise HTTPException(409, model_store.PACKS_ARE_THE_SHELLS)
+    # The dub check first, packs included: the page asks this route before it
+    # hands a pack's removal to the desktop app, so a pack cannot be pulled
+    # out from under a running dub any more than a model can.
     if model_store.dub_in_progress():
         raise HTTPException(409, "A dub is running right now. Wait for it to finish, then remove the model.")
+    if entry["role"] == "pack":
+        raise HTTPException(409, model_store.PACKS_ARE_THE_SHELLS)
     model_store.cancel_download(mid)
-    model_store.remove_model(entry)
+    try:
+        model_store.remove_model(entry)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return {"removed": mid}

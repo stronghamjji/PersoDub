@@ -182,7 +182,29 @@ def test_api_models_shows_the_packs_with_this_platforms_size(monkeypatch, tmp_pa
 
 def test_packs_are_not_downloaded_or_removed_through_the_backend(monkeypatch, tmp_path):
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    monkeypatch.setattr(models_module, "dub_in_progress", lambda: False)   # other tests leave jobs behind
     r = client.post("/api/models/engine/download")
     assert r.status_code == 409 and r.json()["detail"] == "Packs are installed by the desktop app"
     r = client.delete("/api/models/ollama-runtime")
     assert r.status_code == 409 and r.json()["detail"] == "Packs are installed by the desktop app"
+
+
+def test_removing_an_ollama_model_without_its_runtime_is_refused_with_a_sentence(monkeypatch, tmp_path):
+    # The runtime owns the blob store; without it the API used to answer
+    # "removed" and remove nothing.
+    kit = str(tmp_path)
+    monkeypatch.setenv("PERSODUB_KIT_DIR", kit)   # a kit with no runtime.json: no runtime up
+    _mk(kit, "models", "ollama", "manifests", "registry.ollama.ai", "library", "hy-mt2", "1.8b")
+    monkeypatch.setattr(models_module, "dub_in_progress", lambda: False)
+    r = client.delete("/api/models/hunyuan")
+    assert r.status_code == 409
+    assert r.json()["detail"] == "Install the Translation runtime first, then remove this model."
+    assert os.path.exists(os.path.join(kit, "models", "ollama", "manifests"))
+
+
+def test_a_pack_cannot_be_removed_while_a_dub_runs_even_by_the_desktop_app(monkeypatch, tmp_path):
+    # The page asks this route before handing a pack's removal to the shell.
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    monkeypatch.setattr(models_module, "dub_in_progress", lambda: True)
+    r = client.delete("/api/models/engine")
+    assert r.status_code == 409 and r.json()["detail"].startswith("A dub is running")

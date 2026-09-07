@@ -43,7 +43,7 @@ from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app import dub_launch, engines_status, media, state
+from app import dub_launch, engines_status, media, runtime, state
 from app import models as model_store
 from app import setup as dub_setup
 from app.api._shared import script_work_dir, work_dir_of
@@ -169,6 +169,13 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
     pulled the model yet, so a busy-but-valid Ollama isn't misreported as
     "not running" (see engines_status.ollama_model_status)."""
     if status == "unreachable":
+        if model_store.kit_dir():
+            # A desktop user cannot "make sure Ollama is running": the app owns it.
+            return (
+                f"Local {engine_name} translation is not available right now: the "
+                "translation runtime is not running. Quit and reopen PersoDub, or "
+                "choose Gemini in the Translation dropdown."
+            )
         return (
             f"Local {engine_name} translation is not available on this machine "
             "(Ollama is not running or not reachable). Choose Gemini in the "
@@ -231,6 +238,14 @@ def _translate_model_missing_on_disk(translator):
     if entry is None:
         return None
     return translator if model_store.model_state(entry, model_store.kit_dir()) != "ready" else None
+
+
+def _require_voice_engine_running() -> None:
+    """The engine pack is on disk, so the preflight let a local dub through --
+    but its process is not announced (its start failed, or it died). Without
+    this the voice stage fails on an empty URL with a raw library error."""
+    if model_store.kit_dir() and not runtime.url("tts"):
+        raise HTTPException(422, "The voice engine is not running. Quit and reopen PersoDub.")
 
 
 def _pack_ready(pack_id: str) -> bool:
@@ -396,6 +411,8 @@ def dub_job_redub(jid: str):
     missing = _missing_models(False, None, need_engine=job.get("dub_mode") != "perso")
     if missing:
         _raise_models_needed(missing)
+    if job.get("dub_mode") != "perso":
+        _require_voice_engine_running()
 
     fields = {"language_code": language_code, "project": project,
               "day": _today(), "from_link": False, "work_dir": work,
@@ -502,6 +519,8 @@ def dub_job_retry(jid: str):
                               need_engine=local, need_ollama=need_ollama)
     if missing:
         _raise_models_needed(missing)
+    if local:
+        _require_voice_engine_running()
 
     fields = {"language_code": language_code, "project": project,
               "day": _today(), "work_dir": work,
@@ -746,6 +765,7 @@ def dub_start(
                                   need_engine=True, need_ollama=need_ollama)
         if missing:
             _raise_models_needed(missing)
+        _require_voice_engine_running()
 
     # Names the job's folder. The caller may pass a title it already knows (the
     # screen probes a link before starting, and app/source_fetch.py's fetch()

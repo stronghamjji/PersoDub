@@ -57,10 +57,13 @@ test("the base install adds up to under a gigabyte", () => {
   const total = baseSteps(buildSteps(freshCtx())).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
   assert.ok(total < 1.0, `base is ${total.toFixed(2)} GB`);
 });
-test("packInstalled reads the disk, not a marker", () => {
+test("packInstalled means the pack's stamp: a folder without it is a paused pack, not an installed one", () => {
   const ctx = freshCtx();
   assert.equal(packInstalled(ctx.kitDir, "engine"), false);
   mkdirSync(join(ctx.kitDir, "engines_venv"), { recursive: true });
+  assert.equal(packInstalled(ctx.kitDir, "engine"), false, "cancelled halfway: not installed");
+  mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, ".install", "venv-engines.ok"), "fp");
   assert.equal(packInstalled(ctx.kitDir, "engine"), true);
 });
 
@@ -672,4 +675,9 @@ test("an installed kit's recorded torch variant wins over the hardware guess", (
   // A kit.env from before the key existed gets the build those kits had.
   const patched = withMissingKitEnvKeys("PERSODUB_KIT_DIR=x\n");
   assert.match(patched, new RegExp(`PERSODUB_TORCH_VARIANT=${IS_WIN ? "cu128" : "mps"}`));
+  // ...and is read as that build from the first boot after the update, before
+  // the kit-env step has recorded it -- never as the hardware guess (which on
+  // a GPU-less Windows machine says "cpu" and would reinstall the venv twice).
+  writeFileSync(join(ctx.kitDir, "kit.env"), "PERSODUB_KIT_DIR=x\n");
+  assert.equal(torchVariantFor(ctx.kitDir), IS_WIN ? "cu128" : "mps");
 });

@@ -5,7 +5,7 @@ import { parseEnvFile, KIT_ENV } from "./kitEnv.js";
 import { getFreePort, getPreferredPort } from "./freePort.js";
 import { waitForHealth } from "./health.js";
 import { IS_WIN, venvBin, exeName, PATH_SEP } from "./platform.js";
-import { writeRuntime, clearRuntime } from "./runtimeFile.js";
+import { readRuntime, writeRuntime, clearRuntime } from "./runtimeFile.js";
 import { PACKS, packInstalled } from "./installSpec.js";
 
 const PIDS_FILE = "pids.json";
@@ -103,7 +103,11 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
     });
     children.push(child);
     record();
-    writeRuntime(cfg.kitDir, { ollama_url: `http://127.0.0.1:${port}` });
+    // Announced only once it answers: right after an on-demand install the
+    // page pulls a model within the second, and a server still binding its
+    // port turned that first pull into a refused connection.
+    await announceWhenUp(`http://127.0.0.1:${port}/api/tags`, (b) => Array.isArray(b.models),
+                         () => writeRuntime(cfg.kitDir, { ollama_url: `http://127.0.0.1:${port}` }));
     return [child];
   }
   if (packId === "engine") {
@@ -118,14 +122,27 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
     // lazy-loads it when the weights appear (vendor/sidecar/server.py) --
     // /synthesize answers 503 until then. Waiting on model_loaded here made
     // every model-less boot a 2-minute timeout and an error screen.
-    await waitForHealth(`http://127.0.0.1:${port}/health`, {
-      timeoutMs: cfg.sidecarHealthTimeoutMs,
-      predicate: (b) => b.status === "ok",
-    });
-    writeRuntime(cfg.kitDir, { tts_url: `http://127.0.0.1:${port}` });
+    await announceWhenUp(`http://127.0.0.1:${port}/health`, (b) => b.status === "ok",
+                         () => writeRuntime(cfg.kitDir, { tts_url: `http://127.0.0.1:${port}` }));
     return [child];
   }
   return [];
+
+  // Waits for the process just launched to answer, then announces it. A
+  // process that never answers is stopped and forgotten before the error goes
+  // up, so a retry does not leave a second copy running.
+  async function announceWhenUp(url, predicate, announce) {
+    const child = children[children.length - 1];
+    try {
+      await waitForHealth(url, { timeoutMs: cfg.sidecarHealthTimeoutMs, predicate });
+    } catch (err) {
+      stopChild(child);
+      children.pop();
+      record();
+      throw err;
+    }
+    announce();
+  }
 }
 
 export async function startEngines(cfg, { logDir, appVersion, preferredBackendPort }) {
@@ -198,7 +215,12 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
     // The install-pack IPC (main.js) starts a pack's process the moment its
     // files are down; remove-pack stops it and withdraws its address.
     const startPack = async (id) => {
-      if (overrideMode || packChildren.has(id)) return;
+      if (overrideMode) return;
+      // Started already and still announced: nothing to do. A pack whose
+      // start failed earlier left no address behind, so it is tried again.
+      const key = id === "engine" ? "tts_url" : "ollama_url";
+      if (packChildren.has(id) && readRuntime(cfg.kitDir)[key]) return;
+      packChildren.delete(id);
       packChildren.set(id, await startPackProcesses(cfg, id, packOpts));
     };
     const stopPack = (id) => {

@@ -245,7 +245,10 @@ def remove_model(entry):
         # every other model with it.
         ollama_url = _runtime.url("ollama")
         if not ollama_url:
-            return   # no translation pack running: nothing it holds can be removed
+            # Only the runtime can take a model out of its shared blob store,
+            # and it is not running. Say so: a silent "removed" that removed
+            # nothing is worse than a refusal.
+            raise ValueError("Install the Translation runtime first, then remove this model.")
         _requests.delete(f"{ollama_url}/api/delete",
                          json={"model": entry["source"]["tag"]}, timeout=60)
     else:

@@ -87,6 +87,15 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   async function removePack(id) {
     $("modelsError").textContent = "";
     if (!shell || !shell.removePack) { $("modelsError").textContent = PACK_HINT + "."; return; }
+    // The engine knows whether a dub is running; its DELETE refuses a pack
+    // either way, and the sentence tells which reason. Only "packs are the
+    // desktop app's" means the coast is clear.
+    try {
+      const r = await fetch(`/api/models/${id}`, { method: "DELETE" });
+      const body = await r.json().catch(() => null);
+      const why = String((body && body.detail) || "");
+      if (!why.startsWith("Packs are installed")) { $("modelsError").textContent = why || "Could not remove it."; return; }
+    } catch { $("modelsError").textContent = "Could not remove it. Is the engine running?"; return; }
     const res = await shell.removePack(id).catch((e) => ({ ok: false, reason: String((e && e.message) || e) }));
     if (!res || !res.ok) $("modelsError").textContent = (res && res.reason) || "Could not remove it.";
     await fetchModels();
@@ -221,7 +230,12 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     }
     $("mnTitle").textContent = "Downloading AI models";
     $("mnLine").textContent = `${pct}%. Dubbing starts when they finish.`;
-    const failed = pendingDub.ids.map(modelRow).find((r) => r && r.state === "paused");
+    // A model whose download stopped: paused with its pieces on disk, or --
+    // an Ollama pull that failed before it began -- not_downloaded with the
+    // engine's reason attached. Either way the dialog says so instead of
+    // polling at 0% for good.
+    const failed = pendingDub.ids.map(modelRow)
+      .find((r) => r && (r.state === "paused" || (r.state === "not_downloaded" && r.error)));
     if (failed) $("mnError").textContent = `${failed.name} stopped${failed.error ? ` (${failed.error})` : ""}. Resume it from the line under its dropdown.`;
     if (allReady(modelRows, pendingDub.ids)) {
       pendingDub = null;

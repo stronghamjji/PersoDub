@@ -54,6 +54,11 @@ def _kit(monkeypatch, tmp_path):
     monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
     monkeypatch.setattr(engines_status, "perso_available", lambda: True)
     _put_packs(kit)
+    # ...and their processes are up: the desktop shell announces the voice
+    # engine in runtime.json, and a local dub is refused without that.
+    import json
+    with open(os.path.join(kit, "runtime.json"), "w") as f:
+        json.dump({"version": 1, "tts_url": "http://127.0.0.1:1", "ollama_url": "http://127.0.0.1:1"}, f)
     yield kit
 
 
@@ -113,7 +118,8 @@ def test_gemma_unreachable_is_still_a_422(monkeypatch, _kit):
     monkeypatch.setattr(engines_status, "gemma_status", lambda: "unreachable")
     r = _start({"translate_engine": "gemma"})
     assert r.status_code == 422
-    assert "not running or not reachable" in r.json()["detail"]
+    # Inside a kit the sentence is the desktop user's: the app owns the runtime.
+    assert "translation runtime is not running" in r.json()["detail"]
 
 
 def test_hunyuan_model_missing_joins_the_409_list(monkeypatch, _kit):
@@ -212,3 +218,20 @@ def test_the_packs_ride_along_in_the_ordinary_409(monkeypatch, _kit):
     r = _start()
     assert [m["id"] for m in r.json()["detail"]["missing"]] == ["qwen3-tts", "whisper"]
     assert all(m["kind"] == "model" for m in r.json()["detail"]["missing"])
+
+
+def test_an_engine_pack_whose_process_is_not_running_is_told_plainly(monkeypatch, _kit):
+    # Packs on disk, models on disk, but the kit's runtime.json names no voice
+    # engine (its start failed): a 422 with a sentence, not a raw error from
+    # the voice stage minutes later.
+    _put_whisper(_kit)
+    _put_tts(_kit)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
+    os.remove(os.path.join(_kit, "runtime.json"))   # the fixture's announced engine goes away
+    r = _start()
+    assert r.status_code == 422
+    assert r.json()["detail"] == "The voice engine is not running. Quit and reopen PersoDub."
+    import json
+    with open(os.path.join(_kit, "runtime.json"), "w") as f:
+        json.dump({"version": 1, "tts_url": "http://127.0.0.1:1"}, f)
+    assert _start().status_code == 200

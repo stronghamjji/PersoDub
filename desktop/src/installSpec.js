@@ -85,7 +85,12 @@ export function packSteps(steps, id) {
 // Whether a pack is on disk -- read from the filesystem, never a marker, so
 // this agrees with isDone()/checkKit() about what "installed" means.
 export function packInstalled(kitDir, id) {
-  if (id === "engine") return existsSync(join(kitDir, "engines_venv"));
+  // The venv step's own stamp, not the folder: a folder is there from the
+  // first second of an install, so on the folder rule a pack cancelled
+  // halfway counted as installed, and the next launch finished it in the
+  // installer with no Cancel. The stamp is what the catalog checks too
+  // (app/models_catalog.json), so the shell and the backend agree.
+  if (id === "engine") return existsSync(join(kitDir, ".install", "venv-engines.ok"));
   if (id === "ollama-runtime") return existsSync(join(kitDir, "ollama", exeName("ollama")));
   return false;
 }
@@ -156,6 +161,9 @@ function whisperCachePath() {
 // existing kit.env. The step's old isDone only sniffed for PERSODUB_KIT_DIR,
 // so any kit installed before these existed satisfied it forever and never
 // received them.
+// The torch build every kit from before PERSODUB_TORCH_VARIANT existed has.
+const LEGACY_TORCH_VARIANT = IS_WIN ? "cu128" : "mps";
+
 const KIT_ENV_MANAGED_ADDITIONS = [
   {
     key: "PERSODUB_LEAKAGE_GATE",
@@ -184,7 +192,7 @@ const KIT_ENV_MANAGED_ADDITIONS = [
     // installed the only build there was (CUDA on Windows, MPS on macOS),
     // whatever the machine's GPU -- recording the hardware guess instead
     // would reopen the engines step and reinstall gigabytes on update.
-    line: `PERSODUB_TORCH_VARIANT=${IS_WIN ? "cu128" : "mps"}`,
+    line: `PERSODUB_TORCH_VARIANT=${LEGACY_TORCH_VARIANT}`,
   },
 ];
 
@@ -192,11 +200,17 @@ const KIT_ENV_MANAGED_ADDITIONS = [
 // kit.env records if it has one (an installed kit keeps its build -- see the
 // managed addition above), else the hardware guess for a fresh install.
 export function torchVariantFor(kitDir) {
+  const envPath = join(kitDir, KIT_ENV);
+  if (!existsSync(envPath)) return TORCH_VARIANT;   // a fresh install: the hardware guess
   try {
-    const m = /^PERSODUB_TORCH_VARIANT=(\S+)/m.exec(readFileSync(join(kitDir, KIT_ENV), "utf8"));
+    const m = /^PERSODUB_TORCH_VARIANT=(\S+)/m.exec(readFileSync(envPath, "utf8"));
     if (m && ["cpu", "cu128", "mps"].includes(m[1])) return m[1];
-  } catch { /* no kit.env yet: a fresh install */ }
-  return TORCH_VARIANT;
+  } catch { /* unreadable: treated as a legacy kit below */ }
+  // A kit.env from before the key existed: that kit installed the only build
+  // there was, whatever the GPU. Guessing from the hardware here would reopen
+  // the engines step on update (the pip index is in its fingerprint) and swap
+  // a working torch for another -- twice, once the legacy value is recorded.
+  return LEGACY_TORCH_VARIANT;
 }
 
 export function writeKitEnv({ kitDir, torchVariant = torchVariantFor(kitDir) }) {

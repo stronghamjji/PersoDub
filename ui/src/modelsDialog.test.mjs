@@ -446,9 +446,20 @@ test("the Settings catalog's pack rows ask the desktop app to install or remove,
   btn(engineRow).onclick();
   await settle(); await settle();
   assert.equal(btn(runtimeRow).textContent, "Remove");
+  // Remove asks the engine first (it knows whether a dub is running); its
+  // "packs are the desktop app's" refusal is the all-clear.
+  h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "Packs are installed by the desktop app" }) } };
   btn(runtimeRow).onclick();
-  await settle(); await settle();
+  await settle(); await settle(); await settle();
   assert.deepEqual(shell.asked, ["install engine", "remove ollama-runtime"]);
+  assert.ok(h.state.calls.includes("DELETE /api/models/ollama-runtime"));
+
+  // A dub in progress: the engine's sentence is shown and the desktop app is not asked.
+  h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "A dub is running right now. Wait for it to finish, then remove the model." }) } };
+  btn(runtimeRow).onclick();
+  await settle(); await settle(); await settle();
+  assert.deepEqual(shell.asked, ["install engine", "remove ollama-runtime"], "not asked again");
+  assert.match(h.$("modelsError").textContent, /A dub is running/);
 
   const bare = harness({ rows: [ENGINE] });
   t.after(bare.state.restore);
@@ -456,4 +467,17 @@ test("the Settings catalog's pack rows ask the desktop app to install or remove,
   const row = bare.$("modelsList").children[0];
   assert.equal(btn(row).disabled, true);
   assert.equal(row.children[2].textContent, "Installed by the desktop app");
+});
+
+test("an Ollama pull that failed before it began is told in the dialog, not polled at 0% forever", async (t) => {
+  const h = harness({ rows: [{ id: "hunyuan", role: "translate", name: "Hunyuan", bytes: 1.1e9, state: "not_downloaded" }] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  h.api.showModelsDialog({ missing: [{ id: "hunyuan", kind: "model", name: "Hunyuan", bytes: 1.1e9 }] });
+  h.$("mnDownload").click();
+  await settle();
+  // The runtime refused the connection: no pieces on disk, so not "paused" -- just failed.
+  h.state.rows = [{ id: "hunyuan", role: "translate", name: "Hunyuan", bytes: 1.1e9, state: "not_downloaded", error: "connection refused" }];
+  await h.api.refreshModels();
+  assert.match(h.$("mnError").textContent, /Hunyuan stopped \(connection refused\)/);
 });
