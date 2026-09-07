@@ -50,11 +50,12 @@ export function dubStartDialog(detail) {
   const models = missing.filter((m) => m.kind !== "pack").map((m) => m.id);
   return {
     // One item gets its own name; several get the total (mockup rule).
+    // "to dub this video": the bare "to dub?" read as a fragment (user, 2026-09-07).
     title: one
-      ? `Download ${one.name} (${gb(one.bytes)} GB) to dub?`
+      ? `Download ${one.name} (${gb(one.bytes)} GB) to dub this video?`
       : packs.length
-        ? `Download ${gb(total)} GB to dub?`
-        : `Download ${gb(total)} GB of AI models to dub?`,
+        ? `Download ${gb(total)} GB to dub this video?`
+        : `Download ${gb(total)} GB of AI models to dub this video?`,
     line: packs.length
       ? "The AI engine and models are saved on this computer and only download once."
       : "They are saved on this computer and only download once.",

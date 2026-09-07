@@ -126,7 +126,7 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
 
   h.api.showModelsDialog(DETAIL_TWO);
 
-  assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB of AI models to dub?");
+  assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB of AI models to dub this video?");
   assert.equal(h.$("mnLine").textContent, "They are saved on this computer and only download once.");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnProgress").hidden, true);
@@ -141,7 +141,7 @@ test("one missing model is named in the title instead of totalled", (t) => {
 
   h.api.showModelsDialog({ missing: [{ id: "hunyuan", name: "Hunyuan", bytes: 1.1 * 1024 ** 3 }] });
 
-  assert.equal(h.$("mnTitle").textContent, "Download Hunyuan (1.1 GB) to dub?");
+  assert.equal(h.$("mnTitle").textContent, "Download Hunyuan (1.1 GB) to dub this video?");
 });
 
 test("Download and Start fetches only what is missing and swaps the buttons", async (t) => {
@@ -383,7 +383,7 @@ test("Download and Start installs the packs through the desktop app first, then 
   t.after(h.state.restore);
   await h.api.refreshModels();
   h.api.showModelsDialog(PACK_409);
-  assert.equal(h.$("mnTitle").textContent, "Download 4.6 GB to dub?");   // 4.9e9 bytes
+  assert.equal(h.$("mnTitle").textContent, "Download 4.6 GB to dub this video?");   // 4.9e9 bytes
   h.$("mnDownload").click();
   await settle(); await settle(); await settle();
   assert.deepEqual(shell.asked, ["install engine"]);
