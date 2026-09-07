@@ -3,6 +3,8 @@ each drawn exactly as the plugin draws it -- colours, boxes, the rainbow's
 per-word palette, neon's halo-plus-fill pair -- with our own two overrides
 (vertical position, size) layered on top."""
 
+import re
+
 from app.subtitle_ass import PRESETS, build_ass
 
 CUES = [{"start": 0.0, "end": 2.5, "text": "안녕하세요"},
@@ -184,3 +186,26 @@ def test_layout_lines_cannot_smuggle_override_tags():
     ass = build_ass(SOUL_CUE, "black-box", width=1920, height=1080, layout=lay)
     assert "{\\pos(0,0)}" not in ass.split("[Events]")[1].replace("{\\an5\\pos(960,", "")
     assert "apos(0,0)b\\Nc" in ass          # braces and backslashes stripped, as ever
+
+
+# The page draws each look at its own font weight (White Box at 600, Neon at
+# 800...); the burn's preset knew only bold-or-not, so White Box came out
+# thinner in the video than on screen (user, 2026-09-07). The measured weight
+# travels with the layout, and libass honours it as \b<weight>.
+def test_the_layouts_weight_reaches_the_words():
+    lay = {"1": {**SOUL_LAYOUT["1"], "weight": 600}}
+    ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, layout=lay)
+    words = [l for l in ass.splitlines() if l.startswith("Dialogue: 1,")][0]
+    assert "\\b600" in words.split("}")[0]
+    # No weight measured: the preset's own bold flag stands, and no \b appears.
+    ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, layout=SOUL_LAYOUT)
+    assert not re.search(r"\\\\b\\d", ass.split("[Events]")[1])   # \bord is not a weight
+
+
+def test_the_weight_reaches_every_look():
+    lay = {"1": {"text": "one two", "lines": ["one two"], "w": 5, "h": 1.5, "weight": 800}}
+    cue = [{"start": 0, "end": 2, "text": "one two"}]
+    for preset in ("clean", "rainbow", "neon"):
+        ass = build_ass(cue, preset, width=1920, height=1080, layout=lay)
+        events = [l for l in ass.splitlines() if l.startswith("Dialogue:")]
+        assert all("\\b800" in e for e in events), preset

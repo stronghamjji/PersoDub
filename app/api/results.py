@@ -437,10 +437,13 @@ def _check_layout(layout) -> None:
               and isinstance(lay.get("lines"), list)
               and all(isinstance(l, str) for l in lay["lines"])
               and isinstance(lay.get("w"), (int, float)) and isinstance(lay.get("h"), (int, float))
-              and 0 < lay["w"] <= 1000 and 0 < lay["h"] <= 1000)
+              and 0 < lay["w"] <= 1000 and 0 < lay["h"] <= 1000
+              and (lay.get("weight") is None
+                   or (isinstance(lay["weight"], int) and 100 <= lay["weight"] <= 900)))
         if not ok:
             raise HTTPException(status_code=422,
-                                detail=f"layout {k} needs text, lines, and a box (w, h) in em")
+                                detail=f"layout {k} needs text, lines, a box (w, h) in em,"
+                                       " and a weight of 100..900 if any")
 
 
 def _subtitle_style_file(jid: str) -> str:

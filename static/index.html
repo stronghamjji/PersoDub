@@ -3536,7 +3536,10 @@ function subRulerFor(preset) {
     subRulerCtx.font = font;
     return subRulerCtx.measureText(upper ? t.toUpperCase() : t).width;
   };
-  return (subRulers[preset] = { ruler, padX, padY, lineHeight });
+  // The weight goes with the layout: the burn's presets know only bold or
+  // not, and White Box (600) came out thin in the video.
+  const weight = parseInt(cs.fontWeight, 10) || 400;
+  return (subRulers[preset] = { ruler, padX, padY, lineHeight, weight });
 }
 
 // What the player shows for line idx, in em of the font: the lines the words
@@ -3560,7 +3563,7 @@ function subLayoutFor(idx, lines = timeline.getLines()) {
                          cap: SUB_MAX_WIDTH * vw * k,
                          padX: r.padX, padY: r.padY, lineHeight: r.lineHeight });
   return { text: l.text || "", lines: lay.lines,
-           w: Math.round(lay.w) / 100, h: Math.round(lay.h) / 100 };
+           w: Math.round(lay.w) / 100, h: Math.round(lay.h) / 100, weight: r.weight };
 }
 
 function subLayoutAll() {

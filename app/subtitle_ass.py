@@ -189,6 +189,9 @@ def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
         lay = _layout_for(layout, n, text)
         # The page's lines, or one line the paths below may break themselves.
         lines = list(lay["lines"]) if lay else [text]
+        # The weight the page drew at (\b<weight>, which libass honours); the
+        # preset's bold flag alone left White Box thinner than on screen.
+        wt = "\\b%d" % lay["weight"] if lay and lay.get("weight") else ""
         if p["uppercase"]:
             text = text.upper()
             lines = [l.upper() for l in lines]
@@ -202,8 +205,8 @@ def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
             # anchor edge, so its middle is half its height in from there.
             mid_y = (anchor_y - h_px / 2 if align in (1, 2, 3) else
                      anchor_y + h_px / 2 if align in (7, 8, 9) else anchor_y)
-            events.append("Dialogue: 1,%s,%s,Base,,0,0,,{\\an5\\pos(%d,%d)}%s"
-                          % (st, en, anchor_x, round(mid_y),
+            events.append("Dialogue: 1,%s,%s,Base,,0,0,,{\\an5\\pos(%d,%d)%s}%s"
+                          % (st, en, anchor_x, round(mid_y), wt,
                              "\\N".join(_text(l) for l in lines)))
             continue
         if fixed_width:
@@ -233,17 +236,19 @@ def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
                     words.append("{\\1c&H%s&}%s" % (RAINBOW[i % len(RAINBOW)], _text(w)))
                     i += 1
                 rows.append(" ".join(words))
-            events.append("Dialogue: 0,%s,%s,Base,,0,0,,%s" % (st, en, "\\N".join(rows)))
+            events.append("Dialogue: 0,%s,%s,Base,,0,0,,%s%s"
+                          % (st, en, "{%s}" % wt if wt else "", "\\N".join(rows)))
         elif p["fx"] == "neon":
             fill = _color(p["primary"])
             body = "\\N".join(_text(l) for l in lines)
-            events.append("Dialogue: 0,%s,%s,Base,,0,0,,{\\1a&HFF&\\3c%s\\bord5\\blur8\\shad0}%s"
-                          % (st, en, fill, body))
-            events.append("Dialogue: 1,%s,%s,Base,,0,0,,{\\1c%s\\3c&H101010&\\bord1.6\\blur0\\shad0}%s"
-                          % (st, en, fill, body))
+            events.append("Dialogue: 0,%s,%s,Base,,0,0,,{\\1a&HFF&\\3c%s\\bord5\\blur8\\shad0%s}%s"
+                          % (st, en, fill, wt, body))
+            events.append("Dialogue: 1,%s,%s,Base,,0,0,,{\\1c%s\\3c&H101010&\\bord1.6\\blur0\\shad0%s}%s"
+                          % (st, en, fill, wt, body))
         else:
-            events.append("Dialogue: 0,%s,%s,Base,,0,0,,%s"
-                          % (st, en, "\\N".join(_text(l) for l in lines)))
+            events.append("Dialogue: 0,%s,%s,Base,,0,0,,%s%s"
+                          % (st, en, "{%s}" % wt if wt else "",
+                             "\\N".join(_text(l) for l in lines)))
 
     return """[Script Info]
 ScriptType: v4.00+

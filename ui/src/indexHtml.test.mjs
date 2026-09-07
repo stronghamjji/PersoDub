@@ -227,5 +227,7 @@ test("the player draws subtitles in the burn's font at its natural line height",
   for (const f of SUB_FONT_STACK) assert.ok(results.includes(`"${f}"`), `${f} is not a burn font`);
   // The measured layout goes out with the settings.
   assert.match(html, /subStyle\.layout = lay;/);
+  // ...with the weight the look is drawn at, which the burn's presets lack.
+  assert.match(html, /weight: r\.weight/);
   assert.match(html, /id="subMeasure"/);
 });

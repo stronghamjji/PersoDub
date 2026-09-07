@@ -208,7 +208,8 @@ def test_subtitle_settings_survive_a_round_trip(monkeypatch, tmp_path):
     body = {"enabled": False, "preset": "variety", "pos": 30, "size": 120,
             "cues": {"1": {"start": 0.5, "end": 3.0}},
             "boxWidth": 62, "widths": {"2": 84},
-            "layout": {"1": {"text": "원래 번역", "lines": ["원래", "번역"], "w": 3.1, "h": 2.9}}}
+            "layout": {"1": {"text": "원래 번역", "lines": ["원래", "번역"], "w": 3.1, "h": 2.9,
+                             "weight": 600}}}
     assert client.put(f"/api/dub/jobs/{jid}/subtitle_style", json=body).status_code == 200
     assert client.get(f"/api/dub/jobs/{jid}/subtitle_style").json() == {
         **body, "preset": "neon-yellow"}
@@ -231,6 +232,9 @@ def test_subtitle_settings_refuse_nonsense(monkeypatch, tmp_path):
     assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": "wide", "h": 1}}}) == 422
     assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 0, "h": 1}}}) == 422
     assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6}}}) == 200
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6, "weight": 600}}}) == 200
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6, "weight": "bold"}}}) == 422
+    assert put({"layout": {"1": {"text": "a", "lines": ["a"], "w": 4, "h": 1.6, "weight": 50}}}) == 422
 
 
 def test_subtitled_reads_the_stored_settings(monkeypatch, tmp_path):
