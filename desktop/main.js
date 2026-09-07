@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
-import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, PACKS } from "./src/installSpec.js";
+import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, PACKS } from "./src/installSpec.js";
 import { runInstall, openSteps, packPercent } from "./src/installer.js";
 import { cancelCurrent } from "./src/exec.js";
 import { readRuntime } from "./src/runtimeFile.js";
@@ -268,6 +268,8 @@ async function boot(win) {
     // that was never installed is left alone here -- a later task adds the
     // IPC to install one on demand.
     installCtx = payload ? { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run } : null;
+    // A pack's "installing" stamp left by a crash would read as downloading forever.
+    for (const p of PACKS) rmSync(packInstallingMarker(cfg.kitDir, p.id), { force: true });
     const all = installCtx ? buildSteps(installCtx) : null;
     const toRun = all && [
       ...baseSteps(all),
@@ -506,7 +508,10 @@ app.whenReady().then(() => {
     if (noRoom) return { ok: false, reason: noRoom };
     packCancelled = false;
     packInFlight = id;
+    const marker = packInstallingMarker(installCtx.kitDir, id);
     try {
+      mkdirSync(join(installCtx.kitDir, ".install"), { recursive: true });
+      writeFileSync(marker, new Date().toISOString());
       shellLog(`PERSODUB_PACK install ${id}: ${steps.map((s) => s.id).join(", ")}`);
       // The page gets the pack's overall percent on every event (installer.js
       // packPercent), not the running step's own -- a pip step has none.
@@ -538,6 +543,7 @@ app.whenReady().then(() => {
       return { ok: true };
     } finally {
       packInFlight = null;
+      rmSync(marker, { force: true });
     }
   });
   ipcMain.handle("shell:cancel-pack", async () => {

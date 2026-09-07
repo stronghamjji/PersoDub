@@ -243,3 +243,12 @@ def test_an_engine_pack_whose_process_is_not_running_is_told_plainly(monkeypatch
     monkeypatch.setattr(dub_api, "_voice_engine_answers", lambda url: False)
     r = _start()
     assert r.status_code == 422 and "voice engine is not running" in r.json()["detail"]
+
+
+def test_a_language_code_the_app_does_not_know_is_refused(monkeypatch, _kit):
+    _put_whisper(_kit)
+    _put_tts(_kit)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
+    r = _start({"language_code": "xx"})
+    assert r.status_code == 422 and "language_code" in r.json()["detail"]
+    assert _start({"language_code": "pt-BR"}).status_code == 200, "a region variant of a known language"

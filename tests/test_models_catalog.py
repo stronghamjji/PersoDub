@@ -232,3 +232,14 @@ def test_every_downloadable_row_says_what_it_is_for():
         assert m.get("hint"), m["id"]
     rows = {m["id"]: m for m in models_module.status_rows()}
     assert rows["engine"]["hint"].startswith("Runs local dubbing")
+
+
+def test_a_pack_the_desktop_app_is_installing_reads_as_downloading(tmp_path):
+    # The shell leaves .install/<pack>.installing while it works; without it
+    # the half-made folder read as "paused" (2026-09-08).
+    kit = str(tmp_path)
+    engine = models_module.find("engine")
+    os.makedirs(os.path.join(kit, "engines_venv"))
+    assert models_module.model_state(engine, kit) == "paused"
+    _mk(kit, ".install", "engine.installing")
+    assert models_module.model_state(engine, kit) == "downloading"

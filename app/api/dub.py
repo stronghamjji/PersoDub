@@ -44,7 +44,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app import dub_launch, engines_status, media, runtime, state
+from app import config, dub_launch, engines_status, media, runtime, state
 from app import models as model_store
 from app import setup as dub_setup
 from app.api._shared import script_work_dir, work_dir_of
@@ -127,7 +127,13 @@ _LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2,8}([-_][A-Za-z0-9]{2,8})?$")
 
 
 def _valid_language_code(code: str) -> bool:
-    return bool(_LANGUAGE_CODE.match(code or ""))
+    """A code the app knows (config.LANGUAGE_NAMES), region variant allowed:
+    "ko", "pt-BR" yes; "xx" no. The shape alone let "xx" start a job that
+    only failed at translation (2026-09-08)."""
+    if not _LANGUAGE_CODE.match(code or ""):
+        return False
+    base = re.split(r"[-_]", code)[0].lower()
+    return base in config.LANGUAGE_NAMES
 
 
 def _job_dir(title, lang_code):

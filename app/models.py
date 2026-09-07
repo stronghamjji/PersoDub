@@ -86,6 +86,11 @@ def model_state(entry, kit: str) -> str:
     """"ready" | "paused" | "not_downloaded" for one catalog entry."""
     base = os.path.join(kit, *entry["dir"].split("/"))
     if entry["role"] == "pack":
+        # The desktop app is installing it right now: it says so with a stamp,
+        # since this process cannot see the shell's work and the half-made
+        # folder alone read as "paused" (2026-09-08).
+        if os.path.exists(os.path.join(kit, ".install", f"{entry['id']}.installing")):
+            return "downloading"
         # Pack markers are kit-relative (they span folders: the installer's
         # own .ok stamp plus the pack's files); the Ollama binary carries the
         # platform's suffix, as the shell writes it.
@@ -199,6 +204,8 @@ def status_rows():
             row["progress"] = rt.get("pct")
         else:
             row["state"] = model_state(m, kit)
+            if row["state"] == "downloading":
+                row["progress"] = None   # a pack the shell is installing: the page has the figure
             if rt.get("state") == "failed" and rt.get("error"):
                 row["error"] = rt["error"]
         rows.append(row)

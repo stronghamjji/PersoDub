@@ -218,6 +218,13 @@ export function pipProgress(budget) {
   };
 }
 
+// While the desktop app installs a pack it leaves this stamp, so the backend
+// (which cannot see the shell's work) answers "downloading" for the pack
+// instead of "paused" -- the folder alone looked half-done (2026-09-08).
+export function packInstallingMarker(kitDir, id) {
+  return join(kitDir, ".install", `${id}.installing`);
+}
+
 export function torchVariantFor(kitDir) {
   const envPath = join(kitDir, KIT_ENV);
   if (!existsSync(envPath)) return TORCH_VARIANT;   // a fresh install: the hardware guess

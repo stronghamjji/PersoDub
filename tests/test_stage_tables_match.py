@@ -47,3 +47,18 @@ def test_the_two_tables_are_the_same_length():
 def test_stage_marker_numbers_the_stages_from_one():
     markers = [stage_marker(name) for name, _label in STAGES]
     assert markers == [f"{i + 1}/{len(STAGES)}" for i in range(len(STAGES))]
+
+
+def test_the_language_tables_match_on_both_sides():
+    """dub_start refuses a code the backend does not know (config.LANGUAGE_NAMES);
+    the page offers ui/src/dubApi.mjs LANGUAGES. One list on each side, pinned
+    equal, so a language added to one never disappears from the other."""
+    import os
+    import re
+
+    from app import config
+    page = os.path.join(os.path.dirname(__file__), "..", "ui", "src", "dubApi.mjs")
+    with open(page, encoding="utf-8") as f:
+        block = f.read().split("export const LANGUAGES = [")[1].split("];")[0]
+    codes = re.findall(r'code: "([a-z]+)"', block)
+    assert codes == list(config.LANGUAGE_NAMES.keys()), (codes, list(config.LANGUAGE_NAMES))

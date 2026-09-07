@@ -695,3 +695,9 @@ test("pipProgress turns pip's raw progress lines into a percent of the step's bu
   assert.deepEqual(p("Progress 900 of 900"), [99, "Installing collected packages"], "never 100 from here");
   assert.deepEqual(pipProgress(0)("Progress 1 of 2"), [null, ""], "no budget, no figure");
 });
+
+import { packInstallingMarker } from "./installSpec.js";
+
+test("the installing stamp sits beside the install's own stamps, named for the pack", () => {
+  assert.equal(packInstallingMarker("/kit", "engine"), join("/kit", ".install", "engine.installing"));
+});
