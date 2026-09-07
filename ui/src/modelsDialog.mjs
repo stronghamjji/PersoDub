@@ -265,6 +265,24 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false };
     $("mnTitle").textContent = d.title;
     $("mnLine").textContent = d.line;
+    // The list: a first-time user never opens Settings, so this is where they
+    // learn what an "AI engine" is and that the Perso API is the other road.
+    const list = $("mnItems");
+    list.replaceChildren();
+    for (const it of d.items) {
+      const li = document.createElement("li");
+      const name = document.createElement("b");
+      name.textContent = `${it.name} · ${it.size}`;
+      li.append(name);
+      if (it.hint) {
+        const hint = document.createElement("span");
+        hint.textContent = it.hint;
+        li.append(hint);
+      }
+      list.append(li);
+    }
+    list.hidden = !d.items.length;
+    $("mnAlt").hidden = false;
     $("mnError").textContent = "";
     $("mnProgress").hidden = true;
     $("mnDownload").hidden = false;
@@ -276,6 +294,8 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     if (!pendingDub || !pendingDub.downloading) return;
     const pct = overallProgress(modelRows, pendingDub.ids);
     $("mnBar").style.width = pct + "%";
+    $("mnItems").hidden = true;   // the list said what; the bar now says how far
+    $("mnAlt").hidden = true;
     if (packBusy) {
       $("mnTitle").textContent = `Installing ${packBusy.name}`;
       $("mnLine").textContent = packBusy.line || "Starting…";
@@ -312,6 +332,8 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     $("mnSettings").hidden = true;
     $("mnHide").hidden = false;
     $("mnProgress").hidden = false;
+    $("mnItems").hidden = true;   // the list said what; the bar now says how far
+    $("mnAlt").hidden = true;
     (async () => {
       // Packs first, one after another (the desktop app installs one at a
       // time); a pack that fails stops here, with its reason in the dialog

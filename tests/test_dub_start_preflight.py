@@ -173,7 +173,9 @@ def test_a_fresh_install_is_asked_for_the_engine_pack_before_the_models(monkeypa
     r = _start()
     assert r.status_code == 409
     missing = r.json()["detail"]["missing"]
-    assert missing[0] == {"id": "engine", "kind": "pack", "name": "AI engine", "bytes": 2000000000}
+    assert missing[0] == {"id": "engine", "kind": "pack", "name": "AI engine", "bytes": 2000000000,
+                          "hint": "Runs local dubbing on this computer: sound separation, transcription and the voice."}
+    assert all(m["hint"] for m in missing), "every item says what it is for"
     assert [m["id"] for m in missing[1:]] == ["qwen3-tts", "whisper"]
     assert all(m["kind"] == "model" for m in missing[1:])
     assert r.json()["detail"]["total_bytes"] == sum(m["bytes"] for m in missing)

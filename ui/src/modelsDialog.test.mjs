@@ -545,3 +545,23 @@ test("downloadAll stops at a pack that failed and downloads no model", async (t)
   assert.equal(await h.api.downloadAll(["engine", "whisper"]), false);
   assert.ok(!h.state.calls.some((c) => c.startsWith("POST")));
 });
+
+test("the dub dialog lists what it will download, by name, size and purpose, and names the API as the other road", async (t) => {
+  const h = harness({ rows: [ENGINE, WHISPER] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  h.api.showModelsDialog({ missing: [
+    { id: "engine", kind: "pack", name: "AI engine", bytes: 2e9, hint: "Runs local dubbing on this computer." },
+    { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9e9, hint: "Turns the speech into text." },
+  ] });
+  const items = h.$("mnItems").children;
+  assert.equal(items.length, 2);
+  assert.equal(items[0].children[0].textContent, "AI engine · 1.9 GB");
+  assert.equal(items[0].children[1].textContent, "Runs local dubbing on this computer.");
+  assert.equal(h.$("mnItems").hidden, false);
+  assert.equal(h.$("mnAlt").hidden, false);
+  // Once the download runs the list gives way to the bar.
+  h.$("mnDownload").click();
+  await settle();
+  assert.equal(h.$("mnItems").hidden, true);
+});

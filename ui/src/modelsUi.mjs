@@ -61,6 +61,8 @@ export function dubStartDialog(detail) {
     ids: missing.map((m) => m.id),
     packs,
     models,
+    // What the dialog lists, in download order: name, size and what it is for.
+    items: missing.map((m) => ({ id: m.id, name: m.name, size: `${gb(m.bytes)} GB`, hint: m.hint || "" })),
     totalBytes: total,
   };
 }

@@ -286,12 +286,14 @@ def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = T
         if m["role"] == "pack":
             if m["id"] in wanted_packs and model_store.model_state(m, kit) != "ready":
                 packs.append({"id": m["id"], "kind": "pack", "name": m["name"],
-                              "bytes": model_store._pack_bytes(m)})
+                              "bytes": model_store._pack_bytes(m), "hint": m.get("hint", "")})
             continue
         if m["id"] in wanted and model_store.model_state(m, kit) != "ready":
-            models.append({"id": m["id"], "kind": "model", "name": m["name"], "bytes": m["bytes"]})
+            models.append({"id": m["id"], "kind": "model", "name": m["name"], "bytes": m["bytes"],
+                           "hint": m.get("hint", "")})
         if translate_missing_id and m["id"] == translate_missing_id:
-            models.append({"id": m["id"], "kind": "model", "name": m["name"], "bytes": m["bytes"]})
+            models.append({"id": m["id"], "kind": "model", "name": m["name"], "bytes": m["bytes"],
+                           "hint": m.get("hint", "")})
     return packs + models
 
 

@@ -1076,6 +1076,12 @@
   .model-hint { display: block; font-size: 0.72rem; color: var(--muted-foreground); font-weight: 400; margin-top: 2px; }
   .model-size { color: var(--muted-foreground); font-size: 0.8rem; }
   .model-btn { height: 30px; padding: 0 12px; font-size: 0.78rem; }
+  /* What the dub will download, by name: the one place a first-time user
+     learns what each thing is before it costs gigabytes. */
+  .mn-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+  .mn-items li { display: grid; gap: 2px; font-size: 0.84rem; }
+  .mn-items li b { font-weight: 600; }
+  .mn-items li span { color: var(--muted-foreground); font-size: 0.78rem; }
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
   .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
@@ -1579,6 +1585,8 @@
     <div class="modal-body">
       <h2 id="mnTitle" style="margin: 0 0 8px"></h2>
       <p class="settings-hint" id="mnLine" style="margin: 0"></p>
+      <ul class="mn-items" id="mnItems" hidden></ul>
+      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or dub with the Perso API using your key: Open Settings.</p>
       <div class="mn-progress" id="mnProgress" hidden><div id="mnBar"></div></div>
       <div class="form-error" id="mnError"></div>
       <div class="mn-buttons">
