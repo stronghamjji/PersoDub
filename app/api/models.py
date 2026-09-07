@@ -90,7 +90,10 @@ def model_download(mid: str):
     if free is not None and free < entry["bytes"] * 1.1:
         raise HTTPException(409, "Not enough space: needs %.1f GB, %.1f GB free"
                                  % (entry["bytes"] / 1024**3, free / 1024**3))
-    started = model_store.request_download(entry)
+    try:
+        started = model_store.request_download(entry)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     # 202 for a fresh start, 200 when it was already running -- a double-click
     # must never error or start a second download.
     return JSONResponse({"state": "downloading"}, status_code=202 if started == "started" else 200)

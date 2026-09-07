@@ -481,3 +481,21 @@ test("an Ollama pull that failed before it began is told in the dialog, not poll
   await h.api.refreshModels();
   assert.match(h.$("mnError").textContent, /Hunyuan stopped \(connection refused\)/);
 });
+
+test("a download the engine refuses shows its sentence instead of starting nothing", async (t) => {
+  const h = harness({ rows: [{ id: "hunyuan", role: "translate", name: "Hunyuan", bytes: 1.1e9, state: "not_downloaded" }] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  h.state.responses = { "/api/models/hunyuan/download": { ok: false, json: async () => ({ detail: "Install the Translation runtime first, then download this model." }) } };
+  await h.api.downloadModel("hunyuan");
+  assert.equal(h.$("modelsError").textContent, "Hunyuan: Install the Translation runtime first, then download this model.");
+});
+
+test("a catalog row says what the thing is for, under its name", async (t) => {
+  const h = harness({ rows: [{ ...ENGINE, hint: "Runs local dubbing on this computer." }] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const name = h.$("modelsList").children[0].children[0];
+  assert.equal(name.children[0].className, "model-hint");
+  assert.equal(name.children[0].textContent, "Runs local dubbing on this computer.");
+});

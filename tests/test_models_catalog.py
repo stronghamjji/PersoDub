@@ -208,3 +208,27 @@ def test_a_pack_cannot_be_removed_while_a_dub_runs_even_by_the_desktop_app(monke
     monkeypatch.setattr(models_module, "dub_in_progress", lambda: True)
     r = client.delete("/api/models/engine")
     assert r.status_code == 409 and r.json()["detail"].startswith("A dub is running")
+
+
+def test_the_catalog_lists_the_packs_first():
+    # Settings and the dub dialog read the catalog in order: what has to come
+    # first (the packs) is listed first, so the order is the guidance.
+    ids = [m["id"] for m in models_module.load_catalog()]
+    assert ids[:2] == ["engine", "ollama-runtime"], ids
+
+
+def test_an_ollama_model_asked_for_without_its_runtime_is_refused_with_a_sentence(monkeypatch, tmp_path):
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))   # no runtime.json: no runtime up
+    monkeypatch.setattr(models_module, "free_bytes_at", lambda path: 10**12)
+    r = client.post("/api/models/hunyuan/download")
+    assert r.status_code == 409
+    assert r.json()["detail"] == "Install the Translation runtime first, then download this model."
+
+
+def test_every_downloadable_row_says_what_it_is_for():
+    for m in models_module.load_catalog():
+        if m["role"] == "always":
+            continue
+        assert m.get("hint"), m["id"]
+    rows = {m["id"]: m for m in models_module.status_rows()}
+    assert rows["engine"]["hint"].startswith("Runs local dubbing")

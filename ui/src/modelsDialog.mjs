@@ -140,7 +140,15 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   async function downloadModel(id) {
     const row = modelRow(id);
     if (row && row.role === "pack") { await installPack(id); return; }
-    try { await fetch(`/api/models/${id}/download`, { method: "POST" }); } catch { /* poll shows it */ }
+    try {
+      const r = await fetch(`/api/models/${id}/download`, { method: "POST" });
+      if (!r.ok) {
+        // The engine's reason -- "install the Translation runtime first" --
+        // in the dialog and in Settings, instead of a download that never starts.
+        const body = await r.json().catch(() => null);
+        showPackError(`${(row && row.name) || id}: ${String((body && body.detail) || "The download could not start.")}`);
+      }
+    } catch { /* poll shows it */ }
     startPolling();
   }
   async function cancelModel(id) {
@@ -170,6 +178,13 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       row.className = "settings-row model-row";
       const name = document.createElement("span");
       name.textContent = m.name;
+      if (m.hint) {
+        // What it is for, under the name: "AI engine" says nothing on its own.
+        const hint = document.createElement("small");
+        hint.className = "model-hint";
+        hint.textContent = m.hint;
+        name.append(hint);
+      }
       const size = document.createElement("span");
       size.className = "model-size";
       size.textContent = `${gb(m.bytes)} GB`;

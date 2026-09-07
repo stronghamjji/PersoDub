@@ -188,7 +188,9 @@ def status_rows():
     for m in load_catalog():
         if m["role"] == "always":
             continue
-        row = {"id": m["id"], "role": m["role"], "name": m["name"], "bytes": _pack_bytes(m)}
+        row = {"id": m["id"], "role": m["role"], "name": m["name"], "bytes": _pack_bytes(m),
+               # One line under the name in Settings: what this is for.
+               "hint": m.get("hint", "")}
         with _lock:
             rt = dict(_downloads.get(m["id"]) or {})
         if rt.get("state") in ("queued", "downloading"):
@@ -211,6 +213,10 @@ def request_download(entry) -> str:
     global _worker
     if entry["role"] == "pack":
         raise ValueError(PACKS_ARE_THE_SHELLS)
+    if entry["source"].get("kind") == "ollama" and not _runtime.url("ollama"):
+        # Only the runtime can pull into its store, and it is not running:
+        # say so up front instead of queueing a pull that fails on an empty URL.
+        raise ValueError("Install the Translation runtime first, then download this model.")
     with _lock:
         state = (_downloads.get(entry["id"]) or {}).get("state")
         if state in ("queued", "downloading"):
