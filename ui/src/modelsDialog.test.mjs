@@ -407,6 +407,10 @@ test("while a pack installs the dialog shows its progress line, and Cancel stops
   shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing AI engines", state: "progress", detail: "torch 40%", pct: 40 });
   assert.equal(h.$("mnLine").textContent, "Installing AI engines: torch 40%");
   assert.equal(h.$("mnBar").style.width, "40%", "the bar follows the pack's percent, not the engine's row");
+  // A detail that only restates the title is not repeated after a colon
+  // ("Downloading the translation runtime: Downloading the translation runtime", 2026-09-08).
+  shell.progress({ pack: "engine", stepId: "ollama-runtime", title: "Downloading the translation runtime", state: "progress", detail: "Downloading the translation runtime", pct: 60 });
+  assert.equal(h.$("mnLine").textContent, "Downloading the translation runtime");
   h.$("mnCancel").click();
   assert.deepEqual(shell.asked, ["install engine", "cancel engine"]);
   finish({ ok: false, reason: "Cancelled." });

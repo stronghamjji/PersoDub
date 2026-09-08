@@ -70,3 +70,12 @@ test("findForeignLockers fails open when the probe blows up", async () => {
   });
   assert.deepEqual(got, []);
 });
+
+test("lockProbeScript makes PowerShell answer in UTF-8, so Korean app names survive", () => {
+  // The dialog showed "Close Microsoft Defender ������ first" on a Korean
+  // Windows (2026-09-08): stdout came out in the console code page.
+  const script = lockProbeScript("C:\\x");
+  const enc = script.indexOf("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+  assert.ok(enc > 0);
+  assert.ok(enc < script.indexOf("Add-Type"), "set before anything prints");
+});
