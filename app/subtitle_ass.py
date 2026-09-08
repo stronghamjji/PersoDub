@@ -133,6 +133,20 @@ def _rect(align, x, y, box, w_px, h_px):
             % (align, x, y, box_col.upper(), alpha, w_px, w_px, h_px, h_px))
 
 
+# libass reads a Style's Fontsize as the font's cell height (ascent + descent),
+# the VSFilter way, so a font whose cell is taller than its em comes out that
+# much smaller than the page drew it -- the page measures in true em. The
+# burn fonts' cells, from their OS/2 metrics and confirmed by rendering ten
+# capital H on 2026-09-08 (Chromium 668 px vs libass 542 px on Mac, 530 px on
+# Windows at Fontsize 100). A font not listed here is drawn unscaled.
+FONT_CELL = {"Apple SD Gothic Neo": 1.2, "Malgun Gothic": 1.33, "Noto Sans CJK KR": 1.448}
+
+# Fonts that ship a regular and a bold face only: the browser gives weight 600
+# the bold face, libass the regular one, so White Box came out thin on
+# Windows. For these the layout's weight snaps to \b1 / \b0.
+TWO_WEIGHT_FONTS = {"Malgun Gothic"}
+
+
 def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
               font="Arial", box_width=None, line_widths=None, layout=None):
     """The whole .ass document for one video's subtitles.
@@ -169,8 +183,11 @@ def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
                      else _color(p["outline"]))
     back = _color(box["color"], box["opacity"]) if box else _color("000000")
     safe_font = re.sub(r"[,\r\n{}]", " ", font).strip()
+    # Only the Style's Fontsize takes the cell scale (FONT_CELL); boxes,
+    # paddings and offsets stay in font_px, the em the page measured with.
+    style_px = round(font_px * FONT_CELL.get(font, 1.0))
     style = ("Style: Base,%s,%d,%s,&H000000FF,%s,%s,%d,0,0,0,100,100,0,0,%d,%d,%d,%d,%d,%d,%d,1"
-             % (safe_font, font_px, _color(p["primary"]), outline_color, back,
+             % (safe_font, style_px, _color(p["primary"]), outline_color, back,
                 1 if p["bold"] else 0, border_style, outline, shadow, align,
                 round(width * 0.06), round(width * 0.06), margin_v))
 
@@ -191,7 +208,11 @@ def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
         lines = list(lay["lines"]) if lay else [text]
         # The weight the page drew at (\b<weight>, which libass honours); the
         # preset's bold flag alone left White Box thinner than on screen.
-        wt = "\\b%d" % lay["weight"] if lay and lay.get("weight") else ""
+        if lay and lay.get("weight"):
+            wt = ("\\b%d" % (1 if lay["weight"] >= 600 else 0) if font in TWO_WEIGHT_FONTS
+                  else "\\b%d" % lay["weight"])
+        else:
+            wt = ""
         if p["uppercase"]:
             text = text.upper()
             lines = [l.upper() for l in lines]
