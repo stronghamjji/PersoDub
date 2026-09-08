@@ -516,12 +516,18 @@ app.whenReady().then(() => {
       // The page gets the pack's overall percent on every event (installer.js
       // packPercent), not the running step's own -- a pip step has none.
       const done = new Set();
+      let lastPct = 0;
       try {
         await runInstall(steps, {
           onProgress: (p) => {
             if (p.state === "start" || p.state === "done" || p.state === "error") shellLog(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail.slice(0, 300) : ""}`);
             if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
-            const pct = packPercent(steps, done, p.stepId, p.state === "progress" ? p.pct : null);
+            // A progress line without a percent (unpacking, a pip line) keeps
+            // the pack's last one: the dialog fell back to 0% for those (2026-09-08).
+            const pct = p.state === "progress" && p.pct == null
+              ? lastPct
+              : packPercent(steps, done, p.stepId, p.state === "progress" ? p.pct : null);
+            lastPct = pct;
             if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id, pct });
           },
         });
