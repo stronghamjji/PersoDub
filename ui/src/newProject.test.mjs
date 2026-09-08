@@ -488,4 +488,10 @@ test("every Perso language gets a flag, regional variants their own country", as
   assert.ok(byId["en-GB"].startsWith("🇬🇧") && byId["en"].startsWith("🇺🇸"), "UK and US English differ");
   assert.ok(byId["pt"].startsWith("🇧🇷") && byId["pt-PT"].startsWith("🇵🇹"));
   assert.ok(byId["es"].startsWith("🇲🇽") && byId["es-ES"].startsWith("🇪🇸"));
+  // Back on the local list, plain Portuguese and Spanish keep their own flags.
+  h.$("dubModeSelect").value = "local";
+  await h.$("dubModeSelect").fire("change");
+  const localById = Object.fromEntries(h.$("targetLangSelect").options.map((o) => [o.value, o.textContent]));
+  assert.equal(localById["pt"], "🇵🇹 Portuguese");
+  assert.equal(localById["es"], "🇪🇸 Spanish");
 });

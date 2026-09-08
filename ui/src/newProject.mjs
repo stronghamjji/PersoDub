@@ -27,6 +27,10 @@ import { fmtClock, fmtClockTenths } from "./format.mjs";
 // languages: India); Welsh gets the Welsh flag. Windows draws these as
 // two-letter codes -- its emoji font has no flags -- which is how the
 // original ten already looked there.
+// The local list says plainly "Portuguese" and "Spanish": those keep the
+// flags they always had. Perso's default regions for the same codes are
+// Brazil and Mexico, which is what the Perso list shows.
+const LOCAL_FLAGS = { pt: "🇵🇹", es: "🇪🇸" };
 const LANG_FLAGS = {
   "af": "🇿🇦", "ar": "🇸🇦", "as": "🇮🇳", "az": "🇦🇿", "be": "🇧🇾", "bg": "🇧🇬", "bn": "🇧🇩", "bs": "🇧🇦",
   "ca": "🇪🇸", "ceb": "🇵🇭", "cs": "🇨🇿", "cy": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "da": "🇩🇰", "de": "🇩🇪", "el": "🇬🇷", "en": "🇺🇸",
@@ -88,7 +92,8 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       for (const l of LANGUAGES) {
         const o = document.createElement("option");
         o.value = l.code;
-        o.textContent = withFlag && LANG_FLAGS[l.code] ? `${LANG_FLAGS[l.code]} ${l.name}` : l.name;
+        const flag = LOCAL_FLAGS[l.code] || LANG_FLAGS[l.code];
+        o.textContent = withFlag && flag ? `${flag} ${l.name}` : l.name;
         if (l.code === defCode) o.selected = true;
         sel.appendChild(o);
       }
@@ -112,11 +117,12 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     if (!sel) return;
     const keep = sel.value || "en";
     const list = currentLanguages();
+    const local = list === languageLists.local;
     sel.innerHTML = "";
     for (const l of list) {
       const o = document.createElement("option");
       o.value = l.id;
-      const flag = LANG_FLAGS[l.id] || (!l.tag && LANG_FLAGS[l.code]);
+      const flag = (local && LOCAL_FLAGS[l.code]) || LANG_FLAGS[l.id] || (!l.tag && LANG_FLAGS[l.code]);
       o.textContent = flag ? `${flag} ${l.name}` : l.name;
       sel.appendChild(o);
     }
