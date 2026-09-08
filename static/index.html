@@ -174,6 +174,12 @@
   .rail-item .icon { width: 20px; height: 20px; stroke-width: 2; }
 
   .rail-item.active { background: var(--primary); color: var(--primary-foreground); }
+  .rail-item.brand { background: none; cursor: default; }
+  .rail-logo { width: 30px; height: 30px; border-radius: 8px; display: block; }
+  .about-brand { display: flex; align-items: center; gap: 12px; margin: 4px 0 10px; }
+  .about-logo { width: 44px; height: 44px; border-radius: 11px; }
+  .about-brand b { font-size: 1rem; display: block; }
+  .about-brand span { color: var(--muted-foreground); font-size: 0.8rem; }
   .rail-item:hover:not(.active) { color: var(--foreground); background: var(--secondary); }
   .rail-spacer { flex: 1; }
 
@@ -1216,10 +1222,9 @@
 <div class="app">
   <!-- ============ RAIL ============ -->
   <div class="rail">
-    <button class="rail-item active" title="Dubbing" type="button" aria-label="Dubbing">
-      <!-- Speech: a waveform with a pen across it -- what this app does to a
-           video, rather than the microphone every other app uses. -->
-      <svg class="icon" viewBox="0 0 24 24"><path d="M3 12h2"/><path d="M7 8v8"/><path d="M11 5v14"/><path d="M15 9v6"/><path d="M14.5 21l5.5-5.5 1.8 1.8L16.3 22.8H14.5z"/><path d="M18.6 16.9l1.8 1.8"/></svg>
+    <button class="rail-item brand" title="PersoDub" type="button" aria-label="PersoDub">
+      <!-- The logo tile stands where the waveform icon was (user, 2026-09-08). -->
+      <img class="rail-logo" src="/logo.png" alt="">
     </button>
     <button class="rail-item" id="historyToggle" title="Projects" type="button" aria-label="Toggle projects">
       <!-- Projects: a folder -->
@@ -1702,6 +1707,7 @@
              this list is the pointer to it, not a replacement for it.
              FFmpeg's terms depend on the build the installer fetches, so it
              is labelled the way NOTICE labels it rather than pinned here. -->
+        <div class="about-brand"><img class="about-logo" src="/logo.png" alt=""><div><b>PersoDub</b><span>Dub any video into another language on your computer.</span></div></div>
         <div class="settings-line">
           <!-- The version itself opens What's new: one less link on the row
                (user feedback 2026-09-01), and the version is the natural place

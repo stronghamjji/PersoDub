@@ -253,3 +253,9 @@ test("a dub refused because the voice engine is not running is retried after the
   assert.match(html, /voice engine is not running\/\.test\(errorText\(e\)\) && await restartVoiceEngine\(\)/);
   assert.match(html, /keepPolling: \(\) => \$\("settingsOverlay"\)\.classList\.contains\("open"\)/);
 });
+
+test("the rail leads with the logo tile, and About shows it beside the name", () => {
+  const html = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
+  assert.match(html, /<button class="rail-item brand"[^>]*>\s*(<!--[^]*?-->\s*)?<img class="rail-logo" src="\/logo.png"/);
+  assert.match(html, /<img class="about-logo" src="\/logo.png"/);
+});

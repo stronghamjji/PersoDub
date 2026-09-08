@@ -58,6 +58,7 @@ ROUTES = [
     ('GET', '/docs/oauth2-redirect'),
     ('GET', '/health'),
     ('GET', '/js/{name}'),   # the page's ES modules, token-stamped and uncacheable (app/main.py)
+    ('GET', '/logo.png'),
     ('GET', '/openapi.json'),
     ('GET', '/redoc'),
     ('HEAD', '/api/dub/result/{jid}/srt'),

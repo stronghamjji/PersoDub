@@ -433,7 +433,13 @@ app.whenReady().then(() => {
   // screens are still whole at. Nothing remembers a size between launches, so
   // this is what every launch opens at.
   const room = screen.getPrimaryDisplay().workAreaSize;
+  // Packaged builds carry build/icon.icns / icon.ico; a dev run (npm start)
+  // would otherwise show Electron's own icon in the dock and the taskbar.
+  if (!app.isPackaged && process.platform === "darwin" && app.dock) {
+    try { app.dock.setIcon(join(HERE, "build", "icon.png")); } catch { /* cosmetic */ }
+  }
   const win = new BrowserWindow({
+    icon: join(HERE, "build", "icon.png"),
     width: Math.min(1280, room.width),
     height: Math.min(800, room.height),
     minWidth: Math.min(960, room.width),

@@ -71,3 +71,8 @@ docs/superpowers/
 /*.md
 !/README.md
 !/INSTALL.md
+
+# The app icons (build/icon.icns, icon.ico, icon.png) ship with the repo so CI
+# can build the Windows installer with them; the iconset is scratch.
+!desktop/build/
+desktop/build/icon.iconset/
