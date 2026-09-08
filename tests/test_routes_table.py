@@ -46,6 +46,7 @@ ROUTES = [
     ('GET', '/api/dub/result/{jid}/subtitle_preview'),
     ('GET', '/api/dub/result/{jid}/subtitled'),
     ('GET', '/api/engines'),
+    ('GET', '/api/languages'),
     ('GET', '/api/models'),
     ('GET', '/api/perso/spaces'),
     ('GET', '/api/settings'),

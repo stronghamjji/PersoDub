@@ -284,7 +284,8 @@ def test_queue_dub_starts_the_job_once_confirmed(monkeypatch, tmp_path):
                                source_language="ko", confirm=True)
     assert out == {"job_id": "j1", "status": "running"}
     assert calls["url"] == "%s/api/dub/start" % mcp_server.API
-    assert calls["data"]["language"] == "English"
+    # Perso's own name for the language on the Perso path (app/languages.py).
+    assert calls["data"]["language"] == "English (US)"
     assert calls["data"]["language_code"] == "en"
     assert calls["data"]["dub_mode"] == "perso"
     assert calls["data"]["source_language_code"] == "ko"
@@ -570,3 +571,21 @@ def test_download_model_says_when_it_is_already_there_or_unknown(monkeypatch):
     assert mcp_server.download_model("hunyuan")["state"] == "ready"
     with pytest.raises(ValueError, match="No such model"):
         mcp_server.download_model("llama")
+
+
+def test_queue_dub_knows_persos_languages_on_the_perso_path_only(monkeypatch, tmp_path):
+    from app import languages
+    monkeypatch.setattr(languages, "_fetch", lambda: None)
+    video = _tmp_video(tmp_path)
+    with pytest.raises(ValueError, match="target_language"):
+        mcp_server.queue_dub(str(video), "hi", confirm=True)          # the local voices cannot
+    calls = {}
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        calls["data"] = data
+        return _Response(200, {"job_id": "j1", "status": "running"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.queue_dub(str(video), "hi", dub_mode="perso", confirm=True)
+    assert out["job_id"] == "j1"
+    assert calls["data"]["language"] == "Hindi" and calls["data"]["language_code"] == "hi"
