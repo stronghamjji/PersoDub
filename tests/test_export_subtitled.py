@@ -300,3 +300,18 @@ def test_the_pages_layout_reaches_the_burn(monkeypatch, tmp_path):
     # font 35 px on the 1080p fallback canvas: 10 em = 350 wide, 3 em = 105 tall
     assert "l 350 0 l 350 105 l 0 105" in ass
     assert "원래\\N번역" in ass
+
+
+def test_subtitled_is_burned_again_when_an_update_draws_it_differently(monkeypatch, tmp_path):
+    # Nothing of the job changed, but the app did (2026-09-08: the font-size
+    # fix): the .ass kept beside the file no longer matches, so it is rebuilt
+    # once, and the next ask finds it fresh again.
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    assert client.get(f"/api/dub/result/{jid}/subtitled?preset=neon-yellow").status_code == 200
+    assert len(ran.calls) == 1
+    assert (work / "subtitled-neon-yellow.mp4.ass").read_text(encoding="utf-8") == _ass(work)
+    monkeypatch.setattr(results_api, "_BURN_FONT", "Some Other Font")
+    assert client.get(f"/api/dub/result/{jid}/subtitled?preset=neon-yellow").status_code == 200
+    assert len(ran.calls) == 2
+    assert client.get(f"/api/dub/result/{jid}/subtitled?preset=neon-yellow").status_code == 200
+    assert len(ran.calls) == 2
