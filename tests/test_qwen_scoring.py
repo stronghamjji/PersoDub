@@ -74,7 +74,7 @@ def test_score_takes_returns_none_when_scorer_reports_failure(monkeypatch, tmp_p
         returncode = 0
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         _write_output(str(tmp_path), {"ok": False, "error": "campplus.onnx not found"})
         return _R()
 
@@ -94,7 +94,7 @@ def test_score_takes_returns_none_on_invalid_json_output(monkeypatch, tmp_path):
         returncode = 0
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         with open(os.path.join(str(tmp_path), "qwen_scorer_output.json"), "w") as f:
             f.write("{not json")
         return _R()
@@ -115,7 +115,7 @@ def test_score_takes_parses_successful_output(monkeypatch, tmp_path):
 
     captured_input = {}
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         with open(cmd[cmd.index("--input") + 1], encoding="utf-8") as f:
             captured_input.update(json.load(f))
         _write_output(str(tmp_path), {
@@ -196,7 +196,7 @@ def test_asr_batch_timeout_scales_with_file_count():
 def test_score_takes_subprocess_timeout_scales_with_total_takes(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_run(cmd, capture_output=True, text=True, timeout=None):
+    def fake_run(cmd, capture_output=True, text=True, timeout=None, **_kw):
         captured["timeout"] = timeout
         class R:
             returncode = 1
@@ -269,7 +269,7 @@ def test_score_takes_subprocess_timeout_honours_asr_timeout_env(monkeypatch, tmp
     # or it kills the child before the child's own (larger) budget expires.
     captured = {}
 
-    def fake_run(cmd, capture_output=True, text=True, timeout=None):
+    def fake_run(cmd, capture_output=True, text=True, timeout=None, **_kw):
         captured["timeout"] = timeout
         class R:
             returncode = 1

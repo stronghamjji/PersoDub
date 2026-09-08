@@ -122,7 +122,7 @@ def diarize(vocals_wav_path, cues, num_speakers=None):
         try:
             r = subprocess.run(
                 [py, SCRIPT_PATH, "--input", in_path, "--output", out_path],
-                capture_output=True, text=True, timeout=PERSODUB_DIAR_TIMEOUT,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=PERSODUB_DIAR_TIMEOUT,
             )
         except Exception as e:
             raise RuntimeError("local diarization failed to run (%s)" % str(e)[:120])

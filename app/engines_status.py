@@ -4,13 +4,16 @@ Pure checks that GET /api/engines and dub_start's preflight (app/api/dub.py) use
 stop offering/starting translation and transcription engines that don't actually
 work on this machine: gemma/qwen need a local Ollama server with the model
 pulled, gemini/perso need an API key configured. Everything here reads
-config/env live (not cached at import time) so tests can monkeypatch, and the
-Ollama check is exception-safe -- a down/slow Ollama must never crash the
-caller, so any network problem resolves to False rather than raising.
+config/env/runtime.json live (not cached at import time) so tests can
+monkeypatch, and the Ollama check is exception-safe -- a down/slow Ollama must
+never crash the caller, so any network problem resolves to False rather than
+raising. When no Ollama pack is installed, runtime.url("ollama") is "" and the
+request itself fails, which ollama_model_status already reports as
+"unreachable" rather than raising.
 """
 import requests
 
-from app import config
+from app import config, runtime
 from app.settings_env import current_value
 
 
@@ -58,33 +61,33 @@ def ollama_model_available(url: str, model: str, timeout: float = 4.0) -> bool:
 
 
 def gemma_available() -> bool:
-    return ollama_model_available(config.OLLAMA_URL, config.OLLAMA_GEMMA_MODEL)
+    return ollama_model_available(runtime.url("ollama"), config.OLLAMA_GEMMA_MODEL)
 
 
 def qwen_available() -> bool:
-    return ollama_model_available(config.OLLAMA_URL, config.OLLAMA_QWEN_MODEL)
+    return ollama_model_available(runtime.url("ollama"), config.OLLAMA_QWEN_MODEL)
 
 
 def hunyuan_available() -> bool:
-    return ollama_model_available(config.OLLAMA_URL, config.OLLAMA_HUNYUAN_MODEL)
+    return ollama_model_available(runtime.url("ollama"), config.OLLAMA_HUNYUAN_MODEL)
 
 
 def gemma_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
     Used by dub_start's preflight (app/api/dub.py) to give an accurate 422."""
-    return ollama_model_status(config.OLLAMA_URL, config.OLLAMA_GEMMA_MODEL)
+    return ollama_model_status(runtime.url("ollama"), config.OLLAMA_GEMMA_MODEL)
 
 
 def qwen_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
     Used by dub_start's preflight (app/api/dub.py) to give an accurate 422."""
-    return ollama_model_status(config.OLLAMA_URL, config.OLLAMA_QWEN_MODEL)
+    return ollama_model_status(runtime.url("ollama"), config.OLLAMA_QWEN_MODEL)
 
 
 def hunyuan_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
     Used by dub_start's preflight (app/api/dub.py) to give an accurate 422."""
-    return ollama_model_status(config.OLLAMA_URL, config.OLLAMA_HUNYUAN_MODEL)
+    return ollama_model_status(runtime.url("ollama"), config.OLLAMA_HUNYUAN_MODEL)
 
 
 def gemini_available() -> bool:

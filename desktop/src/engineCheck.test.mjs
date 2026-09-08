@@ -17,6 +17,19 @@ function makeKit(paths, { version } = {}) {
   return dir;
 }
 
+// The engine pack (engines_venv + Demucs) and the ollama-runtime pack are
+// installed later on demand (installSpec.js's PACKS); the boot check must
+// name only what the base install itself lays down.
+test("REQUIRED names the base install's own outputs, not the packs'", () => {
+  assert.ok(!REQUIRED.some((p) => String(p).includes("engines_venv")));
+  assert.ok(!REQUIRED.some((p) => String(p).includes("ollama")));
+  assert.ok(!REQUIRED.some((p) => String(p).includes(join("models", "demucs"))));
+  assert.ok(REQUIRED.includes(venvBin("app_venv", "uvicorn")));
+  assert.ok(REQUIRED.includes("kit.env"));
+  assert.ok(REQUIRED.includes("sidecar/server.py"));
+  assert.ok(REQUIRED.includes(join("models", "campplus", "campplus.onnx")));
+});
+
 test("complete kit with matching KIT_VERSION passes", () => {
   const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
   assert.deepEqual(checkKit(dir, "1.0.0+abc1234"), { ok: true, missing: [] });
@@ -46,39 +59,36 @@ test("missing uvicorn binaries are reported even with a matching version", () =>
   assert.deepEqual(res.missing.sort(), REQUIRED.filter((r) => !present.includes(r)).sort());
 });
 
-// The install's Ollama runtime used to sit outside this check, so a kit
-// whose download died halfway still reported ok: boot skipped runInstall,
-// the app never repaired itself, and local translation stayed dead across
-// every restart with no way out but a reinstall.
-test("kit missing the Ollama runtime is not installed", () => {
+// The Ollama runtime is a pack now (installSpec.js's PACKS): the boot flow
+// only refreshes it when it is already on disk, so a kit that never had it
+// -- or lost it -- must still boot, not bounce back to the installer.
+test("kit missing the Ollama runtime still boots (it is a pack now)", () => {
   const ollamaRel = join("ollama", exeName("ollama"));
-  const dir = makeKit(REQUIRED.filter((p) => p !== ollamaRel), { version: "1.0.0+abc1234" });
-  const res = checkKit(dir, "1.0.0+abc1234");
-  assert.equal(res.ok, false);
-  assert.deepEqual(res.missing, [ollamaRel]);
+  assert.ok(!REQUIRED.includes(ollamaRel));
+  const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
+  assert.deepEqual(checkKit(dir, "1.0.0+abc1234"), { ok: true, missing: [] });
 });
 
 // The big models (Gemma, Whisper, Qwen3-TTS) are optional now -- downloaded
 // in-app by the Python server -- so a kit without any of them must boot
 // straight into the app instead of bouncing back to the installer forever.
-test("kit without the optional models passes (runtime + always-installed only)", () => {
+test("kit without the optional models passes (base install's own files only)", () => {
   assert.ok(!REQUIRED.some((p) => String(p).includes("gemma3")), "Gemma manifest must not be required");
   assert.ok(!REQUIRED.some((p) => String(p).includes("qwen3-tts")), "TTS weights must not be required");
   assert.ok(!REQUIRED.some((p) => String(p).includes(join("models", "whisper"))), "Whisper weights must not be required");
-  assert.ok(REQUIRED.includes(venvBin("engines_venv", "uvicorn")), "the sidecar boots from the engines venv");
   assert.ok(!REQUIRED.some((p) => String(p).includes("qwen_venv")), "the old voice venv is gone");
   const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
   assert.deepEqual(checkKit(dir, "1.0.0+abc1234"), { ok: true, missing: [] });
 });
 
-// The always-installed models stay on the boot requirement: a kit that lost
-// one must go back to the installer, which re-downloads it.
-test("kit missing the Demucs weights is not installed", () => {
+// Demucs is part of the "engine" pack now -- same reasoning as the Ollama
+// runtime above: a kit missing it still boots, since the boot flow only
+// refreshes a pack already on disk (a later task adds installing it fresh).
+test("kit missing the Demucs weights still boots (it is part of the engine pack now)", () => {
   const weights = join("models", "demucs", "HTDemucs", "955717e8.safetensors");
-  const dir = makeKit(REQUIRED.filter((p) => p !== weights), { version: "1.0.0+abc1234" });
-  const res = checkKit(dir, "1.0.0+abc1234");
-  assert.equal(res.ok, false);
-  assert.deepEqual(res.missing, [weights]);
+  assert.ok(!REQUIRED.includes(weights));
+  const dir = makeKit(REQUIRED, { version: "1.0.0+abc1234" });
+  assert.deepEqual(checkKit(dir, "1.0.0+abc1234"), { ok: true, missing: [] });
 });
 
 test("nonexistent kitDir reports everything missing", () => {

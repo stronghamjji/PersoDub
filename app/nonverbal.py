@@ -189,7 +189,7 @@ def whisper_veto(vocals_path: str, candidates: Sequence[Tuple[float, float]],
             json.dump(clips, f)
         try:
             r = subprocess.run([python_bin, "-c", _WHISPER_RUNNER, model, in_path, out_path],
-                               capture_output=True, text=True, timeout=1800)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
             if r.returncode != 0:
                 raise RuntimeError(r.stderr[-300:])
             texts = json.load(open(out_path))

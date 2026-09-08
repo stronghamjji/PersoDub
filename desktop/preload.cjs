@@ -16,6 +16,13 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // the step that silently didn't happen.
   relaunch: () => ipcRenderer.send("shell:relaunch"),
   onInstallProgress: (cb) => ipcRenderer.on("shell:install-progress", (_e, p) => cb(p)),
+  // Packs (the engines venv, the Ollama runtime) are the shell's to install,
+  // stop and remove; the page asks and follows the progress channel above,
+  // where a pack's events carry `pack: id`.
+  installPack: (id) => ipcRenderer.invoke("shell:install-pack", id),
+  cancelPack: (id) => ipcRenderer.invoke("shell:cancel-pack", id),
+  removePack: (id) => ipcRenderer.invoke("shell:remove-pack", id),
+  packStatus: () => ipcRenderer.invoke("shell:pack-status"),
   // Auto-update: main.js announces the update's state -- {version, phase:
   // "downloading" | "ready", pct} -- as it changes and again whenever the page
   // loads, so the pill shows "downloading" within seconds of launch and turns

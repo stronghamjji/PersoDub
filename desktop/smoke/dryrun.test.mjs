@@ -16,6 +16,9 @@ test("full dry run: start, serve UI, stop, no leftovers", async () => {
   const logDir = mkdtempSync(join(tmpdir(), "oddry-"));
   const cfg = {
     ...DEFAULTS,
+    // A throwaway kit: startEngines announces the sidecar in <kit>/runtime.json,
+    // and a test must never write into the developer's real kit.
+    kitDir: mkdtempSync(join(tmpdir(), "oddry-kit-")),
     sidecarPort: 0,
     sidecarHealthTimeoutMs: 10000,
     backendHealthTimeoutMs: 10000,

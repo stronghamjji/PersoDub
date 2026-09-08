@@ -183,7 +183,7 @@ LOGIN_TIMEOUT = 8.0
 def _run_quiet(cmd: List[str]) -> tuple:
     """(returncode, stdout, stderr) for a short read-only command, or None."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            stdin=subprocess.DEVNULL, timeout=LOGIN_TIMEOUT)
     except (OSError, subprocess.SubprocessError):
         return None

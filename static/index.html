@@ -1062,15 +1062,29 @@
   .settings-hint { font-size: 0.74rem; color: var(--muted-foreground); margin-top: 4px; }
   .settings-hint.model-busy { color: var(--destructive); font-weight: 600; }
   .settings-hint.model-ok { color: #2a8a4a; font-weight: 600; }
+  /* The sentence takes the room and wraps; the button keeps to one line at
+     the same size as its neighbours -- a wrapped "Download (1.0 GB)" stood
+     twice as tall as the Resume beside it (user, 2026-09-07). */
   .model-line { display: flex; align-items: center; gap: 8px; }
-  .model-line .keys-link { margin: 0; }
+  .model-line > span { flex: 1 1 auto; min-width: 0; }
+  .model-line .keys-link { margin: 0; flex: none; white-space: nowrap; }
   .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: #fff;
                font-size: 0.74rem; font-weight: 600; padding: 4px 10px; cursor: pointer; }
   #modelsFold > summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
   #modelsFold[open] > summary { margin-bottom: 6px; }
   .model-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 10px; }
+  .model-hint { display: block; font-size: 0.72rem; color: var(--muted-foreground); font-weight: 400; margin-top: 2px; }
   .model-size { color: var(--muted-foreground); font-size: 0.8rem; }
+  /* A long status ("Stopped: …") must not squeeze the name into one word per
+     line: it keeps to its column and trims with an ellipsis. */
+  .model-row > .settings-hint { max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-btn { height: 30px; padding: 0 12px; font-size: 0.78rem; }
+  /* What the dub will download, by name: the one place a first-time user
+     learns what each thing is before it costs gigabytes. */
+  .mn-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+  .mn-items li { display: grid; gap: 2px; font-size: 0.84rem; }
+  .mn-items li b { font-weight: 600; }
+  .mn-items li span { color: var(--muted-foreground); font-size: 0.78rem; }
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
   .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
@@ -1574,6 +1588,8 @@
     <div class="modal-body">
       <h2 id="mnTitle" style="margin: 0 0 8px"></h2>
       <p class="settings-hint" id="mnLine" style="margin: 0"></p>
+      <ul class="mn-items" id="mnItems" hidden></ul>
+      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or dub with the Perso API using your key: Open Settings.</p>
       <div class="mn-progress" id="mnProgress" hidden><div id="mnBar"></div></div>
       <div class="form-error" id="mnError"></div>
       <div class="mn-buttons">
@@ -1960,7 +1976,7 @@
 
 <script type="module">
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, resultUrl, parseProgress, applyEngineAvailability, probeSource, engineChips } from "/js/dubApi.mjs";
-import { gb, neededModelId, modelStatusLine } from "/js/modelsUi.mjs";
+import { gb, neededModelId, neededPackIds, modelStatusLine } from "/js/modelsUi.mjs";
 import { initModelsUi } from "/js/modelsDialog.mjs";
 import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
@@ -2216,29 +2232,63 @@ const models = initModelsUi({
   onStartDubbing: startDubbing,
   onOpenSettings: settings.openSettings,
   onRowsChanged: paintModelStatusLines,
+  // The desktop app's bridge (absent in a plain browser): packs are its to install.
+  shell: window.persodubShell || null,
+  // Keep the catalog fresh while Settings shows it.
+  keepPolling: () => $("settingsOverlay").classList.contains("open"),
 });
 
-function paintHint(el, row) {
-  const line = modelStatusLine(row);
-  if (line.cls === "model-busy") el.dataset.everBusy = "1";
-  // A quiet machine stays quiet: Ready only shows after this session saw the
-  // model busy -- three green lines on a fully-installed machine are noise.
-  if (!row || (row.state === "ready" && !el.dataset.everBusy)) { el.hidden = true; return; }
+// Everything a dropdown choice needs, in the order it downloads: the pack it
+// runs in first (as in the dub's own 409), then its model. Only the rows
+// that are not ready -- an empty list means the choice is good to go.
+function hintNeeds(role, value) {
+  const ids = [...neededPackIds(role, value), neededModelId(role, value)].filter(Boolean);
+  return ids.map((id) => models.modelRow(id)).filter((r) => r && r.state !== "ready");
+}
+
+// One line under the dropdown, one button. Nothing missing: hidden (or Ready,
+// once this session saw it busy). Something downloading or stopped: that
+// row's own status, with Cancel or Resume. Otherwise every missing thing by
+// name -- "Needs Translation runtime + Hunyuan · 1.4 GB" -- and one Download
+// that fetches them all, in order, so a pack never arrives without a word
+// about what it is or why (user, 2026-09-07).
+function paintHint(el, needs, ready) {
+  const active = needs.find((r) => r.state === "downloading") || needs.find((r) => r.state === "paused");
+  if (active) el.dataset.everBusy = "1";
+  if (!needs.length) {
+    if (ready && el.dataset.everBusy) {
+      el.hidden = false;
+      el.className = "settings-hint model-line model-ok";
+      el.replaceChildren(document.createTextNode("Ready"));
+    } else el.hidden = true;
+    return;
+  }
   el.hidden = false;
-  el.className = "settings-hint model-line" + (line.cls ? " " + line.cls : "");
   el.replaceChildren();
   const span = document.createElement("span");
-  span.textContent = line.text;
-  el.append(span);
-  if (!line.button) return;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "keys-link";
-  btn.textContent = line.button === "download" ? `Download (${gb(row.bytes)} GB)`
-                  : line.button === "resume" ? "Resume" : "Cancel";
-  btn.addEventListener("click", () =>
-    line.button === "cancel" ? models.cancelModel(row.id) : models.downloadModel(row.id));
-  el.append(btn);
+  const ids = needs.map((r) => r.id);
+  if (active) {
+    const line = modelStatusLine(active);
+    el.className = "settings-hint model-line " + line.cls;
+    // A stopped one is named: "Paused" alone under a dropdown says nothing
+    // about which of the things the choice needs it is.
+    span.textContent = active.state === "paused"
+      ? `${active.name} paused${active.error ? `: ${active.error}` : ""}`
+      : line.text;
+    btn.textContent = line.button === "cancel" ? "Cancel" : "Resume";
+    btn.addEventListener("click", () =>
+      line.button === "cancel" ? models.cancelModel(active.id) : models.downloadAll(ids));
+  } else {
+    const total = needs.reduce((n, r) => n + r.bytes, 0);
+    el.className = "settings-hint model-line";
+    span.textContent = `Needs ${needs.map((r) => r.name).join(" + ")} · ${gb(total)} GB`;
+    btn.textContent = "Download";   // the size is in the sentence beside it
+    btn.addEventListener("click", () => models.downloadAll(ids));
+  }
+  el.append(span, btn);
 }
 
 // The parts of the model UI this page owns: the three dropdown hints and the
@@ -2247,9 +2297,13 @@ function paintModelStatusLines(rows) {
   // Cloud dubbing needs no local models -- their download lines would only
   // confuse; the per-stage dropdowns are greyed by paintDubMode below.
   const cloud = $("dubModeSelect").value === "perso";
-  paintHint($("sttModelHint"), cloud ? null : models.modelRow(neededModelId("stt", $("sttSelect").value)));
-  paintHint($("translateModelHint"), cloud ? null : models.modelRow(neededModelId("translate", $("translateSelect").value)));
-  paintHint($("voiceModelHint"), cloud ? null : models.modelRow(neededModelId("voice", $("voiceSelect").value)));
+  for (const [role, sel, hint] of [["stt", "sttSelect", "sttModelHint"],
+                                    ["translate", "translateSelect", "translateModelHint"],
+                                    ["voice", "voiceSelect", "voiceModelHint"]]) {
+    const value = $(sel).value;
+    const needsAnything = !cloud && (neededPackIds(role, value).length || neededModelId(role, value));
+    paintHint($(hint), cloud ? [] : hintNeeds(role, value), !!needsAnything);
+  }
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
           || rows.find((m) => m.state === "downloading");
   $("topbarDl").hidden = !dl;
@@ -2857,6 +2911,19 @@ function langsLabel() {
 
 // Lives in the New project dialog, which is where the whole start-a-job
 // decision now sits.
+// The voice engine's pack is on disk but its process is not up (its start
+// after an on-demand install timed out, or it died): the desktop app can start
+// it again, and the dub goes on -- no "quit and reopen" for the user.
+let engineRestartTried = false;
+async function restartVoiceEngine() {
+  const shell = window.persodubShell;
+  if (!shell || !shell.installPack || engineRestartTried) return false;
+  engineRestartTried = true;
+  $("projectError").textContent = "Starting the voice engine…";
+  const r = await shell.installPack("engine").catch(() => ({ ok: false }));
+  return !!(r && r.ok);
+}
+
 async function startDubbing() {
   $("projectError").textContent = "";
   const np = state.newProject;
@@ -2890,6 +2957,9 @@ async function startDubbing() {
     if (e && e.status === 409 && e.detail && e.detail.missing) {
       await models.refreshModels();
       models.showModelsDialog(e.detail);
+    } else if (e && e.status === 422 && /voice engine is not running/.test(errorText(e)) && await restartVoiceEngine()) {
+      engineRestartTried = false;
+      return startDubbing();
     } else if (!showIfOutOfSpace(e)) {
       $("projectError").textContent = errorText(e);
     }

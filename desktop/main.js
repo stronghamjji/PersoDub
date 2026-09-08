@@ -1,13 +1,15 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
-import { buildSteps, bytesStillNeeded } from "./src/installSpec.js";
-import { runInstall, openSteps } from "./src/installer.js";
+import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, PACKS } from "./src/installSpec.js";
+import { runInstall, openSteps, packPercent } from "./src/installer.js";
+import { cancelCurrent } from "./src/exec.js";
+import { readRuntime } from "./src/runtimeFile.js";
 import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
@@ -19,6 +21,34 @@ import { IS_WIN } from "./src/platform.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
+// The boot's install context (kit, bundled payload, downloader), kept so the
+// pack IPC below can run a pack's steps from the same table later.
+let installCtx = null;
+
+// The shell's own lines go to a file as well as the console: a packaged app
+// has no console, and the one question a support log could not answer on
+// Windows (2026-09-07) was why a pack's process did not start.
+function shellLog(line) {
+  console.log(line);
+  try {
+    const dir = join(app.getPath("userData"), "logs");
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(join(dir, "shell.log"), `${new Date().toISOString()} ${line}\n`);
+  } catch { /* logging never breaks the app */ }
+}
+
+// The last line a person can act on, out of a tool's whole transcript: the
+// page showed two screens of pip output in red (Windows, 2026-09-07).
+function lastReason(message) {
+  const lines = String(message || "").split("\n").map((l) => l.trim())
+    // Traceback scaffolding names files, not causes.
+    .filter((l) => l && !/^File "/.test(l) && !/^Traceback/.test(l) && !/^\^+$/.test(l));
+  if (!lines.length) return "The install could not finish.";
+  // The sentence that names the error: "ERROR: …", "OSError: …",
+  // "ConnectionResetError(…)" -- a path that merely contains "error" is not one.
+  const err = [...lines].reverse().find((l) => /^ERROR\b|[A-Za-z]+Error\b|\bError:/.test(l) && !/^WARNING/.test(l));
+  return (err || lines[lines.length - 1]).slice(0, 200);
+}
 let updateDownloaded = false;
 // The update as last announced -- re-sent to the page on every load, so a
 // page that arrives after the check (boot) or reloads mid-download still
@@ -232,9 +262,21 @@ async function boot(win) {
     // it, and it skips everything already done.
     const kitOk = checkKit(cfg.kitDir, kitVersion).ok;
     let unfinished = false;
+    // The boot install: the base steps every launch needs, plus only the
+    // packs already on this kit's disk. An existing user's engine/
+    // ollama-runtime keep being refreshed the way they always were; a pack
+    // that was never installed is left alone here -- a later task adds the
+    // IPC to install one on demand.
+    installCtx = payload ? { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run } : null;
+    // A pack's "installing" stamp left by a crash would read as downloading forever.
+    for (const p of PACKS) rmSync(packInstallingMarker(cfg.kitDir, p.id), { force: true });
+    const all = installCtx ? buildSteps(installCtx) : null;
+    const toRun = all && [
+      ...baseSteps(all),
+      ...PACKS.filter((p) => packInstalled(cfg.kitDir, p.id)).flatMap((p) => packSteps(all, p.id)),
+    ];
     if (kitOk && payload) {
-      const probe = buildSteps({ kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run });
-      const open = await openSteps(probe);
+      const open = await openSteps(toRun);
       unfinished = open.length > 0;
       if (unfinished) console.log(`PERSODUB_KIT resuming an unfinished install: ${open.map((s) => s.id).join(", ")}`);
     }
@@ -258,13 +300,11 @@ async function boot(win) {
         });
         return;
       }
-      const ctx = { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run };
-      const steps = buildSteps(ctx);
       // The other preflight, and for the same reason: five machines reported a
       // disk-full from deep inside a step, after gigabytes had already been
       // downloaded. Only the steps still missing are counted, so a half-done
       // install asks for the remainder rather than the whole kit again.
-      const stillNeeded = await bytesStillNeeded(steps);
+      const stillNeeded = await bytesStillNeeded(toRun);
       const noRoom = notEnoughSpace(stillNeeded, await freeSpaceAt(cfg.kitDir));
       if (noRoom) {
         countUsage("install_failure", cfg.kitDir, "disk-full");
@@ -286,7 +326,7 @@ async function boot(win) {
       // four real install failures unactionable.
       let failedStep;
       try {
-        await runInstall(steps, {
+        await runInstall(toRun, {
           onProgress: (p) => {
             if (p.state === "error") failedStep = p.stepId;
             win.webContents.send("shell:install-progress", p);
@@ -322,7 +362,7 @@ async function boot(win) {
     });
     rememberPorts({ backend: engines.port });
     await win.loadURL(engines.url);
-    console.log(`PERSODUB_READY ${engines.url}`);
+    shellLog(`PERSODUB_READY ${engines.url}`);
     bootedKitDir = cfg.kitDir;
     countUsage("app_launch", cfg.kitDir);
   } catch (err) {
@@ -450,6 +490,90 @@ app.whenReady().then(() => {
       bootedKitDir,
       status === "error" ? classifyError(String((msg && msg.detail) || "")) : undefined,
     );
+  });
+
+  // Packs: the heavy bundles (the engines venv with Demucs, the Ollama
+  // runtime) the first install leaves out. The page asks for one when a dub
+  // needs it; the install runs the pack's own steps from the table the boot
+  // install uses, reports on the same progress channel tagged with the pack,
+  // then starts the pack's process -- so dubbing goes on without a restart.
+  let packCancelled = false;
+  let packInFlight = null;   // one pack at a time: two at once shared one progress and one Cancel
+  ipcMain.handle("shell:install-pack", async (_e, id) => {
+    if (!PACKS.some((p) => p.id === id)) return { ok: false, reason: `Unknown pack: ${id}` };
+    if (!installCtx) return { ok: false, reason: "This build carries no bundled files to install from." };
+    if (packInFlight) return { ok: false, reason: `${packInFlight} is still installing. Wait for it to finish.` };
+    const steps = packSteps(buildSteps(installCtx), id);
+    const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(installCtx.kitDir));
+    if (noRoom) return { ok: false, reason: noRoom };
+    packCancelled = false;
+    packInFlight = id;
+    const marker = packInstallingMarker(installCtx.kitDir, id);
+    try {
+      mkdirSync(join(installCtx.kitDir, ".install"), { recursive: true });
+      writeFileSync(marker, new Date().toISOString());
+      shellLog(`PERSODUB_PACK install ${id}: ${steps.map((s) => s.id).join(", ")}`);
+      // The page gets the pack's overall percent on every event (installer.js
+      // packPercent), not the running step's own -- a pip step has none.
+      const done = new Set();
+      try {
+        await runInstall(steps, {
+          onProgress: (p) => {
+            if (p.state === "start" || p.state === "done" || p.state === "error") shellLog(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail.slice(0, 300) : ""}`);
+            if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
+            const pct = packPercent(steps, done, p.stepId, p.state === "progress" ? p.pct : null);
+            if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { ...p, pack: id, pct });
+          },
+        });
+      } catch (err) {
+        const full = String((err && err.message) || err);
+        shellLog(`PERSODUB_PACK install ${id} failed: ${full}`);
+        return { ok: false, reason: packCancelled ? "Cancelled." : lastReason(full) };
+      }
+      if (engines && engines.startPack) {
+        // The last step's line would sit in the dialog for the ~40 s the
+        // process takes to answer; say what is happening instead.
+        if (!win.isDestroyed()) win.webContents.send("shell:install-progress", { pack: id, stepId: "start", title: "Installed. Starting it up", state: "progress", pct: 100 });
+        try {
+          await engines.startPack(id);
+          shellLog(`PERSODUB_PACK ${id} process up: ${JSON.stringify(readRuntime(installCtx.kitDir))}`);
+        } catch (err) {
+          shellLog(`PERSODUB_PACK ${id} installed but did not start: ${String((err && err.message) || err)}`);
+          return { ok: false, reason: `Installed, but it could not start: ${lastReason(String((err && err.message) || err))}` };
+        }
+      }
+      shellLog(`PERSODUB_PACK install ${id} ok`);
+      return { ok: true };
+    } finally {
+      packInFlight = null;
+      rmSync(marker, { force: true });
+    }
+  });
+  ipcMain.handle("shell:cancel-pack", async () => {
+    packCancelled = true;
+    cancelCurrent();   // the step's process dies, runInstall rejects, install-pack answers Cancelled
+  });
+  ipcMain.handle("shell:remove-pack", async (_e, id) => {
+    const pack = PACKS.find((p) => p.id === id);
+    const kitDir = installCtx ? installCtx.kitDir : bootedKitDir;
+    if (!pack) return { ok: false, reason: `Unknown pack: ${id}` };
+    if (!kitDir) return { ok: false, reason: "No kit to remove it from." };
+    if (engines && engines.stopPack) engines.stopPack(id);
+    // The pack's folders and its steps' done-stamps, so a later install runs
+    // the steps again rather than skipping them on a stale stamp. Models
+    // pulled through Ollama stay: they are listed and removed as models.
+    const dirs = id === "engine" ? ["engines_venv", join("models", "demucs")] : ["ollama"];
+    try {
+      for (const d of dirs) rmSync(join(kitDir, d), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      for (const step of pack.steps) rmSync(join(kitDir, ".install", `${step}.ok`), { force: true });
+    } catch (err) {
+      return { ok: false, reason: String((err && err.message) || err) };
+    }
+    return { ok: true };
+  });
+  ipcMain.handle("shell:pack-status", async () => {
+    const kitDir = installCtx ? installCtx.kitDir : bootedKitDir;
+    return Object.fromEntries(PACKS.map((p) => [p.id, kitDir && packInstalled(kitDir, p.id) ? "ready" : "missing"]));
   });
 
   ipcMain.on("shell:retry", guardedBoot);

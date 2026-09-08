@@ -247,7 +247,7 @@ def embed_files(wav_paths, timeout=600):
         try:
             r = subprocess.run(
                 [py, EMBED_SCRIPT, "--input", in_path, "--output", out_path],
-                capture_output=True, text=True, timeout=timeout)
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         except Exception as e:
             raise RuntimeError("embedding worker failed to run (%s)" % str(e)[:120])
         if r.returncode != 0 or not os.path.exists(out_path):

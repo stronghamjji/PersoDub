@@ -14,6 +14,7 @@ This distinction is what keeps the 2026-08-14 "install died halfway = broken
 forever" bug from coming back: half-downloaded is a visible, resumable state,
 never silently "done" and never a dead end.
 """
+import contextlib
 import json
 import logging
 import os
@@ -46,6 +47,10 @@ def load_catalog():
             raise ValueError("catalog is not a non-empty list")
         for m in cat:
             for key in _REQUIRED_FIELDS:
+                # A pack has no source: the desktop shell installs it, not this
+                # process (see PACKS in desktop/src/installSpec.js).
+                if key == "source" and m.get("role") == "pack":
+                    continue
                 if key not in m:
                     raise ValueError(f"entry {m.get('id')!r} lacks {key!r}")
         return cat
@@ -60,9 +65,44 @@ def kit_dir() -> str:
     return os.environ.get("PERSODUB_KIT_DIR", "")
 
 
+def platform_key() -> str:
+    """Which of a pack's sizes applies here: "mac", or on Windows "win-gpu" /
+    "win-cpu" by the torch variant the desktop shell chose at install
+    (PERSODUB_TORCH_VARIANT in kit.env; absent means the GPU build, which is
+    what every kit before the variant existed installed)."""
+    if not _sys.platform.startswith("win"):
+        return "mac"
+    variant = os.environ.get("PERSODUB_TORCH_VARIANT", "").strip().lower()
+    return "win-cpu" if variant == "cpu" else "win-gpu"
+
+
+def _pack_bytes(entry):
+    """A pack's size on this platform; a model's size is one number already."""
+    b = entry["bytes"]
+    return b.get(platform_key(), 0) if isinstance(b, dict) else b
+
+
 def model_state(entry, kit: str) -> str:
     """"ready" | "paused" | "not_downloaded" for one catalog entry."""
     base = os.path.join(kit, *entry["dir"].split("/"))
+    if entry["role"] == "pack":
+        # The desktop app is installing it right now: it says so with a stamp,
+        # since this process cannot see the shell's work and the half-made
+        # folder alone read as "paused" (2026-09-08).
+        if os.path.exists(os.path.join(kit, ".install", f"{entry['id']}.installing")):
+            return "downloading"
+        # Pack markers are kit-relative (they span folders: the installer's
+        # own .ok stamp plus the pack's files); the Ollama binary carries the
+        # platform's suffix, as the shell writes it.
+        markers = []
+        for m in entry["markers"]:
+            rel = m.split("/")
+            if _sys.platform.startswith("win") and rel[-1] == "ollama":
+                rel[-1] += ".exe"
+            markers.append(os.path.join(kit, *rel))
+        if markers and all(os.path.exists(p) for p in markers):
+            return "ready"
+        return "paused" if os.path.isdir(base) else "not_downloaded"
     markers = [os.path.join(base, *m.split("/")) for m in entry["markers"]]
     if markers and all(os.path.exists(p) for p in markers):
         return "ready"
@@ -78,7 +118,6 @@ def model_state(entry, kit: str) -> str:
 # ── downloads: one at a time, cancellable, resumable ───────────────────────
 # In-memory only: on a server restart a half-download simply shows as
 # "paused" from disk and the screen offers Resume -- nothing else to persist.
-import re as _re
 import shutil as _shutil
 import subprocess as _subprocess
 import sys as _sys
@@ -87,6 +126,7 @@ import threading as _threading
 import requests as _requests
 
 from app import config as _config
+from app import runtime as _runtime
 
 _downloads = {}   # id -> {"state": "queued"|"downloading"|"failed", "pct", "error"}
 _queue = []
@@ -153,7 +193,9 @@ def status_rows():
     for m in load_catalog():
         if m["role"] == "always":
             continue
-        row = {"id": m["id"], "role": m["role"], "name": m["name"], "bytes": m["bytes"]}
+        row = {"id": m["id"], "role": m["role"], "name": m["name"], "bytes": _pack_bytes(m),
+               # One line under the name in Settings: what this is for.
+               "hint": m.get("hint", "")}
         with _lock:
             rt = dict(_downloads.get(m["id"]) or {})
         if rt.get("state") in ("queued", "downloading"):
@@ -162,15 +204,26 @@ def status_rows():
             row["progress"] = rt.get("pct")
         else:
             row["state"] = model_state(m, kit)
+            if row["state"] == "downloading":
+                row["progress"] = None   # a pack the shell is installing: the page has the figure
             if rt.get("state") == "failed" and rt.get("error"):
                 row["error"] = rt["error"]
         rows.append(row)
     return rows
 
 
+PACKS_ARE_THE_SHELLS = "Packs are installed by the desktop app"
+
+
 def request_download(entry) -> str:
     """"started" | "already". Queues the model; one download runs at a time."""
     global _worker
+    if entry["role"] == "pack":
+        raise ValueError(PACKS_ARE_THE_SHELLS)
+    if entry["source"].get("kind") == "ollama" and not _runtime.url("ollama"):
+        # Only the runtime can pull into its store, and it is not running:
+        # say so up front instead of queueing a pull that fails on an empty URL.
+        raise ValueError("Install the Translation runtime first, then download this model.")
     with _lock:
         state = (_downloads.get(entry["id"]) or {}).get("state")
         if state in ("queued", "downloading"):
@@ -196,12 +249,20 @@ def cancel_download(mid):
 
 
 def remove_model(entry):
+    if entry["role"] == "pack":
+        raise ValueError(PACKS_ARE_THE_SHELLS)
     kit = kit_dir()
     if entry["source"].get("kind") == "ollama":
         # The blob store is shared across Ollama models: deleting through the
         # server removes exactly this model's layers, an rmtree would take
         # every other model with it.
-        _requests.delete(f"{_config.OLLAMA_URL}/api/delete",
+        ollama_url = _runtime.url("ollama")
+        if not ollama_url:
+            # Only the runtime can take a model out of its shared blob store,
+            # and it is not running. Say so: a silent "removed" that removed
+            # nothing is worse than a refusal.
+            raise ValueError("Install the Translation runtime first, then remove this model.")
+        _requests.delete(f"{ollama_url}/api/delete",
                          json={"model": entry["source"]["tag"]}, timeout=60)
     else:
         _shutil.rmtree(os.path.join(kit, *entry["dir"].split("/")), ignore_errors=True)
@@ -229,8 +290,11 @@ def _drain():
                 # truth (ready, or paused with the pieces kept).
                 _downloads.pop(mid, None)
         except Exception as e:
+            # Logged with the traceback: the reason used to live only in the
+            # row's error field, so a support log said nothing (Windows, 2026-09-07).
+            log.exception("download of %s failed", mid)
             with _lock:
-                _downloads[mid] = {"state": "failed", "pct": None, "error": str(e)[:120]}
+                _downloads[mid] = {"state": "failed", "pct": None, "error": str(e)[:300]}
 
 
 def _run_download(entry, kit, progress, cancelled):
@@ -247,8 +311,32 @@ def _hf_cli(kit: str) -> str:
     return os.path.join(kit, "app_venv", bindir, "hf.exe" if _sys.platform == "win32" else "hf")
 
 
+HF_ATTEMPTS = 3            # a CDN read timeout mid-file is retried; hf resumes the .incomplete
+HF_DOWNLOAD_TIMEOUT = "60"  # seconds per read; the tool's own default of 10 gave up on slow CDNs
+
+
+def _dir_bytes(path: str) -> int:
+    """Bytes on disk under path, .incomplete pieces included -- what has really
+    arrived, which is what a percent should mean."""
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            with contextlib.suppress(OSError):
+                total += os.path.getsize(os.path.join(root, f))
+    return total
+
+
 def _pull_hf(entry, kit, progress, cancelled):
-    """hf CLI download -- it resumes partial files by itself (--local-dir)."""
+    """hf CLI download -- it resumes partial files by itself (--local-dir).
+
+    Percent is what is on disk against the catalog's size, not the tool's own
+    figure: that one counts files ("Fetching 13 files: 92%") and read 92% while
+    1.2 of 3.7 GB had arrived (Windows, 2026-09-07). A failed run is tried
+    again up to HF_ATTEMPTS times -- the tool resumes its .incomplete files --
+    and the process is always ended with us, never left running on its own.
+    """
+    import time
+
     from app.agents.base import _end  # the app's proven process-tree stopper
 
     dest = os.path.join(kit, *entry["dir"].split("/"))
@@ -256,20 +344,63 @@ def _pull_hf(entry, kit, progress, cancelled):
     src = entry["source"]
     argv = [_hf_cli(kit), "download", src["repo"], *src.get("files", []),
             "--revision", src["rev"], "--local-dir", dest]
-    proc = _subprocess.Popen(argv, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT, text=True)
-    pct_re = _re.compile(r"(\d{1,3})%")
-    for line in proc.stdout:
-        if cancelled():
-            _end(proc)
+    env = {**os.environ, "HF_HUB_DOWNLOAD_TIMEOUT": HF_DOWNLOAD_TIMEOUT,
+           "HF_HUB_DISABLE_PROGRESS_BARS": "0", "PYTHONUTF8": "1"}
+    total_bytes = int(entry.get("bytes") or 0)
+    last_report = 0.0
+
+    def report_from_disk(force=False):
+        nonlocal last_report
+        if not total_bytes:
             return
-        m = pct_re.search(line)
-        if m:
-            progress(min(100, int(m.group(1))))
-    rc = proc.wait()
-    if cancelled():
-        return
-    if rc != 0:
-        raise RuntimeError(f"hf download exited {rc}")
+        now = time.monotonic()
+        if force or now - last_report >= 1.0:
+            last_report = now
+            progress(min(99, int(100 * _dir_bytes(dest) / total_bytes)))
+
+    recent = []   # the tool's last words, for the error a failure carries
+    for attempt in range(1, HF_ATTEMPTS + 1):
+        # utf-8 with replacement: the tool draws its progress bars in UTF-8, and
+        # a Korean Windows console's default (cp949) choked on them mid-stream.
+        proc = _subprocess.Popen(argv, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT,
+                                 text=True, encoding="utf-8", errors="replace", env=env)
+        # The percent is measured on its own clock, not on the tool's output:
+        # without a terminal the tool prints almost nothing while a file
+        # streams in, and the figure sat at 10% for a whole 2.9 GB (Windows).
+        stop_meter = _threading.Event()
+
+        def meter():
+            while not stop_meter.wait(1.0):
+                report_from_disk(force=True)
+        _threading.Thread(target=meter, daemon=True).start()
+        try:
+            for line in proc.stdout:
+                if cancelled():
+                    _end(proc)
+                    return
+                line = line.strip()
+                if line:
+                    recent.append(line)
+                    del recent[:-6]
+            rc = proc.wait()
+        except BaseException:
+            _end(proc)   # never leave the tool downloading on its own
+            raise
+        finally:
+            stop_meter.set()
+        if cancelled():
+            return
+        report_from_disk(force=True)
+        if rc == 0:
+            return
+        log.warning("hf download of %s exited %s (attempt %d/%d): %s",
+                    entry["id"], rc, attempt, HF_ATTEMPTS, " | ".join(recent))
+        if attempt < HF_ATTEMPTS:
+            time.sleep(3)
+    # The exit code alone said nothing ("hf download exited 1", Windows,
+    # 2026-09-07); the tool's own last lines say what went wrong.
+    tail = " | ".join(recent[-3:])
+    raise RuntimeError(f"hf download exited {rc}" + (f": {tail}" if tail else ""))
 
 
 def _pull_ollama(entry, progress, cancelled):
@@ -278,7 +409,8 @@ def _pull_ollama(entry, progress, cancelled):
     create call on top -- the same two-step flow verified 2026-08-31."""
     src = entry["source"]
     pull_name = src.get("pull") or src["tag"]
-    r = _requests.post(f"{_config.OLLAMA_URL}/api/pull",
+    ollama_url = _runtime.url("ollama")
+    r = _requests.post(f"{ollama_url}/api/pull",
                        json={"model": pull_name, "stream": True}, stream=True, timeout=600)
     r.raise_for_status()
     for line in r.iter_lines():
@@ -295,7 +427,7 @@ def _pull_ollama(entry, progress, cancelled):
     if cancelled():
         return
     if src.get("needs_template"):
-        cr = _requests.post(f"{_config.OLLAMA_URL}/api/create",
+        cr = _requests.post(f"{ollama_url}/api/create",
                             json={"model": src["tag"], "from": pull_name,
                                   "template": _config.HUNYUAN_TEMPLATE,
                                   "parameters": _config.HUNYUAN_PARAMETERS,

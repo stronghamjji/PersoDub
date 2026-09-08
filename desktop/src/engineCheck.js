@@ -1,26 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { venvBin, exeName } from "./platform.js";
+import { venvBin } from "./platform.js";
 import { KIT_ENV } from "./kitEnv.js";
-import { MODEL_MARKERS } from "./installSpec.js";
 
+// What the base install itself lays down -- venv entrypoints carry
+// platform-specific layout (bin/x vs Scripts\x.exe) -- see platform.js.
+// The engine pack (engines_venv, Demucs) and the ollama-runtime pack are
+// installed later on demand (installSpec.js's PACKS) and are refreshed by
+// the boot flow only when already on disk, so neither is required to boot.
 export const REQUIRED = [
   KIT_ENV,
-  // venv entrypoints and the ollama binary carry platform-specific layout
-  // (bin/x vs Scripts\x.exe, ".exe" suffix) -- see platform.js.
-  // The voice sidecar boots from the engines venv since the two were merged.
-  venvBin("engines_venv", "uvicorn"),
   venvBin("app_venv", "uvicorn"),
   "sidecar/server.py",
-  // The Ollama runtime binary, mirroring installSpec.js's ollama-runtime
-  // step. Only the runtime: the big models (Gemma, Whisper, Qwen3-TTS) are
-  // optional now, downloaded in-app through the model catalog, so requiring
-  // any of them here would bounce every light install back to the installer.
-  join("ollama", exeName("ollama")),
-  // The always-installed models, taken straight from installSpec's own list
-  // rather than copied -- MODEL_MARKERS now carries only those (Demucs), so
-  // this boot check covers runtime + always-installed models and nothing more.
-  ...MODEL_MARKERS.map((rel) => join(...rel)),
+  // Speaker-diarization model, copied in by the payload step.
+  join("models", "campplus", "campplus.onnx"),
 ];
 
 // Reads a KIT_VERSION file (a kit's own, or the app's bundled payload's --

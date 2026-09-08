@@ -133,6 +133,9 @@ def test_ollama_model_status_unreachable_on_timeout(monkeypatch):
 # --- gemma_available / qwen_available (delegate to ollama_model_available) --
 
 def test_gemma_available_checks_the_configured_ollama_gemma_model(monkeypatch):
+    # No kit in these tests (no desktop shell), so runtime.url("ollama") is
+    # config.OLLAMA_URL -- the dev-run path.
+    monkeypatch.setenv("OLLAMA_URL", config.OLLAMA_URL)
     calls = {}
 
     def fake(url, model, timeout=1.5):
@@ -145,6 +148,7 @@ def test_gemma_available_checks_the_configured_ollama_gemma_model(monkeypatch):
 
 
 def test_qwen_available_checks_the_configured_ollama_qwen_model(monkeypatch):
+    monkeypatch.setenv("OLLAMA_URL", config.OLLAMA_URL)
     calls = {}
 
     def fake(url, model, timeout=1.5):
@@ -159,6 +163,7 @@ def test_qwen_available_checks_the_configured_ollama_qwen_model(monkeypatch):
 # --- gemma_status / qwen_status (delegate to ollama_model_status) -----------
 
 def test_gemma_status_checks_the_configured_ollama_gemma_model(monkeypatch):
+    monkeypatch.setenv("OLLAMA_URL", config.OLLAMA_URL)
     calls = {}
 
     def fake(url, model, timeout=4.0):
@@ -171,6 +176,7 @@ def test_gemma_status_checks_the_configured_ollama_gemma_model(monkeypatch):
 
 
 def test_qwen_status_checks_the_configured_ollama_qwen_model(monkeypatch):
+    monkeypatch.setenv("OLLAMA_URL", config.OLLAMA_URL)
     calls = {}
 
     def fake(url, model, timeout=4.0):
@@ -456,6 +462,7 @@ def test_hunyuan_available_false_when_tag_missing(monkeypatch):
 
 
 def test_hunyuan_status_checks_the_configured_ollama_hunyuan_model(monkeypatch):
+    monkeypatch.setenv("OLLAMA_URL", config.OLLAMA_URL)
     calls = {}
 
     def fake(url, model, timeout=4.0):
@@ -465,6 +472,15 @@ def test_hunyuan_status_checks_the_configured_ollama_hunyuan_model(monkeypatch):
     monkeypatch.setattr(engines_status, "ollama_model_status", fake)
     assert engines_status.hunyuan_status() == "available"
     assert calls["args"] == (config.OLLAMA_URL, config.OLLAMA_HUNYUAN_MODEL)
+
+
+def test_hunyuan_status_is_unreachable_when_no_ollama_pack_is_installed(monkeypatch, tmp_path):
+    # A kit whose translation pack is not running has announced no address:
+    # runtime.url("ollama") is "" (no pack = no tool), and that must read as
+    # "unreachable", not raise -- whatever OLLAMA_URL the environment carries.
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    monkeypatch.setenv("OLLAMA_URL", "http://127.0.0.1:11434")
+    assert engines_status.hunyuan_status() == "unreachable"
 
 
 def test_dub_start_hunyuan_available_job_starts(monkeypatch):

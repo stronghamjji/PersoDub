@@ -84,7 +84,7 @@ def test_separate_raises_when_script_reports_failure(monkeypatch, tmp_path):
         returncode = 0
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         _write_output(str(tmp_path), {"ok": False, "error": "weights not found"})
         return _R()
 
@@ -101,7 +101,7 @@ def test_separate_raises_on_invalid_json_output(monkeypatch, tmp_path):
         returncode = 0
         stderr = ""
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         with open(os.path.join(str(tmp_path), "sep_output.json"), "w") as f:
             f.write("{not json")
         return _R()
@@ -121,7 +121,7 @@ def test_separate_returns_paths_on_success(monkeypatch, tmp_path):
 
     captured_input = {}
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
         with open(cmd[cmd.index("--input") + 1], encoding="utf-8") as f:
             captured_input.update(json.load(f))
         _write_output(str(tmp_path), {

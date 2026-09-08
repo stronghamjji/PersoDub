@@ -9,7 +9,8 @@ from typing import Dict, Optional
 
 import httpx
 
-from app.config import QWEN_TTS_URL, QWEN_VOICE_MODE
+from app import runtime
+from app.config import QWEN_VOICE_MODE
 from app.engines.base import (
     SynthesisRequest,
     SynthesisResult,
@@ -29,8 +30,15 @@ class QwenTTSEngine(TTSEngine):
     display_name = "Qwen3-TTS (local voice clone)"
     supports_cloning = True
 
-    def __init__(self, base_url: str = QWEN_TTS_URL):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, base_url: Optional[str] = None):
+        self._base_url = base_url
+
+    @property
+    def base_url(self) -> str:
+        """Read at every use, not once at construction: the engine registered
+        at import (app/api/misc.py) must see a sidecar the desktop shell starts
+        later in the session, when the engine pack is installed on demand."""
+        return (self._base_url or runtime.url("tts")).rstrip("/")
 
     def is_available(self) -> bool:
         """True only when the sidecar answers and the model is loaded."""

@@ -5,6 +5,8 @@ import { parseEnvFile, KIT_ENV } from "./kitEnv.js";
 import { getFreePort, getPreferredPort } from "./freePort.js";
 import { waitForHealth } from "./health.js";
 import { IS_WIN, venvBin, exeName, PATH_SEP } from "./platform.js";
+import { readRuntime, writeRuntime, clearRuntime } from "./runtimeFile.js";
+import { PACKS, packInstalled } from "./installSpec.js";
 
 const PIDS_FILE = "pids.json";
 
@@ -79,6 +81,70 @@ export function sidecarArgv(kitDir, port) {
           "server:app", "--host", "127.0.0.1", "--port", String(port)];
 }
 
+// One pack's process: started at boot for every pack already on disk, and
+// again by the install-pack IPC the moment a pack finishes downloading -- the
+// same function both times, so a pack installed mid-session behaves exactly
+// like one that was there at launch. Each process announces where it listens
+// through <kit>/runtime.json (runtimeFile.js), which the backend reads at use
+// time (app/runtime.py) -- never through the backend's environment, which is
+// fixed at its launch. Returns the children it started (for stopPack).
+export async function startPackProcesses(cfg, packId, { logDir, env, children, record, healthTimeoutMs }) {
+  if (packId === "ollama-runtime") {
+    // Local translation runs through an Ollama server owned by this app:
+    // kit-contained binary and models dir, free port (never fights a user's
+    // own Ollama on 11434), killed with the other engines.
+    const ollamaBin = join(cfg.kitDir, "ollama", exeName("ollama"));
+    if (!existsSync(ollamaBin)) return [];
+    const port = await getFreePort();
+    const child = launch([ollamaBin, "serve"], {
+      cwd: cfg.kitDir,
+      env: { ...env, OLLAMA_HOST: `127.0.0.1:${port}`, OLLAMA_MODELS: join(cfg.kitDir, "models", "ollama") },
+      logPath: join(logDir, "ollama.log"),
+    });
+    children.push(child);
+    record();
+    // Announced only once it answers: right after an on-demand install the
+    // page pulls a model within the second, and a server still binding its
+    // port turned that first pull into a refused connection.
+    await announceWhenUp(`http://127.0.0.1:${port}/api/tags`, (b) => Array.isArray(b.models),
+                         () => writeRuntime(cfg.kitDir, { ollama_url: `http://127.0.0.1:${port}` }));
+    return [child];
+  }
+  if (packId === "engine") {
+    const port = await getFreePort();
+    const child = launch(sidecarArgv(cfg.kitDir, port), {
+      cwd: join(cfg.kitDir, "sidecar"), env, logPath: join(logDir, "sidecar.log"),
+    });
+    children.push(child);
+    record();
+    // Status ok is enough: the voice model may not be downloaded yet (it is
+    // optional, fetched through the in-app catalog), and the sidecar
+    // lazy-loads it when the weights appear (vendor/sidecar/server.py) --
+    // /synthesize answers 503 until then. Waiting on model_loaded here made
+    // every model-less boot a 2-minute timeout and an error screen.
+    await announceWhenUp(`http://127.0.0.1:${port}/health`, (b) => b.status === "ok",
+                         () => writeRuntime(cfg.kitDir, { tts_url: `http://127.0.0.1:${port}` }));
+    return [child];
+  }
+  return [];
+
+  // Waits for the process just launched to answer, then announces it. A
+  // process that never answers is stopped and forgotten before the error goes
+  // up, so a retry does not leave a second copy running.
+  async function announceWhenUp(url, predicate, announce) {
+    const child = children[children.length - 1];
+    try {
+      await waitForHealth(url, { timeoutMs: healthTimeoutMs ?? cfg.sidecarHealthTimeoutMs, predicate });
+    } catch (err) {
+      stopChild(child);
+      children.pop();
+      record();
+      throw err;
+    }
+    announce();
+  }
+}
+
 export async function startEngines(cfg, { logDir, appVersion, preferredBackendPort }) {
   mkdirSync(logDir, { recursive: true });
   await killStalePids(logDir);
@@ -97,49 +163,41 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
   env = { ...env, PERSODUB_CLIENT: "desktop", PERSODUB_APP_VERSION: appVersion ?? "" };
 
   const children = [];
+  const packChildren = new Map();   // pack id -> the processes it owns
   const pids = () => children.map((c) => c.pid);
   const stopAll = () => children.forEach(stopChild);
   const record = () => writeFileSync(join(logDir, PIDS_FILE), JSON.stringify(pids()));
+  const packOpts = { logDir, env, children, record };
 
   try {
-    // Local Gemma translation runs through an Ollama server owned by this
-    // app: kit-contained binary and models dir, free port (never fights a
-    // user's own Ollama on 11434), killed with the other engines. Optional:
-    // a kit installed before the gemma step existed simply has no binary,
-    // and the backend then reports Gemma as unavailable -- boot never gates
-    // on it.
+    // Addresses from the last launch must not outlive it: a pack that was
+    // removed since would otherwise still be announced.
+    clearRuntime(cfg.kitDir, ["ollama_url", "tts_url"]);
     if (!overrideMode) {
-      const ollamaBin = join(cfg.kitDir, "ollama", exeName("ollama"));
-      if (existsSync(ollamaBin)) {
-        const ollamaPort = await getFreePort();
-        env = { ...env, OLLAMA_URL: `http://127.0.0.1:${ollamaPort}` };
-        children.push(launch([ollamaBin, "serve"], {
-          cwd: cfg.kitDir,
-          env: { ...env, OLLAMA_HOST: `127.0.0.1:${ollamaPort}`, OLLAMA_MODELS: join(cfg.kitDir, "models", "ollama") },
-          logPath: join(logDir, "ollama.log"),
-        }));
-        record();
+      // Every pack already on this kit's disk starts now; a pack installed
+      // later in the session starts through startPack below, the same way.
+      // A kit with no engine pack simply has no sidecar yet: the backend
+      // answers that the voice engine is not installed, and its preflight
+      // asks for the pack before a local dub.
+      for (const p of PACKS) {
+        if (packInstalled(cfg.kitDir, p.id)) {
+          packChildren.set(p.id, await startPackProcesses(cfg, p.id, packOpts));
+        }
       }
+    } else {
+      // Dev and tests: the fake sidecar stands in for the engine pack, and
+      // announces itself the same way so the backend finds it.
+      const sidecarPort = cfg.sidecarPort === 0 ? await getFreePort() : cfg.sidecarPort;
+      children.push(launch(substitute(cfg.sidecarCmd, sidecarPort), {
+        cwd: process.cwd(), env, logPath: join(logDir, "sidecar.log"),
+      }));
+      record();
+      await waitForHealth(`http://127.0.0.1:${sidecarPort}/health`, {
+        timeoutMs: cfg.sidecarHealthTimeoutMs,
+        predicate: (b) => b.status === "ok",
+      });
+      writeRuntime(cfg.kitDir, { tts_url: `http://127.0.0.1:${sidecarPort}` });
     }
-
-    const sidecarPort = overrideMode && cfg.sidecarPort === 0 ? await getFreePort() : cfg.sidecarPort;
-    const sidecarArgvFinal = overrideMode
-      ? substitute(cfg.sidecarCmd, sidecarPort)
-      : sidecarArgv(cfg.kitDir, sidecarPort);
-    children.push(launch(sidecarArgvFinal, {
-      cwd: overrideMode ? process.cwd() : join(cfg.kitDir, "sidecar"),
-      env, logPath: join(logDir, "sidecar.log"),
-    }));
-    record();
-    // Status ok is enough: the voice model may not be downloaded yet (it is
-    // optional now, fetched through the in-app catalog), and the sidecar
-    // lazy-loads it when the weights appear (vendor/sidecar/server.py) --
-    // /synthesize answers 503 until then. Waiting on model_loaded here made
-    // every model-less boot a 2-minute timeout and an error screen.
-    await waitForHealth(`http://127.0.0.1:${sidecarPort}/health`, {
-      timeoutMs: cfg.sidecarHealthTimeoutMs,
-      predicate: (b) => b.status === "ok",
-    });
 
     // Last launch's port when free (main.js remembers it), so the page keeps
     // the same origin -- and its localStorage -- from one launch to the next.
@@ -154,7 +212,41 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
       timeoutMs: cfg.backendHealthTimeoutMs,
     });
 
-    return { url: `http://127.0.0.1:${backendPort}`, port: backendPort, pids: pids(), stopAll };
+    // The install-pack IPC (main.js) starts a pack's process the moment its
+    // files are down; remove-pack stops it and withdraws its address.
+    const startPack = async (id) => {
+      if (overrideMode) return;
+      // Started already and still announced: nothing to do. A pack whose
+      // start failed earlier left no address behind, so it is tried again.
+      const key = id === "engine" ? "tts_url" : "ollama_url";
+      const alive = (packChildren.get(id) || []).some((c) => c && c.exitCode == null && !c.killed);
+      if (alive && readRuntime(cfg.kitDir)[key]) return;
+      // Not running (never started, or it died after announcing itself): its
+      // stale address goes first, so nothing reads it while the new one comes up.
+      for (const c of packChildren.get(id) || []) {
+        const i = children.indexOf(c);
+        if (i >= 0) children.splice(i, 1);
+      }
+      packChildren.delete(id);
+      clearRuntime(cfg.kitDir, [key]);
+      // A pack started right after its install imports torch cold, on a disk
+      // that just wrote gigabytes: the boot's two minutes were not enough on
+      // Windows (2026-09-07), and a start that gives up leaves the dub refused.
+      packChildren.set(id, await startPackProcesses(cfg, id, { ...packOpts, healthTimeoutMs: 5 * 60 * 1000 }));
+    };
+    const stopPack = (id) => {
+      for (const c of packChildren.get(id) || []) {
+        stopChild(c);
+        const i = children.indexOf(c);
+        if (i >= 0) children.splice(i, 1);
+      }
+      packChildren.delete(id);
+      record();
+      clearRuntime(cfg.kitDir, id === "engine" ? ["tts_url"] : ["ollama_url"]);
+    };
+
+    return { url: `http://127.0.0.1:${backendPort}`, port: backendPort, pids: pids(), stopAll,
+             startPack, stopPack };
   } catch (err) {
     stopAll();
     err.logDir = logDir;

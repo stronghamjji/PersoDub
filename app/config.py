@@ -41,6 +41,10 @@ def _env_number(cast, expected, name, default, minimum):
 
 
 # Address of the Qwen3-TTS local sidecar (internal only).
+# app/runtime.url("tts") takes precedence over this constant when a kit's
+# runtime.json has a tts_url (the desktop shell picks the sidecar's port at
+# launch, and this constant's own QWEN_TTS_URL env fallback is a dev-run
+# convenience only, for running the backend without the shell at all).
 QWEN_TTS_URL = os.environ.get("QWEN_TTS_URL", "http://127.0.0.1:3901")
 
 # Qwen3-TTS voice-clone mode: "timbre" (speaker-embedding-only, clones from
@@ -74,7 +78,11 @@ VERTEX_MODEL = os.environ.get("VERTEX_MODEL", "gemini-2.5-flash")
 TRANSLATE_ENGINE_DEFAULT = "hunyuan"
 TRANSLATE_ENGINE = os.environ.get("TRANSLATE_ENGINE", TRANSLATE_ENGINE_DEFAULT)
 
-# Ollama (local LLM) translation settings (internal only)
+# Ollama (local LLM) translation settings (internal only).
+# app/runtime.url("ollama") takes precedence over this constant when a kit's
+# runtime.json has an ollama_url (the desktop shell picks the server's port at
+# launch, and this constant's own OLLAMA_URL env fallback is a dev-run
+# convenience only, for running the backend without the shell at all).
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 # Stock Ollama tags, so a fresh machine works after a plain `ollama pull`.
 # The server's custom qwen-dub/gemma-dub aliases can still be set via env.

@@ -82,11 +82,18 @@ def _model_or_404(mid: str):
 @router.post("/api/models/{mid}/download")
 def model_download(mid: str):
     entry = _model_or_404(mid)
+    if entry["role"] == "pack":
+        # The desktop shell installs packs (its install-pack IPC); this
+        # process has neither the installer nor the right to run it.
+        raise HTTPException(409, model_store.PACKS_ARE_THE_SHELLS)
     free = model_store.free_bytes_at(model_store.kit_dir())
     if free is not None and free < entry["bytes"] * 1.1:
         raise HTTPException(409, "Not enough space: needs %.1f GB, %.1f GB free"
                                  % (entry["bytes"] / 1024**3, free / 1024**3))
-    started = model_store.request_download(entry)
+    try:
+        started = model_store.request_download(entry)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     # 202 for a fresh start, 200 when it was already running -- a double-click
     # must never error or start a second download.
     return JSONResponse({"state": "downloading"}, status_code=202 if started == "started" else 200)
@@ -103,8 +110,16 @@ def model_cancel(mid: str):
 @router.delete("/api/models/{mid}")
 def model_remove(mid: str):
     entry = _model_or_404(mid)
+    # The dub check first, packs included: the page asks this route before it
+    # hands a pack's removal to the desktop app, so a pack cannot be pulled
+    # out from under a running dub any more than a model can.
     if model_store.dub_in_progress():
         raise HTTPException(409, "A dub is running right now. Wait for it to finish, then remove the model.")
+    if entry["role"] == "pack":
+        raise HTTPException(409, model_store.PACKS_ARE_THE_SHELLS)
     model_store.cancel_download(mid)
-    model_store.remove_model(entry)
+    try:
+        model_store.remove_model(entry)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return {"removed": mid}

@@ -231,3 +231,25 @@ test("the player draws subtitles in the burn's font at its natural line height",
   assert.match(html, /weight: r\.weight/);
   assert.match(html, /id="subMeasure"/);
 });
+
+// Packs (the AI engine, the translation runtime) are the desktop app's to
+// install: the page hands its bridge to the models controller and, in the
+// dropdown hints, names the pack before the model while the pack is missing.
+test("the page hands the desktop bridge to the models controller and hints name packs first", () => {
+  const html = readFileSync(INDEX, "utf8");
+  assert.match(html, /shell: window\.persodubShell \|\| null/);
+  assert.match(html, /function hintNeeds\(role, value\)/);
+  // One line names everything the choice needs, one button fetches it all.
+  assert.match(html, /Needs \$\{needs\.map\(\(r\) => r\.name\)\.join\(" \+ "\)\}/);
+  assert.match(html, /models\.downloadAll\(ids\)/);
+  assert.match(html, /neededPackIds/);
+});
+
+// The voice engine's pack on disk but its process down: the page asks the
+// desktop app to start it and tries the dub again, once.
+test("a dub refused because the voice engine is not running is retried after the desktop app starts it", () => {
+  const html = readFileSync(INDEX, "utf8");
+  assert.match(html, /async function restartVoiceEngine\(\)/);
+  assert.match(html, /voice engine is not running\/\.test\(errorText\(e\)\) && await restartVoiceEngine\(\)/);
+  assert.match(html, /keepPolling: \(\) => \$\("settingsOverlay"\)\.classList\.contains\("open"\)/);
+});

@@ -6,10 +6,11 @@ import { tmpdir } from "node:os";
 import {
   buildSteps, writeKitEnv, PYTHON_URL, PYTHON_SHA256, CAMPPLUS_SHA256,
   OLLAMA_TGZ_SHA256, bytesStillNeeded, STEP_IDS, MODEL_MARKERS,
-  OPTIONAL_MODEL_MARKERS,
+  OPTIONAL_MODEL_MARKERS, baseSteps, packSteps, packInstalled,
 } from "./installSpec.js";
 import { runInstall } from "./installer.js";
-import { IS_WIN, venvBin, exeName, TTS_DEVICE } from "./platform.js";
+import { IS_WIN, venvBin, exeName, TTS_DEVICE, TORCH_VARIANT } from "./platform.js";
+import { torchVariantFor, withMissingKitEnvKeys } from "./installSpec.js";
 
 // Bundled dependency lists are platform-specific (see buildSteps' reqSuffix).
 const REQ_SUFFIX = IS_WIN ? "win" : "mac";
@@ -42,6 +43,28 @@ test("returns the 10 steps in install order", () => {
     "models", "ollama-runtime", "nonverbal-weights", "kit-env",
   ]);
   assert.deepEqual(ids, STEP_IDS);
+});
+
+test("PACKS names the steps that leave the base install", () => {
+  const steps = buildSteps(freshCtx());
+  const tagged = Object.fromEntries(steps.map((s) => [s.id, s.pack]));
+  assert.deepEqual(baseSteps(steps).map((s) => s.id), ["payload", "python", "venv-app", "ffmpeg", "cleanup", "kit-env"]);
+  assert.deepEqual(packSteps(steps, "engine").map((s) => s.id), ["venv-engines", "models", "nonverbal-weights"]);
+  assert.deepEqual(packSteps(steps, "ollama-runtime").map((s) => s.id), ["ollama-runtime"]);
+  assert.equal(tagged.payload, undefined);
+});
+test("the base install adds up to under a gigabyte", () => {
+  const total = baseSteps(buildSteps(freshCtx())).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
+  assert.ok(total < 1.0, `base is ${total.toFixed(2)} GB`);
+});
+test("packInstalled means the pack's stamp: a folder without it is a paused pack, not an installed one", () => {
+  const ctx = freshCtx();
+  assert.equal(packInstalled(ctx.kitDir, "engine"), false);
+  mkdirSync(join(ctx.kitDir, "engines_venv"), { recursive: true });
+  assert.equal(packInstalled(ctx.kitDir, "engine"), false, "cancelled halfway: not installed");
+  mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, ".install", "venv-engines.ok"), "fp");
+  assert.equal(packInstalled(ctx.kitDir, "engine"), true);
 });
 
 test("ollama-runtime step downloads and extracts the runtime, never pulls a model", async () => {
@@ -175,7 +198,8 @@ test("venv-app runs venv + pip installs and marks done", async () => {
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
   assert.ok(argvs.some((a) => a.includes("-m venv") && a.includes("app_venv")));
-  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir -r") && a.includes("requirements.txt")));
+  // --progress-bar raw for a byte-based percent, --retries/--timeout for a flaky line (2026-09-07).
+  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir --progress-bar raw --retries 10 --timeout 60 -r") && a.includes("requirements.txt")));
   assert.equal(await step.isDone(), true);
 });
 
@@ -491,6 +515,9 @@ test("kit-env step writes template with kit paths", async () => {
     "NONVERBAL_WHISPER_PYTHON",
     // Stage-5/6 dark-launch mode + Mac-CPU-calibrated worker timeouts.
     "PERSODUB_LEAKAGE_GATE", "PERSODUB_SCORER_ASR_TIMEOUT", "PERSODUB_TTS_TIMEOUT", "PERSODUB_DIAR_TIMEOUT",
+    // Which torch build this machine's venv-engines installed; app/models.py's
+    // platform_key() reads it back to size GPU-only packs correctly.
+    "PERSODUB_TORCH_VARIANT",
   ]) assert.ok(env.includes(key), `missing ${key}`);
   // Deliberately absent: the backend resolves the workspace id from the API
   // key itself and the media host has a public default (app/perso_client.py),
@@ -499,6 +526,7 @@ test("kit-env step writes template with kit paths", async () => {
   assert.ok(!env.includes("PERSO_MEDIA_HOST"), "PERSO_MEDIA_HOST must not be written by the installer");
   assert.ok(env.includes(ctx.kitDir));
   assert.ok(env.includes(`QWEN_TTS_DEVICE=${TTS_DEVICE}`));
+  assert.ok(env.includes(`PERSODUB_TORCH_VARIANT=${TORCH_VARIANT}`));
   assert.equal(await step.isDone(), true);
 });
 
@@ -520,7 +548,11 @@ test("kit-env step appends missing managed keys to a legacy kit.env, preserving 
   assert.ok(env.includes("PERSODUB_KIT_DIR=/old/kit"), "existing line must survive");
   assert.ok(env.includes("GEMINI_API_KEY=sk-legacy-key"), "user API key must survive");
   for (const key of ["PERSODUB_LEAKAGE_GATE=measure", "PERSODUB_SCORER_ASR_TIMEOUT=60",
-                      "PERSODUB_TTS_TIMEOUT=900", "PERSODUB_DIAR_TIMEOUT=1800"]) {
+                      "PERSODUB_TTS_TIMEOUT=900", "PERSODUB_DIAR_TIMEOUT=1800",
+                      // A kit.env without the key predates the CPU wheel: its venv has
+                      // the build there was (CUDA on Windows, MPS on Mac), whatever this
+                      // machine's GPU -- see LEGACY_TORCH_VARIANT in installSpec.js.
+                      `PERSODUB_TORCH_VARIANT=${IS_WIN ? "cu128" : "mps"}`]) {
     assert.ok(env.includes(key), `missing ${key}`);
   }
   assert.ok(!env.includes("PERSO_SPACE_SEQ"), "upgrade must not pin a workspace id");
@@ -565,6 +597,13 @@ test("writeKitEnv includes the leakage-gate and worker-timeout additions", () =>
   assert.ok(s.includes("PERSODUB_SCORER_ASR_TIMEOUT=60"));
   assert.ok(s.includes("PERSODUB_TTS_TIMEOUT=900"));
   assert.ok(s.includes("PERSODUB_DIAR_TIMEOUT=1800"));
+});
+
+// app/models.py's platform_key() reads this key back to size GPU-only packs
+// per machine; absent (an old kit that predates it) it treats Windows as GPU.
+test("writeKitEnv records which torch build this machine's venv-engines will install", () => {
+  const s = writeKitEnv({ kitDir: "/K" });
+  assert.ok(s.includes(`PERSODUB_TORCH_VARIANT=${TORCH_VARIANT}`));
 });
 
 // --- how much room the remaining steps need -------------------------------
@@ -613,4 +652,55 @@ test("venv-engines counts a small figure when the venv already exists", () => {
   const update = byId(ctx)["venv-engines"].bytes;
   assert.ok(update < fresh, `update ${update} should be below fresh ${fresh}`);
   assert.ok(update <= 0.5 * 1024 ** 3);
+});
+
+// A Windows machine with no NVIDIA GPU installs the small CPU-only torch
+// wheel instead of the 8+ GB CUDA build, so its budget follows TORCH_VARIANT
+// too -- macOS is unaffected (it always gets the MPS wheel automatically).
+test("venv-engines budget follows the platform's torch variant", () => {
+  const GB = 1024 ** 3;
+  const expected = IS_WIN ? (TORCH_VARIANT === "cpu" ? 1.5 * GB : 9 * GB) : 2 * GB;
+  assert.equal(byId(freshCtx())["venv-engines"].bytes, expected);
+});
+
+
+// An installed kit keeps the torch build it has. The hardware guess is for a
+// fresh install only: a Windows machine without an NVIDIA GPU that installed
+// the CUDA build under 0.5.2 must not have its engines venv reinstalled on
+// update because the guess now says "cpu".
+test("an installed kit's recorded torch variant wins over the hardware guess", () => {
+  const ctx = freshCtx();
+  assert.equal(torchVariantFor(ctx.kitDir), TORCH_VARIANT, "no kit.env: the hardware guess");
+  mkdirSync(ctx.kitDir, { recursive: true });
+  writeFileSync(join(ctx.kitDir, "kit.env"), "PERSODUB_KIT_DIR=x\nPERSODUB_TORCH_VARIANT=cpu\n");
+  assert.equal(torchVariantFor(ctx.kitDir), "cpu");
+  // The kit-env step writes the same value back, not the guess.
+  assert.match(writeKitEnv({ kitDir: ctx.kitDir }), /PERSODUB_TORCH_VARIANT=cpu/);
+  // A kit.env from before the key existed gets the build those kits had.
+  const patched = withMissingKitEnvKeys("PERSODUB_KIT_DIR=x\n");
+  assert.match(patched, new RegExp(`PERSODUB_TORCH_VARIANT=${IS_WIN ? "cu128" : "mps"}`));
+  // ...and is read as that build from the first boot after the update, before
+  // the kit-env step has recorded it -- never as the hardware guess (which on
+  // a GPU-less Windows machine says "cpu" and would reinstall the venv twice).
+  writeFileSync(join(ctx.kitDir, "kit.env"), "PERSODUB_KIT_DIR=x\n");
+  assert.equal(torchVariantFor(ctx.kitDir), IS_WIN ? "cu128" : "mps");
+});
+
+import { pipProgress } from "./installSpec.js";
+
+test("pipProgress turns pip's raw progress lines into a percent of the step's budget", () => {
+  const p = pipProgress(1000);
+  assert.deepEqual(p("Collecting torch"), [0, "Collecting torch"]);
+  assert.deepEqual(p("Progress 250 of 500"), [25, "Collecting torch"]);
+  assert.deepEqual(p("Progress 500 of 500"), [50, "Collecting torch"]);
+  assert.deepEqual(p("Progress 100 of 300"), [60, "Collecting torch"]);   // next file: the first counts in full
+  assert.deepEqual(p("Installing collected packages"), [60, "Installing collected packages"]);
+  assert.deepEqual(p("Progress 900 of 900"), [99, "Installing collected packages"], "never 100 from here");
+  assert.deepEqual(pipProgress(0)("Progress 1 of 2"), [null, ""], "no budget, no figure");
+});
+
+import { packInstallingMarker } from "./installSpec.js";
+
+test("the installing stamp sits beside the install's own stamps, named for the pack", () => {
+  assert.equal(packInstallingMarker("/kit", "engine"), join("/kit", ".install", "engine.installing"));
 });

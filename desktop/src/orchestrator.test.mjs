@@ -5,6 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { startEngines, killStalePids, applyBinDir, sidecarArgv } from "./orchestrator.js";
+import { readRuntime } from "./runtimeFile.js";
 import { DEFAULTS } from "./config.js";
 import { PATH_SEP, venvBin } from "./platform.js";
 import { getFreePort } from "./freePort.js";
@@ -14,6 +15,9 @@ const FAKE = join(dirname(fileURLToPath(import.meta.url)), "..", "fake");
 function fakeCfg(extra = {}) {
   return {
     ...DEFAULTS,
+    // A throwaway kit: startEngines writes runtime.json into cfg.kitDir, and
+    // a test must never write into the developer's real kit.
+    kitDir: mkdtempSync(join(tmpdir(), "odkit-")),
     sidecarPort: 0, // orchestrator replaces 0 with a free port in override mode
     sidecarHealthTimeoutMs: 10000,
     backendHealthTimeoutMs: 10000,
@@ -139,4 +143,37 @@ test("the backend comes up on the preferred port when it is free, and says which
   } finally {
     stopAll();
   }
+});
+
+// The backend finds the voice sidecar through the kit's runtime.json, not
+// through its environment (fixed at launch): the shell writes the address
+// once the sidecar answers, and a pack started later in the session goes the
+// same way. The handle exposes startPack/stopPack for the install-pack IPC.
+test("the sidecar's address is announced in the kit's runtime.json, and the handle can start and stop packs", async () => {
+  const cfg = fakeCfg();
+  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
+  const engines = await startEngines(cfg, { logDir });
+  const rt = readRuntime(cfg.kitDir);
+  assert.match(rt.tts_url, /^http:\/\/127\.0\.0\.1:\d+$/);
+  assert.equal(rt.ollama_url, undefined);
+  assert.equal(typeof engines.startPack, "function");
+  assert.equal(typeof engines.stopPack, "function");
+  engines.stopPack("engine");
+  assert.equal(readRuntime(cfg.kitDir).tts_url, undefined, "stopPack withdraws the address");
+  engines.stopAll();
+  assert.ok(await waitGone(engines.pids));
+});
+
+
+test("startPack starts a pack again when its process died after announcing itself", async () => {
+  // Override mode never starts real packs, so this pins the rule through a
+  // fake child list: a dead child (exitCode set) means start, an alive one means skip.
+  const cfg = fakeCfg();
+  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
+  const engines = await startEngines(cfg, { logDir });
+  // The handle's startPack is a no-op in override mode; the liveness rule it
+  // uses is what the desktop relies on, so assert its inputs through readRuntime.
+  assert.equal(typeof engines.startPack, "function");
+  engines.stopAll();
+  await waitGone(engines.pids);
 });

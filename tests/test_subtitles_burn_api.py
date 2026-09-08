@@ -18,7 +18,11 @@ class _Ran:
         self.returncode = 0
         self.stderr = ""
 
-    def __call__(self, cmd, capture_output=True, text=True):
+    def __call__(self, cmd, capture_output=True, text=True, **_kw):
+        # No ffprobe here: the route then falls back to its 1080p canvas, which
+        # is what these tests were written against.
+        if cmd[0] == "ffprobe":
+            raise OSError("no ffprobe in tests")
         self.calls.append(cmd)
         if self.returncode == 0:
             open(cmd[-1], "wb").close()

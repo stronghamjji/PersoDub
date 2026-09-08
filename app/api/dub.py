@@ -41,9 +41,10 @@ import uuid
 from datetime import date
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app import dub_launch, engines_status, media, state
+from app import config, dub_launch, engines_status, media, runtime, state
 from app import models as model_store
 from app import setup as dub_setup
 from app.api._shared import script_work_dir, work_dir_of
@@ -126,7 +127,13 @@ _LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2,8}([-_][A-Za-z0-9]{2,8})?$")
 
 
 def _valid_language_code(code: str) -> bool:
-    return bool(_LANGUAGE_CODE.match(code or ""))
+    """A code the app knows (config.LANGUAGE_NAMES), region variant allowed:
+    "ko", "pt-BR" yes; "xx" no. The shape alone let "xx" start a job that
+    only failed at translation (2026-09-08)."""
+    if not _LANGUAGE_CODE.match(code or ""):
+        return False
+    base = re.split(r"[-_]", code)[0].lower()
+    return base in config.LANGUAGE_NAMES
 
 
 def _job_dir(title, lang_code):
@@ -169,6 +176,13 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
     pulled the model yet, so a busy-but-valid Ollama isn't misreported as
     "not running" (see engines_status.ollama_model_status)."""
     if status == "unreachable":
+        if model_store.kit_dir():
+            # A desktop user cannot "make sure Ollama is running": the app owns it.
+            return (
+                f"Local {engine_name} translation is not available right now: the "
+                "translation runtime is not running. Quit and reopen PersoDub, or "
+                "choose Gemini in the Translation dropdown."
+            )
         return (
             f"Local {engine_name} translation is not available on this machine "
             "(Ollama is not running or not reachable). Choose Gemini in the "
@@ -224,27 +238,84 @@ def _inherited_engines(job, keys):
     return engines
 
 
-def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = True):
-    """Catalog entries this job still needs, in catalog order.
+def _translate_model_missing_on_disk(translator):
+    """The catalog id a local translator needs when its runtime is not there
+    to ask: read the model's markers straight off the disk instead."""
+    entry = model_store.find(translator) if translator in ("gemma", "hunyuan") else None
+    if entry is None:
+        return None
+    return translator if model_store.model_state(entry, model_store.kit_dir()) != "ready" else None
+
+
+def _voice_engine_answers(url: str) -> bool:
+    """Whether the announced voice engine is actually up: a process that died
+    after announcing itself left the address behind (Windows, 2026-09-07), and
+    the dub then failed minutes in at the voice stage instead of here."""
+    try:
+        return httpx.get(f"{url}/health", timeout=2).status_code == 200
+    except Exception:
+        return False
+
+
+def _require_voice_engine_running() -> None:
+    """The engine pack is on disk, so the preflight let a local dub through --
+    but its process is not announced (its start failed) or not answering (it
+    died). Without this the voice stage fails with a raw library error; with
+    it the page asks the desktop app to start the engine again."""
+    if not model_store.kit_dir():
+        return
+    url = runtime.url("tts")
+    if not url or not _voice_engine_answers(url):
+        raise HTTPException(422, "The voice engine is not running. Quit and reopen PersoDub.")
+
+
+def _pack_ready(pack_id: str) -> bool:
+    """Whether a pack (the engines venv, the Ollama runtime) is on this kit.
+    Without a kit (a dev run of the backend alone) packs are not a thing:
+    whatever engines the developer runs by hand are simply there."""
+    kit = model_store.kit_dir()
+    if not kit:
+        return True
+    entry = model_store.find(pack_id)
+    return bool(entry) and model_store.model_state(entry, kit) == "ready"
+
+
+def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = True, *,
+                    need_engine: bool = False, need_ollama: bool = False):
+    """Catalog entries this job still needs: the packs first (the desktop app
+    installs those, kind "pack"), then the models in catalog order (kind
+    "model", downloaded by this process).
 
     Pure lookups (disk markers via the catalog; the caller already resolved
     the Ollama-side statuses) so tests can drive it without a network. The
-    409 built from it is what the screen's "Download N GB of AI models to
-    dub?" dialog renders.
+    409 built from it is what the screen's "Download N GB to dub?" dialog
+    renders.
     """
     kit = model_store.kit_dir()
+    wanted_packs = []
+    if kit and need_engine:       # no kit, no packs (see _pack_ready)
+        wanted_packs.append("engine")
+    if kit and need_ollama:
+        wanted_packs.append("ollama-runtime")
     wanted = []
     if need_whisper:
         wanted.append("whisper")
     if need_tts:
         wanted.append("qwen3-tts")
-    missing = []
+    packs, models = [], []
     for m in model_store.load_catalog():
+        if m["role"] == "pack":
+            if m["id"] in wanted_packs and model_store.model_state(m, kit) != "ready":
+                packs.append({"id": m["id"], "kind": "pack", "name": m["name"],
+                              "bytes": model_store._pack_bytes(m), "hint": m.get("hint", "")})
+            continue
         if m["id"] in wanted and model_store.model_state(m, kit) != "ready":
-            missing.append({"id": m["id"], "name": m["name"], "bytes": m["bytes"]})
+            models.append({"id": m["id"], "kind": "model", "name": m["name"], "bytes": m["bytes"],
+                           "hint": m.get("hint", "")})
         if translate_missing_id and m["id"] == translate_missing_id:
-            missing.append({"id": m["id"], "name": m["name"], "bytes": m["bytes"]})
-    return missing
+            models.append({"id": m["id"], "kind": "model", "name": m["name"], "bytes": m["bytes"],
+                           "hint": m.get("hint", "")})
+    return packs + models
 
 
 def _raise_models_needed(missing):
@@ -343,20 +414,28 @@ def dub_job_redub(jid: str):
     language_code = job.get("language_code") or "en"
     project = job.get("project") or os.path.basename(work_dir)
     check_space(state.WORKSPACE)
+    script = script_path(work_dir)
+    if not os.path.exists(script):
+        # A job that finished without a script (a cloud dub, a folder carried
+        # over from an old install) has nothing to re-voice from.
+        raise HTTPException(409, "No script was recorded for this job, so its voices cannot be made again.")
     work = _job_dir(project, language_code)
     video_path = os.path.join(work, "input.mp4")
     shutil.copyfile(source_video, video_path)
     # "sub.srt" because that is the name a ready-made script has in a job's
     # folder, whichever door put it there -- the work builder looks for it.
-    shutil.copyfile(script_path(work_dir), os.path.join(work, "sub.srt"))
+    shutil.copyfile(script, os.path.join(work, "sub.srt"))
 
     engines = _inherited_engines(job, ("stt_engine", "translator", "tts", "quality"))
 
     # Only the voices are made again -- no STT, no translation -- but a voice
-    # model removed in the catalog must resurface as the dialog, not a crash.
-    missing = _missing_models(False, None)
+    # model (or the engine pack) removed since must resurface as the dialog,
+    # not a crash.
+    missing = _missing_models(False, None, need_engine=job.get("dub_mode") != "perso")
     if missing:
         _raise_models_needed(missing)
+    if job.get("dub_mode") != "perso":
+        _require_voice_engine_running()
 
     fields = {"language_code": language_code, "project": project,
               "day": _today(), "from_link": False, "work_dir": work,
@@ -451,10 +530,20 @@ def dub_job_retry(jid: str):
     engines = _inherited_engines(
         job, ("stt_engine", "translator", "tts", "quality", "separation"))
 
-    translate_missing_id = dub_launch.translate_model_missing(engines.get("translator"))
-    missing = _missing_models(engines.get("stt_engine") != "perso", translate_missing_id)
+    local = job.get("dub_mode") != "perso"
+    need_ollama = local and engines.get("translator") in ("gemma", "hunyuan")
+    if need_ollama and not _pack_ready("ollama-runtime"):
+        # Nothing to probe without the runtime: the model is missing from disk
+        # or it is not, and either way the pack comes first.
+        translate_missing_id = _translate_model_missing_on_disk(engines.get("translator"))
+    else:
+        translate_missing_id = dub_launch.translate_model_missing(engines.get("translator"))
+    missing = _missing_models(engines.get("stt_engine") != "perso", translate_missing_id,
+                              need_engine=local, need_ollama=need_ollama)
     if missing:
         _raise_models_needed(missing)
+    if local:
+        _require_voice_engine_running()
 
     fields = {"language_code": language_code, "project": project,
               "day": _today(), "work_dir": work,
@@ -628,16 +717,22 @@ def dub_start(
         raise HTTPException(422, f"Unknown language_code: {language_code}")
     effective_translate_engine = "" if dub_mode == "perso" else (translate_engine or dub_setup.default_for("translator")).lower()
     translate_missing_id = None
-    if effective_translate_engine == "gemma":
+    need_ollama = effective_translate_engine in ("gemma", "hunyuan")
+    if need_ollama and not _pack_ready("ollama-runtime"):
+        # No runtime pack, nothing to probe: the reachability check below would
+        # answer 422 "not running", which no dialog can fix. The 409 further
+        # down names the pack (and the model, if it is not on disk either).
+        translate_missing_id = _translate_model_missing_on_disk(effective_translate_engine)
+    elif effective_translate_engine == "gemma":
         status = engines_status.gemma_status()
         if status == "unreachable":
             raise HTTPException(422, _ollama_unavailable_message("Gemma", status, OLLAMA_GEMMA_MODEL))
         translate_missing_id = dub_launch.translate_model_missing("gemma", status)
-    if effective_translate_engine == "qwen":
+    elif effective_translate_engine == "qwen":
         status = engines_status.qwen_status()
         if status != "available":
             raise HTTPException(422, _ollama_unavailable_message("Qwen", status, OLLAMA_QWEN_MODEL))
-    if effective_translate_engine == "hunyuan":
+    elif effective_translate_engine == "hunyuan":
         status = engines_status.hunyuan_status()
         if status == "unreachable":
             raise HTTPException(422, _ollama_unavailable_message("Hunyuan", status, OLLAMA_HUNYUAN_MODEL))
@@ -687,9 +782,13 @@ def dub_start(
     # asks, downloads, and resubmits; nothing here downloads silently).
     if dub_mode != "perso":
         need_whisper = stt_engine != "perso"  # resolved above, once
-        missing = _missing_models(need_whisper, translate_missing_id)
+        # The voice is always made locally in a local dub: the engine pack is
+        # needed whatever the STT and separation choices.
+        missing = _missing_models(need_whisper, translate_missing_id,
+                                  need_engine=True, need_ollama=need_ollama)
         if missing:
             _raise_models_needed(missing)
+        _require_voice_engine_running()
 
     # Names the job's folder. The caller may pass a title it already knows (the
     # screen probes a link before starting, and app/source_fetch.py's fetch()

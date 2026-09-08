@@ -12,7 +12,7 @@ def stream_duration(path: str, stream: str) -> float:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", stream,
          "-show_entries", "stream=duration", "-of", "csv=p=0", path],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     # ffmpeg 7.x appends a trailing comma to csv output -> strip it and convert to number
     return float(out.stdout.strip().splitlines()[0].rstrip(","))
@@ -31,7 +31,7 @@ def mux(video: str, audio: str, out: str, dur: float) -> subprocess.CompletedPro
         ["ffmpeg", "-y", "-v", "error", "-i", video, "-i", audio,
          "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac",
          "-b:a", "256k", "-af", "apad", "-t", f"{dur:.3f}", out],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
 
 
@@ -73,7 +73,7 @@ def cut_video(path: str, start: float, end: float, on_cut=None) -> None:
     try:
         r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
                             "-i", path, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", tmp],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
             # Only ffmpeg's last line, which is the complaint itself. The lines
             # before it name the input file, so a tail of the whole thing put the

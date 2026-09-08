@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { run } from "./exec.js";
+import { run, cancelCurrent } from "./exec.js";
 
 test("captures lines and resolves on success", async () => {
   const lines = [];
@@ -37,4 +37,13 @@ test("rejects with code and recent output on failure", async () => {
     run([process.execPath, "-e", "console.log('boom');process.exit(3)"], {}),
     (err) => err.message.includes("exit 3") && err.message.includes("boom"),
   );
+});
+
+test("cancelCurrent kills the process run() is driving, and run() rejects", async () => {
+  // The page's Cancel on a pack install: the installer is mid-step, and the
+  // only way to stop it is to kill the step's process.
+  const p = run([process.execPath, "-e", "setTimeout(() => {}, 10000)"]);
+  await new Promise((r) => setTimeout(r, 200));
+  cancelCurrent();
+  await assert.rejects(p);
 });

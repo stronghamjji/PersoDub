@@ -16,13 +16,13 @@ import requests
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import service_account
 
+from app import runtime
 from app.config import (
     GEMINI_MODEL,
     OLLAMA_GEMMA_MODEL,
     OLLAMA_HUNYUAN_MODEL,
     OLLAMA_MODEL,
     OLLAMA_QWEN_MODEL,
-    OLLAMA_URL,
     TRANSLATE_ENGINE,
     VERTEX_LOCATION,
     VERTEX_MODEL,
@@ -313,8 +313,11 @@ class OllamaTranslator(TranslationEngine):
     # Local/free -- no cost or rate-limit pressure, keep the full retry budget (base default).
     max_budget_retries = 3
 
-    def __init__(self, url: str = OLLAMA_URL, model: str = OLLAMA_MODEL):
-        self.url = url.rstrip("/")
+    def __init__(self, url: Optional[str] = None, model: str = OLLAMA_MODEL):
+        # Resolved here, not as a default-argument value: a default argument is
+        # evaluated once at import time, before the desktop shell has started
+        # (or restarted) the pack and written its port to runtime.json.
+        self.url = (url or runtime.url("ollama")).rstrip("/")
         self.model = model
 
     def _ask(self, prompt: str) -> str:

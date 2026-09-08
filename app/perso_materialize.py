@@ -23,7 +23,7 @@ from app.text.srt import build_srt
 def _ffmpeg_to_wav(src: str, dest: str) -> None:
     """Any downloaded audio -> PCM wav the assembler can read (48 kHz)."""
     r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-ar", "48000", dest],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise RuntimeError("could not convert %s: %s" % (os.path.basename(src),
                                                          (r.stderr or "").strip()[-120:]))

@@ -361,6 +361,18 @@ def test_redub(recorder, tmp_path):
     assert _as_the_pipeline_reads_it(kw, _work_dir(r.json()["job_id"])) == REDUB
 
 
+def test_redub_of_a_job_without_a_script_is_refused_not_a_500(recorder, tmp_path):
+    # Found on the real app (2026-09-07): a finished job with no translated.srt
+    # crashed the route on the copy. The screen needs a sentence, not a 500.
+    jid, work = _saved_job(tmp_path, name="finished", **_FIRST_RUN)
+    state.job_store._update(jid, status="done",
+                            result={"out_path": str(work / "dubbed.mp4")})
+    r = client.post(f"/api/dub/jobs/{jid}/redub")
+    assert r.status_code == 409
+    assert "No script" in r.json()["detail"]
+    assert not recorder["run_dub"], "nothing was started"
+
+
 def test_rearm_after_a_restart(recorder, tmp_path):
     jid, work = _saved_job(tmp_path, name="queued", num_speakers=3, **_FIRST_RUN)
     (work / "sub.srt").write_text("1\n")
