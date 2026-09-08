@@ -9,6 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initNewProjectUi } from "./newProject.mjs";
+import { LANGUAGES } from "./dubApi.mjs";
 
 function makeEl(id) {
   const classes = new Set();
@@ -324,9 +325,10 @@ test("an engine that will not answer leaves the form on its shipped defaults", a
 
 // -- what a dub is started with -------------------------------------------
 
-test("readOptions hands back the whole form, field for field", (t) => {
+test("readOptions hands back the whole form, field for field", async (t) => {
   const h = harness();
   t.after(h.log.restore);
+  await new Promise((r) => setTimeout(r, 0));   // the language lists have been asked for
   const file = { name: "a.mp4" };
   h.state.newProject = { file, files: null, probe: null, trim: { start: 1, end: 9 } };
   h.$("sourceLangSelect").value = "ko";
@@ -349,6 +351,9 @@ test("readOptions hands back the whole form, field for field", (t) => {
     qualityMode: "high",
     numSpeakers: 2,
     translateEngine: "gemini",
+    // The list the target was picked from (the model's ten until the app
+    // answers /api/languages; this harness answers nothing useful).
+    languages: LANGUAGES.map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null })),
     project: undefined,
     trim: { start: 1, end: 9 },
   });

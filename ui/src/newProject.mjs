@@ -13,7 +13,7 @@
 // playRange/cancelRange, which the finished screen plays its lines with.
 //
 // Everything this file touches is #projectOverlay and its children.
-import { LANGUAGES } from "./dubApi.mjs";
+import { LANGUAGES, fetchLanguages } from "./dubApi.mjs";
 import { fmtClock, fmtClockTenths } from "./format.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
@@ -81,6 +81,40 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   }
   fillLanguageSelects();
 
+  // The target list follows the dubbing path: Perso's own languages (77 on
+  // 2026-09-08, with regional variants such as English (UK)) when the cloud
+  // dubs, the model's ten when this computer does. Until GET /api/languages
+  // answers, both paths show the ten. The source dropdown stays as it is:
+  // "Auto-detect" covers the cloud, and the ten are what Whisper is asked for.
+  const asEntries = (xs) => xs.map((l) => ({ id: l.id || l.code, code: l.code, name: l.name, tag: l.tag || null }));
+  let languageLists = { local: asEntries(LANGUAGES), perso: asEntries(LANGUAGES) };
+  function currentLanguages() {
+    const mode = $("dubModeSelect") ? $("dubModeSelect").value : "local";
+    return languageLists[mode === "perso" ? "perso" : "local"];
+  }
+  function refillTargetLanguages() {
+    const sel = $("targetLangSelect");
+    if (!sel) return;
+    const keep = sel.value || "en";
+    const list = currentLanguages();
+    sel.innerHTML = "";
+    for (const l of list) {
+      const o = document.createElement("option");
+      o.value = l.id;
+      // Flags exist for the ten; a regional variant (en-GB) goes without one
+      // rather than borrowing its parent's.
+      const flag = !l.tag && LANG_FLAGS[l.code];
+      o.textContent = flag ? `${flag} ${l.name}` : l.name;
+      sel.appendChild(o);
+    }
+    sel.value = list.some((l) => l.id === keep) ? keep : "en";
+  }
+  fetchLanguages().then((lists) => {
+    languageLists = { local: asEntries(lists.local), perso: asEntries(lists.perso) };
+    refillTargetLanguages();
+  });
+  if ($("dubModeSelect")) $("dubModeSelect").addEventListener("change", refillTargetLanguages);
+
   // The dropdowns start on the app's saved defaults (GET /api/setup: kit.env,
   // written by Settings or the Dub Agent's set_default), so what the agent
   // changed is what the dialog shows, and a choice survives a relaunch.
@@ -96,6 +130,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       if (sel && value && sel.querySelector(`option[value="${value}"]`)) sel.value = value;
     };
     pick("dubModeSelect", d.dub_mode);
+    refillTargetLanguages();
     pick("sepSelect", d.separation);
     pick("sttSelect", d.stt);
     pick("translateSelect", d.translator);
@@ -400,6 +435,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       sourceUrl: np.probe ? np.probe.url : null,
       sourceLang: $("sourceLangSelect").value,
       targetLang: $("targetLangSelect").value,
+      languages: currentLanguages(),
       sttEngine: $("sttSelect").value,
       sepEngine: $("sepSelect").value,
       dubMode: $("dubModeSelect").value,

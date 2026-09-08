@@ -44,7 +44,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app import config, dub_launch, engines_status, media, runtime, state
+from app import dub_launch, engines_status, languages, media, runtime, state
 from app import models as model_store
 from app import setup as dub_setup
 from app.api._shared import script_work_dir, work_dir_of
@@ -126,14 +126,14 @@ def _today():
 _LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2,8}([-_][A-Za-z0-9]{2,8})?$")
 
 
-def _valid_language_code(code: str) -> bool:
-    """A code the app knows (config.LANGUAGE_NAMES), region variant allowed:
-    "ko", "pt-BR" yes; "xx" no. The shape alone let "xx" start a job that
-    only failed at translation (2026-09-08)."""
+def _valid_language_code(code: str, dub_mode: str = "local") -> bool:
+    """A code the chosen path knows: local = config.LANGUAGE_NAMES (region
+    variant allowed: "pt-BR" is still Portuguese), perso = Perso's own list
+    (app/languages.py; "hi", "en-GB" yes there, not locally). The shape alone
+    let "xx" start a job that only failed at translation (2026-09-08)."""
     if not _LANGUAGE_CODE.match(code or ""):
         return False
-    base = re.split(r"[-_]", code)[0].lower()
-    return base in config.LANGUAGE_NAMES
+    return languages.lookup(dub_mode, code) is not None
 
 
 def _job_dir(title, lang_code):
@@ -713,7 +713,7 @@ def dub_start(
         # The cloud does everything -- the per-stage engine choices (and their
         # preflights, including the local-model 409) do not apply.
         stt_engine = sep_engine = translate_engine = None
-    if not _valid_language_code(language_code):
+    if not _valid_language_code(language_code, dub_mode):
         raise HTTPException(422, f"Unknown language_code: {language_code}")
     effective_translate_engine = "" if dub_mode == "perso" else (translate_engine or dub_setup.default_for("translator")).lower()
     translate_missing_id = None

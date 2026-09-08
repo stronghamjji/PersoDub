@@ -321,7 +321,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     $("mnItems").hidden = true;   // the list said what; the bar now says how far
     $("mnAlt").hidden = true;
     if (packBusy) {
-      $("mnTitle").textContent = `Installing ${packBusy.name}`;
+      // The percent lives in the title, where the eye lands; the line below
+      // says what step the installer is on (2026-09-08: only the bar moved).
+      $("mnTitle").textContent = packBusy.pct != null ? `Installing ${packBusy.name} · ${packBusy.pct}%` : `Installing ${packBusy.name}`;
       $("mnLine").textContent = packBusy.line || "Starting…";
       return;
     }
@@ -380,7 +382,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     })();
   });
   $("mnSettings").addEventListener("click", () => onOpenSettings());
-  $("mnHide").addEventListener("click", () => $("modelsNeededOverlay").classList.remove("open"));
+  // Hidden, the download shows as the top-bar chip instead -- the page draws
+  // that chip only while this dialog is closed, so it needs a repaint now.
+  $("mnHide").addEventListener("click", () => { $("modelsNeededOverlay").classList.remove("open"); repaint(); });
   $("mnCancel").addEventListener("click", () => {
     if (packBusy) cancelPack(packBusy.id);
     if (pendingDub && pendingDub.downloading) {
