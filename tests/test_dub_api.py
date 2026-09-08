@@ -297,6 +297,12 @@ def test_dub_start_translate_engine_blank_means_the_saved_default(monkeypatch):
         data={"language": "Korean", "language_code": "ko"},
     )
     assert r.status_code == 200
+    jid = r.json()["job_id"]
+    for _ in range(100):
+        if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
+            break
+        time.sleep(0.02)
+
     assert captured["translate_engine"] == "gemma"
 
 

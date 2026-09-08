@@ -549,7 +549,10 @@ test("kit-env step appends missing managed keys to a legacy kit.env, preserving 
   assert.ok(env.includes("GEMINI_API_KEY=sk-legacy-key"), "user API key must survive");
   for (const key of ["PERSODUB_LEAKAGE_GATE=measure", "PERSODUB_SCORER_ASR_TIMEOUT=60",
                       "PERSODUB_TTS_TIMEOUT=900", "PERSODUB_DIAR_TIMEOUT=1800",
-                      `PERSODUB_TORCH_VARIANT=${TORCH_VARIANT}`]) {
+                      // A kit.env without the key predates the CPU wheel: its venv has
+                      // the build there was (CUDA on Windows, MPS on Mac), whatever this
+                      // machine's GPU -- see LEGACY_TORCH_VARIANT in installSpec.js.
+                      `PERSODUB_TORCH_VARIANT=${IS_WIN ? "cu128" : "mps"}`]) {
     assert.ok(env.includes(key), `missing ${key}`);
   }
   assert.ok(!env.includes("PERSO_SPACE_SEQ"), "upgrade must not pin a workspace id");
