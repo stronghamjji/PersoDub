@@ -11,6 +11,13 @@ from app import engines_status
 from app.api import dub as dub_api
 from app.api import results as results_api
 from app.main import app
+from app.subtitle_ass import FONT_CELL
+
+
+def _style_px(em_px):
+    """The Style's Fontsize for an em of em_px on this platform's burn font:
+    libass sizes by the font's cell, so build_ass scales it up (FONT_CELL)."""
+    return round(em_px * FONT_CELL.get(results_api._BURN_FONT, 1.0))
 
 client = TestClient(app, base_url="http://127.0.0.1")
 
@@ -176,7 +183,8 @@ def test_subtitled_takes_a_font_size(monkeypatch, tmp_path):
     ran, jid, work = _done_job(monkeypatch, tmp_path)
     r = client.get(f"/api/dub/result/{jid}/subtitled?preset=clean&size=150")
     assert r.status_code == 200
-    assert "Base,Arial,52," in _ass(work).split("Style: ")[1][:40] or ",52," in _ass(work)  # 1080 * .032 * 1.5
+    style = [l for l in _ass(work).splitlines() if l.startswith("Style: Base,")][0]
+    assert style.split(",")[2] == str(_style_px(52))   # em 1080 * .032 * 1.5
     assert ran.calls[0][-1] == str(work / "subtitled-clean-s150.mp4")
     # 300 is a legal size now (user wanted bigger); past it is still nonsense.
     assert client.get(f"/api/dub/result/{jid}/subtitled?preset=clean&size=300").status_code == 200
@@ -188,7 +196,7 @@ def test_subtitle_preview_takes_size_and_position_together(monkeypatch, tmp_path
     r = client.get(f"/api/dub/result/{jid}/subtitle_preview?preset=variety&pos=30&size=80")
     assert r.status_code == 200
     ass = _ass(work)
-    assert ",42," in ass                # neon-yellow's .049 * 1080 * 0.8
+    assert ",%d," % _style_px(42) in ass   # neon-yellow's .049 * 1080 * 0.8
     assert ",756," in ass               # (100-30)% of 1080
     assert ran.calls[0][-1] == str(work / "subtitle-preview-neon-yellow-p30-s80.jpg")
 
@@ -249,7 +257,7 @@ def test_subtitled_reads_the_stored_settings(monkeypatch, tmp_path):
     r = client.get(f"/api/dub/result/{jid}/subtitled")
     assert r.status_code == 200
     ass = _ass(work)
-    assert "&H0000E6FF&" in ass and ",756," in ass and ",64," in ass
+    assert "&H0000E6FF&" in ass and ",756," in ass and ",%d," % _style_px(64) in ass
     assert "-neon-yellow-p30-s120.mp4" in ran.calls[0][-1]
 
 
@@ -292,3 +300,18 @@ def test_the_pages_layout_reaches_the_burn(monkeypatch, tmp_path):
     # font 35 px on the 1080p fallback canvas: 10 em = 350 wide, 3 em = 105 tall
     assert "l 350 0 l 350 105 l 0 105" in ass
     assert "원래\\N번역" in ass
+
+
+def test_subtitled_is_burned_again_when_an_update_draws_it_differently(monkeypatch, tmp_path):
+    # Nothing of the job changed, but the app did (2026-09-08: the font-size
+    # fix): the .ass kept beside the file no longer matches, so it is rebuilt
+    # once, and the next ask finds it fresh again.
+    ran, jid, work = _done_job(monkeypatch, tmp_path)
+    assert client.get(f"/api/dub/result/{jid}/subtitled?preset=neon-yellow").status_code == 200
+    assert len(ran.calls) == 1
+    assert (work / "subtitled-neon-yellow.mp4.ass").read_text(encoding="utf-8") == _ass(work)
+    monkeypatch.setattr(results_api, "_BURN_FONT", "Some Other Font")
+    assert client.get(f"/api/dub/result/{jid}/subtitled?preset=neon-yellow").status_code == 200
+    assert len(ran.calls) == 2
+    assert client.get(f"/api/dub/result/{jid}/subtitled?preset=neon-yellow").status_code == 200
+    assert len(ran.calls) == 2

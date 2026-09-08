@@ -7,7 +7,7 @@ import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, fr
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, PACKS } from "./src/installSpec.js";
-import { runInstall, openSteps, packPercent } from "./src/installer.js";
+import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED } from "./src/installer.js";
 import { cancelCurrent } from "./src/exec.js";
 import { readRuntime } from "./src/runtimeFile.js";
 import { download } from "./src/download.js";
@@ -24,6 +24,9 @@ let engines = null;
 // The boot's install context (kit, bundled payload, downloader), kept so the
 // pack IPC below can run a pack's steps from the same table later.
 let installCtx = null;
+// The old-path kit main.js walked away from at boot (issue #6); the cleanup
+// step removes it once its models are carried over.
+let abandonedKitDir = null;
 
 // The shell's own lines go to a file as well as the console: a packaged app
 // has no console, and the one question a support log could not answer on
@@ -252,6 +255,7 @@ async function boot(win) {
       } catch (err) {
         console.warn("PERSODUB_KIT could not carry models over:", String((err && err.message) || err));
       }
+      abandonedKitDir = cfg.kitDir;
       cfg = { ...cfg, kitDir: freshKitDir };
     }
     // checkKit sees files and a version, not whether the steps that produce
@@ -267,7 +271,7 @@ async function boot(win) {
     // ollama-runtime keep being refreshed the way they always were; a pack
     // that was never installed is left alone here -- a later task adds the
     // IPC to install one on demand.
-    installCtx = payload ? { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run } : null;
+    installCtx = payload ? { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run, abandonedKitDir } : null;
     // A pack's "installing" stamp left by a crash would read as downloading forever.
     for (const p of PACKS) rmSync(packInstallingMarker(cfg.kitDir, p.id), { force: true });
     const all = installCtx ? buildSteps(installCtx) : null;
@@ -528,7 +532,7 @@ app.whenReady().then(() => {
       } catch (err) {
         const full = String((err && err.message) || err);
         shellLog(`PERSODUB_PACK install ${id} failed: ${full}`);
-        return { ok: false, reason: packCancelled ? "Cancelled." : lastReason(full) };
+        return { ok: false, reason: packCancelled ? "Cancelled." : downloadInterrupted(full) ? DOWNLOAD_INTERRUPTED : lastReason(full) };
       }
       if (engines && engines.startPack) {
         // The last step's line would sit in the dialog for the ~40 s the
@@ -618,7 +622,9 @@ app.whenReady().then(() => {
     // quitAndInstall bypasses will-quit in some paths -- stop the engines
     // explicitly first so no uvicorn is orphaned across the swap.
     if (engines) engines.stopAll();
-    electronUpdater.autoUpdater.quitAndInstall();
+    // (silent, relaunch): without the flags the NSIS wizard opened and asked
+    // for three clicks (user, Next, Finish) on 2026-09-08. Mac ignores them.
+    electronUpdater.autoUpdater.quitAndInstall(true, true);
   });
   guardedBoot();
 });

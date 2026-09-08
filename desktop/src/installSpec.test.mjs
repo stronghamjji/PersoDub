@@ -704,3 +704,24 @@ import { packInstallingMarker } from "./installSpec.js";
 test("the installing stamp sits beside the install's own stamps, named for the pack", () => {
   assert.equal(packInstallingMarker("/kit", "engine"), join("/kit", ".install", "engine.installing"));
 });
+
+test("cleanup removes the kit abandoned on the path move once its models were carried over (issue #6)", async () => {
+  const ctx = freshCtx();
+  const old = join(ctx.kitDir, "..", "old-kit");
+  mkdirSync(join(old, "python"), { recursive: true });
+  writeFileSync(join(old, "python", "bin"), "x");
+  const step = byId({ ...ctx, abandonedKitDir: old })["cleanup"];
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+  assert.equal(existsSync(old), false);
+  assert.equal(await step.isDone(), true);
+});
+
+test("cleanup keeps an abandoned kit that still holds its models", async () => {
+  const ctx = freshCtx();
+  const old = join(ctx.kitDir, "..", "old-kit-with-models");
+  mkdirSync(join(old, "models", "whisper"), { recursive: true });
+  const step = byId({ ...ctx, abandonedKitDir: old })["cleanup"];
+  await step.run(() => {});
+  assert.equal(existsSync(join(old, "models", "whisper")), true, "models never deleted by cleanup");
+});

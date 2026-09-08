@@ -20,6 +20,7 @@ import logging
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 from typing import Optional
@@ -388,6 +389,20 @@ def _stale(built: str, *sources: str) -> bool:
     return any(os.path.getmtime(src) > made for src in sources)
 
 
+def _drawn_differently(built: str, ass: str) -> bool:
+    """The .ass a file was burned from is kept beside it (<built>.ass); the
+    .ass we would burn today being different means an update changed how the
+    subtitles are drawn, and the file must be made again -- the sources'
+    clocks alone called it fresh after the 2026-09-08 font-size fix."""
+    try:
+        with open(built + ".ass", encoding="utf-8") as f:
+            kept = f.read()
+    except OSError:
+        return True
+    with open(ass, encoding="utf-8") as f:
+        return f.read() != kept
+
+
 @router.get("/api/dub/result/{jid}/subtitled")
 def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int = 0,
                          pos: Optional[float] = None, size: Optional[float] = None):
@@ -401,9 +416,9 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
     j, out, srt, work, preset, pos, size, sources, stored = _resolved_burn_inputs(
         jid, preset, pos, size)
     built = os.path.join(work, "subtitled-%s%s.mp4" % (preset, _pos_size_suffix(pos, size)))
-    if _stale(built, *sources):
-        ass = _write_burn_ass(srt, preset, pos, size, work, out,
-                              stored["boxWidth"], stored["widths"], stored["layout"])
+    ass = _write_burn_ass(srt, preset, pos, size, work, out,
+                          stored["boxWidth"], stored["widths"], stored["layout"])
+    if _stale(built, *sources) or _drawn_differently(built, ass):
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-i", out, "-vf", "ass=filename='%s'" % _filter_path(ass),
@@ -415,6 +430,7 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
             raise HTTPException(status_code=503,
                                 detail="ffmpeg could not subtitle this video (%s)."
                                        % (run.stderr or "no detail")[-120:].strip())
+        shutil.copyfile(ass, built + ".ass")
     filename = "dub_%s-sub-%s.mp4" % (_target_code(j), preset)
     headers = ({"Content-Disposition": 'attachment; filename="%s"' % filename}
                if download else None)
@@ -571,10 +587,10 @@ def dub_result_subtitle_preview(jid: str, preset: Optional[str] = None,
     j, out, srt, work, preset, pos, size, sources, stored = _resolved_burn_inputs(
         jid, preset, pos, size)
     built = os.path.join(work, "subtitle-preview-%s%s.jpg" % (preset, _pos_size_suffix(pos, size)))
-    if _stale(built, *sources):
+    ass = _write_burn_ass(srt, preset, pos, size, work, out,
+                          stored["boxWidth"], stored["widths"], stored["layout"])
+    if _stale(built, *sources) or _drawn_differently(built, ass):
         at = _first_srt_second(srt) + 0.5
-        ass = _write_burn_ass(srt, preset, pos, size, work, out,
-                              stored["boxWidth"], stored["widths"], stored["layout"])
         run = subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-ss", "%.3f" % at, "-copyts", "-i", out,
@@ -585,4 +601,5 @@ def dub_result_subtitle_preview(jid: str, preset: Optional[str] = None,
             raise HTTPException(status_code=503,
                                 detail="ffmpeg could not draw the preview (%s)."
                                        % (run.stderr or "no detail")[-120:].strip())
+        shutil.copyfile(ass, built + ".ass")
     return FileResponse(built, media_type="image/jpeg")

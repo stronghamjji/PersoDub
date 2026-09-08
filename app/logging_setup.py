@@ -31,6 +31,22 @@ BACKUP_COUNT = 3
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
+class _ClientWentAway(logging.Filter):
+    """Drops asyncio's report of a client that hung up mid-response.
+
+    On Windows the proactor loop logs "Exception in callback
+    _ProactorBasePipeTransport._call_connection_lost" with a
+    ConnectionResetError traceback every time the page closes a request early
+    (a video seek, a reload). Nothing went wrong on our side; three of these
+    sat in backend.log after one afternoon (2026-09-08)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        text = record.getMessage()
+        if record.exc_info and record.exc_info[1] is not None:
+            text += " " + type(record.exc_info[1]).__name__
+        return not ("_call_connection_lost" in text or "ConnectionResetError" in text)
+
+
 def configure_logging() -> logging.Logger:
     """Give the "persodub" logger its handlers. Safe to call twice.
 
@@ -46,6 +62,9 @@ def configure_logging() -> logging.Logger:
     logger.setLevel(logging.DEBUG if os.environ.get("PERSODUB_DEBUG") == "1" else logging.INFO)
     if logger.handlers:
         return logger
+    asyncio_log = logging.getLogger("asyncio")
+    if not any(isinstance(f, _ClientWentAway) for f in asyncio_log.filters):
+        asyncio_log.addFilter(_ClientWentAway())
 
     formatter = logging.Formatter(LOG_FORMAT)
     console = logging.StreamHandler(sys.stderr)

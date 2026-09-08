@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runInstall } from "./installer.js";
+import { runInstall, downloadInterrupted, DOWNLOAD_INTERRUPTED } from "./installer.js";
 
 function step(id, { done = false, fail = false, completes = true } = {}, log) {
   let ran = false;
@@ -94,4 +94,13 @@ test("packPercent weighs the steps by size and moves from step to step even with
   assert.equal(packPercent(steps, new Set(["venv-engines"]), "models", 50), 88);   // 800 + 75 of 1000
   assert.equal(packPercent(steps, new Set(["venv-engines", "models", "nonverbal-weights"]), null, null), 100);
   assert.equal(packPercent([{ id: "x", bytes: 0 }], new Set(), "x", 10), null, "no sizes, no figure");
+});
+
+test("a download that broke mid-way is reported as interrupted, other failures keep their own text", () => {
+  const hf = "AI engine: requests.exceptions.ChunkedEncodingError: ('Connection broken: IncompleteRead(50682952 bytes read, 33342488 more expected)', IncompleteRead(...))";
+  assert.equal(downloadInterrupted(hf), true);
+  assert.equal(downloadInterrupted("Error: getaddrinfo ENOTFOUND huggingface.co"), true);
+  assert.equal(downloadInterrupted("ERROR: No matching distribution found for torch==2.8.0"), false);
+  assert.equal(downloadInterrupted(""), false);
+  assert.match(DOWNLOAD_INTERRUPTED, /Download and Start/);
 });

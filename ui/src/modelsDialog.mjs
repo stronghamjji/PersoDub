@@ -47,7 +47,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   if (shell && shell.onInstallProgress) {
     shell.onInstallProgress((p) => {
       if (!p || !p.pack || !packBusy || packBusy.id !== p.pack) return;
-      packBusy.line = p.state === "progress" && p.detail ? `${p.title}: ${p.detail}` : (p.title || "");
+      // A detail that only restates the title ("Downloading the translation
+      // runtime: Downloading the translation runtime", 2026-09-08) shows once.
+      packBusy.line = p.state === "progress" && p.detail && p.detail !== p.title ? `${p.title}: ${p.detail}` : (p.title || "");
       // The shell sends the pack's overall percent on every event.
       if (p.pct != null) packBusy.pct = p.pct;
       repaint();
