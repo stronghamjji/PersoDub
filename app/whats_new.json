@@ -1,7 +1,8 @@
 {"notes": [
-    "Setup is now about 0.6 GB on Mac and 0.9 GB on Windows. The AI engine and models download when you first dub, and only the ones you choose.",
-    "The dub-start dialog shows the download's progress and starts the dub when it is done. Settings can remove or reinstall the AI engine and the translation runtime.",
-    "Subtitles export exactly as the work screen shows them: the same line breaks, box and font weight.",
-    "The subtitle width handles follow the pointer for the whole drag."
+    "Perso dubbing can target every language Perso offers, 77 in all, with regional variants such as English (UK) and Portuguese (Portugal).",
+    "While AI packs download, the dialog shows the percent; Hide moves it to the top bar until you bring it back.",
+    "Subtitled exports match the work screen's size, and export again after an update changed how they are drawn.",
+    "Windows updates install without the setup wizard, and the pre-update check reads correctly in Korean.",
+    "A download that was interrupted says so and resumes where it left off when you press Download and Start."
   ]
 }
