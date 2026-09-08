@@ -319,7 +319,14 @@ export async function bytesStillNeeded(steps) {
 // removed once venv-engines succeeded (this step sits right after it), and
 // the step stays open until every one is gone -- a locked file on Windows
 // just means it is retried next launch.
-const LEFTOVERS = (k) => [
+// ctx.abandonedKitDir: the kit at the pre-0.3.0 path (Electron's userData)
+// that main.js redirected away from, carrying its models/ over. It stayed
+// behind holding ~3 GB with nothing telling the user it was safe to delete
+// (issue #6). Removed only once models/ is gone from it, so a failed carry-over
+// never costs the models.
+const LEFTOVERS = (k, ctx = {}) => [
+  ...(ctx.abandonedKitDir && !existsSync(join(ctx.abandonedKitDir, "models"))
+    ? [{ path: ctx.abandonedKitDir, recursive: true }] : []),
   { path: k("qwen_venv"), recursive: true },                       // the retired voice venv
   { path: k("downloads", "python.tar.gz") },                         // archives, already extracted
   { path: k("downloads", "ollama.tgz") },
@@ -532,9 +539,9 @@ export function buildSteps(ctx) {
       title: "Cleaning up",
       bytes: 0,
       verify: false,   // a locked leftover is dead weight, never a failed install
-      isDone: () => LEFTOVERS(k).every((l) => !existsSync(l.path)),
+      isDone: () => LEFTOVERS(k, ctx).every((l) => !existsSync(l.path)),
       run: async (report) => {
-        for (const l of LEFTOVERS(k)) {
+        for (const l of LEFTOVERS(k, ctx)) {
           if (!existsSync(l.path)) continue;
           report(null, `Removing ${basename(l.path)}`);
           try {

@@ -852,3 +852,19 @@ def test_download_target_scans_for_the_link_and_saves(monkeypatch, tmp_path):
     out = tmp_path / "bg.src"
     client.download_target(409873, "backgroundAudio", str(out))
     assert out.read_bytes() == b"BG-BYTES"
+
+
+def test_dub_video_sends_the_region_tag_when_the_language_has_one(monkeypatch, tmp_path):
+    # Perso tells English (UK) from English (US) by languageTag, not by code
+    # (app/languages.py); a plain code carries no tag at all.
+    calls = _install_fake_perso_dub_http(
+        monkeypatch,
+        progress_sequence=[{"progressReason": "Completed", "hasFailed": False}],
+    )
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    src = tmp_path / "in.mp4"
+    src.write_bytes(b"v")
+    pc = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    pc.dub_video(str(src), str(tmp_path / "out.mp4"), "ko", "en", num_speakers=1, target_tag="en-GB")
+    url, body = next(c for c in calls["post"] if c[0].endswith("/translate"))
+    assert body["targetLanguages"] == [{"languageCode": "en", "ttsModel": "AUDIO_ENGINE_V3", "languageTag": "en-GB"}]

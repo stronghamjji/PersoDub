@@ -258,3 +258,14 @@ def test_a_language_code_the_app_does_not_know_is_refused(monkeypatch, _kit):
     r = _start({"language_code": "xx"})
     assert r.status_code == 422 and "language_code" in r.json()["detail"]
     assert _start({"language_code": "pt-BR"}).status_code == 200, "a region variant of a known language"
+
+
+def test_perso_dubbing_accepts_persos_languages_and_local_does_not(monkeypatch, _kit):
+    # Hindi and British English exist on Perso's list only (app/languages.py).
+    monkeypatch.setattr(dub_api, "_run_cloud_dub", lambda *a, **kw: None)
+    monkeypatch.setattr(perso_client, "PersoClient", lambda: type("C", (), {
+        "dubbing_spaces": lambda self: [{"seq": 1}], "space_seq": 1})())
+    for code in ("hi", "en-GB"):
+        r = _start({"language_code": code, "dub_mode": "perso"})
+        assert r.status_code == 200, (code, r.text)
+    assert _start({"language_code": "hi"}).status_code == 422

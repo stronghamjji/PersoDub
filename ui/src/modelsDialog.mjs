@@ -47,7 +47,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   if (shell && shell.onInstallProgress) {
     shell.onInstallProgress((p) => {
       if (!p || !p.pack || !packBusy || packBusy.id !== p.pack) return;
-      packBusy.line = p.state === "progress" && p.detail ? `${p.title}: ${p.detail}` : (p.title || "");
+      // A detail that only restates the title ("Downloading the translation
+      // runtime: Downloading the translation runtime", 2026-09-08) shows once.
+      packBusy.line = p.state === "progress" && p.detail && p.detail !== p.title ? `${p.title}: ${p.detail}` : (p.title || "");
       // The shell sends the pack's overall percent on every event.
       if (p.pct != null) packBusy.pct = p.pct;
       repaint();
@@ -319,7 +321,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     $("mnItems").hidden = true;   // the list said what; the bar now says how far
     $("mnAlt").hidden = true;
     if (packBusy) {
-      $("mnTitle").textContent = `Installing ${packBusy.name}`;
+      // The percent lives in the title, where the eye lands; the line below
+      // says what step the installer is on (2026-09-08: only the bar moved).
+      $("mnTitle").textContent = packBusy.pct != null ? `Installing ${packBusy.name} · ${packBusy.pct}%` : `Installing ${packBusy.name}`;
       $("mnLine").textContent = packBusy.line || "Starting…";
       return;
     }
@@ -378,7 +382,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     })();
   });
   $("mnSettings").addEventListener("click", () => onOpenSettings());
-  $("mnHide").addEventListener("click", () => $("modelsNeededOverlay").classList.remove("open"));
+  // Hidden, the download shows as the top-bar chip instead -- the page draws
+  // that chip only while this dialog is closed, so it needs a repaint now.
+  $("mnHide").addEventListener("click", () => { $("modelsNeededOverlay").classList.remove("open"); repaint(); });
   $("mnCancel").addEventListener("click", () => {
     if (packBusy) cancelPack(packBusy.id);
     if (pendingDub && pendingDub.downloading) {

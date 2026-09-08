@@ -262,8 +262,10 @@ test("Hide leaves the dub pending, and the topbar chip brings the dialog back", 
   t.after(h.state.restore);
   h.api.showModelsDialog(DETAIL_TWO);
 
+  const paintsBefore = h.state.painted.length;
   h.$("mnHide").click();
   assert.equal(h.$("modelsNeededOverlay").classList.contains("open"), false);
+  assert.equal(h.state.painted.length, paintsBefore + 1, "the page repaints, so its chip can show in the dialog's place");
 
   h.api.reopenDialogOrSettings();
   assert.equal(h.$("modelsNeededOverlay").classList.contains("open"), true);
@@ -407,6 +409,12 @@ test("while a pack installs the dialog shows its progress line, and Cancel stops
   shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing AI engines", state: "progress", detail: "torch 40%", pct: 40 });
   assert.equal(h.$("mnLine").textContent, "Installing AI engines: torch 40%");
   assert.equal(h.$("mnBar").style.width, "40%", "the bar follows the pack's percent, not the engine's row");
+  assert.equal(h.$("mnTitle").textContent, "Installing AI engine · 40%", "the title says how far, not only the bar");
+  // A detail that only restates the title is not repeated after a colon
+  // ("Downloading the translation runtime: Downloading the translation runtime", 2026-09-08).
+  shell.progress({ pack: "engine", stepId: "ollama-runtime", title: "Downloading the translation runtime", state: "progress", detail: "Downloading the translation runtime", pct: 60 });
+  assert.equal(h.$("mnLine").textContent, "Downloading the translation runtime");
+  assert.equal(h.$("mnTitle").textContent, "Installing AI engine · 60%");
   h.$("mnCancel").click();
   assert.deepEqual(shell.asked, ["install engine", "cancel engine"]);
   finish({ ok: false, reason: "Cancelled." });

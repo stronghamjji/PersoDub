@@ -63,6 +63,25 @@ function qualityModeToNTakes(qualityMode) {
  * @param {{start: number, end: number}} [opts.trim] - dub only this part of the video, in seconds
  * @returns {FormData}
  */
+/**
+ * The languages each dubbing path offers, from GET /api/languages:
+ * {local: [{id, code, name, tag}], perso: [...]}. Perso's list is the one it
+ * publishes (77 entries, 2026-09-08); the local one is the model's ten. When
+ * the app cannot answer, both fall back to LANGUAGES so the dialog still works.
+ */
+export async function fetchLanguages({ baseUrl = "" } = {}) {
+  const fallback = LANGUAGES.map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null }));
+  try {
+    const r = await fetch(`${baseUrl}/api/languages`);
+    if (!r.ok) return { local: fallback, perso: fallback };
+    const d = await r.json();
+    const ok = (xs) => Array.isArray(xs) && xs.length ? xs : fallback;
+    return { local: ok(d.local), perso: ok(d.perso) };
+  } catch {
+    return { local: fallback, perso: fallback };
+  }
+}
+
 export function buildDubFormData(opts) {
   if (!opts || (!opts.video && !opts.sourceUrl)) {
     throw new Error("A video file or a link is required.");
@@ -74,10 +93,14 @@ export function buildDubFormData(opts) {
     if (opts.sourceLang === opts.targetLang) {
       throw new Error("Source and target languages must be different.");
     }
-    const target = LANGUAGES.find((l) => l.code === opts.targetLang);
+    // opts.languages is the list the dialog is showing for the chosen path
+    // (Perso's own, or the model's ten); an entry's id is what the server
+    // takes as language_code -- a region tag such as en-GB, else the code.
+    const list = opts.languages || LANGUAGES;
+    const target = list.find((l) => (l.id || l.code) === opts.targetLang);
     if (!target) throw new Error(`Unsupported target language: ${opts.targetLang}`);
     language = target.name;
-    language_code = target.code;
+    language_code = target.id || target.code;
     sourceCode = opts.sourceLang;
   } else {
     ({ language, language_code } = directionToLanguage(opts.direction));

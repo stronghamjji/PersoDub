@@ -209,3 +209,39 @@ def test_the_weight_reaches_every_look():
         ass = build_ass(cue, preset, width=1920, height=1080, layout=lay)
         events = [l for l in ass.splitlines() if l.startswith("Dialogue:")]
         assert all("\\b800" in e for e in events), preset
+
+
+# libass sizes a font by its cell (ascent + descent), not its em: Fontsize 100
+# draws Apple SD Gothic Neo at 83 px and Malgun Gothic at 75 px, while the
+# page measured the layout at a true 100 px em. Measured 2026-09-08 with ten
+# capital H: Chromium 668 px vs libass 542 px on Mac, 530 px on Windows.
+def _style_size(ass):
+    return int([l for l in ass.splitlines() if l.startswith("Style: Base,")][0].split(",")[2])
+
+
+def test_the_style_font_size_is_scaled_by_the_fonts_cell_height():
+    # font_px for black-box at size 150 in 1080p is 52
+    for font, cell in (("Apple SD Gothic Neo", 1.2), ("Malgun Gothic", 1.33),
+                       ("Noto Sans CJK KR", 1.448), ("Arial", 1.0)):
+        ass = build_ass(SOUL_CUE, "black-box", width=1920, height=1080, size=150,
+                        font=font, layout=SOUL_LAYOUT)
+        assert _style_size(ass) == round(52 * cell), font
+        # The box and the words' place come from the page's em, unchanged.
+        assert "l 998 0 l 998 84 l 0 84" in ass, font
+
+
+def test_malgun_gothic_gets_its_bold_face_for_a_semibold_layout():
+    # Malgun Gothic ships regular and bold only; the browser maps 600 to bold,
+    # libass to regular, so White Box came out thin on Windows (2026-09-08).
+    lay = {"1": {**SOUL_LAYOUT["1"], "weight": 600}}
+    ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, font="Malgun Gothic", layout=lay)
+    words = [l for l in ass.splitlines() if l.startswith("Dialogue: 1,")][0]
+    assert "\\b1" in words.split("}")[0] and "\\b600" not in words
+    lay = {"1": {**SOUL_LAYOUT["1"], "weight": 400}}
+    ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, font="Malgun Gothic", layout=lay)
+    words = [l for l in ass.splitlines() if l.startswith("Dialogue: 1,")][0]
+    assert "\\b0" in words.split("}")[0]
+    # Fonts with the in-between weights keep the exact one, as before.
+    lay = {"1": {**SOUL_LAYOUT["1"], "weight": 600}}
+    ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, font="Apple SD Gothic Neo", layout=lay)
+    assert "\\b600" in ass

@@ -9,6 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initNewProjectUi } from "./newProject.mjs";
+import { LANGUAGES } from "./dubApi.mjs";
 
 function makeEl(id) {
   const classes = new Set();
@@ -324,9 +325,10 @@ test("an engine that will not answer leaves the form on its shipped defaults", a
 
 // -- what a dub is started with -------------------------------------------
 
-test("readOptions hands back the whole form, field for field", (t) => {
+test("readOptions hands back the whole form, field for field", async (t) => {
   const h = harness();
   t.after(h.log.restore);
+  await new Promise((r) => setTimeout(r, 0));   // the language lists have been asked for
   const file = { name: "a.mp4" };
   h.state.newProject = { file, files: null, probe: null, trim: { start: 1, end: 9 } };
   h.$("sourceLangSelect").value = "ko";
@@ -349,6 +351,9 @@ test("readOptions hands back the whole form, field for field", (t) => {
     qualityMode: "high",
     numSpeakers: 2,
     translateEngine: "gemini",
+    // The list the target was picked from (the model's ten until the app
+    // answers /api/languages; this harness answers nothing useful).
+    languages: LANGUAGES.map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null })),
     project: undefined,
     trim: { start: 1, end: 9 },
   });
@@ -462,4 +467,31 @@ test("Start hands the job back to the page", (t) => {
   h.$("startBtn").fire("click");
 
   assert.equal(h.log.started, 1);
+});
+
+
+test("every Perso language gets a flag, regional variants their own country", async (t) => {
+  // The bundled list is the one the app ships (app/perso_languages.json).
+  const { readFileSync } = await import("node:fs");
+  const perso = JSON.parse(readFileSync(new URL("../../app/perso_languages.json", import.meta.url), "utf8")).languages
+    .map((l) => ({ id: l.tag || l.code, code: l.code, name: l.name, tag: l.tag }));
+  const h = harness({ responses: { "/api/languages": { ok: true, json: async () => ({ local: [], perso }) } } });
+  t.after(h.log.restore);
+  await new Promise((r) => setTimeout(r, 0));
+  h.$("dubModeSelect").value = "perso";
+  await h.$("dubModeSelect").fire("change");
+  const opts = h.$("targetLangSelect").options;
+  assert.equal(opts.length, perso.length);
+  const bare = opts.filter((o) => !/^\p{Extended_Pictographic}|^\p{Regional_Indicator}/u.test(o.textContent));
+  assert.deepEqual(bare.map((o) => o.value), [], "every option starts with a flag");
+  const byId = Object.fromEntries(opts.map((o) => [o.value, o.textContent]));
+  assert.ok(byId["en-GB"].startsWith("🇬🇧") && byId["en"].startsWith("🇺🇸"), "UK and US English differ");
+  assert.ok(byId["pt"].startsWith("🇧🇷") && byId["pt-PT"].startsWith("🇵🇹"));
+  assert.ok(byId["es"].startsWith("🇲🇽") && byId["es-ES"].startsWith("🇪🇸"));
+  // Back on the local list, plain Portuguese and Spanish keep their own flags.
+  h.$("dubModeSelect").value = "local";
+  await h.$("dubModeSelect").fire("change");
+  const localById = Object.fromEntries(h.$("targetLangSelect").options.map((o) => [o.value, o.textContent]));
+  assert.equal(localById["pt"], "🇵🇹 Portuguese");
+  assert.equal(localById["es"], "🇪🇸 Spanish");
 });

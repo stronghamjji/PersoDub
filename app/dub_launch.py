@@ -23,7 +23,7 @@ import logging
 import os
 from typing import Optional
 
-from app import config, engines_status, media, perso_client, state
+from app import config, engines_status, languages, media, perso_client, state
 from app.jobs import JobCancelled
 from app.perso_client import (
     PersoCreditExhaustedError,
@@ -37,7 +37,17 @@ from app.source_fetch import fetch as _fetch_source
 logger = logging.getLogger("persodub.dub_launch")
 
 
-def language_name(code: str) -> str:
+def language_name(code: str, dub_mode: str = "local") -> str:
+    """The name a job shows for its target: Perso's own for its list ("Hindi",
+    "English (UK)"), the model's for the local ten; the code itself when
+    neither knows it."""
+    entry = languages.lookup(dub_mode, code)
+    if entry:
+        return entry["name"]
+    return _legacy_language_name(code)
+
+
+def _legacy_language_name(code: str) -> str:
     """The language's name for a code, or the code itself for one we don't know
     (a region variant, say) -- which is no worse than what we were given.
 
@@ -74,7 +84,11 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
     if ws:
         log(f"   Perso workspace: {ws.get('name') or ws.get('seq')} (#{ws.get('seq')})")
     try:
-        pc.dub_video(video_path, out_path, source_code, target_code, num_speakers=num_speakers, log=log)
+        # The job's language_code is the screen's id (a region tag such as
+        # "en-GB" or a plain code); Perso wants the code and the tag apart.
+        entry = languages.lookup("perso", target_code) or {"code": target_code, "tag": None}
+        tag = {"target_tag": entry["tag"]} if entry.get("tag") else {}
+        pc.dub_video(video_path, out_path, source_code, entry["code"], num_speakers=num_speakers, log=log, **tag)
         # The Perso project number is how the script viewer (and later the
         # agent) finds this job's sentences again -- persist it with the job.
         seq = getattr(pc, "last_dub_project_seq", None)
@@ -125,7 +139,7 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False,
     video_path = os.path.join(work, "input.mp4")
     out_path = os.path.join(work, "dubbed.mp4")
     language_code = job.get("language_code") or "en"
-    language = job.get("language") or language_name(language_code)
+    language = job.get("language") or language_name(language_code, job.get("dub_mode") or "local")
     srt_path = _in_folder(work, "sub.srt")
     source_srt_path = _in_folder(work, "source.srt")
     trim = job.get("trim")

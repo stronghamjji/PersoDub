@@ -23,7 +23,7 @@ from typing import List, Optional
 import httpx
 from mcp.server.mcpserver import MCPServer
 
-from app.config import LANGUAGE_NAMES
+from app import languages
 from app.dub_script import edit_line, export_srt, load_lines
 
 API = os.environ.get("PERSODUB_API", "http://127.0.0.1:8000")
@@ -331,10 +331,10 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
         raise ValueError('dub_mode must be "local" or "perso"')
     if translator not in ("", "gemma", "hunyuan", "gemini"):
         raise ValueError('translator must be "gemma", "hunyuan", "gemini" or empty')
-    code = (target_language or "").lower()
-    if code not in LANGUAGE_NAMES:
-        raise ValueError("target_language must be one of: %s"
-                         % " ".join(sorted(LANGUAGE_NAMES)))
+    code = (target_language or "").strip()
+    if languages.lookup(dub_mode, code) is None:
+        known = [e["id"] for e in languages.languages_for(dub_mode)]
+        raise ValueError("target_language must be one of: %s" % " ".join(sorted(known)))
     path = os.path.expanduser(video_path)
     if not confirm:
         # The estimate route already measures the video and, for perso, the
@@ -363,7 +363,7 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
                 "seconds": seconds}
     if not os.path.isfile(path):
         raise ValueError("No such video: %s" % video_path)
-    fields = {"language": LANGUAGE_NAMES[code], "language_code": code}
+    fields = {"language": languages.lookup(dub_mode, code)["name"], "language_code": code}
     if dub_mode == "perso":
         fields["dub_mode"] = "perso"
     if source_language:

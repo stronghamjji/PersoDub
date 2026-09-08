@@ -2306,7 +2306,10 @@ function paintModelStatusLines(rows) {
   }
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
           || rows.find((m) => m.state === "downloading");
-  $("topbarDl").hidden = !dl;
+  // The chip stands in for the download dialog, not beside it: it shows only
+  // once Hide closed the dialog (the dialog itself carries the percent).
+  const dialogOpen = $("modelsNeededOverlay").classList.contains("open");
+  $("topbarDl").hidden = !dl || dialogOpen;
   if (dl) $("topbarDl").textContent = `${dl.name} · ${dl.progress ?? 0}%`;
 }
 

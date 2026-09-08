@@ -13,16 +13,36 @@
 // playRange/cancelRange, which the finished screen plays its lines with.
 //
 // Everything this file touches is #projectOverlay and its children.
-import { LANGUAGES } from "./dubApi.mjs";
+import { LANGUAGES, fetchLanguages } from "./dubApi.mjs";
 import { fmtClock, fmtClockTenths } from "./format.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
 // is the single most-glanced-at line in the dialog, and a flag says it faster
 // than a word. The Original dropdown stays plain -- its default is not a
 // country at all ("Auto-detect"), so a half-flagged list would only look broken.
+// One flag per language the app can dub into, keyed by the language's id
+// (a region tag such as en-GB where Perso tells variants apart, else the
+// code). A language spoken in many countries gets the country it is most
+// associated with (Arabic: Saudi Arabia, Swahili: Kenya, the Indian
+// languages: India); Welsh gets the Union Jack -- the Welsh flag is a tag
+// sequence that Windows draws as a bare black flag, unlike the two-letter
+// codes it draws for every other flag here (its emoji font has none), which
+// is how the original ten already looked there.
+// The local list says plainly "Portuguese" and "Spanish": those keep the
+// flags they always had. Perso's default regions for the same codes are
+// Brazil and Mexico, which is what the Perso list shows.
+const LOCAL_FLAGS = { pt: "🇵🇹", es: "🇪🇸" };
 const LANG_FLAGS = {
-  en: "🇺🇸", ko: "🇰🇷", zh: "🇨🇳", fr: "🇫🇷", de: "🇩🇪",
-  it: "🇮🇹", ja: "🇯🇵", pt: "🇵🇹", ru: "🇷🇺", es: "🇪🇸",
+  "af": "🇿🇦", "ar": "🇸🇦", "as": "🇮🇳", "az": "🇦🇿", "be": "🇧🇾", "bg": "🇧🇬", "bn": "🇧🇩", "bs": "🇧🇦",
+  "ca": "🇪🇸", "ceb": "🇵🇭", "cs": "🇨🇿", "cy": "🇬🇧", "da": "🇩🇰", "de": "🇩🇪", "el": "🇬🇷", "en": "🇺🇸",
+  "en-GB": "🇬🇧", "es": "🇲🇽", "es-ES": "🇪🇸", "et": "🇪🇪", "fa": "🇮🇷", "fi": "🇫🇮", "fil": "🇵🇭", "fr": "🇫🇷",
+  "ga": "🇮🇪", "gl": "🇪🇸", "gu": "🇮🇳", "ha": "🇳🇬", "he": "🇮🇱", "hi": "🇮🇳", "hr": "🇭🇷", "hu": "🇭🇺",
+  "hy": "🇦🇲", "id": "🇮🇩", "is": "🇮🇸", "it": "🇮🇹", "ja": "🇯🇵", "jv": "🇮🇩", "ka": "🇬🇪", "kk": "🇰🇿",
+  "kn": "🇮🇳", "ko": "🇰🇷", "ky": "🇰🇬", "lb": "🇱🇺", "ln": "🇨🇩", "lt": "🇱🇹", "lv": "🇱🇻", "mk": "🇲🇰",
+  "ml": "🇮🇳", "mr": "🇮🇳", "ms": "🇲🇾", "ne": "🇳🇵", "nl": "🇳🇱", "no": "🇳🇴", "ny": "🇲🇼", "pa": "🇮🇳",
+  "pl": "🇵🇱", "ps": "🇦🇫", "pt": "🇧🇷", "pt-PT": "🇵🇹", "ro": "🇷🇴", "ru": "🇷🇺", "sd": "🇵🇰", "sk": "🇸🇰",
+  "sl": "🇸🇮", "so": "🇸🇴", "sr": "🇷🇸", "sv": "🇸🇪", "sw": "🇰🇪", "ta": "🇮🇳", "te": "🇮🇳", "th": "🇹🇭",
+  "tr": "🇹🇷", "uk": "🇺🇦", "ur": "🇵🇰", "vi": "🇻🇳", "zh": "🇨🇳",
 };
 
 // The shortest part worth dubbing; also what keeps the two handles from
@@ -73,13 +93,47 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       for (const l of LANGUAGES) {
         const o = document.createElement("option");
         o.value = l.code;
-        o.textContent = withFlag && LANG_FLAGS[l.code] ? `${LANG_FLAGS[l.code]} ${l.name}` : l.name;
+        const flag = LOCAL_FLAGS[l.code] || LANG_FLAGS[l.code];
+        o.textContent = withFlag && flag ? `${flag} ${l.name}` : l.name;
         if (l.code === defCode) o.selected = true;
         sel.appendChild(o);
       }
     }
   }
   fillLanguageSelects();
+
+  // The target list follows the dubbing path: Perso's own languages (77 on
+  // 2026-09-08, with regional variants such as English (UK)) when the cloud
+  // dubs, the model's ten when this computer does. Until GET /api/languages
+  // answers, both paths show the ten. The source dropdown stays as it is:
+  // "Auto-detect" covers the cloud, and the ten are what Whisper is asked for.
+  const asEntries = (xs) => xs.map((l) => ({ id: l.id || l.code, code: l.code, name: l.name, tag: l.tag || null }));
+  let languageLists = { local: asEntries(LANGUAGES), perso: asEntries(LANGUAGES) };
+  function currentLanguages() {
+    const mode = $("dubModeSelect") ? $("dubModeSelect").value : "local";
+    return languageLists[mode === "perso" ? "perso" : "local"];
+  }
+  function refillTargetLanguages() {
+    const sel = $("targetLangSelect");
+    if (!sel) return;
+    const keep = sel.value || "en";
+    const list = currentLanguages();
+    const local = list === languageLists.local;
+    sel.innerHTML = "";
+    for (const l of list) {
+      const o = document.createElement("option");
+      o.value = l.id;
+      const flag = (local && LOCAL_FLAGS[l.code]) || LANG_FLAGS[l.id] || (!l.tag && LANG_FLAGS[l.code]);
+      o.textContent = flag ? `${flag} ${l.name}` : l.name;
+      sel.appendChild(o);
+    }
+    sel.value = list.some((l) => l.id === keep) ? keep : "en";
+  }
+  fetchLanguages().then((lists) => {
+    languageLists = { local: asEntries(lists.local), perso: asEntries(lists.perso) };
+    refillTargetLanguages();
+  });
+  if ($("dubModeSelect")) $("dubModeSelect").addEventListener("change", refillTargetLanguages);
 
   // The dropdowns start on the app's saved defaults (GET /api/setup: kit.env,
   // written by Settings or the Dub Agent's set_default), so what the agent
@@ -96,6 +150,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       if (sel && value && sel.querySelector(`option[value="${value}"]`)) sel.value = value;
     };
     pick("dubModeSelect", d.dub_mode);
+    refillTargetLanguages();
     pick("sepSelect", d.separation);
     pick("sttSelect", d.stt);
     pick("translateSelect", d.translator);
@@ -400,6 +455,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       sourceUrl: np.probe ? np.probe.url : null,
       sourceLang: $("sourceLangSelect").value,
       targetLang: $("targetLangSelect").value,
+      languages: currentLanguages(),
       sttEngine: $("sttSelect").value,
       sepEngine: $("sepSelect").value,
       dubMode: $("dubModeSelect").value,

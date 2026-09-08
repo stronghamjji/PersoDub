@@ -24,7 +24,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
-from app import engines_status
+from app import engines_status, languages
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -129,6 +129,14 @@ def tts_say(body: SayRequest):
 
 
 # --- What this machine can do, and what changed in this release -------------
+
+@router.get("/api/languages")
+def api_languages():
+    """The languages each dubbing path offers: local = the model's ten,
+    perso = Perso's list (asked daily, kept locally). One id per entry is
+    what the New project dropdown sends as language_code."""
+    return {"local": languages.local_languages(), "perso": languages.perso_languages()}
+
 
 @router.get("/api/whats-new")
 def whats_new():

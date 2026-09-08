@@ -52,5 +52,6 @@ jobs:
           name: PersoDub-Setup-windows
           path: |
             desktop/dist/*.exe
+            desktop/dist/*.blockmap
             desktop/dist/latest.yml
           if-no-files-found: error

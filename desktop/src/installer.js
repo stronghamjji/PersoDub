@@ -36,6 +36,17 @@ export async function runInstall(steps, { onProgress = () => {} } = {}) {
 // it counts as 0 until it finishes -- the percent still moves from step to
 // step). This is the number the page shows for a pack, the way it shows a
 // model's, because "Downloading AI engine…" with no figure read as stuck.
+// A pack step's failure text as the dialog should show it. A download that
+// broke mid-way (Hugging Face reset it twice on a slow office line,
+// 2026-09-08) surfaced as a Python exception with byte counts; the person
+// only needs to know that pressing Download and Start resumes it. Anything
+// else keeps the tool's own last line (main.js lastReason).
+export const DOWNLOAD_INTERRUPTED = "The download was interrupted. Click Download and Start to pick up where it left off.";
+const NETWORK_MARKS = /IncompleteRead|ChunkedEncodingError|Connection broken|ConnectionResetError|ConnectionError|ReadTimeout|timed out|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|getaddrinfo|Network is unreachable|RemoteDisconnected|ProtocolError|Max retries exceeded/;
+export function downloadInterrupted(message) {
+  return NETWORK_MARKS.test(String(message || ""));
+}
+
 export function packPercent(steps, doneIds, currentId, currentPct) {
   const total = steps.reduce((n, s) => n + (s.bytes || 0), 0);
   if (!total) return null;

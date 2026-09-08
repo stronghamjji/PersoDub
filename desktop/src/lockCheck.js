@@ -24,6 +24,10 @@ export function lockProbeScript(installDir) {
   const dir = String(installDir).replace(/'/g, "''");
   return `
 $ErrorActionPreference = 'Stop'
+# The console code page is cp949 on Korean Windows and Node reads stdout as
+# UTF-8: without this, a locker's Korean description ("Microsoft Defender
+# 바이러스 백신") reached the dialog as ������ (2026-09-08).
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 try {
   Add-Type -TypeDefinition @'
 using System;

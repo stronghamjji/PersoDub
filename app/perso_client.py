@@ -390,7 +390,8 @@ class PersoClient:
     def dub_video(self, video_path: str, out_path: str,
                   source_code: Optional[str], target_code: str,
                   num_speakers: Optional[int] = None,
-                  space_seq: Optional[int] = None, log=None) -> str:
+                  space_seq: Optional[int] = None, log=None,
+                  target_tag: Optional[str] = None) -> str:
         """Full cloud dub: upload -> translate project -> poll -> download.
 
         The whole pipeline runs on Perso's side (translation, voices, mix);
@@ -411,7 +412,10 @@ class PersoClient:
                 "isVideoProject": True,
                 # "auto" is the server's own detect-the-source value.
                 "sourceLanguageCode": source_code or "auto",
-                "targetLanguages": [{"languageCode": target_code, "ttsModel": "AUDIO_ENGINE_V3"}],
+                # languageTag tells Perso's regional variants apart (en-GB,
+                # es-ES, pt-PT); the plain code alone means its default region.
+                "targetLanguages": [{"languageCode": target_code, "ttsModel": "AUDIO_ENGINE_V3",
+                                     **({"languageTag": target_tag} if target_tag else {})}],
                 "numberOfSpeakers": int(num_speakers) if num_speakers else 1,
                 "preferredSpeedType": "GREEN",
             },

@@ -61,4 +61,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
         shell: bash
-        run: gh release upload "$TAG" desktop/dist/*.exe desktop/dist/latest.yml --clobber
+        run: gh release upload "$TAG" desktop/dist/*.exe desktop/dist/*.blockmap desktop/dist/latest.yml --clobber
