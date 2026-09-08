@@ -1,10 +1,7 @@
 {"notes": [
-    "Setup is now about 0.6 GB on Mac and 0.9 GB on Windows. The AI engines and models download when you first dub, and only the ones you choose.",
-    "Setup keeps one AI engine environment instead of two: about 1 GB smaller on Mac, about 8 GB smaller on Windows. The first launch after this update tidies up for a minute or two.",
-    "Hunyuan is the default translator. Gemma stays a choice if you download it.",
-    "The Dub Agent can now check your setup, change a stage's default, and download a model after asking you.",
-    "Update notices appear within seconds of launch and a downloaded update also applies when you quit (Mac).",
-    "The app reopens where you closed it, and your layout choices are remembered.",
-    "An install closed midway now resumes on the next launch."
+    "Setup is now about 0.6 GB on Mac and 0.9 GB on Windows. The AI engine and models download when you first dub, and only the ones you choose.",
+    "The dub-start dialog shows the download's progress and starts the dub when it is done. Settings can remove or reinstall the AI engine and the translation runtime.",
+    "Subtitles export exactly as the work screen shows them: the same line breaks, box and font weight.",
+    "The subtitle width handles follow the pointer for the whole drag."
   ]
 }
