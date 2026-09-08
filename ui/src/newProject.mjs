@@ -24,16 +24,17 @@ import { fmtClock, fmtClockTenths } from "./format.mjs";
 // (a region tag such as en-GB where Perso tells variants apart, else the
 // code). A language spoken in many countries gets the country it is most
 // associated with (Arabic: Saudi Arabia, Swahili: Kenya, the Indian
-// languages: India); Welsh gets the Welsh flag. Windows draws these as
-// two-letter codes -- its emoji font has no flags -- which is how the
-// original ten already looked there.
+// languages: India); Welsh gets the Union Jack -- the Welsh flag is a tag
+// sequence that Windows draws as a bare black flag, unlike the two-letter
+// codes it draws for every other flag here (its emoji font has none), which
+// is how the original ten already looked there.
 // The local list says plainly "Portuguese" and "Spanish": those keep the
 // flags they always had. Perso's default regions for the same codes are
 // Brazil and Mexico, which is what the Perso list shows.
 const LOCAL_FLAGS = { pt: "🇵🇹", es: "🇪🇸" };
 const LANG_FLAGS = {
   "af": "🇿🇦", "ar": "🇸🇦", "as": "🇮🇳", "az": "🇦🇿", "be": "🇧🇾", "bg": "🇧🇬", "bn": "🇧🇩", "bs": "🇧🇦",
-  "ca": "🇪🇸", "ceb": "🇵🇭", "cs": "🇨🇿", "cy": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "da": "🇩🇰", "de": "🇩🇪", "el": "🇬🇷", "en": "🇺🇸",
+  "ca": "🇪🇸", "ceb": "🇵🇭", "cs": "🇨🇿", "cy": "🇬🇧", "da": "🇩🇰", "de": "🇩🇪", "el": "🇬🇷", "en": "🇺🇸",
   "en-GB": "🇬🇧", "es": "🇲🇽", "es-ES": "🇪🇸", "et": "🇪🇪", "fa": "🇮🇷", "fi": "🇫🇮", "fil": "🇵🇭", "fr": "🇫🇷",
   "ga": "🇮🇪", "gl": "🇪🇸", "gu": "🇮🇳", "ha": "🇳🇬", "he": "🇮🇱", "hi": "🇮🇳", "hr": "🇭🇷", "hu": "🇭🇺",
   "hy": "🇦🇲", "id": "🇮🇩", "is": "🇮🇸", "it": "🇮🇹", "ja": "🇯🇵", "jv": "🇮🇩", "ka": "🇬🇪", "kk": "🇰🇿",
