@@ -176,10 +176,8 @@
   .rail-item.active { background: var(--primary); color: var(--primary-foreground); }
   .rail-item.brand { background: none; cursor: default; }
   .rail-logo { width: 30px; height: 30px; border-radius: 8px; display: block; }
-  .about-brand { display: flex; align-items: center; gap: 12px; margin: 4px 0 10px; }
-  .about-logo { width: 44px; height: 44px; border-radius: 11px; }
-  .about-brand b { font-size: 1rem; display: block; }
-  .about-brand span { color: var(--muted-foreground); font-size: 0.8rem; }
+  .about-brand { display: inline-flex; align-items: center; gap: 8px; }
+  .about-logo { width: 22px; height: 22px; border-radius: 6px; }
   .rail-item:hover:not(.active) { color: var(--foreground); background: var(--secondary); }
   .rail-spacer { flex: 1; }
 
@@ -1707,12 +1705,12 @@
              this list is the pointer to it, not a replacement for it.
              FFmpeg's terms depend on the build the installer fetches, so it
              is labelled the way NOTICE labels it rather than pinned here. -->
-        <div class="about-brand"><img class="about-logo" src="/logo.png" alt=""><div><b>PersoDub</b><span>Dub any video into another language on your computer.</span></div></div>
         <div class="settings-line">
           <!-- The version itself opens What's new: one less link on the row
                (user feedback 2026-09-01), and the version is the natural place
-               to ask what changed. -->
-          <button class="settings-link" id="aboutVersion" type="button" title="What&#8217;s new">PersoDub</button>
+               to ask what changed. The logo sits on this line at text height
+               (user, 2026-09-08: a big one threw the row off). -->
+          <span class="about-brand"><img class="about-logo" src="/logo.png" alt=""><button class="settings-link" id="aboutVersion" type="button" title="What&#8217;s new">PersoDub</button></span>
           <button class="settings-link" id="ackToggle" type="button" aria-expanded="false">Acknowledgements</button>
         </div>
         <div id="ackList" hidden>

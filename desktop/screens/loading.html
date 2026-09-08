@@ -6,9 +6,11 @@
           border-radius: 50%; animation: s 1s linear infinite; margin-bottom: 16px; }
   @keyframes s { to { transform: rotate(360deg); } }
   p { color: #888; font-size: 14px; }
-  .logo { width: 64px; height: 64px; border-radius: 16px; display: block; margin: 0 auto 14px; }
+  .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 0 auto 22px; }
+  .brand img { width: 48px; height: 48px; border-radius: 12px; display: block; }
+  .brand b { font-size: 15px; font-weight: 600; letter-spacing: .01em; color: #333; }
 </style>
-<img class="logo" src="logo.png" alt="">
+<div class="brand"><img src="logo.png" alt=""><b>PersoDub</b></div>
 <div class="spin"></div>
-<h2>Starting engines…</h2>
+<h2 style="font-size:17px;font-weight:500;margin:4px 0 6px">Starting engines…</h2>
 <p>First launch can take a minute or two while the voice model loads.</p>
