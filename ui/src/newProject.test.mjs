@@ -468,3 +468,24 @@ test("Start hands the job back to the page", (t) => {
 
   assert.equal(h.log.started, 1);
 });
+
+
+test("every Perso language gets a flag, regional variants their own country", async (t) => {
+  // The bundled list is the one the app ships (app/perso_languages.json).
+  const { readFileSync } = await import("node:fs");
+  const perso = JSON.parse(readFileSync(new URL("../../app/perso_languages.json", import.meta.url), "utf8")).languages
+    .map((l) => ({ id: l.tag || l.code, code: l.code, name: l.name, tag: l.tag }));
+  const h = harness({ responses: { "/api/languages": { ok: true, json: async () => ({ local: [], perso }) } } });
+  t.after(h.log.restore);
+  await new Promise((r) => setTimeout(r, 0));
+  h.$("dubModeSelect").value = "perso";
+  await h.$("dubModeSelect").fire("change");
+  const opts = h.$("targetLangSelect").options;
+  assert.equal(opts.length, perso.length);
+  const bare = opts.filter((o) => !/^\p{Extended_Pictographic}|^\p{Regional_Indicator}/u.test(o.textContent));
+  assert.deepEqual(bare.map((o) => o.value), [], "every option starts with a flag");
+  const byId = Object.fromEntries(opts.map((o) => [o.value, o.textContent]));
+  assert.ok(byId["en-GB"].startsWith("🇬🇧") && byId["en"].startsWith("🇺🇸"), "UK and US English differ");
+  assert.ok(byId["pt"].startsWith("🇧🇷") && byId["pt-PT"].startsWith("🇵🇹"));
+  assert.ok(byId["es"].startsWith("🇲🇽") && byId["es-ES"].startsWith("🇪🇸"));
+});

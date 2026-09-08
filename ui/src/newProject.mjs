@@ -20,9 +20,24 @@ import { fmtClock, fmtClockTenths } from "./format.mjs";
 // is the single most-glanced-at line in the dialog, and a flag says it faster
 // than a word. The Original dropdown stays plain -- its default is not a
 // country at all ("Auto-detect"), so a half-flagged list would only look broken.
+// One flag per language the app can dub into, keyed by the language's id
+// (a region tag such as en-GB where Perso tells variants apart, else the
+// code). A language spoken in many countries gets the country it is most
+// associated with (Arabic: Saudi Arabia, Swahili: Kenya, the Indian
+// languages: India); Welsh gets the Welsh flag. Windows draws these as
+// two-letter codes -- its emoji font has no flags -- which is how the
+// original ten already looked there.
 const LANG_FLAGS = {
-  en: "🇺🇸", ko: "🇰🇷", zh: "🇨🇳", fr: "🇫🇷", de: "🇩🇪",
-  it: "🇮🇹", ja: "🇯🇵", pt: "🇵🇹", ru: "🇷🇺", es: "🇪🇸",
+  "af": "🇿🇦", "ar": "🇸🇦", "as": "🇮🇳", "az": "🇦🇿", "be": "🇧🇾", "bg": "🇧🇬", "bn": "🇧🇩", "bs": "🇧🇦",
+  "ca": "🇪🇸", "ceb": "🇵🇭", "cs": "🇨🇿", "cy": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "da": "🇩🇰", "de": "🇩🇪", "el": "🇬🇷", "en": "🇺🇸",
+  "en-GB": "🇬🇧", "es": "🇲🇽", "es-ES": "🇪🇸", "et": "🇪🇪", "fa": "🇮🇷", "fi": "🇫🇮", "fil": "🇵🇭", "fr": "🇫🇷",
+  "ga": "🇮🇪", "gl": "🇪🇸", "gu": "🇮🇳", "ha": "🇳🇬", "he": "🇮🇱", "hi": "🇮🇳", "hr": "🇭🇷", "hu": "🇭🇺",
+  "hy": "🇦🇲", "id": "🇮🇩", "is": "🇮🇸", "it": "🇮🇹", "ja": "🇯🇵", "jv": "🇮🇩", "ka": "🇬🇪", "kk": "🇰🇿",
+  "kn": "🇮🇳", "ko": "🇰🇷", "ky": "🇰🇬", "lb": "🇱🇺", "ln": "🇨🇩", "lt": "🇱🇹", "lv": "🇱🇻", "mk": "🇲🇰",
+  "ml": "🇮🇳", "mr": "🇮🇳", "ms": "🇲🇾", "ne": "🇳🇵", "nl": "🇳🇱", "no": "🇳🇴", "ny": "🇲🇼", "pa": "🇮🇳",
+  "pl": "🇵🇱", "ps": "🇦🇫", "pt": "🇧🇷", "pt-PT": "🇵🇹", "ro": "🇷🇴", "ru": "🇷🇺", "sd": "🇵🇰", "sk": "🇸🇰",
+  "sl": "🇸🇮", "so": "🇸🇴", "sr": "🇷🇸", "sv": "🇸🇪", "sw": "🇰🇪", "ta": "🇮🇳", "te": "🇮🇳", "th": "🇹🇭",
+  "tr": "🇹🇷", "uk": "🇺🇦", "ur": "🇵🇰", "vi": "🇻🇳", "zh": "🇨🇳",
 };
 
 // The shortest part worth dubbing; also what keeps the two handles from
@@ -101,9 +116,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     for (const l of list) {
       const o = document.createElement("option");
       o.value = l.id;
-      // Flags exist for the ten; a regional variant (en-GB) goes without one
-      // rather than borrowing its parent's.
-      const flag = !l.tag && LANG_FLAGS[l.code];
+      const flag = LANG_FLAGS[l.id] || (!l.tag && LANG_FLAGS[l.code]);
       o.textContent = flag ? `${flag} ${l.name}` : l.name;
       sel.appendChild(o);
     }
