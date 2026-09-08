@@ -1,11 +1,12 @@
 """dub_start's missing-model preflight: a 409 whose body is exactly what the
 screen needs to draw the "Download N GB of AI models to dub?" dialog."""
 import os
+import sys
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import engines_status, perso_client, state
+from app import engines_status, models, perso_client, state
 from app.api import dub as dub_api
 from app.main import app
 
@@ -37,7 +38,9 @@ def _put_whisper(kit):
 def _put_packs(kit):
     _mk(kit, ".install", "venv-engines.ok")
     _mk(kit, "models", "demucs", "HTDemucs", "955717e8.safetensors")
-    _mk(kit, "ollama", "ollama")
+    # The shell writes the binary with the platform's suffix, and app/models.py
+    # looks for it that way.
+    _mk(kit, "ollama", "ollama.exe" if sys.platform.startswith("win") else "ollama")
 
 
 def _remove_packs(kit):
@@ -174,7 +177,10 @@ def test_a_fresh_install_is_asked_for_the_engine_pack_before_the_models(monkeypa
     r = _start()
     assert r.status_code == 409
     missing = r.json()["detail"]["missing"]
-    assert missing[0] == {"id": "engine", "kind": "pack", "name": "AI engine", "bytes": 2000000000,
+    # The pack's size is per platform (2 GB on Mac, 9 GB for the CUDA build on
+    # Windows): the catalog's figure for this one, as the screen would show.
+    engine_bytes = models._pack_bytes(next(e for e in models.load_catalog() if e["id"] == "engine"))
+    assert missing[0] == {"id": "engine", "kind": "pack", "name": "AI engine", "bytes": engine_bytes,
                           "hint": "Runs local dubbing on this computer: sound separation, transcription and the voice."}
     assert all(m["hint"] for m in missing), "every item says what it is for"
     assert [m["id"] for m in missing[1:]] == ["qwen3-tts", "whisper"]
