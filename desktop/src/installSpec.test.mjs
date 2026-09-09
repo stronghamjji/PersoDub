@@ -30,17 +30,19 @@ function makePayload(payloadDir, { campplus = true, version = "1.0.0+abc1234" } 
   mkdirSync(join(payloadDir, "kit-src", "sidecar"), { recursive: true });
   writeFileSync(join(payloadDir, "kit-src", "sidecar", "server.py"), "# sidecar");
   writeFileSync(join(payloadDir, "kit-src", `requirements_engines_${REQ_SUFFIX}.txt`), "torch");
+  writeFileSync(join(payloadDir, "kit-src", "requirements_eraser.txt"), "paddleocr");
   if (campplus) writeFileSync(join(payloadDir, "campplus.onnx"), "onnx");
   writeFileSync(join(payloadDir, "KIT_VERSION"), version);
 }
 
 const byId = (ctx) => Object.fromEntries(buildSteps(ctx).map((s) => [s.id, s]));
 
-test("returns the 10 steps in install order", () => {
+test("returns the 12 steps in install order", () => {
   const ids = buildSteps(freshCtx()).map((s) => s.id);
   assert.deepEqual(ids, [
     "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup",
-    "models", "ollama-runtime", "nonverbal-weights", "kit-env",
+    "models", "ollama-runtime", "nonverbal-weights",
+    "eraser-src", "venv-eraser", "kit-env",
   ]);
   assert.deepEqual(ids, STEP_IDS);
 });
@@ -618,12 +620,13 @@ test("every step declares how much room it takes", () => {
 });
 
 test("the whole kit adds up to roughly what the installing screen promises", () => {
-  // The install screen shows this sum next to its title (runtime with one
-  // engines venv + the small always-installed models; Windows runs larger for
-  // its CUDA torch wheels).
-  // If this drifts back toward the old 18 GB, a big model crept back in.
+  // Every step there is: the base install plus all three packs (engines,
+  // translation runtime, subtitle eraser), which is what a machine that asks
+  // for everything downloads. Windows runs larger for its CUDA torch wheels,
+  // twice over now that the eraser has a torch of its own.
+  // If this drifts far past that, something big crept into a step.
   const total = buildSteps(freshCtx()).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
-  assert.ok(total > 2 && total < 12, `total is ${total.toFixed(1)} GB`);
+  assert.ok(total > 2 && total < 21, `total is ${total.toFixed(1)} GB`);
 });
 
 test("only the steps still missing are counted", async () => {
