@@ -379,7 +379,9 @@ def _fake_detector(with_text, seen_crops):
 
         def detect_subtitle(self, frame):
             seen_crops.append((frame.no, frame.cropped, tuple(self.sub_areas)))
-            return [(0, 1, 0, 1)] if frame.no in with_text else []
+            # (xmin, xmax, ymin, ymax), the detector's own order, in the
+            # coordinates of whatever picture it was handed.
+            return [(10, 20, 30, 40)] if frame.no in with_text else []
     return Detect
 
 
@@ -393,7 +395,9 @@ def test_the_check_says_how_many_frames_it_read_and_where_the_writing_is(monkeyp
 
     assert check == {"frames_checked": 4, "frames_with_text": 2,
                      "sample_times": [1.0, 2.0]}
-    assert leftovers == [31, 61]
+    # The boxes come back in the frame's own corner, not the crop's: the second
+    # pass paints them, and it works in whole-frame coordinates.
+    assert leftovers == {31: [(10, 20, 690, 700)], 61: [(10, 20, 690, 700)]}
     # The detector was shown the band, not the whole picture -- ten times
     # cheaper -- with its areas moved to the crop's own corner, and it got its
     # own areas back afterwards.
@@ -414,3 +418,21 @@ def test_the_check_stops_when_its_share_of_the_time_is_spent(monkeypatch):
     # erasing would be the slowest thing in the app.
     assert check["frames_checked"] == 0
     assert seen == []
+
+
+def test_the_second_pass_paints_the_boxes_the_check_drew_and_not_the_band():
+    """Handing the model the whole band as one mask is what sttn-auto does, and
+    on a wide band it smears the picture instead of filling it. The check has
+    just said where the writing is; that is what gets painted."""
+    found = {50: [(100, 300, 900, 960)]}
+
+    fixed = erase_subtitles.masks_for_repaint(found, 30.0)
+
+    # Nine frames either side -- a survivor lasts longer than the one frame the
+    # check happened to look at.
+    assert sorted(fixed) == list(range(41, 60))
+    assert fixed[41] == [erase_subtitles.pad_sideways((100, 300, 900, 960))]
+    # Two frames that survived close together share one box list, once each.
+    fixed = erase_subtitles.masks_for_repaint({50: [(100, 300, 900, 960)],
+                                               52: [(100, 300, 900, 960)]}, 30.0)
+    assert fixed[50] == [erase_subtitles.pad_sideways((100, 300, 900, 960))]

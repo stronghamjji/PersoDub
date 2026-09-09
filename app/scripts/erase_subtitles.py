@@ -245,34 +245,40 @@ def frames_to_check(total, fps, stretches):
     return order
 
 
-def has_writing(detector, frame, area):
-    """Whether the detector still finds writing inside the band of this frame.
+def writing_left(detector, frame, area):
+    """The boxes of any writing the detector still finds in this frame's band.
 
     It is shown the band alone, not the whole picture. What the detector costs
     is set by how many pixels it is given, and the band is a fifteenth of the
     frame in our test clip: 0.31s a frame against 3.30s (this Mac, 2026-09-09),
     with the same verdict on all 27 frames the two were compared on. Its
     sub_areas move to the crop's own corner for the moment of the question,
-    because it filters what it found by them.
+    because it filters what it found by them, and the boxes it hands back are
+    moved into the frame's own corner again -- the second pass paints THOSE,
+    which is why they are worth carrying back rather than a yes or no.
     """
     if not area:
-        return bool(detector.detect_subtitle(frame))
+        return [tuple(box) for box in detector.detect_subtitle(frame)]
     ymin, ymax, xmin, xmax = area
     was = detector.sub_areas
     detector.sub_areas = [(0, ymax - ymin, 0, xmax - xmin)]
     try:
-        return bool(detector.detect_subtitle(frame[ymin:ymax, xmin:xmax]))
+        found = detector.detect_subtitle(frame[ymin:ymax, xmin:xmax])
     finally:
         detector.sub_areas = was
+    # (xmin, xmax, ymin, ymax) -- the detector's own order.
+    return [(bx0 + xmin, bx1 + xmin, by0 + ymin, by1 + ymin)
+            for bx0, bx1, by0, by1 in found]
 
 
 def check_result(path, area, detector_class, frames=None, deadline=None):
     """Count the sampled frames of `path` that still hold writing in the band.
 
-    Returns ({frames_checked, frames_with_text, sample_times}, [frame numbers])
-    -- the times are seconds, for the person reading the job, and the numbers
-    are for the second pass. `deadline` is a time.monotonic() reading to stop
-    at, so the check costs a share of the erasing rather than a fixed amount.
+    Returns ({frames_checked, frames_with_text, sample_times}, {frame: boxes})
+    -- the times are seconds, for the person reading the job, and the boxes are
+    what the second pass paints. `deadline` is a time.monotonic() reading to
+    stop at, so the check costs a share of the erasing rather than a fixed
+    amount.
     """
     import cv2
 
@@ -283,7 +289,7 @@ def check_result(path, area, detector_class, frames=None, deadline=None):
         # Frame numbers are 1-based here, the way the tool counts them.
         frames = frames_to_check(total, fps, STRETCHES)
     detector = detector_class(path, [tuple(area)] if area else [])
-    checked, bad = 0, []
+    checked, found = 0, {}
     for no in frames:
         if deadline is not None and time.monotonic() >= deadline:
             break
@@ -292,43 +298,54 @@ def check_result(path, area, detector_class, frames=None, deadline=None):
         if not ok:
             continue
         checked += 1
-        if has_writing(detector, frame, area):
-            bad.append(no)
+        boxes = writing_left(detector, frame, area)
+        if boxes:
+            found[no] = boxes
     cap.release()
-    bad.sort()
-    return ({"frames_checked": checked, "frames_with_text": len(bad),
-             "sample_times": [round((no - 1) / fps, 2) for no in bad]}, bad)
+    return ({"frames_checked": checked, "frames_with_text": len(found),
+             "sample_times": [round((no - 1) / fps, 2) for no in sorted(found)]},
+            found)
 
 
-def repaint_frames(path, area, frames, detector_class, remover_class):
-    """Paint the seconds around `frames` again, with the whole band as the mask.
+def masks_for_repaint(found, fps):
+    """{frame: boxes} for the second pass, out of what the check found.
 
-    No detection this time: writing that survived is writing the detector
-    already missed once, so asking it the same question would get the same
-    answer. The band itself becomes the mask, and only over the stretches
-    around those frames -- every other frame of the video is copied through
-    untouched, and no OCR runs at all, so this costs seconds rather than the
-    minutes the first pass did.
+    The boxes the check drew, not the band. Painting the whole band was the
+    first thing tried and it is wrong: on a wide band (239 by 1547 pixels, a
+    1080p short, this Mac 2026-09-09) the model was handed a mask far larger
+    than anything it can fill and smeared the picture across it -- the same
+    failure sttn-auto has, for the same reason. The check has just told us
+    exactly where the writing is; the second pass paints that, with the room a
+    stroke needs, and spread over the frames either side because a survivor
+    lasts longer than the one frame that happened to be sampled.
+    """
+    pad = max(1, int(round(fps * REPAINT_PAD_SEC)))
+    fixed = {}
+    for no, boxes in found.items():
+        roomy = [pad_sideways(box) for box in boxes]
+        for near in range(max(1, no - pad), no + pad + 1):
+            here = fixed.setdefault(near, [])
+            here.extend(box for box in roomy if box not in here)
+    return fixed
+
+
+def repaint_frames(path, found, detector_class, remover_class):
+    """Paint the seconds around what the check found again, with its own boxes.
+
+    Only those stretches -- every other frame of the video is copied through
+    untouched, and no OCR runs at all, so this costs a fraction of what the
+    first pass did.
     """
     import cv2
 
     cap = cv2.VideoCapture(path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     cap.release()
-    pad = max(1, int(round(fps * REPAINT_PAD_SEC)))
-    wanted = set()
-    for no in frames:
-        wanted.update(range(max(1, no - pad), no + pad + 1))
 
     tmp = path + ".pass2.mp4"
     remover = remover_class(path)
     remover.video_out_path = tmp
-    remover.sub_areas = [tuple(area)] if area else []
-    # (xmin, xmax, ymin, ymax) -- the detector's own order, which is not the
-    # (ymin, ymax, xmin, xmax) an area is given in.
-    box = ((area[2], area[3], area[0], area[1]) if area else
-           (0, remover.frame_width, 0, remover.frame_height))
-    fixed = {no: [box] for no in sorted(wanted)}
+    fixed = masks_for_repaint(found, fps)
     detector_class.find_subtitle_frame_no = lambda self, sub_remover=None: dict(fixed)
     remover.run()
     os.replace(tmp, path)
@@ -394,9 +411,10 @@ def main():
                                     deadline=time.monotonic() + erasing * CHECK_BUDGET)
     repainted = 0
     if leftovers:
-        repaint_frames(out_path, a.area, leftovers, SubtitleDetect, SubtitleRemover)
+        repaint_frames(out_path, leftovers, SubtitleDetect, SubtitleRemover)
         repainted = len(leftovers)
-        after, _still = check_result(out_path, a.area, SubtitleDetect, frames=leftovers)
+        after, _still = check_result(out_path, a.area, SubtitleDetect,
+                                     frames=sorted(leftovers))
         check["frames_with_text"] = after["frames_with_text"]
         check["sample_times"] = after["sample_times"]
     check["repainted"] = repainted
