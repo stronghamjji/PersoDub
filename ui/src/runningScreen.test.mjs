@@ -276,7 +276,8 @@ test("a job already on its way out says so, and cannot be asked twice", (t) => {
   t.after(h.log.restore);
 
   h.api.paintCancel();
-  assert.equal(h.$("cancelBtn").textContent, "Cancelling…");
+  // The word lives in its own element beside the stop square (2026-09-09).
+  assert.equal(h.$("cancelLabel").textContent, "Cancelling…");
   assert.equal(h.$("cancelBtn").disabled, true);
 });
 
@@ -288,7 +289,7 @@ test("pressing Cancel asks once, then disables itself while the server answers",
   await btn.fire("click", {});
   assert.deepEqual(h.log.cancelled, ["j1"]);
   assert.equal(btn.disabled, true);
-  assert.equal(btn.textContent, "Cancelling…");
+  assert.equal(h.$("cancelLabel").textContent, "Cancelling…");
 });
 
 test("answering no to the question stops nothing", async (t) => {

@@ -252,7 +252,9 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     const status = getJobStatus();
     btn.hidden = !["running", "cancelling", "queued"].includes(status);
     btn.disabled = status === "cancelling";
-    btn.textContent = status === "cancelling" ? "Cancelling…" : "Cancel";
+    // The label only: the button also holds the stop square, and writing the
+    // word into the button itself took the square with it.
+    ($("cancelLabel") || btn).textContent = status === "cancelling" ? "Cancelling…" : "Cancel";
   }
 
   $("cancelBtn").addEventListener("click", async () => {
@@ -260,7 +262,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     if (!jobId) return;
     if (!confirm("Cancel this dubbing job?")) return;
     $("cancelBtn").disabled = true;
-    $("cancelBtn").textContent = "Cancelling…";
+    ($("cancelLabel") || $("cancelBtn")).textContent = "Cancelling…";
     try {
       await onCancel(jobId);
     } catch (e) {

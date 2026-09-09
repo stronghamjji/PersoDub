@@ -524,7 +524,7 @@
   /* The same band as the Dub Agent's heading beside it: same height, same
      ground, same weight of word, so the two panes' tops are one line across
      the window rather than two that nearly agree (user, 2026-09-09). */
-  .erase-head { flex: 0 0 auto; height: 52px; box-sizing: border-box;
+  .erase-head { flex: 0 0 auto; height: 40px; box-sizing: border-box;
     display: flex; align-items: center; gap: 12px; padding: 0 12px 0 16px;
     background: var(--head-bg);
     border-bottom: 1px solid var(--agent-border);
@@ -778,7 +778,7 @@
   /* One band across the top of the work area: this, the video tabs beside it
      and the Dub Agent's heading are the same height on the same ground, so
      the three panes begin on one line (user, 2026-09-09). */
-  .pane-head { flex: 0 0 auto; box-sizing: border-box; height: 52px; display: flex;
+  .pane-head { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     align-items: center; gap: 8px; padding: 0 16px; font-size: var(--font-title);
     font-weight: 700; color: var(--foreground);
     background: var(--head-bg); border-bottom: 1px solid var(--agent-border); }
@@ -952,7 +952,7 @@
   .done-main.stacked > .video-pane { width: auto; min-width: 0;
     flex: 0 0 clamp(200px, 36vh, 440px); }
   .done-main.stacked > .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
-  .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 52px; display: flex;
+  .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     background: var(--head-bg); border-bottom: 1px solid var(--agent-border); }
   .vtab { flex: 1; border: none; background: none; cursor: pointer;
     font: inherit; font-size: var(--font-ui); color: var(--muted-foreground); }
@@ -1706,8 +1706,11 @@
               <b id="progressTitle">Separating audio</b>
               <div class="progress-head-end">
                 <span id="progressPct">0%</span>
+                <!-- The word is its own element: paintCancel writes "Cancel"
+                     and "Cancelling…" into it, and writing them into the
+                     button itself wiped the square out of it. -->
                 <button class="btn btn-secondary btn-sm" id="cancelBtn" type="button" hidden>
-                  <svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/></svg>Cancel</button>
+                  <svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/></svg><span id="cancelLabel">Cancel</span></button>
               </div>
             </div>
             <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
@@ -2332,7 +2335,7 @@
      is on show at both sizes -- folded, it is the whole strip above the input
      row. Clear of the drag handle along the very top edge. */
   .agent-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-    padding: 0 12px 0 16px; height: 52px; box-sizing: border-box;
+    padding: 0 12px 0 16px; height: 40px; box-sizing: border-box;
     background: var(--agent-head-bg);   /* --head-bg's dark value, by design */
     border-bottom: 1px solid var(--agent-border); }
   .agent-title { font-size: var(--font-title); font-weight: 700; }
@@ -3858,7 +3861,7 @@ function sizeVideoPane() {
   if (!w || !h) return;   // no metadata yet: the stylesheet's 42% stands
   // What is left for the picture once the tabs, the pane's own padding, the gap
   // under the picture and the row of controls have taken theirs.
-  const picture = Math.max(120, pane.clientHeight - 52 - 28 - 10 - 28);
+  const picture = Math.max(120, pane.clientHeight - 40 - 28 - 10 - 28);
   const want = Math.round((w / h) * picture) + 28;
   // Never more than 45% of the row, and -- while there is that much to give --
   // never so much that the table has under the 680px its six columns need
