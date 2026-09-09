@@ -99,6 +99,10 @@
     --warning-soft: #3a2f12;
     --warning-ink: #ffd98a;
     --destructive: #d97777;
+    /* The box drawn over the subtitles on the erase screen. One value for both
+       sheets: it is drawn on the picture, which is neither light nor dark, and
+       a yellow this saturated is on nothing else in the app. */
+    --zone: #ffd34d;
     /* The letterbox behind a video still, and the badges that sit on top of
        it. Dark on purpose in both cases -- a frame can be any colour. */
     --thumb-bg: #111111;
@@ -480,6 +484,36 @@
     .step-mark.current, .sc-wave:disabled svg { animation: none; }
     .progress-bar > div { transition: none; }
   }
+
+  /* ---------------- Erase subtitles ---------------- */
+  /* One screen, three faces (drop a video / place the box / the result), all
+     three the same column: a 40px strip that says what to do or which video is
+     showing, the picture under it taking every pixel that is left, and one row
+     of buttons at the foot. The finished screen's shape, so the wave and
+     lip-sync panes that are coming can be dropped in under the picture without
+     moving anything above them. */
+  #screen-erase { display: flex; flex-direction: column; padding: 0;
+    background: var(--background); }
+  /* The same drop zone as the home screen's, at the same size and in the same
+     place on the window -- both ways into the app then look alike, and one
+     stretched to fill a 1440px window was a very large amount of nothing. */
+  .erase-drop { flex: 1; min-height: 0; display: flex; padding: 22px; overflow-y: auto; }
+  .erase-drop .upload-zone { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto; }
+  .erase-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  /* The one instruction on this screen, in the strip the tabs take over later
+     -- so the picture under it never moves when the result arrives. */
+  .erase-head { flex: 0 0 auto; height: 40px; box-sizing: border-box;
+    display: flex; align-items: center; padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--font-ui); font-weight: 600; }
+  .erase-stage { position: relative; flex: 1; min-height: 0; margin: 14px;
+    border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg);
+    display: flex; align-items: center; justify-content: center; }
+  .erase-stage video { display: block; max-width: 100%; max-height: 100%;
+    object-fit: contain; }
+  .erase-error { color: var(--destructive); font-size: var(--font-label);
+    padding: 0 22px 14px; }
+  .erase-error:empty { display: none; }
 
   h2 { margin: 0 0 3px; font-size: var(--font-title); }
 
@@ -1344,6 +1378,12 @@
       <!-- Projects: a folder -->
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     </button>
+    <!-- Erasing the subtitles burned into a video: its own screen, so its own
+         rail icon (the chrome rule at the top of this file). A frame with a
+         line of writing in it, and a rubber over the corner. -->
+    <button class="rail-item" id="eraseToggle" title="Erase subtitles" type="button" aria-label="Erase subtitles">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="2.5" y="5" width="15" height="11" rx="2"/><path d="M6 12.5h4"/><path d="M13.5 21l6.8-6.8a1.6 1.6 0 0 0 0-2.3l-1.7-1.7a1.6 1.6 0 0 0-2.3 0L9.5 17z"/><path d="M12 14.5l3.5 3.5"/></svg>
+    </button>
     <div class="rail-spacer"></div>
     <button class="rail-item" id="settingsBtn" title="Settings" type="button" aria-label="Open settings">
       <svg class="icon" viewBox="0 0 24 24">
@@ -1478,6 +1518,29 @@
             </details>
           </div>
         </div>
+      </section>
+
+      <!-- ============ ERASE SUBTITLES ============ -->
+      <!-- Taking the subtitles burned into a video back out of it. One section
+           with three faces, swapped by ui/src/eraseScreen.mjs: the drop zone,
+           the box over the subtitles, and the erased video. The top bar carries
+           what this will cost in minutes and the one button that applies. -->
+      <section class="screen" id="screen-erase" hidden>
+        <div class="erase-drop" id="eraseDrop">
+          <div class="upload-zone" id="eraseZone" tabindex="0">
+            <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            <div class="upload-title">Drop a video</div>
+            <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose file…</button><span>MP4 or MOV</span></div>
+            <input type="file" id="eraseInput" accept="video/*" hidden>
+          </div>
+        </div>
+        <div class="erase-body" id="eraseBody" hidden>
+          <div class="erase-head" id="eraseHead">Where are the subtitles?</div>
+          <div class="erase-stage" id="eraseStage">
+            <video id="eraseVideo" playsinline muted></video>
+          </div>
+        </div>
+        <div class="erase-error" id="eraseError"></div>
       </section>
 
       <!-- ============ DONE ============ -->
@@ -2139,6 +2202,7 @@ import { initModelsUi } from "/js/modelsDialog.mjs";
 import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
+import { initEraseScreenUi } from "/js/eraseScreen.mjs";
 import { initProjectsUi } from "/js/projects.mjs";
 import { initRunningScreenUi, stoppedMark } from "/js/runningScreen.mjs";
 import { initScriptTableUi } from "/js/scriptTable.mjs";
@@ -2522,6 +2586,9 @@ function showScreen(name) {
   const id = `screen-${SCREEN_SECTION[name] || name}`;
   for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== id;
   document.body.dataset.screen = name;   // the assistant reads this
+  // The rail says which screen is up. Only the screens a rail icon owns: the
+  // folder beside it is a fold, not a place, and lights up with its sidebar.
+  $("eraseToggle").classList.toggle("active", name === "erase");
 }
 
 // The top bar carries the whole state of the app: what is open, what it is
@@ -2669,15 +2736,19 @@ const newProject = initNewProjectUi({
     clearLink();
   },
   onPickFile: () => videoInput.click(),
-  onErase: (source) => openEraseWith(source),
+  onErase: (source) => eraseScreen.openEraseWith(source),
 });
 
-// Where Erase subtitles goes. The screen it opens is not built yet; what is
-// settled is how it is entered -- by the id of the video the app is already
-// holding, so the erasing works on the same file the dialog was playing.
-function openEraseWith(source) {
-  console.log("Erase subtitles", source);
-}
+// ---------------- Erase subtitles ----------------
+// The rail's third screen, and everything inside #screen-erase, belongs to
+// ui/src/eraseScreen.mjs. What the page hands it is what is the page's: the
+// one way screens are swapped, the one top bar, and the one rule about which
+// files this app takes -- videoProblem, shared with the home drop zone, so a
+// file refused on one screen is refused on the other in the same words.
+const eraseScreen = initEraseScreenUi({
+  $, showScreen, setTopbar, checkFile: videoProblem,
+});
+$("eraseToggle").addEventListener("click", () => eraseScreen.openErase());
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
