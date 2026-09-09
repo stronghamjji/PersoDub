@@ -85,6 +85,10 @@
        pane ends and the next begins (user, 2026-09-02). */
     --divider: #3a3a42;
     --success: #3fbf5f;
+    /* "Ready" in words, which needs more contrast than the dots --success
+       paints: on white the dot green reads at 3:1, under what small bold text
+       needs. */
+    --success-ink: #3fbf5f;
     /* Timeline bars that fit: violet, so a bar is never mistaken for one of the
        blue buttons it sits under (user, 2026-09-08). */
     --timeline-fit: #8B5CF6;
@@ -159,6 +163,7 @@
     --border: #e5e5e5;
     --divider: #c4c4cb;
     --success: #11ad32;
+    --success-ink: #2a8a4a;
     --timeline-fit: #8B5CF6;
     --warning: #dfa11a;
     --warning-soft: #fff7e6;
@@ -1119,7 +1124,7 @@
   .settings-row:last-child { margin-bottom: 0; }
   .settings-hint { font-size: 0.74rem; color: var(--muted-foreground); margin-top: 4px; }
   .settings-hint.model-busy { color: var(--destructive); font-weight: 600; }
-  .settings-hint.model-ok { color: var(--success); font-weight: 600; }
+  .settings-hint.model-ok { color: var(--success-ink); font-weight: 600; }
   /* The sentence takes the room and wraps; the button keeps to one line at
      the same size as its neighbours -- a wrapped "Download (1.0 GB)" stood
      twice as tall as the Resume beside it (user, 2026-09-07). */
