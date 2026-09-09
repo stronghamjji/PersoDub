@@ -190,6 +190,51 @@ def widen_masks(detector_class, frames=SEAM_FRAMES):
     detector_class.find_continuous_ranges_with_same_mask = staticmethod(widened)
 
 
+# The band the user drew is not the band the tool is given. vsr only counts a
+# detected box when it falls ENTIRELY inside the area -- a box whose outline or
+# last stroke pokes one pixel out is thrown away, and a band that catches none
+# of them is not "nothing to do" but a crash: NoSubtitleDetected. A person
+# drags that box by eye over a moving picture, so a few pixels short is the
+# normal case, not the careless one: the real brief for this feature named a
+# band 96 pixels too short at the bottom and the run died 402 seconds in.
+#
+# So the band is let out before it is handed over -- more up and down, where
+# the miss happens, than at the ends. It is only the band: the mask is still
+# the boxes the detector found inside it, so letting it out does not paint
+# anything extra. What it CAN do is take in a second line of writing that sits
+# just outside, and that one would then be erased too -- which is why these
+# stay small and the retry below is the one that gets greedy, and only once.
+BAND_PAD_UPDOWN = 0.06
+BAND_PAD_SIDES = 0.04
+BAND_PAD_MIN = 8
+RETRY_PAD_UPDOWN = 0.15
+RETRY_PAD_SIDES = 0.10
+# What the tool says when the band caught nothing. Kept in step with
+# app/eraser.py's NO_SUBTITLES_MARKS, which turns it into the user's sentence.
+NO_SUBTITLES_MARKS = ("NoSubtitleDetected", "No subtitles detected")
+
+
+def pad_band(area, width, height, updown=BAND_PAD_UPDOWN, sides=BAND_PAD_SIDES):
+    """The user's band let out a little, and never off the picture."""
+    ymin, ymax, xmin, xmax = area
+    dy = max(BAND_PAD_MIN, int(round((ymax - ymin) * updown)))
+    dx = max(BAND_PAD_MIN, int(round((xmax - xmin) * sides)))
+    return (max(0, ymin - dy), min(height, ymax + dy),
+            max(0, xmin - dx), min(width, xmax + dx))
+
+
+def caught_nothing(error):
+    """Whether this is the tool saying the band held no writing it would take."""
+    return any(mark in str(error) for mark in NO_SUBTITLES_MARKS)
+
+
+def say_band(band, came_from, widened=False):
+    print("band %d..%d x %d..%d (%s %d..%d x %d..%d)" % (
+        band[0], band[1], band[2], band[3],
+        "widened again after nothing was found in" if widened else "padded from",
+        came_from[0], came_from[1], came_from[2], came_from[3]), flush=True)
+
+
 # The finished video is looked at again before it is handed over -- with the
 # same detector, because "gone" has to be judged the way the tool itself would
 # judge it. Every sample is an OCR pass, so the check is aimed rather than
@@ -351,6 +396,48 @@ def repaint_frames(path, found, detector_class, remover_class):
     os.replace(tmp, path)
 
 
+def erase_pass(remover_class, input_path, out_path, band):
+    """One run of the tool over the whole video. Returns how long it took."""
+    remover = remover_class(input_path)
+    # Set before run(), or the result is written beside the ORIGINAL as
+    # <name>_no_sub.mp4 and the app never finds it.
+    remover.video_out_path = out_path
+    remover.sub_areas = [tuple(band)] if band else []
+
+    stop = threading.Event()
+    watcher = threading.Thread(target=report_progress, args=(remover, stop), daemon=True)
+    watcher.start()
+    started = time.monotonic()
+    try:
+        remover.run()
+    finally:
+        stop.set()
+    return time.monotonic() - started
+
+
+def erase_with_band(remover_class, input_path, out_path, area, width, height):
+    """Erase in the user's band let out, and if that caught nothing, once more
+    in a generous one. Returns (seconds the erasing took, the band it used).
+
+    The retry runs at most once. A band widened by a sixth that still finds no
+    writing is a band with no writing in it, and the sentence the user gets
+    then -- move the box and try again -- is the true one; going round a third
+    time would only spend more of their minutes before saying the same thing.
+    """
+    roomy = bool(area) and width > 0 and height > 0
+    band = pad_band(area, width, height) if roomy else area
+    if roomy:
+        say_band(band, area)
+    try:
+        return erase_pass(remover_class, input_path, out_path, band), band
+    except Exception as first:
+        if not roomy or not caught_nothing(first):
+            raise
+        band = pad_band(area, width, height, RETRY_PAD_UPDOWN, RETRY_PAD_SIDES)
+        say_band(band, area, widened=True)
+        return erase_pass(remover_class, input_path, out_path, band), band
+
+
 def main():
     ap = argparse.ArgumentParser(description="Erase burned-in subtitles from a video")
     ap.add_argument("--vsr-dir", required=True, help="the video-subtitle-remover checkout")
@@ -385,21 +472,15 @@ def main():
     config.inpaintMode.value = InpaintMode.STTN_DET
     widen_masks(SubtitleDetect)
 
-    remover = SubtitleRemover(input_path)
-    # Set before run(), or the result is written beside the ORIGINAL as
-    # <name>_no_sub.mp4 and the app never finds it.
-    remover.video_out_path = out_path
-    remover.sub_areas = [tuple(a.area)] if a.area else []
+    import cv2
 
-    stop = threading.Event()
-    watcher = threading.Thread(target=report_progress, args=(remover, stop), daemon=True)
-    watcher.start()
-    started = time.monotonic()
-    try:
-        remover.run()
-    finally:
-        stop.set()
-    erasing = time.monotonic() - started
+    cap = cv2.VideoCapture(input_path)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+    cap.release()
+
+    erasing, band = erase_with_band(SubtitleRemover, input_path, out_path,
+                                    a.area, width, height)
     print("progress 100%", flush=True)
 
     # Handing back a video with three surviving letters in it is worse than
@@ -407,13 +488,13 @@ def main():
     # writing is gone. What is still there is painted again, once, and the
     # answer travels with the job either way. The looking is given a share of
     # the time the erasing took and no more.
-    check, leftovers = check_result(out_path, a.area, SubtitleDetect,
+    check, leftovers = check_result(out_path, band, SubtitleDetect,
                                     deadline=time.monotonic() + erasing * CHECK_BUDGET)
     repainted = 0
     if leftovers:
         repaint_frames(out_path, leftovers, SubtitleDetect, SubtitleRemover)
         repainted = len(leftovers)
-        after, _still = check_result(out_path, a.area, SubtitleDetect,
+        after, _still = check_result(out_path, band, SubtitleDetect,
                                      frames=sorted(leftovers))
         check["frames_with_text"] = after["frames_with_text"]
         check["sample_times"] = after["sample_times"]

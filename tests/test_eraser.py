@@ -436,3 +436,113 @@ def test_the_second_pass_paints_the_boxes_the_check_drew_and_not_the_band():
     fixed = erase_subtitles.masks_for_repaint({50: [(100, 300, 900, 960)],
                                                52: [(100, 300, 900, 960)]}, 30.0)
     assert fixed[50] == [erase_subtitles.pad_sideways((100, 300, 900, 960))]
+
+
+# --- the band the user drew is not the band the tool is given ---------------
+
+def test_the_band_is_let_out_before_the_tool_sees_it_and_never_off_the_picture():
+    """vsr only counts a box that falls ENTIRELY inside the area, so a band a
+    few pixels short of the letters' outline is not "nothing to do" -- it is a
+    crash. More room up and down, where the miss happens, than at the ends."""
+    # 140 tall, 608 wide: 6% of 140 is 8, 4% of 608 is 24.
+    assert erase_subtitles.pad_band((660, 800, 0, 608), 608, 1080) == (652, 808, 0, 608)
+    # The picture's own edges are the limit in all four directions.
+    assert erase_subtitles.pad_band((4, 1076, 6, 602), 608, 1080) == (0, 1080, 0, 608)
+    # A thin band still gets whole pixels, not a fraction of one.
+    assert erase_subtitles.pad_band((500, 520, 300, 340), 608, 1080) == (492, 528, 292, 348)
+    # The retry is the greedy one.
+    assert erase_subtitles.pad_band((850, 970, 420, 1920), 1920, 1080,
+                                    erase_subtitles.RETRY_PAD_UPDOWN,
+                                    erase_subtitles.RETRY_PAD_SIDES) == (832, 988, 270, 1920)
+
+
+class _NothingFound(Exception):
+    pass
+
+
+def _remover_class(fail_times, bands):
+    """A stand-in for SubtitleRemover that fails the first `fail_times` runs
+    the way vsr does when the band caught no writing it would take."""
+    state = {"runs": 0}
+
+    class Remover:
+        def __init__(self, path):
+            self.sub_areas = []
+            self.video_out_path = None
+
+        def run(self):
+            state["runs"] += 1
+            bands.append(tuple(self.sub_areas[0]) if self.sub_areas else None)
+            if state["runs"] <= fail_times:
+                raise _NothingFound(
+                    "No subtitles detected. Check file: /Users/x/holiday.mp4")
+    Remover.runs = state
+    return Remover
+
+
+def test_a_band_that_caught_nothing_is_widened_and_tried_once_more(capsys):
+    bands = []
+    remover = _remover_class(fail_times=1, bands=bands)
+
+    _seconds, band = erase_subtitles.erase_with_band(
+        remover, "in.mp4", "out.mp4", (850, 970, 420, 1920), 1920, 1080)
+
+    # Twice, and only twice: the padded band, then the generous one.
+    assert remover.runs["runs"] == 2
+    assert bands == [(842, 978, 360, 1920), (832, 988, 270, 1920)]
+    assert band == (832, 988, 270, 1920)
+    said = capsys.readouterr().out.splitlines()
+    assert said == ["band 842..978 x 360..1920 (padded from 850..970 x 420..1920)",
+                    "band 832..988 x 270..1920 "
+                    "(widened again after nothing was found in 850..970 x 420..1920)"]
+
+
+def test_a_band_with_nothing_in_it_either_way_still_says_so(capsys):
+    # Two goes and no writing found means there is none: the user gets the
+    # sentence about moving the box, not a third helping of their own minutes.
+    bands = []
+    remover = _remover_class(fail_times=2, bands=bands)
+
+    with pytest.raises(Exception, match="No subtitles detected"):
+        erase_subtitles.erase_with_band(remover, "in.mp4", "out.mp4",
+                                        (850, 970, 420, 1920), 1920, 1080)
+
+    assert remover.runs["runs"] == 2
+    # The script decides whether to retry by the same words app/eraser.py turns
+    # into the user's sentence; they have to stay in step or one of them stops
+    # recognising the case.
+    assert erase_subtitles.NO_SUBTITLES_MARKS == eraser.NO_SUBTITLES_MARKS
+
+
+def test_any_other_failure_is_not_retried():
+    # A band that caught nothing is worth a second go; a torch that fell over
+    # would only fall over again, five minutes later.
+    class Remover:
+        runs = {"runs": 0}
+
+        def __init__(self, path):
+            self.sub_areas = []
+            self.video_out_path = None
+
+        def run(self):
+            Remover.runs["runs"] += 1
+            raise RuntimeError("MPS backend out of memory")
+
+    with pytest.raises(RuntimeError, match="out of memory"):
+        erase_subtitles.erase_with_band(Remover, "in.mp4", "out.mp4",
+                                        (660, 800, 0, 608), 608, 1080)
+    assert Remover.runs["runs"] == 1
+
+
+def test_the_whole_frame_is_not_a_band_to_widen():
+    class Remover:
+        def __init__(self, path):
+            self.sub_areas = ["untouched"]
+            self.video_out_path = None
+
+        def run(self):
+            assert self.sub_areas == []
+
+    _seconds, band = erase_subtitles.erase_with_band(Remover, "in.mp4", "out.mp4",
+                                                     None, 608, 1080)
+    assert band is None
