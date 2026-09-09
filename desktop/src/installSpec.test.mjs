@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import {
   buildSteps, writeKitEnv, PYTHON_URL, PYTHON_SHA256, CAMPPLUS_SHA256,
   OLLAMA_TGZ_SHA256, bytesStillNeeded, STEP_IDS, MODEL_MARKERS,
-  OPTIONAL_MODEL_MARKERS, baseSteps, packSteps, packInstalled,
+  OPTIONAL_MODEL_MARKERS, baseSteps, packSteps, packInstalled, PACK_DIRS,
+  ERASER_SRC_URL, ERASER_SRC_SHA256, syncEraserKitEnv,
 } from "./installSpec.js";
 import { runInstall } from "./installer.js";
 import { IS_WIN, venvBin, exeName, TTS_DEVICE, TORCH_VARIANT } from "./platform.js";
@@ -53,7 +54,15 @@ test("PACKS names the steps that leave the base install", () => {
   assert.deepEqual(baseSteps(steps).map((s) => s.id), ["payload", "python", "venv-app", "ffmpeg", "cleanup", "kit-env"]);
   assert.deepEqual(packSteps(steps, "engine").map((s) => s.id), ["venv-engines", "models", "nonverbal-weights"]);
   assert.deepEqual(packSteps(steps, "ollama-runtime").map((s) => s.id), ["ollama-runtime"]);
+  assert.deepEqual(packSteps(steps, "subtitle-eraser").map((s) => s.id), ["eraser-src", "venv-eraser"]);
   assert.equal(tagged.payload, undefined);
+});
+
+// What shell:remove-pack deletes. The eraser owns two folders (its source
+// tree and its venv) where the other packs own one apiece.
+test("every pack names the folders removing it takes", () => {
+  assert.deepEqual(Object.keys(PACK_DIRS), ["engine", "ollama-runtime", "subtitle-eraser"]);
+  assert.deepEqual(PACK_DIRS["subtitle-eraser"], ["eraser", "venv-eraser"]);
 });
 test("the base install adds up to under a gigabyte", () => {
   const total = baseSteps(buildSteps(freshCtx())).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
@@ -108,6 +117,8 @@ test("payload step copies bundle including campplus and marks done", async () =>
   assert.ok(existsSync(join(ctx.kitDir, "app", "app", "main.py")));
   assert.ok(existsSync(join(ctx.kitDir, "sidecar", "server.py")));
   assert.ok(existsSync(join(ctx.kitDir, `requirements_engines_${REQ_SUFFIX}.txt`)));
+  // One list for both platforms -- the subtitle-eraser pack installs from it.
+  assert.ok(existsSync(join(ctx.kitDir, "requirements_eraser.txt")));
   assert.equal(existsSync(join(ctx.kitDir, `requirements_qwen_${REQ_SUFFIX}.txt`)), false,
     "the voice environment's own list is gone -- one engines list now");
   assert.ok(existsSync(join(ctx.kitDir, "models", "campplus", "campplus.onnx")));
@@ -687,6 +698,119 @@ test("an installed kit's recorded torch variant wins over the hardware guess", (
   // a GPU-less Windows machine says "cpu" and would reinstall the venv twice).
   writeFileSync(join(ctx.kitDir, "kit.env"), "PERSODUB_KIT_DIR=x\n");
   assert.equal(torchVariantFor(ctx.kitDir), IS_WIN ? "cu128" : "mps");
+});
+
+// ── the subtitle-eraser pack ───────────────────────────────────────────────
+// Two steps: the tool's own source tree (OCR weights included, so nothing
+// else is fetched) and a venv with the torch pair that tree was verified
+// against. The app finds both through two kit.env keys that exist only while
+// the pack does.
+test("the eraser pack is installed exactly when its venv stamp is there", () => {
+  const ctx = freshCtx();
+  assert.equal(packInstalled(ctx.kitDir, "subtitle-eraser"), false);
+  mkdirSync(join(ctx.kitDir, "eraser", "vsr"), { recursive: true });
+  assert.equal(packInstalled(ctx.kitDir, "subtitle-eraser"), false, "source tree alone: still installing");
+  mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, ".install", "venv-eraser.ok"), "fp");
+  assert.equal(packInstalled(ctx.kitDir, "subtitle-eraser"), true);
+});
+
+test("eraser-src downloads the pinned archive and unpacks it without its top folder", async () => {
+  const calls = [];
+  const ctx = freshCtx({
+    download: async (url, dest, opts) => { calls.push([url, opts.sha256]); writeFileSync(dest, "zip"); },
+    // The real archive wraps everything in video-subtitle-remover-<sha>/;
+    // strip:1 is what puts backend/ directly under eraser/vsr.
+    extract: async (_file, dest, opts) => {
+      calls.push(["extract", dest, opts && opts.strip]);
+      mkdirSync(join(dest, "backend"), { recursive: true });
+      writeFileSync(join(dest, "backend", "main.py"), "# vsr");
+    },
+  });
+  const step = byId(ctx)["eraser-src"];
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+  assert.deepEqual(calls[0], [ERASER_SRC_URL, ERASER_SRC_SHA256]);
+  assert.deepEqual(calls[1], ["extract", join(ctx.kitDir, "eraser", "vsr"), 1]);
+  assert.ok(existsSync(join(ctx.kitDir, "eraser", "vsr", "backend", "main.py")));
+  assert.equal(existsSync(join(ctx.kitDir, "downloads", "eraser-src.zip")), false, "790 MB the kit never reads again");
+  assert.equal(await step.isDone(), true);
+});
+
+// The marker records which archive is unpacked, the way the venv steps record
+// what they installed: re-pinning the commit must re-open the step instead of
+// leaving last version's tree in place behind a bare .ok.
+test("eraser-src is open again when the tree on disk came from another commit", async () => {
+  const ctx = freshCtx();
+  mkdirSync(join(ctx.kitDir, "eraser", "vsr", "backend"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, "eraser", "vsr", "backend", "main.py"), "# vsr");
+  mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
+  const step = byId(ctx)["eraser-src"];
+  writeFileSync(join(ctx.kitDir, ".install", "eraser-src.ok"), "an older archive's sha");
+  assert.equal(await step.isDone(), false);
+  writeFileSync(join(ctx.kitDir, ".install", "eraser-src.ok"), ERASER_SRC_SHA256);
+  assert.equal(await step.isDone(), true);
+});
+
+test("venv-eraser installs its own torch pair first, then the eraser's list", async () => {
+  const argvs = [];
+  const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });
+  await byId(ctx)["venv-eraser"].run(() => {});
+  assert.ok(argvs.some((a) => a.includes("-m venv") && a.includes("venv-eraser")));
+  const installs = argvs.filter((a) => a.includes(" install ") && !a.includes("--upgrade pip"));
+  // torch 2.7.0/torchvision 0.22.0 -- older than the engines venv's pair,
+  // which is why the eraser gets an environment of its own.
+  assert.ok(installs[0].includes("torch==2.7.0") && installs[0].includes("torchvision==0.22.0"), installs[0]);
+  // Windows takes torch from the pytorch.org index (CUDA, or CPU on a machine
+  // with no NVIDIA GPU); macOS gets the MPS wheel from PyPI, no index.
+  assert.equal(installs[0].includes("--index-url"), IS_WIN);
+  if (IS_WIN) assert.ok(installs[0].includes(TORCH_VARIANT === "cpu" ? "/whl/cpu" : "/whl/cu128"), installs[0]);
+  assert.ok(installs[1].includes("requirements_eraser.txt"), installs[1]);
+});
+
+// The two packages that are the difference between a working eraser and one
+// that dies in its OCR step (Windows, 2026-09-09), plus the torch pair that
+// must be installed per platform rather than resolved from the list.
+test("the eraser's bundled list keeps out the runtimes that break it", () => {
+  const list = readFileSync(new URL("../vendor/requirements_eraser.txt", import.meta.url), "utf8");
+  const pins = list.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  assert.ok(!pins.some((l) => l.startsWith("onnxruntime")), "onnxruntime-directml/-gpu kill the OCR step");
+  assert.ok(!pins.some((l) => l.startsWith("torch")), "torch is installed before this list, from a per-platform index");
+  assert.ok(pins.includes("paddlepaddle==3.0.0"), "the CPU build: the GPU one is on a China-only index");
+});
+
+// The app reads these two keys' presence as "the eraser is installed", so
+// they must never outlive the pack -- nor arrive before it.
+test("kit.env carries the eraser's keys only while the pack is on disk", async () => {
+  const ctx = freshCtx({ run: async () => {} });
+  await byId(ctx)["kit-env"].run(() => {});
+  const envPath = join(ctx.kitDir, "kit.env");
+  assert.ok(!readFileSync(envPath, "utf8").includes("ERASER_PYTHON"), "no pack, no keys");
+
+  await byId(ctx)["venv-eraser"].run(() => {});   // its stamp, then its keys
+  const withPack = readFileSync(envPath, "utf8");
+  assert.ok(withPack.includes(`ERASER_PYTHON=${venvBin(join(ctx.kitDir, "venv-eraser"), "python")}`), withPack);
+  assert.ok(withPack.includes(`ERASER_VSR_DIR=${join(ctx.kitDir, "eraser", "vsr")}`), withPack);
+
+  // What shell:remove-pack does: the stamp goes, then kit.env is squared up.
+  rmSync(join(ctx.kitDir, ".install", "venv-eraser.ok"), { force: true });
+  syncEraserKitEnv(ctx.kitDir);
+  assert.equal(readFileSync(envPath, "utf8"), writeKitEnv({ kitDir: ctx.kitDir }));
+});
+
+test("squaring up the eraser's keys leaves every other line of kit.env alone", () => {
+  const ctx = freshCtx();
+  writeFileSync(join(ctx.kitDir, "kit.env"), "PERSODUB_KIT_DIR=/old/kit\nGEMINI_API_KEY=sk-legacy-key\n");
+  mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(ctx.kitDir, ".install", "venv-eraser.ok"), "fp");
+  syncEraserKitEnv(ctx.kitDir);
+  const env = readFileSync(join(ctx.kitDir, "kit.env"), "utf8");
+  assert.ok(env.includes("GEMINI_API_KEY=sk-legacy-key"), "a user's API key must survive");
+  assert.ok(env.includes("ERASER_VSR_DIR="));
+  rmSync(join(ctx.kitDir, ".install", "venv-eraser.ok"));
+  syncEraserKitEnv(ctx.kitDir);
+  assert.equal(readFileSync(join(ctx.kitDir, "kit.env"), "utf8"),
+               "PERSODUB_KIT_DIR=/old/kit\nGEMINI_API_KEY=sk-legacy-key\n");
 });
 
 import { pipProgress } from "./installSpec.js";
