@@ -1,0 +1,218 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  MAX_REPORT_BYTES,
+  commentText,
+  dayKey,
+  issueBody,
+  issueTitle,
+  labelsFor,
+  logExpiry,
+  logObjectKey,
+  logUrl,
+  maskAgain,
+  newId,
+  rateDecision,
+  signLog,
+  validateReport,
+  verifyLog,
+  withLogsLine,
+} from "./report-logic.js";
+import { buildReport, collectEnvironment, issueTitle as appIssueTitle } from "../desktop/src/report.js";
+
+// Run me: node --test relay/*.test.mjs
+
+const GOOD = {
+  kind: "dub",
+  version: "0.5.5",
+  installId: "0123456789abcdef0123456789abcdef",
+  fingerprint: "0123456789ab",
+  step: "",
+  stage: "synthesize",
+  stageMarker: "4/6",
+  code: "engine-crash",
+  message: "RuntimeError: the voice engine exited",
+  env: {
+    platformKey: "win-gpu", os: "windows 10.0.26100", arch: "x64", cpu: "Intel i7",
+    cores: 8, ramGb: 32, freeDiskGb: 42, appVersion: "0.5.5", kitVersion: "0.5.5", torch: "cu128",
+  },
+  packs: { engine: "ready" },
+  logTails: { shell: "PERSODUB_READY", app: "boom", job: "4/6 synthesize" },
+};
+
+// ---- validation --------------------------------------------------------
+
+test("a well-formed report is accepted whole", () => {
+  const { ok, report } = validateReport(GOOD);
+  assert.ok(ok);
+  assert.equal(report.code, "engine-crash");
+  assert.equal(report.env.platformKey, "win-gpu");
+  assert.equal(report.packs.engine, "ready");
+});
+
+test("a report is rebuilt, so a field nobody named cannot get through", () => {
+  const { report } = validateReport({ ...GOOD, videoTitle: "Q3 results", contactEmail: "a@b.c" });
+  const text = JSON.stringify(report);
+  assert.ok(!text.includes("Q3 results"));
+  assert.ok(!text.includes("a@b.c"));
+});
+
+test("junk is refused rather than half-accepted", () => {
+  for (const bad of [null, "", "[]", 5, { ...GOOD, fingerprint: "nope" }, { ...GOOD, installId: "x" }, { ...GOOD, version: "" }]) {
+    assert.equal(validateReport(bad).ok, false, JSON.stringify(bad));
+  }
+});
+
+test("a report over the size limit is refused", () => {
+  const fat = { ...GOOD, logTails: { shell: "x".repeat(MAX_REPORT_BYTES + 10), app: "", job: "" } };
+  assert.equal(validateReport(JSON.stringify(fat)).ok, false);
+});
+
+test("a word that is not on a published list becomes unknown", () => {
+  const { report } = validateReport({ ...GOOD, kind: "screenshot", code: "ENOSPC", env: { ...GOOD.env, platformKey: "linux" } });
+  assert.equal(report.kind, "unknown");
+  assert.equal(report.code, "unknown");
+  assert.equal(report.env.platformKey, "unknown");
+});
+
+test("a made-up step or stage is dropped", () => {
+  const { report } = validateReport({ ...GOOD, step: "rm -rf /", stage: "Q3.mp4" });
+  assert.equal(report.step, "");
+  assert.equal(report.stage, "");
+});
+
+test("the relay masks again, for the sake of the builds it cannot fix", () => {
+  const { report } = validateReport({
+    ...GOOD,
+    message: "at /Users/jane/kit with sk-abcd1234efgh5678",
+    logTails: { shell: "GET https://cdn.example.com/a/b?token=zzz", app: "", job: "" },
+  });
+  assert.equal(report.message, "at ~/kit with [REDACTED]");
+  assert.equal(report.logTails.shell, "GET https://cdn.example.com/...");
+});
+
+test("masking again handles Windows and Linux home directories too", () => {
+  assert.equal(maskAgain("C:\\Users\\Jane\\kit"), "~\\kit");
+  assert.equal(maskAgain("/home/jane/kit"), "~/kit");
+});
+
+// ---- labels ------------------------------------------------------------
+
+test("a dub failure earns five labels, all of them from a published list", () => {
+  const { report } = validateReport(GOOD);
+  assert.deepEqual(labelsFor(report).sort(), [
+    "env:win-gpu", "err:engine-crash", "kind:dub", "stage:synthesize", "ver:0.5.5",
+  ]);
+});
+
+test("an install failure is labelled by step instead of stage", () => {
+  const { report } = validateReport({ ...GOOD, kind: "install", stage: "", step: "venv-engines" });
+  assert.ok(labelsFor(report).includes("step:venv-engines"));
+  assert.ok(!labelsFor(report).some((l) => l.startsWith("stage:")));
+});
+
+// ---- what it writes ----------------------------------------------------
+
+test("the relay and the app spell one failure's title the same way", () => {
+  // Both sides render a title: the app for the copy it saves when it cannot
+  // send, the relay for the issue. Two spellings would read as two bugs.
+  const built = buildReport({
+    kind: "dub", stage: "synthesize", stageMarker: "4/6", code: "engine-crash",
+    version: "0.5.5", installId: GOOD.installId, message: GOOD.message,
+    env: collectEnvironment({
+      sys: { platform: "win32", release: "10.0.26100", arch: "x64", cpuModel: "Intel i7", cores: 8, totalMemBytes: 32 * 1024 ** 3 },
+      torchVariant: "cu128", appVersion: "0.5.5", kitVersion: "0.5.5",
+    }),
+  });
+  const { report } = validateReport(JSON.parse(JSON.stringify(built)));
+  assert.equal(issueTitle(report), appIssueTitle(built));
+  assert.equal(issueTitle(report), "[win-gpu] 4/6 synthesize: engine-crash (0.5.5)");
+});
+
+test("the body carries the machine, the error and the fingerprint", () => {
+  const body = issueBody(validateReport(GOOD).report);
+  assert.match(body, /\| RAM \| 32 GB \|/);
+  assert.match(body, /\| Packs \| engine=ready \|/);
+  assert.match(body, /the voice engine exited/);
+  assert.match(body, /Fingerprint: `0123456789ab`/);
+  assert.ok(!body.includes("Full logs:"));
+});
+
+test("a body written with a log link says so", () => {
+  const body = issueBody(validateReport(GOOD).report, { logsUrl: "https://r/logs/x" });
+  assert.match(body, /Full logs: https:\/\/r\/logs\/x/);
+});
+
+test("a repeat is one line naming the machine and the version", () => {
+  assert.equal(commentText(validateReport(GOOD).report), "+1 · win-gpu · windows 10.0.26100 · cu128 · 0.5.5");
+});
+
+test("the log line is appended once, however often the logs land", () => {
+  const once = withLogsLine("body", "https://r/logs/x");
+  assert.match(once, /Full logs: https:\/\/r\/logs\/x/);
+  assert.equal(withLogsLine(once, "https://r/logs/y"), once);
+});
+
+// ---- rate limits -------------------------------------------------------
+
+test("five a day per machine, then no more", () => {
+  assert.equal(rateDecision({ installCount: 4 }).ok, true);
+  assert.equal(rateDecision({ installCount: 5 }).ok, false);
+});
+
+test("an address is capped even when the install ids differ", () => {
+  assert.equal(rateDecision({ installCount: 0, ipCount: 5 }).reason, "per address");
+});
+
+test("the day itself has a ceiling", () => {
+  assert.equal(rateDecision({ totalCount: 200 }).reason, "daily total");
+});
+
+test("the caps are configurable, because the owner sets them in the dashboard", () => {
+  assert.equal(rateDecision({ installCount: 5 }, { perDay: 10 }).ok, true);
+});
+
+// ---- ids, keys and signed links ----------------------------------------
+
+test("an id is 32 hex characters, and not the same one twice", () => {
+  const a = newId();
+  assert.match(a, /^[0-9a-f]{32}$/);
+  assert.notEqual(a, newId());
+});
+
+test("a log object is filed by month and fingerprint", () => {
+  const key = logObjectKey({ fingerprint: "0123456789ab", id: "a".repeat(32), now: Date.UTC(2026, 8, 9) });
+  assert.equal(key, `2026-09/0123456789ab/${"a".repeat(32)}.tar.gz`);
+});
+
+test("a day key is the UTC date", () => {
+  assert.equal(dayKey(Date.UTC(2026, 8, 9, 23, 30)), "2026-09-09");
+});
+
+test("a signed link verifies, and only that one", async () => {
+  const id = "b".repeat(32);
+  const exp = logExpiry(Date.now());
+  const sig = await signLog(id, exp, "secret");
+  assert.equal(await verifyLog(id, exp, sig, "secret"), true);
+  assert.equal(await verifyLog(id, exp, sig, "other secret"), false);
+  assert.equal(await verifyLog("c".repeat(32), exp, sig, "secret"), false);
+  assert.equal(await verifyLog(id, exp + 1, sig, "secret"), false);
+  assert.equal(await verifyLog(id, exp, "", "secret"), false);
+});
+
+test("an expired link stops working", async () => {
+  const id = "b".repeat(32);
+  const exp = Math.floor(Date.now() / 1000) - 1;
+  assert.equal(await verifyLog(id, exp, await signLog(id, exp, "secret"), "secret"), false);
+});
+
+test("a link that is thirty days old is still inside its life", async () => {
+  const now = Date.now();
+  const exp = logExpiry(now);
+  assert.equal(await verifyLog("b".repeat(32), exp, await signLog("b".repeat(32), exp, "s"), "s", now + 29 * 86400000), true);
+});
+
+test("the link points at the relay, never at the bucket", () => {
+  assert.equal(logUrl("https://relay.example/", "a".repeat(32), 123, "sig+/"),
+    `https://relay.example/logs/${"a".repeat(32)}?exp=123&sig=sig%2B%2F`);
+});
