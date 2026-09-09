@@ -357,6 +357,24 @@ test("when the file has landed it plays from the app and gets a trim bar", async
   assert.match(h.$("trimBox").innerHTML, /id="trimStart"/);
 });
 
+// Coming back from the erase screen: the dialog is opened again on the video
+// the app is already holding, and the handles have to be where they were left
+// -- a trim thrown away on the way out is a cut the user has to make twice
+// (user, 2026-09-09).
+test("reopening the dialog on a held video puts the trim handles back", async (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.openNewProject({ downloadId: "d1", title: "clip", trim: { start: 5, end: 20 } });
+  h.$("projectVideo").duration = 30;
+  await h.$("projectVideo").fire("loadedmetadata");
+
+  assert.equal(h.$("projectVideo").src, "/api/downloads/d1/video");
+  assert.equal(h.$("trimStart").value, "5");
+  assert.equal(h.$("trimEnd").value, "20");
+  assert.deepEqual(h.state.newProject.trim, { start: 5, end: 20 });
+});
+
 test("a fetch that fails says why on the dialog's own line and stops asking", async (t) => {
   const h = linkHarness([{ status: "failed", error: "This video is private." }]);
   t.after(h.log.restore);

@@ -346,6 +346,46 @@ test("the rail leads with the logo tile, and About shows it beside the name", ()
   assert.match(html, /<img class="about-logo" src="\/logo.png"/);
 });
 
+// The three tools stand together in the rail, dubbing first, and the way home
+// is a house rather than a back arrow: both are what the user asked for after
+// running 0.5.5 on the mac (2026-09-09).
+test("the rail carries dubbing before projects, and the top bar's way out is Home", () => {
+  const html = readFileSync(INDEX, "utf8");
+  const dub = html.indexOf('id="dubToggle"');
+  const projects = html.indexOf('id="historyToggle"');
+  const erase = html.indexOf('id="eraseToggle"');
+  assert.ok(dub > 0 && dub < projects && projects < erase,
+    "the rail order is Dubbing, Projects, Erase subtitles");
+  assert.match(html, /id="dubToggle"[^>]*title="Dubbing"/);
+  // Pressing it leaves the open job rather than hiding it behind another screen.
+  assert.match(html, /\$\("dubToggle"\)\.addEventListener\("click", \(\) => resetForNewJob\(\)\)/);
+  // Lit on every screen a dub passes through, not just the first one.
+  assert.match(html, /DUB_SCREENS = new Set\(\["home", "running", "done", "failed"\]\)/);
+  assert.match(html, /\$\("dubToggle"\)\.classList\.toggle\("active", DUB_SCREENS\.has\(name\)\)/);
+  // The house: no tailed arrow left in the button, and it says where it goes.
+  const back = html.slice(html.indexOf('id="topbarBack"'));
+  const button = back.slice(0, back.indexOf("</button>"));
+  assert.ok(button.includes('title="Home"') && button.includes('aria-label="Home"'),
+    "the top bar button says Home");
+  assert.ok(!button.includes("M19 12H5"), "the back arrow's path is gone");
+});
+
+// Cancel stands beside the stage it cancels, and the way out of an erase that
+// began in the New project dialog goes back to that dialog (user, 2026-09-09).
+test("Cancel sits in the progress card, and leaving an erase reopens the dialog it came from", () => {
+  const html = readFileSync(INDEX, "utf8");
+  const card = html.slice(html.indexOf('id="progressCard"'), html.indexOf('id="rawLogDetails"'));
+  assert.ok(card.includes('id="cancelBtn"'), "Cancel is inside the progress card");
+  const topbar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('id="screen-home"'));
+  assert.ok(!topbar.includes('id="cancelBtn"'), "and no longer in the top bar");
+  // The percentage first, then the button: read, then press.
+  assert.match(card, /id="progressPct"[^]*id="cancelBtn"/);
+  // Leaving: the dialog goes back up only when that is where the erase began.
+  assert.match(html, /const back = eraseScreen\.origin\(\);/);
+  assert.match(html, /document\.body\.dataset\.screen === "erase" && back/);
+  assert.match(html, /if \(fromDialog\) newProject\.openNewProject\(back\);/);
+});
+
 // A subtitle look is written to the job the moment it is changed -- there is no
 // Save button and the user decided there should not be one -- so the only way
 // to know it happened is the mark at the right end of the toolbar. Same words

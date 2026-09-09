@@ -536,6 +536,38 @@ test("a pack being installed reads as downloading in the rows the page paints, a
   assert.equal(row.children[3].textContent, "Resume");
 });
 
+// A pack can be started from a screen that is not this dialog. That screen is
+// told the same progress and the same refusal, or the button it owns looks
+// dead (user, 2026-09-09: the erase screen's Download).
+test("a watcher outside the dialog is told the progress, and the reason a pack failed", async (t) => {
+  const shell = fakeShell({ install: async () => ({ ok: false, reason: "No room on the disk." }) });
+  const h = harness({ rows: [ENGINE], shell });
+  await h.api.refreshModels();
+  const seen = [];
+  h.api.onPackProgress((p) => seen.push(p));
+
+  const running = h.api.installPack("engine");
+  shell.progress({ pack: "engine", state: "progress", title: "Downloading", detail: "half way", pct: 50 });
+  await running;
+  await settle();
+
+  assert.deepEqual(seen[0], { id: "engine", line: "Downloading: half way", pct: 50 });
+  assert.deepEqual(seen.at(-1), { id: "engine", error: "AI engine: No room on the disk." });
+});
+
+test("a watcher outside the dialog hears when the pack is finally there", async (t) => {
+  const shell = fakeShell();
+  const h = harness({ rows: [ENGINE], shell });
+  await h.api.refreshModels();
+  const seen = [];
+  h.api.onPackProgress((p) => seen.push(p));
+
+  await h.api.installPack("engine");
+  await settle();
+
+  assert.deepEqual(seen.at(-1), { id: "engine", done: true });
+});
+
 test("downloadAll installs the packs first, one after another, then downloads the models", async (t) => {
   const shell = fakeShell({ install: async () => { h.state.rows = [{ ...ENGINE, state: "ready" }, WHISPER]; return { ok: true }; } });
   const h = harness({ rows: [ENGINE, WHISPER], shell });

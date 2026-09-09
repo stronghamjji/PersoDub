@@ -53,12 +53,27 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       // The shell sends the pack's overall percent on every event.
       if (p.pct != null) packBusy.pct = p.pct;
       repaint();
+      tellPack({ id: packBusy.id, line: packBusy.line, pct: packBusy.pct });
     });
   }
 
   function showPackError(text) {
     $("mnError").textContent = text;
     $("modelsError").textContent = text;
+  }
+
+  // Whoever else is drawing this install. A pack can be started from a screen
+  // that is not this dialog -- the erase screen's own Download row -- and that
+  // screen has to be told what the dialog is told: an error written only into
+  // #mnError is written into a dialog nobody has open (user, 2026-09-09).
+  const packWatchers = new Set();
+  function onPackProgress(fn) {
+    packWatchers.add(fn);
+    return () => packWatchers.delete(fn);
+  }
+  function tellPack(info) {
+    // A watcher paints; one that throws must not take the install down with it.
+    for (const fn of packWatchers) { try { fn(info); } catch { /* painter, not gate */ } }
   }
 
   // Resolves true once the pack is on disk and its process is up. A failure
@@ -68,12 +83,16 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     const name = (modelRow(id) || {}).name || id;
     if (!shell || !shell.installPack) {
       showPackError(`${name}: ${PACK_HINT}.`);
+      tellPack({ id, error: `${name}: ${PACK_HINT}.` });
       return false;
     }
     if (packBusy) {
       // One at a time, and the one running keeps its place on screen: a second
       // press used to take over the busy slot and show the first as paused.
-      if (packBusy.id !== id) showPackError(`${packBusy.name} is still installing. Wait for it to finish.`);
+      if (packBusy.id !== id) {
+        showPackError(`${packBusy.name} is still installing. Wait for it to finish.`);
+        tellPack({ id, error: `${packBusy.name} is still installing. Wait for it to finish.` });
+      }
       return false;
     }
     packBusy = { id, name, line: "", pct: null };
@@ -88,9 +107,11 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     repaint();
     if (packFailed) {
       showPackError(`${name}: ${packFailed.reason}`);
+      tellPack({ id, error: `${name}: ${packFailed.reason}` });
       return false;
     }
     showPackError("");   // a "still installing" notice from a second press is over
+    tellPack({ id, done: true });
     return true;
   }
   async function cancelPack(id) {
@@ -401,7 +422,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   return {
     // used by the page
     showModelsDialog, refreshModels, modelRow, downloadModel, downloadAll, cancelModel,
-    repaint, reopenDialogOrSettings, startPolling,
+    repaint, reopenDialogOrSettings, startPolling, onPackProgress,
     // used by tests only -- Remove is drawn by this file and clicked through
     // its own row, so the page never names it. Reachable so the test can.
     removeModel, installPack, removePack,

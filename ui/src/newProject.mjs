@@ -242,7 +242,8 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     v.src = downloadVideoUrl(d.id);
     v.addEventListener("loadedmetadata", () => {
       $("projectDur").textContent = fmtClock(v.duration);
-      trimBar.render(v.duration);
+      // With the handles where they were, when this dialog is being put back.
+      trimBar.render(v.duration, state.newProject && state.newProject.trim);
     }, { once: true });
   }
 
@@ -311,7 +312,11 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     // same choices start them all, one after another (the queue's job).
     const files = source.files && source.files.length > 1 ? source.files : null;
     const file = source.file || (files ? files[0] : null);
-    state.newProject = { file, files, probe: source.probe || null, trim: null,
+    // The trim the dialog was left with, when it is being reopened -- the way
+    // back from the erase screen (user, 2026-09-09). Null everywhere else,
+    // which is the whole video.
+    state.newProject = { file, files, probe: source.probe || null,
+                         trim: source.trim || null,
                          // The third way in: a video the app is ALREADY holding,
                          // which is how the erase screen hands its result on.
                          // There is nothing to fetch and nothing to upload --

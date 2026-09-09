@@ -51,7 +51,7 @@ const PACK_ID = "subtitle-eraser";
  * @returns the operations the rest of the page calls.
  */
 export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
-                                    installPack, packRow, onJobsChanged,
+                                    installPack, packRow, onPackProgress, onJobsChanged,
                                     onDub, reveal,
                                     playRange, cancelRange, labelPx }) {
   // The video being worked on: the id the app holds it under, what to call it,
@@ -239,8 +239,20 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     $("eraseError").textContent = "";
   }
 
+  // The New project dialog this screen was reached from, or null when it was
+  // reached from the rail or the Projects list. Leaving the screen puts that
+  // dialog back rather than dropping the user on the home screen with the
+  // video they were in the middle of gone (user, 2026-09-09).
+  let cameFrom = null;
+
+  /** The New project dialog to reopen on the way out, or null. */
+  function origin() {
+    return cameFrom;
+  }
+
   /** The rail icon: the screen with nothing on it yet. */
   function openErase() {
+    cameFrom = null;
     showScreen("erase");
     reset();
     paint();
@@ -253,6 +265,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
    * and its length is not on the record, so no time is promised for it.
    */
   function openEraseJob(rec) {
+    cameFrom = null;
     showScreen("erase");
     reset();
     source = { downloadId: "", title: rec.project || "", duration: 0, trim: null };
@@ -286,6 +299,9 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
    */
   function openEraseWith({ downloadId, title, duration_sec, trim = null }) {
     if (!downloadId) return;
+    // Everything the dialog needs to come back exactly as it was left: the
+    // video is already held, so this is the whole of it.
+    cameFrom = { downloadId, title: title || "", trim };
     showScreen("erase");
     reset();
     // The trim comes with the video: the dialog's handles chose a part of it,
@@ -429,9 +445,30 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   // The download itself is the models controller's (it owns the progress the
   // rest of the app shows). When it finishes, the look that was refused is
   // taken again by itself -- the user asked for it once already.
+  // The install draws itself HERE. The models controller writes its progress
+  // and its errors into the models dialog, which is closed while this screen is
+  // up: pressing Download looked like it did nothing at all, whether it was
+  // downloading or refusing (user, 2026-09-09).
+  if (onPackProgress) onPackProgress((p) => {
+    if (!p || p.id !== PACK_ID) return;
+    if (p.error) {
+      $("eraseError").textContent = p.error;
+      $("erasePackText").textContent = packNeededLine(packSize());
+      return;
+    }
+    if (p.done) {
+      $("erasePackText").textContent = packNeededLine(packSize());
+      return;
+    }
+    const pct = p.pct == null ? "" : ` · ${Math.round(p.pct)}%`;
+    $("erasePackText").textContent = (p.line || "Downloading the erase tool") + pct;
+  });
+
   $("erasePackBtn").addEventListener("click", async () => {
     if (installing) return;
     installing = true;
+    $("eraseError").textContent = "";
+    $("erasePackText").textContent = "Starting the download…";
     $("erasePackBtn").disabled = true;
     const ok = await installPack(PACK_ID);
     installing = false;
@@ -595,5 +632,5 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     if (file) takeFile(file);
   });
 
-  return { openErase, openEraseWith, openEraseJob, exportErased };
+  return { openErase, openEraseWith, openEraseJob, exportErased, origin };
 }

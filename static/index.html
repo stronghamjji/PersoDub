@@ -461,7 +461,10 @@
   .progress-card { flex: 0 0 clamp(420px, 26vw, 520px); display: flex; flex-direction: column; gap: 16px;
     padding: 22px 24px; background: var(--background);
     border: 1px solid var(--border); border-radius: var(--radius-lg); }
-  .progress-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .progress-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
+  /* The percentage and the way out, in that order: the number is what is read,
+     the button is what is pressed. */
+  .progress-head-end { display: flex; align-items: center; gap: 12px; }
   .progress-head b { font-size: var(--font-title); font-weight: 600; }
   .progress-head span { font-size: var(--font-label); color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
   .progress-bar { height: 6px; border-radius: 3px; background: var(--primary-soft); overflow: hidden; }
@@ -1509,6 +1512,15 @@
       <!-- The logo tile stands where the waveform icon was (user, 2026-09-08). -->
       <img class="rail-logo" src="/logo.png" alt="">
     </button>
+    <!-- The three tools stand together, dubbing first: it is what the app is
+         for, and a rail that led with Projects made the way home a guess
+         (user, 2026-09-09). A bare waveform: the mockup drew a pencil across
+         it, but at the rail's 20px the pencil and the bars ran together into a
+         smudge. Pressing it leaves whatever job is open, the same step the
+         home button in the top bar takes. -->
+    <button class="rail-item" id="dubToggle" title="Dubbing" type="button" aria-label="Dubbing">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 10v4"/><path d="M8 6v12"/><path d="M12 8.5v7"/><path d="M16 5v14"/><path d="M20 9v6"/></svg>
+    </button>
     <button class="rail-item" id="historyToggle" title="Projects" type="button" aria-label="Toggle projects">
       <!-- Projects: a folder -->
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
@@ -1556,11 +1568,12 @@
     <!-- The app's only chrome: who we are (or which job is open), what it is
          doing, and the one or two buttons that apply right now. -->
     <div class="topbar" id="topbar">
-      <!-- A tailed arrow, not a chevron: this leaves the job for the list of
-           projects, which is a place to go back to rather than a step back. -->
+      <!-- A house, not an arrow: this does not step back through what you did,
+           it leaves the job for the screen every job starts on (user,
+           2026-09-02). Same step the rail's Dubbing icon takes. -->
       <button class="topbar-back" id="topbarBack" type="button"
-              aria-label="Back to projects" title="Back to projects" hidden>
-        <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
+              aria-label="Home" title="Home" hidden>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.8V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9.8"/><path d="M10 20v-5.5h4V20"/></svg>
       </button>
       <div class="topbar-titles">
         <span class="topbar-title" id="topbarTitle">PersoDub</span>
@@ -1581,7 +1594,6 @@
            screen, the way Export and Cancel are. -->
       <span class="topbar-est" id="eraseEst" hidden></span>
       <button class="btn btn-primary" id="eraseRunBtn" type="button" hidden>Erase</button>
-      <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
       <!-- Which panels are open. Each button presses the panel's own existing
@@ -1648,7 +1660,18 @@
             <div class="running-trim" id="runningTrim"></div>
           </div>
           <div class="progress-card" id="progressCard">
-            <div class="progress-head"><b id="progressTitle">Separating audio</b><span id="progressPct">0%</span></div>
+            <!-- Cancel belongs beside the thing it cancels, not at the far
+                 end of the top bar (user, 2026-09-09): the eye is on the
+                 stage and the percentage, and that is where the way out has
+                 to be. Still #cancelBtn -- setTopbar and runningScreen show
+                 and word it exactly as before. -->
+            <div class="progress-head">
+              <b id="progressTitle">Separating audio</b>
+              <div class="progress-head-end">
+                <span id="progressPct">0%</span>
+                <button class="btn btn-outline btn-sm" id="cancelBtn" type="button" hidden>Cancel</button>
+              </div>
+            </div>
             <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
             <ol class="progress-steps" id="progressSteps"></ol>
             <div class="job-notice" id="jobNotice" hidden></div>
@@ -1793,7 +1816,11 @@
                   <span class="sub-size" id="subSaved"></span>
                 </div>
                 <div class="sub-style-menu" id="subStyleMenu" hidden></div>
-                <div class="video-under">
+                <!-- Tied to the picture by placeVideoUnder, not to the pane:
+                     a portrait clip in a wide pane sits in the middle, and this
+                     row used to stay hard against the pane's left edge with
+                     nothing above it (user, 2026-09-09). -->
+                <div class="video-under" id="videoUnder">
                   <!-- Filled in by paintPlayToggle: play or pause, whichever
                        the video is not doing right now. -->
                   <button class="video-play" id="playToggle" type="button"
@@ -2787,6 +2814,9 @@ models.refreshModels();
 // shows its card inside #screen-done, but nothing on it can be fixed, so the
 // agent strip has to be able to tell the two apart.
 const SCREEN_SECTION = { failed: "done" };
+// The screens the rail's Dubbing icon owns: home, and the three a job moves
+// through after it.
+const DUB_SCREENS = new Set(["home", "running", "done", "failed"]);
 function showScreen(name) {
   const id = `screen-${SCREEN_SECTION[name] || name}`;
   for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== id;
@@ -2794,6 +2824,9 @@ function showScreen(name) {
   // The rail says which screen is up. Only the screens a rail icon owns: the
   // folder beside it is a fold, not a place, and lights up with its sidebar.
   $("eraseToggle").classList.toggle("active", name === "erase");
+  // Dubbing owns the first screen and every screen a dub passes through, so
+  // the icon stays lit from the drop to the finished video.
+  $("dubToggle").classList.toggle("active", DUB_SCREENS.has(name));
 }
 
 // The top bar carries the whole state of the app: what is open, what it is
@@ -2966,6 +2999,9 @@ const eraseScreen = initEraseScreenUi({
   // install: it owns the progress the top-bar chip and Settings both show.
   installPack: (id) => models.installPack(id),
   packRow: (id) => models.modelRow(id),
+  // ...and the progress and the refusals that go with it, so the erase screen
+  // can draw them where the button was pressed.
+  onPackProgress: (fn) => models.onPackProgress(fn),
   // An erase is a job like any other, so the list and the waiting line have a
   // new row the moment one starts and a changed one when it ends.
   onJobsChanged: () => {
@@ -2986,6 +3022,9 @@ const eraseScreen = initEraseScreenUi({
   labelPx: () => TL_LABEL_PX,
 });
 $("eraseToggle").addEventListener("click", () => eraseScreen.openErase());
+// The rail's way home. Same call as the top bar's house: a job left open is
+// left properly, not just hidden behind another screen.
+$("dubToggle").addEventListener("click", () => resetForNewJob());
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
@@ -3215,7 +3254,15 @@ function resetForNewJob() {
 }
 // The back arrow is the way out of a finished job -- the same "start another
 // one" the New job button used to be, in the place a back arrow belongs.
-$("topbarBack").addEventListener("click", resetForNewJob);
+$("topbarBack").addEventListener("click", () => {
+  // Leaving the erase screen that a New project dialog sent us to puts that
+  // dialog back, with the same video and the same trim -- home would throw
+  // away the video the user was in the middle of (user, 2026-09-09).
+  const back = eraseScreen.origin();
+  const fromDialog = document.body.dataset.screen === "erase" && back;
+  resetForNewJob();
+  if (fromDialog) newProject.openNewProject(back);
+});
 
 function renderLog(job) {
   $("logBox").textContent = (job.logs || []).join("\n");
@@ -4131,6 +4178,32 @@ function syncSubOverlayBox() {
   return pic;
 }
 
+/**
+ * The row under the picture, put where the picture is: same left edge, same
+ * width. Both are read off pictureRect, so the play button and the clock move
+ * with the video instead of with the pane around it.
+ */
+function placeVideoUnder() {
+  const under = $("videoUnder");
+  if (!doneVideo.videoWidth || !doneVideo.videoHeight || !doneVideo.offsetWidth) {
+    under.style.marginLeft = "";
+    under.style.width = "";
+    return;
+  }
+  const pic = pictureRect({ left: doneVideo.offsetLeft, top: doneVideo.offsetTop,
+                            width: doneVideo.offsetWidth, height: doneVideo.offsetHeight,
+                            videoWidth: doneVideo.videoWidth, videoHeight: doneVideo.videoHeight });
+  under.style.marginLeft = Math.round(pic.left) + "px";
+  under.style.width = Math.round(pic.width) + "px";
+}
+
+/** Everything that hangs off the picture, after the picture has moved. */
+function syncVideoChrome() {
+  placeVideoUnder();
+  if (!subOverlay.hidden) updateSubtitleNow();
+}
+doneVideo.addEventListener("loadedmetadata", placeVideoUnder);
+
 // ---- The ruler: the burn's font, measured by the browser ----
 // One canvas measures text in the font ffmpeg will draw with, at 100 px, so
 // every number is em x 100. The padding, weight and line height are read off
@@ -4400,11 +4473,19 @@ $("videoPane").addEventListener("click", (e) => {
 for (const e of ["timeupdate", "seeked", "loadedmetadata", "play", "pause"]) {
   doneVideo.addEventListener(e, updateSubtitleNow);
 }
-window.addEventListener("resize", () => { if (!subOverlay.hidden) updateSubtitleNow(); });
+window.addEventListener("resize", syncVideoChrome);
 // And whenever the player's own box changes without the window moving: layout G
 // sizes the video pane off the row it is in, so opening the Dub Agent or
 // dragging the divider moves the picture and the subtitles have to follow it.
-new ResizeObserver(() => { if (!subOverlay.hidden) updateSubtitleNow(); }).observe(doneVideo);
+//
+// The WRAP is watched as well as the video, and it is the one that matters
+// while a divider is dragged: a portrait clip is as tall as the pane allows,
+// so widening the pane does not change the video's SIZE at all -- only where
+// it sits inside a wider box. The video's own observer never fired, and the
+// subtitle stayed at the old left edge, out on the dark beside the picture
+// (user, 2026-09-09).
+new ResizeObserver(syncVideoChrome).observe(doneVideo);
+new ResizeObserver(syncVideoChrome).observe(doneVideo.parentElement);
 
 // ---------------- Done: the timeline ----------------
 // The strip under the script table -- the ruler, the three lanes over it, the
