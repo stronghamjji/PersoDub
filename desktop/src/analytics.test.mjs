@@ -374,6 +374,16 @@ test("a dropped download is recognised", () => {
   assert.equal(classifyError("connect ETIMEDOUT 1.2.3.4:443"), "network");
 });
 
+test("a refused connection is recognised in either spelling", () => {
+  // The engines fail through Python, which writes the sentence rather than the
+  // errno. The first line here is what a real dub left behind on 2026-08-26
+  // when the voice engine was not running -- the commonest local failure of
+  // all, and it used to count as "unknown".
+  assert.equal(classifyError("ConnectError: [Errno 61] Connection refused"), "network");
+  assert.equal(classifyError("ConnectionResetError(54, 'Connection reset by peer')"), "network");
+  assert.equal(classifyError("connect ECONNREFUSED 127.0.0.1:51801"), "network");
+});
+
 test("a blocked write is recognised", () => {
   assert.equal(classifyError("EACCES: permission denied, mkdir '/Users/x/Library/PersoDub'"), "permission");
 });

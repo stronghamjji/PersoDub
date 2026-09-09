@@ -178,7 +178,15 @@ const ERROR_PATTERNS = [
   [/ENOSPC|no space left/i,                          "disk-full"],
   [/EACCES|EPERM|permission denied/i,                "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
-  [/ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|download failed|sha256 mismatch/i, "network"],
+  // Both spellings of a connection that went away: node and curl print the
+  // errno (ECONNREFUSED), Python prints the sentence ("[Errno 61] Connection
+  // refused"). Only the errno was listed, so the commonest local failure of all
+  // -- a dub reaching a voice engine that is not running -- was counted as
+  // "unknown". Found by rebuilding a real failed job as a report, 2026-09-09.
+  // Widening a rule can only move a message from "unknown" to "network"; no
+  // message that already had a code can change, because every rule above this
+  // one is tried first.
+  [/ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection refused|connection reset|download failed|sha256 mismatch/i, "network"],
   [/out of memory|ENOMEM|allocate/i,                 "out-of-memory"],
   [/unsupported|unrecognized codec|invalid data found/i, "unsupported-format"],
   [/did not become ready|exit \d+/i,                 "engine-crash"],
