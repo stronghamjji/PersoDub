@@ -524,6 +524,10 @@
     display: flex; align-items: center; justify-content: center; }
   .erase-stage video { display: block; max-width: 100%; max-height: 100%;
     object-fit: contain; }
+  /* The trim bar under the picture: one row and its ruler, no more. The
+     picture above it keeps every pixel that is left, which is what a 13-inch
+     window needs. */
+  .erase-trim { flex: 0 0 auto; margin: 0 14px 14px; }
   .erase-error { color: var(--destructive); font-size: var(--font-label);
     padding: 0 22px 14px; }
   .erase-error:empty { display: none; }
@@ -1686,6 +1690,11 @@
             </div>
             <div class="erase-finding" id="eraseFinding" hidden>Finding subtitles…</div>
           </div>
+          <!-- The New project dialog's own trim bar, drawn by the same module
+               (ui/src/trimBar.mjs): the part it chooses is the part that gets
+               erased, and its readout is where "15s of 60s" is read. Empty --
+               and so not there at all -- on every face but the box. -->
+          <div class="trim erase-trim" id="eraseTrimBox"></div>
           <!-- One row, one line high: how far along the erase is and the way to
                stop it, or -- when it stopped by itself -- why, and the way back
                to the box to try a different one. -->
@@ -2942,6 +2951,11 @@ const eraseScreen = initEraseScreenUi({
   // open, and the "Show" beside "Saved to Downloads" stays away.
   reveal: window.persodubShell?.revealPath
     ? (path) => window.persodubShell.revealPath(path) : null,
+  // The trim bar under the picture is the New project dialog's, drawn by the
+  // same module, so it needs the same three from the page.
+  playRange,
+  cancelRange,
+  labelPx: () => TL_LABEL_PX,
 });
 $("eraseToggle").addEventListener("click", () => eraseScreen.openErase());
 

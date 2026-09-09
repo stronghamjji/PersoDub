@@ -10,12 +10,15 @@
 // readOptions() and wires it to the Start button. The repaint passes that
 // reach across sections (the hints under the dropdowns, the cloud-mode
 // greying, the key-gated greying) are passed in rather than moved, and so is
-// playRange/cancelRange, which the finished screen plays its lines with.
+// playRange/cancelRange, which the finished screen plays its lines with. The
+// trim bar itself moved out to ui/src/trimBar.mjs, because the Erase subtitles
+// screen draws the same one.
 //
 // Everything this file touches is #projectOverlay and its children.
 import { LANGUAGES, fetchLanguages, startDownload, fetchDownload,
          downloadVideoUrl, uploadDownload, saveDownloadClip } from "./dubApi.mjs";
-import { fmtClock, fmtClockTenths } from "./format.mjs";
+import { fmtClock } from "./format.mjs";
+import { initTrimBar } from "./trimBar.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
 // is the single most-glanced-at line in the dialog, and a flag says it faster
@@ -46,14 +49,6 @@ const LANG_FLAGS = {
   "tr": "🇹🇷", "uk": "🇺🇦", "ur": "🇵🇰", "vi": "🇻🇳", "zh": "🇨🇳",
 };
 
-// The shortest part worth dubbing; also what keeps the two handles from
-// crossing over each other.
-const TRIM_MIN_SPAN = 0.5;
-// What one nudge of a handle is worth -- the sliders' step, in seconds.
-const TRIM_STEP = 0.1;
-// How far apart the ruler's ticks are, and the coarsest they may ever be read
-// in: squeezed, they thin out to 10s, 15s, 20s rather than to 6s or 7s.
-const TRIM_TICK_SEC = 5;
 // How often the dialog asks how far along a link's download is. A second is
 // what the progress row is worth: the percent moves in visible steps and the
 // question costs one small answer.
@@ -169,195 +164,17 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   // The play button's purple-while-playing state is driven by the video, whose
   // listeners outlive the box; kept here so re-drawing swaps them rather than
   // piling a second set on.
-  let trimPlayState = null;
+  // The trim bar is its own module (ui/src/trimBar.mjs): the Erase subtitles
+  // screen draws the same control, and one question asked twice is how the two
+  // would come to answer it differently. What is this dialog's own goes in
+  // here -- the player it scrubs, the badge it writes the position into, and
+  // where the chosen part is kept.
+  const trimBar = initTrimBar({
+    $, getVideo: () => $("projectVideo"), getClock: () => $("projectDur"),
+    playRange, cancelRange, labelPx,
+    onChange: (trim) => { if (state.newProject) state.newProject.trim = trim; },
+  });
 
-  // Draws the trim box: play button, readout, and a bar with a handle at each
-  // end. Called once a local file's length is known (a link has none to scrub).
-  function renderTrim(duration) {
-    const box = $("trimBox");
-    // No usable length (metadata still loading, or a stream): draw nothing
-    // rather than a bar that lies. The loadedmetadata handler calls back.
-    if (!Number.isFinite(duration) || duration < 1) { box.innerHTML = ""; return; }
-
-    // Every line below the first is HTML the browser receives, so its
-    // indentation is output, not layout: it is deliberately NOT stepped in with
-    // the rest of this file, and reads byte for byte as it did when this lived
-    // inline in static/index.html (pinned by newProject.test.mjs).
-    box.innerHTML = `
-    <div class="trim-row">
-      <button class="trim-play" id="trimPlay" type="button" title="Play the selected part" aria-label="Play the selected part">
-        <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
-        <svg class="ico-pause" viewBox="0 0 18 18" aria-hidden="true"><rect x="5" y="3" width="3" height="12" rx="1"/><rect x="10" y="3" width="3" height="12" rx="1"/></svg>
-      </button>
-      <span class="trim-label">Trim</span>
-      <span class="trim-read" id="trimRead"></span>
-    </div>
-    <div class="trim-scale" id="trimScale">
-      <div class="trim-bar">
-        <div class="trim-hatch" id="trimHatchStart" style="left: 0"></div>
-        <div class="trim-hatch" id="trimHatchEnd" style="right: 0"></div>
-        <div class="trim-sel" id="trimSel"></div>
-        <input type="range" class="trim-range" id="trimStart" min="0" step="${TRIM_STEP}" aria-label="Trim start">
-        <input type="range" class="trim-range" id="trimEnd" min="0" step="${TRIM_STEP}" aria-label="Trim end">
-        <div class="trim-head" id="trimHead" hidden><i></i></div>
-      </div>
-      <div class="trim-ruler" id="trimRuler"></div>
-    </div>`;
-
-    const startInput = $("trimStart"), endInput = $("trimEnd");
-    startInput.max = endInput.max = String(duration);
-    startInput.value = "0";
-    endInput.value = String(duration);
-
-    // Where a slider's thumb centre sits: half a thumb in from each edge, which
-    // is exactly how the browser lays a range out. The painted layers use the
-    // same formula so bar and handles never drift apart.
-    const at = (sec) => `calc(5px + (100% - 10px) * ${sec / duration})`;
-
-    // The ruler under the bar, ticked on that same mapping. Every 5 seconds
-    // where they fit; where they do not, the timeline's rule -- a label needs
-    // labelPx of room, so thin the ticks until it has it -- rounded up to
-    // whole fives. Settled once, from the width the bar has now.
-    const room = Math.max(1, $("trimScale").clientWidth - 10);
-    const every = TRIM_TICK_SEC *
-      Math.max(1, Math.ceil((labelPx() * duration) / (room * TRIM_TICK_SEC)));
-    let ticks = "";
-    for (let s = 0; s <= Math.floor(duration); s += every) {
-      // The label hangs to the RIGHT of its tick, so the last one would run off
-      // the end and be cut in half. A tick with no room keeps the line and
-      // drops the label.
-      const label = 5 + room * (s / duration) + labelPx() <= room + 10
-        ? `<span>${fmtClock(s)}</span>` : "";
-      ticks += `<div class="trim-tick" style="left:${at(s)}">${label}</div>`;
-    }
-    $("trimRuler").innerHTML = ticks;
-
-    function paint() {
-      const start = Number(startInput.value), end = Number(endInput.value);
-      $("trimHatchStart").style.width = at(start);
-      $("trimHatchEnd").style.left = at(end);
-      $("trimSel").style.left = at(start);
-      $("trimSel").style.width = `calc((100% - 10px) * ${(end - start) / duration})`;
-      // Both handles parked at the ends is not a trim -- send no range at all,
-      // so the server keeps the file exactly as uploaded. Within one step of the
-      // end counts as the end: a slider snaps to its 0.1 s grid, so a length like
-      // 22.08s can only ever be dragged back to 22.0.
-      const whole = start <= 0 && end >= duration - TRIM_STEP;
-      // Which is also why the readout counts a full range against the real
-      // length: otherwise an untrimmed 22.085s video reads "22.0s of 22.1s", as
-      // if a tenth had been shaved off it.
-      const shownEnd = whole ? duration : end;
-      $("trimRead").textContent =
-        `${fmtClockTenths(start)} – ${fmtClockTenths(shownEnd)} · ${(shownEnd - start).toFixed(1)}s of ${duration.toFixed(1)}s`;
-      if (state.newProject) state.newProject.trim = whole ? null : { start, end };
-      // A handle dragged past the playhead leaves it outside the part being
-      // dubbed, where it means nothing: put it away.
-      if (headAt !== null && (headAt < start || headAt > end)) {
-        headAt = null;
-        $("trimHead").hidden = true;
-      }
-    }
-
-    startInput.addEventListener("input", () => {
-      startInput.value = String(Math.min(Number(startInput.value), Number(endInput.value) - TRIM_MIN_SPAN));
-      paint();
-    });
-    endInput.addEventListener("input", () => {
-      endInput.value = String(Math.max(Number(endInput.value), Number(startInput.value) + TRIM_MIN_SPAN));
-      paint();
-    });
-
-    const video = $("projectVideo"), playBtn = $("trimPlay");
-    // Where the playhead stands when nothing is playing: null means "nowhere",
-    // and the line is not drawn at all. Set by a drag, a click on the selection,
-    // or by playback stopping partway.
-    let headAt = null;
-    // The reverse of at(): a pointer's x turned back into a second of the video,
-    // never outside the part that is actually going to be dubbed.
-    const secAt = (clientX) => {
-      const box = $("trimSel").parentElement.getBoundingClientRect();
-      const sec = ((clientX - box.left - 5) / Math.max(1, box.width - 10)) * duration;
-      return Math.min(Math.max(sec, Number(startInput.value)), Number(endInput.value));
-    };
-    const head = $("trimHead");
-    // Moving the playhead moves the preview with it: the video seeks, the line
-    // follows the pointer and the badge counts along.
-    function seekTo(sec) {
-      headAt = sec;
-      video.currentTime = sec;
-      head.style.left = at(sec);
-      head.hidden = false;
-      $("projectDur").textContent = fmtClockTenths(sec);
-    }
-
-    // Dragging the head. The video is stopped for the duration of the drag so
-    // playRange's stop-listener cannot fire on a seek, and started again on drop
-    // if it had been playing -- from where it was dropped, still stopping at the
-    // end of the selection.
-    let wasPlaying = false;
-    head.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      head.setPointerCapture(e.pointerId);
-      wasPlaying = !video.paused;
-      if (wasPlaying) cancelRange(video);
-      seekTo(secAt(e.clientX));
-    });
-    head.addEventListener("pointermove", (e) => {
-      if (head.hasPointerCapture(e.pointerId)) seekTo(secAt(e.clientX));
-    });
-    head.addEventListener("pointerup", (e) => {
-      if (!head.hasPointerCapture(e.pointerId)) return;
-      head.releasePointerCapture(e.pointerId);
-      if (wasPlaying) playRange(video, headAt, Number(endInput.value)).catch(() => {});
-      wasPlaying = false;
-    });
-    // A click anywhere on the chosen part puts the playhead there too. The
-    // handles sit on top of their own ends, so they still grab first.
-    $("trimSel").addEventListener("pointerdown", (e) => { seekTo(secAt(e.clientX)); });
-
-    // The thumbnail is muted so it can sit quietly; a press on the play
-    // button is the user asking to hear the part they picked, so unmute then.
-    // A second press pauses -- the same button, the same place.
-    playBtn.addEventListener("click", () => {
-      if (!video.paused) { cancelRange(video); return; }
-      video.muted = false;
-      // Play from where the playhead was left standing, not from the start.
-      const from = headAt === null ? Number(startInput.value) : headAt;
-      playRange(video, from, Number(endInput.value)).catch(() => {});
-    });
-    if (trimPlayState) {
-      for (const e of ["play", "pause", "ended", "timeupdate"]) video.removeEventListener(e, trimPlayState);
-    }
-    // One handler for play / pause / ended / timeupdate: the button's look, the
-    // badge on the thumbnail (the running clock while it plays, the length
-    // when it stops) and the playhead line walking the bar.
-    trimPlayState = () => {
-      const playing = !video.paused && !video.ended;
-      playBtn.classList.toggle("playing", playing);
-      const label = playing ? "Pause" : "Play the selected part";
-      playBtn.title = label; playBtn.setAttribute("aria-label", label);
-      if (playing) {
-        headAt = video.currentTime;
-        $("projectDur").textContent = fmtClockTenths(headAt);
-        head.style.left = at(headAt);
-        head.hidden = false;
-      } else if (headAt !== null && headAt < Number(endInput.value) - TRIM_STEP) {
-        // Stopped partway -- by the pause button or by a drag. The line stays
-        // where it stopped, and the next press picks up from there.
-        $("projectDur").textContent = fmtClockTenths(headAt);
-        head.style.left = at(headAt);
-        head.hidden = false;
-      } else {
-        // Played to the end of the selection: back to a bare bar and the length.
-        headAt = null;
-        $("projectDur").textContent = fmtClock(duration);
-        head.hidden = true;
-      }
-    };
-    for (const e of ["play", "pause", "ended", "timeupdate"]) video.addEventListener(e, trimPlayState);
-
-    paint();
-  }
 
   // A dropped file is played straight from memory, which costs an object URL --
   // released whenever the dialog lets go of that file.
@@ -365,12 +182,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   function releaseProjectVideo() {
     const v = $("projectVideo");
     cancelRange(v);
-    // The trim box goes with the video, so its play/pause listeners go too --
-    // otherwise they keep toggling a class on a button that has left the page.
-    if (trimPlayState) {
-      for (const e of ["play", "pause", "ended", "timeupdate"]) v.removeEventListener(e, trimPlayState);
-      trimPlayState = null;
-    }
+    // The trim bar goes with the video, so its play/pause listener goes too --
+    // otherwise it keeps toggling a class on a button that has left the page.
+    trimBar.release();
     v.removeAttribute("src");
     v.load();
     if (projectObjectUrl) { URL.revokeObjectURL(projectObjectUrl); projectObjectUrl = null; }
@@ -428,7 +242,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     v.src = downloadVideoUrl(d.id);
     v.addEventListener("loadedmetadata", () => {
       $("projectDur").textContent = fmtClock(v.duration);
-      renderTrim(v.duration);
+      trimBar.render(v.duration);
     }, { once: true });
   }
 
@@ -519,7 +333,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     $("projectThumb").style.backgroundImage = "";
     // The previous video's bar would otherwise sit there until this one's
     // length is known -- and stay for good behind a link, which has no bar.
-    $("trimBox").innerHTML = "";
+    trimBar.clear();
     // Likewise the last download's row: beginDownload puts it back up when
     // this link actually has to be fetched.
     $("dlRow").hidden = true;
@@ -536,7 +350,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
           $("projectDur").textContent = `${files.length} videos`;
         } else {
           $("projectDur").textContent = fmtClock(v.duration);
-          renderTrim(v.duration);
+          trimBar.render(v.duration);
           // Its length is known now, so the copy can be filed with one.
           holdFile(file, v.duration);
         }

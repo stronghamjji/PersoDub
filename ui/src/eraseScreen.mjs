@@ -17,6 +17,7 @@ import { uploadDownload, downloadVideoUrl, suggestEraseArea, startErase,
 import { clampArea, defaultArea, dragArea, toScreen, videoPerScreen, isWhole,
          estimateSeconds, estimateLabel, progressLine, isPackMissing,
          packNeededLine, eraseView, workLength, trimNote } from "./eraseArea.mjs";
+import { initTrimBar } from "./trimBar.mjs";
 
 // How often the erase is asked how far along it is. The same second the dub's
 // queue card uses: the percentage moves in visible steps and the answer is small.
@@ -43,11 +44,16 @@ const PACK_ID = "subtitle-eraser";
  *        the erased video (optionally with the user's own subtitles)
  * @param {(path: string) => void} deps.reveal  show a saved file in the
  *        computer's own file window, or null outside the desktop app
+ * @param {(video, start, end) => Promise} deps.playRange  play only [start, end]
+ * @param {(video) => void} deps.cancelRange  stop that
+ * @param {() => number} deps.labelPx  how much room a clock label needs on the
+ *        trim bar's ruler
  * @returns the operations the rest of the page calls.
  */
 export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
                                     installPack, packRow, onJobsChanged,
-                                    onDub, reveal }) {
+                                    onDub, reveal,
+                                    playRange, cancelRange, labelPx }) {
   // The video being worked on: the id the app holds it under, what to call it,
   // and how long it is (the estimate is made from that length).
   let source = null;
@@ -74,6 +80,24 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   // Where Export wrote the video, once it has. "" until then, which is what
   // keeps the "Saved to Downloads" line from claiming anything too early.
   let savedPath = "";
+
+  // The same trim bar the New project dialog draws, on this screen's own video
+  // and under its own ids. Before it, a video already cut down in the dialog
+  // could not be cut again here, and one brought in whole could not be cut at
+  // all -- so every erase ran over the entire file.
+  const trimBar = initTrimBar({
+    $, prefix: "erase", getVideo: () => $("eraseVideo"),
+    playRange, cancelRange, labelPx,
+    onChange: (trim) => { if (source) { source.trim = trim; paint(); } },
+  });
+
+  // The bar, drawn on the part that came in with the video -- or nothing at
+  // all when the length is not known, which is what a job opened out of the
+  // Projects list has.
+  function drawTrim() {
+    if (source && source.duration >= 1) trimBar.render(source.duration, source.trim);
+    else trimBar.clear();
+  }
 
   // This computer's own speed. Windows machines here have a GPU doing the
   // work; a Mac does it on its own chip and takes longer per second of video.
@@ -128,6 +152,10 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     $("eraseBox").hidden = view !== "area" || !area;
     $("eraseFinding").hidden = !finding;
     $("eraseRow").hidden = view === "area";
+    // The trim bar belongs to the question "which part?", which is only asked
+    // while the box is being placed. Emptied rather than hidden, so it also
+    // lets go of the player it was scrubbing.
+    if (view !== "area" && $("eraseTrimBox").innerHTML) trimBar.clear();
     $("eraseCancelBtn").hidden = view !== "working";
     $("eraseBarBox").hidden = view !== "working";
     // Back is the way to the box that has to change -- which is only somewhere
@@ -206,6 +234,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     source = null; area = null; job = null; frame = { w: 0, h: 0 };
     packMissing = false; finding = false; startedAt = 0; savedPath = "";
     tab = "erased";
+    trimBar.clear();
     setVideo("");
     $("eraseError").textContent = "";
   }
@@ -303,6 +332,9 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     setVideo(downloadVideoUrl(source.downloadId));
     finding = true;
     paint();
+    // After paint, so the ruler is measured off a bar that is on the screen:
+    // ticks worked out against a width of zero come out as one tick.
+    drawTrim();
     suggest();
   }
 
