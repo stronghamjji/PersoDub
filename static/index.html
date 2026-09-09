@@ -1187,7 +1187,7 @@
   .mn-items li span { color: var(--muted-foreground); font-size: var(--font-label); }
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
-  .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 16px; }
   /* Above the settings sheet: What's new can be opened FROM Settings, and a
      sibling overlay later in the DOM would otherwise paint over it. */
   #whatsNewOverlay { z-index: 30; }
@@ -1698,9 +1698,12 @@
       <div class="mn-progress" id="mnProgress" hidden><div id="mnBar"></div></div>
       <div class="form-error" id="mnError"></div>
       <div class="mn-buttons">
+        <!-- Open Settings is a way out, not a second answer: as a third button
+             of the same weight the eye had to choose between three, and the one
+             that matters is Download and Start. -->
+        <button class="settings-link" id="mnSettings" type="button">Open Settings</button>
         <button class="btn btn-outline" id="mnCancel" type="button">Cancel</button>
         <button class="btn btn-outline" id="mnHide" type="button" hidden>Hide</button>
-        <button class="btn btn-outline" id="mnSettings" type="button">Open Settings</button>
         <button class="btn btn-primary" id="mnDownload" type="button">Download and Start</button>
       </div>
     </div>

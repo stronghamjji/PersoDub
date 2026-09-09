@@ -70,6 +70,19 @@ test("the saved theme is read before the first paint", () => {
     "the boot script must put the theme on <html>");
 });
 
+// The download-first dialog asks one question, so it must offer one answer:
+// Download and Start filled, Cancel outlined, and the way out to Settings as a
+// word. Three buttons of the same weight made the eye pick between three.
+test("only one button in the models dialog reads as the answer", () => {
+  const html = readFileSync(INDEX, "utf8");
+  assert.match(html, /class="btn btn-primary" id="mnDownload"/,
+    "Download and Start is the filled button");
+  assert.match(html, /class="settings-link" id="mnSettings"/,
+    "Open Settings is a word, not a third button");
+  assert.match(html, /class="btn btn-outline" id="mnCancel"/,
+    "Cancel keeps its outline");
+});
+
 // Korean typing sends Enter twice: once to settle the syllable being composed
 // (isComposing=true), once for real. The agent input treating the first as
 // "send" left the settled syllable behind in the box and -- worse -- stopped
