@@ -136,6 +136,18 @@ SEP_MODEL_DIR = os.environ.get("SEP_MODEL_DIR", "models/demucs")
 DIAR_PYTHON = os.environ.get("DIAR_PYTHON", "python3")
 
 
+# Erasing the subtitles burned into a video (app/eraser.py,
+# app/scripts/erase_subtitles.py + suggest_area.py). The tool is
+# video-subtitle-remover, and it runs under its own interpreter for the same
+# reason SEP_PYTHON does -- paddleocr, paddlepaddle and its torch build are
+# not in the app's own venv. ERASER_VSR_DIR is where that repository is
+# checked out: it names its own weights (backend/models) by paths relative to
+# itself, so the run has to stand in that folder. Both empty means the pack is
+# not installed here, and the erase routes answer 409 instead of failing later.
+ERASER_PYTHON = os.environ.get("ERASER_PYTHON", "")
+ERASER_VSR_DIR = os.environ.get("ERASER_VSR_DIR", "")
+
+
 # Original-vocals gating margin (app/qwen_assemble.gate_vocals_chunks/place_lines).
 # Each speech region is padded by this many seconds on both sides (then
 # overlapping regions are merged) before the original vocals track is gated
