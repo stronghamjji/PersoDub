@@ -14,7 +14,7 @@
 //
 // Everything this file touches is #projectOverlay and its children.
 import { LANGUAGES, fetchLanguages, startDownload, fetchDownload,
-         downloadVideoUrl } from "./dubApi.mjs";
+         downloadVideoUrl, uploadDownload } from "./dubApi.mjs";
 import { fmtClock, fmtClockTenths } from "./format.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
@@ -444,6 +444,23 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     }, DOWNLOAD_POLL_MS);
   }
 
+  // A dropped file is copied into the holding area too, and quietly: the video
+  // is already playing from memory, so nothing on screen waits for the copy.
+  // What it buys is the same three buttons a link gets -- and a dub that reads
+  // the copy instead of uploading the file a second time. A copy that fails
+  // leaves the dialog exactly as it was before this existed.
+  async function holdFile(file, durationSec) {
+    let d;
+    try {
+      d = await uploadDownload(file, durationSec);
+    } catch { return; }
+    const np = state.newProject;
+    // The dialog may have moved on to another video while this was uploading.
+    if (!np || np.file !== file) return;
+    np.downloadId = d.id;
+    paintActions();
+  }
+
   async function beginDownload(url) {
     if (lastLink && lastLink.url === url) {
       // The same link, still in the holding area: play it rather than fetch a
@@ -501,6 +518,8 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
         } else {
           $("projectDur").textContent = fmtClock(v.duration);
           renderTrim(v.duration);
+          // Its length is known now, so the copy can be filed with one.
+          holdFile(file, v.duration);
         }
       }, { once: true });
     } else if (source.probe) {

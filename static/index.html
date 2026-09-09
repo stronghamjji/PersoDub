@@ -3124,7 +3124,7 @@ async function startBatchDubbing(files) {
     const opts = newProject.readOptions();
     for (const f of files) {
       const fd = buildDubFormData({ ...opts, video: f, sourceUrl: null,
-                                    project: undefined, trim: null });
+                                    downloadId: null, project: undefined, trim: null });
       await startDubJob(fd);
     }
     newProject.closeNewProject();
