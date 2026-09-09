@@ -38,7 +38,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   // progress line. Packs (the engines venv, the Ollama runtime) are the
   // shell's to install: this page asks over `shell` (window.persodubShell,
   // absent in a plain browser) and follows the progress events it sends.
-  let packBusy = null;     // { id, name, line, pct }
+  let packBusy = null;     // { id, name, title, line, pct }
   let packFailed = null;   // { id, reason } until the next attempt or refresh clears it
   const PACK_HINT = "Installed by the desktop app";
 
@@ -49,11 +49,15 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       if (!p || !p.pack || !packBusy || packBusy.id !== p.pack) return;
       // A detail that only restates the title ("Downloading the translation
       // runtime: Downloading the translation runtime", 2026-09-08) shows once.
+      packBusy.title = p.title || "";
       packBusy.line = p.state === "progress" && p.detail && p.detail !== p.title ? `${p.title}: ${p.detail}` : (p.title || "");
       // The shell sends the pack's overall percent on every event.
       if (p.pct != null) packBusy.pct = p.pct;
       repaint();
-      tellPack({ id: packBusy.id, line: packBusy.line, pct: packBusy.pct });
+      // The title alone as well as the whole line: a screen with room for one
+      // short sentence wants "Installing the subtitle eraser", not that plus
+      // the name of the wheel being fetched (user, 2026-09-09).
+      tellPack({ id: packBusy.id, title: packBusy.title, line: packBusy.line, pct: packBusy.pct });
     });
   }
 

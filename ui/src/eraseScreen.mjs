@@ -24,7 +24,7 @@ import { initTrimBar } from "./trimBar.mjs";
 const POLL_MS = 1000;
 // The pack that does the erasing, and the row in the catalog its size is read
 // from (GET /api/models already answers with this platform's number).
-const PACK_ID = "subtitle-eraser";
+export const PACK_ID = "subtitle-eraser";
 
 /**
  * Wire the Erase subtitles screen to a page.
@@ -461,7 +461,9 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       return;
     }
     const pct = p.pct == null ? "" : ` · ${Math.round(p.pct)}%`;
-    $("erasePackText").textContent = (p.line || "Downloading the erase tool") + pct;
+    // The step and the percentage. The step's detail is the file being
+    // fetched, which is a line of its own length and says nothing to anyone.
+    $("erasePackText").textContent = (p.title || "Downloading the subtitle eraser") + pct;
   });
 
   $("erasePackBtn").addEventListener("click", async () => {

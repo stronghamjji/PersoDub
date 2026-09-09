@@ -551,7 +551,10 @@ test("a watcher outside the dialog is told the progress, and the reason a pack f
   await running;
   await settle();
 
-  assert.deepEqual(seen[0], { id: "engine", line: "Downloading: half way", pct: 50 });
+  // The title travels apart from the line: a screen with room for one short
+  // sentence takes the title alone.
+  assert.deepEqual(seen[0],
+    { id: "engine", title: "Downloading", line: "Downloading: half way", pct: 50 });
   assert.deepEqual(seen.at(-1), { id: "engine", error: "AI engine: No room on the disk." });
 });
 

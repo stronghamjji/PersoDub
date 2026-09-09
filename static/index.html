@@ -2457,7 +2457,7 @@ import { initModelsUi } from "/js/modelsDialog.mjs";
 import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
-import { initEraseScreenUi } from "/js/eraseScreen.mjs";
+import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "/js/eraseScreen.mjs";
 import { initProjectsUi } from "/js/projects.mjs";
 import { initRunningScreenUi, stoppedMark } from "/js/runningScreen.mjs";
 import { initScriptTableUi } from "/js/scriptTable.mjs";
@@ -2783,9 +2783,13 @@ function paintModelStatusLines(rows) {
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
           || rows.find((m) => m.state === "downloading");
   // The chip stands in for the download dialog, not beside it: it shows only
-  // once Hide closed the dialog (the dialog itself carries the percent).
+  // once Hide closed the dialog (the dialog itself carries the percent). Same
+  // rule for the erase screen, which draws its pack's percentage on its own
+  // line -- the chip beside it was the same number twice (user, 2026-09-09).
   const dialogOpen = $("modelsNeededOverlay").classList.contains("open");
-  $("topbarDl").hidden = !dl || dialogOpen;
+  const shownElsewhere = dl && dl.id === ERASER_PACK_ID
+    && document.body.dataset.screen === "erase";
+  $("topbarDl").hidden = !dl || dialogOpen || shownElsewhere;
   if (dl) $("topbarDl").textContent = `${dl.name} · ${dl.progress ?? 0}%`;
 }
 
