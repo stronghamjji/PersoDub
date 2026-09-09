@@ -30,7 +30,7 @@ const STAGE_NAMES = stepLabels(STAGES);
 // token is what the code elsewhere tests. Said in plain words here, where the
 // only audience is the person reading the screen.
 const ERROR_SENTENCES = {
-  interrupted: "The app was closed before this dub finished.",
+  interrupted: "The app was closed before dubbing finished.",
 };
 
 // Out-of-credits / quota popup: pop once per job on the first exhaustion-type

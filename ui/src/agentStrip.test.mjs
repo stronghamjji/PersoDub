@@ -383,7 +383,7 @@ test("a running dub locks the row, and a failed one says why", async () => {
     assert.equal(h.$("assistantInput").disabled, true);
     assert.equal(h.$("assistantModelBtn").disabled, true);
     assert.equal(h.$("assistantInput").placeholder,
-      "Nothing to fix here - this dub did not finish");
+      "Nothing to fix here - dubbing did not finish");
   } finally { h.log.restore(); }
 });
 

@@ -104,6 +104,10 @@
     /* The trim bar's empty track -- a touch off --secondary so the hatching
        over it stays readable. */
     --trim-track: #2c2c32;
+    /* The outline on the one button inside the drop zone. Full contrast in
+       both sheets: it sits on the zone rather than in a row of buttons, and
+       --border there left it looking switched off (user, 2026-09-08). */
+    --outline-button: #ffffff;
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
@@ -164,6 +168,7 @@
     --thumb-badge: rgba(0, 0, 0, 0.6);
     --thumb-foreground: #fafafa;
     --trim-track: #f1f1f4;
+    --outline-button: #0a0a0a;
   }
 
   * { box-sizing: border-box; }
@@ -482,7 +487,8 @@
      button, and "Choose File…" with the ellipsis is the platform's own wording
      for one (2026-08-28). */
   .upload-hint { font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .upload-choose { font-size: 0.84rem; }
+  .upload-choose { font-size: 0.84rem;
+    border-color: var(--outline-button); color: var(--outline-button); }
 
   /* A rule either side of the word, so "OR" reads as a divider, not a label. */
   .home-or { display: flex; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: 11.5px; letter-spacing: 0.06em; }
@@ -1644,7 +1650,7 @@
       <h2 id="mnTitle" style="margin: 0 0 8px"></h2>
       <p class="settings-hint" id="mnLine" style="margin: 0"></p>
       <ul class="mn-items" id="mnItems" hidden></ul>
-      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or dub with the Perso API using your key: Open Settings.</p>
+      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or use the Perso API with your key: Open Settings.</p>
       <div class="mn-progress" id="mnProgress" hidden><div id="mnBar"></div></div>
       <div class="form-error" id="mnError"></div>
       <div class="mn-buttons">
@@ -2396,7 +2402,7 @@ for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
 // the hint slots render these with pre-line whitespace.
 const ENGINE_HINTS = {
   dubMode: { local: ["Runs on your desktop, free.", "You can edit the script after."],
-             perso: ["Perso dubs it start to finish.", "Uses Perso credits."] },
+             perso: ["Perso does the dubbing start to finish.", "Uses Perso credits."] },
   sep: { local: ["Runs on your desktop, free.", "For accuracy, use the API."],
          perso: ["Most accurate.", "Uses Perso credits."] },
   stt: { local: ["Runs on your desktop, free.", "For accuracy, use the API."],

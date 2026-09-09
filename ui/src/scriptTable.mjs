@@ -194,14 +194,14 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       // gets crushed into the first one and looks like nothing happened.
       bar.style.gridColumn = "1 / -1";
       const note = document.createElement("span");
-      note.textContent = "This Perso dub is read-only. ";
+      note.textContent = "This Perso dubbing is read-only. ";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "keys-link";
       btn.textContent = "Make it editable";
       btn.addEventListener("click", async () => {
         btn.disabled = true;
-        note.textContent = "Fetching this dub from Perso… ";
+        note.textContent = "Fetching from Perso… ";
         try {
           const r = await fetch(`/api/dub/jobs/${jobId}/perso/materialize`, { method: "POST" });
           if (!r.ok) {

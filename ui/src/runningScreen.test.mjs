@@ -155,7 +155,7 @@ test("a failed job's reason is written into both screens, in plain words", (t) =
   h.api.paintNotices({ id: "j1", status: "error", error: "interrupted" });
   for (const id of ["jobNotice", "doneNotice"]) {
     assert.equal(h.$(id).hidden, false);
-    assert.equal(h.$(id).innerHTML, "The app was closed before this dub finished.");
+    assert.equal(h.$(id).innerHTML, "The app was closed before dubbing finished.");
   }
 });
 

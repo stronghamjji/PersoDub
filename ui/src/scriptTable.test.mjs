@@ -511,7 +511,7 @@ test("a read-only Perso script cannot be typed into until its bar is pressed", a
   const bar = box.children[0];
   assert.equal(bar.className, "script-empty");
   const [note, btn] = bar.children;
-  assert.equal(note.textContent, "This Perso dub is read-only. ");
+  assert.equal(note.textContent, "This Perso dubbing is read-only. ");
   assert.equal(btn.textContent, "Make it editable");
 
   await btn.fire("click");

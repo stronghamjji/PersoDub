@@ -36,11 +36,11 @@ test("dubStartDialog: several models get the total, one gets its name", () => {
     { id: "qwen3-tts", name: "Qwen3-TTS", bytes: 4.3 * 1024 ** 3 },
     { id: "whisper", name: "Whisper", bytes: 2.9 * 1024 ** 3 },
   ], total_bytes: 7.2 * 1024 ** 3 });
-  assert.equal(many.title, "Download 7.2 GB of AI models to dub this video?");
+  assert.equal(many.title, "Download 7.2 GB of AI models to start dubbing?");
   assert.deepEqual(many.ids, ["qwen3-tts", "whisper"]);
 
   const one = dubStartDialog({ missing: [{ id: "gemma", name: "Gemma 3", bytes: 7.6 * 1024 ** 3 }] });
-  assert.equal(one.title, "Download Gemma 3 (7.6 GB) to dub this video?");
+  assert.equal(one.title, "Download Gemma 3 (7.6 GB) to start dubbing?");
 });
 
 test("dubStartDialog splits packs from models and keeps the 409's order", () => {
@@ -51,17 +51,17 @@ test("dubStartDialog splits packs from models and keeps the 409's order", () => 
   assert.deepEqual(d.packs, ["engine"]);
   assert.deepEqual(d.models, ["whisper"]);
   assert.deepEqual(d.ids, ["engine", "whisper"]);
-  assert.equal(d.title, "Download 4.9 GB to dub this video?");
+  assert.equal(d.title, "Download 4.9 GB to start dubbing?");
   assert.match(d.line, /AI engine/);
   const one = dubStartDialog({ missing: [{ id: "engine", kind: "pack", name: "AI engine", bytes: 2.0 * 1024 ** 3 }] });
-  assert.equal(one.title, "Download AI engine (2.0 GB) to dub this video?");
+  assert.equal(one.title, "Download AI engine (2.0 GB) to start dubbing?");
   // Models-only 409s (every 0.5.2 kit) keep their wording.
   const old = dubStartDialog({ missing: [
     { id: "qwen3-tts", kind: "model", name: "Qwen3-TTS", bytes: 4.3 * 1024 ** 3 },
     { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9 * 1024 ** 3 },
   ] });
   assert.deepEqual(old.packs, []);
-  assert.equal(old.title, "Download 7.2 GB of AI models to dub this video?");
+  assert.equal(old.title, "Download 7.2 GB of AI models to start dubbing?");
 });
 
 test("neededPackIds names the pack behind each dropdown choice", () => {
