@@ -35,6 +35,7 @@ ROUTES = [
     ('DELETE', '/api/models/{mid}'),
     ('GET', '/'),
     ('GET', '/api/agent/status'),
+    ('GET', '/api/downloads'),
     ('GET', '/api/downloads/{did}'),
     ('GET', '/api/downloads/{did}/video'),
     ('GET', '/api/dub/jobs'),

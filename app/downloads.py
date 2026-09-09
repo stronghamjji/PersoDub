@@ -66,6 +66,13 @@ class DownloadStore:
         with self._lock:
             return self._items.get(did)
 
+    def all(self):
+        """Everything being held right now. The Dub Agent lists these beside a
+        folder's videos, so a link the user fetched on the screen can be named
+        without their knowing where in the workspace it landed."""
+        with self._lock:
+            return list(self._items.values())
+
     def add_file(self, root: str, title: str, duration_sec: float, write: Callable[[str], None]) -> Download:
         """A file the user already has (dropped on the screen), held the same
         way a fetched link is, so Save clip and Start dubbing read one record

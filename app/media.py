@@ -22,6 +22,27 @@ def video_duration(path: str) -> float:
     return stream_duration(path, "v:0")
 
 
+def video_size(path: str):
+    """The video's pixel width and height, or (0, 0) when ffprobe will not say.
+
+    For work described in the frame's own coordinates -- the band the subtitle
+    eraser is pointed at, which app/mcp_server.py works out from words like
+    "bottom". Zeros rather than a guessed size: a band measured against the
+    wrong frame would clean the wrong part of the picture, so the caller has
+    to be told instead.
+    """
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    try:
+        w, h = (int(x) for x in out.stdout.strip().split(",")[:2])
+    except ValueError:
+        return 0, 0
+    return w, h
+
+
 def mux(video: str, audio: str, out: str, dur: float) -> subprocess.CompletedProcess:
     """Re-mux a video track with an audio track, padding the audio to `dur` seconds.
 

@@ -81,6 +81,17 @@ def downloads_upload(video: UploadFile = File(...), duration_sec: Optional[float
     return d.as_dict()
 
 
+@router.get("/api/downloads")
+def downloads_list():
+    """Every video being held right now.
+
+    For the Dub Agent's list_videos, which shows these beside the files in the
+    folder it was asked about: a link the user fetched on the screen is a real
+    file on this computer, sitting where they would never think to look.
+    """
+    return {"downloads": [d.as_dict() for d in download_store.all()]}
+
+
 @router.get("/api/downloads/{did}")
 def downloads_status(did: str):
     d = download_store.get(did)
