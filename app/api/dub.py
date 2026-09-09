@@ -44,7 +44,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app import dub_launch, engines_status, languages, media, runtime, state
+from app import dub_launch, engines_status, erase_launch, languages, media, runtime, state
 from app import models as model_store
 from app import setup as dub_setup
 from app.api import downloads as downloads_api
@@ -57,6 +57,7 @@ from app.config import (
     default_stt_engine,
 )
 from app.dub_script import EDITED_NAME, script_path
+from app.jobs import kind_of
 from app.perso_client import list_dubbing_spaces
 from app.pipeline import run_dub
 from app.settings_env import current_value
@@ -941,6 +942,17 @@ def _dub_target_for(job: dict):
     return _work_for(job, job["id"])
 
 
+def _erase_target_for(job: dict):
+    """The same for a job that erases a video's subtitles (app/erase_launch.py).
+
+    One stage, so one call -- but it is rebuilt here, beside the dub's, because
+    this is where a queued job of either kind comes back to life.
+    """
+    jid = job["id"]
+    return erase_launch.work_for(
+        job, cancel_check=lambda: state.job_store.is_cancel_requested(jid))
+
+
 def rearm_queued_jobs() -> None:
     """Put restored queued jobs back in line, oldest first.
 
@@ -954,7 +966,9 @@ def rearm_queued_jobs() -> None:
         try:
             if not job.get("work_dir"):
                 raise RuntimeError("no folder on record")
-            state.job_store.start(job["id"], _dub_target_for(job),
+            target = (_erase_target_for(job) if kind_of(job) == "erase"
+                      else _dub_target_for(job))
+            state.job_store.start(job["id"], target,
                                   parallel=(job.get("dub_mode") == "perso"))
         except Exception as e:
             state.job_store.update(job["id"], status="error", error=str(e))
