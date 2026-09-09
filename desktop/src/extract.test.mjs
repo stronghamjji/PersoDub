@@ -18,6 +18,21 @@ test("extracts a tar.gz preserving structure", async () => {
 });
 
 
+// GitHub's source archives wrap everything in one folder named for the
+// commit (video-subtitle-remover-<sha>/). The eraser pack's step asks for it
+// to be stripped, so the kit gets eraser/vsr/backend, not one folder deeper.
+test("strip drops the archive's own top folder", async () => {
+  const work = mkdtempSync(join(tmpdir(), "odtar-"));
+  mkdirSync(join(work, "tool-abc123", "backend"), { recursive: true });
+  writeFileSync(join(work, "tool-abc123", "backend", "main.py"), "hi");
+  const tarball = join(work, "src.tar.gz");
+  await run(["tar", "-czf", tarball, "-C", work, "tool-abc123"]);
+  const dest = join(work, "vsr");
+  await extractTarGz(tarball, dest, { strip: 1 });
+  assert.ok(existsSync(join(dest, "backend", "main.py")));
+  assert.equal(existsSync(join(dest, "tool-abc123")), false);
+});
+
 test("on Windows the system's own tar is called by its full path, elsewhere plain tar", () => {
   const env = { SystemRoot: "C:\\Windows" };
   assert.equal(tarBinary({ platform: "win32", env, exists: () => true }), "C:\\Windows\\System32\\tar.exe");

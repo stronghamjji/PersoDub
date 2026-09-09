@@ -226,6 +226,7 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
     monkeypatch.setattr(engines_status, "hunyuan_available", lambda: False)
     monkeypatch.setattr(engines_status, "gemini_available", lambda: False)
     monkeypatch.setattr(engines_status, "perso_available", lambda: False)
+    monkeypatch.setattr(engines_status, "eraser_available", lambda: False)
 
     r = client.get("/api/engines")
     assert r.status_code == 200
@@ -235,6 +236,7 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
         "hunyuan_available": False,
         "gemini_available": False,
         "perso_available": False,
+        "eraser_available": False,
     }
 
 
@@ -245,6 +247,7 @@ def test_engines_endpoint_all_available(monkeypatch):
     monkeypatch.setattr(engines_status, "hunyuan_available", lambda: True)
     monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
     monkeypatch.setattr(engines_status, "perso_available", lambda: True)
+    monkeypatch.setattr(engines_status, "eraser_available", lambda: True)
 
     r = client.get("/api/engines")
     assert r.status_code == 200
@@ -254,6 +257,7 @@ def test_engines_endpoint_all_available(monkeypatch):
         "hunyuan_available": True,
         "gemini_available": True,
         "perso_available": True,
+        "eraser_available": True,
     }
 
 

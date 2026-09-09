@@ -179,6 +179,9 @@ def engines_status_route():
         "hunyuan_available": engines_status.hunyuan_available(),
         "gemini_available": engines_status.gemini_available(),
         "perso_available": engines_status.perso_available(),
+        # Not a dubbing engine: the screen reads it to know whether Erase
+        # subtitles can be offered at all on this computer.
+        "eraser_available": engines_status.eraser_available(),
     }
 
 

@@ -44,9 +44,10 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app import dub_launch, engines_status, languages, media, runtime, state
+from app import dub_launch, engines_status, erase_launch, languages, media, runtime, state
 from app import models as model_store
 from app import setup as dub_setup
+from app.api import downloads as downloads_api
 from app.api._shared import script_work_dir, work_dir_of
 from app.config import (
     OLLAMA_GEMMA_MODEL,
@@ -56,6 +57,7 @@ from app.config import (
     default_stt_engine,
 )
 from app.dub_script import EDITED_NAME, script_path
+from app.jobs import kind_of
 from app.perso_client import list_dubbing_spaces
 from app.pipeline import run_dub
 from app.settings_env import current_value
@@ -485,6 +487,11 @@ def dub_job_retry(jid: str):
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if job.get("status") in ("running", "cancelling"):
         raise HTTPException(status_code=409, detail="This job is still running.")
+    if kind_of(job) != "dub":
+        # Both kinds share this list, so this button can be pressed on an
+        # erase -- which would quietly start dubbing a video nobody asked to
+        # have dubbed, in whatever language the blank record defaults to.
+        raise HTTPException(409, "This job erased subtitles, so there is no dub to run again.")
     # work_dir, not the result folder: a job that failed before it produced
     # anything is exactly the one this endpoint exists for.
     work_dir = work_dir_of(job)
@@ -637,6 +644,7 @@ def dub_job_delete_workspace(jid: str):
 def dub_start(
     video: Optional[UploadFile] = File(None),
     source_url: Optional[str] = Form(None),
+    download_id: Optional[str] = Form(None),
     srt: Optional[UploadFile] = File(None),
     source_srt: Optional[UploadFile] = File(None),
     language: str = Form("English"),
@@ -666,6 +674,9 @@ def dub_start(
     chosen for a reason); pick Whisper explicitly for the free offline path.
     trim_start/trim_end = dub only these seconds of the video. Both or neither:
     the video is cut down to that part and the cut IS this job's original.
+    download_id = a video the New project screen already fetched or was given
+    (app/api/downloads.py): its file is copied in as the original, so a link
+    is not downloaded a second time and a dropped file is not uploaded twice.
     """
     # Half a range means nothing, and a backwards one would produce an empty
     # video minutes later -- both are caught here, before anything is saved.
@@ -685,9 +696,18 @@ def dub_start(
     # Exactly one source. Accepting both would silently pick a winner, and the
     # user would watch the wrong video get dubbed.
     source_url = (source_url or "").strip() or None
+    download_id = (download_id or "").strip() or None
     has_upload = video is not None and bool(video.filename)
-    if has_upload == bool(source_url):
-        raise HTTPException(422, "Provide either a video file or a source_url, not both.")
+    held = None
+    if download_id:
+        held = downloads_api.download_store.get(download_id)
+        if held is None or held.status != "ready" or not os.path.exists(held.path):
+            raise HTTPException(404, "That video is not downloaded yet.")
+        # A held link keeps its address for the record, but the file is here
+        # already: the work builder fetches only when input.mp4 is missing.
+        source_url = source_url or (held.url or None)
+    if (has_upload + bool(source_url and not held) + bool(held)) != 1:
+        raise HTTPException(422, "Provide either a video file, a source_url or a download_id.")
 
     # Normalize like translate_engine below: without this, "Perso" (capital P)
     # skipped both the preflight and the Perso branch and silently ran the
@@ -797,14 +817,18 @@ def dub_start(
     project = safe_name(project or "")
     if not project:
         project = safe_name(
+            held.title if held else
             os.path.splitext(video.filename or "")[0] if has_upload else (source_url or "")
         )
     check_space(state.WORKSPACE)
     work = _job_dir(project, language_code)
     video_path = os.path.join(work, "input.mp4")
-    if has_upload:
-        with open(video_path, "wb") as f:
-            shutil.copyfileobj(video.file, f)
+    if held:
+        shutil.copyfile(held.path, video_path)
+    if has_upload or held:
+        if has_upload:
+            with open(video_path, "wb") as f:
+                shutil.copyfileobj(video.file, f)
         # Cut before the job starts, so everything downstream (and the running
         # screen's original) only ever sees the part the user picked. A link
         # has nothing to cut yet -- that happens after the download, below.
@@ -857,7 +881,7 @@ def dub_start(
         # An upload was cut further up, before this record existed.
         # A link still holds the whole video and is cut inside the
         # job, which clears this the moment it is.
-        "trim_pending": bool(source_url and trim_start is not None),
+        "trim_pending": bool(source_url and not held and trim_start is not None),
         "from_link": bool(source_url),
         # The link itself and the speaker count: what the boot
         # re-arm needs to rebuild this job's work should it wait
@@ -896,7 +920,7 @@ def dub_start(
         fields,
         # First log line names the source -- log files are job-<id>.log, so
         # without this there is no way to tell which video a log belongs to.
-        f"{source_url or video.filename or 'video'}",
+        f"{source_url or (held.title if held else None) or video.filename or 'video'}",
         _target,
         parallel=(dub_mode == "perso"),
     )
@@ -923,6 +947,17 @@ def _dub_target_for(job: dict):
     return _work_for(job, job["id"])
 
 
+def _erase_target_for(job: dict):
+    """The same for a job that erases a video's subtitles (app/erase_launch.py).
+
+    One stage, so one call -- but it is rebuilt here, beside the dub's, because
+    this is where a queued job of either kind comes back to life.
+    """
+    jid = job["id"]
+    return erase_launch.work_for(
+        job, cancel_check=lambda: state.job_store.is_cancel_requested(jid))
+
+
 def rearm_queued_jobs() -> None:
     """Put restored queued jobs back in line, oldest first.
 
@@ -936,7 +971,9 @@ def rearm_queued_jobs() -> None:
         try:
             if not job.get("work_dir"):
                 raise RuntimeError("no folder on record")
-            state.job_store.start(job["id"], _dub_target_for(job),
+            target = (_erase_target_for(job) if kind_of(job) == "erase"
+                      else _dub_target_for(job))
+            state.job_store.start(job["id"], target,
                                   parallel=(job.get("dub_mode") == "perso"))
         except Exception as e:
             state.job_store.update(job["id"], status="error", error=str(e))

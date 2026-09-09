@@ -11,9 +11,11 @@ raising. When no Ollama pack is installed, runtime.url("ollama") is "" and the
 request itself fails, which ollama_model_status already reports as
 "unreachable" rather than raising.
 """
+import os
+
 import requests
 
-from app import config, runtime
+from app import config, eraser, runtime
 from app.settings_env import current_value
 
 
@@ -88,6 +90,18 @@ def hunyuan_status() -> str:
     """"unreachable" | "model_missing" | "available" -- see ollama_model_status.
     Used by dub_start's preflight (app/api/dub.py) to give an accurate 422."""
     return ollama_model_status(runtime.url("ollama"), config.OLLAMA_HUNYUAN_MODEL)
+
+
+def eraser_available() -> bool:
+    """Whether the subtitle eraser can run here: its interpreter and the
+    video-subtitle-remover checkout it runs out of are both really on disk.
+
+    Where those are is app/eraser.py's answer, read out of kit.env every time
+    it is asked -- that pack is installed while the app is open, so a snapshot
+    taken at startup would keep the Erase subtitles screen refusing long after
+    the download had finished."""
+    py, vsr = eraser.paths_now()
+    return bool(py and vsr and os.path.isfile(py) and os.path.isdir(vsr))
 
 
 def gemini_available() -> bool:

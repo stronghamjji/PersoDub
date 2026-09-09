@@ -136,6 +136,18 @@ SEP_MODEL_DIR = os.environ.get("SEP_MODEL_DIR", "models/demucs")
 DIAR_PYTHON = os.environ.get("DIAR_PYTHON", "python3")
 
 
+# Erasing the subtitles burned into a video (app/eraser.py,
+# app/scripts/erase_subtitles.py + suggest_area.py) wants two settings of its
+# own -- the interpreter that runs video-subtitle-remover and the folder it is
+# checked out in -- but they are deliberately NOT constants here, unlike
+# SEP_PYTHON above. That pack is installed while the app is running, and the
+# desktop shell writes ERASER_PYTHON and ERASER_VSR_DIR into kit.env at that
+# moment; a value read once at import would keep saying "not installed" until
+# the next launch. app/eraser.py's paths_now() reads them through
+# settings_env.current_value instead -- kit.env first, then the process env --
+# which is how the API keys and STT_ENGINE are read for the same reason.
+
+
 # Original-vocals gating margin (app/qwen_assemble.gate_vocals_chunks/place_lines).
 # Each speech region is padded by this many seconds on both sides (then
 # overlapping regions are merged) before the original vocals track is gated

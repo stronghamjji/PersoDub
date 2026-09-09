@@ -27,7 +27,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app import config, state
 from app.api import agent as agent_api
 from app.api import clips as clips_api
+from app.api import downloads as downloads_api
 from app.api import dub as dub_api
+from app.api import erase as erase_api
 from app.api import misc as misc_api
 from app.api import models as models_api
 from app.api import results as results_api
@@ -130,7 +132,9 @@ async def reject_cross_origin_writes(request, call_next):
 # notices a router that quietly stops being mounted.
 app.include_router(agent_api.router)
 app.include_router(clips_api.router)
+app.include_router(downloads_api.router)
 app.include_router(dub_api.router)
+app.include_router(erase_api.router)
 app.include_router(misc_api.router)
 app.include_router(models_api.router)
 app.include_router(results_api.router)
