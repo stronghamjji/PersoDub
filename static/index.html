@@ -336,7 +336,11 @@
   .pane-btn { width: 30px; height: 26px; border-radius: 7px; border: 0; background: transparent;
     display: grid; place-items: center; cursor: pointer; color: var(--muted-foreground); flex: none; }
   .pane-btn:hover { background: var(--secondary); }
-  .pane-btn.on { background: var(--primary-soft); color: var(--primary); }
+  /* --primary-ink, not --primary: the app's blue on the pale blue behind it
+     reads at 2.9:1 in the dark sheet and 4.1:1 in the light one -- under what a
+     control needs in either. The ink is the colour drawn to sit on that
+     background (user, 2026-09-09). */
+  .pane-btn.on { background: var(--primary-soft); color: var(--primary-ink); }
   .pane-btn[disabled] { opacity: 0.35; cursor: default; }
   .pane-btn[disabled]:hover { background: transparent; }
   .pane-btn svg { width: 17px; height: 17px; }
@@ -951,7 +955,7 @@
   .tl-name .tl-eye { width: 22px; height: 20px; border: 0; background: none;
     cursor: pointer; padding: 0; margin-right: 5px; color: var(--muted-foreground);
     display: inline-grid; place-items: center; border-radius: 5px; }
-  .tl-name .tl-eye:hover { background: var(--primary-soft); color: var(--primary); }
+  .tl-name .tl-eye:hover { background: var(--primary-soft); color: var(--primary-ink); }
   .tl-name .tl-eye.on { color: var(--primary); }
   .tl-name .tl-eye svg { width: 15px; height: 15px; fill: none; stroke: currentColor;
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
