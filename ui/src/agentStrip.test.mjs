@@ -431,6 +431,31 @@ test("picking a model writes the choice down, and a saved one is read back", asy
 
 // -- a turn ---------------------------------------------------------------
 
+// The strip was unlocked on the running screen but submit() still turned the
+// message away, in silence: the words stayed in the box and nothing happened.
+// That is exactly what "why won't it stop when I ask?" was (user, 2026-09-09).
+test("a message sent while a dub runs actually goes out", async () => {
+  const chat = stream([
+    { kind: "start", model: "claude-opus-4-6" },
+    { kind: "text", text: "Stopping it." },
+    { kind: "done" },
+  ]);
+  const h = harness({ agents: [CLAUDE], chat, screen: "running" });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "중단해줘";
+    await input.fire("input", {});
+    await h.$("assistantGo").fire("click", {});
+    await flush(60);
+
+    const post = h.log.calls.find((c) => c.url === "/api/agent/chat");
+    assert.ok(post, "the turn was sent");
+    assert.equal(JSON.parse(post.body).message, "중단해줘");
+    assert.equal(input.value, "", "and the box is emptied, as on every other screen");
+  } finally { h.log.restore(); }
+});
+
 test("a message carries the open job, and a rewritten line tells the page twice", async () => {
   const chat = stream([
     { kind: "start", model: "claude-opus-4-6" },

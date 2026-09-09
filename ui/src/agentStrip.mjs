@@ -663,9 +663,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   }
 
   async function ask(message) {
-    // The same doors submit() holds open: a finished job, or the home screen.
+    // The same doors submit() holds open: a finished job, the home screen, or
+    // one that is running.
     const screen = getScreen();
-    if (screen !== "done" && screen !== "home") return;
+    if (screen !== "done" && screen !== "home" && screen !== "running") return;
     const token = ++turnToken;
     busy = true;
     paintGo();
@@ -806,11 +807,16 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   }
 
   function submit() {
-    // A finished job has a script to fix, and the home screen has questions.
-    // Nothing here may start a turn against a job the pipeline is still
-    // rendering (running), or one that left no script behind (failed).
+    // A finished job has a script to fix, the home screen has questions, and a
+    // running one has the two things people actually ask while they wait: stop
+    // it, and how far along is it. A job that left no script behind (failed) is
+    // the one screen with nothing to say -- its row is locked there anyway.
+    //
+    // Running was refused here too until 2026-09-09, and refused in silence:
+    // the strip was open, the button was pressable, the words stayed in the box
+    // and nothing happened. That is what "why won't it stop when I ask?" was.
     const screen = getScreen();
-    if (screen !== "done" && screen !== "home") return;
+    if (screen !== "done" && screen !== "home" && screen !== "running") return;
     const message = input.value.trim();
     if (!message || busy) return;
     if (!chosen.agent) { menu.hidden = false; return; }
