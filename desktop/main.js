@@ -191,8 +191,10 @@ async function postLogs(id, archive, timeoutMs = 30000) {
       signal: abort.signal,
     });
     if (res.ok) return "ok";
-    // 404 the id is forgotten, 413 the archive is too big, 410 gone: all final.
-    return [404, 410, 413].includes(res.status) ? "gone" : "retry";
+    // 404 the id is forgotten, 413 the archive is too big, 410 gone, 501 the
+    // relay has nowhere to put logs: all final, and none of them get better by
+    // being asked again tomorrow.
+    return [404, 410, 413, 501].includes(res.status) ? "gone" : "retry";
   } catch {
     return "retry";
   } finally {
