@@ -733,15 +733,45 @@ def save_erased(job_id: str, dir: str = "") -> dict:
 
 
 @mcp.tool()
+def list_jobs(active_only: bool = True) -> List[dict]:
+    """What PersoDub is working on right now, newest first.
+
+    Each entry carries id, kind ("dub" or "erase"), title and status. This is
+    how "stop it", "how far along is it?" or "what is it doing?" becomes a job
+    id: work the user started on the screen has an id they have never seen and
+    cannot be asked for. Follow it with get_job_status for the percentage, or
+    cancel_dub to stop one.
+
+    active_only lists only what is queued, running or stopping. False lists
+    the finished ones too, newest first.
+    """
+    r = _api_get("/api/dub/jobs", timeout=10.0)
+    r.raise_for_status()
+    body = r.json()
+    jobs = body.get("jobs", body) if isinstance(body, dict) else body
+    live = ("queued", "running", "cancelling")
+    out = []
+    for j in jobs:
+        status = j.get("status") or ""
+        if active_only and status not in live:
+            continue
+        out.append({"id": j.get("id"), "kind": j.get("kind") or "dub",
+                    "title": j.get("project") or "", "status": status})
+    return out
+
+
+@mcp.tool()
 def cancel_dub(job_id: str) -> dict:
-    """Cancel ONE dub AT ONCE: a waiting job leaves the line, a running one
-    stops at its next safe point.
+    """Cancel ONE job AT ONCE -- a dub or a subtitle erase: a waiting job
+    leaves the line, a running one stops at its next safe point.
 
     Never ask the user to confirm first -- "cancel it" IS the confirmation,
     and a cancel is urgent (asking again meant the job sometimes finished
     before the user could answer). A job that already ended
     (done/error/cancelled) has nothing left to stop. Job ids come from
-    queue_dub and get_job_status.
+    queue_dub, erase_subtitles and list_jobs -- and list_jobs is the one to
+    use when the user says "stop it" about work they started on the screen,
+    whose id they have never seen.
     """
     job = _job(job_id)
     status = job.get("status")

@@ -376,7 +376,7 @@ test("a part that throws is said once and leaves the other three working", async
   } finally { h.log.restore(); }
 });
 
-test("a running dub locks the row, and a failed one says why", async () => {
+test("a job that stopped early locks the row and says why", async () => {
   const h = harness({ agents: [CLAUDE], screen: "failed" });
   try {
     await flush();
@@ -384,6 +384,19 @@ test("a running dub locks the row, and a failed one says why", async () => {
     assert.equal(h.$("assistantModelBtn").disabled, true);
     assert.equal(h.$("assistantInput").placeholder,
       "Nothing to fix here - dubbing did not finish");
+  } finally { h.log.restore(); }
+});
+
+// It used to lock this one too, and the strip was off the page besides. A dub
+// in progress is exactly when someone asks the assistant to stop it (user,
+// 2026-09-09).
+test("a dub in progress leaves the row open", async () => {
+  const h = harness({ agents: [CLAUDE], screen: "running" });
+  try {
+    await flush();
+    assert.equal(h.$("assistantInput").disabled, false);
+    assert.equal(h.$("assistantModelBtn").disabled, false);
+    assert.equal(h.$("assistantGo").getAttribute("aria-label"), "Send");
   } finally { h.log.restore(); }
 });
 

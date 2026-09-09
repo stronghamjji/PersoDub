@@ -713,6 +713,28 @@ def test_get_job_status_of_an_erase_carries_the_percent_and_the_file(monkeypatch
     assert out["check"]["frames_with_text"] == 0
 
 
+JOBS = {"jobs": [
+    {"id": "e1", "kind": "erase", "status": "running", "project": "clip8"},
+    {"id": "d2", "kind": "dub", "status": "queued", "project": "clip9"},
+    {"id": "d3", "kind": "dub", "status": "done", "project": "clip7"},
+]}
+
+
+def test_list_jobs_names_what_is_running_so_stop_it_can_find_a_job(monkeypatch):
+    # "Stop the subtitle erase" -- work started on the screen has an id nobody
+    # has seen, and without this the assistant had nothing to cancel by
+    # (user, 2026-09-09).
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda url, **kw: _Response(200, JOBS))
+    out = mcp_server.list_jobs()
+    assert [j["id"] for j in out] == ["e1", "d2"]
+    assert out[0] == {"id": "e1", "kind": "erase", "title": "clip8", "status": "running"}
+
+
+def test_list_jobs_can_list_the_finished_ones_too(monkeypatch):
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda url, **kw: _Response(200, JOBS))
+    assert [j["id"] for j in mcp_server.list_jobs(active_only=False)] == ["e1", "d2", "d3"]
+
+
 def test_list_videos_names_the_videos_the_app_is_holding(monkeypatch, tmp_path):
     held = tmp_path / "source.mp4"
     held.write_bytes(b"video-bytes")

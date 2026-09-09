@@ -1706,7 +1706,8 @@
               <b id="progressTitle">Separating audio</b>
               <div class="progress-head-end">
                 <span id="progressPct">0%</span>
-                <button class="btn btn-outline btn-sm" id="cancelBtn" type="button" hidden>Cancel</button>
+                <button class="btn btn-secondary btn-sm" id="cancelBtn" type="button" hidden>
+                  <svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/></svg>Cancel</button>
               </div>
             </div>
             <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
@@ -2307,13 +2308,10 @@
     background: var(--agent-bg); border-left: 1px solid var(--agent-border);
     color: var(--agent-fg); }
   body:not(.agent-open) .agent { display: none; }
-  /* Nothing yet while a dub runs, where the script the assistant would fix
-     does not exist. A greyed-out row there was just a thing that could not be
-     used taking up the bottom of the screen, so it goes off the page instead.
-     The home screen keeps the strip: there is no job there either, but the
-     assistant can still be asked things, and this is where batch requests
-     will land. */
-  body[data-screen="running"] .agent { display: none; }
+  /* The running screen keeps the strip. It was taken off the page there --
+     there is no script to fix yet -- but a dub in progress is exactly when a
+     person turns to the assistant: to stop it, or to ask how far along it is
+     (user, 2026-09-09). */
   /* A cancelled or failed job has no script either, but its card stays on show
      with the strip beneath it, so there the row is dimmed and locked -- a turn
      would be paid for and answered by a script route that can only say 409.
@@ -2558,10 +2556,7 @@ $("historySidebar").addEventListener("transitionend", () => projects.markClipped
 // elsewhere.
 function paintPanes() {
   $("paneList").classList.toggle("on", !$("historySidebar").classList.contains("collapsed"));
-  const running = document.body.dataset.screen === "running";
-  $("paneAgent").disabled = running;
-  $("paneAgent").classList.toggle(
-    "on", !running && document.body.classList.contains("agent-open"));
+  $("paneAgent").classList.toggle("on", document.body.classList.contains("agent-open"));
   const done = document.body.dataset.screen === "done";
   $("paneTimeline").disabled = !done;
   $("paneTimeline").classList.toggle(

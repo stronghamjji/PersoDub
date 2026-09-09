@@ -256,7 +256,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   function paintGo() {
     wire("send button", () => {
       const screen = getScreen();
-      const locked = screen === "running" || screen === "failed";
+      const locked = screen === "failed";
       const words = busy ? "Stop" : "Send";
       goIcon.innerHTML = busy ? GO_STOP : GO_SEND;
       goBtn.disabled = locked || (!busy && !input.value.trim());
@@ -272,7 +272,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     // altogether (see the CSS above); it is locked here as well so that nothing
     // is live in the moment between one screen going and the next arriving.
     const screen = getScreen();
-    const running = screen === "running";
+    // A running dub used to lock the strip as well -- it was off the page
+    // there, so nothing it said was read. It stays now: stopping the dub and
+    // asking how far along it is are the two things a person turns to the
+    // assistant for while one runs (user, 2026-09-09).
     const failed = screen === "failed";
     wire("status line", () => {
       ensureLoginChecked();
@@ -280,10 +283,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     });
     wire("picker", () => {
       modelLabel.textContent = labelFor(chosen, agentList, servedModel);
-      modelBtn.disabled = running || failed;
+      modelBtn.disabled = failed;
     });
     wire("input", () => {
-      input.disabled = running || failed;
+      input.disabled = failed;
       // The one line the strip has to say what it is waiting for: an assistant to
       // be installed, a model to be picked, or the user. A running dub is not on
       // the list -- the strip is off the page there, so nothing it said was read.
@@ -413,14 +416,12 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
 
   let recheckedLogin = false;   // see loadAgents: one second look, never a loop
   // Each check is a child process, so none is started until the strip is on
-  // screen AND there is something to say to it. A running dub hides the strip,
-  // so that is no reason to start one -- and the "agent-open" class outlives
-  // the screen that set it, which is why the screen is asked first rather than
-  // the class alone.
+  // screen AND there is something to say to it. The "agent-open" class outlives
+  // the screen that set it, which is why the screen is asked as well as the
+  // class.
   function stripInUse() {
     const screen = getScreen();
-    if (screen === "running") return false;
-    return screen === "home" || screen === "done"
+    return screen === "home" || screen === "done" || screen === "running"
       || document.body.classList.contains("agent-open");
   }
 
