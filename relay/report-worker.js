@@ -139,12 +139,16 @@ async function handleReport(request, env, ctx) {
   }
 
   // What the log upload will need: which issue to hang the link on, and
-  // whether it goes in the body or in the comment just made. An hour is
-  // plenty -- the app uploads the archive seconds later.
+  // whether it goes in the body or in the comment just made. Kept for the same
+  // week the app is willing to keep retrying an upload for
+  // (desktop/src/reportQueue.js MAX_AGE_DAYS) -- an hour looked like plenty,
+  // since the archive normally follows within seconds, but the one case that
+  // matters is the machine whose network died between the two requests, and
+  // for that machine the retry can be days later.
   await env.REPORTS.put(
     `id:${id}`,
     JSON.stringify({ fingerprint: report.fingerprint, issue, commentId }),
-    { expirationTtl: 60 * 60 },
+    { expirationTtl: 7 * 24 * 60 * 60 },
   );
   return json({ id, issue, url, dedup: !!(known && known.issue) });
 }

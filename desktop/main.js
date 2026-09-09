@@ -173,6 +173,12 @@ async function postJson(url, body, timeoutMs = 8000) {
 
 // The archive of full logs, sent after the report so the issue exists even
 // when this half fails. Its own request, its own retry.
+//
+// Three answers, not two. "gone" is the one that matters: the relay only
+// remembers a report id for a week, and a refusal that says the id is unknown
+// (or the archive is malformed) will say the same thing on every future
+// launch. Retrying that forever would be a request a day for nothing, so it is
+// treated as an answer and the queued copy is dropped.
 async function postLogs(id, archive, timeoutMs = 30000) {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
@@ -183,9 +189,11 @@ async function postLogs(id, archive, timeoutMs = 30000) {
       body: archive,
       signal: abort.signal,
     });
-    return res.ok;
+    if (res.ok) return "ok";
+    // 404 the id is forgotten, 413 the archive is too big, 410 gone: all final.
+    return [404, 410, 413].includes(res.status) ? "gone" : "retry";
   } catch {
-    return false;
+    return "retry";
   } finally {
     clearTimeout(timer);
   }
@@ -258,9 +266,9 @@ function announceReport(sent) {
 async function deliver(report, archive) {
   const answer = await postJson(REPORT_ENDPOINT + "/report", report);
   if (!answer || !answer.id) return { sent: false, id: null, logsSent: false };
-  const logsSent = archive ? await postLogs(answer.id, archive) : true;
+  const logs = archive ? await postLogs(answer.id, archive) : "ok";
   announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
-  return { sent: true, id: answer.id, logsSent };
+  return { sent: true, id: answer.id, logsSent: logs !== "retry" };
 }
 
 function sendReport(opts) {
@@ -321,7 +329,7 @@ async function flushReports(kitDir) {
       else if (sent) writeFileSync(join(dir, `${base}${REPORT_EXT}`), JSON.stringify({ report: entry.report, id }));
       continue;
     }
-    if (await postLogs(entry.id, archive)) remove(base);
+    if (await postLogs(entry.id, archive) !== "retry") remove(base);
   }
 }
 
