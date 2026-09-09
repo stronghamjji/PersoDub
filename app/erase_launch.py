@@ -18,13 +18,17 @@ import os
 from app import eraser
 
 
-def work_for(job, *, cancel_check, run_erase=eraser.run_erase):
+def work_for(job, *, cancel_check):
     """The work one erase job runs, built from its record and its folder.
 
     Returns work(log) -- what JobStore.start wants. The video is input.mp4 in
     the job's folder and the result is erased.mp4 beside it, the same way a dub
     keeps input.mp4 and dubbed.mp4. `area` is the band the user picked, or
     "whole" for the whole frame (slower, but it catches writing anywhere).
+
+    The erase itself is reached through the module, not imported by name --
+    that is the seam the tests replace, the way dub_launch takes run_dub as an
+    argument.
     """
     work = job["work_dir"]
     input_path = os.path.join(work, "input.mp4")
@@ -33,7 +37,7 @@ def work_for(job, *, cancel_check, run_erase=eraser.run_erase):
     band = None if not area or area == "whole" else tuple(area)
 
     def work_now(log):
-        run_erase(input_path, out_path, band, log=log, cancel_check=cancel_check)
+        eraser.run_erase(input_path, out_path, band, log=log, cancel_check=cancel_check)
         # Same shape a dub's result has: out_path is how every reader --
         # Projects, the delete route, the agent -- finds a job's folder.
         return {"out_path": out_path}

@@ -11,7 +11,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from app import engines_status
+from app import engines_status, eraser
 from app.api import dub as dub_api
 from app.jobs import JobStore
 from app.main import app
@@ -173,6 +173,25 @@ def test_a_restored_queued_job_is_rearmed_from_its_record(monkeypatch, tmp_path)
     assert seen["n_takes"] == 2
     assert seen["num_speakers"] == 3
     assert seen["source_language_code"] == "en"
+
+
+def test_a_restored_queued_erase_comes_back_as_an_erase(monkeypatch, tmp_path):
+    """The two kinds of job share one queue and one job.json, so the re-arm has
+    to read the record to know which work to rebuild -- a queued erase started
+    as a dub would transcribe a video nobody asked to have dubbed."""
+    work = tmp_path / "day" / "clip_erase"
+    work.mkdir(parents=True)
+    (work / "input.mp4").write_bytes(b"video-bytes")
+    job = {"id": "qe111111", "status": "queued", "kind": "erase", "project": "clip",
+           "day": "day", "created": "2026-09-09T10:00:00", "work_dir": str(work),
+           "area": [660, 800, 0, 608]}
+    seen = []
+    monkeypatch.setattr(eraser, "run_erase",
+                        lambda src, out, area, **kw: seen.append((src, out, area)))
+
+    result = dub_api._erase_target_for(job)(lambda msg: None)
+    assert seen == [(str(work / "input.mp4"), str(work / "erased.mp4"), (660, 800, 0, 608))]
+    assert result == {"out_path": str(work / "erased.mp4")}
 
 
 def test_a_perso_cloud_dub_skips_the_local_line(slow_dub, monkeypatch):
