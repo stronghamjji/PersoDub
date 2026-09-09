@@ -117,8 +117,10 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     $("eraseBody").hidden = view === "drop";
     $("erasePack").hidden = !packMissing || done;
     // The question and the tabs take turns in the same strip, so the picture
-    // under them is in the same place before and after.
-    $("eraseHead").hidden = done;
+    // under them is in the same place before and after. While the erase runs
+    // the strip goes: the question has been answered, and the row under the
+    // picture is where the answer to "how long now" is.
+    $("eraseHead").hidden = view !== "area";
     $("eraseTabs").hidden = !done;
     $("eraseBox").hidden = view !== "area" || !area;
     $("eraseFinding").hidden = !finding;

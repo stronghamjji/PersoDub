@@ -506,12 +506,19 @@
   .erase-drop { flex: 1; min-height: 0; display: flex; padding: 22px; overflow-y: auto; }
   .erase-drop .upload-zone { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto; }
   .erase-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  /* The one instruction on this screen, in the strip the tabs take over later
-     -- so the picture under it never moves when the result arrives. */
+  /* The one instruction on this screen, in the strip the tabs take over once
+     there is a result -- both are 40px, so the picture is the same size while
+     the box is being placed and once the erased video is in. In between, while
+     the erase runs, the strip carries neither: the question has been answered
+     and there is nothing yet to compare. */
   .erase-head { flex: 0 0 auto; height: 40px; box-sizing: border-box;
     display: flex; align-items: center; padding: 0 14px;
     border-bottom: 1px solid var(--border);
     font-size: var(--font-ui); font-weight: 600; }
+  /* The finished screen's tabs share a narrow pane and split it in two; these
+     sit over a picture as wide as the window, where two labels a metre apart
+     stop reading as a pair. They keep their own width, at the left. */
+  #eraseTabs .vtab { flex: 0 0 auto; padding: 0 22px; }
   .erase-stage { position: relative; flex: 1; min-height: 0; margin: 14px;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg);
     display: flex; align-items: center; justify-content: center; }
