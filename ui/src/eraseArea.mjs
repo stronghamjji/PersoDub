@@ -136,6 +136,20 @@ export function progressLine(percent, estSeconds) {
   return `Erasing · ${pct}% · ${Math.ceil(remaining / 60)} min left`;
 }
 
+/**
+ * How far along an erase is, read out of its own log. The eraser prints one
+ * "progress N%" line as it goes and nothing else the screen can count, which
+ * is why a dub's stage markers (dubApi's parseProgress) say nothing here.
+ */
+export function erasePercent(logs) {
+  let pct = 0;
+  for (const line of logs || []) {
+    const m = /^\s*progress (\d+)%/.exec(String(line));
+    if (m) pct = Math.max(pct, parseInt(m[1], 10));
+  }
+  return pct;
+}
+
 /** Is this the app saying the eraser is not installed on this computer? */
 export function isPackMissing(err) {
   return !!err && err.reason === "pack_missing";

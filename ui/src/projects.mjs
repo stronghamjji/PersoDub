@@ -17,6 +17,7 @@
 // Everything this file touches is #historyList and the #queueCard box.
 import { escapeHtml, fmtClock } from "./format.mjs";
 import { parseProgress } from "./dubApi.mjs";
+import { erasePercent } from "./eraseArea.mjs";
 
 // Anything that is not finished, failed or cancelled is still going.
 const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled",
@@ -38,6 +39,15 @@ const JOB_MARK = {
 export function jobMark(status) {
   return `<svg viewBox="0 0 12 12" aria-hidden="true">${JOB_MARK[status] || JOB_MARK.running}</svg>`;
 }
+
+// Erasing subtitles is the other work this app does, so its rows say so twice:
+// the rail's own eraser, shrunk, beside the name, and a word under it. A row
+// with neither is a dub, which is what every row here used to be.
+const ERASE_ICON = '<svg class="job-kind" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="15" height="11" rx="2"/><path d="M6 12.5h4"/><path d="M13.5 21l6.8-6.8a1.6 1.6 0 0 0 0-2.3l-1.7-1.7a1.6 1.6 0 0 0-2.3 0L9.5 17z"/><path d="M12 14.5l3.5 3.5"/></svg>';
+// What an erase row says under its name. A job that stopped says only what it
+// was -- the dot beside it is what says how it ended, exactly as for a dub.
+const ERASE_META = { done: "Erased", error: "Erase subtitles", cancelled: "Erase subtitles" };
+const isErase = (job) => job.kind === "erase";
 
 /**
  * Wire the Projects list and the Up next card to a page.
@@ -64,6 +74,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
   // Length is only known for a job the user trimmed -- the record says what was
   // cut, never how long the film was -- so it is left out rather than guessed at.
   function projectMeta(job) {
+    if (isErase(job)) return ERASE_META[job.status] || "Erasing";
     const langs = `${langName(job.source_lang) || "Auto"} → ${langName(job.language_code) || "Script"}`;
     const length = job.trim ? fmtClock(job.trim.end - job.trim.start) : "";
     return [langs, length].filter(Boolean).join(" · ");
@@ -100,7 +111,10 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
     if (running.length) {
       try {
         const detail = await (await fetch(`/api/dub/jobs/${running[0].id}`)).json();
-        pct = parseProgress(detail.logs || []).percent;
+        // The two kinds of work count themselves differently: a dub logs the
+        // stage it is on, an erase logs a percentage of one long stage.
+        pct = isErase(running[0]) ? erasePercent(detail.logs || [])
+                                  : parseProgress(detail.logs || []).percent;
       } catch { /* the row just says Dubbing... */ }
     }
 
@@ -111,8 +125,9 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       const row = document.createElement("button");
       row.type = "button";
       row.className = "queue-row";
+      const doing = isErase(job) ? "Erasing" : "Dubbing";
       const stateText = job.status === "cancelling" ? "Cancelling…"
-        : live ? (pct != null ? `Dubbing ${pct}%` : "Dubbing…") : "Waiting";
+        : live ? (pct != null ? `${doing} ${pct}%` : `${doing}…`) : "Waiting";
       row.innerHTML = `<span class="q-name">${escapeHtml(job.project || "Dubbing")}${
         live ? `<div class="queue-bar"><i style="width:${pct ?? 0}%"></i></div>` : ""
       }</span><span class="q-state${live ? " run" : ""}">${stateText}</span>`;
@@ -128,7 +143,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
         const x = document.createElement("button");
         x.type = "button";
         x.className = "queue-x";
-        x.title = live ? "Cancel dubbing" : "Take this video out of line";
+        x.title = live ? `Cancel ${doing.toLowerCase()}` : "Take this video out of line";
         x.textContent = "✕";
         x.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -162,7 +177,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       row.className = "job-row" + (job.id === getActiveJobId() ? " current" : "");
       row.type = "button";
       row.innerHTML = `<span class="job-dot ${JOB_DOT[job.status] || "dot-running"}">${jobMark(job.status)}</span>
-      <div class="job-info"><div class="job-name">${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div></div>`;
+      <div class="job-info"><div class="job-name">${isErase(job) ? ERASE_ICON : ""}${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div></div>`;
       row.addEventListener("click", () => onOpenJob(job.id));
 
       const del = document.createElement("button");

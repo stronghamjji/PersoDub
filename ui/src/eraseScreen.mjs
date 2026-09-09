@@ -125,7 +125,9 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     $("eraseRow").hidden = view === "area";
     $("eraseCancelBtn").hidden = view !== "working";
     $("eraseBarBox").hidden = view !== "working";
-    $("eraseBackBtn").hidden = view !== "failed";
+    // Back is the way to the box that has to change -- which is only somewhere
+    // to go while this screen still has the video that box was drawn on.
+    $("eraseBackBtn").hidden = view !== "failed" || !area;
     $("eraseSrtBtn").hidden = !done;
     $("eraseDubBtn").hidden = !done;
     $("eraseSaved").hidden = !done || !savedPath;
@@ -141,6 +143,10 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     } else {
       $("eraseState").textContent = "";
     }
+    // A job picked up out of the Projects list has no held video behind it, so
+    // the picture comes from the job's own folder: the original while it runs,
+    // and whichever tab is up once there is a result.
+    if (view === "working" && !playing) setVideo(eraseVideoUrl(job.id, "original"));
     if (done) {
       setVideo(eraseVideoUrl(job.id, tab));
       for (const el of $("eraseTabs").querySelectorAll(".vtab")) {
@@ -194,6 +200,39 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     showScreen("erase");
     reset();
     paint();
+  }
+
+  /**
+   * A row in the Projects list, or the waiting line: an erase that is already
+   * under way somewhere, or one that finished days ago. There is no held video
+   * behind it any more -- the job's own two videos are what this screen shows,
+   * and its length is not on the record, so no time is promised for it.
+   */
+  function openEraseJob(rec) {
+    showScreen("erase");
+    reset();
+    source = { downloadId: "", title: rec.project || "", duration: 0 };
+    job = { id: rec.id, status: rec.status, percent: 0, done: false,
+            error: rec.error || "" };
+    paint();
+    catchUp(rec.id);
+  }
+
+  // What that job looks like right now -- and, if it is still going, a watch
+  // on it from here on.
+  async function catchUp(jid) {
+    let j;
+    try {
+      j = await fetchErase(jid);
+    } catch (e) {
+      $("eraseError").textContent = e.message;
+      return;
+    }
+    if (!job || job.id !== jid) return;
+    job = { id: jid, status: j.status, percent: j.percent || 0,
+            done: !!j.done, error: j.error || "" };
+    paint();
+    if (["queued", "running", "cancelling"].includes(j.status)) watch(jid);
   }
 
   /**
@@ -500,5 +539,5 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     if (file) takeFile(file);
   });
 
-  return { openErase, openEraseWith, exportErased };
+  return { openErase, openEraseWith, openEraseJob, exportErased };
 }

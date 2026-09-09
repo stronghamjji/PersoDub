@@ -323,6 +323,12 @@
   .job-line:hover .job-del, .job-del:focus-visible { opacity: 1; }
   .job-del:hover { color: var(--destructive); }
   .job-name { font-size: var(--font-ui); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The rail's eraser, shrunk, in front of the name of a job that erased
+     subtitles rather than dubbed. Muted: it says what kind of work this was,
+     and the name beside it is still the thing to read. */
+  .job-name .job-kind { width: 13px; height: 13px; vertical-align: -2px;
+    margin-right: 5px; stroke: currentColor; fill: none; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; color: var(--muted-foreground); }
   /* One line, clipped: left to wrap it ran to three lines in a 230px sidebar
      and pushed half the list below the fold. */
   .job-meta { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3223,6 +3229,9 @@ async function resumeJob(jobId) {
   try {
     const job = await (await fetch(`/api/dub/jobs/${jobId}`)).json();
     if (job.detail) throw new Error("This job is no longer available (server may have restarted).");
+    // Erasing subtitles is the other work this app does, and it has a screen of
+    // its own: the same row, the same click, a different place to land.
+    if (job.kind === "erase") { eraseScreen.openEraseJob(job); return; }
     handleJobUpdate(job);
     noteLastScreen(jobId);
     // queued is alive too (handleJobUpdate paints it as waiting): a job
