@@ -8,10 +8,15 @@ checked out at --vsr-dir. This is the wrapper verified on this Mac 2026-09-04
 turned into the script the app runs, and it keeps that wrapper's two hard-won
 lines:
 
-  * the inpaint mode MUST be STTN_DET. The default (sttn-auto) skips text
-    detection and repaints the whole area with nothing to refer to, so it
-    burns the same minutes and hands back a video with every subtitle still
-    on it -- no error, no warning.
+  * the inpaint mode MUST be STTN_DET. The other one, sttn-auto, does no
+    detection: it hands the whole band to the model as one mask. Given no band
+    at all it repaints the entire frame from nothing to refer to and returns
+    the video unchanged, no error and no warning. Given a band it does take
+    the colour out of the writing -- but it shrinks that whole band to the
+    model's small input and blows it back up, so a grey ghost of every letter
+    stays behind (measured on this Mac 2026-09-09: where the letters had been
+    was 40 to 75 levels darker than the band around it, against 10 to 44 for
+    STTN_DET, which masks only the letters the detector found and fills those).
   * backend/config.py's `tr` table has to be read, or the first progress
     message the library prints dies with a KeyError.
 
