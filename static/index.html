@@ -1574,7 +1574,7 @@
      link to the list. The list itself (below) opens only from that link and
      from the version in Settings -- it no longer pops up on its own (user,
      2026-09-02). -->
-<div class="update-banner" id="updatedNotice" hidden><span id="updatedText"></span><button class="link" id="updatedWhatsNew" type="button">What&#8217;s new</button></div>
+<div class="update-banner" id="updatedNotice" hidden><span id="updatedText"></span><button class="link" id="updatedWhatsNew" type="button">What&#8217;s new</button><button class="link" id="updatedClose" type="button" aria-label="Close" title="Close">&#215;</button></div>
 
 <div class="modal-overlay" id="whatsNewOverlay">
   <div class="modal" style="max-width: 430px">
@@ -2137,24 +2137,23 @@ async function checkWhatsNew() {
     return;
   }
   if (seen === whatsNew.version) return;
-  try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
+  // Not marked seen here: the banner stays, launch after launch, until the
+  // person closes it or opens the list (user, 2026-09-08 -- the six-second
+  // version was gone before anyone looked up from the Updating screen).
   showUpdatedNotice();
 }
-// "Updated to 0.4.4 · What's new": six seconds, then gone on its own; a
-// pointer resting on it keeps it. Adobe and the App Store call the list
-// "What's new", so the link does too.
-let updatedTimer = null;
-function hideUpdatedNotice() { clearTimeout(updatedTimer); $("updatedNotice").hidden = true; }
+// "Updated to 0.4.4 · What's new · ×": stays until closed. Adobe and the App
+// Store call the list "What's new", so the link does too.
+function hideUpdatedNotice() {
+  $("updatedNotice").hidden = true;
+  try { if (whatsNew && whatsNew.version) localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
+}
 function showUpdatedNotice() {
-  const el = $("updatedNotice");
   $("updatedText").textContent = `Updated to ${whatsNew.version}`;
-  el.hidden = false;
-  const arm = () => { clearTimeout(updatedTimer); updatedTimer = setTimeout(hideUpdatedNotice, 6000); };
-  el.onmouseenter = () => clearTimeout(updatedTimer);
-  el.onmouseleave = arm;
-  arm();
+  $("updatedNotice").hidden = false;
 }
 $("updatedWhatsNew").addEventListener("click", () => { hideUpdatedNotice(); showWhatsNew(); });
+$("updatedClose").addEventListener("click", hideUpdatedNotice);
 $("wnOk").addEventListener("click", () => {
   try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
   $("whatsNewOverlay").classList.remove("open");

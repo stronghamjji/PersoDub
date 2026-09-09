@@ -132,6 +132,9 @@ test("after an update the page says so in one line and keeps the What's new shee
   assert.match(html, /id="updatedNotice"/);
   assert.match(html, /Updated to \$\{/);
   assert.match(html, /id="updatedWhatsNew"[^>]*>What(’|&#8217;)s new</);
+  // The banner stays until closed: a close button, and no self-hiding timer.
+  assert.match(html, /id="updatedClose"/);
+  assert.doesNotMatch(html, /setTimeout\(hideUpdatedNotice/);
   // A changed version shows the notice, never the sheet on its own.
   const start = html.indexOf("async function checkWhatsNew");
   const check = html.slice(start, html.indexOf("\n}\n", start));
