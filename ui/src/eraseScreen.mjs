@@ -155,7 +155,13 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
         el.classList.toggle("active", el.dataset.erase === tab);
       }
     }
-    setTopbar({
+    // The top bar is the whole app's, not this screen's. An erase is followed
+    // once a second whether or not the user stayed to watch it, and a tick
+    // that ran while they were on the home screen used to put this video's
+    // name, its subtitle and its back arrow up there over theirs. Every way
+    // back onto this screen paints on arrival, so there is nothing to lose by
+    // leaving the bar alone while the screen is away.
+    if (!$("screen-erase").hidden) setTopbar({
       title: source ? (source.title || "Erase subtitles") : "Erase subtitles",
       // How long it took is what the result says; until then, where you are.
       subtitle: done ? erasedFor() : (view === "drop" ? "" : "Erase subtitles"),
