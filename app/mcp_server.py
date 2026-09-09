@@ -185,8 +185,8 @@ def get_job_status(job_id: str) -> dict:
     A subtitle-erase job (erase_subtitles) also carries percent, done, the path
     of the cleaned video, and `check`: what the eraser found when it looked at
     its own work -- how many sampled frames of the finished video still hold
-    writing, and at what seconds. frames_with_text 0 is the answer the user is
-    after; anything else names the moments to look at.
+    writing, at what seconds, and how many it had to paint again. frames_with_text
+    0 is the answer the user is after; anything else names the moments to look at.
     """
     job = _job(job_id)
     info = {

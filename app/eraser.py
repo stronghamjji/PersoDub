@@ -112,10 +112,9 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
     the process runs, and a true answer kills it and raises JobCancelled.
 
     Returns what the script's own check of the finished video found --
-    {"frames_checked", "frames_with_text", "sample_times"} and "second_pass"
-    when it had to paint anything again -- or None from a script too old to
-    look. It is a number, not a log line: the job record carries it and the
-    screen and the agent both read it there.
+    {"frames_checked", "frames_with_text", "sample_times", "repainted"} -- or
+    None from a script too old to look. It is a number, not a log line: the job
+    record carries it and the screen and the agent both read it there.
     """
     py, vsr = _resolve(python, vsr_dir)
     cmd = [py, ERASE_SCRIPT, "--vsr-dir", vsr, "-i", input_path, "-o", out_path]
