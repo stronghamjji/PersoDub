@@ -450,10 +450,7 @@ def test_the_band_is_let_out_before_the_tool_sees_it_and_never_off_the_picture()
     assert erase_subtitles.pad_band((4, 1076, 6, 602), 608, 1080) == (0, 1080, 0, 608)
     # A thin band still gets whole pixels, not a fraction of one.
     assert erase_subtitles.pad_band((500, 520, 300, 340), 608, 1080) == (492, 528, 292, 348)
-    # The retry is the greedy one.
-    assert erase_subtitles.pad_band((850, 970, 420, 1920), 1920, 1080,
-                                    erase_subtitles.RETRY_PAD_UPDOWN,
-                                    erase_subtitles.RETRY_PAD_SIDES) == (832, 988, 270, 1920)
+
 
 
 class _NothingFound(Exception):
@@ -480,38 +477,88 @@ def _remover_class(fail_times, bands):
     return Remover
 
 
-def test_a_band_that_caught_nothing_is_widened_and_tried_once_more(capsys):
+# The white subtitle of the 1080p short the eraser was measured on: the box
+# runs 41 pixels below the band the brief drew, which is why no percentage was
+# ever going to be the right amount to widen by.
+CLIP_B_BAND = (850, 970, 420, 1920)
+CLIP_B_TEXT = [(898, 1492, 957, 1011), (906, 1480, 961, 1009),
+               (102, 312, 963, 1005)]      # the last one is the side panel
+
+
+def test_a_band_that_caught_nothing_is_asked_of_the_detector_and_tried_once_more(capsys):
     bands = []
     remover = _remover_class(fail_times=1, bands=bands)
 
     _seconds, band = erase_subtitles.erase_with_band(
-        remover, "in.mp4", "out.mp4", (850, 970, 420, 1920), 1920, 1080)
+        remover, "in.mp4", "out.mp4", CLIP_B_BAND, 1920, 1080,
+        find_text=lambda: CLIP_B_TEXT)
 
-    # Twice, and only twice: the padded band, then the generous one.
+    # Twice, and only twice: the padded band, then the one the writing needs.
+    # The side panel at x 102..312 never touches the band, so it is not in it.
     assert remover.runs["runs"] == 2
-    assert bands == [(842, 978, 360, 1920), (832, 988, 270, 1920)]
-    assert band == (832, 988, 270, 1920)
+    # The writing runs to row 1011, 41 below the band the user drew; the second
+    # band covers it and is let out by the usual 6% and 4% on top.
+    assert bands == [(842, 978, 360, 1920), (949, 1019, 874, 1516)]
+    assert band == (949, 1019, 874, 1516)
     said = capsys.readouterr().out.splitlines()
     assert said == ["band 842..978 x 360..1920 (padded from 850..970 x 420..1920)",
-                    "band 832..988 x 270..1920 "
-                    "(widened again after nothing was found in 850..970 x 420..1920)"]
+                    "band 949..1019 x 874..1516 "
+                    "(from detected text overlapping 850..970 x 420..1920)"]
 
 
-def test_a_band_with_nothing_in_it_either_way_still_says_so(capsys):
-    # Two goes and no writing found means there is none: the user gets the
-    # sentence about moving the box, not a third helping of their own minutes.
+def test_only_the_boxes_that_touch_the_band_are_taken_and_then_taken_whole():
+    band = (850, 970, 420, 1920)
+    # A line the band clips has to go entirely -- half a sentence cannot be
+    # erased -- so the box is taken whole even though only its top is inside.
+    assert erase_subtitles.overlapping_union(CLIP_B_TEXT, band) == (957, 1011, 898, 1492)
+    # A watermark below and a title above are not candidates at all.
+    away = [(0, 100, 20, 60), (800, 900, 1040, 1070)]
+    assert erase_subtitles.overlapping_union(away, band) is None
+    # Touching along an edge is not overlapping.
+    assert erase_subtitles.overlapping_union([(420, 700, 700, 850)], band) is None
+    assert erase_subtitles.overlapping_union([(420, 700, 700, 851)], band) == (700, 851, 420, 700)
+
+
+def test_a_union_that_is_no_longer_the_band_the_user_drew_is_refused():
+    band = (850, 970, 420, 1920)              # 120 tall, in a 1080-tall frame
+    assert erase_subtitles.union_is_usable((900, 1020, 420, 1920), band, 1080) is True
+    # Three times the height they drew is the limit.
+    assert erase_subtitles.union_is_usable((700, 1060, 420, 1920), band, 1080) is True
+    assert erase_subtitles.union_is_usable((699, 1060, 420, 1920), band, 1080) is False
+    # And never most of the picture, however big the band was.
+    assert erase_subtitles.union_is_usable((600, 1040, 0, 1920),
+                                           (600, 1040, 0, 1920), 1080) is False
+
+
+def test_a_band_the_detector_finds_no_writing_near_is_not_retried(capsys):
+    # Nothing overlaps: there really is no writing where the user pointed, and
+    # the sentence about moving the box is the true answer -- not another five
+    # minutes spent erasing somebody else's watermark.
     bands = []
     remover = _remover_class(fail_times=2, bands=bands)
 
     with pytest.raises(Exception, match="No subtitles detected"):
-        erase_subtitles.erase_with_band(remover, "in.mp4", "out.mp4",
-                                        (850, 970, 420, 1920), 1920, 1080)
+        erase_subtitles.erase_with_band(remover, "in.mp4", "out.mp4", CLIP_B_BAND,
+                                        1920, 1080, find_text=lambda: [(0, 100, 20, 60)])
 
-    assert remover.runs["runs"] == 2
+    assert remover.runs["runs"] == 1
     # The script decides whether to retry by the same words app/eraser.py turns
     # into the user's sentence; they have to stay in step or one of them stops
     # recognising the case.
     assert erase_subtitles.NO_SUBTITLES_MARKS == eraser.NO_SUBTITLES_MARKS
+
+
+def test_the_second_band_is_the_last_one_tried():
+    # Even when the detector's band is a good one, it gets one go. A third
+    # attempt would be a third guess, and the user is already minutes in.
+    bands = []
+    remover = _remover_class(fail_times=2, bands=bands)
+
+    with pytest.raises(Exception, match="No subtitles detected"):
+        erase_subtitles.erase_with_band(remover, "in.mp4", "out.mp4", CLIP_B_BAND,
+                                        1920, 1080, find_text=lambda: CLIP_B_TEXT)
+
+    assert remover.runs["runs"] == 2
 
 
 def test_any_other_failure_is_not_retried():

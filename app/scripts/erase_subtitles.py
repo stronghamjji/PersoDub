@@ -207,11 +207,24 @@ def widen_masks(detector_class, frames=SEAM_FRAMES):
 BAND_PAD_UPDOWN = 0.06
 BAND_PAD_SIDES = 0.04
 BAND_PAD_MIN = 8
-RETRY_PAD_UPDOWN = 0.15
-RETRY_PAD_SIDES = 0.10
 # What the tool says when the band caught nothing. Kept in step with
 # app/eraser.py's NO_SUBTITLES_MARKS, which turns it into the user's sentence.
 NO_SUBTITLES_MARKS = ("NoSubtitleDetected", "No subtitles detected")
+
+# When the padded band still catches nothing, the second band is not another
+# guess at a percentage -- it is asked of the detector. A percentage is wrong
+# on both sides: the miss measured on a 1080p short was 41 pixels, a third of
+# the band the user drew, while the same percentage on a tall band would reach
+# into a watermark. So a dozen frames are read whole and the boxes that TOUCH
+# the user's band are taken entirely: a line of writing the band clips has to
+# go entirely, since half a sentence cannot be erased, and a title or a
+# watermark the band does not touch never becomes a candidate.
+RETRY_SHOTS = 12
+# ... within reason. A union three times the height the user drew, or taking up
+# most of the picture, is no longer the thing they pointed at, and erasing it
+# would be a worse answer than saying nothing was found.
+RETRY_MAX_GROWTH = 3
+RETRY_MAX_SHARE = 0.40
 
 
 def pad_band(area, width, height, updown=BAND_PAD_UPDOWN, sides=BAND_PAD_SIDES):
@@ -223,15 +236,38 @@ def pad_band(area, width, height, updown=BAND_PAD_UPDOWN, sides=BAND_PAD_SIDES):
             max(0, xmin - dx), min(width, xmax + dx))
 
 
+def overlapping_union(boxes, area):
+    """One band around every detected box that overlaps `area`, or None.
+
+    `boxes` are the detector's own (xmin, xmax, ymin, ymax); the answer is an
+    (ymin, ymax, xmin, xmax) area, the order a band is written in. None means
+    no box touched the band at all -- there really is no writing where the user
+    pointed, and widening would only find somebody else's.
+    """
+    ymin, ymax, xmin, xmax = area
+    touching = [b for b in boxes
+                if b[0] < xmax and b[1] > xmin and b[2] < ymax and b[3] > ymin]
+    if not touching:
+        return None
+    return (min(b[2] for b in touching), max(b[3] for b in touching),
+            min(b[0] for b in touching), max(b[1] for b in touching))
+
+
+def union_is_usable(union, area, height):
+    """Whether that union is still recognisably the band the user drew."""
+    tall = union[1] - union[0]
+    return (tall <= (area[1] - area[0]) * RETRY_MAX_GROWTH
+            and tall <= height * RETRY_MAX_SHARE)
+
+
 def caught_nothing(error):
     """Whether this is the tool saying the band held no writing it would take."""
     return any(mark in str(error) for mark in NO_SUBTITLES_MARKS)
 
 
-def say_band(band, came_from, widened=False):
+def say_band(band, came_from, because="padded from"):
     print("band %d..%d x %d..%d (%s %d..%d x %d..%d)" % (
-        band[0], band[1], band[2], band[3],
-        "widened again after nothing was found in" if widened else "padded from",
+        band[0], band[1], band[2], band[3], because,
         came_from[0], came_from[1], came_from[2], came_from[3]), flush=True)
 
 
@@ -396,6 +432,33 @@ def repaint_frames(path, found, detector_class, remover_class):
     os.replace(tmp, path)
 
 
+def text_in_frames(cv2, detector_class, path, shots=RETRY_SHOTS):
+    """Every text box the detector finds in `shots` frames of the whole picture.
+
+    Spread evenly and away from both ends, the way suggest_area picks its
+    frames for the same question -- a title card is not what is being looked
+    for and that is where they live. (The two scripts keep their own copies of
+    this: erase_subtitles.py is handed to a Windows box as one file, and an
+    import between them would break that.)
+    """
+    cap = cv2.VideoCapture(path)
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    boxes = []
+    if total > 0:
+        detector = detector_class(path, [])
+        step = max(1, int(total * 0.8) // shots)
+        for i in range(shots):
+            no = int(total * 0.1) + i * step
+            if no >= total:
+                break
+            cap.set(cv2.CAP_PROP_POS_FRAMES, no)
+            ok, frame = cap.read()
+            if ok:
+                boxes.extend(tuple(box) for box in detector.detect_subtitle(frame))
+    cap.release()
+    return boxes
+
+
 def erase_pass(remover_class, input_path, out_path, band):
     """One run of the tool over the whole video. Returns how long it took."""
     remover = remover_class(input_path)
@@ -415,14 +478,20 @@ def erase_pass(remover_class, input_path, out_path, band):
     return time.monotonic() - started
 
 
-def erase_with_band(remover_class, input_path, out_path, area, width, height):
+def erase_with_band(remover_class, input_path, out_path, area, width, height,
+                    find_text=None):
     """Erase in the user's band let out, and if that caught nothing, once more
-    in a generous one. Returns (seconds the erasing took, the band it used).
+    in the band the detector says the writing there actually needs.
 
-    The retry runs at most once. A band widened by a sixth that still finds no
-    writing is a band with no writing in it, and the sentence the user gets
-    then -- move the box and try again -- is the true one; going round a third
-    time would only spend more of their minutes before saying the same thing.
+    `find_text` is asked -- only when the first try caught nothing -- for the
+    text boxes in a handful of whole frames. Returns (seconds the erasing took,
+    the band it used).
+
+    The retry runs at most once, and only when the detector both finds writing
+    that touches the user's band and answers with a band still recognisably
+    theirs. Anything else is the true answer -- there is no writing where they
+    pointed -- and the sentence they get says so instead of spending another
+    five minutes on a second guess.
     """
     roomy = bool(area) and width > 0 and height > 0
     band = pad_band(area, width, height) if roomy else area
@@ -431,10 +500,13 @@ def erase_with_band(remover_class, input_path, out_path, area, width, height):
     try:
         return erase_pass(remover_class, input_path, out_path, band), band
     except Exception as first:
-        if not roomy or not caught_nothing(first):
+        if not roomy or not caught_nothing(first) or find_text is None:
             raise
-        band = pad_band(area, width, height, RETRY_PAD_UPDOWN, RETRY_PAD_SIDES)
-        say_band(band, area, widened=True)
+        union = overlapping_union(find_text(), area)
+        if union is None or not union_is_usable(union, area, height):
+            raise
+        band = pad_band(union, width, height)
+        say_band(band, area, "from detected text overlapping")
         return erase_pass(remover_class, input_path, out_path, band), band
 
 
@@ -479,8 +551,9 @@ def main():
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     cap.release()
 
-    erasing, band = erase_with_band(SubtitleRemover, input_path, out_path,
-                                    a.area, width, height)
+    erasing, band = erase_with_band(
+        SubtitleRemover, input_path, out_path, a.area, width, height,
+        find_text=lambda: text_in_frames(cv2, SubtitleDetect, input_path))
     print("progress 100%", flush=True)
 
     # Handing back a video with three surviving letters in it is worse than
