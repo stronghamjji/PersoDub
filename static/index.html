@@ -501,7 +501,11 @@
   .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--dropzone-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted-foreground); }
   .upload-zone.drag-over { border-color: var(--primary); background: var(--accent); }
-  .upload-zone .icon-lg { width: clamp(30px, 2.2vw, 38px); height: clamp(30px, 2.2vw, 38px); color: var(--primary); }
+  /* Grey like the edge around it: a big blue arrow said "drop a file" was the
+     main way in, next to a link field the same size as a hint. Both turn blue
+     together, and only while a file is actually over the zone. */
+  .upload-zone .icon-lg { width: clamp(30px, 2.2vw, 38px); height: clamp(30px, 2.2vw, 38px); color: var(--muted-foreground); }
+  .upload-zone.drag-over .icon-lg { color: var(--primary); }
   .upload-title { color: var(--foreground); font-weight: 600; font-size: 14px; }
   /* A button, not an underlined word: a desktop app opens a file picker from a
      button, and "Choose File…" with the ellipsis is the platform's own wording
