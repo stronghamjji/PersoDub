@@ -293,13 +293,21 @@ test("a report that is all message still comes in under the cap", () => {
 
 // ---- how it reads ------------------------------------------------------
 
-test("the title names the machine, the step, the error and the version", () => {
-  assert.equal(issueTitle(buildReport(SAMPLE)), "[win-gpu] 4/6 synthesize: engine-crash (0.5.5)");
+test("the title names the machine, what was being done, the step, the error and the version", () => {
+  assert.equal(issueTitle(buildReport(SAMPLE)), "[win-gpu] dub 4/6 synthesize: engine-crash (0.5.5)");
 });
 
 test("an install failure titles itself by step", () => {
   const report = buildReport({ ...SAMPLE, kind: "install", step: "venv-engines", code: "network" });
-  assert.equal(issueTitle(report), "[win-gpu] venv-engines: network (0.5.5)");
+  assert.equal(issueTitle(report), "[win-gpu] install venv-engines: network (0.5.5)");
+});
+
+// Nothing placed it -- a cloud dub that never reached a local stage. The kind
+// is all there is, and a title without it read "[win-gpu] unknown: unknown"
+// (user, 2026-09-09).
+test("a failure with no step and no stage is still named by what was being done", () => {
+  const report = buildReport({ ...SAMPLE, kind: "dub", stage: "", stageMarker: "", code: "cloud-refused" });
+  assert.equal(issueTitle(report), "[win-gpu] dub: cloud-refused (0.5.5)");
 });
 
 test("the body carries the environment table, the error and the fingerprint", () => {

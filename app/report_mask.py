@@ -29,6 +29,19 @@ _KEYS = (
 _LONG_TOKEN = re.compile(r"(?<![A-Za-z0-9_\-/\\.])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_\-/\\.])")
 
 _URL = re.compile(r"\bhttps?://[^\s\"'<>)\]}]+", re.IGNORECASE)
+
+# The kit's own paths stay readable (rule 2) -- but one folder under them is
+# not the app's, it is the user's: the workspace holds a folder per project,
+# and a project is named after the video it was made from. Keeping the kit
+# readable must not hand over the title of what somebody was dubbing.
+# Two passes, because a project name may have spaces in it and a path stops at
+# whitespace: the first takes the whole segment up to the next separator, the
+# second the plain case where the path ends at the project itself.
+_WS_HEAD = r"(workspace[\\/]\d{4}-\d{2}-\d{2}[\\/])"
+_WORKSPACE_PROJECT = (
+    re.compile(_WS_HEAD + r"[^\\/\n]+?(?=[\\/])"),
+    re.compile(_WS_HEAD + r"[^\\/\s\"']+"),
+)
 _URL_HOST = re.compile(r"^(https?://)([^/?#]+)", re.IGNORECASE)
 
 # What follows a home directory, up to the first space: the folders and the
@@ -41,6 +54,14 @@ _UNDER_HOME = r"((?:[\\/][^\\/\s\"']+)*)"
 # into "~/.../*.mp4" and leaves prose alone.
 _SPACED_FILENAME = re.compile(r"(~[\\/]…)((?: [^\s\\/\"']+)*\.[A-Za-z0-9]{1,8})(?=[\s\"']|$)")
 _EXTENSION = re.compile(r"^[A-Za-z0-9]{1,8}$")
+
+# The account behind the cloud, which the job log names twice: the workspace it
+# dubbed in, and what that workspace has left to spend. Neither is a fact about
+# the failure, and both belong to whoever is running the app -- the workspace
+# NAME is a company, the balance is its books. The workspace number stays: it
+# is what support asks for, and it says nothing on its own.
+_PERSO_WORKSPACE = re.compile(r"(Perso workspace:\s*).+?(\s*\(#\d+\))")
+_PERSO_CREDITS = re.compile(r"(Perso credits used:\s*\d+\s*\()[^)]*(\))")
 
 REDACTED = "[REDACTED]"
 ELLIPSIS = "…"
@@ -84,7 +105,8 @@ def mask_text(text: str, home: str = "", kit: str = "") -> str:
     1. A URL becomes its own scheme and host.
     2. The kit's own path keeps everything but the user's name. Which model,
        which venv, which folder a step died in is the diagnosis itself, so this
-       runs first and takes those paths out of rule 3's way.
+       runs first and takes those paths out of rule 3's way. Its one exception
+       is the workspace's project folder, which is named after the video.
     3. Every other path under the home directory collapses to "~/.../*.ext".
     4. The four key shapes go.
     5. What is left that is 32+ token characters, and is not part of a path, is
@@ -105,6 +127,10 @@ def mask_text(text: str, home: str = "", kit: str = "") -> str:
         masks = _separator_forms("~" + kit[len(home):]) if under_home else forms
         for form, mask in zip(forms, masks):
             out = re.sub(re.escape(form), lambda _m, r=mask: r, out, flags=re.IGNORECASE)
+    for pattern in _WORKSPACE_PROJECT:
+        out = pattern.sub(lambda m: m.group(1) + "*", out)
+    out = _PERSO_WORKSPACE.sub(lambda m: m.group(1) + "*" + m.group(2), out)
+    out = _PERSO_CREDITS.sub(lambda m: m.group(1) + "*" + m.group(2), out)
     if home:
         for form in dict.fromkeys(_separator_forms(home)):
             out = re.sub(re.escape(form) + _UNDER_HOME,

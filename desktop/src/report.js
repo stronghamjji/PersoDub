@@ -341,10 +341,16 @@ export function whereFailed(report) {
   return [report.stageMarker, report.stage].filter(Boolean).join(" ") || "unknown";
 }
 
-/** e.g. "[win-gpu] 4/6 synthesize: engine-crash (0.5.5)" */
+/** e.g. "[win-gpu] dub 4/6 synthesize: engine-crash (0.5.5)" */
 export function issueTitle(report) {
   const key = (report.env && report.env.platformKey) || "unknown";
-  return `[${key}] ${whereFailed(report)}: ${report.code} (${report.version || "?"})`;
+  const where = whereFailed(report);
+  // The kind is always known ("dub", "install", "erase"); the stage often is
+  // not. Without it a cloud failure came out as "[mac] unknown: unknown",
+  // which cannot be told apart from the next one in a list of issues (user,
+  // 2026-09-09).
+  const what = where === "unknown" ? report.kind : `${report.kind} ${where}`;
+  return `[${key}] ${what}: ${report.code} (${report.version || "?"})`;
 }
 
 /** The one-line summary the relay repeats on a duplicate: "win-gpu · windows 10.0.26100 · cu128". */

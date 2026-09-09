@@ -22,7 +22,7 @@ export const INSTALL_STEPS = new Set(STEP_IDS);
 export const ERROR_CODES = new Set([
   "path-too-long", "disk-full", "network", "permission", "engine-start",
   "out-of-memory", "unsupported-format", "engine-crash", "step-failed",
-  "unknown",
+  "cloud-refused", "unknown",
 ]);
 
 /**
@@ -190,6 +190,13 @@ const ERROR_PATTERNS = [
   [/out of memory|ENOMEM|allocate/i,                 "out-of-memory"],
   [/unsupported|unrecognized codec|invalid data found/i, "unsupported-format"],
   [/did not become ready|exit \d+/i,                 "engine-crash"],
+  // The cloud service saying no. The five sentences in app/pipeline.py's
+  // _NOTICE_ERRORS (Perso unavailable, credits used up, key rejected; Gemini
+  // overloaded, quota used up) are the app's own published words, and none of them is a fact about the user's machine --
+  // counting them as "unknown" made a service outage look like a broken
+  // install (found rebuilding a real failed job as a report, 2026-09-09).
+  // Last in the table on purpose: every machine-side rule above is tried first.
+  [/temporarily unavailable|temporarily overloaded|credits are used up|quota is used up|rejected the api key/i, "cloud-refused"],
 ];
 
 /** One published word for a whole error message. Never the message itself.

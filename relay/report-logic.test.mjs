@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ERROR_CODES,
+  KINDS,
   MAX_REPORT_BYTES,
   commentText,
   dayKey,
@@ -18,7 +20,8 @@ import {
   verifyLog,
   withLogsLine,
 } from "./report-logic.js";
-import { buildReport, collectEnvironment, issueTitle as appIssueTitle } from "../desktop/src/report.js";
+import { buildReport, collectEnvironment, issueTitle as appIssueTitle, REPORT_KINDS } from "../desktop/src/report.js";
+import { ERROR_CODES as APP_ERROR_CODES } from "../desktop/src/analytics.js";
 
 // Run me: node --test relay/*.test.mjs
 
@@ -123,6 +126,16 @@ test("an install failure is labelled by step instead of stage", () => {
   assert.ok(!labelsFor(report).some((l) => l.startsWith("stage:")));
 });
 
+// The relay keeps its own copy of the app's vocabularies on purpose -- it must
+// refuse a word it has never heard rather than create a label from whatever a
+// request contained. A copy that drifts is worse than no copy: the app would
+// send a code and the relay would file it as "unknown". Adding "cloud-refused"
+// by hand to both lists (2026-09-09) is exactly the drift this catches.
+test("the relay's vocabularies are the app's, word for word", () => {
+  assert.deepEqual([...ERROR_CODES].sort(), [...APP_ERROR_CODES].sort());
+  assert.deepEqual([...KINDS].sort(), [...REPORT_KINDS, "unknown"].sort());
+});
+
 // ---- what it writes ----------------------------------------------------
 
 test("the relay and the app spell one failure's title the same way", () => {
@@ -138,7 +151,27 @@ test("the relay and the app spell one failure's title the same way", () => {
   });
   const { report } = validateReport(JSON.parse(JSON.stringify(built)));
   assert.equal(issueTitle(report), appIssueTitle(built));
-  assert.equal(issueTitle(report), "[win-gpu] 4/6 synthesize: engine-crash (0.5.5)");
+  assert.equal(issueTitle(report), "[win-gpu] dub 4/6 synthesize: engine-crash (0.5.5)");
+});
+
+// A cloud dub dies before any stage of the local pipeline is reached, and the
+// service's own refusal is not a fact about the machine: without the kind in
+// front, every one of them arrived as "[mac] unknown: unknown" (user,
+// 2026-09-09).
+test("a failure with no stage still says what was being done", () => {
+  const built = buildReport({
+    kind: "dub", code: "cloud-refused", version: "0.5.5", installId: GOOD.installId,
+    message: "Perso's server is temporarily unavailable.",
+    env: collectEnvironment({
+      sys: { platform: "darwin", release: "25.5.0", arch: "arm64", cpuModel: "Apple M4", cores: 10, totalMemBytes: 24 * 1024 ** 3 },
+      torchVariant: "mps", appVersion: "0.5.5", kitVersion: "0.5.5",
+    }),
+  });
+  const { report } = validateReport(JSON.parse(JSON.stringify(built)));
+  assert.equal(issueTitle(report), appIssueTitle(built));
+  assert.equal(issueTitle(report), "[mac] dub: cloud-refused (0.5.5)");
+  assert.ok(labelsFor(report).includes("err:cloud-refused"),
+    "the relay knows the code, so the label is a real one rather than err:unknown");
 });
 
 test("the body carries the machine, the error and the fingerprint", () => {

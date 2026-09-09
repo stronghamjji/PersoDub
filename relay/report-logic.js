@@ -25,7 +25,9 @@ export const KINDS = ["install", "dub", "erase", "agent", "unknown"];
 export const ERROR_CODES = [
   "path-too-long", "disk-full", "network", "permission", "engine-start",
   "out-of-memory", "unsupported-format", "engine-crash", "step-failed",
-  "unknown",
+  // The cloud service refused -- not the machine's fault, and worth its own
+  // word so an outage cannot be read as a broken install.
+  "cloud-refused", "unknown",
 ];
 export const PLATFORM_KEYS = ["mac", "win-gpu", "win-cpu"];
 
@@ -159,12 +161,15 @@ export function whereFailed(report) {
   return [report.stageMarker, report.stage].filter(Boolean).join(" ") || "unknown";
 }
 
-/** e.g. "[win-gpu] 4/6 synthesize: engine-crash (0.5.5)".
+/** e.g. "[win-gpu] dub 4/6 synthesize: engine-crash (0.5.5)".
  *  Pinned equal to the app's own issueTitle by the test -- the app writes this
  *  title into the bundle it saves for a manual report, and two spellings of
- *  one failure would look like two failures. */
+ *  one failure would look like two failures. The kind leads it because a
+ *  failure the app could not place used to leave "[mac] unknown: unknown". */
 export function issueTitle(report) {
-  return `[${report.env.platformKey}] ${whereFailed(report)}: ${report.code} (${report.version})`;
+  const where = whereFailed(report);
+  const what = where === "unknown" ? report.kind : `${report.kind} ${where}`;
+  return `[${report.env.platformKey}] ${what}: ${report.code} (${report.version})`;
 }
 
 export function envLine(report) {

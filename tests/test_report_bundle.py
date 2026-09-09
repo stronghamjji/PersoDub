@@ -155,6 +155,51 @@ def test_a_job_that_never_reached_a_stage_names_none():
     assert report_api.stage_of("") == ("", "")
 
 
+def test_a_cloud_dub_reports_the_one_step_it_had():
+    # The cloud path logs "1/1", not one of the six: without this every Perso
+    # failure said it had reached no stage at all (user, 2026-09-09).
+    assert report_api.stage_of("1/1 Dubbing in the Perso cloud…\n   Uploading…") == \
+        ("1/1", report_api.CLOUD_STAGE)
+
+
+def test_a_marker_from_the_table_still_wins_over_the_cloud_one():
+    assert report_api.stage_of("1/1 something\n3/6 translating")[1] == STAGES[2][0]
+
+
+# --- the video's own name --------------------------------------------------
+
+def test_the_first_log_line_is_the_video_and_does_not_travel():
+    log = "Q3 board review.mp4\n0/6 fetching\n4/6 synthesize\n"
+    assert report_api.strip_source_line(log) == "[video]\n0/6 fetching\n4/6 synthesize\n"
+    assert report_api.strip_source_line("https://youtube.com/watch?v=secret\nrest") == "[video]\nrest"
+    assert report_api.strip_source_line("") == ""
+
+
+def test_the_workspace_folder_is_named_after_the_video_so_it_goes_too():
+    home = "/Users/jane"
+    kit = "/Users/jane/Library/Application Support/PersoDub"
+    ws = kit + "/app/workspace/2026-09-08"
+    assert mask_text("ffmpeg -i %s/Q3 board review_ko/input.mp4" % ws, home, kit) == \
+        "ffmpeg -i ~/Library/Application Support/PersoDub/app/workspace/2026-09-08/*/input.mp4"
+    # And when the path stops at the folder itself, with no file under it.
+    assert mask_text("no such folder: %s/clip8_en" % ws, home, kit) == \
+        "no such folder: ~/Library/Application Support/PersoDub/app/workspace/2026-09-08/*"
+    # Everything else about the kit stays readable -- it is the diagnosis.
+    assert mask_text("%s/models/qwen3-tts/model.safetensors" % kit, home, kit) == \
+        "~/Library/Application Support/PersoDub/models/qwen3-tts/model.safetensors"
+
+
+def test_the_cloud_account_behind_a_job_is_not_a_fact_about_the_failure():
+    # Both lines are written by app/dub_launch.py on every cloud dub. The
+    # workspace NAME is a company and the balance is its books; the number is
+    # what support asks for and says nothing on its own (found in a real
+    # report, 2026-09-09).
+    assert mask_text("   Perso workspace: CommunitySpotLight (#114)") == \
+        "   Perso workspace: * (#114)"
+    assert mask_text("   Perso credits used: 6 (186815 left)") == \
+        "   Perso credits used: 6 (*)"
+
+
 # --- GET /api/report/bundle ------------------------------------------------
 
 @pytest.fixture

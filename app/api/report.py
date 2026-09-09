@@ -35,6 +35,12 @@ router = APIRouter()
 # The "N/6" marker every stage log line starts with (app/stages.py). The last
 # one in a job's log is the stage the job was in when it stopped.
 _MARKER = re.compile(r"\b(\d{1,2})/%d\b" % len(STAGES))
+# The Perso cloud path is not one of those six stages: the whole job is one
+# step there ("1/1 Dubbing in the Perso cloud…", app/dub_launch.py), so a cloud
+# failure matched no marker at all and every one of them reported no stage
+# (user, 2026-09-09).
+_CLOUD_MARKER = re.compile(r"\b1/1\b")
+CLOUD_STAGE = "perso-cloud"
 
 # The engine choices a job was started with. Named one by one rather than
 # copied out of the record, for the same reason the shell's report is an
@@ -45,7 +51,8 @@ ENGINE_FIELDS = ("stt_engine", "translator", "tts", "quality", "separation", "du
 
 def stage_of(log_text: str):
     """(marker, stage name) for the last stage a job reached, e.g. ("4/6",
-    "synthesize"). ("", "") when the log never got that far.
+    "synthesize"), or ("1/1", "perso-cloud") for the cloud path, which has one
+    step and does not use the table. ("", "") when the log never got that far.
 
     Read from the stage table rather than from a list of its own: inserting a
     stage renumbers every marker at once (app/stages.py), and a copy here would
@@ -57,8 +64,23 @@ def stage_of(log_text: str):
         if 1 <= n <= len(STAGES):
             last = n
     if last is None:
-        return "", ""
+        return ("1/1", CLOUD_STAGE) if _CLOUD_MARKER.search(log_text or "") else ("", "")
     return "%d/%d" % (last, len(STAGES)), STAGES[last - 1][0]
+
+
+def strip_source_line(text: str) -> str:
+    """The job log without its first line.
+
+    That line is the video itself -- a link, a title or a file name, whichever
+    the job was started from (app/api/dub.py's launch_job) -- and none of the
+    three is a fact about the failure. The rest of the log is the failure.
+    Replaced rather than dropped, so the line numbers a reader counts still
+    line up with the log on the machine it came from.
+    """
+    if not text:
+        return text
+    _first, sep, rest = text.partition("\n")
+    return "[video]" + sep + rest
 
 
 def _packs():
@@ -92,7 +114,7 @@ def report_bundle(job: Optional[str] = None):
 
     j = state.job_store.get(job) if job else None
     if j:
-        job_log = read_masked(os.path.join(log_dir, "job-%s.log" % job), home, kit)
+        job_log = strip_source_line(read_masked(os.path.join(log_dir, "job-%s.log" % job), home, kit))
         marker, stage = stage_of(job_log)
         record = {
             "kind": kind_of(j),

@@ -374,6 +374,20 @@ test("a dropped download is recognised", () => {
   assert.equal(classifyError("connect ETIMEDOUT 1.2.3.4:443"), "network");
 });
 
+// The cloud saying no is not the machine failing. These five sentences are
+// the app's own (app/pipeline.py's _NOTICE_ERRORS), and the first is what a
+// real failed dub carried on 2026-09-09 -- counted as "unknown" until now, so
+// an outage on Perso's side looked exactly like a broken install.
+test("a cloud service that refused is recognised, and is not called a machine fault", () => {
+  assert.equal(classifyError("Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."), "cloud-refused");
+  assert.equal(classifyError("Perso credits are used up. Recharge to continue."), "cloud-refused");
+  assert.equal(classifyError("Perso rejected the API key. Open Settings and check the key."), "cloud-refused");
+  assert.equal(classifyError("Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again."), "cloud-refused");
+  assert.equal(classifyError("Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset."), "cloud-refused");
+  // A machine-side rule still wins: those are tried first, in order.
+  assert.equal(classifyError("ENOSPC: no space left while the service was temporarily unavailable"), "disk-full");
+});
+
 test("a refused connection is recognised in either spelling", () => {
   // The engines fail through Python, which writes the sentence rather than the
   // errno. The first line here is what a real dub left behind on 2026-08-26
