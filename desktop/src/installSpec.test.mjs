@@ -752,6 +752,70 @@ test("eraser-src is open again when the tree on disk came from another commit", 
   assert.equal(await step.isDone(), true);
 });
 
+// The kit's Python is 3.11 and one file of the tool is 3.12-only (PEP 701's
+// f-string quoting), on backend.main's import path -- so before this, every
+// erase failed with a SyntaxError while detection passed (2026-09-09).
+test("eraser-src rewrites the one 3.12-only f-string as it unpacks", async () => {
+  const ctx = freshCtx({
+    download: async (_url, dest) => writeFileSync(dest, "zip"),
+    extract: async (_file, dest) => {
+      mkdirSync(join(dest, "backend", "inpaint"), { recursive: true });
+      writeFileSync(join(dest, "backend", "main.py"), "# vsr");
+      writeFileSync(join(dest, "backend", "inpaint", "sttn_auto_inpaint.py"),
+                    "print(f\"len {frame_info['len']} of {n}\")\n");
+    },
+  });
+  await byId(ctx)["eraser-src"].run(() => {});
+  const fixed = readFileSync(join(ctx.kitDir, "eraser", "vsr", "backend", "inpaint", "sttn_auto_inpaint.py"), "utf8");
+  assert.ok(fixed.includes('{frame_info["len"]}'), fixed);
+  assert.ok(!fixed.includes("{frame_info['len']}"), fixed);
+  assert.ok(fixed.includes("of {n}"), "nothing else in the file changes");
+});
+
+test("eraser-src leaves a file that already parses on 3.11 exactly as it is", async () => {
+  const already = 'print(f"len {frame_info[\'x\']}")\n';
+  const ctx = freshCtx({
+    download: async (_url, dest) => writeFileSync(dest, "zip"),
+    extract: async (_file, dest) => {
+      mkdirSync(join(dest, "backend", "inpaint"), { recursive: true });
+      writeFileSync(join(dest, "backend", "main.py"), "# vsr");
+      writeFileSync(join(dest, "backend", "inpaint", "sttn_auto_inpaint.py"), already);
+    },
+  });
+  await byId(ctx)["eraser-src"].run(() => {});
+  assert.equal(
+    readFileSync(join(ctx.kitDir, "eraser", "vsr", "backend", "inpaint", "sttn_auto_inpaint.py"), "utf8"),
+    already,
+  );
+});
+
+// pip finishing is not the same as the eraser working: the step imports the
+// tool's entry module with the venv it just built, and only then stamps
+// itself done. Without that, a pack that can never erase reported "Installed".
+test("venv-eraser is done only once the eraser can be imported", async () => {
+  const argvs = [];
+  const ctx = freshCtx({ run: async (argv) => { argvs.push(argv); } });
+  const step = byId(ctx)["venv-eraser"];
+  await step.run(() => {});
+  const check = argvs.find((a) => a.join(" ").includes("import backend.main"));
+  assert.ok(check, argvs.map((a) => a.join(" ")).join("\n"));
+  assert.equal(check[0], venvBin(join(ctx.kitDir, "venv-eraser"), "python"));
+  assert.ok(check[2].includes(join(ctx.kitDir, "eraser", "vsr")), check[2]);
+  assert.equal(await step.isDone(), true);
+});
+
+test("an eraser that cannot be imported fails the step and leaves no stamp", async () => {
+  const ctx = freshCtx({
+    run: async (argv) => {
+      if (argv.join(" ").includes("import backend.main")) throw new Error("python exit 1");
+    },
+  });
+  const step = byId(ctx)["venv-eraser"];
+  await assert.rejects(step.run(() => {}), /could not be loaded/);
+  assert.equal(existsSync(join(ctx.kitDir, ".install", "venv-eraser.ok")), false);
+  assert.equal(await step.isDone(), false, "the step stays open, so the next attempt runs it again");
+});
+
 test("venv-eraser installs its own torch pair first, then the eraser's list", async () => {
   const argvs = [];
   const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });

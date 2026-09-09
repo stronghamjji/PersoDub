@@ -462,7 +462,11 @@ export function buildSteps(ctx) {
     return createHash("sha256").update(JSON.stringify(words)).digest("hex");
   };
 
-  const venvStep = (id, title, bytes, venvName, pipInstalls) => ({
+  // proveItWorks: an optional last word before the step stamps itself done --
+  // pip can finish and still leave an environment the tool cannot be loaded
+  // from. It runs with the fresh venv's python and may throw, in which case
+  // no stamp is written and the step is open again next time.
+  const venvStep = (id, title, bytes, venvName, pipInstalls, proveItWorks = null) => ({
     id,
     title,
     // A venv that already exists is being updated: pip adds what the new list
@@ -497,16 +501,68 @@ export function buildSteps(ctx) {
                        "--retries", "10", "--timeout", "60", ...args],
                       { onLine: (l) => report(...progress(l)) });
       }
+      if (proveItWorks) await proveItWorks(venvPy, report);
       markOk(id, pipFingerprint(pipInstalls));
     },
   });
 
-  // The eraser's venv, plus the two kit.env keys that follow it: the app
-  // reads their presence as "the pack is here", so they are written from the
-  // same place the stamp saying the venv is complete comes from.
+  // The kit's Python is 3.11.15, and the tool's README asks for 3.12+. One
+  // file needs it: backend/inpaint/sttn_auto_inpaint.py:245 writes an f-string
+  // with the same quote inside the braces ({frame_info['len']}), which is
+  // PEP 701 and only parses from 3.12. That file sits on backend.main's import
+  // path, so every erase died on a SyntaxError while detection -- which never
+  // imports backend.main -- passed (measured 2026-09-09). Parsing all of
+  // backend/ with 3.11 found this one file and no other, and the app runs only
+  // this module's STTN_DET path, so swapping the two quotes changes the syntax
+  // and nothing else.
+  // Root fix, next time this commit is re-pinned: give venv-eraser a CPython
+  // 3.12 standalone of its own and put the interpreter version into
+  // pipFingerprint, so a Python change re-opens the step instead of leaving a
+  // venv built for another one.
+  const PY312_FSTRING = "{frame_info['len']}";
+  const makeReadableToPython311 = (report) => {
+    const path = k("eraser", "vsr", "backend", "inpaint", "sttn_auto_inpaint.py");
+    if (!existsSync(path)) return;   // upstream moved it: the import check below is what judges
+    const text = readFileSync(path, "utf8");
+    if (!text.includes(PY312_FSTRING)) return;   // already plain 3.11 syntax
+    report(null, "Making the eraser readable to Python 3.11");
+    writeFileSync(path, text.replaceAll(PY312_FSTRING, '{frame_info["len"]}'));
+  };
+
+  // The one second that turns "pip finished" into "the eraser works": the
+  // tool's own entry module is imported with the venv that just installed it.
+  // A 3.11 kit against a 3.12-only source, or a wheel that resolved but does
+  // not load, is a SyntaxError/ImportError here -- instead of a dead Erase
+  // button on a pack the user was told was installed (measured 2026-09-09:
+  // every erase failed while detection, which never imports this module,
+  // passed). PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: paddlex otherwise reaches
+  // out to a model registry on import.
+  const eraserImports = async (venvPy, report) => {
+    report(null, "Checking the subtitle eraser");
+    const vsr = k("eraser", "vsr");
+    const recent = [];
+    try {
+      await ctx.run(
+        [venvPy, "-c", `import sys; sys.path.insert(0, ${JSON.stringify(vsr)}); import backend.main`],
+        { cwd: vsr,
+          env: { ...process.env, PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True" },
+          onLine: (l) => { recent.push(l); if (recent.length > 3) recent.shift(); } },
+      );
+    } catch (err) {
+      // The tool's own last line, not the whole traceback: that is the
+      // sentence naming the file and the reason.
+      const why = recent[recent.length - 1] || String((err && err.message) || err);
+      throw new Error(`The subtitle eraser installed but could not be loaded: ${why.slice(0, 200)}`);
+    }
+  };
+
+  // The eraser's venv, proved by that import, plus the two kit.env keys that
+  // follow it: the app reads their presence as "the pack is here", so they
+  // are written from the same place the stamp saying the venv is complete
+  // comes from.
   const eraserVenv = venvStep("venv-eraser", "Installing the subtitle eraser",
                               venvEraserBytes(torchVariant), "venv-eraser",
-                              [torchEraser, ["-r", k(reqEraser)]]);
+                              [torchEraser, ["-r", k(reqEraser)]], eraserImports);
 
   const steps = [
     {
@@ -718,6 +774,7 @@ export function buildSteps(ctx) {
         // then vouch for it.
         rmSync(k("eraser", "vsr"), { recursive: true, force: true });
         await ctx.extract(archive, k("eraser", "vsr"), { strip: 1 });
+        makeReadableToPython311(report);
         // Best-effort, same reasoning as the python step above.
         try {
           rmSync(archive, { force: true }); // 790 MB the kit never reads again
