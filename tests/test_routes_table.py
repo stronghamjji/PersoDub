@@ -55,6 +55,7 @@ ROUTES = [
     ('GET', '/api/languages'),
     ('GET', '/api/models'),
     ('GET', '/api/perso/spaces'),
+    ('GET', '/api/report/bundle'),
     ('GET', '/api/settings'),
     ('GET', '/api/setup'),
     ('GET', '/api/subtitles/estimate'),

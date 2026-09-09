@@ -21,6 +21,13 @@ MANAGED_KEYS = ("GEMINI_API_KEY", "PERSO_API_KEY", "PERSO_SPACE_SEQ")
 # are one value rather than two that could disagree.
 ANALYTICS_OFF_KEY = "PERSODUB_NO_ANALYTICS"
 
+# The other switch the desktop shell reads out of kit.env before every send:
+# whether an automatic failure report may leave (desktop/src/report.js). A
+# separate line from the counts, because they are separate promises -- someone
+# who does not want to be counted may still want their crash fixed, and
+# someone who does not want their logs sent still shows up in the count.
+REPORTS_OFF_KEY = "PERSODUB_NO_REPORTS"
+
 KIT_ENV = "kit.env"
 # The file was mac.env before Windows existed. The desktop shell renames it on
 # startup (kitEnv.js migrateKitEnv), but this module also runs where that shell
@@ -200,3 +207,14 @@ def write_analytics_off(off: bool) -> None:
     """Turn usage counts off, or back on. Takes effect on the next count --
     the shell re-reads kit.env every time, so nothing waits for a restart."""
     _write_env({ANALYTICS_OFF_KEY: "1" if off else "0"})
+
+
+def read_reports_off() -> bool:
+    """Whether the user turned automatic failure reports off. Absent means on."""
+    return read_value(REPORTS_OFF_KEY) == "1"
+
+
+def write_reports_off(off: bool) -> None:
+    """Turn automatic failure reports off, or back on. Like the counts' switch,
+    it takes effect on the next failure rather than the next restart."""
+    _write_env({REPORTS_OFF_KEY: "1" if off else "0"})
