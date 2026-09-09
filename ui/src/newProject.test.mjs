@@ -56,8 +56,8 @@ function harness({ responses = {} } = {}) {
     return els.get(id);
   };
   const state = { newProject: null, linkProbe: null };
-  const log = { calls: [], docKeydown: [], hints: 0, dubMode: 0, engines: 0,
-                started: 0, closed: 0, picked: 0, played: [], cancelled: [] };
+  const log = { calls: [], requests: [], docKeydown: [], hints: 0, dubMode: 0, engines: 0,
+                started: 0, closed: 0, picked: 0, played: [], cancelled: [], erased: [] };
 
   const real = { fetch: globalThis.fetch, document: globalThis.document, URL: globalThis.URL,
                  setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval };
@@ -77,10 +77,14 @@ function harness({ responses = {} } = {}) {
     createObjectURL: () => "blob:fake",
     revokeObjectURL: (u) => log.calls.push(`revoke ${u}`),
   };
-  globalThis.fetch = async (url) => {
-    log.calls.push(`GET ${url}`);
+  // The method and the body come along now: the download routes are POSTs, and
+  // what a Save clip asked for is the whole point of that button.
+  globalThis.fetch = async (url, init = {}) => {
+    const method = (init.method || "GET").toUpperCase();
+    log.calls.push(`${method} ${url}`);
+    log.requests.push({ url, method, body: init.body });
     const r = responses[url];
-    if (typeof r === "function") return r();
+    if (typeof r === "function") return r(url, init);
     return r ?? { ok: true, json: async () => ({}) };
   };
   log.restore = () => {
@@ -102,11 +106,26 @@ function harness({ responses = {} } = {}) {
     labelPx: () => 58,
     onClosed: () => { log.closed += 1; },
     onPickFile: () => { log.picked += 1; },
+    onErase: (source) => { log.erased.push(source); },
   });
   return { $, api, state, log };
 }
 
 const ok = (body) => ({ ok: true, status: 200, json: async () => body });
+const bad = (status, detail) => ({ ok: false, status, json: async () => ({ detail }) });
+// A link's dialog with the holding area answering: POST /api/downloads hands
+// back id "d1", and every tick of the clock reads the next record in `steps`
+// (the last one repeats).
+function linkHarness(steps, extra = {}) {
+  let at = 0;
+  return harness({ responses: {
+    "/api/downloads": () => ok({ id: "d1" }),
+    "/api/downloads/d1": () => ok({ id: "d1", url: "https://x/y",
+                                    ...steps[Math.min(at++, steps.length - 1)] }),
+    ...extra,
+  } });
+}
+const PROBE = { url: "https://x/y", title: "A talk", duration_sec: 90 };
 // The Advanced-options dropdowns as the markup ships them, so loadSavedDefaults
 // has real options to find (or fail to find).
 function fillAdvanced($) {
@@ -287,6 +306,202 @@ test("a length too short to scrub draws no bar at all", async (t) => {
   await h.$("projectVideo").fire("loadedmetadata");
 
   assert.equal(h.$("trimBox").innerHTML, "");
+});
+
+// -- the held video: a link fetched, a file copied --------------------------
+
+test("a pasted link is fetched the moment the dialog opens, and the row counts it down", async (t) => {
+  const h = linkHarness([{ status: "downloading", percent: 43 }]);
+  t.after(h.log.restore);
+
+  h.api.openNewProject({ probe: PROBE });
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.ok(h.log.calls.includes("POST /api/downloads"));
+  assert.equal(h.$("dlRow").hidden, false);
+  // Nothing can be done to a video that is not on this computer yet.
+  assert.equal(h.$("startBtn").disabled, true);
+  assert.equal(h.$("saveClipBtn").disabled, true);
+  assert.equal(h.$("eraseBtn").disabled, true);
+
+  await h.log.tick();
+
+  assert.equal(h.$("dlPercent").textContent, "43%");
+  assert.equal(h.$("dlFill").style.width, "43%");
+});
+
+test("when the file has landed it plays from the app and gets a trim bar", async (t) => {
+  const h = linkHarness([{ status: "downloading", percent: 20 }, { status: "ready", percent: 100 }]);
+  t.after(h.log.restore);
+  h.api.openNewProject({ probe: PROBE });
+  await new Promise((r) => setTimeout(r, 0));
+
+  await h.log.tick();
+  await h.log.tick();
+
+  assert.equal(h.$("dlRow").hidden, true, "the row goes rather than sitting at 100%");
+  assert.equal(h.$("projectVideo").hidden, false);
+  assert.equal(h.$("projectVideo").src, "/api/downloads/d1/video");
+  assert.equal(h.state.newProject.downloadId, "d1");
+  assert.equal(h.api.readOptions().downloadId, "d1");
+  assert.equal(h.$("startBtn").disabled, false);
+  assert.equal(h.$("saveClipBtn").disabled, false);
+  assert.equal(h.$("eraseBtn").disabled, false);
+  assert.equal(h.log.ticking(), 0, "nothing left to ask about");
+
+  h.$("projectVideo").duration = 30;
+  await h.$("projectVideo").fire("loadedmetadata");
+
+  assert.equal(h.$("projectDur").textContent, "00:00:30");
+  assert.match(h.$("trimBox").innerHTML, /id="trimStart"/);
+});
+
+test("a fetch that fails says why on the dialog's own line and stops asking", async (t) => {
+  const h = linkHarness([{ status: "failed", error: "This video is private." }]);
+  t.after(h.log.restore);
+  h.api.openNewProject({ probe: PROBE });
+  await new Promise((r) => setTimeout(r, 0));
+
+  await h.log.tick();
+
+  assert.equal(h.$("projectError").textContent, "This video is private.");
+  assert.equal(h.$("dlRow").hidden, true);
+  assert.equal(h.log.ticking(), 0);
+  assert.equal(h.$("startBtn").disabled, true);
+});
+
+test("closing the dialog stops watching the download", async (t) => {
+  const h = linkHarness([{ status: "downloading", percent: 10 }]);
+  t.after(h.log.restore);
+  h.api.openNewProject({ probe: PROBE });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(h.log.ticking(), 1);
+
+  h.api.closeNewProject();
+
+  assert.equal(h.log.ticking(), 0);
+});
+
+test("the same link is played from the copy already held, not fetched again", async (t) => {
+  const h = linkHarness([{ status: "ready", percent: 100 }]);
+  t.after(h.log.restore);
+  h.api.openNewProject({ probe: PROBE });
+  await new Promise((r) => setTimeout(r, 0));
+  await h.log.tick();
+  h.api.closeNewProject();
+  const fetches = h.log.calls.filter((c) => c === "POST /api/downloads").length;
+
+  h.api.openNewProject({ probe: PROBE });
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(h.log.calls.filter((c) => c === "POST /api/downloads").length, fetches);
+  assert.equal(h.state.newProject.downloadId, "d1");
+  assert.equal(h.$("projectVideo").src, "/api/downloads/d1/video");
+});
+
+test("a dropped file is copied into the holding area behind the video it is already playing", async (t) => {
+  const h = harness({ responses: { "/api/downloads/upload": () => ok({ id: "u9", status: "ready" }) } });
+  t.after(h.log.restore);
+  const file = { name: "a.mp4" };
+
+  h.api.openNewProject({ file });
+  h.$("projectVideo").duration = 30;
+  await h.$("projectVideo").fire("loadedmetadata");
+  await new Promise((r) => setTimeout(r, 0));
+
+  const up = h.log.requests.find((r) => r.url === "/api/downloads/upload");
+  assert.equal(up.method, "POST");
+  assert.equal(up.body.get("duration_sec"), "30");
+  assert.equal(h.state.newProject.downloadId, "u9");
+  assert.equal(h.$("saveClipBtn").disabled, false);
+  // Nothing on screen waited for the copy: no progress row, and the video has
+  // been playing from memory the whole time.
+  assert.equal(h.$("dlRow").hidden, true);
+  assert.equal(h.$("projectVideo").src, "blob:fake");
+});
+
+test("a copy that will not upload leaves the file itself to be dubbed", async (t) => {
+  const h = harness({ responses: { "/api/downloads/upload": () => bad(500, "No room on the disk.") } });
+  t.after(h.log.restore);
+  const file = { name: "a.mp4" };
+
+  h.api.openNewProject({ file });
+  h.$("projectVideo").duration = 30;
+  await h.$("projectVideo").fire("loadedmetadata");
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(h.state.newProject.downloadId, null);
+  assert.equal(h.api.readOptions().video, file);
+  // The two that need the copy stay off; the dub carries the file as it always did.
+  assert.equal(h.$("saveClipBtn").disabled, true);
+  assert.equal(h.$("startBtn").disabled, false);
+  assert.equal(h.$("projectError").textContent, "", "a quiet copy fails quietly");
+});
+
+// -- Save clip and Erase subtitles ------------------------------------------
+
+/** A dialog whose link has landed, with the trim bar drawn for a 30s video. */
+async function readyDialog(extra = {}) {
+  const h = linkHarness([{ status: "ready", percent: 100 }], extra);
+  h.api.openNewProject({ probe: PROBE });
+  await new Promise((r) => setTimeout(r, 0));
+  await h.log.tick();
+  h.$("projectVideo").duration = 30;
+  await h.$("projectVideo").fire("loadedmetadata");
+  return h;
+}
+
+test("Save clip sends the chosen stretch, then says where the file went", async (t) => {
+  const h = await readyDialog({
+    "/api/downloads/d1/save": () => ok({ path: "/Users/x/Downloads/A talk (0s-20s).mp4", seconds: 20 }),
+  });
+  t.after(h.log.restore);
+  h.$("trimEnd").value = "20";
+  await h.$("trimEnd").fire("input");
+
+  await h.$("saveClipBtn").fire("click");
+
+  const save = h.log.requests.find((r) => r.url === "/api/downloads/d1/save");
+  assert.equal(save.method, "POST");
+  assert.deepEqual(JSON.parse(save.body), { start: 0, end: 20 });
+  assert.equal(h.$("projectSaved").textContent, "Saved to Downloads");
+  // The button is itself again, so another stretch can be cut straight away.
+  assert.equal(h.$("saveClipBtn").textContent, "Save clip");
+  assert.equal(h.$("saveClipBtn").disabled, false);
+});
+
+test("Save clip with the handles at the ends asks for the whole video", async (t) => {
+  const h = await readyDialog({ "/api/downloads/d1/save": () => ok({ path: "/Users/x/Downloads/A talk.mp4", seconds: 30 }) });
+  t.after(h.log.restore);
+
+  await h.$("saveClipBtn").fire("click");
+
+  const save = h.log.requests.find((r) => r.url === "/api/downloads/d1/save");
+  assert.deepEqual(JSON.parse(save.body), {});
+  assert.equal(h.$("projectSaved").textContent, "Saved to Downloads");
+});
+
+test("a clip that cannot be saved says so on the red line, and claims nothing", async (t) => {
+  const h = await readyDialog({ "/api/downloads/d1/save": () => bad(503, "ffmpeg could not cut this video.") });
+  t.after(h.log.restore);
+
+  await h.$("saveClipBtn").fire("click");
+
+  assert.equal(h.$("projectError").textContent, "ffmpeg could not cut this video.");
+  assert.equal(h.$("projectSaved").textContent, "");
+  assert.equal(h.$("saveClipBtn").textContent, "Save clip");
+  assert.equal(h.$("saveClipBtn").disabled, false);
+});
+
+test("Erase subtitles hands the held video over and gets out of the way", async (t) => {
+  const h = await readyDialog();
+  t.after(h.log.restore);
+
+  await h.$("eraseBtn").fire("click");
+
+  assert.deepEqual(h.log.erased, [{ downloadId: "d1", title: "A talk", duration_sec: 30 }]);
+  assert.equal(h.$("projectOverlay").classList.contains("open"), false);
+  assert.equal(h.state.newProject, null);
 });
 
 // -- the saved defaults ----------------------------------------------------

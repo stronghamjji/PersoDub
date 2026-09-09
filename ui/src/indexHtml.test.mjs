@@ -83,6 +83,21 @@ test("only one button in the models dialog reads as the answer", () => {
     "Cancel keeps its outline");
 });
 
+// The New project dialog's own row of three. The ids are what the dialog
+// module reaches for, and the classes are the decision: two ghost buttons for
+// the errands that end here, one filled button for the dub that goes on. The
+// progress row and the line Save clip writes belong to the same contract.
+test("the New project dialog carries the three buttons, the download row and the saved line", () => {
+  const html = readFileSync(INDEX, "utf8");
+  for (const id of ["dlRow", "dlFill", "dlPercent", "projectSaved"]) {
+    assert.ok(html.includes(`id="${id}"`), `${id} is missing from the New project dialog`);
+  }
+  assert.match(html, /class="btn btn-outline" id="saveClipBtn"/, "Save clip is a ghost button");
+  assert.match(html, /class="btn btn-outline" id="eraseBtn"/, "Erase subtitles is a ghost button");
+  assert.match(html, /class="btn btn-primary" id="startBtn"/,
+    "Start dubbing is the one filled button, in the app's one button box");
+});
+
 // Korean typing sends Enter twice: once to settle the syllable being composed
 // (isComposing=true), once for real. The agent input treating the first as
 // "send" left the settled syllable behind in the box and -- worse -- stopped
