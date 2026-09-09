@@ -112,6 +112,11 @@
        both sheets: it sits on the zone rather than in a row of buttons, and
        --border there left it looking switched off (user, 2026-09-08). */
     --outline-button: #ffffff;
+    /* The drop zone's dashed edge at rest. Grey, the weight of the link field
+       under it: in blue the zone read as the main way in and the link as an
+       afterthought, when the two are equals (user, 2026-09-09). It turns
+       --primary only while a file is being dragged over it. */
+    --dropzone-line: #4a4a52;
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
@@ -174,6 +179,7 @@
     --thumb-foreground: #fafafa;
     --trim-track: #f1f1f4;
     --outline-button: #0a0a0a;
+    --dropzone-line: var(--border);
   }
 
   * { box-sizing: border-box; }
@@ -483,7 +489,7 @@
   .home-title { margin: 0; font-size: clamp(22px, 1.4vw, 26px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
   .home-sub { margin: -10px 0 6px; font-size: 14px; color: var(--muted-foreground); }
 
-  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--primary-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
+  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--dropzone-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted-foreground); }
   .upload-zone.drag-over { border-color: var(--primary); background: var(--accent); }
   .upload-zone .icon-lg { width: clamp(30px, 2.2vw, 38px); height: clamp(30px, 2.2vw, 38px); color: var(--primary); }
