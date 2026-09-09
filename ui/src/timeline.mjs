@@ -626,22 +626,28 @@ export function initTimelineUi({ $, getVideo, getClock, getSubStyle,
     makeGrip({
       el: $("gripTimeline"), axis: "y", key: "persodub.layout.timelineHeight",
       read: () => $("timeline").offsetHeight,
-      // At most 40% of the window, and never so tall that the top bar (44), the
-      // video tabs (40), the smallest video pane (180) and a readable table
-      // (240) cannot share what is left -- about 480px above it.
-      limits: () => [110, Math.max(110, Math.min(window.innerHeight * 0.4, window.innerHeight - 480))],
+      // At most 40% of the window, and never so tall that the top bar (52), the
+      // gutters (18), the script pane's name (30), the table's own header (40)
+      // and a few rows of script cannot share what is left -- about 340px above
+      // it. (Stacked it is the video that also has to fit up there, but there
+      // the strip is as tall as its lanes and this ceiling is not reached.)
+      limits: () => [110, Math.max(110, Math.min(window.innerHeight * 0.4, window.innerHeight - 340))],
       apply: (h) => { $("timeline").style.height = `${h}px`; },
     }),
+    // Layout G (user, 2026-09-08): the video is RIGHT of the table, so this
+    // handle sizes a width, not a height. A new key, because a height saved by
+    // the old stacked screen would come back as a width here and hand the video
+    // whatever the window used to be tall.
     makeGrip({
-      el: $("gripPanes"), axis: "y", key: "persodub.layout.videoHeight", before: true,
-      read: () => $("videoPane").offsetHeight,
-      // The table is the point of the screen, so it keeps the room: the video
-      // only grows while 240px is left for the script under it.
+      el: $("gripPanes"), axis: "x", key: "persodub.layout.videoWidth",
+      read: () => $("videoPane").offsetWidth,
+      // The table is the point of the screen, so the video never takes more
+      // than 45% of the row, and never less than the 320px floor.
       limits: () => {
-        const room = $("doneMain").offsetHeight;
-        return room ? [180, Math.max(180, room - 240)] : null;
+        const room = $("doneMain").offsetWidth;
+        return room ? [320, Math.max(320, Math.round(room * 0.45))] : null;
       },
-      apply: (h) => { $("videoPane").style.flex = `0 0 ${h}px`; },
+      apply: (w) => { $("videoPane").style.width = `${w}px`; },
     }),
     makeGrip({
       el: $("gripAgent"), axis: "x", key: "persodub.layout.agentWidth",

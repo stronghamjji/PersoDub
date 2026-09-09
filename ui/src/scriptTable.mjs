@@ -1,6 +1,6 @@
 // The script table on the finished screen: one row per line of the dub --
-// number, speaker, time, the source line, play, the line itself (editable),
-// how long its voice runs, and make that voice again. The whole loop of
+// number, speaker, time, the source line, the line itself (editable), and at
+// the row's right end play, how long its voice runs, and make that voice again. The whole loop of
 // reading a dub and fixing it lives here: draw the table, take an edit,
 // save it, revert it, re-speak one line.
 //
@@ -24,8 +24,9 @@
 // bars by the same rule, and one rule for "too long" said in two places is how
 // the two would come to disagree.
 //
-// The elements this file touches: #scriptBox and #scriptSaving, both inside
-// the script pane. It never reaches the top bar, the timeline or `state`.
+// The elements this file touches: #scriptBox, #scriptSaving and #scriptCount --
+// the count beside the pane's own name -- all three inside the script pane. It
+// never reaches the top bar, the timeline or `state`.
 import { escapeHtml, fmtClockTenths, errorText } from "./format.mjs";
 import { CHECK_ICON, REMAKE_ICON } from "./icons.mjs";
 import { numberSpeakers } from "./speakers.mjs";
@@ -108,7 +109,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const verdict = over ? `<span class="sc-over">+${over.toFixed(1)}s</span>`
       : under > 0.3 ? `<span class="sc-under">−${under.toFixed(1)}s</span>`
       : `<span class="sc-fit">fits</span>`;
-    const lengthCell = `<b>${lineLength(l).toFixed(1)}s</b> / ${l.slot.toFixed(1)}s · ${verdict}`;
+    // The verdict is the answer; the two numbers behind it are the working.
+    // A narrow table drops the working (the stylesheet hides .sc-num) and keeps
+    // the answer, so the row still says whether the line fits.
+    const lengthCell = `<span class="sc-num"><b>${lineLength(l).toFixed(1)}s</b> / ${l.slot.toFixed(1)}s · </span>${verdict}`;
     // Filled means "the words changed and the voice has not caught up". Both
     // halves are needed: `edited` is per line, and `voice_stale` (a file older
     // than the script) is what says the remake has not happened since.
@@ -127,13 +131,11 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     <div class="sc-time"><span class="sc-t-a">${escapeHtml(fmtClockTenths(l.start))}</span><span
       class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
     <div class="sc-src">${escapeHtml(l.source || "—")}</div>
-    <div>
-      <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-        data-line="${l.line}">${escapeHtml(l.text)}</div>
-      <div class="sc-tools"><button class="sc-listen" data-play="${l.line}" type="button"
-          title="Play this line in the video">${PLAY_ICON}</button><span class="sc-len">${lengthCell}</span><span class="sc-sp"></span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
-          type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
-    </div>
+    <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
+      data-line="${l.line}">${escapeHtml(l.text)}</div>
+    <div class="sc-tools"><button class="sc-listen" data-play="${l.line}" type="button"
+        title="Play this line in the video">${PLAY_ICON}</button><span class="sc-len">${lengthCell}</span><span class="sc-sp"></span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
+        type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
   </div>`;
   }
 
@@ -156,6 +158,11 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const data = await fetch(`/api/dub/jobs/${jobId}/script`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
+    // Beside the pane's name: how much script there is. Empty when there is
+    // none, so the label reads as "Script" alone.
+    const count = $("scriptCount");
+    if (count) count.textContent = data && data.lines && data.lines.length
+      ? `${data.lines.length} lines` : "";
     if (!data || !data.lines || !data.lines.length) {
       const perso = isPersoJob();
       box.innerHTML = `<div class="script-empty">${perso
@@ -171,7 +178,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // the column it had inline rather than stepping in with this file.
     box.innerHTML = `
     <div class="sc-row head">
-      <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div>Time</div><div>${escapeHtml(sourceName)}</div>
+      <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div class="sc-h-t">Time</div><div>${escapeHtml(sourceName)}</div>
       <div>${escapeHtml(targetName)}</div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;

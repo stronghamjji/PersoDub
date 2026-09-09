@@ -413,10 +413,10 @@
   .work { flex: 1; min-width: 0; min-height: 0; position: relative; background: var(--canvas); }
   .screen { position: absolute; inset: 0; overflow-y: auto; padding: 16px 22px 22px; }
 
-  /* The done screen runs edge to edge: two panes divided by a line, and the
-     timeline under them. Its own panes carry the padding. */
+  /* The done screen runs edge to edge: three named boxes laid on the app's
+     canvas with a 6px gap between them. Its own panes carry the padding. */
   #screen-done { display: flex; flex-direction: column; padding: 0;
-    background: var(--background); }
+    background: var(--canvas); }
 
   /* ---------------- Running: blurred original + progress card ---------------- */
   /* The two halves are one centred group: the source video on the left, out of
@@ -719,28 +719,44 @@
      link field for a message that is not there. */
   .form-error:empty { display: none; }
 
-  /* ---------------- Done: the script beside the video ---------------- */
-  /* The script is the screen. The video is beside it at a fixed width so the
-     table keeps the room it needs, and the two panes' first rows -- the table's
-     header and the video's tabs -- are both 40px, so the line under them runs
-     unbroken across the whole screen. */
+  /* ---------------- Done: layout G ---------------- */
+  /* Premiere's shape, which the user picked on 2026-09-08: the script wide on
+     the LEFT, the video on the right at its own aspect, the timeline across the
+     foot of both. Three boxes on the canvas with a 6px gutter between them --
+     no dividing lines except where a handle sits -- so each one reads as a
+     panel with a name (Script / the Original-Dubbing tabs / Timeline).
+     The point of the shape is rows: stacked, the table had a third of the
+     screen's height and showed four lines; here it has all of it. */
 
-  .done { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .done { flex: 1; min-height: 0; display: flex; flex-direction: column;
+    gap: 6px; padding: 6px; background: var(--canvas); }
   /* min-height, so a short window scrolls the finished screen rather than
      squeezing the table down to no rows at all. */
   /* position, so the handle that sits on the line above the timeline can be
      hung off this pane's bottom edge. */
   .done-main { position: relative; flex: 1; min-height: 200px; display: flex;
-    flex-direction: column; }
+    flex-direction: row; gap: 6px; }
+  /* Too narrow for the two side by side (under 820 the video's 320px floor
+     leaves the table less than 500): back to the old stack, video on top.
+     The class is written by sizeVideoPane() off THIS box's width, not by a media
+     query off the window's -- with the agent column open a 1440px window leaves
+     the work area 830px, and the window's width would say "wide" about a box
+     that is not. */
+  .done-main.stacked { flex-direction: column-reverse; }
   /* A container, so the table below can pick its own width off THIS pane rather
      than off the window: the grip between the panes changes it with the window
      standing still. */
-  /* The line the video/script divider lives on -- drawn, so the drag is
-     discoverable (user, 2026-09-01), with a small grab pill in the middle. */
-  .script-pane { position: relative; border-top: 3px solid var(--divider);
+  .script-pane { position: relative;
     flex: 1 1 auto; min-width: 0; min-height: 120px; display: flex;
-    flex-direction: column; border-right: 1px solid var(--border);
+    flex-direction: column; background: var(--background);
+    border-radius: var(--radius); overflow: hidden;
     container: scriptpane / inline-size; }
+  /* Every pane says what it is. 30px and quiet: it is a label, not a heading,
+     and every pixel it takes is a row of script it takes away. */
+  .pane-head { flex: 0 0 auto; box-sizing: border-box; height: 30px; display: flex;
+    align-items: center; gap: 8px; padding: 0 14px; font-size: var(--font-label);
+    font-weight: 600; color: var(--foreground); }
+  .pane-head .m { font-weight: 400; color: var(--muted-foreground); }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
     border-bottom: 1px solid var(--border); }
   #scriptBox { flex: 1; min-height: 0; overflow: auto; }
@@ -762,13 +778,16 @@
      five words a line), and the row's min-width is the sum of everything at
      that floor. Below it the pane scrolls sideways instead of grinding the two
      languages down to one or two words a line, which is what 1fr alone did. */
-  /* Five columns (2026-08-28): number, speaker, time, the original, and the
-     translation -- whose cell carries its own tool line (listen, length,
-     revert, remake) above the words. The three columns those tools used to
-     take (play, length, remake) are gone, so a line is read in one place. */
+  /* Six columns: number, speaker, time, the original, the translation, and the
+     line's own tools (listen, length, revert, remake) at the right end.
+     The tools sat ON TOP of the words until layout G (2026-09-08): a second
+     line inside the translation cell, which cost every row 26px of height for
+     as long as it was there. Beside the words instead, a row is as tall as its
+     text and the table shows two and a half times as many lines -- which is
+     the whole reason the user asked for this shape. */
   .sc-row { display: grid;
-    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) minmax(220px, 1.2fr);
-    gap: 12px; align-items: start; padding: 11px 14px; font-size: var(--font-ui);
+    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) minmax(220px, 1.2fr) auto;
+    gap: 12px; align-items: center; padding: 8px 14px; font-size: var(--font-ui);
     line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 772px; }
   .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
     align-items: center; position: sticky; top: 0; z-index: 1;
@@ -776,16 +795,22 @@
     letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
   /* The line the video is on right now, so the eye can follow the script. */
   .sc-row.sc-now { background: color-mix(in srgb, var(--primary) 14%, transparent); }
-  .sc-n { color: var(--muted-foreground); font-variant-numeric: tabular-nums; padding-top: 2px; }
+  .sc-n { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
   .sc-time { color: var(--primary); font-size: var(--font-label); font-variant-numeric: tabular-nums;
-    white-space: nowrap; padding-top: 3px; }
+    white-space: nowrap; }
   .sc-src { color: var(--muted-foreground); min-width: 0; overflow-wrap: anywhere;
     font-size: var(--font-script); }
   .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere;
     font-size: var(--font-script); }
-  /* The tool line above the words: listen and the length on the left, revert
-     (only on an edited line) and remake on the right. */
-  .sc-tools { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  /* The row's own tools, at its right end: listen, the length, revert (only on
+     an edited line) and remake. Stuck to the right edge of the box, so a table
+     too wide for its pane scrolls its words sideways and never its buttons --
+     a control that has to be scrolled to is a control nobody finds. It carries
+     the row's own ground so the words pass under it rather than through it. */
+  .sc-tools { position: sticky; right: 0; z-index: 1; padding-left: 10px;
+    background: var(--background); align-self: stretch;
+    display: flex; align-items: center; gap: 8px; }
+  .sc-row.sc-now .sc-tools { background: color-mix(in srgb, var(--primary) 14%, var(--background)); }
   .sc-tools .sc-sp { flex: 1; }
   .sc-len { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap;
     font-variant-numeric: tabular-nums; }
@@ -802,9 +827,23 @@
      rest. 787 is 772 plus room for a vertical scrollbar on the systems that
      draw one inside the box (macOS draws none). */
   @container scriptpane (max-width: 787px) {
-    .sc-row { grid-template-columns: 28px 100px 90px minmax(120px, 1fr) minmax(160px, 1.2fr);
+    .sc-row { grid-template-columns: 28px 100px 90px minmax(120px, 1fr) minmax(160px, 1.2fr) auto;
       gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
     .sc-t-b { display: none; }
+    /* And the length keeps its verdict alone -- "fits", "+1.4s" -- rather than
+       the two numbers it was worked out from. Those are on the timeline's bars
+       and in the cell's own tooltip. */
+    .sc-num { display: none; }
+  }
+
+  /* Narrower still -- a 13-inch window with the Dub Agent open leaves the table
+     about 560px -- and the clock goes too. It is the one column whose answer is
+     also right underneath: the timeline draws every line against a ruler, and
+     the row plays from its own button. What is left is what cannot be read
+     anywhere else: which line, who says it, and the two languages. */
+  @container scriptpane (max-width: 640px) {
+    .sc-row { grid-template-columns: 28px 100px minmax(100px, 1fr) minmax(130px, 1.2fr) auto; }
+    .sc-time, .sc-h-t { display: none; }
   }
 
   /* Who is speaking. One chip in the app's own blue, not a colour per speaker:
@@ -820,7 +859,7 @@
   .spk-chip b { font-weight: inherit; }
 
   /* Play this line in the video; filled while it is the line playing. */
-  .sc-listen { width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  .sc-listen { width: 22px; height: 22px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--primary-line); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; flex-shrink: 0; }
@@ -831,7 +870,7 @@
 
   /* Make this line's voice again. Filled means the words were changed and the
      voice has not caught up with them yet. */
-  .sc-wave { width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  .sc-wave { width: 22px; height: 22px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--primary); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; flex-shrink: 0; }
@@ -866,18 +905,24 @@
 
   /* ---------------- Done: the video pane ---------------- */
 
-  /* The table is the point of this screen, so the default split leans its way:
-     enough room is left beside the video for both language columns to read as
-     sentences at 1280px and up. The grip is there for anyone who would rather
-     have the bigger picture. */
-  /* 0 1: the video is the pane that gives way. Down to the window the app opens
-     at there is nothing to give -- it is already at the 320px floor Task 10 set
-     -- and below that the table simply takes whatever is left. */
-  .video-pane { flex: 0 0 clamp(200px, 36vh, 440px); min-width: 0; min-height: 180px;
-    display: flex; flex-direction: column; background: var(--canvas); }
-  /* A portrait clip is drawn to the pane's height, so it gets more of it:
-     46vh leaves a 13-inch window (800px tall) about 200px of table. */
-  .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
+  /* The table is the point of this screen, so the video takes only the width
+     its own shape needs: sizeVideoPane() measures the clip and writes the
+     width, between a 320px floor and 45% of the row -- a portrait clip ends up
+     narrow, a wide one broad, and whatever is left over is the table's. The
+     grip on its left edge is there for anyone who wants it otherwise; a width
+     they dragged is remembered and wins over the measurement.
+     position, for that handle. */
+  .video-pane { position: relative; flex: 0 0 auto; width: 42%;
+    min-width: 320px; min-height: 180px;
+    display: flex; flex-direction: column; background: var(--background);
+    border-radius: var(--radius); }
+  /* Stacked, the pane is as wide as the screen and it is the HEIGHT that is
+     shared -- the old rule, kept for the narrow window. A portrait clip is
+     drawn to the pane's height, so it gets more of it: 46vh leaves a 13-inch
+     window (800px tall) about 200px of table. */
+  .done-main.stacked > .video-pane { width: auto; min-width: 0;
+    flex: 0 0 clamp(200px, 36vh, 440px); }
+  .done-main.stacked > .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
   .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     border-bottom: 1px solid var(--border); }
   .vtab { flex: 1; border: none; background: none; cursor: pointer;
@@ -886,8 +931,11 @@
     box-shadow: inset 0 -2px 0 var(--primary); }
   .video-body { padding: 14px; display: flex; flex-direction: column; gap: 10px;
     flex: 1; min-height: 0; position: relative; }
-  .video-wrap { position: relative; border-radius: var(--radius); overflow: hidden;
-    background: var(--thumb-bg); display: flex; justify-content: center;
+  /* No ground of its own: beside the table the pane is as wide as the clip
+     needs, but a wide clip in a tall pane still leaves room over and under it,
+     and a black band there read as part of the picture. The dark ground belongs
+     to the picture itself (below), so what is left over is simply the pane. */
+  .video-wrap { position: relative; display: flex; justify-content: center;
     align-items: center; flex: 1; min-height: 0; }
   /* Capped in height as well as width: a portrait clip at full height pushed
      the playhead and the controls under the bottom of the window. What is left
@@ -1003,7 +1051,7 @@
      sit on one line (user, 2026-09-02). A fixed 192 left 10px of nothing under
      the lanes. The handle on its top line still writes an inline height. */
   .timeline { flex: 0 0 auto; height: auto; display: flex; flex-direction: column;
-    border-top: 3px solid var(--divider); background: var(--background); }
+    background: var(--background); border-radius: var(--radius); }
   /* Nothing to draw (no script, or no job open) must leave no empty strip. */
   .timeline:empty { display: none; }
   /* Zoom, next to the clock: out, the level, in, and back to fit-all. */
@@ -1180,12 +1228,16 @@
   .grip-y { left: 0; right: 0; height: 6px; cursor: row-resize; }
   .grip-y::after { left: 0; right: 0; top: 0; height: 1px; }
 
-  /* Video over script: the line between them is the script pane's top edge. */
-  #gripPanes { left: 0; right: 0; top: -6px; }
-  #gripPanes::before { content: ""; position: absolute; left: 50%; top: 4px;
-    width: 44px; height: 4px; margin-left: -22px; border-radius: 2px;
+  /* Script beside video: the handle lies in the 6px gutter left of the video
+     pane, with a small grab pill in the middle so the drag is discoverable
+     (user, 2026-09-01). Stacked, the two panes are sized by the window instead
+     and there is nothing here to drag. */
+  #gripPanes { left: -6px; top: 0; }
+  #gripPanes::before { content: ""; position: absolute; top: 50%; left: 1px;
+    width: 4px; height: 44px; margin-top: -22px; border-radius: 2px;
     background: var(--border); }
   #gripPanes:hover::before, #gripPanes.dragging::before { background: var(--primary); }
+  .done-main.stacked #gripPanes { display: none; }
   /* Outside the sidebar rather than inside it, the same way as the one above:
      the last 6px inside belong to a row's Delete button, and a handle over
      those would eat the click aimed at it. The 6px it reaches into instead are
@@ -1661,6 +1713,21 @@
       <section class="screen" id="screen-done" hidden>
         <div class="done" id="doneLayout" hidden>
           <div class="done-main" id="doneMain">
+            <div class="script-pane" id="scriptPane">
+              <!-- The pane's name, the way the video pane has its tabs and the
+                   timeline its heading row: three named boxes with a 6px gap
+                   between them (layout G, user 2026-09-08). #scriptCount is
+                   filled by scriptTable.mjs with how many lines there are. -->
+              <div class="pane-head">Script <span class="m" id="scriptCount"></span></div>
+              <!-- The same notice line the running screen carries, on the
+                   screen that replaced it. Hidden unless there is one, and
+                   moved into the failure block when the job failed. -->
+              <div class="job-notice" id="doneNotice" hidden></div>
+              <div id="scriptBox"></div>
+              <!-- Saving, remaking, and anything that went wrong while doing
+                   either. Empty -- and so invisible -- the rest of the time. -->
+              <div class="script-status" id="scriptSaving"></div>
+            </div>
             <div class="video-pane" id="videoPane">
               <div class="video-tabs">
                 <button class="vtab" data-src="original" type="button">Original</button>
@@ -1707,19 +1774,9 @@
                   <div class="video-time" id="videoTime">00:00:00.0 / 00:00:00.0</div>
                 </div>
               </div>
-            </div>
-            <div class="script-pane" id="scriptPane">
-              <!-- The same notice line the running screen carries, on the
-                   screen that replaced it. Hidden unless there is one, and
-                   moved into the failure block when the job failed. -->
-              <div class="job-notice" id="doneNotice" hidden></div>
-              <div id="scriptBox"></div>
-              <!-- Saving, remaking, and anything that went wrong while doing
-                   either. Empty -- and so invisible -- the rest of the time. -->
-              <div class="script-status" id="scriptSaving"></div>
-              <!-- Drag the line between the video above and the table. -->
-              <div class="grip grip-y" id="gripPanes" role="separator"
-                   aria-orientation="horizontal" aria-label="Resize the video"></div>
+              <!-- Drag the line between the table left of it and the video. -->
+              <div class="grip grip-x" id="gripPanes" role="separator"
+                   aria-orientation="vertical" aria-label="Resize the video"></div>
             </div>
             
             <!-- Drag the line between the two panes and the timeline. -->
@@ -3540,6 +3597,7 @@ async function renderDone(job) {
   $("doneLayout").hidden = !finished;
   $("doneFail").hidden = finished;
   timeline.fitLayout();   // the two panes have a width to measure only now they are on show
+  sizeVideoPane();        // and only now can the row say whether the two fit side by side
   if (!finished) {
     // Cancelled and failed are two different stories, and neither has a screen
     // of its own: the back chevron in the top bar is the way out of both. The
@@ -3635,12 +3693,45 @@ paintPlayToggle();
 for (const e of ["play", "playing"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = true; paintPlayToggle(); });
 for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = false; paintPlayToggle(); });
 for (const e of ["timeupdate", "loadedmetadata", "seeked"]) doneVideo.addEventListener(e, paintPlayhead);
-// A portrait clip gets a taller pane by default: drawn to the pane's width it
-// came out thumbnail-sized on a laptop screen (user, 2026-09-02). A height the
-// user has dragged still wins -- that is an inline style.
-doneVideo.addEventListener("loadedmetadata", () => {
-  $("videoPane").classList.toggle("portrait", doneVideo.videoHeight > doneVideo.videoWidth);
-});
+// Layout G: the video pane is only as wide as the clip inside it needs to be at
+// the height the row gives it -- a portrait clip ends up narrow, a wide one
+// broad -- between a 320px floor and 45% of the row. Whatever is left over is
+// the table's, which is the whole point of the shape (user, 2026-09-08).
+// Below 820px there is not enough room for both (the video's floor is 320, and
+// under 500 the table is more sideways scrolling than table), so the pane goes
+// back to being a band above the table and is sized by its height again --
+// taller for a portrait clip (user, 2026-09-02).
+// A width the user has dragged wins over the measurement: that is a remembered
+// size, and timeline.fitLayout() is what puts it back.
+const VIDEO_PANE_KEY = "persodub.layout.videoWidth";
+function sizeVideoPane() {
+  const pane = $("videoPane"), main = $("doneMain");
+  const room = main.clientWidth;
+  if (!room) return;   // the screen is not on show, so there is nothing to measure
+  const stacked = room < 820;
+  main.classList.toggle("stacked", stacked);
+  pane.classList.toggle("portrait", doneVideo.videoHeight > doneVideo.videoWidth);
+  let saved = 0;
+  try { saved = Number(localStorage.getItem(VIDEO_PANE_KEY)); } catch { /* private window */ }
+  if (stacked || saved > 0) { if (stacked) pane.style.width = ""; return; }
+  const w = doneVideo.videoWidth, h = doneVideo.videoHeight;
+  if (!w || !h) return;   // no metadata yet: the stylesheet's 42% stands
+  // What is left for the picture once the tabs, the pane's own padding, the gap
+  // under the picture and the row of controls have taken theirs.
+  const picture = Math.max(120, pane.clientHeight - 40 - 28 - 10 - 28);
+  const want = Math.round((w / h) * picture) + 28;
+  // Never more than 45% of the row, and -- while there is that much to give --
+  // never so much that the table has under the 680px its six columns need
+  // before it starts scrolling sideways.
+  const most = Math.max(320, Math.min(Math.round(room * 0.45), room - 6 - 680));
+  pane.style.width = `${Math.min(Math.max(want, 320), most)}px`;
+}
+doneVideo.addEventListener("loadedmetadata", sizeVideoPane);
+// The row itself, not the window: opening or closing the Dub Agent column and
+// dragging the projects list both change how much room the two panes have with
+// the window standing still. Writing the video pane's width does not change
+// this box's, so there is no loop to fall into.
+new ResizeObserver(sizeVideoPane).observe($("doneMain"));
 
 // Is the video inside this line right now? The table's highlighted row and the
 // timeline's highlighted bars are the same answer, so they ask it the same way.
@@ -4241,6 +4332,10 @@ for (const e of ["timeupdate", "seeked", "loadedmetadata", "play", "pause"]) {
   doneVideo.addEventListener(e, updateSubtitleNow);
 }
 window.addEventListener("resize", () => { if (!subOverlay.hidden) updateSubtitleNow(); });
+// And whenever the player's own box changes without the window moving: layout G
+// sizes the video pane off the row it is in, so opening the Dub Agent or
+// dragging the divider moves the picture and the subtitles have to follow it.
+new ResizeObserver(() => { if (!subOverlay.hidden) updateSubtitleNow(); }).observe(doneVideo);
 
 // ---------------- Done: the timeline ----------------
 // The strip under the script table -- the ruler, the three lanes over it, the

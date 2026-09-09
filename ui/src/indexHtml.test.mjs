@@ -163,19 +163,20 @@ test("the topbar carries the three pane buttons and the timeline off-switch", ()
     "hiding the timeline needs a body.timeline-off rule");
 });
 
-// The agent lives in a right-hand column and the finished screen stacks
-// video over script (layout approved 2026-09-01). The grips must match:
-// the agent's resizes width (x), the video/script divider resizes height (y).
+// The agent lives in a right-hand column and the finished screen puts the
+// script LEFT of the video (layout G, user 2026-09-08). The grips must match:
+// the agent's resizes width (x), and so does the script/video divider. Reading
+// order follows the screen, so the script comes first in the markup.
 test("the agent column sits beside the work and the grips point the right way", () => {
   const html = readFileSync(INDEX, "utf8");
   assert.ok(html.includes('class="mainrow"'), "work and agent need the mainrow wrapper");
   assert.match(html, /class="grip grip-x" id="gripAgent"/,
     "the agent grip must resize width");
-  assert.match(html, /class="grip grip-y" id="gripPanes"/,
-    "the video/script grip must resize height");
+  assert.match(html, /class="grip grip-x" id="gripPanes"/,
+    "the script/video grip must resize width");
   const video = html.indexOf('id="videoPane"');
   const script = html.indexOf('id="scriptPane"');
-  assert.ok(video > 0 && video < script, "the video pane must come before the script");
+  assert.ok(script > 0 && script < video, "the script pane must come before the video");
 });
 
 // Timeline zoom, the aligned agent heading, and the Korean tab names

@@ -673,8 +673,9 @@ function laidOut(stored) {
   const h = harness({ stored });
   h.$("timeline").offsetHeight = 150;
   h.$("historySidebar").offsetWidth = 260;
-  h.$("videoPane").offsetHeight = 200;
+  h.$("videoPane").offsetWidth = 400;
   h.$("doneMain").offsetHeight = 800;
+  h.$("doneMain").offsetWidth = 1000;
   h.$("agentStrip").offsetWidth = 400;
   return h;
 }
@@ -683,7 +684,7 @@ test("remembered pane sizes come back, clamped to the window as it stands now", 
   const h = laidOut({
     "persodub.layout.timelineHeight": "300",
     "persodub.layout.sidebarW": "999",     // saved on a much wider window
-    "persodub.layout.videoHeight": "200",
+    "persodub.layout.videoWidth": "400",
     "persodub.layout.agentWidth": "400",
   });
   t.after(h.log.restore);
@@ -693,7 +694,7 @@ test("remembered pane sizes come back, clamped to the window as it stands now", 
   assert.equal(h.$("timeline").style.height, "300px");
   assert.equal(h.$("historySidebar").style["--sidebar-w"], "480px",
     "480px of project names is as much as anyone wants");
-  assert.equal(h.$("videoPane").style.flex, "0 0 200px");
+  assert.equal(h.$("videoPane").style.width, "400px");
   assert.equal(h.$("agentStrip").style.width, "400px");
   assert.equal(h.log.clipped, 1, "the names are re-measured for their new column");
 
@@ -730,13 +731,13 @@ test("a grip drag sizes the pane below the line, and remembers what ended up on 
   // A press that never moved changes nothing and remembers nothing.
   const still = laidOut({});
   t.after(still.log.restore);
-  still.$("gripPanes").fire("pointerdown", evt({}, { clientY: 500 }));
-  still.$("gripPanes").fire("pointermove", { clientY: 500 });
+  still.$("gripPanes").fire("pointerdown", evt({}, { clientX: 500 }));
+  still.$("gripPanes").fire("pointermove", { clientX: 500 });
   still.$("gripPanes").fire("pointerup", {});
-  assert.equal(still.log.stored.has("persodub.layout.videoHeight"), false);
+  assert.equal(still.log.stored.has("persodub.layout.videoWidth"), false);
 });
 
-test("the grips left of and above their pane count the drag the other way round", (t) => {
+test("the grip left of its pane counts the drag the other way round", (t) => {
   const h = laidOut({});
   t.after(h.log.restore);
 
@@ -745,13 +746,13 @@ test("the grips left of and above their pane count the drag the other way round"
   h.$("gripSidebar").fire("pointermove", { clientX: 340 });
   assert.equal(h.$("historySidebar").style["--sidebar-w"], "300px");
 
-  // The video pane is above its handle: pulling that line down grows it, and
-  // the script keeps 240px of what the screen has.
-  h.$("gripPanes").fire("pointerdown", evt({}, { clientY: 400 }));
-  h.$("gripPanes").fire("pointermove", { clientY: 500 });
-  assert.equal(h.$("videoPane").style.flex, "0 0 300px");
-  h.$("gripPanes").fire("pointermove", { clientY: 5000 });
-  assert.equal(h.$("videoPane").style.flex, "0 0 560px", "800px of room, less 240");
+  // Layout G: the video pane is RIGHT of its handle, so pulling that line left
+  // grows it -- and it never takes more than 45% of the row.
+  h.$("gripPanes").fire("pointerdown", evt({}, { clientX: 900 }));
+  h.$("gripPanes").fire("pointermove", { clientX: 870 });
+  assert.equal(h.$("videoPane").style.width, "430px");
+  h.$("gripPanes").fire("pointermove", { clientX: 100 });
+  assert.equal(h.$("videoPane").style.width, "450px", "45% of a 1000px row");
 });
 
 test("a window that changed size refits once a frame, and a track that changed width is redrawn", (t) => {
