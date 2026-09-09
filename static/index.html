@@ -2100,6 +2100,16 @@
                until a save fails -- the label says what the switch does. -->
           <div class="settings-hint" id="analyticsHint"></div>
         </div>
+        <div class="settings-row">
+          <label for="reportsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+            <span>Send failure reports automatically</span>
+            <input type="checkbox" class="switch" id="reportsToggle">
+          </label>
+          <!-- Separate from the counts: this one carries what broke, so it is
+               its own choice. Nothing personal leaves -- keys and folder names
+               are taken out first (desktop/src/report.js). -->
+          <div class="settings-hint" id="reportsHint">Keys and folder names are removed first.</div>
+        </div>
       </div>
 
       <div class="settings-section">
@@ -3541,7 +3551,10 @@ async function handleJobUpdate(job) {
 
   // Desktop only: in a plain browser persodubShell is undefined and nothing is
   // counted, which is the intended behaviour -- the counts describe app installs.
-  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(-6).join("\n"));
+  // The id goes with it: a failure report is built in the shell, and without
+  // the job it cannot ask the engine which stage died or read that job's own
+  // log -- it would travel with the app log alone and no "3/6 translate".
+  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(-6).join("\n"), job.id);
 
   await renderDone(job);
 }

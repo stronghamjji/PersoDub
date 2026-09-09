@@ -358,6 +358,32 @@ test("the usage-counts switch posts the new setting", async (t) => {
   assert.equal(h.$("analyticsHint").textContent, "");
 });
 
+test("the failure-reports switch posts its own setting, apart from the counts", async (t) => {
+  const h = harness();
+  t.after(h.state.restore);
+
+  h.$("reportsToggle").checked = false;
+  await h.$("reportsToggle").fire("change");
+
+  // Its own key: someone who leaves the counts on can still turn reports off.
+  assert.deepEqual(h.state.bodies, [{ url: "/api/settings", body: { reports_off: true } }]);
+  assert.equal(h.$("reportsToggle").checked, false);
+  assert.equal(h.$("reportsHint").textContent, "Keys and folder names are removed first.");
+});
+
+test("a failure-reports save that fails flips the switch back and says so", async (t) => {
+  const h = harness({
+    responses: { "/api/settings": { ok: false, status: 500, json: async () => ({}) } },
+  });
+  t.after(h.state.restore);
+
+  h.$("reportsToggle").checked = false;
+  await h.$("reportsToggle").fire("change");
+
+  assert.equal(h.$("reportsToggle").checked, true);
+  assert.equal(h.$("reportsHint").textContent, "Could not save that. Is the engine running?");
+});
+
 test("a usage-counts save that fails flips the switch back", async (t) => {
   const h = harness({
     responses: { "/api/settings": { ok: false, status: 500, json: async () => ({}) } },

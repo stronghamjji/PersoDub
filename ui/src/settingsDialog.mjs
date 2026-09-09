@@ -187,6 +187,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
         $("aboutVersion").textContent = `PersoDub ${st.app_version}`;
       }
       $("analyticsToggle").checked = !st.analytics_off;
+      $("reportsToggle").checked = !st.reports_off;
     } catch {
       $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
     }
@@ -338,6 +339,28 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
       return r.ok;
     } catch { return false; }
   }
+
+  // The same shape for the same reason: one POST is the whole switch, and the
+  // shell re-reads the file before it sends anything.
+  async function setFailureReports(on) {
+    try {
+      const r = await fetch("/api/settings", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reports_off: !on }),
+      });
+      return r.ok;
+    } catch { return false; }
+  }
+
+  $("reportsToggle").addEventListener("change", async () => {
+    const on = $("reportsToggle").checked;
+    if (await setFailureReports(on)) {
+      $("reportsHint").textContent = "Keys and folder names are removed first.";
+      return;
+    }
+    $("reportsToggle").checked = !on;
+    $("reportsHint").textContent = "Could not save that. Is the engine running?";
+  });
 
   $("analyticsToggle").addEventListener("change", async () => {
     const on = $("analyticsToggle").checked;
