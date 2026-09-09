@@ -258,3 +258,16 @@ def test_try_again_is_not_offered_a_job_that_erased_subtitles(erased):
     _wait(jid)
     r = client.post("/api/dub/jobs/%s/retry" % jid)
     assert r.status_code == 409 and "erased subtitles" in r.json()["detail"]
+
+
+def test_a_band_that_missed_the_subtitles_says_so_where_both_the_screen_and_the_agent_read_it(monkeypatch):
+    """The sentence app/eraser.py raises is what lands on the job's record --
+    which is the red bar on the screen and the `error` the Dub Agent's
+    get_job_status hands back."""
+    def missed(src, out, area, *, log, cancel_check):
+        raise RuntimeError(eraser.NO_SUBTITLES_MESSAGE)
+
+    monkeypatch.setattr(eraser, "run_erase", missed)
+    jid = _start(area=json.dumps([0, 100, 0, 100])).json()["job_id"]
+    job = _wait(jid, "error")
+    assert job["error"] == "No subtitles were found in that area. Move the box and try again."

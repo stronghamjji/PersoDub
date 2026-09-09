@@ -34,6 +34,13 @@ if mode == "fail":
     print("a warning first", file=sys.stderr, flush=True)
     print("something went wrong deep inside", file=sys.stderr, flush=True)
     sys.exit(1)
+if mode == "nosub":
+    print("Traceback (most recent call last):", file=sys.stderr, flush=True)
+    print("    raise Exception(tr['Main']['NoSubtitleDetected'].format(self.video_path))",
+          file=sys.stderr, flush=True)
+    print("Exception: No subtitles detected. Check file: /Users/x/holiday.mp4",
+          file=sys.stderr, flush=True)
+    sys.exit(1)
 for percent in (10, 55, 100):
     print("progress %d%%" % percent, flush=True)
 if mode == "slow":
@@ -137,6 +144,18 @@ def test_a_failure_carries_the_last_thing_the_tool_said(installed, tmp_path, mon
     with pytest.raises(RuntimeError, match="something went wrong deep inside"):
         eraser.run_erase(_video(tmp_path), str(tmp_path / "erased.mp4"), None,
                          log=lambda _: None, cancel_check=lambda: False)
+
+
+def test_a_band_with_no_writing_in_it_tells_the_user_what_to_do(installed, tmp_path, monkeypatch):
+    # Not a fault to report: the box simply missed the subtitles, and the way
+    # out is to move it. The tool's own sentence ends in the user's file path,
+    # so it is not the one shown.
+    monkeypatch.setenv("STUB_MODE", "nosub")
+    with pytest.raises(RuntimeError) as failed:
+        eraser.run_erase(_video(tmp_path), str(tmp_path / "erased.mp4"), (0, 100, 0, 100),
+                         log=lambda _: None, cancel_check=lambda: False)
+    assert str(failed.value) == eraser.NO_SUBTITLES_MESSAGE
+    assert "holiday.mp4" not in str(failed.value)
 
 
 def test_no_pack_is_its_own_answer(tmp_path, monkeypatch):

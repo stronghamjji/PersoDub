@@ -41,6 +41,14 @@ CHILD_ENV = {"PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK": "True"}
 # minutes is well past anything healthy, and the screen is waiting on this one.
 SUGGEST_TIMEOUT = 180
 
+# The one failure that is not a fault: the band the user drew held no writing,
+# so there was nothing to rub out. video-subtitle-remover says so by raising,
+# and its traceback carries both the name it looked the sentence up by and the
+# sentence itself -- which ends in the user's own file path, which is why it is
+# not the one shown.
+NO_SUBTITLES_MARKS = ("NoSubtitleDetected", "No subtitles detected")
+NO_SUBTITLES_MESSAGE = "No subtitles were found in that area. Move the box and try again."
+
 
 class EraserMissing(RuntimeError):
     """The subtitle-eraser pack is not installed on this computer. The routes
@@ -126,7 +134,12 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
             log(line)
     proc.wait()
     if proc.returncode != 0:
-        raise _fail("The subtitle eraser stopped with an error", list(errors))
+        tail = list(errors)
+        # A band with no writing in it is something the user can fix, and the
+        # sentence says how. Every other failure keeps naming what went wrong.
+        if any(mark in line for line in tail for mark in NO_SUBTITLES_MARKS):
+            raise RuntimeError(NO_SUBTITLES_MESSAGE)
+        raise _fail("The subtitle eraser stopped with an error", tail)
     if not os.path.exists(out_path):
         raise _fail("The subtitle eraser produced no video", list(errors))
 
