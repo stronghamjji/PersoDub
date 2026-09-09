@@ -13,7 +13,7 @@
 // controls, which setTopbar hides for every other screen.
 import { uploadDownload, downloadVideoUrl, suggestEraseArea, startErase,
          fetchErase, cancelDubJob, eraseVideoUrl, saveErased,
-         eraseToDub } from "./dubApi.mjs";
+         startDownload, fetchDownload, eraseToDub } from "./dubApi.mjs";
 import { clampArea, defaultArea, dragArea, toScreen, videoPerScreen, isWhole,
          estimateSeconds, estimateLabel, progressLine, isPackMissing,
          packNeededLine, eraseView, workLength, trimNote } from "./eraseArea.mjs";
@@ -242,6 +242,10 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     trimBar.clear();
     setVideo("");
     $("eraseError").textContent = "";
+    stopWatchingLink();
+    $("eraseDlRow").hidden = true;
+    $("eraseDropError").textContent = "";
+    $("eraseLinkInput").value = "";
   }
 
   // The New project dialog this screen was reached from, or null when it was
@@ -333,6 +337,80 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     source = { downloadId: held.id, title: held.title || file.name, duration, trim: null };
     begin();
   }
+
+  // ---- A link ---------------------------------------------------------------
+  // The app fetches it into the same holding area an upload lands in, so from
+  // the id on this screen cannot tell the two apart (user, 2026-09-09). The
+  // work is the New project dialog's, done again here in the six lines it
+  // takes rather than by dragging that dialog onto this screen.
+  let dlTimer = null;
+  let dlTyped = null;
+
+  function stopWatchingLink() {
+    if (dlTimer) { clearInterval(dlTimer); dlTimer = null; }
+  }
+
+  function linkFailed(message) {
+    stopWatchingLink();
+    $("eraseDlRow").hidden = true;
+    $("eraseDropError").textContent = message;
+  }
+
+  function sayFetching(rec) {
+    const pct = rec && rec.percent != null ? ` · ${Math.round(rec.percent)}%` : "";
+    $("eraseDlRow").hidden = false;
+    $("eraseDlRow").textContent = `Fetching the video${pct}`;
+  }
+
+  async function takeLink(url) {
+    stopWatchingLink();
+    $("eraseDropError").textContent = "";
+    sayFetching(null);
+    let id;
+    try {
+      id = await startDownload(url);
+    } catch (e) {
+      linkFailed(e.message);
+      return;
+    }
+    // Once a second, the same beat the New project dialog watches on.
+    dlTimer = setInterval(async () => {
+      let rec;
+      try {
+        rec = await fetchDownload(id);
+      } catch (e) {
+        linkFailed(e.message);
+        return;
+      }
+      if (rec.status === "failed") {
+        linkFailed(rec.error || "The video could not be fetched.");
+        return;
+      }
+      if (rec.status !== "ready") { sayFetching(rec); return; }
+      stopWatchingLink();
+      $("eraseDlRow").hidden = true;
+      $("eraseLinkInput").value = "";
+      source = { downloadId: id, title: rec.title || "", duration: rec.duration_sec || 0, trim: null };
+      begin();
+    }, 1000);
+  }
+
+  // A pasted link arrives as one input event with the whole address in it, so
+  // a short wait after the last keystroke is enough to tell a paste from
+  // somebody still typing.
+  $("eraseLinkInput").addEventListener("input", () => {
+    clearTimeout(dlTyped);
+    const url = $("eraseLinkInput").value.trim();
+    if (!/^https?:\/\/\S+$/.test(url)) return;
+    dlTyped = setTimeout(() => takeLink(url), 400);
+  });
+  $("eraseLinkInput").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    clearTimeout(dlTyped);
+    const url = $("eraseLinkInput").value.trim();
+    if (/^https?:\/\/\S+$/.test(url)) takeLink(url);
+  });
 
   // How long a file is, read by the same <video> that will show it. 0 when the
   // browser cannot say -- the estimate then has nothing to promise, and says

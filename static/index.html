@@ -256,7 +256,7 @@
   .rail-item .icon { width: 20px; height: 20px; stroke-width: 2; }
 
   .rail-item.active { background: var(--primary); color: var(--primary-foreground); }
-  .rail-item.brand { background: none; cursor: default; }
+  .rail-item.brand { background: none; }
   .rail-logo { width: 30px; height: 30px; border-radius: 8px; display: block; }
   .about-brand { display: inline-flex; align-items: center; gap: 8px; }
   .about-logo { width: 22px; height: 22px; border-radius: 6px; }
@@ -514,7 +514,12 @@
      place on the window -- both ways into the app then look alike, and one
      stretched to fill a 1440px window was a very large amount of nothing. */
   .erase-drop { flex: 1; min-height: 0; display: flex; padding: 22px; overflow-y: auto; }
-  .erase-drop .upload-zone { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto; }
+  /* The zone, the OR line and the link field are one column down the middle,
+     the same shape the home screen's two ways in have. */
+  .erase-drop-col { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto;
+    display: flex; flex-direction: column; gap: 14px; }
+  .erase-dl { font-size: var(--font-label); color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums; }
   .erase-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   /* The one instruction on this screen, in the strip the tabs take over once
      there is a result -- both are 40px, so the picture is the same size while
@@ -1527,8 +1532,12 @@
 <div class="app">
   <!-- ============ RAIL ============ -->
   <div class="rail">
-    <button class="rail-item brand" title="PersoDub" type="button" aria-label="PersoDub">
-      <!-- The logo tile stands where the waveform icon was (user, 2026-09-08). -->
+    <!-- The logo tile stands where the waveform icon was (user, 2026-09-08),
+         and it is the way to the project itself (user, 2026-09-09). The window
+         has no address bar, so the link leaves for the user's own browser --
+         desktop/main.js hands every http(s) window.open to the OS. -->
+    <button class="rail-item brand" id="brandBtn" type="button"
+            title="PersoDub on GitHub" aria-label="PersoDub on GitHub">
       <img class="rail-logo" src="/logo.png" alt="">
     </button>
     <!-- The tools stand together at the top, dubbing first: it is what the app
@@ -1731,11 +1740,23 @@
            what this will cost in minutes and the one button that applies. -->
       <section class="screen" id="screen-erase" hidden>
         <div class="erase-drop" id="eraseDrop">
-          <div class="upload-zone" id="eraseZone" tabindex="0">
-            <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-            <div class="upload-title">Drop a video</div>
-            <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose file…</button><span>MP4 or MOV</span></div>
-            <input type="file" id="eraseInput" accept="video/*" hidden>
+          <!-- A file or a link, the two ways in the home screen has. The app
+               fetches a link into the same holding area an upload lands in, so
+               from the download's id on there is one road (user, 2026-09-09). -->
+          <div class="erase-drop-col">
+            <div class="upload-zone" id="eraseZone" tabindex="0">
+              <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <div class="upload-title">Drop a video</div>
+              <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose file…</button><span>MP4 or MOV</span></div>
+              <input type="file" id="eraseInput" accept="video/*" hidden>
+            </div>
+            <div class="home-or"><span></span>OR<span></span></div>
+            <label class="link-field"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+              <input id="eraseLinkInput" type="url" placeholder="Paste a YouTube, TikTok or Reels link" autocomplete="off"></label>
+            <!-- What the fetch is doing, in the words the New project dialog
+                 uses for the same wait. -->
+            <div class="erase-dl" id="eraseDlRow" hidden></div>
+            <div class="form-error" id="eraseDropError"></div>
           </div>
         </div>
         <div class="erase-body" id="eraseBody" hidden>
@@ -3073,6 +3094,11 @@ const eraseScreen = initEraseScreenUi({
   labelPx: () => TL_LABEL_PX,
 });
 $("eraseToggle").addEventListener("click", () => eraseScreen.openErase());
+// The project's own page. window.open rather than an <a>: the shell hands
+// every http(s) open to the OS browser (desktop/main.js), and in a plain
+// browser it is a new tab either way.
+const REPO_URL = "https://github.com/stronghamjji/PersoDub";
+$("brandBtn").addEventListener("click", () => window.open(REPO_URL, "_blank", "noopener"));
 // The rail's way home. Same call as the top bar's house: a job left open is
 // left properly, not just hidden behind another screen.
 $("dubToggle").addEventListener("click", () => resetForNewJob());
