@@ -29,7 +29,7 @@
 // never reaches the top bar, the timeline or `state`.
 import { escapeHtml, fmtClockTenths, errorText } from "./format.mjs";
 import { CHECK_ICON, REMAKE_ICON } from "./icons.mjs";
-import { numberSpeakers } from "./speakers.mjs";
+import { numberSpeakers, speakerLetter } from "./speakers.mjs";
 
 // A hair over the slot is not "too long" -- the assembly step lets a line spill
 // that much into the silence after it.
@@ -100,7 +100,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // The name is a title as well as words, so a chip the narrow table has
     // squeezed still says who is speaking on hover.
     const chip = n
-      ? `<span class="spk-chip" title="Speaker ${n}"><b>Speaker ${n}</b></span>` : "";
+      ? `<span class="spk-chip" title="Speaker ${n}" aria-label="Speaker ${n}"><b>${speakerLetter(n)}</b></span>` : "";
     const over = lineOverBy(l);
     // "1.6s / 0.2s · +1.4s": how long the voice is, how long the slot is, and
     // the difference in one glance -- red when it runs over, grey when it is
@@ -178,7 +178,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // the column it had inline rather than stepping in with this file.
     box.innerHTML = `
     <div class="sc-row head">
-      <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div class="sc-h-t">Time</div><div>${escapeHtml(sourceName)}</div>
+      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div>${escapeHtml(sourceName)}</div>
       <div>${escapeHtml(targetName)}</div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;

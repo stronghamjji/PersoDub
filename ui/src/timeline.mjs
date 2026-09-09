@@ -28,7 +28,7 @@
 // bar, the script table or `state`.
 import { escapeHtml, fmtClock } from "./format.mjs";
 import { lineOverBy } from "./scriptTable.mjs";
-import { numberSpeakers } from "./speakers.mjs";
+import { numberSpeakers, speakerLetter } from "./speakers.mjs";
 
 // Roughly the room one 00:00:00 label needs. When a second is narrower than
 // this, only every Nth tick is labelled, so the labels never overlap. Exported
@@ -252,7 +252,7 @@ export function initTimelineUi({ $, getVideo, getClock, getSubStyle,
         // drawn after this one -- still reads, and the red still says how far
         // the voice runs. (A solid red bar on top used to hide the next line.)
         const who = numbered ? speakers.get(l.speaker) : null;
-        const badge = who ? `<i class="tl-spk">${who}</i>` : "";
+        const badge = who ? `<i class="tl-spk" title="Speaker ${who}">${speakerLetter(who)}</i>` : "";
         voices += timelineBlock(l, `tl-voice${over ? " tl-over" : ""}`, l.start,
                                 over ? l.end : voiceEnd, l.text, true, badge);
         if (over) {

@@ -1,6 +1,8 @@
 // Who is speaking, numbered. The diarizer's own labels ("SPEAKER_00") mean
 // nothing to a reader, so the table's chips and the timeline's badges both say
-// "1", "2", "3" in the order the voices first speak.
+// A, B, C in the order the voices first speak -- letters rather than numbers
+// because the column beside them already counts the lines, and two columns of
+// digits side by side read as one (user, 2026-09-09).
 //
 // Its own file because two screens read the same answer: a line that is
 // Speaker 2 in the table must be 2 on the strip below it, and two copies of
@@ -21,4 +23,26 @@ export function numberSpeakers(lines) {
     if (l.speaker && !seen.has(l.speaker)) seen.set(l.speaker, seen.size + 1);
   }
   return seen;
+}
+
+/**
+ * The letter a speaker wears: 1 -> A, 2 -> B, 26 -> Z, 27 -> AA.
+ *
+ * The numbering stays the numbering -- everything else counts with it -- and
+ * this is only how it is written down where space is short.
+ *
+ * @param {number} n  a speaker's number, 1-based
+ * @returns {string} its letters, or "" for anything that is not a whole
+ *          number of at least one.
+ */
+export function speakerLetter(n) {
+  if (!Number.isInteger(n) || n < 1) return "";
+  let out = "";
+  let left = n;
+  while (left > 0) {
+    const rest = (left - 1) % 26;
+    out = String.fromCharCode(65 + rest) + out;
+    left = Math.floor((left - 1) / 26);
+  }
+  return out;
 }

@@ -180,7 +180,7 @@ test("a row carries the line number, who said it, both languages and whether it 
 const ONE_ROW =
   '<div class="sc-row" data-start="1" data-end="2.5">\n' +
   '    <div class="sc-n">7</div>\n' +
-  '    <div><span class="spk-chip" title="Speaker 1"><b>Speaker 1</b></span></div>\n' +
+  '    <div><span class="spk-chip" title="Speaker 1" aria-label="Speaker 1"><b>A</b></span></div>\n' +
   '    <div class="sc-time"><span class="sc-t-a">00:00:01.0</span><span\n' +
   '      class="sc-t-b"> – 00:00:02.5</span></div>\n' +
   '    <div class="sc-src">안녕</div>\n' +
@@ -213,7 +213,7 @@ test("a row is byte for byte the row the page drew before this file existed", as
   // And the header above it, indentation included.
   assert.equal(html.slice(0, html.indexOf('<div class="sc-row" data-start')),
     '\n    <div class="sc-row head">\n' +
-    '      <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div class="sc-h-t">Time</div><div>Korean</div>\n' +
+    '      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div>Korean</div>\n' +
     '      <div>English</div>\n' +
     '    </div>\n    ');
 });

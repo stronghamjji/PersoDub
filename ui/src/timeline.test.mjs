@@ -304,7 +304,7 @@ test("one speaker gets no badge on the bars", (t) => {
 
 // Two or more, and each Target bar leads with the number the table's chip
 // gives that speaker -- numbered in the order they first speak.
-test("two speakers put their number at the head of each Target bar", (t) => {
+test("two speakers put their letter at the head of each Target bar", (t) => {
   const h = harness();
   t.after(h.log.restore);
 
@@ -315,8 +315,8 @@ test("two speakers put their number at the head of each Target bar", (t) => {
   ], 30);
   const track = h.$("timelineTrack").innerHTML;
 
-  assert.ok(track.includes('title="Hello"><i class="tl-spk">1</i>Hello'));
-  assert.ok(track.includes('title="Over"><i class="tl-spk">2</i>Over'));
+  assert.ok(track.includes('title="Hello"><i class="tl-spk" title="Speaker 1">A</i>Hello'));
+  assert.ok(track.includes('title="Over"><i class="tl-spk" title="Speaker 2">B</i>Over'));
   // The original lane and the slots stay bare -- the badge belongs to the dub.
   assert.equal((track.match(/tl-spk/g) || []).length, 2);
 });

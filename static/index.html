@@ -790,9 +790,9 @@
      text and the table shows two and a half times as many lines -- which is
      the whole reason the user asked for this shape. */
   .sc-row { display: grid;
-    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) minmax(220px, 1.2fr) auto;
+    grid-template-columns: 28px 34px 168px minmax(200px, 1fr) minmax(240px, 1.2fr) auto;
     gap: 12px; align-items: center; padding: 8px 14px; font-size: var(--font-ui);
-    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 772px; }
+    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 706px; }
   .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
     align-items: center; position: sticky; top: 0; z-index: 1;
     background: var(--canvas); font-size: var(--font-label); font-weight: 600;
@@ -824,14 +824,14 @@
   .sc-fit { color: var(--success); font-weight: 600; }
 
   /* ---------------- The script table, narrow ---------------- */
-  /* 772px is the row above at its floors, so a pane thinner than that would
+  /* 706px is the row above at its floors, so a pane thinner than that would
      grow a sideways scrollbar. Under that width the row keeps its number and
      speaker (user decision 2026-08-27) and drops only the end of the slot --
      the start is what finds a line, and the length beside the words says the
-     rest. 787 is 772 plus room for a vertical scrollbar on the systems that
-     draw one inside the box (macOS draws none). */
+     rest. The breakpoint stays at 787, where it was set when the speaker
+     column was 100px wide, so the row tightens a little before it has to. */
   @container scriptpane (max-width: 787px) {
-    .sc-row { grid-template-columns: 28px 100px 90px minmax(120px, 1fr) minmax(160px, 1.2fr) auto;
+    .sc-row { grid-template-columns: 28px 34px 90px minmax(120px, 1fr) minmax(160px, 1.2fr) auto;
       gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
     .sc-t-b { display: none; }
     /* And the length keeps its verdict alone -- "fits", "+1.4s" -- rather than
@@ -841,25 +841,28 @@
   }
 
   /* Narrower still -- a 13-inch window with the Dub Agent open leaves the table
-     about 560px -- and the clock goes too. It is the one column whose answer is
-     also right underneath: the timeline draws every line against a ruler, and
-     the row plays from its own button. What is left is what cannot be read
-     anywhere else: which line, who says it, and the two languages. */
+     about 560px. The clock used to be dropped here; a speaker column of 34px
+     instead of 100px pays for it, so every column simply draws closer and the
+     one thing a line is found by -- when it starts -- stays on screen. */
   @container scriptpane (max-width: 640px) {
-    .sc-row { grid-template-columns: 28px 100px minmax(100px, 1fr) minmax(130px, 1.2fr) auto; }
-    .sc-time, .sc-h-t { display: none; }
+    .sc-row { grid-template-columns: 28px 34px 74px minmax(100px, 1fr) minmax(130px, 1.2fr) auto;
+      gap: 8px; }
   }
 
   /* Who is speaking. One chip in the app's own blue, not a colour per speaker:
      four tinted chips down a column of text shouted louder than the words they
-     labelled, and the number in them is what tells the speakers apart (user,
-     2026-09-08). (Not ".chip" -- the assistant strip already has one of those,
+     labelled, and the letter in them is what tells the speakers apart -- a
+     letter, not a number, because the # column beside it already counts, and
+     two columns of digits read as one (user, 2026-09-08). The chip is a fixed
+     24px so the letters line up down the column.
+     (Not ".chip" -- the assistant strip already has one of those,
      and its style block comes after this one.) */
-  .spk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+  .spk-chip { display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; padding: 3px 0;
     border-radius: 999px; font-size: var(--font-label); font-weight: 600; white-space: nowrap;
     background: var(--primary-soft); color: var(--primary-ink); }
-  /* The name is wrapped so the narrow table has something of its own to reach
-     for; it must not read heavier than the chip it sits in. */
+  /* The letter is wrapped so the narrow table has something of its own to
+     reach for; it must not read heavier than the chip it sits in. */
   .spk-chip b { font-weight: inherit; }
 
   /* Play this line in the video; filled while it is the line playing. */
