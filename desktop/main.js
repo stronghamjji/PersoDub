@@ -440,6 +440,9 @@ app.whenReady().then(() => {
   }
   const win = new BrowserWindow({
     icon: join(HERE, "build", "icon.png"),
+    // What the frame is painted with before the first page arrives. The app is
+    // dark (0.5.5), and Electron's default white flashed on every launch.
+    backgroundColor: "#1e1e22",
     width: Math.min(1280, room.width),
     height: Math.min(800, room.height),
     minWidth: Math.min(960, room.width),

@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- The dark ground is on the element itself, not only in the stylesheet: the
+     window is painted before a byte of CSS is parsed, and a white flash there
+     is the first thing a dark app should not do. -->
+<html style="background:#1e1e22">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
@@ -48,48 +52,62 @@
     defaults stay in localStorage.
 -->
 <title>PersoDub</title>
+<!-- The saved Appearance, read before the first paint. Not a module: a module
+     is deferred, and by the time it ran the dark page would already have been
+     drawn once in the light theme and swapped under the reader's eyes. -->
+<script>try{var t=localStorage.getItem("persodub.theme");if(t==="light")document.documentElement.dataset.theme="light";}catch(e){}</script>
 <style>
+  /* Two sheets, one set of names. The app is dark by default from 0.5.5 on
+     (user, 2026-09-08) and the light sheet below is the same variables wearing
+     the values the app had before; Settings > Appearance puts data-theme on
+     <html> to swap them. Everything a theme cannot change -- radii, the focus
+     ring, the assistant's own colours -- stays here and is written once. */
   :root {
-    --primary: #7B64C8;
-    --primary-soft: #EDE7FF;
-    --primary-line: #C7B9FF;
-    --primary-foreground: #fafafa;
-    --accent: #f7f5fd;
-    --secondary: #f5f5f5;
-    /* The page behind the work area -- a shade off white, so cards and the
+    --primary: #166CFB;
+    --primary-soft: #172a55;
+    --primary-line: #3f6ad1;
+    --primary-foreground: #ffffff;
+    /* Words ON --primary-soft. --primary-line is the line around that chip and
+       is far too dark to read on it here, the way --primary-line is far too
+       pale to read on it in the light sheet -- so the ink is its own name. */
+    --primary-ink: #9EC1FF;
+    --accent: #1d2540;
+    --secondary: #26262b;
+    /* The page behind the work area -- a shade off the panels, so cards and the
        top bar read as sitting on top of it. */
-    --canvas: #fafafa;
-    --muted-foreground: #737373;
-    --foreground: #0a0a0a;
-    --background: #ffffff;
-    --border: #e5e5e5;
+    --canvas: #17171a;
+    --muted-foreground: #9a9aa6;
+    --foreground: #ececf1;
+    --background: #1e1e22;
+    --border: #2c2c32;
     /* The lines between the finished screen's three panes (video, script,
-       timeline): heavier and darker than --border, which was too faint to say
-       where one pane ends and the next begins (user, 2026-09-02). */
-    --divider: #c4c4cb;
-    --success: #11ad32;
-    /* Timeline bars that fit: one notch softer than --success, matched to --destructive. */
-    --timeline-fit: #55A071;
+       timeline): heavier than --border, which was too faint to say where one
+       pane ends and the next begins (user, 2026-09-02). */
+    --divider: #3a3a42;
+    --success: #3fbf5f;
+    /* Timeline bars that fit: violet, so a bar is never mistaken for one of the
+       blue buttons it sits under (user, 2026-09-08). */
+    --timeline-fit: #8B5CF6;
     --warning: #dfa11a;
-    /* The Settings save-failure panel: pale amber with ink dark enough to
+    /* The Settings save-failure panel: a dark amber with ink light enough to
        read on it. --warning itself is the border and the icon, and is far too
-       light to write words in. */
-    --warning-soft: #fff7e6;
-    --warning-ink: #7a5200;
-    --destructive: #C96A6A;
+       bright to write words on. */
+    --warning-soft: #3a2f12;
+    --warning-ink: #ffd98a;
+    --destructive: #d97777;
     /* The letterbox behind a video still, and the badges that sit on top of
        it. Dark on purpose in both cases -- a frame can be any colour. */
     --thumb-bg: #111111;
     --thumb-badge: rgba(0, 0, 0, 0.6);
     /* Text that sits on top of that dark frame. */
     --thumb-foreground: #fafafa;
-    /* The trim bar's empty track -- a touch darker than --secondary so the
-       hatching over it stays readable. */
-    --trim-track: #f1f1f4;
+    /* The trim bar's empty track -- a touch off --secondary so the hatching
+       over it stays readable. */
+    --trim-track: #2c2c32;
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
-    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
 
     /* One colour per speaker, cycled after the fourth. Each is a dot colour, the
        pale background its chip sits on, and the ink that stays readable on that
@@ -118,6 +136,34 @@
     /* Quiet, but still readable: 8.2:1 on the strip, where --agent-muted is
        3.4:1 and belongs on things nobody has to read. */
     --agent-soft: #a1a1aa;
+  }
+
+  /* The light sheet. Same names, same jobs -- only the values change, so every
+     rule below this block is written once and works in both. */
+  html[data-theme="light"] {
+    --primary: #166CFB;
+    --primary-soft: #E3EDFF;
+    --primary-line: #9EC1FF;
+    --primary-foreground: #ffffff;
+    --primary-ink: #1d4ed8;
+    --accent: #eef3ff;
+    --secondary: #ececf0;
+    --canvas: #fafafa;
+    --muted-foreground: #737373;
+    --foreground: #0a0a0a;
+    --background: #ffffff;
+    --border: #e5e5e5;
+    --divider: #c4c4cb;
+    --success: #11ad32;
+    --timeline-fit: #8B5CF6;
+    --warning: #dfa11a;
+    --warning-soft: #fff7e6;
+    --warning-ink: #7a5200;
+    --destructive: #C96A6A;
+    --thumb-bg: #111111;
+    --thumb-badge: rgba(0, 0, 0, 0.6);
+    --thumb-foreground: #fafafa;
+    --trim-track: #f1f1f4;
   }
 
   * { box-sizing: border-box; }
@@ -769,7 +815,7 @@
   .sub-seg { display: inline-flex; background: #111; border: 1px solid var(--agent-border);
     border-radius: 7px; padding: 2px; gap: 2px; }
   .sub-seg button { min-width: 0; height: 20px; font-size: 0.68rem; padding: 0 8px; }
-  .sub-seg button.on { background: var(--primary); color: #fff; }
+  .sub-seg button.on { background: var(--primary); color: var(--primary-foreground); }
   /* The box-width handles on the selected subtitles' sides. */
   .sub-wh { position: absolute; top: 50%; margin-top: -11px; width: 5px; height: 22px;
     border-radius: 3px; background: var(--primary); box-shadow: 0 0 0 1.5px #fff;
@@ -879,7 +925,7 @@
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .tl-cap { position: absolute; top: 4px; height: 26px; border-radius: 5px;
     background: var(--primary-soft); border: 1px solid var(--primary);
-    color: var(--spk-1-ink); font-size: 0.68rem; line-height: 24px;
+    color: var(--primary-ink); font-size: 0.68rem; line-height: 24px;
     box-sizing: border-box; }
   .tl-cap-txt { display: block; padding: 0 8px; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
@@ -891,7 +937,7 @@
   .tl-cap.trimming { box-shadow: 0 0 0 2px var(--primary); z-index: 2; }
   /* This line keeps its own box width: the dot says so, and puts it back. */
   .tl-exdot { position: absolute; top: -7px; right: -7px; width: 15px; height: 15px;
-    border-radius: 50%; background: var(--primary); color: #fff; font-size: 9px;
+    border-radius: 50%; background: var(--primary); color: var(--primary-foreground); font-size: 9px;
     line-height: 15px; text-align: center; box-shadow: 0 0 0 2px var(--background);
     cursor: pointer; z-index: 3; }
   .tl-lane-caps.off, .tl-name-caps.off { opacity: 0.35; }
@@ -1065,14 +1111,14 @@
   .settings-row:last-child { margin-bottom: 0; }
   .settings-hint { font-size: 0.74rem; color: var(--muted-foreground); margin-top: 4px; }
   .settings-hint.model-busy { color: var(--destructive); font-weight: 600; }
-  .settings-hint.model-ok { color: #2a8a4a; font-weight: 600; }
+  .settings-hint.model-ok { color: var(--success); font-weight: 600; }
   /* The sentence takes the room and wraps; the button keeps to one line at
      the same size as its neighbours -- a wrapped "Download (1.0 GB)" stood
      twice as tall as the Resume beside it (user, 2026-09-07). */
   .model-line { display: flex; align-items: center; gap: 8px; }
   .model-line > span { flex: 1 1 auto; min-width: 0; }
   .model-line .keys-link { margin: 0; flex: none; white-space: nowrap; }
-  .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: #fff;
+  .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: var(--primary-foreground);
                font-size: 0.74rem; font-weight: 600; padding: 4px 10px; cursor: pointer; }
   #modelsFold > summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
   #modelsFold[open] > summary { margin-bottom: 6px; }
@@ -1110,6 +1156,9 @@
     color: var(--primary); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
   .settings-link:hover { text-decoration: underline; }
   .settings-line .settings-link { margin-top: 0; }
+  /* A picker on a settings row is one control beside its label, not a field
+     across the whole sheet -- selects are width:100% everywhere else. */
+  .settings-select { width: auto; min-width: 120px; }
   .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
   input.switch { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; margin: 0; border-radius: 10px;
     background: var(--border); position: relative; cursor: pointer; transition: background 0.15s ease; }
@@ -1614,6 +1663,21 @@
       </button>
     </div>
     <div class="modal-body">
+      <div class="settings-section">
+        <h3>Appearance</h3>
+        <!-- Dark is the app (0.5.5); this is the way back to the old light
+             sheet. It takes effect on the spot, like everything else in here,
+             and is remembered in the browser rather than in kit.env: it is a
+             property of this screen, not of the engine. -->
+        <div class="settings-row settings-line">
+          <label for="themeSelect">Theme</label>
+          <select id="themeSelect" class="settings-select">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+      </div>
+
       <div class="settings-section">
         <h3>Models</h3>
         <!-- Folded to one summary line by default (the open list made Settings

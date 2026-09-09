@@ -45,18 +45,27 @@ function harness({ responses = {} } = {}) {
     if (!els.has(id)) els.set(id, makeEl(id));
     return els.get(id);
   };
-  const state = { calls: [], bodies: [], timers: [], saved: 0, models: 0, docKeydown: [] };
+  const state = { calls: [], bodies: [], timers: [], saved: 0, models: 0, docKeydown: [],
+                  stored: new Map() };
 
   const real = {
     fetch: globalThis.fetch,
     document: globalThis.document,
     navigator: globalThis.navigator,
+    localStorage: globalThis.localStorage,
     setTimeout: globalThis.setTimeout,
     clearTimeout: globalThis.clearTimeout,
   };
   globalThis.document = {
     createElement: (tag) => makeEl(tag),
     addEventListener: (ev, fn) => { if (ev === "keydown") state.docKeydown.push(fn); },
+    // Appearance writes the chosen theme onto <html>; a dataset is all it needs.
+    documentElement: { dataset: {} },
+  };
+  globalThis.localStorage = {
+    getItem: (k) => (state.stored.has(k) ? state.stored.get(k) : null),
+    setItem: (k, v) => state.stored.set(k, String(v)),
+    removeItem: (k) => state.stored.delete(k),
   };
   // The reveal button names the file browser after this; Mac is the default here.
   Object.defineProperty(globalThis, "navigator", {
@@ -74,6 +83,7 @@ function harness({ responses = {} } = {}) {
   state.restore = () => {
     globalThis.fetch = real.fetch;
     globalThis.document = real.document;
+    globalThis.localStorage = real.localStorage;
     Object.defineProperty(globalThis, "navigator", {
       value: real.navigator, configurable: true, writable: true,
     });
@@ -359,6 +369,30 @@ test("a usage-counts save that fails flips the switch back", async (t) => {
 
   assert.equal(h.$("analyticsToggle").checked, false);
   assert.equal(h.$("analyticsHint").textContent, "Could not save that. Is the engine running?");
+});
+
+test("picking a theme paints <html> and remembers the choice", async (t) => {
+  const h = harness();
+  t.after(h.state.restore);
+
+  h.$("themeSelect").value = "light";
+  await h.$("themeSelect").fire("change");
+  assert.equal(globalThis.document.documentElement.dataset.theme, "light");
+  assert.equal(h.state.stored.get("persodub.theme"), "light");
+
+  h.$("themeSelect").value = "dark";
+  await h.$("themeSelect").fire("change");
+  assert.equal(globalThis.document.documentElement.dataset.theme, undefined);
+  assert.equal(h.state.stored.get("persodub.theme"), "dark");
+});
+
+test("Settings opens showing the theme that is saved", async (t) => {
+  const h = harness();
+  t.after(h.state.restore);
+  h.state.stored.set("persodub.theme", "light");
+
+  await h.api.openSettings();
+  assert.equal(h.$("themeSelect").value, "light");
 });
 
 test("Acknowledgements folds open and shut", async (t) => {
