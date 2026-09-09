@@ -373,12 +373,6 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topbar-sub { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap; }
   .topbar-spacer { flex: 1; }
-  /* The one filled button up here, sized for the top bar rather than for a
-     dialog: 32px tall like the two arrows beside it, with the same room left
-     and right of what is inside it, and the icon exactly one gap from the
-     word. Its right edge lands on the top bar's own 16px padding -- where
-     Cancel already ends. */
-  #exportBtn { height: 32px; padding: 0 14px; gap: 6px; }
 
   /* The one job-wide message line (a credit warning, or why a dub failed).
      It sits in the progress card, right under the four steps -- the place the
@@ -560,7 +554,13 @@
   .update-banner .link { background: none; color: var(--primary-line); padding: 0; }
   .update-banner .link:hover { text-decoration: underline; }
 
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: var(--font-ui); font-weight: 600; cursor: pointer; font-family: inherit; }
+  /* Every button in the app is this box: 32px tall, 14px of room either side,
+     one radius and one type size -- the top bar's Export, which is the button
+     the eye is calibrated on. A 44px Start beside a 32px Export said the two
+     belonged to different apps (user, 2026-09-09). Height rather than vertical
+     padding, so a label that wraps cannot make one button taller than the one
+     beside it. */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--radius-sm); height: 32px; padding: 0 14px; font-size: var(--font-ui); font-weight: 600; cursor: pointer; font-family: inherit; }
   .btn-primary { background: var(--primary); color: var(--primary-foreground); }
   .btn-primary:hover { box-shadow: var(--focus-ring); }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
@@ -1182,7 +1182,7 @@
   /* A long status ("Stopped: …") must not squeeze the name into one word per
      line: it keeps to its column and trims with an ellipsis. */
   .model-row > .settings-hint { max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .model-btn { height: 30px; padding: 0 12px; font-size: var(--font-ui); }
+  .model-btn { padding: 0 12px; }
   /* What the dub will download, by name: the one place a first-time user
      learns what each thing is before it costs gigabytes. */
   .mn-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
@@ -1213,7 +1213,8 @@
   /* A picker on a settings row is one control beside its label, not a field
      across the whole sheet -- selects are width:100% everywhere else. */
   .settings-select { width: auto; min-width: 120px; }
-  .btn-sm { padding: 6px 12px; font-size: var(--font-label); }
+  /* The same box, in quieter type. */
+  .btn-sm { padding: 0 12px; font-size: var(--font-label); }
   input.switch { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; margin: 0; border-radius: 10px;
     background: var(--border); position: relative; cursor: pointer; transition: background 0.15s ease; }
   input.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
@@ -1305,7 +1306,7 @@
   .option-grid.two { grid-template-columns: 1fr 1fr; }
   /* A whole-width bordered row rather than a link, so it reads as the lid on
      everything the user does not normally have to open. */
-  .advanced-btn { width: 100%; height: 42px; padding: 0 12px; justify-content: space-between;
+  .advanced-btn { width: 100%; padding: 0 12px; justify-content: space-between;
     background: var(--background); border: 1px solid var(--border); font-weight: 500; }
   .advanced-btn > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
   .advanced-btn .chev { color: var(--muted-foreground); display: inline-flex;
@@ -1317,7 +1318,9 @@
   /* A sentence, not a field: it belongs under the whole grid rather than in a
      column beside one. The grid's own gap already spaces it. */
   #advancedKeysLink { grid-column: 1 / -1; margin-top: 0; }
-  .start-btn { width: 100%; height: 44px; font-size: var(--font-title); }
+  /* The dialog's one action, so it spans the sheet -- but it is the same
+     button as every other one. */
+  .start-btn { width: 100%; }
 </style>
 
 <div class="app">
