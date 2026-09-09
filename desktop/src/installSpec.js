@@ -84,6 +84,15 @@ export const PACKS = [
   { id: "subtitle-eraser", steps: ["eraser-src", "venv-eraser"] },
 ];
 
+// The kit folders a pack owns, taken with it by shell:remove-pack. Models
+// pulled through Ollama are deliberately absent: they are listed and removed
+// as models, one at a time, out of a blob store the runtime shares.
+export const PACK_DIRS = {
+  engine: ["engines_venv", join("models", "demucs")],
+  "ollama-runtime": ["ollama"],
+  "subtitle-eraser": ["eraser", "venv-eraser"],
+};
+
 /** The steps with no pack tag -- what the first install downloads. */
 export function baseSteps(steps) {
   return steps.filter((s) => s.pack === undefined);

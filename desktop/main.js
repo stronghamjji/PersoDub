@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
-import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, PACKS } from "./src/installSpec.js";
+import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, PACKS, PACK_DIRS } from "./src/installSpec.js";
 import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED } from "./src/installer.js";
 import { cancelCurrent } from "./src/exec.js";
 import { readRuntime } from "./src/runtimeFile.js";
@@ -581,11 +581,7 @@ app.whenReady().then(() => {
     // The pack's folders and its steps' done-stamps, so a later install runs
     // the steps again rather than skipping them on a stale stamp. Models
     // pulled through Ollama stay: they are listed and removed as models.
-    const dirs = {
-      engine: ["engines_venv", join("models", "demucs")],
-      "ollama-runtime": ["ollama"],
-      "subtitle-eraser": ["eraser", "venv-eraser"],
-    }[id] || [];
+    const dirs = PACK_DIRS[id] || [];
     try {
       for (const d of dirs) rmSync(join(kitDir, d), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
       for (const step of pack.steps) rmSync(join(kitDir, ".install", `${step}.ok`), { force: true });
