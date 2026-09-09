@@ -257,18 +257,28 @@ def test_the_mask_at_a_seam_carries_both_sentences_and_the_stretches_do_not_move
                 4: [long_line], 5: [long_line], 6: [long_line]}
     detector = _detector_class([(1, 3), (4, 6)])
 
-    erase_subtitles.widen_masks_at_seams(detector, frames=2)
+    erase_subtitles.widen_masks(detector, frames=2)
     stretches = detector.find_continuous_ranges_with_same_mask(sub_list)
 
     assert stretches == [(1, 3), (4, 6)]
     # The frames at the changeover now carry the longer line too, so the mask
     # built from the first stretch covers its ends.
-    assert long_line in sub_list[3]
-    assert short in sub_list[4]
-    # Away from the seam nothing is added -- the picture there is not repainted
-    # for no reason.
-    assert sub_list[1] == [short]
-    assert sub_list[6] == [long_line]
+    roomy_short = erase_subtitles.pad_sideways(short)
+    roomy_long = erase_subtitles.pad_sideways(long_line)
+    assert roomy_long in sub_list[3]
+    assert roomy_short in sub_list[4]
+    # Away from the seam only the box's own elbow room is added -- the picture
+    # there is not repainted for no reason.
+    assert sub_list[1] == [roomy_short]
+    assert sub_list[6] == [roomy_long]
+
+
+def test_a_box_is_given_room_for_the_stroke_the_detector_stopped_short_of():
+    # A box tight around the letters leaves the outline and the last stroke
+    # outside the mask, and that is what stays behind as a smear.
+    assert erase_subtitles.pad_sideways((100, 300, 660, 800)) == (88, 312, 660, 800)
+    # Never off the left edge of the frame, and a tiny box still gets pixels.
+    assert erase_subtitles.pad_sideways((2, 20, 10, 30)) == (0, 26, 10, 30)
 
 
 def test_the_tool_s_own_ffmpeg_is_used_where_the_computer_has_none(tmp_path, monkeypatch):

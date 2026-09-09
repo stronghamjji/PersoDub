@@ -130,10 +130,27 @@ def restore_audio(source, out_path, ffmpeg="ffmpeg", ffprobe="ffprobe"):
 # +-3, and this is the same idea applied to the mask rather than the timing.
 SEAM_FRAMES = 4
 
+# And every box is given a little room at each end. The detector draws its box
+# around the letters it is sure of, and a stroke, a shadow or the tail of the
+# last character sits just outside it -- which is exactly what survives as a
+# smear. Six percent of the box's own width, so a long line gets more room than
+# a short one, and never less than a few pixels. (The tool pads every box by a
+# fixed 10px of its own on top of this, in all four directions.)
+BOX_SIDE_PAD = 0.06
+BOX_SIDE_PAD_MIN = 6
 
-def widen_masks_at_seams(detector_class, frames=SEAM_FRAMES):
-    """Fold each frame's neighbours into its own box list -- after the stretches
-    have been cut, so their edges do not move.
+
+def pad_sideways(box):
+    """One (xmin, xmax, ymin, ymax) box with room added at its two ends."""
+    xmin, xmax, ymin, ymax = box
+    pad = max(BOX_SIDE_PAD_MIN, int((xmax - xmin) * BOX_SIDE_PAD))
+    return (max(0, xmin - pad), xmax + pad, ymin, ymax)
+
+
+def widen_masks(detector_class, frames=SEAM_FRAMES):
+    """Fold each frame's neighbours into its own box list, and give every box
+    room at its ends -- after the stretches have been cut, so their edges do
+    not move.
 
     The checkout itself is never edited (the pack unpacks the original zip), so
     this wraps the one call that sits between the two uses of the detector's
@@ -142,7 +159,7 @@ def widen_masks_at_seams(detector_class, frames=SEAM_FRAMES):
     each stretch's mask. Widening it inside the wrapper therefore leaves every
     stretch exactly where the tool cut it, and adds to a stretch's mask only
     the boxes of the frames just outside it -- which at a seam is both
-    sentences at once. Inside a stretch nothing changes: the mask there is
+    sentences at once. Inside a stretch nothing else changes: the mask there is
     already the union of all its frames.
     """
     original = detector_class.find_continuous_ranges_with_same_mask
@@ -151,11 +168,12 @@ def widen_masks_at_seams(detector_class, frames=SEAM_FRAMES):
         stretches = original(sub_list)
         near = {}
         for no in sub_list:
-            boxes = list(sub_list[no])
+            boxes = []
             for other in range(no - frames, no + frames + 1):
                 for box in sub_list.get(other, ()):
-                    if box not in boxes:
-                        boxes.append(box)
+                    roomy = pad_sideways(box)
+                    if roomy not in boxes:
+                        boxes.append(roomy)
             near[no] = boxes
         sub_list.update(near)
         return stretches
@@ -275,7 +293,7 @@ def main():
     config.set(config.interface, "en")
     tr.read(os.path.join(vsr_dir, "backend", "interface", "en.ini"), encoding="utf-8")
     config.inpaintMode.value = InpaintMode.STTN_DET
-    widen_masks_at_seams(SubtitleDetect)
+    widen_masks(SubtitleDetect)
 
     remover = SubtitleRemover(input_path)
     # Set before run(), or the result is written beside the ORIGINAL as
