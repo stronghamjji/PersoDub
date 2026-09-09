@@ -1,0 +1,25 @@
+{
+  // The relay that turns a failure report into a GitHub issue. Deployed by
+  // hand from this folder (`wrangler deploy`), not by CI: it holds a token,
+  // and nothing in the release pipeline should be able to reach it.
+  //
+  // GITHUB_TOKEN and LOG_SIGNING_KEY are secrets -- `wrangler secret put`,
+  // never this file. GITHUB_REPO points at the private test repository until
+  // the end-to-end run is proven; moving to the public one is this one line.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "persodub-report",
+  "main": "report-worker.js",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    { "binding": "REPORTS", "id": "31c7975c8c98486ba89345d9495c8f48" }
+  ],
+  // R2 is not enabled on the account yet. Until it is, the Worker answers 501
+  // to a log upload and the issue is created without the "Full logs" line.
+  // "r2_buckets": [{ "binding": "LOGS", "bucket_name": "persodub-report-logs" }],
+  "vars": {
+    "GITHUB_REPO": "stronghamjji/PersoDub-test",
+    "MAX_PER_DAY": "5",
+    "MAX_TOTAL_PER_DAY": "200"
+  }
+}

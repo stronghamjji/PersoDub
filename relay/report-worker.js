@@ -158,6 +158,10 @@ async function handleLogs(request, env, id) {
   if (!pending) return json({ error: "unknown report" }, 404);
   const body = await request.arrayBuffer();
   if (body.byteLength === 0 || body.byteLength > MAX_LOG_BYTES) return json({ error: "bad size" }, 413);
+  // A relay standing up before its bucket exists takes the report and says the
+  // logs found no home -- 501, which the app reads as "never going to work"
+  // and stops retrying, rather than keeping the file for a week.
+  if (!env.LOGS) return json({ error: "no log store" }, 501);
 
   const now = Date.now();
   const key = logObjectKey({ fingerprint: pending.fingerprint, id, now });
@@ -187,7 +191,7 @@ async function serveLogs(request, env, id) {
     return json({ error: "bad link" }, 403);
   }
   const key = await env.REPORTS.get(`log:${id}`);
-  const object = key && (await env.LOGS.get(key));
+  const object = key && env.LOGS && (await env.LOGS.get(key));
   if (!object) return json({ error: "gone" }, 404);
   return new Response(object.body, {
     headers: {
