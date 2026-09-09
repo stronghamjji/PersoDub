@@ -131,7 +131,13 @@ async function handleReport(request, env, ctx) {
       method: "POST",
       body: JSON.stringify({ title: issueTitle(report), body: issueBody(report), labels }),
     });
-    if (!res.ok) return json({ error: "upstream" }, 502);
+    if (!res.ok) {
+      // The status alone, never the body: GitHub quotes the request back, and
+      // the request is somebody's crash report. 401/403 is the token, 404 is
+      // the repository name -- both are set-up mistakes worth telling apart.
+      console.log(`relay github ${res.status} on create`);
+      return json({ error: "upstream", status: res.status }, 502);
+    }
     const made = await res.json();
     issue = made.number;
     url = made.html_url;
