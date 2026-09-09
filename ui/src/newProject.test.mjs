@@ -59,7 +59,16 @@ function harness({ responses = {} } = {}) {
   const log = { calls: [], docKeydown: [], hints: 0, dubMode: 0, engines: 0,
                 started: 0, closed: 0, picked: 0, played: [], cancelled: [] };
 
-  const real = { fetch: globalThis.fetch, document: globalThis.document, URL: globalThis.URL };
+  const real = { fetch: globalThis.fetch, document: globalThis.document, URL: globalThis.URL,
+                 setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval };
+  // The dialog asks how far along a download is once a second. The tests hold
+  // that tick themselves -- log.tick() is one second going by -- so nothing
+  // waits on a real clock and no test leaves a timer running behind it.
+  let ticks = new Map(), nextTick = 1;
+  globalThis.setInterval = (fn) => { ticks.set(nextTick, fn); return nextTick++; };
+  globalThis.clearInterval = (id) => { ticks.delete(id); };
+  log.tick = async () => { for (const fn of [...ticks.values()]) await fn(); };
+  log.ticking = () => ticks.size;
   globalThis.document = {
     createElement: (tag) => makeEl(tag),
     addEventListener: (ev, fn) => { if (ev === "keydown") log.docKeydown.push(fn); },
@@ -78,6 +87,8 @@ function harness({ responses = {} } = {}) {
     globalThis.fetch = real.fetch;
     globalThis.document = real.document;
     globalThis.URL = real.URL;
+    globalThis.setInterval = real.setInterval;
+    globalThis.clearInterval = real.clearInterval;
   };
 
   const api = initNewProjectUi({
@@ -137,7 +148,8 @@ test("openNewProject on a link sets state.newProject and opens the overlay", asy
 
   h.api.openNewProject({ probe });
 
-  assert.deepEqual(h.state.newProject, { file: null, files: null, probe, trim: null });
+  assert.deepEqual(h.state.newProject,
+    { file: null, files: null, probe, trim: null, downloadId: null });
   assert.equal(h.$("projectOverlay").classList.contains("open"), true);
   assert.equal(h.$("projectTitle").textContent, "New project");
   // A link has no video to scrub -- a still, a length, and no trim bar.
@@ -343,6 +355,7 @@ test("readOptions hands back the whole form, field for field", async (t) => {
   assert.deepEqual(h.api.readOptions(), {
     video: file,
     sourceUrl: null,
+    downloadId: null,
     sourceLang: "ko",
     targetLang: "en",
     sttEngine: "local",

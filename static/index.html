@@ -1241,6 +1241,12 @@
     background: var(--thumb-badge); color: var(--primary-foreground);
     border-radius: var(--radius-sm); font-family: inherit; font-size: var(--font-label);
     text-decoration: underline; cursor: pointer; }
+  /* How far along the link's download is: the same bar the running screen
+     uses, on one muted line under the still. */
+  .dl-row { display: flex; align-items: center; gap: 10px;
+    font-size: var(--font-label); color: var(--muted-foreground); }
+  .dl-row .progress-bar { flex: 1; }
+  #dlPercent { font-variant-numeric: tabular-nums; }
   /* Filled in by renderTrim(); a link (no local file to scrub) never gets one,
      and an empty box must not leave a gap behind. */
   .trim:empty { display: none; }
@@ -1629,6 +1635,10 @@
     </button></div>
     <div class="modal-body">
       <div class="project-thumb" id="projectThumb"><video id="projectVideo" muted playsinline></video><span class="project-dur" id="projectDur"></span><button class="project-replace" id="projectReplace" type="button">Replace</button></div>
+      <!-- A pasted link is fetched into the app the moment this dialog opens.
+           This row is how far along that is; it goes when the video itself can
+           be played. -->
+      <div class="dl-row" id="dlRow" hidden>Downloaded<div class="progress-bar"><div id="dlFill"></div></div><span id="dlPercent">0%</span></div>
       <div class="trim" id="trimBox"></div>
       <div class="option-grid two">
         <div class="field"><label for="sourceLangSelect">Original language</label><select id="sourceLangSelect"><option value="" selected>Auto-detect</option></select></div>

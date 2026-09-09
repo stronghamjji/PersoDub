@@ -13,7 +13,8 @@
 // playRange/cancelRange, which the finished screen plays its lines with.
 //
 // Everything this file touches is #projectOverlay and its children.
-import { LANGUAGES, fetchLanguages } from "./dubApi.mjs";
+import { LANGUAGES, fetchLanguages, startDownload, fetchDownload,
+         downloadVideoUrl } from "./dubApi.mjs";
 import { fmtClock, fmtClockTenths } from "./format.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
@@ -53,6 +54,10 @@ const TRIM_STEP = 0.1;
 // How far apart the ruler's ticks are, and the coarsest they may ever be read
 // in: squeezed, they thin out to 10s, 15s, 20s rather than to 6s or 7s.
 const TRIM_TICK_SEC = 5;
+// How often the dialog asks how far along a link's download is. A second is
+// what the progress row is worth: the percent moves in visible steps and the
+// question costs one small answer.
+const DOWNLOAD_POLL_MS = 1000;
 
 /**
  * Wire the New project dialog to a page.
@@ -73,12 +78,14 @@ const TRIM_TICK_SEC = 5;
  * @param {() => void} deps.onClosed     forget the source the dialog was holding:
  *        the home screen's error line, the file input and the link field
  * @param {() => void} deps.onPickFile   open the file picker (Replace)
+ * @param {(source: {downloadId, title, duration_sec}) => void} deps.onErase
+ *        hand the held video to the subtitle-erasing screen
  * @returns the operations the rest of the page calls.
  */
 export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
                                    updateEngineHints, paintDubMode,
                                    playRange, cancelRange, labelPx,
-                                   onClosed, onPickFile }) {
+                                   onClosed, onPickFile, onErase }) {
   // Populated from dubApi.LANGUAGES (the model's own supported-language table).
   // sourceLangSelect's default is the literal "Auto-detect" <option> written into
   // its markup -- defCode null never matches a real LANGUAGES code, so no
@@ -367,12 +374,105 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     if (projectObjectUrl) { URL.revokeObjectURL(projectObjectUrl); projectObjectUrl = null; }
   }
 
+  // ---- The held video ------------------------------------------------------
+  // A link is fetched into the app's holding area the moment this dialog opens,
+  // so by the time the user has looked at it there is a real file on this
+  // computer: it plays and scrubs like a dropped one, a clip can be cut out of
+  // it, and the dub is handed its id instead of the link.
+
+  // The 1s timer while a link is coming down, and the last link that finished:
+  // pasting the same address again plays the file that is already here.
+  let downloadTimer = null;
+  let lastLink = null;
+
+  function stopWatching() {
+    clearInterval(downloadTimer);
+    downloadTimer = null;
+  }
+
+  function showDownloaded(percent) {
+    $("dlRow").hidden = false;
+    $("dlFill").style.width = `${percent}%`;
+    $("dlPercent").textContent = `${percent}%`;
+  }
+
+  // Start needs the held file only for a link -- a dropped file is playable
+  // and startable the moment it lands, so a link is the one source that has to
+  // wait for the download to finish.
+  function paintActions() {
+    const np = state.newProject || {};
+    $("startBtn").disabled = !np.downloadId && !np.file;
+  }
+
+  // The file is here. The progress row goes, the still gives way to the video
+  // itself, and its length draws the trim bar -- the same path a dropped file
+  // takes once its metadata has loaded.
+  function playHeldVideo(d) {
+    $("dlRow").hidden = true;
+    if (!state.newProject) return;
+    state.newProject.downloadId = d.id;
+    lastLink = { url: d.url, id: d.id };
+    paintActions();
+    const v = $("projectVideo");
+    v.hidden = false;
+    v.src = downloadVideoUrl(d.id);
+    v.addEventListener("loadedmetadata", () => {
+      $("projectDur").textContent = fmtClock(v.duration);
+      renderTrim(v.duration);
+    }, { once: true });
+  }
+
+  // Ask how far along, once a second, until the record settles. A question
+  // that fails to arrive is left alone: the next second asks again, and the
+  // download itself carries on regardless of who is watching.
+  function watchDownload(id) {
+    stopWatching();
+    downloadTimer = setInterval(async () => {
+      let d;
+      try {
+        d = await fetchDownload(id);
+      } catch { return; }
+      if (!state.newProject) { stopWatching(); return; }
+      if (d.status === "failed") {
+        stopWatching();
+        $("dlRow").hidden = true;
+        $("projectError").textContent = d.error || "Couldn't fetch the video.";
+        return;
+      }
+      if (d.status === "ready") { stopWatching(); playHeldVideo(d); return; }
+      showDownloaded(d.percent || 0);
+    }, DOWNLOAD_POLL_MS);
+  }
+
+  async function beginDownload(url) {
+    if (lastLink && lastLink.url === url) {
+      // The same link, still in the holding area: play it rather than fetch a
+      // second copy. If it has been cleared away, fall through and fetch it.
+      const d = await fetchDownload(lastLink.id).catch(() => null);
+      if (d && d.status === "ready") { playHeldVideo(d); return; }
+      lastLink = null;
+    }
+    showDownloaded(0);
+    let id;
+    try {
+      id = await startDownload(url);
+    } catch (e) {
+      $("dlRow").hidden = true;
+      $("projectError").textContent = e.message;
+      return;
+    }
+    if (!state.newProject) return;   // closed while the fetch was being started
+    watchDownload(id);
+  }
+
   function openNewProject(source) {
     // Several files come in as `files`; the dialog is then asked once and the
     // same choices start them all, one after another (the queue's job).
     const files = source.files && source.files.length > 1 ? source.files : null;
     const file = source.file || (files ? files[0] : null);
-    state.newProject = { file, files, probe: source.probe || null, trim: null };
+    state.newProject = { file, files, probe: source.probe || null, trim: null,
+                         downloadId: null };
+    stopWatching();
     releaseProjectVideo();
     const v = $("projectVideo");
     // A local file can be played and scrubbed; a link only ever has a still.
@@ -384,6 +484,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     // The previous video's bar would otherwise sit there until this one's
     // length is known -- and stay for good behind a link, which has no bar.
     $("trimBox").innerHTML = "";
+    // Likewise the last download's row: beginDownload puts it back up when
+    // this link actually has to be fetched.
+    $("dlRow").hidden = true;
     if (file) {
       projectObjectUrl = URL.createObjectURL(file);
       v.src = projectObjectUrl;
@@ -400,11 +503,16 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
           renderTrim(v.duration);
         }
       }, { once: true });
-    } else if (source.probe && source.probe.thumbnail_url) {
-      $("projectThumb").style.backgroundImage = `url(${source.probe.thumbnail_url})`;
+    } else if (source.probe) {
+      if (source.probe.thumbnail_url) {
+        $("projectThumb").style.backgroundImage = `url(${source.probe.thumbnail_url})`;
+      }
+      // The still is what there is to look at while the link comes down.
+      beginDownload(source.probe.url);
     }
     $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
     $("projectError").textContent = "";
+    paintActions();
     // The dropdowns start on the saved defaults every time the dialog opens
     // (the Dub Agent may have changed them a moment ago), then the key-gated
     // options are greyed out. Not on a Settings save: that path must leave a
@@ -423,6 +531,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   // video was accepted, so leaving one half-chosen behind would be a lie.
   function closeNewProject() {
     $("projectOverlay").classList.remove("open");
+    // Nobody is watching the download any more. The fetch itself carries on in
+    // the app -- pasting the same link again finds the file waiting.
+    stopWatching();
     releaseProjectVideo();
     state.newProject = null;
     // The home screen forgets the source too: its error line, the file input
@@ -453,6 +564,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     return {
       video: np.file || null,
       sourceUrl: np.probe ? np.probe.url : null,
+      // What the app is already holding, which the dub takes in place of both:
+      // the link is fetched and the file copied by the time Start can be pressed.
+      downloadId: np.downloadId || null,
       sourceLang: $("sourceLangSelect").value,
       targetLang: $("targetLangSelect").value,
       languages: currentLanguages(),

@@ -50,6 +50,8 @@ function qualityModeToNTakes(qualityMode) {
  *
  * @param {Object} opts
  * @param {File|Blob} opts.video - required video file
+ * @param {string} [opts.downloadId] - a video the app is already holding
+ *        (a fetched link or a copied file); sent instead of the file or the link
  * @param {string} [opts.sourceLang] - source language code (with targetLang, the preferred path)
  * @param {string} [opts.targetLang] - target language code from LANGUAGES
  * @param {"ko_to_en"|"en_to_ko"} [opts.direction] - legacy dubbing direction (fallback)
@@ -83,7 +85,7 @@ export async function fetchLanguages({ baseUrl = "" } = {}) {
 }
 
 export function buildDubFormData(opts) {
-  if (!opts || (!opts.video && !opts.sourceUrl)) {
+  if (!opts || (!opts.video && !opts.sourceUrl && !opts.downloadId)) {
     throw new Error("A video file or a link is required.");
   }
   let language, language_code, sourceCode = null;
@@ -108,8 +110,12 @@ export function buildDubFormData(opts) {
   const nTakes = opts.nTakesOverride ?? qualityModeToNTakes(opts.qualityMode ?? "fast");
 
   const fd = new FormData();
-  // Exactly one source -- the server rejects both (app/api/dub.py:dub_start).
-  if (opts.video) fd.append("video", opts.video);
+  // Exactly one source -- the server rejects two (app/api/dub.py:dub_start).
+  // The held file wins whenever there is one: the link is already fetched and
+  // the dropped file already copied, so sending either again would fetch or
+  // upload the same video a second time.
+  if (opts.downloadId) fd.append("download_id", opts.downloadId);
+  else if (opts.video) fd.append("video", opts.video);
   else fd.append("source_url", opts.sourceUrl);
   fd.append("language", language);
   fd.append("language_code", language_code);
@@ -228,6 +234,79 @@ export async function probeSource(url, { baseUrl = "" } = {}) {
     err.reason = detail.reason || "unknown";
     throw err;
   }
+  return res.json();
+}
+
+// ---- The holding area behind the New project dialog ------------------------
+// A pasted link is fetched into the app's own folder, and a dropped file is
+// copied into it, before anything else happens (app/api/downloads.py). From
+// then on there is one file on this computer, and the dialog plays it, cuts a
+// clip out of it and hands it to a dub by id -- never fetching or uploading
+// the same video a second time.
+
+/** The message an /api/downloads error carries, whichever shape it came in. */
+async function downloadError(res, fallback) {
+  const body = await res.json().catch(() => ({}));
+  const detail = body.detail;
+  const message = typeof detail === "string" ? detail : (detail || {}).message;
+  const err = new Error(message || fallback);
+  err.reason = (detail || {}).reason || "unknown";
+  err.status = res.status;
+  return err;
+}
+
+/** POST /api/downloads -- start fetching a link; answers with the id to poll. */
+export async function startDownload(url, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/downloads`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) throw await downloadError(res, "Couldn't fetch the video.");
+  return (await res.json()).id;
+}
+
+/**
+ * GET /api/downloads/{id} -- the held video's record:
+ * {status: probing|downloading|ready|failed, percent, title, duration_sec, error}.
+ */
+export async function fetchDownload(id, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/downloads/${id}`);
+  if (!res.ok) throw await downloadError(res, "Lost track of the download.");
+  return res.json();
+}
+
+/** Where the held video plays from, once its record says ready. */
+export function downloadVideoUrl(id, { baseUrl = "" } = {}) {
+  return `${baseUrl}/api/downloads/${id}/video`;
+}
+
+/**
+ * POST /api/downloads/upload -- put a dropped file in the holding area too, so
+ * the three buttons under it work the same whichever way the video arrived.
+ * Returns the record.
+ */
+export async function uploadDownload(file, durationSec, { baseUrl = "" } = {}) {
+  const fd = new FormData();
+  fd.append("video", file);
+  if (durationSec) fd.append("duration_sec", String(durationSec));
+  const res = await fetch(`${baseUrl}/api/downloads/upload`, { method: "POST", body: fd });
+  if (!res.ok) throw await downloadError(res, "Couldn't hold on to this file.");
+  return res.json();
+}
+
+/**
+ * POST /api/downloads/{id}/save -- write the held video out as a file of its
+ * own: the chosen stretch, or all of it when there is no trim. Returns
+ * {path, seconds}.
+ */
+export async function saveDownloadClip(id, trim, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/downloads/${id}/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(trim ? { start: trim.start, end: trim.end } : {}),
+  });
+  if (!res.ok) throw await downloadError(res, "Couldn't save the clip.");
   return res.json();
 }
 
