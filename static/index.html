@@ -1324,9 +1324,13 @@
   /* A sentence, not a field: it belongs under the whole grid rather than in a
      column beside one. The grid's own gap already spaces it. */
   #advancedKeysLink { grid-column: 1 / -1; margin-top: 0; }
-  /* The dialog's one action, so it spans the sheet -- but it is the same
-     button as every other one. */
-  .start-btn { width: 100%; }
+  /* The two that end here sit left, the one that goes on to a dub sits right,
+     where the eye leaves the row. All three are the app's one button box. */
+  .project-actions { display: flex; align-items: center; gap: 8px; }
+  .project-actions .btn-primary { margin-left: auto; }
+  /* What Save clip has to say, and only after it has said it. */
+  .project-saved { font-size: var(--font-label); color: var(--muted-foreground); }
+  .project-saved:empty { display: none; }
 </style>
 
 <div class="app">
@@ -1660,7 +1664,15 @@
       <!-- Start's own error line: the first screen's #formError sits behind the
            dimmed overlay, where a failed start would never be read. -->
       <div class="form-error" id="projectError"></div>
-      <button class="btn btn-primary start-btn" id="startBtn" type="button">Start dubbing</button>
+      <!-- Three things can be done with the video that is now on this
+           computer. Two of them end here (a clip saved, the subtitles erased);
+           only the third goes on to a dub, which is why it alone is filled. -->
+      <div class="project-actions">
+        <button class="btn btn-outline" id="saveClipBtn" type="button">Save clip</button>
+        <button class="btn btn-outline" id="eraseBtn" type="button">Erase subtitles</button>
+        <button class="btn btn-primary" id="startBtn" type="button">Start dubbing</button>
+      </div>
+      <div class="project-saved" id="projectSaved"></div>
     </div>
   </div>
 </div>
@@ -2657,7 +2669,15 @@ const newProject = initNewProjectUi({
     clearLink();
   },
   onPickFile: () => videoInput.click(),
+  onErase: (source) => openEraseWith(source),
 });
+
+// Where Erase subtitles goes. The screen it opens is not built yet; what is
+// settled is how it is entered -- by the id of the video the app is already
+// holding, so the erasing works on the same file the dialog was playing.
+function openEraseWith(source) {
+  console.log("Erase subtitles", source);
+}
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");

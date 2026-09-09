@@ -14,7 +14,7 @@
 //
 // Everything this file touches is #projectOverlay and its children.
 import { LANGUAGES, fetchLanguages, startDownload, fetchDownload,
-         downloadVideoUrl, uploadDownload } from "./dubApi.mjs";
+         downloadVideoUrl, uploadDownload, saveDownloadClip } from "./dubApi.mjs";
 import { fmtClock, fmtClockTenths } from "./format.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
@@ -396,11 +396,14 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     $("dlPercent").textContent = `${percent}%`;
   }
 
-  // Start needs the held file only for a link -- a dropped file is playable
-  // and startable the moment it lands, so a link is the one source that has to
-  // wait for the download to finish.
+  // Which of the three buttons can be pressed. Saving a clip and erasing
+  // subtitles are done to the held file, so they wait for it; Start needs it
+  // only for a link -- a dropped file is startable the moment it lands, while
+  // its copy is still being made.
   function paintActions() {
     const np = state.newProject || {};
+    $("saveClipBtn").disabled = !np.downloadId;
+    $("eraseBtn").disabled = !np.downloadId;
     $("startBtn").disabled = !np.downloadId && !np.file;
   }
 
@@ -415,6 +418,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     paintActions();
     const v = $("projectVideo");
     v.hidden = false;
+    // The still was there to be looked at while the fetch ran; leaving it
+    // behind the video shows it again down both sides of a letterboxed frame.
+    $("projectThumb").style.backgroundImage = "";
     v.src = downloadVideoUrl(d.id);
     v.addEventListener("loadedmetadata", () => {
       $("projectDur").textContent = fmtClock(v.duration);
@@ -531,6 +537,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     }
     $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
     $("projectError").textContent = "";
+    $("projectSaved").textContent = "";
     paintActions();
     // The dropdowns start on the saved defaults every time the dialog opens
     // (the Dub Agent may have changed them a moment ago), then the key-gated
@@ -576,6 +583,45 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   // Start is wired here so the dialog owns every button inside it; what the
   // button does -- the job, the running screen, the top bar -- stays on the page.
   $("startBtn").addEventListener("click", () => onStart());
+
+  // Save clip writes the part the handles have chosen (or the whole video)
+  // into the Downloads folder as a file of its own. The dub is not involved:
+  // for whoever came to cut a piece out of a link, this is the whole errand,
+  // and the dialog stays open so they can cut another.
+  $("saveClipBtn").addEventListener("click", async () => {
+    const np = state.newProject || {};
+    if (!np.downloadId) return;
+    const btn = $("saveClipBtn");
+    btn.textContent = "Saving…";
+    btn.disabled = true;
+    $("projectError").textContent = "";
+    $("projectSaved").textContent = "";
+    try {
+      await saveDownloadClip(np.downloadId, np.trim);
+      $("projectSaved").textContent = "Saved to Downloads";
+    } catch (e) {
+      $("projectError").textContent = e.message;
+    } finally {
+      btn.textContent = "Save clip";
+      paintActions();
+    }
+  });
+
+  // Erase subtitles hands the held video over by id -- the erasing screen
+  // reads the same file, so nothing is fetched or copied again -- and this
+  // dialog gets out of the way.
+  $("eraseBtn").addEventListener("click", () => {
+    const np = state.newProject || {};
+    if (!np.downloadId) return;
+    const v = $("projectVideo");
+    onErase({
+      downloadId: np.downloadId,
+      title: np.probe ? np.probe.title : (np.file ? np.file.name : ""),
+      duration_sec: Number.isFinite(v.duration) && v.duration
+        ? v.duration : (np.probe ? np.probe.duration_sec : 0),
+    });
+    closeNewProject();
+  });
 
   function readOptions() {
     // The dialog owns the source now: either a dropped file or a probed link.
