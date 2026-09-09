@@ -8,7 +8,7 @@
 // Run with: node --test ui/src/projects.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initProjectsUi } from "./projects.mjs";
+import { initProjectsUi, jobMark } from "./projects.mjs";
 
 function makeEl(id) {
   return {
@@ -101,6 +101,26 @@ test("the sidebar paints a row per job, marks the open one and says which way ea
   assert.match(second.innerHTML, /Auto → Korean · 00:01:00/);
   // Anything still going gets the running dot, named or not.
   assert.match(second.innerHTML, /class="job-dot dot-running"/);
+});
+
+// Five colours are one colour to a reader who does not see them, so every state
+// carries its own shape too. The colour class is still there; this pins the mark.
+test("every job state is a shape as well as a colour", () => {
+  const marks = {
+    done: jobMark("done"), queued: jobMark("queued"), running: jobMark("running"),
+    error: jobMark("error"), cancelled: jobMark("cancelled"),
+  };
+  for (const [state, svg] of Object.entries(marks)) {
+    assert.match(svg, /^<svg viewBox="0 0 12 12"/, `${state} is not a 12px mark`);
+  }
+  assert.match(marks.done, /<path d="M2\.6 6\.4/, "done is a tick");
+  assert.match(marks.queued, /<circle cx="6" cy="6" r="3\.6"\/>/, "waiting is an empty ring");
+  assert.doesNotMatch(marks.queued, /fill:currentColor/);
+  assert.match(marks.running, /fill:currentColor/, "running fills that ring");
+  assert.equal((marks.error.match(/<path/g) || []).length, 2, "a failure is a cross");
+  assert.match(marks.cancelled, /<circle[\s\S]*<path/, "cancelled is the ring struck through");
+  // Anything the server has no mark for is still going.
+  assert.equal(jobMark("separating"), marks.running);
 });
 
 test("a row opens its job, and its Delete button asks the page instead", async (t) => {

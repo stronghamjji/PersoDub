@@ -22,6 +22,23 @@ import { parseProgress } from "./dubApi.mjs";
 const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled",
                   queued: "dot-queued" };
 
+// The same five states, said in shape as well as in colour: five coloured dots
+// are one dot to anyone who does not see colour the way the palette assumes.
+// Drawn at 12px in the page's own inline-SVG way -- no icon font, still offline.
+// Done is a tick, waiting is an empty ring, running is that ring filled, a
+// failure is a cross and a cancelled job is the ring struck through.
+const JOB_MARK = {
+  done: '<path d="M2.6 6.4l2.4 2.4 4.5-5"/>',
+  error: '<path d="M3.2 3.2l5.6 5.6"/><path d="M8.8 3.2l-5.6 5.6"/>',
+  cancelled: '<circle cx="6" cy="6" r="3.6"/><path d="M3.5 8.5l5-5"/>',
+  queued: '<circle cx="6" cy="6" r="3.6"/>',
+  running: '<circle cx="6" cy="6" r="3.6" style="fill:currentColor;stroke:none"/>',
+};
+/** The mark for a job's state -- "running" for anything still going. */
+export function jobMark(status) {
+  return `<svg viewBox="0 0 12 12" aria-hidden="true">${JOB_MARK[status] || JOB_MARK.running}</svg>`;
+}
+
 /**
  * Wire the Projects list and the Up next card to a page.
  *
@@ -144,7 +161,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       const row = document.createElement("button");
       row.className = "job-row" + (job.id === getActiveJobId() ? " current" : "");
       row.type = "button";
-      row.innerHTML = `<span class="job-dot ${JOB_DOT[job.status] || "dot-running"}"></span>
+      row.innerHTML = `<span class="job-dot ${JOB_DOT[job.status] || "dot-running"}">${jobMark(job.status)}</span>
       <div class="job-info"><div class="job-name">${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div></div>`;
       row.addEventListener("click", () => onOpenJob(job.id));
 

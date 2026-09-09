@@ -297,12 +297,18 @@
   /* dot- prefixed on purpose: a bare .done here is the finished screen's own
      layout class, which laid the dot out as a flex column and left it 0px wide
      -- so every finished job used to sit in the list with no dot at all. */
-  .job-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .job-dot.dot-running { background: var(--primary); box-shadow: var(--focus-ring); }
-  .job-dot.dot-done { background: var(--success); }
-  .job-dot.dot-error { background: var(--destructive); }
-  .job-dot.dot-cancelled { background: var(--muted-foreground); }
-  .job-dot.dot-queued { background: var(--primary-line); }
+  /* A state's mark, not only its colour: the shape is drawn by jobMark() in
+     ui/src/projects.mjs and these rules only say what colour it wears -- the
+     same five colours the plain dots had. */
+  .job-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+    display: inline-grid; place-items: center; }
+  .job-dot svg { width: 12px; height: 12px; fill: none; stroke: currentColor;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .job-dot.dot-running { color: var(--primary); box-shadow: var(--focus-ring); }
+  .job-dot.dot-done { color: var(--success); }
+  .job-dot.dot-error { color: var(--destructive); }
+  .job-dot.dot-cancelled { color: var(--muted-foreground); }
+  .job-dot.dot-queued { color: var(--primary-line); }
   .job-row .job-info { min-width: 0; }
   /* The row itself is a <button>, so the delete control sits beside it rather
      than inside. It stays hidden until the row is hovered or it has focus --
