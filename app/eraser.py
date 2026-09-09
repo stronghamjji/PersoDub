@@ -36,8 +36,9 @@ SUGGEST_SCRIPT = os.path.join(SCRIPT_DIR, "suggest_area.py")
 CHILD_ENV = {"PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK": "True"}
 
 # How long suggest_area may take before it is given up on. It reads a dozen
-# frames (about 15s on this Mac); a minute means something is wrong, and the
-# screen is waiting on this one.
+# frames -- 27 seconds on this Mac for a 10-second clip (2026-09-09), most of
+# it loading the detector, and seeking through a long video costs more. Three
+# minutes is well past anything healthy, and the screen is waiting on this one.
 SUGGEST_TIMEOUT = 180
 
 

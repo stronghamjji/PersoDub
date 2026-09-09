@@ -487,6 +487,11 @@ def dub_job_retry(jid: str):
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     if job.get("status") in ("running", "cancelling"):
         raise HTTPException(status_code=409, detail="This job is still running.")
+    if kind_of(job) != "dub":
+        # Both kinds share this list, so this button can be pressed on an
+        # erase -- which would quietly start dubbing a video nobody asked to
+        # have dubbed, in whatever language the blank record defaults to.
+        raise HTTPException(409, "This job erased subtitles, so there is no dub to run again.")
     # work_dir, not the result folder: a job that failed before it produced
     # anything is exactly the one this endpoint exists for.
     work_dir = work_dir_of(job)

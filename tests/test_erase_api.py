@@ -249,3 +249,12 @@ def test_an_erase_job_shows_up_in_the_projects_list_as_an_erase(erased):
     rows = client.get("/api/dub/jobs").json()["jobs"]
     row = next(r for r in rows if r["id"] == jid)
     assert row["kind"] == "erase"
+
+
+def test_try_again_is_not_offered_a_job_that_erased_subtitles(erased):
+    """Both kinds share the Projects list, and this button on an erase would
+    start dubbing a video nobody asked to have dubbed."""
+    jid = _start(project="clip").json()["job_id"]
+    _wait(jid)
+    r = client.post("/api/dub/jobs/%s/retry" % jid)
+    assert r.status_code == 409 and "erased subtitles" in r.json()["detail"]
