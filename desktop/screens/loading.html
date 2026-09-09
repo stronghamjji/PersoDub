@@ -16,11 +16,23 @@
            background: #166CFB; animation: sweep 1.5s ease-in-out infinite; }
   @keyframes sweep { 0% { margin-left: -32%; } 100% { margin-left: 100%; } }
   @media (prefers-reduced-motion: reduce) { #bar i { animation: none; width: 100%; opacity: .5; } }
-  .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 0 auto 22px; }
-  .brand img { width: 48px; height: 48px; border-radius: 12px; display: block; }
-  .brand b { font-size: 15px; font-weight: 600; letter-spacing: .01em; color: #ececf1; }
+  /* The mark and the name side by side, ranged left over the column they head --
+     the shape Premiere, Resolve and Docker Desktop use on a screen that has to
+     say what it is doing while it loads. The version rides along so nobody has
+     to be asked which one they are running. */
+  .brand { display: flex; align-items: center; gap: 10px; margin: 0 0 26px; }
+  .brand img { width: 34px; height: 34px; border-radius: 9px; display: block; }
+  .brand b { font-size: 14px; font-weight: 600; letter-spacing: .01em; color: #ececf1; }
+  .brand .ver { color: #9a9aa6; font-size: 12px; }
 </style>
-<div class="brand"><img src="logo.png" alt=""><b>PersoDub</b></div>
+<div class="brand"><img src="logo.png" alt=""><b>PersoDub</b><span class="ver" id="ver"></span></div>
 <h2>Starting engines…</h2>
 <div id="bar"><i></i></div>
 <p>First launch can take a minute or two while the voice model loads.</p>
+
+<script>
+  // The version comes in on the query string (desktop/main.js), so every launch
+  // screen names the build the user is on without asking anyone.
+  const v = new URLSearchParams(location.search).get("v");
+  if (v) document.getElementById("ver").textContent = "v" + v;
+</script>

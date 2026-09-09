@@ -288,7 +288,7 @@ async function boot(win) {
     if (!kitOk || unfinished) {
       if (!payload) {
         await win.loadFile(join(HERE, "screens", "not-installed.html"), {
-          query: { kitDir: cfg.kitDir, missing: checkKit(cfg.kitDir, kitVersion).missing.join(",") },
+          query: { v: app.getVersion(), kitDir: cfg.kitDir, missing: checkKit(cfg.kitDir, kitVersion).missing.join(",") },
         });
         return;
       }
@@ -301,7 +301,7 @@ async function boot(win) {
         await win.loadFile(join(HERE, "screens", "error.html"), {
           // No logDir: this stopped before a byte was written, so there is no
           // log to point at.
-          query: { title: "Choose a shorter install location", message: tooLong },
+          query: { v: app.getVersion(), title: "Choose a shorter install location", message: tooLong },
         });
         return;
       }
@@ -314,7 +314,7 @@ async function boot(win) {
       if (noRoom) {
         countUsage("install_failure", cfg.kitDir, "disk-full");
         await win.loadFile(join(HERE, "screens", "error.html"), {
-          query: { title: "Not enough space to install", message: noRoom },
+          query: { v: app.getVersion(), title: "Not enough space to install", message: noRoom },
         });
         return;
       }
@@ -341,6 +341,7 @@ async function boot(win) {
         countUsage("install_failure", cfg.kitDir, classifyError(String((err && err.message) || err), { install: true }), failedStep);
         await win.loadFile(join(HERE, "screens", "error.html"), {
           query: {
+            v: app.getVersion(),
             title: "The install could not finish",
             message: String((err && err.message) || err),
             logDir: cfg.kitDir,
@@ -358,7 +359,7 @@ async function boot(win) {
   // that is what this line sits after. Whatever it learns is re-sent on every
   // page load below, so the app page gets it the moment it appears.
   startUpdater(win, cfg.kitDir); // deliberately not awaited: boot never waits on the network
-  await win.loadFile(join(HERE, "screens", "loading.html"));
+  await win.loadFile(join(HERE, "screens", "loading.html"), { query: { v: app.getVersion() } });
   try {
     engines = await startEngines(cfg, {
       logDir: join(app.getPath("userData"), "logs"),
@@ -376,7 +377,7 @@ async function boot(win) {
     // PERSODUB_READY was never reached -- so without this it is invisible.
     countUsage("install_failure", cfg.kitDir, "engine-start");
     await win.loadFile(join(HERE, "screens", "error.html"), {
-      query: { message: String((err && err.message) || err), logDir: String((err && err.logDir) || "") },
+      query: { v: app.getVersion(), message: String((err && err.message) || err), logDir: String((err && err.logDir) || "") },
     });
   }
 }
