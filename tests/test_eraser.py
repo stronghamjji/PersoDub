@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from app import config, eraser
+from app import engines_status, eraser
 from app.jobs import JobCancelled
 
 ERASE_STUB = '''
@@ -68,6 +68,18 @@ print("not json at all")
 '''
 
 
+def kit_env(tmp_path, monkeypatch, text=""):
+    """A desktop kit whose kit.env says `text`. The file is what the shell
+    writes the pack's two lines into, and rewriting it is how these tests
+    install and remove the pack while the app is "running"."""
+    kit = tmp_path / "kit"
+    kit.mkdir(exist_ok=True)
+    path = kit / "kit.env"
+    path.write_text(text, encoding="utf-8")
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    return path
+
+
 @pytest.fixture
 def installed(tmp_path, monkeypatch):
     """A pack that is "installed": this interpreter, a folder, and stubs in
@@ -75,8 +87,8 @@ def installed(tmp_path, monkeypatch):
     import sys
     vsr = tmp_path / "vsr"
     vsr.mkdir()
-    monkeypatch.setattr(config, "ERASER_PYTHON", sys.executable)
-    monkeypatch.setattr(config, "ERASER_VSR_DIR", str(vsr))
+    kit_env(tmp_path, monkeypatch,
+            "ERASER_PYTHON=%s\nERASER_VSR_DIR=%s\n" % (sys.executable, vsr))
 
     def use(name, source):
         path = tmp_path / name
@@ -113,7 +125,7 @@ def test_the_band_is_passed_rows_first_and_the_host_check_is_skipped(installed, 
     with open(out + ".args.json", encoding="utf-8") as f:
         seen = json.load(f)
     assert seen["area"] == [660, 800, 0, 608]
-    assert seen["vsr"] == config.ERASER_VSR_DIR
+    assert seen["vsr"] == eraser.paths_now()[1]
     # Without this PaddleX spends seconds asking four model hosts whether they
     # are up -- and the eraser needs none of them.
     assert seen["check"] == "True"
@@ -161,8 +173,7 @@ def test_a_band_with_no_writing_in_it_tells_the_user_what_to_do(installed, tmp_p
 def test_no_pack_is_its_own_answer(tmp_path, monkeypatch):
     # Not a failed run: the routes turn this into the 409 that offers the
     # download, and a job is never started at all.
-    monkeypatch.setattr(config, "ERASER_PYTHON", "")
-    monkeypatch.setattr(config, "ERASER_VSR_DIR", "")
+    kit_env(tmp_path, monkeypatch)
     with pytest.raises(eraser.EraserMissing):
         eraser.run_erase(_video(tmp_path), str(tmp_path / "out.mp4"), None,
                          log=lambda _: None, cancel_check=lambda: False)
@@ -171,7 +182,9 @@ def test_no_pack_is_its_own_answer(tmp_path, monkeypatch):
 
 
 def test_a_pack_whose_files_are_gone_counts_as_missing(installed, tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "ERASER_VSR_DIR", str(tmp_path / "not-here"))
+    import sys
+    kit_env(tmp_path, monkeypatch,
+            "ERASER_PYTHON=%s\nERASER_VSR_DIR=%s\n" % (sys.executable, tmp_path / "not-here"))
     with pytest.raises(eraser.EraserMissing):
         eraser.suggest_area(_video(tmp_path))
 
@@ -189,3 +202,24 @@ def test_suggest_area_says_so_when_the_answer_is_not_an_answer(installed, tmp_pa
     monkeypatch.setattr(eraser, "SUGGEST_SCRIPT", str(bad))
     with pytest.raises(RuntimeError, match="Could not read where the subtitles are"):
         eraser.suggest_area(_video(tmp_path))
+
+
+def test_the_pack_is_seen_the_moment_kit_env_names_it(tmp_path, monkeypatch):
+    """No restart. The pack is downloaded while the app is open and the desktop
+    shell writes its two lines into kit.env there and then -- a value read once
+    at startup kept the screen refusing until the next launch."""
+    import sys
+    vsr = tmp_path / "vsr"
+    vsr.mkdir()
+    monkeypatch.delenv("ERASER_PYTHON", raising=False)
+    monkeypatch.delenv("ERASER_VSR_DIR", raising=False)
+    path = kit_env(tmp_path, monkeypatch, "PERSODUB_NO_ANALYTICS=0\n")
+    assert engines_status.eraser_available() is False
+
+    path.write_text("ERASER_PYTHON=%s\nERASER_VSR_DIR=%s\n" % (sys.executable, vsr),
+                    encoding="utf-8")
+    assert engines_status.eraser_available() is True
+
+    # Removing the pack takes the two lines back out, and no line means no pack.
+    path.write_text("PERSODUB_NO_ANALYTICS=0\n", encoding="utf-8")
+    assert engines_status.eraser_available() is False

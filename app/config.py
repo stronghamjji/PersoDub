@@ -137,15 +137,15 @@ DIAR_PYTHON = os.environ.get("DIAR_PYTHON", "python3")
 
 
 # Erasing the subtitles burned into a video (app/eraser.py,
-# app/scripts/erase_subtitles.py + suggest_area.py). The tool is
-# video-subtitle-remover, and it runs under its own interpreter for the same
-# reason SEP_PYTHON does -- paddleocr, paddlepaddle and its torch build are
-# not in the app's own venv. ERASER_VSR_DIR is where that repository is
-# checked out: it names its own weights (backend/models) by paths relative to
-# itself, so the run has to stand in that folder. Both empty means the pack is
-# not installed here, and the erase routes answer 409 instead of failing later.
-ERASER_PYTHON = os.environ.get("ERASER_PYTHON", "")
-ERASER_VSR_DIR = os.environ.get("ERASER_VSR_DIR", "")
+# app/scripts/erase_subtitles.py + suggest_area.py) wants two settings of its
+# own -- the interpreter that runs video-subtitle-remover and the folder it is
+# checked out in -- but they are deliberately NOT constants here, unlike
+# SEP_PYTHON above. That pack is installed while the app is running, and the
+# desktop shell writes ERASER_PYTHON and ERASER_VSR_DIR into kit.env at that
+# moment; a value read once at import would keep saying "not installed" until
+# the next launch. app/eraser.py's paths_now() reads them through
+# settings_env.current_value instead -- kit.env first, then the process env --
+# which is how the API keys and STT_ENGINE are read for the same reason.
 
 
 # Original-vocals gating margin (app/qwen_assemble.gate_vocals_chunks/place_lines).

@@ -4,8 +4,9 @@ burned into a video (app/scripts/erase_subtitles.py) and finding where they sit
 
 video-subtitle-remover brings paddleocr, paddlepaddle and its own torch build,
 none of which are in the app's own venv, so both run as separate processes
-under ERASER_PYTHON (config.py) -- the same shape as app/separate.py, for the
-same reason.
+under ERASER_PYTHON -- the same shape as app/separate.py, for the same reason.
+Where that interpreter is, and where the tool is checked out, is asked afresh
+every time (paths_now below) rather than read once at startup.
 
 Unlike separation, an erase runs for minutes and says so as it goes: every
 `progress N%` line the script prints is handed to the job's log, which is
@@ -20,8 +21,8 @@ import queue
 import subprocess
 import threading
 
-from app import config
 from app.jobs import JobCancelled
+from app.settings_env import current_value
 
 SCRIPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
 ERASE_SCRIPT = os.path.join(SCRIPT_DIR, "erase_subtitles.py")
@@ -56,15 +57,30 @@ class EraserMissing(RuntimeError):
     rather than a failed job."""
 
 
+def paths_now():
+    """Where the eraser is right now: (interpreter, checkout), "" for either
+    one nothing names.
+
+    Asked afresh every time, through kit.env (settings_env.current_value, the
+    way the API keys and STT_ENGINE are asked), because this pack is installed
+    while the app is running: the desktop shell writes ERASER_PYTHON and
+    ERASER_VSR_DIR into kit.env the moment the download finishes, and a value
+    read once at startup would keep saying "not installed" until the next
+    launch. Removing the pack takes those two lines back out again, so no line
+    means no pack.
+    """
+    return current_value("ERASER_PYTHON"), current_value("ERASER_VSR_DIR")
+
+
 def _resolve(python, vsr_dir):
     """The interpreter and the checkout to run with, or EraserMissing.
 
-    Read off app.config at call time, not imported by name: a pack installed
-    while the app is open works without a restart, and the tests point these
-    at a stand-in script.
+    The caller may name its own (that is what the tests do); otherwise this
+    asks what is installed at this moment.
     """
-    py = python or config.ERASER_PYTHON
-    vsr = vsr_dir or config.ERASER_VSR_DIR
+    now_py, now_vsr = paths_now()
+    py = python or now_py
+    vsr = vsr_dir or now_vsr
     if not (py and vsr and os.path.isfile(py) and os.path.isdir(vsr)):
         raise EraserMissing("The subtitle eraser is not installed on this computer.")
     return py, vsr

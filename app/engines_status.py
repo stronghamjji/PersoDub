@@ -15,7 +15,7 @@ import os
 
 import requests
 
-from app import config, runtime
+from app import config, eraser, runtime
 from app.settings_env import current_value
 
 
@@ -95,9 +95,12 @@ def hunyuan_status() -> str:
 def eraser_available() -> bool:
     """Whether the subtitle eraser can run here: its interpreter and the
     video-subtitle-remover checkout it runs out of are both really on disk.
-    Read off the config module rather than imported by name, so a pack
-    installed while the app is open is seen without a restart."""
-    py, vsr = config.ERASER_PYTHON, config.ERASER_VSR_DIR
+
+    Where those are is app/eraser.py's answer, read out of kit.env every time
+    it is asked -- that pack is installed while the app is open, so a snapshot
+    taken at startup would keep the Erase subtitles screen refusing long after
+    the download had finished."""
+    py, vsr = eraser.paths_now()
     return bool(py and vsr and os.path.isfile(py) and os.path.isdir(vsr))
 
 

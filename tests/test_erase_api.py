@@ -24,6 +24,10 @@ from app.main import app
 
 client = TestClient(app, base_url="http://127.0.0.1")
 
+# The real check, kept before the fixture below replaces it -- one test wants
+# to watch it change its mind as kit.env is written.
+real_eraser_available = engines_status.eraser_available
+
 
 @pytest.fixture(autouse=True)
 def _eraser_installed(monkeypatch):
@@ -271,3 +275,26 @@ def test_a_band_that_missed_the_subtitles_says_so_where_both_the_screen_and_the_
     jid = _start(area=json.dumps([0, 100, 0, 100])).json()["job_id"]
     job = _wait(jid, "error")
     assert job["error"] == "No subtitles were found in that area. Move the box and try again."
+
+
+def test_the_route_stops_refusing_the_moment_the_pack_is_installed(erased, tmp_path, monkeypatch):
+    """The pack arrives while the app is open, and the desktop shell writes its
+    two lines into kit.env then and there. Nothing may wait for a restart."""
+    import sys
+    monkeypatch.setattr(engines_status, "eraser_available", real_eraser_available)
+    monkeypatch.delenv("ERASER_PYTHON", raising=False)
+    monkeypatch.delenv("ERASER_VSR_DIR", raising=False)
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    env = kit / "kit.env"
+    env.write_text("PERSODUB_NO_ANALYTICS=0\n", encoding="utf-8")
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    assert _start().status_code == 409
+
+    vsr = tmp_path / "vsr"
+    vsr.mkdir()
+    env.write_text("ERASER_PYTHON=%s\nERASER_VSR_DIR=%s\n" % (sys.executable, vsr),
+                   encoding="utf-8")
+    r = _start()
+    assert r.status_code == 200
+    assert _wait(r.json()["job_id"])["done"] is True
