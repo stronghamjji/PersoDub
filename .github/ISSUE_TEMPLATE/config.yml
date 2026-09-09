@@ -1,0 +1,7 @@
+# A blank issue stays possible: not every report is a bug, and a form that is
+# the only way in turns a question into a wrongly-filled bug report.
+blank_issues_enabled: true
+contact_links:
+  - name: Security problem
+    url: https://github.com/stronghamjji/PersoDub/security/advisories/new
+    about: Report it privately instead, so it can be fixed before it is public.

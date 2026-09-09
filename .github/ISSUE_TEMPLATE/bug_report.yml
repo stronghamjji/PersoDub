@@ -1,0 +1,72 @@
+name: Bug report
+description: Something in PersoDub broke
+labels: ["kind:manual"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The app usually reports a failure by itself, with the machine and the logs
+        already attached. Use this form when it could not — you turned automatic
+        reports off, the machine was offline, or the app never got far enough to
+        report anything.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you were doing, and what the app did instead.
+      placeholder: I dropped a 3-minute MP4, picked Korean, pressed Start, and it stopped at "4/6".
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it stopped
+      options:
+        - Installing / first launch
+        - Dubbing a video
+        - Erasing subtitles
+        - The Dub Agent
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: PersoDub version
+      description: Settings shows it at the bottom.
+      placeholder: "0.5.5"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Computer
+      options:
+        - macOS (Apple Silicon)
+        - Windows with an NVIDIA graphics card
+        - Windows without an NVIDIA graphics card
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: The end of the log
+      description: |
+        The last page or so of the log is usually enough. Settings → "Open log folder"
+        opens where they are; `persodub.log` is the app's own and `job-<id>.log` is the
+        failed job's.
+      render: text
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before you send
+      options:
+        - label: I removed anything private from what I pasted — an issue is public, and API keys, file paths with my name in them and links are the things to look for.
+          required: true

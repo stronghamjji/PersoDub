@@ -55,6 +55,34 @@ A launch counts once a day; every dub counts. Turn it off in **Settings → Priv
 with `PERSODUB_NO_ANALYTICS=1` in the kit's `kit.env`; it applies to the next event, no
 restart. `PERSODUB_ANALYTICS_DEBUG=1` prints what would be sent instead of sending it.
 
+## Failure reports
+
+When an install or a dub fails, the app sends one report so the failure can be fixed.
+It becomes a public issue in this repository — a hundred machines that broke the same
+way land on one issue rather than a hundred.
+
+A report carries the machine (operating system and version, CPU, memory, free disk,
+which torch build, which packs are installed), where it stopped, one error code off a
+fixed list, the error sentence, your app version, a random install ID, and the logs:
+the last 200 lines of each in the issue itself, and the three logs in full as an
+attached archive, kept for 30 days behind a signed link.
+
+Before anything leaves your machine, three things are taken out of every line of it:
+your home folder becomes `~` (so your name is not in a path), anything shaped like an
+API key becomes `[REDACTED]`, and a link is cut down to its site. Your `kit.env` — the
+file your API keys live in — is never read by the reporting code at all, and no video,
+audio, subtitle, project name or filename is ever included. The relay that posts the
+issue does not store your IP address, and masks everything a second time.
+
+Turn it off in **Settings → Privacy** or with `PERSODUB_NO_REPORTS=1` in the kit's
+`kit.env`; it applies to the next failure, no restart. This is a separate switch from
+the usage counts above — turning one off leaves the other alone.
+`PERSODUB_REPORTS_DEBUG=1` prints what would be sent instead of sending it, and a
+PersoDub run from source never reports at all.
+
+With reports off, a failure can still be sent by hand: the bug report form on the
+Issues page asks for the same facts, and you choose what to paste.
+
 ## Dubbing from a link
 
 Link fetching is powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp)

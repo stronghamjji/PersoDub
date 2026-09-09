@@ -294,10 +294,15 @@ The backend targets Python 3.11 and is not yet compatible with 3.13 or later.
 ## Contributing
 
 Issues and pull requests are welcome. Please open an issue describing the problem or
-proposal before starting substantial work, so effort is not duplicated. Bug reports are
-most useful when they include your operating system version — macOS version and your
-Mac's chip, or your Windows version and whether the machine has an NVIDIA GPU — and the
-job log from the failing run.
+proposal before starting substantial work, so effort is not duplicated.
+
+You do not have to write a bug report by hand. When an install or a dub fails, the app
+reports it by itself: the machine, the step it stopped at, the error and the logs, with
+your home folder, your API keys and your links taken out first. The same failure from
+many machines becomes one issue with a count on it, not many. Exactly what is sent, and
+how to turn it off, is in **[docs/privacy.md](docs/privacy.md)**. With it turned off,
+the bug report form on the Issues page asks for the same facts and you choose what to
+paste.
 
 ## Security
 
