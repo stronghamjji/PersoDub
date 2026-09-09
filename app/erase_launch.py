@@ -15,7 +15,7 @@ and run_erase comes in as an argument so the tests can hand it a stand-in.
 """
 import os
 
-from app import eraser
+from app import eraser, state
 
 
 def work_for(job, *, cancel_check):
@@ -37,7 +37,13 @@ def work_for(job, *, cancel_check):
     band = None if not area or area == "whole" else tuple(area)
 
     def work_now(log):
-        eraser.run_erase(input_path, out_path, band, log=log, cancel_check=cancel_check)
+        check = eraser.run_erase(input_path, out_path, band, log=log, cancel_check=cancel_check)
+        if check:
+            # What the eraser found when it looked at its own work. Stamped on
+            # the record rather than returned, so it is in job.json and outlives
+            # the run -- the screen and the agent both read it there.
+            state.job_store.update(job["id"], check=check)
+            state.job_store.persist(job["id"], work)
         # Same shape a dub's result has: out_path is how every reader --
         # Projects, the delete route, the agent -- finds a job's folder.
         return {"out_path": out_path}

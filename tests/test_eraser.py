@@ -46,6 +46,7 @@ for percent in (10, 55, 100):
     print("progress %d%%" % percent, flush=True)
 if mode == "slow":
     time.sleep(30)
+print('check {"frames_checked": 40, "frames_with_text": 0, "sample_times": []}', flush=True)
 with open(a.out + ".args.json", "w") as f:
     json.dump({"vsr": a.vsr, "area": a.area, "check": os.environ.get(
         "PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK")}, f)
@@ -113,10 +114,20 @@ def test_the_progress_lines_go_to_the_job_log(installed, tmp_path):
     out = str(tmp_path / "erased.mp4")
     eraser.run_erase(_video(tmp_path), out, (660, 800, 0, 608),
                      log=lines.append, cancel_check=lambda: False)
+    # The check is a number for the record, not a line in the user's log.
+    assert not any("check" in line for line in lines)
     assert lines == ["progress 10%", "progress 55%", "progress 100%"]
     # Nothing else the tool prints is worth a line in a user's job log.
     assert not any("banner" in line for line in lines)
     assert os.path.exists(out)
+
+
+def test_what_the_eraser_found_when_it_checked_its_own_work_comes_back(installed, tmp_path):
+    # The screen and the agent show this; a job that says "done" while three
+    # letters are still on screen is the one thing this feature cannot do.
+    check = eraser.run_erase(_video(tmp_path), str(tmp_path / "erased.mp4"), None,
+                             log=lambda _: None, cancel_check=lambda: False)
+    assert check == {"frames_checked": 40, "frames_with_text": 0, "sample_times": []}
 
 
 def test_the_band_is_passed_rows_first_and_the_host_check_is_skipped(installed, tmp_path):

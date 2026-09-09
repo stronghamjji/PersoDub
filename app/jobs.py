@@ -43,10 +43,13 @@ logger = logging.getLogger("persodub.jobs")
 # kind_of below, so a record written before erasing existed still reads as the
 # dub it was. `area` is the band of the frame an erase worked in ("whole" for
 # all of it), for the same reason: a job that waits out a restart must come
-# back to the part of the video its user picked.
+# back to the part of the video its user picked. `check` is what the eraser
+# found when it looked at its own finished video (how many sampled frames still
+# held writing) -- the answer to "is it really gone?", which the screen and the
+# agent both show, so it has to outlive the run that measured it.
 SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lang",
                 "project", "day", "from_link", "created", "work_dir", "trim",
-                "trim_pending", "error", "remade_as", "area",
+                "trim_pending", "error", "remade_as", "area", "check",
                 "stt_engine", "translator", "tts", "quality", "separation",
                 "dub_mode", "perso_project_seq",
                 # What the boot re-arm needs to rebuild a queued job's work:

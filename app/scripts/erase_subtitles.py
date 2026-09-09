@@ -26,6 +26,7 @@ Usage: python erase_subtitles.py --vsr-dir DIR -i in.mp4 -o out.mp4
 Coordinates are (ymin, ymax, xmin, xmax) -- rows first, not the usual (x, y).
 """
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -132,6 +133,84 @@ def widen_masks_at_seams(detector_class, frames=SEAM_FRAMES):
     detector_class.find_continuous_ranges_with_same_mask = staticmethod(widened)
 
 
+# The finished video is looked at again before it is handed over: a fifth of a
+# second is about how long a survivor lasts, so that is how often it is sampled
+# -- up to a point, since every sample is an OCR pass and a ten-minute video
+# would otherwise spend longer being checked than being cleaned.
+CHECK_EVERY_SEC = 0.2
+MAX_CHECKS = 300
+# How much of the video around a survivor is painted again in the second pass.
+REPAINT_PAD_SEC = 0.3
+
+
+def check_result(path, area, detector_class, frames=None):
+    """Count the sampled frames of `path` that still hold writing in the band.
+
+    The same detector the erasing used, on the same band: "gone" has to be
+    measured the way the tool itself would judge it. Returns
+    ({frames_checked, frames_with_text, sample_times}, [frame numbers]) --
+    the times are seconds, for the person reading the job, and the numbers are
+    for the second pass.
+    """
+    import cv2
+
+    cap = cv2.VideoCapture(path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    if frames is None:
+        # Frame numbers are 1-based here, the way the tool counts them.
+        step = max(1, int(round(fps * CHECK_EVERY_SEC)), -(-total // MAX_CHECKS))
+        frames = list(range(1, total + 1, step))
+    detector = detector_class(path, [tuple(area)] if area else [])
+    checked, times, bad = 0, [], []
+    for no in frames:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, no - 1)
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        checked += 1
+        if detector.detect_subtitle(frame):
+            times.append(round((no - 1) / fps, 2))
+            bad.append(no)
+    cap.release()
+    return ({"frames_checked": checked, "frames_with_text": len(bad),
+             "sample_times": times}, bad)
+
+
+def repaint_frames(path, area, frames, detector_class, remover_class):
+    """Paint the seconds around `frames` again, with the whole band as the mask.
+
+    No detection this time: writing that survived is writing the detector
+    already missed once, so asking it the same question would get the same
+    answer. The band itself becomes the mask, and only over the stretches
+    around those frames -- every other frame of the video is copied through
+    untouched, and no OCR runs at all, so this costs seconds rather than the
+    minutes the first pass did.
+    """
+    import cv2
+
+    cap = cv2.VideoCapture(path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    cap.release()
+    pad = max(1, int(round(fps * REPAINT_PAD_SEC)))
+    wanted = set()
+    for no in frames:
+        wanted.update(range(max(1, no - pad), no + pad + 1))
+
+    tmp = path + ".pass2.mp4"
+    remover = remover_class(path)
+    remover.video_out_path = tmp
+    remover.sub_areas = [tuple(area)] if area else []
+    # (xmin, xmax, ymin, ymax) -- the detector's own order, which is not the
+    # (ymin, ymax, xmin, xmax) an area is given in.
+    box = ((area[2], area[3], area[0], area[1]) if area else
+           (0, remover.frame_width, 0, remover.frame_height))
+    fixed = {no: [box] for no in sorted(wanted)}
+    detector_class.find_subtitle_frame_no = lambda self, sub_remover=None: dict(fixed)
+    remover.run()
+    os.replace(tmp, path)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Erase burned-in subtitles from a video")
     ap.add_argument("--vsr-dir", required=True, help="the video-subtitle-remover checkout")
@@ -180,6 +259,21 @@ def main():
     finally:
         stop.set()
     print("progress 100%", flush=True)
+
+    # Handing back a video with three surviving letters in it is worse than
+    # taking another minute to look: the whole point of the feature is that the
+    # writing is gone. What is still there is painted again, once, and the
+    # answer travels with the job either way.
+    check, leftovers = check_result(out_path, a.area, SubtitleDetect)
+    if leftovers:
+        repaint_frames(out_path, a.area, leftovers, SubtitleDetect, SubtitleRemover)
+        after, _still = check_result(out_path, a.area, SubtitleDetect, frames=leftovers)
+        check = {"frames_checked": check["frames_checked"],
+                 "frames_with_text": after["frames_with_text"],
+                 "sample_times": after["sample_times"],
+                 "second_pass": True}
+    print("check " + json.dumps(check), flush=True)
+
     restore_audio(input_path, out_path)
     print("done", flush=True)
 

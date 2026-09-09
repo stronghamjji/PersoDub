@@ -701,12 +701,16 @@ def test_get_job_status_of_an_erase_carries_the_percent_and_the_file(monkeypatch
         if url.endswith("/api/dub/jobs/e1"):
             return _Response(200, {"status": "done", "kind": "erase", "logs": []})
         return _Response(200, {"percent": 100, "done": True,
-                               "result": {"out_path": "/w/day/clip_erase/erased.mp4"}})
+                               "result": {"out_path": "/w/day/clip_erase/erased.mp4"},
+                               "check": {"frames_checked": 114, "frames_with_text": 0,
+                                         "sample_times": []}})
 
     monkeypatch.setattr(mcp_server.httpx, "get", fake_get)
     out = mcp_server.get_job_status("e1")
     assert out["percent"] == 100 and out["done"] is True
     assert out["result_path"].endswith("erased.mp4")
+    # "Is it really gone?" -- the agent can answer it without opening the video.
+    assert out["check"]["frames_with_text"] == 0
 
 
 def test_list_videos_names_the_videos_the_app_is_holding(monkeypatch, tmp_path):

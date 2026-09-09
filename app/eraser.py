@@ -36,6 +36,11 @@ SUGGEST_SCRIPT = os.path.join(SCRIPT_DIR, "suggest_area.py")
 # also works on a computer that is offline.
 CHILD_ENV = {"PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK": "True"}
 
+# How the script hands back what its own check of the finished video found.
+# One line of JSON on stdout, not a log line: the numbers belong on the job
+# record, where the screen and the agent read them.
+CHECK_PREFIX = "check "
+
 # How long suggest_area may take before it is given up on. It reads a dozen
 # frames -- 27 seconds on this Mac for a 10-second clip (2026-09-09), most of
 # it loading the detector, and seeking through a long video costs more. Three
@@ -98,13 +103,19 @@ def _fail(what, tail):
 
 
 def run_erase(input_path, out_path, area, *, log, cancel_check,
-              python=None, vsr_dir=None) -> None:
+              python=None, vsr_dir=None):
     """Erase the subtitles from input_path into out_path. Blocks until done.
 
     `area` is (ymin, ymax, xmin, xmax) -- the band to work in, about twice as
     fast as the whole frame, which is what None means. `log` is the job's log
     function and gets every `progress N%` line; `cancel_check` is polled while
     the process runs, and a true answer kills it and raises JobCancelled.
+
+    Returns what the script's own check of the finished video found --
+    {"frames_checked", "frames_with_text", "sample_times"} and "second_pass"
+    when it had to paint anything again -- or None from a script too old to
+    look. It is a number, not a log line: the job record carries it and the
+    screen and the agent both read it there.
     """
     py, vsr = _resolve(python, vsr_dir)
     cmd = [py, ERASE_SCRIPT, "--vsr-dir", vsr, "-i", input_path, "-o", out_path]
@@ -133,6 +144,7 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
     threading.Thread(target=_drain_errors, daemon=True).start()
     threading.Thread(target=_drain_output, daemon=True).start()
 
+    checked = None
     while True:
         try:
             line = lines.get(timeout=0.5)
@@ -148,6 +160,11 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
         # (its own banners, a library's tips) would say nothing to the user.
         if line.startswith("progress "):
             log(line)
+        elif line.startswith(CHECK_PREFIX):
+            try:
+                checked = json.loads(line[len(CHECK_PREFIX):])
+            except ValueError:
+                checked = None
     proc.wait()
     if proc.returncode != 0:
         tail = list(errors)
@@ -158,6 +175,7 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
         raise _fail("The subtitle eraser stopped with an error", tail)
     if not os.path.exists(out_path):
         raise _fail("The subtitle eraser produced no video", list(errors))
+    return checked
 
 
 def suggest_area(input_path, *, python=None, vsr_dir=None) -> dict:
