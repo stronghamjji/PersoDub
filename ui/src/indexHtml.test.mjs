@@ -345,3 +345,58 @@ test("the rail leads with the logo tile, and About shows it beside the name", ()
   assert.match(html, /<button class="rail-item brand"[^>]*>\s*(<!--[^]*?-->\s*)?<img class="rail-logo" src="\/logo.png"/);
   assert.match(html, /<img class="about-logo" src="\/logo.png"/);
 });
+
+// A subtitle look is written to the job the moment it is changed -- there is no
+// Save button and the user decided there should not be one -- so the only way
+// to know it happened is the mark at the right end of the toolbar. Same words
+// and same coming-and-going as the script table's own (user, 2026-09-09).
+test("the subtitle toolbar says Saving, then Saved, and says so when it could not", async () => {
+  const html = readFileSync(INDEX, "utf8");
+  const from = html.indexOf("// The mark at the right end of the subtitle toolbar.");
+  assert.ok(from > 0, "the subtitle saving mark is gone?");
+  const src = html.slice(from, html.indexOf("\n}\n", html.indexOf("function saveSubStyle()", from)) + 2);
+
+  // The toolbar is one span; the timers are held here so nothing waits on a
+  // real clock -- run() is "the wait is over".
+  const marks = [];
+  const el = { set textContent(v) { marks.push(v); }, get textContent() { return marks.at(-1) || ""; } };
+  let pending = [];
+  const fake = {
+    setTimeout: (fn) => { pending.push(fn); return pending.length; },
+    clearTimeout: (id) => { if (id) pending[id - 1] = null; },
+  };
+  const run = async () => {
+    const now = pending; pending = [];
+    for (const fn of now) if (fn) await fn();
+  };
+
+  function build(answer) {
+    return new Function("$", "subLayoutAll", "subStyle", "fetch", "setTimeout", "clearTimeout",
+      'let subStyleRev = 0, subStyleTimer = null, subStyleJobId = "j1";\n'
+      + src + "\nreturn { saveSubStyle };")(
+      () => el, () => null, {}, answer, fake.setTimeout, fake.clearTimeout);
+  }
+
+  // A look changed: the mark says so at once, and the answer turns it to Saved.
+  const good = build(async () => ({ ok: true }));
+  good.saveSubStyle();
+  assert.equal(el.textContent, "Saving…");
+  await run();          // the 350ms settle, which sends the PUT
+  await Promise.resolve();
+  assert.equal(el.textContent, "Saved");
+  await run();          // the 2s the mark stays up
+  assert.equal(el.textContent, "");
+
+  // The app refused it, or could not be reached: the mark says so and stays.
+  const refused = build(async () => ({ ok: false }));
+  refused.saveSubStyle();
+  await run();
+  await Promise.resolve();
+  assert.equal(el.textContent, "Not saved");
+
+  const offline = build(async () => { throw new Error("no"); });
+  offline.saveSubStyle();
+  await run();
+  await Promise.resolve();
+  assert.equal(el.textContent, "Not saved");
+});

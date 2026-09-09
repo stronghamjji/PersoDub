@@ -988,17 +988,26 @@
     padding: 0.08em 0.5em; border-radius: 0.1em; }
   .sub-ov-white-box { color: #3a332c; background: #fff;
     padding: 0.1em 0.55em; border-radius: 0.1em; font-weight: 600; }
+  /* One row, whatever is in it: beside the table the video pane is only as wide
+     as the clip needs, and a bar allowed to wrap broke "A +" over two lines and
+     pushed its own buttons out of reach. It floats over the picture, so a bar
+     wider than the pane simply overhangs it. */
   .sub-toolbar { position: absolute; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 4px; z-index: 6;
+    display: flex; flex-wrap: nowrap; white-space: nowrap;
+    align-items: center; gap: 4px; z-index: 6;
     background: rgba(24, 24, 27, 0.92); border: 1px solid var(--agent-border);
     border-radius: 10px; padding: 5px 7px; }
-  .sub-toolbar button { min-width: 26px; height: 24px; border: 0; border-radius: 6px;
+  .sub-toolbar button { flex: 0 0 auto; min-width: 26px; height: 24px; border: 0; border-radius: 6px;
     background: transparent; color: var(--agent-fg); font: inherit; font-size: var(--font-ui);
     cursor: pointer; padding: 0 7px; }
   .sub-toolbar button:hover { background: var(--agent-border); }
   .sub-size { color: var(--agent-muted); font-size: var(--font-label); min-width: 36px;
     text-align: center; font-variant-numeric: tabular-nums; }
   .sub-sep { width: 1px; height: 16px; background: var(--agent-border); margin: 0 2px; }
+  /* Nothing to say: the mark and the line before it are both away, so the bar
+     is the width of its buttons again. */
+  #subSaved:empty, .sub-sep:has(+ #subSaved:empty) { display: none; }
+  #subSaved { min-width: 0; color: var(--agent-fg); }
   .sub-style { color: #c9b8ff; font-weight: 600; }
   .sub-seg { display: inline-flex; background: #111; border: 1px solid var(--agent-border);
     border-radius: 7px; padding: 2px; gap: 2px; }
@@ -1773,6 +1782,12 @@
                     <button id="subScopeAll" class="on" type="button">All lines</button>
                     <button id="subScopeOne" type="button">This line</button>
                   </span>
+                  <!-- The same mark the script table keeps in its own corner:
+                       "Saving…", then "Saved" for a moment, then nothing. A
+                       look is written to the job the moment it is changed, and
+                       without this there was no way to know it (user). -->
+                  <span class="sub-sep"></span>
+                  <span class="sub-size" id="subSaved"></span>
                 </div>
                 <div class="sub-style-menu" id="subStyleMenu" hidden></div>
                 <div class="video-under">
@@ -4021,18 +4036,40 @@ const SUB_LEGACY = { variety: "neon-yellow", box: "sticker" };
 // The looks that have a background box -- the only ones a width applies to.
 const SUB_BOXED = new Set(["sticker", "soft-card", "lower-bar", "black-box", "white-box"]);
 
+// The mark at the right end of the subtitle toolbar. The script table keeps
+// one exactly like it (scriptTable.mjs's scriptSaving) and for the same reason:
+// a look is written to the job as soon as it is changed, and a change that
+// leaves no trace on screen reads as a change that did not happen.
+let subSavedTimer = null;
+function subSaved(text) {
+  clearTimeout(subSavedTimer);
+  $("subSaved").textContent = text || "";
+}
+
 function saveSubStyle() {
   subStyleRev++;
   clearTimeout(subStyleTimer);
+  subSaved("Saving…");
   subStyleTimer = setTimeout(() => {
     if (!subStyleJobId) return;
     // What the player showed goes with the settings, so the burn draws that.
     const lay = subLayoutAll();
     if (lay) subStyle.layout = lay;
+    // Which save this is: a later one overtaking this one owns the mark, so an
+    // older answer must not write "Saved" over its "Saving…".
+    const mine = subStyleRev;
     fetch(`/api/dub/jobs/${subStyleJobId}/subtitle_style`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(subStyle),
-    }).catch(() => { /* the next save tries again */ });
+    }).then((r) => {
+      if (mine !== subStyleRev) return;
+      if (!r.ok) { subSaved("Not saved"); return; }
+      subSaved("Saved");
+      subSavedTimer = setTimeout(() => subSaved(""), 2000);
+    }).catch(() => {
+      // The next save tries again; until then the toolbar says so.
+      if (mine === subStyleRev) subSaved("Not saved");
+    });
   }, 350);
 }
 
@@ -4223,6 +4260,8 @@ function placeSubToolbar() {
 function subSelect(on) {
   subSelected = on;
   subToolbar.hidden = !on;
+  // A bar that has left the screen must not come back still saying "Saved".
+  if (!on) subSaved("");
   if (!on) subMenu.hidden = true;
   subOvText.classList.toggle("sel", on);
   if (on) {
