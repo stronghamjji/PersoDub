@@ -12,7 +12,7 @@
 // Run with: node --test ui/src/runningScreen.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initRunningScreenUi } from "./runningScreen.mjs";
+import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { parseProgress } from "./dubApi.mjs";
 
 function makeEl(id) {
@@ -325,4 +325,22 @@ test("reset takes both reason lines away, red included", (t) => {
   assert.equal(h.$("jobNotice").hidden, true);
   assert.equal(h.$("doneNotice").hidden, true);
   assert.ok(!h.$("jobNotice").classList.contains("danger"));
+});
+
+// -- a job that stopped -----------------------------------------------------
+
+// Cancelled and failed share one screen and, until now, only the sentence told
+// them apart -- so the screen read the same as a finished one at a glance.
+test("a stopped job wears a mark: a stop square cancelled, an exclamation failed", () => {
+  const cancelled = stoppedMark("cancelled");
+  const failed = stoppedMark("error");
+
+  assert.match(cancelled, /^<svg viewBox="0 0 24 24"/);
+  assert.match(cancelled, /<rect /, "cancelled is a stop square");
+  assert.doesNotMatch(cancelled, /<path /);
+  assert.match(failed, /<path d="M12 7\.5v5\.5"\/><path d="M12 16\.6h\.01"\/>/,
+    "a failure is a stroke and the dot under it");
+  // Anything the server did not call cancelled has failed.
+  assert.equal(stoppedMark("interrupted"), failed);
+  assert.equal(stoppedMark(undefined), failed);
 });

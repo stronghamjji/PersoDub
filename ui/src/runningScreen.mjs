@@ -33,6 +33,19 @@ const ERROR_SENTENCES = {
   interrupted: "The app was closed before dubbing finished.",
 };
 
+// The mark above that sentence on a job that stopped. Two states share the one
+// screen and only the words told them apart, so a stopped job read the same as
+// a finished one until it was read: a stop square when someone cancelled it, an
+// exclamation when it failed on its own.
+const STOPPED_MARKS = {
+  cancelled: '<rect x="6.5" y="6.5" width="11" height="11" rx="2"/>',
+  error: '<path d="M12 7.5v5.5"/><path d="M12 16.6h.01"/>',
+};
+/** The mark for a job that stopped -- anything not cancelled has failed. */
+export function stoppedMark(status) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${STOPPED_MARKS[status] || STOPPED_MARKS.error}</svg>`;
+}
+
 // Out-of-credits / quota popup: pop once per job on the first exhaustion-type
 // notice. The inline yellow notice line stays either way, so the reason
 // is still visible after the popup is dismissed. Per-type wording; button is

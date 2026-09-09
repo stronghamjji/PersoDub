@@ -1104,6 +1104,13 @@
     padding: 30px; }
   .done-fail-body { width: min(560px, 100%); display: flex; flex-direction: column;
     gap: 12px; }
+  /* Grey and quiet: it says which of the two stories this is before the
+     sentence under it is read, and does not shout about a stopped job. */
+  .done-fail-mark { width: 40px; height: 40px; border-radius: 50%; align-self: center;
+    display: grid; place-items: center;
+    background: var(--secondary); color: var(--muted-foreground); }
+  .done-fail-mark svg { width: 20px; height: 20px; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .done-fail-why { margin: 0; text-align: center; color: var(--foreground);
     font-size: var(--font-ui); }
   .done-fail .job-notice { margin: 0; text-align: center; }
@@ -1535,6 +1542,8 @@
              which are moved in here from the screens that normally hold them. -->
         <div class="done-fail" id="doneFail" hidden>
           <div class="done-fail-body" id="doneFailBody">
+            <!-- Filled by stoppedMark() -- a stop square, or an exclamation. -->
+            <div class="done-fail-mark" id="doneFailMark"></div>
             <p class="done-fail-why" id="doneFailWhy"></p>
             <!-- The same video, back in the New project dialog: a job that
                  failed is nearly always retried with one option changed, and
@@ -2099,7 +2108,7 @@ import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
 import { initProjectsUi } from "/js/projects.mjs";
-import { initRunningScreenUi } from "/js/runningScreen.mjs";
+import { initRunningScreenUi, stoppedMark } from "/js/runningScreen.mjs";
 import { initScriptTableUi } from "/js/scriptTable.mjs";
 import { initTimelineUi, TL_LABEL_PX } from "/js/timeline.mjs";
 import { updateBannerView } from "/js/updateBanner.mjs";
@@ -3282,6 +3291,7 @@ async function renderDone(job) {
     // of its own: the back chevron in the top bar is the way out of both. The
     // reason itself is the notice line's job -- it is the copy that carries the
     // Recharge link, and one sentence said twice reads as a bug.
+    $("doneFailMark").innerHTML = stoppedMark(job.status);
     $("doneFailWhy").textContent = job.status === "cancelled"
       ? "This dubbing job was cancelled."
       : "Dubbing didn't finish.";
