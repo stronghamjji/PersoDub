@@ -141,7 +141,6 @@ function harness({ room = 600, innerHeight = 900, innerWidth = 1600,
 
   const api = initTimelineUi({
     $,
-    scriptLangNames: () => ({ source: "Korean", target: "English" }),
     getVideo: () => video,
     getClock: () => "00:00:00.0 / 00:00:30.0",
     getSubStyle: () => subStyle,
@@ -237,8 +236,8 @@ test("the strip is byte for byte the strip the page drew before this file existe
     '    <div class="tl-body">\n' +
     '      <div class="tl-names">\n' +
     '        <div class="tl-corner"></div>\n' +
-    '        <div class="tl-name strong">English</div>\n' +
-    '        <div class="tl-name">Korean</div>\n' +
+    '        <div class="tl-name strong">Target</div>\n' +
+    '        <div class="tl-name">Original</div>\n' +
     '        <div class="tl-name strong tl-name-caps">\n' +
     '          <button class="tl-eye on" id="tlSubEye" type="button"\n' +
     '            title="Subtitles on or off" aria-label="Subtitles on or off">' +
@@ -276,6 +275,50 @@ test("three lines land where their seconds are, and a long voice spills past its
   // The subtitle lane draws one block per line, over the same seconds.
   assert.ok(track.includes('<div class="tl-cap" data-idx="2"\n' +
                            '      style="left:100.0px;width:20.0px"'));
+});
+
+// The lanes are named for what they hold, not for the languages in them: the
+// table above already heads its columns with those, and "English / Korean"
+// down the side said nothing about which row was the dub (user, 2026-09-08).
+test("the lanes are named Target, Original and Subtitles", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.renderTimeline(LINES, 30);
+  const names = h.box.innerHTML;
+
+  assert.ok(names.includes('<div class="tl-name strong">Target</div>'));
+  assert.ok(names.includes('<div class="tl-name">Original</div>'));
+  assert.ok(names.includes(">Subtitles</div>"));
+});
+
+// One voice needs no telling apart, so the badge would be a "1" on every bar.
+test("one speaker gets no badge on the bars", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.renderTimeline(LINES.map((l) => ({ ...l, speaker: "SPEAKER_00" })), 30);
+
+  assert.equal(h.$("timelineTrack").innerHTML.includes("tl-spk"), false);
+});
+
+// Two or more, and each Target bar leads with the number the table's chip
+// gives that speaker -- numbered in the order they first speak.
+test("two speakers put their number at the head of each Target bar", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.renderTimeline([
+    { ...LINES[0], speaker: "SPEAKER_01" },   // speaks first, so it is 1
+    { ...LINES[1], speaker: "SPEAKER_00" },
+    { ...LINES[2], speaker: "SPEAKER_01" },   // no voice on disk: slot only
+  ], 30);
+  const track = h.$("timelineTrack").innerHTML;
+
+  assert.ok(track.includes('title="Hello"><i class="tl-spk">1</i>Hello'));
+  assert.ok(track.includes('title="Over"><i class="tl-spk">2</i>Over'));
+  // The original lane and the slots stay bare -- the badge belongs to the dub.
+  assert.equal((track.match(/tl-spk/g) || []).length, 2);
 });
 
 test("a second is never drawn smaller than ten pixels, and the ruler thins its labels", (t) => {

@@ -28,6 +28,7 @@
 // the script pane. It never reaches the top bar, the timeline or `state`.
 import { escapeHtml, fmtClockTenths, errorText } from "./format.mjs";
 import { CHECK_ICON, REMAKE_ICON } from "./icons.mjs";
+import { numberSpeakers } from "./speakers.mjs";
 
 // A hair over the slot is not "too long" -- the assembly step lets a line spill
 // that much into the silence after it.
@@ -55,18 +56,6 @@ const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:curr
 // The "revert" arrow beside an edited line (renderScript): a curled-back
 // arrow, drawn like the rest of the app's icons.
 const UNDO_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>';
-
-// Speaker labels are the diarizer's own ("SPEAKER_00"), which mean nothing to a
-// reader. Number them in the order they first speak instead, and give each a
-// colour -- four of them, cycled, because a video with five speakers is rare
-// and five colours down a column of text is a mess.
-function numberSpeakers(lines) {
-  const seen = new Map();
-  for (const l of lines) {
-    if (l.speaker && !seen.has(l.speaker)) seen.set(l.speaker, seen.size + 1);
-  }
-  return seen;
-}
 
 /**
  * Wire the script table to a page.

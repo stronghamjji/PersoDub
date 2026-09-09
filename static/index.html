@@ -980,6 +980,14 @@
      runs long is seen poking out of it. */
   .tl-slot { border-color: var(--primary-line); border-style: dashed; }
   .tl-voice { background: var(--timeline-fit); color: var(--primary-foreground); }
+  /* Who is speaking, at the head of the bar -- drawn only when the script has
+     more than one voice. A punched-out square rather than a colour per
+     speaker: four tinted bars down a strip fought with the buttons above it,
+     and a number can be read straight off (user, 2026-09-08). */
+  .tl-spk { display: inline-block; min-width: 14px; height: 14px; line-height: 14px;
+    padding: 0 3px; margin-right: 5px; border-radius: 4px; vertical-align: 1px;
+    background: rgba(0, 0, 0, 0.35); font-size: 0.58rem; font-style: normal;
+    text-align: center; }
   /* A voice that runs long: solid red as far as its slot, then a red tint for
      the part past it, laid over whatever is there. A tint, so the NEXT line's
      bar and words -- drawn after this one -- still read through it, while the
@@ -3952,7 +3960,6 @@ window.addEventListener("resize", () => { if (!subOverlay.hidden) updateSubtitle
 // re-measure for the sidebar grip.
 const timeline = initTimelineUi({
   $,
-  scriptLangNames,
   getVideo: () => doneVideo,
   getClock: () => doneClock,
   getSubStyle: () => subStyle,
