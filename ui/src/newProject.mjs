@@ -78,6 +78,8 @@ const DOWNLOAD_POLL_MS = 1000;
  * @param {() => void} deps.onClosed     forget the source the dialog was holding:
  *        the home screen's error line, the file input and the link field
  * @param {() => void} deps.onPickFile   open the file picker (Replace)
+ * @param {(path: string) => void} [deps.reveal]  show a saved file in the
+ *        computer's own file window, or null outside the desktop app
  * @param {(source: {downloadId, title, duration_sec}) => void} deps.onErase
  *        hand the held video to the subtitle-erasing screen
  * @returns the operations the rest of the page calls.
@@ -85,7 +87,7 @@ const DOWNLOAD_POLL_MS = 1000;
 export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
                                    updateEngineHints, paintDubMode,
                                    playRange, cancelRange, labelPx,
-                                   onClosed, onPickFile, onErase }) {
+                                   onClosed, onPickFile, onErase, reveal = null }) {
   // Populated from dubApi.LANGUAGES (the model's own supported-language table).
   // sourceLangSelect's default is the literal "Auto-detect" <option> written into
   // its markup -- defCode null never matches a real LANGUAGES code, so no
@@ -553,6 +555,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
     $("projectError").textContent = "";
     $("projectSaved").textContent = "";
+    $("projectShowWrap").hidden = true;
     paintActions();
     // The dropdowns start on the saved defaults every time the dialog opens
     // (the Dub Agent may have changed them a moment ago), then the key-gated
@@ -599,6 +602,10 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   // button does -- the job, the running screen, the top bar -- stays on the page.
   $("startBtn").addEventListener("click", () => onStart());
 
+  // The file the last Save clip wrote, for the Show button beside its line.
+  let savedClipPath = "";
+  $("projectShow").addEventListener("click", () => { if (reveal && savedClipPath) reveal(savedClipPath); });
+
   // Save clip writes the part the handles have chosen (or the whole video)
   // into the Downloads folder as a file of its own. The dub is not involved:
   // for whoever came to cut a piece out of a link, this is the whole errand,
@@ -611,9 +618,14 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     btn.disabled = true;
     $("projectError").textContent = "";
     $("projectSaved").textContent = "";
+    $("projectShowWrap").hidden = true;
     try {
-      await saveDownloadClip(np.downloadId, np.trim);
+      const saved = await saveDownloadClip(np.downloadId, np.trim);
       $("projectSaved").textContent = "Saved to Downloads";
+      // Where it went, for the Show beside that line. Only the desktop app can
+      // open a folder; in a browser the line says where and stops there.
+      savedClipPath = saved.path || "";
+      $("projectShowWrap").hidden = !reveal || !savedClipPath;
     } catch (e) {
       $("projectError").textContent = e.message;
     } finally {

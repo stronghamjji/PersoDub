@@ -8,6 +8,7 @@ import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, PACKS, PACK_DIRS } from "./src/installSpec.js";
 import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED } from "./src/installer.js";
+import { revealAllowed } from "./src/revealPolicy.js";
 import { cancelCurrent } from "./src/exec.js";
 import { readRuntime } from "./src/runtimeFile.js";
 import { download } from "./src/download.js";
@@ -387,6 +388,22 @@ ipcMain.on("shell:remember-job", (_e, job) => {
   if (job && job.id && job.project && job.day) {
     jobFolders.set(job.id, { project: job.project, day: job.day });
   }
+});
+
+// "Saved to Downloads · Show". The page knows where the app wrote a file and
+// asks for it to be shown; this decides whether it may be. Only the two
+// folders this app writes into (revealPolicy.js) -- a reveal that took any
+// path the page named would be a way to point the user at any file on the
+// disk. A refusal is logged and answered quietly: the page's own line has
+// already said where the file went.
+ipcMain.handle("shell:reveal", (_e, target) => {
+  const folders = [app.getPath("downloads"), bootedKitDir].filter(Boolean);
+  if (!revealAllowed(target, folders)) {
+    shellLog(`PERSODUB_REVEAL refused: ${String(target).slice(0, 200)}`);
+    return { ok: false };
+  }
+  shell.showItemInFolder(target);
+  return { ok: true };
 });
 
 app.whenReady().then(() => {

@@ -563,9 +563,12 @@
      there is nothing between the reason and the one thing to do about it. */
   #eraseDubBtn, #eraseBackBtn { margin-left: auto; }
   /* What Export has to say, and only after it has said it. */
-  .erase-saved { display: inline-flex; align-items: center; gap: 8px;
+  .erase-saved { display: inline-flex; align-items: center; gap: 6px;
     font-size: var(--font-label); color: var(--muted-foreground); }
-  .erase-saved button { border: none; background: none; padding: 0; cursor: pointer;
+  /* The "Show" that opens the folder a file was just written into -- here and
+     beside the New project dialog's Save clip. A link rather than a button:
+     it sits inside a sentence, and there is already a button box on this row. */
+  .show-link { border: none; background: none; padding: 0; cursor: pointer;
     font: inherit; color: var(--primary-ink); text-decoration: underline; }
   /* The estimate beside the Erase button: a label, not a second title. */
   .topbar-est { font-size: var(--font-label); color: var(--muted-foreground);
@@ -1419,8 +1422,9 @@
   .project-actions { display: flex; align-items: center; gap: 8px; }
   .project-actions .btn-primary { margin-left: auto; }
   /* What Save clip has to say, and only after it has said it. */
-  .project-saved { font-size: var(--font-label); color: var(--muted-foreground); }
-  .project-saved:empty { display: none; }
+  .project-saved { display: flex; align-items: center; gap: 6px;
+    font-size: var(--font-label); color: var(--muted-foreground); }
+  .project-saved:has(#projectSaved:empty) { display: none; }
 </style>
 
 <div class="app">
@@ -1633,7 +1637,7 @@
             <!-- Where Export answers. A line, not a dialog: the file is already
                  written by the time this appears, the same way Save clip says
                  so in the New project dialog. -->
-            <span class="erase-saved" id="eraseSaved" hidden>Saved to Downloads<span id="eraseShowWrap" hidden>· <button type="button" id="eraseShowBtn">Show</button></span></span>
+            <span class="erase-saved" id="eraseSaved" hidden>Saved to Downloads<span id="eraseShowWrap" hidden>· <button type="button" class="show-link" id="eraseShowBtn">Show</button></span></span>
             <div class="progress-bar erase-bar" id="eraseBarBox"><div id="eraseFill"></div></div>
             <button class="btn btn-outline" id="eraseCancelBtn" type="button">Cancel</button>
             <button class="btn btn-outline" id="eraseBackBtn" type="button" hidden>Back</button>
@@ -1835,7 +1839,7 @@
         <button class="btn btn-outline" id="eraseBtn" type="button">Erase subtitles</button>
         <button class="btn btn-primary" id="startBtn" type="button">Start dubbing</button>
       </div>
-      <div class="project-saved" id="projectSaved"></div>
+      <div class="project-saved"><span id="projectSaved"></span><span id="projectShowWrap" hidden>· <button type="button" class="show-link" id="projectShow">Show</button></span></div>
     </div>
   </div>
 </div>
@@ -2844,6 +2848,9 @@ const newProject = initNewProjectUi({
   },
   onPickFile: () => videoInput.click(),
   onErase: (source) => eraseScreen.openEraseWith(source),
+  // Only the desktop app can open a folder (see the erase screen's own Show).
+  reveal: window.persodubShell?.revealPath
+    ? (path) => window.persodubShell.revealPath(path) : null,
 });
 
 // ---------------- Erase subtitles ----------------

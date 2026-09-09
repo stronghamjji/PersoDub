@@ -96,6 +96,8 @@ test("the New project dialog carries the three buttons, the download row and the
   assert.match(html, /class="btn btn-outline" id="eraseBtn"/, "Erase subtitles is a ghost button");
   assert.match(html, /class="btn btn-primary" id="startBtn"/,
     "Start dubbing is the one filled button, in the app's one button box");
+  // "Saved to Downloads · Show" -- the second half only in the desktop app.
+  assert.match(html, /id="projectShowWrap" hidden>· <button type="button" class="show-link" id="projectShow"/);
 });
 
 // Korean typing sends Enter twice: once to settle the syllable being composed

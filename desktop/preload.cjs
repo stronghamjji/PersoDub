@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // the page has no other way to know one landed -- the Export dialog's "where
   // it goes" line reads this and says where it went.
   onDownloadDone: (cb) => ipcRenderer.on("shell:download-done", (_e, info) => cb(info)),
+  // "Saved to Downloads · Show": show a file the app just wrote in Finder or
+  // Explorer. main.js opens only what is inside Downloads or the kit, so this
+  // is a request rather than a command.
+  revealPath: (path) => ipcRenderer.invoke("shell:reveal", path),
   // Settings' "Restart now" button. Keys/workspace only apply on the next
   // start, and asking a non-technical user to quit and reopen by hand was
   // the step that silently didn't happen.
