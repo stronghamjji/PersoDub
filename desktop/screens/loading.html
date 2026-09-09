@@ -1,17 +1,26 @@
 <!doctype html><meta charset="utf-8"><title>PersoDub</title>
 <style>
-  body { font-family: -apple-system, sans-serif; display: flex; flex-direction: column;
-         align-items: center; justify-content: center; height: 100vh; margin: 0;
-         background: #1e1e22; color: #ececf1; }
-  .spin { width: 28px; height: 28px; border: 3px solid #3a3a42; border-top-color: #166CFB;
-          border-radius: 50%; animation: s 1s linear infinite; margin-bottom: 16px; }
-  @keyframes s { to { transform: rotate(360deg); } }
-  p { color: #9a9aa6; font-size: 14px; }
+  /* The same shape as installing.html and not-installed.html: the mark and the
+     name centred at the top, everything the screen has to say ranged left in a
+     560px column under it. The three screens are the same screen at different
+     moments, so they cannot be laid out three ways. */
+  body { font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto;
+         padding: 60px 20px; background: #1e1e22; color: #ececf1; }
+  /* h2 keeps the browser's own size, the way the other two screens do. */
+  p { color: #9a9aa6; font-size: 14px; margin: 4px 0 0; }
+  /* Nothing here knows how far along it is, so the bar sweeps rather than
+     fills -- the same 8px bar the install screen shows, in the same place. */
+  #bar { width: 100%; height: 8px; background: #2c2c32; border-radius: 4px;
+         overflow: hidden; margin: 18px 0 6px; }
+  #bar i { display: block; height: 100%; width: 32%; border-radius: 4px;
+           background: #166CFB; animation: sweep 1.5s ease-in-out infinite; }
+  @keyframes sweep { 0% { margin-left: -32%; } 100% { margin-left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { #bar i { animation: none; width: 100%; opacity: .5; } }
   .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 0 auto 22px; }
   .brand img { width: 48px; height: 48px; border-radius: 12px; display: block; }
   .brand b { font-size: 15px; font-weight: 600; letter-spacing: .01em; color: #ececf1; }
 </style>
 <div class="brand"><img src="logo.png" alt=""><b>PersoDub</b></div>
-<div class="spin"></div>
-<h2 style="font-size:17px;font-weight:500;margin:4px 0 6px">Starting engines…</h2>
+<h2>Starting engines…</h2>
+<div id="bar"><i></i></div>
 <p>First launch can take a minute or two while the voice model loads.</p>
