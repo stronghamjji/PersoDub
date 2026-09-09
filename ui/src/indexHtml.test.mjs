@@ -103,6 +103,44 @@ test("the New project dialog carries the three buttons, the download row and the
 // "send" left the settled syllable behind in the box and -- worse -- stopped
 // the running answer to send it ("해" turns ending in Stopped, 2026-09-01).
 // The guard is the standard one; this pins it to the agent input's handler.
+test("the erase screen has its three faces, and the rail button that opens it", () => {
+  const html = readFileSync(INDEX, "utf8");
+  for (const id of ["eraseToggle", "screen-erase", "eraseDrop", "eraseZone", "eraseInput",
+                    "eraseBody", "erasePack", "erasePackText", "erasePackBtn", "eraseHead",
+                    "eraseTabs", "eraseStage", "eraseVideo", "eraseBox", "eraseFinding",
+                    "eraseRow", "eraseState", "eraseSaved", "eraseShowWrap", "eraseShowBtn",
+                    "eraseBarBox", "eraseFill", "eraseSrtBtn", "eraseSrtInput",
+                    "eraseCancelBtn", "eraseBackBtn", "eraseDubBtn",
+                    "eraseEst", "eraseRunBtn"]) {
+    assert.ok(html.includes(`id="${id}"`), `${id} is missing from the erase screen`);
+  }
+  // The box has a handle at each corner, and the module drags by that name.
+  for (const corner of ["nw", "ne", "sw", "se"]) {
+    assert.ok(html.includes(`data-handle="${corner}"`), `the box has no ${corner} handle`);
+  }
+  // Its tabs are the finished screen's own, told apart by their own attribute
+  // -- the two pairs must never answer each other's clicks.
+  assert.match(html, /<button class="vtab" data-erase="original"/);
+  assert.match(html, /<button class="vtab active" data-erase="erased"/);
+  assert.match(html, /querySelectorAll\("#videoPane \.vtab"\)/,
+    "the finished screen's tabs must be scoped to its own pane");
+  // Every button on the screen is the app's one button box.
+  assert.match(html, /class="btn btn-primary" id="eraseRunBtn"/, "Erase is the filled button");
+  assert.match(html, /class="btn btn-primary" id="eraseDubBtn"/, "Start dubbing is filled");
+  assert.match(html, /class="btn btn-outline" id="eraseSrtBtn"/, "Add my subtitles is a ghost button");
+  assert.match(html, /class="btn btn-outline" id="eraseCancelBtn"/, "Cancel is a ghost button");
+});
+
+test("the erase screen says only what the mockup says", () => {
+  const html = readFileSync(INDEX, "utf8");
+  for (const words of ["Erase subtitles", "Drop a video", "MP4 or MOV", "Choose file…",
+                       "Where are the subtitles?", "Finding subtitles…", "Subtitles",
+                       "Add my subtitles (.srt)", "Start dubbing", "Download"]) {
+    assert.ok(html.includes(`>${words}<`) || html.includes(`>${words}`),
+      `the screen no longer says "${words}"`);
+  }
+});
+
 test("the agent input ignores Enter pressed mid-composition", () => {
   const html = readFileSync(STRIP, "utf8");
   const handler = html.match(/input\.addEventListener\("keydown"[\s\S]{0,600}/);
