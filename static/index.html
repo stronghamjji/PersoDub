@@ -514,6 +514,47 @@
   .erase-error { color: var(--destructive); font-size: var(--font-label);
     padding: 0 22px 14px; }
   .erase-error:empty { display: none; }
+  /* The pack line. The accent ground of the app's other "you need this first"
+     panels, and the same 32px button as everywhere else. */
+  .erase-notice { flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px; background: var(--accent);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--font-ui); color: var(--foreground); }
+  /* The box over the subtitles: yellow, dashed, with a handle at each corner.
+     Yellow because it has to be found on any frame of any video, and nothing
+     else in the app is that colour. */
+  .erase-zone { position: absolute; border: 2px dashed var(--zone);
+    background: color-mix(in srgb, var(--zone) 10%, transparent);
+    cursor: move; touch-action: none; }
+  /* Clear of the corner handle it would otherwise sit under. */
+  .erase-zone b { position: absolute; left: 10px; top: -19px;
+    font-size: var(--font-label); font-weight: 600; color: var(--zone);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+  /* 11px, and each one hangs half outside its corner so the whole handle can be
+     grabbed rather than only the half of it over the picture. */
+  .erase-zone i { position: absolute; width: 11px; height: 11px;
+    background: var(--zone); border-radius: 2px; }
+  .erase-zone i[data-handle="nw"] { left: -6px; top: -6px; cursor: nwse-resize; }
+  .erase-zone i[data-handle="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
+  .erase-zone i[data-handle="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; }
+  .erase-zone i[data-handle="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+  /* What the app is doing before it can offer a box. One thin line on the
+     picture, top left, where it covers nothing that matters. */
+  .erase-finding { position: absolute; left: 0; right: 0; top: 0;
+    padding: 7px 14px; background: var(--thumb-badge);
+    color: var(--thumb-foreground); font-size: var(--font-label); }
+  /* The one row of controls, one line high whatever it is carrying. */
+  .erase-row { flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
+    padding: 0 14px 14px; }
+  .erase-state { font-size: var(--font-ui); color: var(--foreground);
+    font-variant-numeric: tabular-nums; }
+  /* Why it stopped, in the same place the percentage was -- and it may be a
+     whole sentence, so this one is allowed to wrap. */
+  .erase-state.bad { color: var(--destructive); white-space: normal; }
+  .erase-bar { flex: 1; min-width: 0; }
+  /* The estimate beside the Erase button: a label, not a second title. */
+  .topbar-est { font-size: var(--font-label); color: var(--muted-foreground);
+    white-space: nowrap; }
 
   h2 { margin: 0 0 3px; font-size: var(--font-title); }
 
@@ -1441,6 +1482,11 @@
               aria-label="Back to the project you left" hidden>
         <svg class="icon" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
       </button>
+      <!-- The erase screen's own pair: what it will cost in minutes, and the
+           button that starts it. Both hidden by setTopbar on every other
+           screen, the way Export and Cancel are. -->
+      <span class="topbar-est" id="eraseEst" hidden></span>
+      <button class="btn btn-primary" id="eraseRunBtn" type="button" hidden>Erase</button>
       <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
@@ -1535,9 +1581,34 @@
           </div>
         </div>
         <div class="erase-body" id="eraseBody" hidden>
+          <!-- The eraser is not part of the base install. One line above the
+               video, because it is about the app rather than about this
+               video -- the box below can still be placed while it downloads. -->
+          <div class="erase-notice" id="erasePack" hidden>
+            <span id="erasePackText"></span>
+            <span class="topbar-spacer"></span>
+            <button class="btn btn-primary" id="erasePackBtn" type="button">Download</button>
+          </div>
           <div class="erase-head" id="eraseHead">Where are the subtitles?</div>
           <div class="erase-stage" id="eraseStage">
             <video id="eraseVideo" playsinline muted></video>
+            <!-- The one box. Drag the middle to move it, a corner to resize it;
+                 stretched to the edges it erases the whole frame, which is why
+                 there is no second control for that. -->
+            <div class="erase-zone" id="eraseBox" hidden>
+              <b>Subtitles</b>
+              <i data-handle="nw"></i><i data-handle="ne"></i><i data-handle="sw"></i><i data-handle="se"></i>
+            </div>
+            <div class="erase-finding" id="eraseFinding" hidden>Finding subtitles…</div>
+          </div>
+          <!-- One row, one line high: how far along the erase is and the way to
+               stop it, or -- when it stopped by itself -- why, and the way back
+               to the box to try a different one. -->
+          <div class="erase-row" id="eraseRow" hidden>
+            <span class="erase-state" id="eraseState"></span>
+            <div class="progress-bar erase-bar" id="eraseBarBox"><div id="eraseFill"></div></div>
+            <button class="btn btn-outline" id="eraseCancelBtn" type="button">Cancel</button>
+            <button class="btn btn-outline" id="eraseBackBtn" type="button" hidden>Back</button>
           </div>
         </div>
         <div class="erase-error" id="eraseError"></div>
@@ -2593,13 +2664,20 @@ function showScreen(name) {
 
 // The top bar carries the whole state of the app: what is open, what it is
 // doing, and the one or two buttons that apply right now.
-function setTopbar({ title, subtitle = "", running = false, done = false, back = false }) {
+function setTopbar({ title, subtitle = "", running = false, done = false, back = false,
+                     estimate = "", erase = false }) {
   $("topbarTitle").textContent = title;
   $("topbarSub").textContent = subtitle;
   $("topbarBack").hidden = !back;
   $("cancelBtn").hidden = !running;
   // Only a finished job has anything to hand back.
   $("exportBtn").hidden = !done;
+  // The erase screen's pair. Named here rather than left to that screen so
+  // that every other call to setTopbar puts them away without knowing they
+  // exist -- which is the whole point of one top bar.
+  $("eraseEst").textContent = estimate;
+  $("eraseEst").hidden = !estimate;
+  $("eraseRunBtn").hidden = !erase;
   paintForward();
 }
 
@@ -2747,6 +2825,16 @@ const newProject = initNewProjectUi({
 // file refused on one screen is refused on the other in the same words.
 const eraseScreen = initEraseScreenUi({
   $, showScreen, setTopbar, checkFile: videoProblem,
+  // The eraser arrives as a pack, and packs are the models controller's to
+  // install: it owns the progress the top-bar chip and Settings both show.
+  installPack: (id) => models.installPack(id),
+  packRow: (id) => models.modelRow(id),
+  // An erase is a job like any other, so the list and the waiting line have a
+  // new row the moment one starts and a changed one when it ends.
+  onJobsChanged: () => {
+    projects.renderHistory().catch(() => {});
+    projects.renderQueueCard().catch(() => {});
+  },
 });
 $("eraseToggle").addEventListener("click", () => eraseScreen.openErase());
 
