@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
-import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, PACKS } from "./src/installSpec.js";
+import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, PACKS, PACK_DIRS } from "./src/installSpec.js";
 import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED } from "./src/installer.js";
 import { cancelCurrent } from "./src/exec.js";
 import { readRuntime } from "./src/runtimeFile.js";
@@ -440,6 +440,9 @@ app.whenReady().then(() => {
   }
   const win = new BrowserWindow({
     icon: join(HERE, "build", "icon.png"),
+    // What the frame is painted with before the first page arrives. The app is
+    // dark (0.5.5), and Electron's default white flashed on every launch.
+    backgroundColor: "#1e1e22",
     width: Math.min(1280, room.width),
     height: Math.min(800, room.height),
     minWidth: Math.min(960, room.width),
@@ -578,13 +581,17 @@ app.whenReady().then(() => {
     // The pack's folders and its steps' done-stamps, so a later install runs
     // the steps again rather than skipping them on a stale stamp. Models
     // pulled through Ollama stay: they are listed and removed as models.
-    const dirs = id === "engine" ? ["engines_venv", join("models", "demucs")] : ["ollama"];
+    const dirs = PACK_DIRS[id] || [];
     try {
       for (const d of dirs) rmSync(join(kitDir, d), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
       for (const step of pack.steps) rmSync(join(kitDir, ".install", `${step}.ok`), { force: true });
     } catch (err) {
       return { ok: false, reason: String((err && err.message) || err) };
     }
+    // The eraser's two keys go with its files: the app judges the pack by
+    // whether kit.env carries them, so a leftover key would point the app at
+    // a python that is no longer there.
+    if (id === "subtitle-eraser") syncEraserKitEnv(kitDir);
     return { ok: true };
   });
   ipcMain.handle("shell:pack-status", async () => {

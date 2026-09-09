@@ -1,14 +1,15 @@
 <!doctype html><meta charset="utf-8"><title>PersoDub</title>
 <style>
   body { font-family: -apple-system, sans-serif; display: flex; flex-direction: column;
-         align-items: center; justify-content: center; height: 100vh; margin: 0; color: #333; }
-  .spin { width: 28px; height: 28px; border: 3px solid #ddd; border-top-color: #4a7dff;
+         align-items: center; justify-content: center; height: 100vh; margin: 0;
+         background: #1e1e22; color: #ececf1; }
+  .spin { width: 28px; height: 28px; border: 3px solid #3a3a42; border-top-color: #166CFB;
           border-radius: 50%; animation: s 1s linear infinite; margin-bottom: 16px; }
   @keyframes s { to { transform: rotate(360deg); } }
-  p { color: #888; font-size: 14px; }
+  p { color: #9a9aa6; font-size: 14px; }
   .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 0 auto 22px; }
   .brand img { width: 48px; height: 48px; border-radius: 12px; display: block; }
-  .brand b { font-size: 15px; font-weight: 600; letter-spacing: .01em; color: #333; }
+  .brand b { font-size: 15px; font-weight: 600; letter-spacing: .01em; color: #ececf1; }
 </style>
 <div class="brand"><img src="logo.png" alt=""><b>PersoDub</b></div>
 <div class="spin"></div>

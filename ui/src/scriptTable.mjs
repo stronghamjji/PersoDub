@@ -28,6 +28,7 @@
 // the script pane. It never reaches the top bar, the timeline or `state`.
 import { escapeHtml, fmtClockTenths, errorText } from "./format.mjs";
 import { CHECK_ICON, REMAKE_ICON } from "./icons.mjs";
+import { numberSpeakers } from "./speakers.mjs";
 
 // A hair over the slot is not "too long" -- the assembly step lets a line spill
 // that much into the silence after it.
@@ -55,18 +56,6 @@ const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:curr
 // The "revert" arrow beside an edited line (renderScript): a curled-back
 // arrow, drawn like the rest of the app's icons.
 const UNDO_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>';
-
-// Speaker labels are the diarizer's own ("SPEAKER_00"), which mean nothing to a
-// reader. Number them in the order they first speak instead, and give each a
-// colour -- four of them, cycled, because a video with five speakers is rare
-// and five colours down a column of text is a mess.
-function numberSpeakers(lines) {
-  const seen = new Map();
-  for (const l of lines) {
-    if (l.speaker && !seen.has(l.speaker)) seen.set(l.speaker, seen.size + 1);
-  }
-  return seen;
-}
 
 /**
  * Wire the script table to a page.
@@ -107,10 +96,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
 
   function scriptRow(l, speakers) {
     const n = speakers.get(l.speaker);
-    // The name is a title as well as words, so the compact table can drop to the
-    // colour dot alone and still say who is speaking on hover.
+    // The name is a title as well as words, so a chip the narrow table has
+    // squeezed still says who is speaking on hover.
     const chip = n
-      ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}" title="Speaker ${n}"><i></i><b>Speaker ${n}</b></span>` : "";
+      ? `<span class="spk-chip" title="Speaker ${n}"><b>Speaker ${n}</b></span>` : "";
     const over = lineOverBy(l);
     // "1.6s / 0.2s · +1.4s": how long the voice is, how long the slot is, and
     // the difference in one glance -- red when it runs over, grey when it is
@@ -205,14 +194,14 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       // gets crushed into the first one and looks like nothing happened.
       bar.style.gridColumn = "1 / -1";
       const note = document.createElement("span");
-      note.textContent = "This Perso dub is read-only. ";
+      note.textContent = "This Perso dubbing is read-only. ";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "keys-link";
       btn.textContent = "Make it editable";
       btn.addEventListener("click", async () => {
         btn.disabled = true;
-        note.textContent = "Fetching this dub from Perso… ";
+        note.textContent = "Fetching from Perso… ";
         try {
           const r = await fetch(`/api/dub/jobs/${jobId}/perso/materialize`, { method: "POST" });
           if (!r.ok) {

@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- The dark ground is on the element itself, not only in the stylesheet: the
+     window is painted before a byte of CSS is parsed, and a white flash there
+     is the first thing a dark app should not do. -->
+<html style="background:#1e1e22">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
@@ -48,68 +52,86 @@
     defaults stay in localStorage.
 -->
 <title>PersoDub</title>
+<!-- The saved Appearance, read before the first paint. Not a module: a module
+     is deferred, and by the time it ran the dark page would already have been
+     drawn once in the light theme and swapped under the reader's eyes. -->
+<script>try{var t=localStorage.getItem("persodub.theme");if(t==="light")document.documentElement.dataset.theme="light";}catch(e){}</script>
 <style>
+  /* Two sheets, one set of names. The app is dark by default from 0.5.5 on
+     (user, 2026-09-08) and the light sheet below is the same variables wearing
+     the values the app had before; Settings > Appearance puts data-theme on
+     <html> to swap them. Everything a theme cannot change -- radii, the focus
+     ring, the assistant's own colours -- stays here and is written once. */
   :root {
-    --primary: #7B64C8;
-    --primary-soft: #EDE7FF;
-    --primary-line: #C7B9FF;
-    --primary-foreground: #fafafa;
-    --accent: #f7f5fd;
-    --secondary: #f5f5f5;
-    /* The page behind the work area -- a shade off white, so cards and the
+    --primary: #166CFB;
+    --primary-soft: #172a55;
+    --primary-line: #3f6ad1;
+    --primary-foreground: #ffffff;
+    /* Words ON --primary-soft. --primary-line is the line around that chip and
+       is far too dark to read on it here, the way --primary-line is far too
+       pale to read on it in the light sheet -- so the ink is its own name. */
+    --primary-ink: #9EC1FF;
+    --accent: #1d2540;
+    --secondary: #26262b;
+    /* The page behind the work area -- a shade off the panels, so cards and the
        top bar read as sitting on top of it. */
-    --canvas: #fafafa;
-    --muted-foreground: #737373;
-    --foreground: #0a0a0a;
-    --background: #ffffff;
-    --border: #e5e5e5;
+    --canvas: #17171a;
+    --muted-foreground: #9a9aa6;
+    --foreground: #ececf1;
+    --background: #1e1e22;
+    --border: #2c2c32;
     /* The lines between the finished screen's three panes (video, script,
-       timeline): heavier and darker than --border, which was too faint to say
-       where one pane ends and the next begins (user, 2026-09-02). */
-    --divider: #c4c4cb;
-    --success: #11ad32;
-    /* Timeline bars that fit: one notch softer than --success, matched to --destructive. */
-    --timeline-fit: #55A071;
+       timeline): heavier than --border, which was too faint to say where one
+       pane ends and the next begins (user, 2026-09-02). */
+    --divider: #3a3a42;
+    --success: #3fbf5f;
+    /* Timeline bars that fit: violet, so a bar is never mistaken for one of the
+       blue buttons it sits under (user, 2026-09-08). */
+    --timeline-fit: #8B5CF6;
     --warning: #dfa11a;
-    /* The Settings save-failure panel: pale amber with ink dark enough to
+    /* The Settings save-failure panel: a dark amber with ink light enough to
        read on it. --warning itself is the border and the icon, and is far too
-       light to write words in. */
-    --warning-soft: #fff7e6;
-    --warning-ink: #7a5200;
-    --destructive: #C96A6A;
+       bright to write words on. */
+    --warning-soft: #3a2f12;
+    --warning-ink: #ffd98a;
+    --destructive: #d97777;
     /* The letterbox behind a video still, and the badges that sit on top of
        it. Dark on purpose in both cases -- a frame can be any colour. */
     --thumb-bg: #111111;
     --thumb-badge: rgba(0, 0, 0, 0.6);
     /* Text that sits on top of that dark frame. */
     --thumb-foreground: #fafafa;
-    /* The trim bar's empty track -- a touch darker than --secondary so the
-       hatching over it stays readable. */
-    --trim-track: #f1f1f4;
+    /* The trim bar's empty track -- a touch off --secondary so the hatching
+       over it stays readable. */
+    --trim-track: #2c2c32;
+    /* The outline on the one button inside the drop zone. Full contrast in
+       both sheets: it sits on the zone rather than in a row of buttons, and
+       --border there left it looking switched off (user, 2026-09-08). */
+    --outline-button: #ffffff;
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
-    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
 
-    /* One colour per speaker, cycled after the fourth. Each is a dot colour, the
-       pale background its chip sits on, and the ink that stays readable on that
-       background. Muted on purpose: four saturated chips down a column of text
-       shout louder than the words they label. */
-    --spk-1: #7B64C8; --spk-1-soft: #EDE7FF; --spk-1-ink: #4B3A8F;
-    --spk-2: #0F766E; --spk-2-soft: #CCFBF1; --spk-2-ink: #115E59;
-    --spk-3: #B4791A; --spk-3-soft: #FBEFD5; --spk-3-ink: #7C5211;
-    --spk-4: #C0587F; --spk-4-soft: #FBE4EE; --spk-4-ink: #8D3A58;
-
-    /* The assistant is dark wherever it sits; these are its only colours. */
-    --agent-bg: #18181b;
-    --agent-box: #27272a;
-    --agent-border: #3f3f46;
+    /* The assistant is dark wherever it sits -- in both themes, unchanged by
+       Appearance -- and these are its only colours. Lifted off black in 0.5.5
+       so the column reads as a window of its own beside the work. */
+    --agent-bg: #26262b;
+    --agent-box: #34343a;
+    --agent-border: #34343a;
+    /* Its heading row, and the box the message is typed into: the field is
+       sunk BELOW the panel and outlined above it, which is what says "type
+       here" without a word of instruction. */
+    --agent-head-bg: #2c2c32;
+    --agent-field: #1d1d21;
+    --agent-field-line: #4a4a52;
     --agent-fg: #e4e4e7;
     --agent-muted: #6b6b75;
-    /* The user's own message, and the tick on a finished step. Translucent
-       white rather than a colour: it has to sit on the strip's own dark. */
-    --agent-me-bg: rgba(255, 255, 255, 0.14);
-    --agent-me-border: rgba(255, 255, 255, 0.16);
+    /* The user's own message: the app's blue, deepened until white words sit
+       on it -- a translucent white wash was the same grey as the panel now. */
+    --agent-me-bg: #1d3a75;
+    --agent-me-border: #1d3a75;
+    --agent-me-fg: #dfe8ff;
     --agent-ok: #5ee07a;
     /* "This cannot answer until you do something" -- amber that reads on the
        strip's own dark, where the app's --warning-ink (drawn for a white
@@ -118,6 +140,35 @@
     /* Quiet, but still readable: 8.2:1 on the strip, where --agent-muted is
        3.4:1 and belongs on things nobody has to read. */
     --agent-soft: #a1a1aa;
+  }
+
+  /* The light sheet. Same names, same jobs -- only the values change, so every
+     rule below this block is written once and works in both. */
+  html[data-theme="light"] {
+    --primary: #166CFB;
+    --primary-soft: #E3EDFF;
+    --primary-line: #9EC1FF;
+    --primary-foreground: #ffffff;
+    --primary-ink: #1d4ed8;
+    --accent: #eef3ff;
+    --secondary: #ececf0;
+    --canvas: #fafafa;
+    --muted-foreground: #737373;
+    --foreground: #0a0a0a;
+    --background: #ffffff;
+    --border: #e5e5e5;
+    --divider: #c4c4cb;
+    --success: #11ad32;
+    --timeline-fit: #8B5CF6;
+    --warning: #dfa11a;
+    --warning-soft: #fff7e6;
+    --warning-ink: #7a5200;
+    --destructive: #C96A6A;
+    --thumb-bg: #111111;
+    --thumb-badge: rgba(0, 0, 0, 0.6);
+    --thumb-foreground: #fafafa;
+    --trim-track: #f1f1f4;
+    --outline-button: #0a0a0a;
   }
 
   * { box-sizing: border-box; }
@@ -436,7 +487,8 @@
      button, and "Choose File…" with the ellipsis is the platform's own wording
      for one (2026-08-28). */
   .upload-hint { font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .upload-choose { font-size: 0.84rem; }
+  .upload-choose { font-size: 0.84rem;
+    border-color: var(--outline-button); color: var(--outline-button); }
 
   /* A rule either side of the word, so "OR" reads as a divider, not a label. */
   .home-or { display: flex; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: 11.5px; letter-spacing: 0.06em; }
@@ -619,23 +671,17 @@
     .sc-t-b { display: none; }
   }
 
-  /* Who is speaking, in that speaker's colour. (Not ".chip" -- the assistant
-     strip already has one of those, and its style block comes after this one.) */
+  /* Who is speaking. One chip in the app's own blue, not a colour per speaker:
+     four tinted chips down a column of text shouted louder than the words they
+     labelled, and the number in them is what tells the speakers apart (user,
+     2026-09-08). (Not ".chip" -- the assistant strip already has one of those,
+     and its style block comes after this one.) */
   .spk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
-    border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
-  .spk-chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block;
-    flex: 0 0 auto; }
-  /* The name is wrapped so the narrow table can leave the dot alone; it must not
-     read heavier than the chip it sits in. */
+    border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap;
+    background: var(--primary-soft); color: var(--primary-ink); }
+  /* The name is wrapped so the narrow table has something of its own to reach
+     for; it must not read heavier than the chip it sits in. */
   .spk-chip b { font-weight: inherit; }
-  .spk-1 { background: var(--spk-1-soft); color: var(--spk-1-ink); }
-  .spk-1 i { background: var(--spk-1); }
-  .spk-2 { background: var(--spk-2-soft); color: var(--spk-2-ink); }
-  .spk-2 i { background: var(--spk-2); }
-  .spk-3 { background: var(--spk-3-soft); color: var(--spk-3-ink); }
-  .spk-3 i { background: var(--spk-3); }
-  .spk-4 { background: var(--spk-4-soft); color: var(--spk-4-ink); }
-  .spk-4 i { background: var(--spk-4); }
 
   /* Play this line in the video; filled while it is the line playing. */
   .sc-listen { width: 26px; height: 26px; border-radius: 50%; padding: 0;
@@ -769,7 +815,7 @@
   .sub-seg { display: inline-flex; background: #111; border: 1px solid var(--agent-border);
     border-radius: 7px; padding: 2px; gap: 2px; }
   .sub-seg button { min-width: 0; height: 20px; font-size: 0.68rem; padding: 0 8px; }
-  .sub-seg button.on { background: var(--primary); color: #fff; }
+  .sub-seg button.on { background: var(--primary); color: var(--primary-foreground); }
   /* The box-width handles on the selected subtitles' sides. */
   .sub-wh { position: absolute; top: 50%; margin-top: -11px; width: 5px; height: 22px;
     border-radius: 3px; background: var(--primary); box-shadow: 0 0 0 1.5px #fff;
@@ -879,7 +925,7 @@
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .tl-cap { position: absolute; top: 4px; height: 26px; border-radius: 5px;
     background: var(--primary-soft); border: 1px solid var(--primary);
-    color: var(--spk-1-ink); font-size: 0.68rem; line-height: 24px;
+    color: var(--primary-ink); font-size: 0.68rem; line-height: 24px;
     box-sizing: border-box; }
   .tl-cap-txt { display: block; padding: 0 8px; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
@@ -891,7 +937,7 @@
   .tl-cap.trimming { box-shadow: 0 0 0 2px var(--primary); z-index: 2; }
   /* This line keeps its own box width: the dot says so, and puts it back. */
   .tl-exdot { position: absolute; top: -7px; right: -7px; width: 15px; height: 15px;
-    border-radius: 50%; background: var(--primary); color: #fff; font-size: 9px;
+    border-radius: 50%; background: var(--primary); color: var(--primary-foreground); font-size: 9px;
     line-height: 15px; text-align: center; box-shadow: 0 0 0 2px var(--background);
     cursor: pointer; z-index: 3; }
   .tl-lane-caps.off, .tl-name-caps.off { opacity: 0.35; }
@@ -925,6 +971,14 @@
      runs long is seen poking out of it. */
   .tl-slot { border-color: var(--primary-line); border-style: dashed; }
   .tl-voice { background: var(--timeline-fit); color: var(--primary-foreground); }
+  /* Who is speaking, at the head of the bar -- drawn only when the script has
+     more than one voice. A punched-out square rather than a colour per
+     speaker: four tinted bars down a strip fought with the buttons above it,
+     and a number can be read straight off (user, 2026-09-08). */
+  .tl-spk { display: inline-block; min-width: 14px; height: 14px; line-height: 14px;
+    padding: 0 3px; margin-right: 5px; border-radius: 4px; vertical-align: 1px;
+    background: rgba(0, 0, 0, 0.35); font-size: 0.58rem; font-style: normal;
+    text-align: center; }
   /* A voice that runs long: solid red as far as its slot, then a red tint for
      the part past it, laid over whatever is there. A tint, so the NEXT line's
      bar and words -- drawn after this one -- still read through it, while the
@@ -1065,14 +1119,14 @@
   .settings-row:last-child { margin-bottom: 0; }
   .settings-hint { font-size: 0.74rem; color: var(--muted-foreground); margin-top: 4px; }
   .settings-hint.model-busy { color: var(--destructive); font-weight: 600; }
-  .settings-hint.model-ok { color: #2a8a4a; font-weight: 600; }
+  .settings-hint.model-ok { color: var(--success); font-weight: 600; }
   /* The sentence takes the room and wraps; the button keeps to one line at
      the same size as its neighbours -- a wrapped "Download (1.0 GB)" stood
      twice as tall as the Resume beside it (user, 2026-09-07). */
   .model-line { display: flex; align-items: center; gap: 8px; }
   .model-line > span { flex: 1 1 auto; min-width: 0; }
   .model-line .keys-link { margin: 0; flex: none; white-space: nowrap; }
-  .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: #fff;
+  .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: var(--primary-foreground);
                font-size: 0.74rem; font-weight: 600; padding: 4px 10px; cursor: pointer; }
   #modelsFold > summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
   #modelsFold[open] > summary { margin-bottom: 6px; }
@@ -1110,6 +1164,9 @@
     color: var(--primary); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
   .settings-link:hover { text-decoration: underline; }
   .settings-line .settings-link { margin-top: 0; }
+  /* A picker on a settings row is one control beside its label, not a field
+     across the whole sheet -- selects are width:100% everywhere else. */
+  .settings-select { width: auto; min-width: 120px; }
   .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
   input.switch { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; margin: 0; border-radius: 10px;
     background: var(--border); position: relative; cursor: pointer; transition: background 0.15s ease; }
@@ -1473,6 +1530,7 @@
            than a control floating in the corner, which the user's own messages
            ran underneath. -->
       <div class="agent-head">
+        <svg class="icon agent-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
         <span class="agent-title">Dub Agent</span>
         <div class="assistant-state" id="assistantState" hidden></div>
         <!-- No arrow on screen: the top bar's pane button opens and closes the
@@ -1486,7 +1544,7 @@
       <div class="assistant-log" id="assistantLog"></div>
       <div class="assistant-foot">
         <textarea class="assistant-input" id="assistantInput" rows="1"
-                  placeholder="Message"></textarea>
+                  placeholder="Ask anything"></textarea>
         <div class="assistant-modelwrap">
           <button class="assistant-modelbtn" id="assistantModelBtn" type="button">
             <span id="assistantModelLabel">Model</span>
@@ -1592,7 +1650,7 @@
       <h2 id="mnTitle" style="margin: 0 0 8px"></h2>
       <p class="settings-hint" id="mnLine" style="margin: 0"></p>
       <ul class="mn-items" id="mnItems" hidden></ul>
-      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or dub with the Perso API using your key: Open Settings.</p>
+      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or use the Perso API with your key: Open Settings.</p>
       <div class="mn-progress" id="mnProgress" hidden><div id="mnBar"></div></div>
       <div class="form-error" id="mnError"></div>
       <div class="mn-buttons">
@@ -1614,6 +1672,21 @@
       </button>
     </div>
     <div class="modal-body">
+      <div class="settings-section">
+        <h3>Appearance</h3>
+        <!-- Dark is the app (0.5.5); this is the way back to the old light
+             sheet. It takes effect on the spot, like everything else in here,
+             and is remembered in the browser rather than in kit.env: it is a
+             property of this screen, not of the engine. -->
+        <div class="settings-row settings-line">
+          <label for="themeSelect">Theme</label>
+          <select id="themeSelect" class="settings-select">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+      </div>
+
       <div class="settings-section">
         <h3>Models</h3>
         <!-- Folded to one summary line by default (the open list made Settings
@@ -1811,7 +1884,7 @@
      Closed is gone entirely; the bar's pane button brings it back. */
   .agent { position: relative; flex: 0 0 auto; width: 320px; min-height: 0;
     display: flex; flex-direction: column;
-    background: var(--agent-bg); border-left: 2px solid var(--primary);
+    background: var(--agent-bg); border-left: 1px solid var(--agent-border);
     color: var(--agent-fg); }
   body:not(.agent-open) .agent { display: none; }
   /* Nothing yet while a dub runs, where the script the assistant would fix
@@ -1841,9 +1914,14 @@
      is on show at both sizes -- folded, it is the whole strip above the input
      row. Clear of the drag handle along the very top edge. */
   .agent-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-    padding: 0 12px 0 16px; height: 40px; box-sizing: border-box;
+    padding: 0 12px 0 16px; height: 52px; box-sizing: border-box;
+    background: var(--agent-head-bg);
     border-bottom: 1px solid var(--agent-border); }
   .agent-title { font-size: 0.82rem; font-weight: 700; }
+  /* A spark, so the row is the assistant's own title bar at a glance rather
+     than two words in a corner. Its blue is the app's, lightened to read on
+     the strip's dark. */
+  .agent-spark { width: 16px; height: 16px; color: #8FB8FF; }
   /* Pushed to the far right of the heading row -- the base rule below says
      flex:1 (it once had a row to itself), which parks its text next to the
      title instead. */
@@ -1864,8 +1942,8 @@
 
   .assistant-foot { display: flex; align-items: center; gap: 12px;
     margin: 6px 14px 12px; padding: 6px 6px 6px 16px; min-height: 48px;
-    border: 1px solid var(--agent-border); border-radius: 14px;
-    background: var(--agent-box); }
+    border: 1px solid var(--agent-field-line); border-radius: 8px;
+    background: var(--agent-field); }
   .assistant-input { flex: 1; resize: none; border: none; background: none;
     padding: 0; outline: none; font: inherit; font-size: 0.875rem;
     color: var(--agent-fg); max-height: 120px; }
@@ -1922,7 +2000,7 @@
     white-space: pre-wrap; word-break: break-word; }
   .bubble.me { align-self: flex-end; padding: 9px 12px; border-radius: 12px;
     border-bottom-right-radius: 3px; background: var(--agent-me-bg);
-    border: 1px solid var(--agent-me-border); color: var(--agent-fg); }
+    border: 1px solid var(--agent-me-border); color: var(--agent-me-fg); }
   .bubble.ai { align-self: flex-start; max-width: 640px; padding: 4px 2px;
     color: var(--agent-fg); }
   .bubble.ai code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2324,7 +2402,7 @@ for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
 // the hint slots render these with pre-line whitespace.
 const ENGINE_HINTS = {
   dubMode: { local: ["Runs on your desktop, free.", "You can edit the script after."],
-             perso: ["Perso dubs it start to finish.", "Uses Perso credits."] },
+             perso: ["Perso does the dubbing start to finish.", "Uses Perso credits."] },
   sep: { local: ["Runs on your desktop, free.", "For accuracy, use the API."],
          perso: ["Most accurate.", "Uses Perso credits."] },
   stt: { local: ["Runs on your desktop, free.", "For accuracy, use the API."],
@@ -3873,7 +3951,6 @@ window.addEventListener("resize", () => { if (!subOverlay.hidden) updateSubtitle
 // re-measure for the sidebar grip.
 const timeline = initTimelineUi({
   $,
-  scriptLangNames,
   getVideo: () => doneVideo,
   getClock: () => doneClock,
   getSubStyle: () => subStyle,

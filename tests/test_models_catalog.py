@@ -129,21 +129,23 @@ def test_free_space_is_none_when_the_disk_will_not_say(monkeypatch, tmp_path):
 
 
 # ── packs ──────────────────────────────────────────────────────────────────
-# The two heavy bundles the desktop app installs on demand (engines venv +
-# Demucs, the Ollama runtime). They sit in the catalog so the screen's
-# "Download N GB to dub?" dialog and Settings > Models can show them next to
-# the models, but the shell installs them, not this process.
+# The heavy bundles the desktop app installs on demand (engines venv + Demucs,
+# the Ollama runtime, the subtitle eraser). They sit in the catalog so the
+# screen's "Download N GB to dub?" dialog and Settings > Models can show them
+# next to the models, but the shell installs them, not this process.
 def _put_engine_pack(kit):
     _mk(kit, ".install", "venv-engines.ok")
     _mk(kit, "models", "demucs", "HTDemucs", "955717e8.safetensors")
 
 
-def test_catalog_lists_the_two_packs_without_a_source():
+def test_catalog_lists_the_packs_without_a_source():
     by_id = {m["id"]: m for m in models_module.load_catalog()}
     assert by_id["engine"]["role"] == "pack" and by_id["engine"]["name"] == "AI engine"
     assert by_id["ollama-runtime"]["role"] == "pack"
-    assert set(by_id["engine"]["bytes"]) == {"mac", "win-gpu", "win-cpu"}
-    assert "source" not in by_id["engine"]
+    assert by_id["subtitle-eraser"]["role"] == "pack"
+    for pack in ("engine", "ollama-runtime", "subtitle-eraser"):
+        assert set(by_id[pack]["bytes"]) == {"mac", "win-gpu", "win-cpu"}
+        assert "source" not in by_id[pack]
 
 
 def test_platform_key_reads_the_torch_variant_on_windows(monkeypatch):
@@ -168,6 +170,25 @@ def test_a_pack_is_ready_paused_or_missing_by_its_root_markers(tmp_path):
     assert models_module.model_state(engine, kit) == "ready"
 
 
+# The eraser's marker is the desktop installer's own stamp for its venv step
+# (.install/venv-eraser.ok, see packInstalled in desktop/src/installSpec.js),
+# so the shell and this process never disagree about whether it is installed.
+# Its folder is the source tree, which lands first: a pack whose download was
+# stopped halfway shows as paused, with a Resume button, not as missing.
+def test_the_subtitle_eraser_pack_is_ready_only_on_the_installers_stamp(tmp_path):
+    kit = str(tmp_path)
+    eraser = models_module.find("subtitle-eraser")
+    assert models_module.model_state(eraser, kit) == "not_downloaded"
+    os.makedirs(os.path.join(kit, "eraser", "vsr", "backend"))
+    assert models_module.model_state(eraser, kit) == "paused"
+    _mk(kit, ".install", "venv-eraser.ok")
+    assert models_module.model_state(eraser, kit) == "ready"
+    # And while the shell installs it, the stamp it leaves says so.
+    os.remove(os.path.join(kit, ".install", "venv-eraser.ok"))
+    _mk(kit, ".install", "subtitle-eraser.installing")
+    assert models_module.model_state(eraser, kit) == "downloading"
+
+
 def test_api_models_shows_the_packs_with_this_platforms_size(monkeypatch, tmp_path):
     kit = str(tmp_path)
     monkeypatch.setenv("PERSODUB_KIT_DIR", kit)
@@ -178,6 +199,8 @@ def test_api_models_shows_the_packs_with_this_platforms_size(monkeypatch, tmp_pa
     assert rows["engine"]["bytes"] == 2000000000
     assert rows["engine"]["state"] == "ready"
     assert rows["ollama-runtime"]["state"] == "not_downloaded"
+    assert rows["subtitle-eraser"]["bytes"] == 3900000000
+    assert rows["subtitle-eraser"]["hint"] == "Erases burned-in subtitles."
 
 
 def test_packs_are_not_downloaded_or_removed_through_the_backend(monkeypatch, tmp_path):

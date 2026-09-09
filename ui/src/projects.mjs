@@ -111,7 +111,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
         const x = document.createElement("button");
         x.type = "button";
         x.className = "queue-x";
-        x.title = live ? "Cancel this dub" : "Take this video out of line";
+        x.title = live ? "Cancel dubbing" : "Take this video out of line";
         x.textContent = "✕";
         x.addEventListener("click", (e) => {
           e.stopPropagation();

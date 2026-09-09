@@ -56,6 +56,20 @@ test("every inline module in static/index.html parses", () => {
   }
 });
 
+// The saved theme has to be on <html> before the first paint, so it is a plain
+// (non-module) script in the head -- a module is deferred, and the light page
+// would be drawn once and swapped. moduleScripts() above cannot see it, which
+// is the point, so it is pinned here instead.
+test("the saved theme is read before the first paint", () => {
+  const html = readFileSync(INDEX, "utf8");
+  const boot = html.match(/<script>[\s\S]{0,400}?<\/script>/);
+  assert.ok(boot, "the head has no plain script at all");
+  assert.match(boot[0], /localStorage\.getItem\("persodub\.theme"\)/,
+    "the boot script must read the saved theme");
+  assert.match(boot[0], /documentElement\.dataset\.theme/,
+    "the boot script must put the theme on <html>");
+});
+
 // Korean typing sends Enter twice: once to settle the syllable being composed
 // (isComposing=true), once for real. The agent input treating the first as
 // "send" left the settled syllable behind in the box and -- worse -- stopped

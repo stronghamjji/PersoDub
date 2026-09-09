@@ -81,6 +81,12 @@ export function sidecarArgv(kitDir, port) {
           "server:app", "--host", "127.0.0.1", "--port", String(port)];
 }
 
+// The address a pack announces in runtime.json, if it has one. A pack that is
+// only files (subtitle-eraser: a source tree and a venv the backend runs on
+// demand) has none -- and must not withdraw another pack's address when it is
+// installed or removed.
+export const PACK_RUNTIME_KEY = { engine: "tts_url", "ollama-runtime": "ollama_url" };
+
 // One pack's process: started at boot for every pack already on disk, and
 // again by the install-pack IPC the moment a pack finishes downloading -- the
 // same function both times, so a pack installed mid-session behaves exactly
@@ -218,9 +224,9 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
       if (overrideMode) return;
       // Started already and still announced: nothing to do. A pack whose
       // start failed earlier left no address behind, so it is tried again.
-      const key = id === "engine" ? "tts_url" : "ollama_url";
+      const key = PACK_RUNTIME_KEY[id];
       const alive = (packChildren.get(id) || []).some((c) => c && c.exitCode == null && !c.killed);
-      if (alive && readRuntime(cfg.kitDir)[key]) return;
+      if (alive && (!key || readRuntime(cfg.kitDir)[key])) return;
       // Not running (never started, or it died after announcing itself): its
       // stale address goes first, so nothing reads it while the new one comes up.
       for (const c of packChildren.get(id) || []) {
@@ -228,7 +234,7 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
         if (i >= 0) children.splice(i, 1);
       }
       packChildren.delete(id);
-      clearRuntime(cfg.kitDir, [key]);
+      if (key) clearRuntime(cfg.kitDir, [key]);
       // A pack started right after its install imports torch cold, on a disk
       // that just wrote gigabytes: the boot's two minutes were not enough on
       // Windows (2026-09-07), and a start that gives up leaves the dub refused.
@@ -242,7 +248,7 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
       }
       packChildren.delete(id);
       record();
-      clearRuntime(cfg.kitDir, id === "engine" ? ["tts_url"] : ["ollama_url"]);
+      if (PACK_RUNTIME_KEY[id]) clearRuntime(cfg.kitDir, [PACK_RUNTIME_KEY[id]]);
     };
 
     return { url: `http://127.0.0.1:${backendPort}`, port: backendPort, pids: pids(), stopAll,

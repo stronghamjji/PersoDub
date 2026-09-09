@@ -20,13 +20,15 @@
 //
 // lineOverBy is imported rather than passed: the table colours its lines by the
 // same rule, and one rule for "too long" said in two places is how the two would
-// come to disagree.
+// come to disagree. numberSpeakers arrives the same way, so a line that is
+// Speaker 2 in the table is 2 on the badge here.
 //
 // The elements this file touches: #timeline and everything it draws inside
 // itself, plus the four grips and the panes they size. It never reaches the top
 // bar, the script table or `state`.
 import { escapeHtml, fmtClock } from "./format.mjs";
 import { lineOverBy } from "./scriptTable.mjs";
+import { numberSpeakers } from "./speakers.mjs";
 
 // Roughly the room one 00:00:00 label needs. When a second is narrower than
 // this, only every Nth tick is labelled, so the labels never overlap. Exported
@@ -48,9 +50,6 @@ function subEyeSvg(on) {
  *
  * @param {object} deps
  * @param {(id: string) => any} deps.$  the page's getElementById helper
- * @param {() => {source: string, target: string}} deps.scriptLangNames  the two
- *        language names the lanes are labelled with -- the page's own, because
- *        the script table heads its columns with the same pair
  * @param {() => any} deps.getVideo  the finished screen's player, read late: the
  *        strip asks it where it is, seeks it, and plays a line in it
  * @param {() => string} deps.getClock  the clock as the player last painted it,
@@ -82,7 +81,7 @@ function subEyeSvg(on) {
  *        names when the sidebar grip changes their column's width
  * @returns the operations the rest of the page calls.
  */
-export function initTimelineUi({ $, scriptLangNames, getVideo, getClock, getSubStyle,
+export function initTimelineUi({ $, getVideo, getClock, getSubStyle,
                                  subCueOf, saveSubStyle, updateSubtitleNow, isNowLine,
                                  showVideoSource, playRange, cancelRange, paintPlayhead,
                                  toggleDonePlay, markClippedNames }) {
@@ -124,7 +123,6 @@ export function initTimelineUi({ $, scriptLangNames, getVideo, getClock, getSubS
       timelineAt = 0;   // the next job starts at its own beginning
       return;
     }
-    const { source, target } = scriptLangNames();
     box.innerHTML = `
     <div class="tl-head">
       <span class="tl-title">Timeline</span>
@@ -147,8 +145,8 @@ export function initTimelineUi({ $, scriptLangNames, getVideo, getClock, getSubS
     <div class="tl-body">
       <div class="tl-names">
         <div class="tl-corner"></div>
-        <div class="tl-name strong">${escapeHtml(target)}</div>
-        <div class="tl-name">${escapeHtml(source)}</div>
+        <div class="tl-name strong">Target</div>
+        <div class="tl-name">Original</div>
         <div class="tl-name strong tl-name-caps${getSubStyle().enabled ? "" : " off"}">
           <button class="tl-eye${getSubStyle().enabled ? " on" : ""}" id="tlSubEye" type="button"
             title="Subtitles on or off" aria-label="Subtitles on or off">${subEyeSvg(getSubStyle().enabled)}</button>Subtitles</div>
@@ -198,13 +196,15 @@ export function initTimelineUi({ $, scriptLangNames, getVideo, getClock, getSubS
   // A line draws up to three blocks and every one of them does the same thing, so
   // only one of them (`stop`) is a tab stop: three per line would bury the rest of
   // the screen behind hundreds of presses of the Tab key.
-  function timelineBlock(l, cls, from, to, text, stop = false) {
+  // `lead` is markup, not words: the speaker badge, already built and escaped
+  // by the caller. Everything else a block says is text and is escaped here.
+  function timelineBlock(l, cls, from, to, text, stop = false, lead = "") {
     const left = from * timelinePps;
     const width = Math.max(3, (to - from) * timelinePps);
     return `<button type="button" class="tl-blk ${cls}"${stop ? "" : ' tabindex="-1"'}
     data-start="${l.start}" data-end="${l.end}"
     style="left:${left.toFixed(1)}px;width:${width.toFixed(1)}px"
-    title="${escapeHtml(text || `Line ${l.line}`)}">${escapeHtml(text)}</button>`;
+    title="${escapeHtml(text || `Line ${l.line}`)}">${lead}${escapeHtml(text)}</button>`;
   }
 
   // Everything right of the language names. Split out because the scale depends
@@ -231,6 +231,12 @@ export function initTimelineUi({ $, scriptLangNames, getVideo, getClock, getSubS
       ticks += `<div class="tl-tick" style="left:${at.toFixed(1)}px">${label}</div>`;
     }
 
+    // Who is speaking, on the Target bar. Only worth saying when there is more
+    // than one voice: a badge reading "1" on every block of a one-speaker video
+    // is a column of noise that answers a question nobody asked.
+    const speakers = numberSpeakers(timelineLines);
+    const numbered = speakers.size > 1;
+
     let voices = "";
     let originals = "";
     for (const l of timelineLines) {
@@ -245,8 +251,10 @@ export function initTimelineUi({ $, scriptLangNames, getVideo, getClock, getSubS
         // tint (see .tl-spill) over whatever follows, so the next line's bar --
         // drawn after this one -- still reads, and the red still says how far
         // the voice runs. (A solid red bar on top used to hide the next line.)
+        const who = numbered ? speakers.get(l.speaker) : null;
+        const badge = who ? `<i class="tl-spk">${who}</i>` : "";
         voices += timelineBlock(l, `tl-voice${over ? " tl-over" : ""}`, l.start,
-                                over ? l.end : voiceEnd, l.text, true);
+                                over ? l.end : voiceEnd, l.text, true, badge);
         if (over) {
           const tip = `Line ${l.line} runs ${over.toFixed(1)}s past its time`;
           voices += `<span class="tl-spill" style="left:${(l.end * timelinePps).toFixed(1)}px;`

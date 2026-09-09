@@ -288,7 +288,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       // be installed, a model to be picked, or the user. A running dub is not on
       // the list -- the strip is off the page there, so nothing it said was read.
       if (failed) {
-        input.placeholder = "Nothing to fix here - this dub did not finish";
+        input.placeholder = "Nothing to fix here - dubbing did not finish";
       } else if (notice) {
         input.placeholder = notice;
       } else if (!chosen.agent) {
@@ -301,7 +301,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
           ? `${a.name} is not signed in - run ${a.login_command} in Terminal`
           : `${a.name} is not signed in`;
       } else if (document.body.classList.contains("agent-open")) {
-        input.placeholder = "Message";
+        input.placeholder = "Ask anything";
       } else if (screen === "home") {
         // No script on screen to point at, so no line-number example here.
         input.placeholder = "Ask anything";
