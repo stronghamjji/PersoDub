@@ -26,26 +26,73 @@ client = TestClient(app, base_url="http://127.0.0.1")
 
 # --- the masker ------------------------------------------------------------
 
-def test_a_home_directory_becomes_a_tilde():
+def test_a_file_under_the_home_directory_keeps_only_its_extension():
+    # The folder names and the file name under a home directory are the user's
+    # own business -- a client, a project, what they were watching.
     assert mask_text("cannot open /Users/jane/Movies/clip.mp4", "/Users/jane") == \
-        "cannot open ~/Movies/clip.mp4"
+        "cannot open ~/…/*.mp4"
+
+
+def test_a_file_name_with_spaces_in_it_is_folded_in_too():
+    assert mask_text("cannot open /Users/jane/Movies/Q3 board review.mp4", "/Users/jane") == \
+        "cannot open ~/…/*.mp4"
+
+
+def test_a_sentence_about_a_home_path_is_still_a_sentence():
+    # Why a path stops at whitespace: without that the words after it would be
+    # swallowed with the folder names.
+    assert mask_text("could not open /Users/jane/kit because the disk is full", "/Users/jane") == \
+        "could not open ~/… because the disk is full"
+
+
+def test_a_home_path_with_no_file_on_the_end_is_just_the_home_mark():
+    assert mask_text("at /Users/jane/Documents", "/Users/jane") == "at ~/…"
+    assert mask_text("at /Users/jane", "/Users/jane") == "at ~"
 
 
 def test_a_korean_home_directory_is_masked_like_any_other():
     home = "/Users/홍길동"
     assert mask_text("FileNotFoundError: /Users/홍길동/영상/제목.mp4", home) == \
-        "FileNotFoundError: ~/영상/제목.mp4"
+        "FileNotFoundError: ~/…/*.mp4"
 
 
 def test_a_windows_home_is_masked_with_either_separator_and_any_case():
     home = "C:\\Users\\Jane"
-    assert mask_text("at C:\\Users\\Jane\\kit\\log", home) == "at ~\\kit\\log"
-    assert mask_text("at c:/users/jane/kit/log", home) == "at ~/kit/log"
+    assert mask_text("at C:\\Users\\Jane\\Videos\\clip.mov", home) == "at ~\\…\\*.mov"
+    assert mask_text("at c:/users/jane/Videos/clip.mov", home) == "at ~/…/*.mov"
+
+
+def test_the_kits_own_paths_stay_readable_they_are_the_diagnosis():
+    home = "/Users/jane"
+    kit = "/Users/jane/Library/Application Support/PersoDub/kit"
+    assert mask_text("no such file: %s/models/qwen3-tts/model.safetensors" % kit, home, kit) == \
+        "no such file: ~/Library/Application Support/PersoDub/kit/models/qwen3-tts/model.safetensors"
+
+
+def test_a_kit_path_is_recognised_however_the_log_spelled_its_separators():
+    home = "C:\\Users\\Jane"
+    kit = "C:\\Users\\Jane\\AppData\\Local\\PersoDub\\kit"
+    assert mask_text("at c:/users/jane/appdata/local/persodub/kit/engines_venv", home, kit) == \
+        "at ~/AppData/Local/PersoDub/kit/engines_venv"
+
+
+def test_a_kit_outside_the_home_directory_is_left_exactly_as_it_is():
+    assert mask_text("no such file: /Volumes/Big/kit/models/x.bin", "/Users/jane", "/Volumes/Big/kit") == \
+        "no such file: /Volumes/Big/kit/models/x.bin"
+
+
+def test_a_long_name_inside_a_path_is_not_mistaken_for_a_secret():
+    # The 32-character rule used to swallow model folders whole, which is how a
+    # report lost the one line saying which model was missing.
+    line = "no such file: /kit/models/Qwen3TTS12BInstructInt8Quantized/config.json"
+    assert mask_text(line) == line
 
 
 @pytest.mark.parametrize("text,expected", [
     ("key sk-abcd1234efgh5678", "key [REDACTED]"),
     ("AIzaSyA1b2C3d4E5f6G7h8", "[REDACTED]"),
+    ("ghp_abcd1234efgh5678ijkl", "[REDACTED]"),
+    ("hf_abcd1234efgh5678ijkl", "[REDACTED]"),
     ("token=" + "a" * 20 + "1" * 20 + " done", "token=[REDACTED] done"),
 ])
 def test_keys_and_long_tokens_are_redacted(text, expected):
@@ -67,7 +114,7 @@ def test_the_two_maskers_agree_on_the_same_line():
     report. The desktop side pins the identical strings in report.test.mjs."""
     home = "/Users/jane"
     line = "ERROR /Users/jane/kit/x.log key sk-abcd1234efgh5678 at https://x.example.com/a/b"
-    assert mask_text(line, home) == "ERROR ~/kit/x.log key [REDACTED] at https://x.example.com/..."
+    assert mask_text(line, home) == "ERROR ~/…/*.log key [REDACTED] at https://x.example.com/..."
 
 
 def test_a_tail_is_the_last_lines_masked():
@@ -75,7 +122,7 @@ def test_a_tail_is_the_last_lines_masked():
     tail = mask_tail(text, "/Users/jane", max_lines=5)
     assert len(tail.splitlines()) == 5
     assert "/Users/jane" not in tail
-    assert "~/kit" in tail
+    assert "~/…" in tail
 
 
 def test_an_empty_log_is_an_empty_tail():
@@ -140,7 +187,7 @@ def test_the_bundle_carries_the_log_tails_and_the_whole_logs(failed_job):
     assert "4/6 synthesize line 3" in body["logs"]["job"]
     # Masked on the way out, not on the way to the network.
     assert os.path.expanduser("~") not in body["logs"]["job"]
-    assert "~/kit/x" in body["logs"]["job"]
+    assert "~/…" in body["logs"]["job"]
 
 
 def test_the_bundle_never_carries_the_project_name_or_the_source_link(failed_job):

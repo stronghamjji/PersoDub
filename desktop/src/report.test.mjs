@@ -45,21 +45,54 @@ test("the counts' switch does not silence reports", () => {
 
 // ---- masking -----------------------------------------------------------
 
-test("the home directory becomes ~", () => {
-  const out = maskText("cannot open /Users/jane/Movies/clip.mp4", { home: "/Users/jane" });
-  assert.equal(out, "cannot open ~/Movies/clip.mp4");
+test("a file under the home directory keeps only its extension", () => {
+  // The folder names and the file name under a home directory are the user's
+  // own business -- a client, a project, what they were watching.
+  const out = maskText("cannot open /Users/jane/Movies/Q3 board review.mp4", { home: "/Users/jane" });
+  assert.equal(out, "cannot open ~/\u2026/*.mp4");
+});
+
+test("a sentence about a home path is still a sentence", () => {
+  // The reason a path stops at whitespace: without that, the words after it
+  // would be swallowed along with the folder names.
+  assert.equal(maskText("could not open /Users/jane/kit because the disk is full", { home: "/Users/jane" }),
+    "could not open ~/\u2026 because the disk is full");
 });
 
 test("a Windows home directory is masked with either separator, any case", () => {
   const home = "C:\\Users\\Jane";
-  assert.equal(maskText("at C:\\Users\\Jane\\kit\\log", { home }), "at ~\\kit\\log");
-  assert.equal(maskText("at c:/users/jane/kit/log", { home }), "at ~/kit/log");
+  assert.equal(maskText("at C:\\Users\\Jane\\Videos\\clip.mov", { home }), "at ~\\\u2026\\*.mov");
+  assert.equal(maskText("at c:/users/jane/Videos/clip.mov", { home }), "at ~/\u2026/*.mov");
+});
+
+test("a home path with no file on the end is just the home mark", () => {
+  assert.equal(maskText("at /Users/jane/Documents", { home: "/Users/jane" }), "at ~/\u2026");
+  assert.equal(maskText("at /Users/jane", { home: "/Users/jane" }), "at ~");
 });
 
 test("a Korean home directory is masked like any other", () => {
   const home = "/Users/\ud64d\uae38\ub3d9";
   const out = maskText("FileNotFoundError: /Users/\ud64d\uae38\ub3d9/\uc601\uc0c1/\uc81c\ubaa9.mp4", { home });
-  assert.equal(out, "FileNotFoundError: ~/\uc601\uc0c1/\uc81c\ubaa9.mp4");
+  assert.equal(out, "FileNotFoundError: ~/\u2026/*.mp4");
+});
+
+test("the kit's own paths stay readable -- they are the diagnosis", () => {
+  const home = "/Users/jane";
+  const kit = "/Users/jane/Library/Application Support/PersoDub/kit";
+  const out = maskText(`no such file: ${kit}/models/qwen3-tts/model.safetensors`, { home, kit });
+  assert.equal(out, "no such file: ~/Library/Application Support/PersoDub/kit/models/qwen3-tts/model.safetensors");
+});
+
+test("a kit path is recognised however the log spelled its separators", () => {
+  const home = "C:\\Users\\Jane";
+  const kit = "C:\\Users\\Jane\\AppData\\Local\\PersoDub\\kit";
+  assert.equal(maskText("at c:/users/jane/appdata/local/persodub/kit/engines_venv", { home, kit }),
+    "at ~/AppData/Local/PersoDub/kit/engines_venv");
+});
+
+test("a kit outside the home directory is left exactly as it is", () => {
+  const out = maskText("no such file: /Volumes/Big/kit/models/x.bin", { home: "/Users/jane", kit: "/Volumes/Big/kit" });
+  assert.equal(out, "no such file: /Volumes/Big/kit/models/x.bin");
 });
 
 test("an OpenAI-style key is redacted", () => {
@@ -70,9 +103,21 @@ test("a Google API key is redacted", () => {
   assert.equal(maskText("AIzaSyA1b2C3d4E5f6G7h8"), "[REDACTED]");
 });
 
-test("any long run of letters and digits is redacted", () => {
+test("any long run of token characters is redacted", () => {
   const token = "a".repeat(20) + "1".repeat(20);
   assert.equal(maskText(`token=${token} done`), "token=[REDACTED] done");
+});
+
+test("a GitHub or Hugging Face token is redacted", () => {
+  assert.equal(maskText("ghp_abcd1234efgh5678ijkl"), "[REDACTED]");
+  assert.equal(maskText("hf_abcd1234efgh5678ijkl"), "[REDACTED]");
+});
+
+test("a long name inside a path is not mistaken for a secret", () => {
+  // The 32-character rule used to swallow model folders whole, which is how a
+  // report lost the one line saying which model was missing.
+  const line = "no such file: /kit/models/Qwen3TTS12BInstructInt8Quantized/config.json";
+  assert.equal(maskText(line), line);
 });
 
 test("a short word is not redacted", () => {
@@ -92,7 +137,7 @@ test("a log tail keeps only its last lines, masked", () => {
   const lines = Array.from({ length: 300 }, (_, i) => `line ${i} in /Users/jane/kit`);
   const tail = maskTail(lines.join("\n"), { home: "/Users/jane", maxLines: 5 });
   assert.equal(tail.split("\n").length, 5);
-  assert.ok(tail.includes("~/kit"));
+  assert.ok(tail.includes("~/\u2026"));
   assert.ok(!tail.includes("/Users/jane"));
 });
 
@@ -212,8 +257,8 @@ test("the message and the log tails are masked", () => {
     message: "cannot write /Users/jane/kit/models",
     logTails: { shell: "at /Users/jane/kit", app: "key sk-abcd1234efgh5678", job: "" },
   });
-  assert.equal(report.message, "cannot write ~/kit/models");
-  assert.equal(report.logTails.shell, "at ~/kit");
+  assert.equal(report.message, "cannot write ~/\u2026");
+  assert.equal(report.logTails.shell, "at ~/\u2026");
   assert.equal(report.logTails.app, "key [REDACTED]");
   assert.equal(report.logTails.job, "");
 });

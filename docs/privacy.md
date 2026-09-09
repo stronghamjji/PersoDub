@@ -67,12 +67,15 @@ fixed list, the error sentence, your app version, a random install ID, and the l
 the last 200 lines of each in the issue itself, and the three logs in full as an
 attached archive, kept for 30 days behind a signed link.
 
-Before anything leaves your machine, three things are taken out of every line of it:
-your home folder becomes `~` (so your name is not in a path), anything shaped like an
-API key becomes `[REDACTED]`, and a link is cut down to its site. Your `kit.env` — the
+Before anything leaves your machine, every line of it is put through three rules: a
+path under your home folder is cut down to `~/…/*.mp4` — the name of the folder and the
+name of the file both go, and so does yours; anything shaped like an API key becomes
+`[REDACTED]`; and a link is cut down to its site. The one exception is PersoDub's own
+installation folder, whose paths are kept readable minus your name, because which model
+or which folder a step died in is the answer we are looking for. Your `kit.env` — the
 file your API keys live in — is never read by the reporting code at all, and no video,
 audio, subtitle, project name or filename is ever included. The relay that posts the
-issue does not store your IP address, and masks everything a second time.
+issue does not store your IP address, and applies the same rules a second time.
 
 Turn it off in **Settings → Privacy** or with `PERSODUB_NO_REPORTS=1` in the kit's
 `kit.env`; it applies to the next failure, no restart. This is a separate switch from

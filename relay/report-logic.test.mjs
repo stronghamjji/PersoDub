@@ -96,6 +96,18 @@ test("masking again handles Windows and Linux home directories too", () => {
   assert.equal(maskAgain("/home/jane/kit"), "~/kit");
 });
 
+test("masking again redacts the other two token shapes", () => {
+  assert.equal(maskAgain("ghp_abcd1234efgh5678ijkl"), "[REDACTED]");
+  assert.equal(maskAgain("hf_abcd1234efgh5678ijkl"), "[REDACTED]");
+});
+
+test("masking again leaves the kit paths the app kept on purpose", () => {
+  // The app keeps these readable because they are the diagnosis; a blunt
+  // 32-character rule here would take them away again.
+  const line = "no such file: ~/kit/models/Qwen3TTS12BInstructInt8Quantized/config.json";
+  assert.equal(maskAgain(line), line);
+});
+
 // ---- labels ------------------------------------------------------------
 
 test("a dub failure earns five labels, all of them from a published list", () => {

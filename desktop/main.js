@@ -204,7 +204,7 @@ async function collectReport({ kind, kitDir, step, code, message, jobId }) {
   const home = app.getPath("home");
   const bundle = await fetchBundle(jobId);
   const job = (bundle && bundle.job) || {};
-  const shellLogText = maskText(readFileText(join(app.getPath("userData"), "logs", "shell.log")), { home });
+  const shellLogText = maskText(readFileText(join(app.getPath("userData"), "logs", "shell.log")), { home, kit: kitDir });
   const packs = (bundle && bundle.packs)
     || Object.fromEntries(PACKS.map((p) => [p.id, packInstalled(kitDir, p.id) ? "ready" : "missing"]));
   const report = buildReport({
@@ -216,6 +216,9 @@ async function collectReport({ kind, kitDir, step, code, message, jobId }) {
     // The job's own sentence when there is one: it is the line the user saw.
     message: message || job.error || "",
     home,
+    // The kit's own paths survive masking -- which model, which venv, which
+    // folder a step died in is the diagnosis. Everything else under home does not.
+    kit: kitDir,
     version: app.getVersion(),
     installId: loadState(REPORT_STATE()).device,
     env: collectEnvironment({

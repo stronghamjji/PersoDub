@@ -78,18 +78,21 @@ def report_bundle(job: Optional[str] = None):
     app's own log, which is what a boot failure leaves behind.
     """
     home = os.path.expanduser("~")
+    # The kit's own paths survive masking -- which model, which venv, which
+    # folder a step died in is the diagnosis. Everything else under home does not.
+    kit = models.kit_dir()
     # Asked of the store that writes the job logs rather than read from
     # app.config here: it resolves PERSODUB_LOG_DIR at call time, so a redirect
     # (a test, a user who moved the folder) reaches this route too. The app's
     # own rolling log shares that folder -- see app/logging_setup.py.
     log_dir = state.job_store.log_dir
-    app_log = read_masked(os.path.join(log_dir, LOG_FILE_NAME), home)
+    app_log = read_masked(os.path.join(log_dir, LOG_FILE_NAME), home, kit)
     job_log = ""
     record = {}
 
     j = state.job_store.get(job) if job else None
     if j:
-        job_log = read_masked(os.path.join(log_dir, "job-%s.log" % job), home)
+        job_log = read_masked(os.path.join(log_dir, "job-%s.log" % job), home, kit)
         marker, stage = stage_of(job_log)
         record = {
             "kind": kind_of(j),
@@ -97,7 +100,7 @@ def report_bundle(job: Optional[str] = None):
             "stage": stage,
             "stageMarker": marker,
             "engines": {k: j.get(k) for k in ENGINE_FIELDS if j.get(k)},
-            "error": mask_text(j.get("error") or "", home),
+            "error": mask_text(j.get("error") or "", home, kit),
         }
 
     return {

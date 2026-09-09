@@ -46,14 +46,21 @@ export function resolveReportMode({ isPackaged, env }) {
 
 // --- Masking -----------------------------------------------------------
 
-// Two shapes of key that a log or an error message really does carry, plus the
-// catch-all: a long unbroken run of letters and digits is a token, a hash or a
-// session id, and none of the three is worth the risk of publishing.
+// The four key shapes a log or an error message really does carry, plus the
+// catch-all: a long unbroken run of token characters is a key, a hash or a
+// session id, and none of them is worth the risk of publishing.
 const KEY_PATTERNS = [
   /\bsk-[A-Za-z0-9_-]{8,}/g,          // OpenAI-style
   /\bAIza[A-Za-z0-9_-]{10,}/g,        // Google API keys
-  /\b[A-Za-z0-9]{32,}\b/g,            // anything else long enough to be a secret
+  /\bghp_[A-Za-z0-9_-]{8,}/g,         // GitHub personal access tokens
+  /\bhf_[A-Za-z0-9_-]{8,}/g,          // Hugging Face tokens
 ];
+
+// Anything else long enough to be a secret -- but only OUTSIDE a path. The
+// guards on either side are the path characters: a run touching a slash, a
+// backslash or a dot is part of a filename or a directory, and redacting those
+// used to swallow whole model folders and leave a report nobody could read.
+const LONG_TOKEN = /(?<![A-Za-z0-9_\-/\\.])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_\-/\\.])/g;
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s"'<>)\]}]+/gi;
 
@@ -61,21 +68,57 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// The same path written the three ways a log can spell it. Windows libraries
+// disagree with each other about the separator inside one process.
+function separatorForms(p) {
+  return [p, p.replace(/\\/g, "/"), p.replace(/\//g, "\\")];
+}
+
+function startsWithCI(text, prefix) {
+  return text.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase();
+}
+
+/**
+ * What is left of a path once its home half is gone: the folders and the file
+ * name under a home directory are the user's own business -- a project name, a
+ * client's name, what they were watching -- so only the extension survives.
+ */
+// A file name with spaces in it survives the collapse above, because a path
+// stops at whitespace -- and it has to, or "could not open /Users/x/kit
+// because the disk is full" would swallow the sentence. What gives such a
+// name away is that it ends in an extension, so this second pass folds
+// "~/... Q3 board review.mp4" into "~/.../*.mp4" and leaves prose alone.
+const SPACED_FILENAME = /(~[\\/]\u2026)((?: [^\s\\/"']+)*\.[A-Za-z0-9]{1,8})(?=[\s"']|$)/g;
+
+function collapseUnderHome(rest) {
+  if (!rest) return "~";
+  const sep = rest[0];
+  const segments = rest.split(/[\\/]/).filter(Boolean);
+  const last = segments[segments.length - 1] || "";
+  const dot = last.lastIndexOf(".");
+  const ext = dot > 0 && /^[A-Za-z0-9]{1,8}$/.test(last.slice(dot + 1)) ? last.slice(dot) : "";
+  return ext ? `~${sep}\u2026${sep}*${ext}` : `~${sep}\u2026`;
+}
+
 /**
  * Everything a report or a log tail passes through before it leaves.
  *
- * Four rules, in this order because each depends on the one before:
+ * Five rules, in this order because each depends on the one before:
  *  1. A URL becomes its own scheme and host. A download link can carry a
  *     signed token, and a YouTube link is the user's viewing history.
- *  2. The two key shapes above go, while their surroundings are still intact.
- *  3. The home directory becomes "~". A path is where the user's real name
- *     lives -- /Users/<name>/, C:\Users\<name>\ -- and it appears in almost
- *     every traceback.
- *  4. What is left that is 32+ letters and digits is redacted.
- * Rule 4 runs last on purpose: before rule 3 it would have eaten the home
- * path's own segments and left a report nobody could read.
+ *  2. The kit's own path keeps everything but the user's name. Which model,
+ *     which venv, which folder a step died in is the diagnosis itself, so this
+ *     runs first and takes those paths out of rule 3's way.
+ *  3. Every other path under the home directory collapses to "~/.../*.ext".
+ *     That is where the real name lives (/Users/<name>/, C:\Users\<name>\) and
+ *     also where the video titles and project names live.
+ *  4. The four key shapes go.
+ *  5. What is left that is 32+ token characters, and is not part of a path, is
+ *     redacted.
+ * The paths are settled before the keys on purpose: done the other way round,
+ * rule 5 ate the path segments rules 2 and 3 exist to keep readable.
  */
-export function maskText(text, { home = "" } = {}) {
+export function maskText(text, { home = "", kit = "" } = {}) {
   let out = String(text ?? "");
   out = out.replace(URL_PATTERN, (url) => {
     try {
@@ -85,26 +128,35 @@ export function maskText(text, { home = "" } = {}) {
       return "[URL]";
     }
   });
-  for (const p of KEY_PATTERNS.slice(0, 2)) out = out.replace(p, "[REDACTED]");
-  if (home) {
-    // Both separators, because a Windows log prints the home directory each
-    // way depending on which library wrote the line, and case-insensitively,
-    // because Windows paths are.
-    const both = [home, home.replace(/\\/g, "/"), home.replace(/\//g, "\\")];
-    for (const form of [...new Set(both)]) {
-      out = out.replace(new RegExp(escapeRegExp(form), "gi"), "~");
-    }
+  if (kit) {
+    // Both lists are built by the same transformation, so a kit path spelled
+    // with one separator is replaced by a mask spelled with that separator.
+    const forms = separatorForms(kit);
+    const masks = home && startsWithCI(kit, home)
+      ? separatorForms("~" + kit.slice(home.length))
+      : forms;
+    forms.forEach((form, i) => {
+      out = out.replace(new RegExp(escapeRegExp(form), "gi"), () => masks[i]);
+    });
   }
-  out = out.replace(KEY_PATTERNS[2], "[REDACTED]");
-  return out;
+  if (home) {
+    for (const form of new Set(separatorForms(home))) {
+      const re = new RegExp(`${escapeRegExp(form)}((?:[\\\\/][^\\\\/\\s"']+)*)`, "gi");
+      out = out.replace(re, (_match, rest) => collapseUnderHome(rest));
+    }
+    out = out.replace(SPACED_FILENAME, (_m, head, tail) =>
+      `${head}${head[1]}*${tail.slice(tail.lastIndexOf("."))}`);
+  }
+  for (const p of KEY_PATTERNS) out = out.replace(p, "[REDACTED]");
+  return out.replace(LONG_TOKEN, "[REDACTED]");
 }
 
 /** The last MAX_LOG_LINES lines of a log, masked. Empty in, empty out. */
-export function maskTail(text, { home = "", maxLines = MAX_LOG_LINES } = {}) {
+export function maskTail(text, { home = "", kit = "", maxLines = MAX_LOG_LINES } = {}) {
   const body = String(text ?? "");
   if (!body.trim()) return "";
   const lines = body.split(/\r?\n/);
-  return maskText(lines.slice(-maxLines).join("\n"), { home }).trim();
+  return maskText(lines.slice(-maxLines).join("\n"), { home, kit }).trim();
 }
 
 // --- Fingerprint -------------------------------------------------------
@@ -220,6 +272,7 @@ export function buildReport({
   version = "",
   installId = "",
   home = "",
+  kit = "",
 } = {}, { maxBytes = MAX_BYTES } = {}) {
   const { packs: envPacks, ...machine } = env;
   const isInstall = kind === "install";
@@ -234,13 +287,13 @@ export function buildReport({
     stage: isInstall ? "" : safeId(stage),
     stageMarker: /^\d{1,2}\/\d{1,2}$/.test(String(stageMarker || "")) ? String(stageMarker) : "",
     code: ERROR_CODES.has(code) ? code : "unknown",
-    message: maskText(message, { home }).slice(0, MAX_MESSAGE_CHARS),
+    message: maskText(message, { home, kit }).slice(0, MAX_MESSAGE_CHARS),
     env: machine,
     packs: packs ?? envPacks ?? {},
     logTails: {
-      shell: maskTail(logTails.shell, { home }),
-      app: maskTail(logTails.app, { home }),
-      job: maskTail(logTails.job, { home }),
+      shell: maskTail(logTails.shell, { home, kit }),
+      app: maskTail(logTails.app, { home, kit }),
+      job: maskTail(logTails.job, { home, kit }),
     },
   };
   report.fingerprint = fingerprint({

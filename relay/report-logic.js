@@ -55,8 +55,13 @@ export function maskAgain(text) {
     })
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, "[REDACTED]")
     .replace(/\bAIza[A-Za-z0-9_-]{10,}/g, "[REDACTED]")
+    .replace(/\bghp_[A-Za-z0-9_-]{8,}/g, "[REDACTED]")
+    .replace(/\bhf_[A-Za-z0-9_-]{8,}/g, "[REDACTED]")
     .replace(HOME_RE, "~")
-    .replace(/\b[A-Za-z0-9]{32,}\b/g, "[REDACTED]");
+    // Only outside a path, the same guard the app uses: the app deliberately
+    // keeps the kit's own paths readable (which model, which venv), and a
+    // blunt rule here would redact them again on the way past.
+    .replace(/(?<![A-Za-z0-9_\-/\\.])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_\-/\\.])/g, "[REDACTED]");
 }
 
 // --- what a report has to be ---------------------------------------------
