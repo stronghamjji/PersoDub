@@ -414,7 +414,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     $("dlRow").hidden = true;
     if (!state.newProject) return;
     state.newProject.downloadId = d.id;
-    lastLink = { url: d.url, id: d.id };
+    // Only a video that came from a link can be recognised by one: a held file
+    // handed straight in has no address to remember it by.
+    if (d.url) lastLink = { url: d.url, id: d.id };
     paintActions();
     const v = $("projectVideo");
     v.hidden = false;
@@ -494,7 +496,16 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     const files = source.files && source.files.length > 1 ? source.files : null;
     const file = source.file || (files ? files[0] : null);
     state.newProject = { file, files, probe: source.probe || null, trim: null,
-                         downloadId: null };
+                         // The third way in: a video the app is ALREADY holding,
+                         // which is how the erase screen hands its result on.
+                         // There is nothing to fetch and nothing to upload --
+                         // the id, the name and the length are known already.
+                         downloadId: source.downloadId || null,
+                         title: source.title || "",
+                         // Subtitles the user brought themselves, when they came
+                         // with the video: the dub then translates these instead
+                         // of listening to the audio for them.
+                         sourceSrt: source.sourceSrt || null };
     stopWatching();
     releaseProjectVideo();
     const v = $("projectVideo");
@@ -534,6 +545,10 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       }
       // The still is what there is to look at while the link comes down.
       beginDownload(source.probe.url);
+    } else if (source.downloadId) {
+      // Already here: it plays and scrubs at once, the way a link's file does
+      // the moment its download finishes.
+      playHeldVideo({ id: source.downloadId });
     }
     $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
     $("projectError").textContent = "";
@@ -643,8 +658,12 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       translateEngine: $("translateSelect").value,
       // A link's title is only known here -- the probe already fetched it, while
       // the server learns nothing from downloading the video. Names the job's
-      // folder, so send it along with the job.
-      project: np.probe ? np.probe.title : undefined,
+      // folder, so send it along with the job. A held video brings its own name
+      // the same way (the erase screen's result).
+      project: np.probe ? np.probe.title : (np.title || undefined),
+      // Subtitles the user supplied for the source language: the dub translates
+      // these instead of transcribing the audio.
+      sourceSrt: np.sourceSrt || null,
       // The part of the video the trim bar has selected, or null for all of it.
       trim: np.trim || null,
     };

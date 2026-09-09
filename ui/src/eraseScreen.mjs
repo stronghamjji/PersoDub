@@ -12,7 +12,8 @@
 // Everything this file touches is #screen-erase and the top bar's two erase
 // controls, which setTopbar hides for every other screen.
 import { uploadDownload, downloadVideoUrl, suggestEraseArea, startErase,
-         fetchErase, cancelDubJob } from "./dubApi.mjs";
+         fetchErase, cancelDubJob, eraseVideoUrl, saveErased,
+         eraseToDub } from "./dubApi.mjs";
 import { clampArea, defaultArea, dragArea, toScreen, videoPerScreen, isWhole,
          estimateSeconds, estimateLabel, progressLine, isPackMissing,
          packNeededLine, eraseView } from "./eraseArea.mjs";
@@ -38,10 +39,15 @@ const PACK_ID = "subtitle-eraser";
  * @param {(id: string) => object|null} deps.packRow  one catalog row, read
  *        for the pack's size on this computer
  * @param {() => void} deps.onJobsChanged  the Projects list has a new row
+ * @param {(source: object) => void} deps.onDub  open the New project dialog on
+ *        the erased video (optionally with the user's own subtitles)
+ * @param {(path: string) => void} deps.reveal  show a saved file in the
+ *        computer's own file window, or null outside the desktop app
  * @returns the operations the rest of the page calls.
  */
 export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
-                                    installPack, packRow, onJobsChanged }) {
+                                    installPack, packRow, onJobsChanged,
+                                    onDub, reveal }) {
   // The video being worked on: the id the app holds it under, what to call it,
   // and how long it is (the estimate is made from that length).
   let source = null;
@@ -59,6 +65,15 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   let finding = false;
   // Which video the <video> is playing, so a repaint does not reload it.
   let playing = "";
+  // Which of the two tabs is up once there is a result. Erased: it is the video
+  // the user came here for, and Original is the one to check it against.
+  let tab = "erased";
+  // When Erase was pressed, so the finished screen can say how long it took.
+  // 0 for a result opened out of the Projects list, which nobody timed.
+  let startedAt = 0;
+  // Where Export wrote the video, once it has. "" until then, which is what
+  // keeps the "Saved to Downloads" line from claiming anything too early.
+  let savedPath = "";
 
   // This computer's own speed. Windows machines here have a GPU doing the
   // work; a Mac does it on its own chip and takes longer per second of video.
@@ -97,15 +112,23 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   /** Everything on screen, from what is known right now. One place, one order. */
   function paint() {
     const view = eraseView({ source, job });
+    const done = view === "done";
     $("eraseDrop").hidden = view !== "drop";
     $("eraseBody").hidden = view === "drop";
-    $("erasePack").hidden = !packMissing;
+    $("erasePack").hidden = !packMissing || done;
+    // The question and the tabs take turns in the same strip, so the picture
+    // under them is in the same place before and after.
+    $("eraseHead").hidden = done;
+    $("eraseTabs").hidden = !done;
     $("eraseBox").hidden = view !== "area" || !area;
     $("eraseFinding").hidden = !finding;
-    $("eraseRow").hidden = view !== "working" && view !== "failed";
+    $("eraseRow").hidden = view === "area";
     $("eraseCancelBtn").hidden = view !== "working";
     $("eraseBarBox").hidden = view !== "working";
     $("eraseBackBtn").hidden = view !== "failed";
+    $("eraseSrtBtn").hidden = !done;
+    $("eraseDubBtn").hidden = !done;
+    $("eraseSaved").hidden = !done || !savedPath;
     $("eraseState").classList.toggle("bad", view === "failed");
     if (view === "working") {
       const pct = job.percent || 0;
@@ -115,16 +138,39 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     } else if (view === "failed") {
       $("eraseState").textContent = job.status === "cancelled"
         ? "Erasing was cancelled." : (job.error || "The erase stopped.");
+    } else {
+      $("eraseState").textContent = "";
+    }
+    if (done) {
+      setVideo(eraseVideoUrl(job.id, tab));
+      for (const el of $("eraseTabs").querySelectorAll(".vtab")) {
+        el.classList.toggle("active", el.dataset.erase === tab);
+      }
     }
     setTopbar({
       title: source ? (source.title || "Erase subtitles") : "Erase subtitles",
-      subtitle: view === "drop" ? "" : "Erase subtitles",
+      // How long it took is what the result says; until then, where you are.
+      subtitle: done ? erasedFor() : (view === "drop" ? "" : "Erase subtitles"),
       back: true,
       estimate: view === "area" ? estimateLabel(estSeconds()) : "",
       erase: view === "area",
+      // The top bar's Export saves the erased video; the page hands the press
+      // to this screen while it is the screen that is up.
+      done,
     });
     $("eraseRunBtn").disabled = !area || packMissing || finding;
     if (view === "area") drawBox();
+  }
+
+  /**
+   * "Erased · 8 min" -- how long it actually took, timed on this screen. A job
+   * record keeps when it started and nothing about when it ended, so a result
+   * opened from the Projects list days later says plainly "Erased" rather than
+   * a number worked out from the estimate, which is not the same thing.
+   */
+  function erasedFor() {
+    if (!startedAt) return "Erased";
+    return `Erased · ${Math.max(1, Math.round((Date.now() - startedAt) / 60000))} min`;
   }
 
   // The box is placed against the picture, so it has to be redrawn whenever the
@@ -137,7 +183,8 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   function reset() {
     stopWatching();
     source = null; area = null; job = null; frame = { w: 0, h: 0 };
-    packMissing = false; finding = false;
+    packMissing = false; finding = false; startedAt = 0; savedPath = "";
+    tab = "erased";
     setVideo("");
     $("eraseError").textContent = "";
   }
@@ -322,6 +369,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       return;
     }
     job = { id: jid, status: "queued", percent: 0, done: false };
+    startedAt = Date.now();
     paint();
     onJobsChanged();
     watch(jid);
@@ -368,6 +416,66 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     }, POLL_MS);
   }
 
+  // ---- The result -----------------------------------------------------------
+
+  // Original / Erased. Which one is up is this screen's own; the finished
+  // screen's tabs are wired separately and look at their own pane.
+  for (const el of $("eraseTabs").querySelectorAll(".vtab")) {
+    el.addEventListener("click", () => { tab = el.dataset.erase; paint(); });
+  }
+
+  /**
+   * The top bar's Export while this screen is up: write the erased video into
+   * the user's Downloads folder and say so on one line. No dialog -- there is
+   * one file and one place for it to go.
+   */
+  async function exportErased() {
+    if (!job || !job.done) return;
+    $("eraseError").textContent = "";
+    let res;
+    try {
+      res = await saveErased(job.id);
+    } catch (e) {
+      $("eraseError").textContent = e.message;
+      return;
+    }
+    savedPath = res.path || "";
+    // Show is the desktop app's; in a browser there is no file window to open,
+    // so the line says where it went and stops there.
+    $("eraseShowWrap").hidden = !reveal || !savedPath;
+    paint();
+  }
+  $("eraseShowBtn").addEventListener("click", () => { if (reveal && savedPath) reveal(savedPath); });
+
+  // Both ways on are the same errand: the erased video goes back into the
+  // holding area under an id of its own, and the New project dialog opens on
+  // that id -- so the dub reads the cleaned file, not the one with the writing
+  // still on it. The only difference is whether the user brought subtitles.
+  async function handOn(sourceSrt) {
+    const btn = sourceSrt ? $("eraseSrtBtn") : $("eraseDubBtn");
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Opening…";
+    $("eraseError").textContent = "";
+    try {
+      const held = await eraseToDub(job.id);
+      onDub({ downloadId: held.download_id, title: held.title,
+              duration_sec: held.duration_sec, sourceSrt: sourceSrt || null });
+    } catch (e) {
+      $("eraseError").textContent = e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+  $("eraseDubBtn").addEventListener("click", () => { if (job && job.done) handOn(null); });
+  $("eraseSrtBtn").addEventListener("click", () => $("eraseSrtInput").click());
+  $("eraseSrtInput").addEventListener("change", () => {
+    const file = $("eraseSrtInput").files && $("eraseSrtInput").files[0];
+    $("eraseSrtInput").value = "";
+    if (file && job && job.done) handOn(file);
+  });
+
   // ---- The drop zone --------------------------------------------------------
   const zone = $("eraseZone");
   const input = $("eraseInput");
@@ -392,5 +500,5 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     if (file) takeFile(file);
   });
 
-  return { openErase, openEraseWith };
+  return { openErase, openEraseWith, exportErased };
 }

@@ -552,6 +552,15 @@
      whole sentence, so this one is allowed to wrap. */
   .erase-state.bad { color: var(--destructive); white-space: normal; }
   .erase-bar { flex: 1; min-width: 0; }
+  /* The way on, at the far end of the row -- the same place the New project
+     dialog puts Start dubbing. Back stands there too: on a job that stopped
+     there is nothing between the reason and the one thing to do about it. */
+  #eraseDubBtn, #eraseBackBtn { margin-left: auto; }
+  /* What Export has to say, and only after it has said it. */
+  .erase-saved { display: inline-flex; align-items: center; gap: 8px;
+    font-size: var(--font-label); color: var(--muted-foreground); }
+  .erase-saved button { border: none; background: none; padding: 0; cursor: pointer;
+    font: inherit; color: var(--primary-ink); text-decoration: underline; }
   /* The estimate beside the Erase button: a label, not a second title. */
   .topbar-est { font-size: var(--font-label); color: var(--muted-foreground);
     white-space: nowrap; }
@@ -1590,6 +1599,13 @@
             <button class="btn btn-primary" id="erasePackBtn" type="button">Download</button>
           </div>
           <div class="erase-head" id="eraseHead">Where are the subtitles?</div>
+          <!-- The finished screen's own tabs, in the strip the question was in,
+               so the picture below never moves. Erased first: it is the video
+               the user came here for. -->
+          <div class="video-tabs" id="eraseTabs" hidden>
+            <button class="vtab" data-erase="original" type="button">Original</button>
+            <button class="vtab active" data-erase="erased" type="button">Erased</button>
+          </div>
           <div class="erase-stage" id="eraseStage">
             <video id="eraseVideo" playsinline muted></video>
             <!-- The one box. Drag the middle to move it, a corner to resize it;
@@ -1605,10 +1621,17 @@
                stop it, or -- when it stopped by itself -- why, and the way back
                to the box to try a different one. -->
           <div class="erase-row" id="eraseRow" hidden>
+            <button class="btn btn-outline" id="eraseSrtBtn" type="button" hidden>Add my subtitles (.srt)</button>
+            <input type="file" id="eraseSrtInput" accept=".srt,text/plain" hidden>
             <span class="erase-state" id="eraseState"></span>
+            <!-- Where Export answers. A line, not a dialog: the file is already
+                 written by the time this appears, the same way Save clip says
+                 so in the New project dialog. -->
+            <span class="erase-saved" id="eraseSaved" hidden>Saved to Downloads<span id="eraseShowWrap" hidden>· <button type="button" id="eraseShowBtn">Show</button></span></span>
             <div class="progress-bar erase-bar" id="eraseBarBox"><div id="eraseFill"></div></div>
             <button class="btn btn-outline" id="eraseCancelBtn" type="button">Cancel</button>
             <button class="btn btn-outline" id="eraseBackBtn" type="button" hidden>Back</button>
+            <button class="btn btn-primary" id="eraseDubBtn" type="button" hidden>Start dubbing</button>
           </div>
         </div>
         <div class="erase-error" id="eraseError"></div>
@@ -2835,6 +2858,13 @@ const eraseScreen = initEraseScreenUi({
     projects.renderHistory().catch(() => {});
     projects.renderQueueCard().catch(() => {});
   },
+  // The way on from an erased video: the New project dialog, opened on the
+  // cleaned file rather than the one with the writing still on it.
+  onDub: (source) => newProject.openNewProject(source),
+  // Only the desktop app can open a folder. In a browser there is none to
+  // open, and the "Show" beside "Saved to Downloads" stays away.
+  reveal: window.persodubShell?.revealPath
+    ? (path) => window.persodubShell.revealPath(path) : null,
 });
 $("eraseToggle").addEventListener("click", () => eraseScreen.openErase());
 
@@ -3254,7 +3284,9 @@ async function restartVoiceEngine() {
 async function startDubbing() {
   $("projectError").textContent = "";
   const np = state.newProject;
-  if (!np || (!np.file && !np.probe)) {
+  // Three ways a video can be in this dialog: dropped, pasted as a link, or
+  // already in the app's hands (the erase screen's result).
+  if (!np || (!np.file && !np.probe && !np.downloadId)) {
     $("projectError").textContent = "Choose a video first."; return;
   }
 
@@ -3269,7 +3301,7 @@ async function startDubbing() {
     state.pollGeneration += 1;
     const myGeneration = state.pollGeneration;
 
-    const label = np.file ? np.file.name : np.probe.title;
+    const label = np.file ? np.file.name : (np.probe ? np.probe.title : (np.title || "Dubbing"));
     // The server has the job on file already, so the sidebar only has to ask
     // again -- the new row comes back with it.
     projects.renderHistory().catch(() => {});
@@ -3614,15 +3646,16 @@ function paintPlayhead() {
 }
 
 // Original / Dubbed. The same moment in the same video, so the position and
-// whether it was playing both survive the swap.
-for (const tab of document.querySelectorAll(".vtab")) {
+// whether it was playing both survive the swap. Only this pane's tabs: the
+// erase screen has a pair of its own, wired by its own module.
+for (const tab of document.querySelectorAll("#videoPane .vtab")) {
   tab.addEventListener("click", () => showVideoSource(tab.dataset.src));
 }
 
 // Which of the two tabs is lit. Three places change doneSource, and every one
 // of them has to say so on screen.
 function paintVideoTabs() {
-  for (const tab of document.querySelectorAll(".vtab")) {
+  for (const tab of document.querySelectorAll("#videoPane .vtab")) {
     tab.classList.toggle("active", tab.dataset.src === doneSource);
   }
 }
@@ -3673,7 +3706,13 @@ function reloadDoneVideo() {
 }
 
 // ---------------- Export dialog ----------------
-$("exportBtn").addEventListener("click", openExport);
+// One Export button, two things to hand back: a finished dub, which has a
+// dialog of choices behind it, and an erased video, which has exactly one file
+// and one place for it -- so that one saves straight away and says so.
+$("exportBtn").addEventListener("click", () => {
+  if (document.body.dataset.screen === "erase") eraseScreen.exportErased();
+  else openExport();
+});
 function closeExport() { $("exportOverlay").classList.remove("open"); }
 $("exportCloseX").addEventListener("click", closeExport);
 // Backdrop and Escape, the same way out the other dialogs give.

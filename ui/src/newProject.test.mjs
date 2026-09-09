@@ -168,7 +168,8 @@ test("openNewProject on a link sets state.newProject and opens the overlay", asy
   h.api.openNewProject({ probe });
 
   assert.deepEqual(h.state.newProject,
-    { file: null, files: null, probe, trim: null, downloadId: null });
+    { file: null, files: null, probe, trim: null, downloadId: null,
+      title: "", sourceSrt: null });
   assert.equal(h.$("projectOverlay").classList.contains("open"), true);
   assert.equal(h.$("projectTitle").textContent, "New project");
   // A link has no video to scrub -- a still, a length, and no trim bar.
@@ -583,6 +584,7 @@ test("readOptions hands back the whole form, field for field", async (t) => {
     // answers /api/languages; this harness answers nothing useful).
     languages: LANGUAGES.map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null })),
     project: undefined,
+    sourceSrt: null,
     trim: { start: 1, end: 9 },
   });
 });
