@@ -80,7 +80,7 @@ const DOWNLOAD_POLL_MS = 1000;
  * @param {() => void} deps.onPickFile   open the file picker (Replace)
  * @param {(path: string) => void} [deps.reveal]  show a saved file in the
  *        computer's own file window, or null outside the desktop app
- * @param {(source: {downloadId, title, duration_sec}) => void} deps.onErase
+ * @param {(source: {downloadId, title, duration_sec, trim}) => void} deps.onErase
  *        hand the held video to the subtitle-erasing screen
  * @returns the operations the rest of the page calls.
  */
@@ -646,6 +646,10 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       title: np.probe ? np.probe.title : (np.file ? np.file.name : ""),
       duration_sec: Number.isFinite(v.duration) && v.duration
         ? v.duration : (np.probe ? np.probe.duration_sec : 0),
+      // The part the handles kept goes with it. Without this a 10-second cut
+      // of a 60-second video was erased in full -- six times the minutes, and
+      // six times the video handed back.
+      trim: np.trim || null,
     });
     closeNewProject();
   });

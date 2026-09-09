@@ -14,6 +14,7 @@ import {
   applyEngineAvailability,
   engineChips,
   startedLabel,
+  startErase,
 } from "./dubApi.mjs";
 
 test("buildDubFormData sends exactly the fields app/main.py:dub_start expects", () => {
@@ -548,4 +549,27 @@ test("every stage's own marker parses back to that stage", () => {
     assert.equal(p.label, s.label, `${s.name} should show as "${s.label}"`);
     assert.ok(p.stage >= 1 && p.stage <= p.total);
   });
+});
+
+test("startErase carries the trim, both fields or neither -- the route refuses one", async () => {
+  const sent = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    sent.push({ url, body: opts.body });
+    return { ok: true, json: async () => ({ job_id: "e1" }) };
+  };
+  try {
+    await startErase({ downloadId: "d1", area: [1, 2, 3, 4], project: "A talk",
+                       trim: { start: 2, end: 12 } });
+    await startErase({ downloadId: "d1", area: "whole" });
+  } finally {
+    globalThis.fetch = real;
+  }
+
+  assert.equal(sent[0].url, "/api/erase");
+  assert.equal(sent[0].body.get("area"), "[1,2,3,4]");
+  assert.equal(sent[0].body.get("trim_start"), "2");
+  assert.equal(sent[0].body.get("trim_end"), "12");
+  assert.equal(sent[1].body.get("trim_start"), null);
+  assert.equal(sent[1].body.get("trim_end"), null);
 });

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { MIN_H, MIN_W, RATE, SETUP_SECONDS, clampArea, toScreen, toVideo,
          videoPerScreen, dragArea, defaultArea, isWhole, estimateSeconds,
          estimateLabel, progressLine, erasePercent, isPackMissing,
-         packNeededLine, eraseView } from "./eraseArea.mjs";
+         packNeededLine, eraseView, workLength, trimNote } from "./eraseArea.mjs";
 
 // A portrait clip in a stage wider and shorter than it is: the picture is
 // letterboxed down both sides, which is what the conversions have to allow for.
@@ -177,4 +177,28 @@ test("a job that stopped without a video is a failure, whatever it says", () => 
   assert.equal(eraseView({ source, job: { status: "cancelled", done: false } }), "failed");
   // Even "done": with no erased video there is nothing to show under a tab.
   assert.equal(eraseView({ source, job: { status: "done", done: false } }), "failed");
+});
+
+// -- the part of the video the erase is actually about ------------------------
+
+test("a trimmed video is measured by what the handles kept, not by the file", () => {
+  assert.equal(workLength({ duration: 60, trim: { start: 5, end: 15 } }), 10);
+  // No trim, no trim worth the name, and no source at all: the whole file.
+  assert.equal(workLength({ duration: 60, trim: null }), 60);
+  assert.equal(workLength({ duration: 60 }), 60);
+  assert.equal(workLength({ duration: 60, trim: { start: 5 } }), 60);
+  assert.equal(workLength(null), 0);
+  // Which is what the minutes are promised from: a sixth of the video, near
+  // enough a sixth of the wait.
+  const whole = estimateSeconds(workLength({ duration: 60, trim: null }));
+  const part = estimateSeconds(workLength({ duration: 60, trim: { start: 5, end: 15 } }));
+  assert.ok(part < whole / 4, `${part} should be far under ${whole}`);
+});
+
+test("the screen says how much of the video is going, and only when some is not", () => {
+  assert.equal(trimNote({ duration: 60, trim: { start: 5, end: 15 } }), "10s of 60s");
+  assert.equal(trimNote({ duration: 60, trim: null }), "");
+  assert.equal(trimNote(null), "");
+  // Nothing to compare against is nothing to say.
+  assert.equal(trimNote({ duration: 0, trim: { start: 0, end: 5 } }), "");
 });

@@ -328,12 +328,21 @@ export async function suggestEraseArea(downloadId, { baseUrl = "" } = {}) {
   return res.json();
 }
 
-/** POST /api/erase -- queue the erase; answers with the job id to follow. */
-export async function startErase({ downloadId, area, project }, { baseUrl = "" } = {}) {
+/**
+ * POST /api/erase -- queue the erase; answers with the job id to follow.
+ * `trim` is {start, end} in seconds, or null for the whole video: the app cuts
+ * the video down first and the cut IS the job, exactly as it is for a dub.
+ */
+export async function startErase({ downloadId, area, project, trim = null }, { baseUrl = "" } = {}) {
   const fd = new FormData();
   fd.append("download_id", downloadId);
   fd.append("area", Array.isArray(area) ? JSON.stringify(area) : String(area || "whole"));
   if (project) fd.append("project", project);
+  // Both or neither: the route refuses one without the other.
+  if (trim) {
+    fd.append("trim_start", String(trim.start));
+    fd.append("trim_end", String(trim.end));
+  }
   const res = await fetch(`${baseUrl}/api/erase`, { method: "POST", body: fd });
   if (!res.ok) throw await downloadError(res, "Couldn't start erasing.");
   return (await res.json()).job_id;

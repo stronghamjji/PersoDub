@@ -16,7 +16,7 @@ import { uploadDownload, downloadVideoUrl, suggestEraseArea, startErase,
          eraseToDub } from "./dubApi.mjs";
 import { clampArea, defaultArea, dragArea, toScreen, videoPerScreen, isWhole,
          estimateSeconds, estimateLabel, progressLine, isPackMissing,
-         packNeededLine, eraseView } from "./eraseArea.mjs";
+         packNeededLine, eraseView, workLength, trimNote } from "./eraseArea.mjs";
 
 // How often the erase is asked how far along it is. The same second the dub's
 // queue card uses: the percentage moves in visible steps and the answer is small.
@@ -84,7 +84,10 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
 
   function estSeconds() {
     if (!source) return 0;
-    return estimateSeconds(source.duration, {
+    // The part the trim kept, not the whole file: erasing 10 seconds of a
+    // minute takes a sixth of the minutes, and promising the sixty was a lie
+    // the user only found out about by waiting.
+    return estimateSeconds(workLength(source), {
       whole: !!area && isWhole(area, frame.w, frame.h), windows: onWindows,
     });
   }
@@ -164,7 +167,11 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     if (!$("screen-erase").hidden) setTopbar({
       title: source ? (source.title || "Erase subtitles") : "Erase subtitles",
       // How long it took is what the result says; until then, where you are.
-      subtitle: done ? erasedFor() : (view === "drop" ? "" : "Erase subtitles"),
+      // And how much of the video it is about, whenever that is not all of it:
+      // without those four words the whole thing looks like it is going.
+      subtitle: done ? erasedFor()
+        : view === "drop" ? ""
+        : trimNote(source) ? `Erase subtitles · ${trimNote(source)}` : "Erase subtitles",
       back: true,
       estimate: view === "area" ? estimateLabel(estSeconds()) : "",
       erase: view === "area",
@@ -219,7 +226,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   function openEraseJob(rec) {
     showScreen("erase");
     reset();
-    source = { downloadId: "", title: rec.project || "", duration: 0 };
+    source = { downloadId: "", title: rec.project || "", duration: 0, trim: null };
     job = { id: rec.id, status: rec.status, percent: 0, done: false,
             error: rec.error || "" };
     paint();
@@ -246,12 +253,15 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   /**
    * The New project dialog's Erase subtitles button: the app is already
    * holding this video, so there is nothing to upload and nothing to wait for.
+   * `trim` is the part its handles kept, {start, end} in seconds, or null.
    */
-  function openEraseWith({ downloadId, title, duration_sec }) {
+  function openEraseWith({ downloadId, title, duration_sec, trim = null }) {
     if (!downloadId) return;
     showScreen("erase");
     reset();
-    source = { downloadId, title: title || "", duration: duration_sec || 0 };
+    // The trim comes with the video: the dialog's handles chose a part of it,
+    // and that part is what gets erased and handed back.
+    source = { downloadId, title: title || "", duration: duration_sec || 0, trim };
     begin();
   }
 
@@ -270,7 +280,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       $("eraseError").textContent = e.message;
       return;
     }
-    source = { downloadId: held.id, title: held.title || file.name, duration };
+    source = { downloadId: held.id, title: held.title || file.name, duration, trim: null };
     begin();
   }
 
@@ -313,6 +323,11 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
    * box, so it is offered rather than assumed -- and when the eraser is not
    * installed, or the look failed, the bottom of the frame is offered instead
    * so there is always something to drag.
+   *
+   * The look is over the whole file even when a trim came in: POST
+   * /api/erase/suggest takes no trim, and subtitles sit in the same band all
+   * the way through a video, so the box it offers is the same box either way.
+   * The box is dragged afterwards regardless.
    */
   async function suggest() {
     const mine = source;
@@ -404,7 +419,8 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     $("eraseError").textContent = "";
     let jid;
     try {
-      jid = await startErase({ downloadId: source.downloadId, area, project: source.title });
+      jid = await startErase({ downloadId: source.downloadId, area,
+                               project: source.title, trim: source.trim || null });
     } catch (e) {
       if (isPackMissing(e)) {
         packMissing = true;

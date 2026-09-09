@@ -500,9 +500,21 @@ test("Erase subtitles hands the held video over and gets out of the way", async 
 
   await h.$("eraseBtn").fire("click");
 
-  assert.deepEqual(h.log.erased, [{ downloadId: "d1", title: "A talk", duration_sec: 30 }]);
+  assert.deepEqual(h.log.erased,
+    [{ downloadId: "d1", title: "A talk", duration_sec: 30, trim: null }]);
   assert.equal(h.$("projectOverlay").classList.contains("open"), false);
   assert.equal(h.state.newProject, null);
+});
+
+test("and the part the handles kept goes with it", async (t) => {
+  const h = await readyDialog();
+  t.after(h.log.restore);
+
+  h.state.newProject.trim = { start: 2, end: 12 };
+  await h.$("eraseBtn").fire("click");
+
+  assert.deepEqual(h.log.erased,
+    [{ downloadId: "d1", title: "A talk", duration_sec: 30, trim: { start: 2, end: 12 } }]);
 });
 
 // -- the saved defaults ----------------------------------------------------

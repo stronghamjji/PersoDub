@@ -110,6 +110,31 @@ export function isWhole(area, videoW, videoH) {
   return (y1 - y0) >= videoH * WHOLE_AT && (x1 - x0) >= videoW * WHOLE_AT;
 }
 
+/**
+ * How much of the video an erase will actually work through: the part the trim
+ * handles kept, or all of it. Everything the screen promises -- the estimate,
+ * the countdown -- is made from this, because a 10-second cut of a 60-second
+ * video takes a sixth of the minutes.
+ */
+export function workLength(source) {
+  if (!source) return 0;
+  const t = source.trim;
+  const whole = Number.isFinite(source.duration) ? source.duration : 0;
+  if (!t || !Number.isFinite(t.start) || !Number.isFinite(t.end)) return whole;
+  return Math.max(0, t.end - t.start);
+}
+
+/**
+ * "15s of 60s" -- said on screen wherever a trim came in, because without it
+ * the user has every reason to think the whole video is being erased. "" when
+ * nothing was trimmed, or when the length is not known.
+ */
+export function trimNote(source) {
+  const t = source && source.trim;
+  if (!t || !source.duration) return "";
+  return `${Math.round(workLength(source))}s of ${Math.round(source.duration)}s`;
+}
+
 /** How long this erase will take, in seconds. 0 when the length is unknown. */
 export function estimateSeconds(durationSec, { whole = false, windows = false } = {}) {
   if (!Number.isFinite(durationSec) || durationSec <= 0) return 0;
