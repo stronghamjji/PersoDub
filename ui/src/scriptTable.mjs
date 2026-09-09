@@ -96,10 +96,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
 
   function scriptRow(l, speakers) {
     const n = speakers.get(l.speaker);
-    // The name is a title as well as words, so the compact table can drop to the
-    // colour dot alone and still say who is speaking on hover.
+    // The name is a title as well as words, so a chip the narrow table has
+    // squeezed still says who is speaking on hover.
     const chip = n
-      ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}" title="Speaker ${n}"><i></i><b>Speaker ${n}</b></span>` : "";
+      ? `<span class="spk-chip" title="Speaker ${n}"><b>Speaker ${n}</b></span>` : "";
     const over = lineOverBy(l);
     // "1.6s / 0.2s · +1.4s": how long the voice is, how long the slot is, and
     // the difference in one glance -- red when it runs over, grey when it is

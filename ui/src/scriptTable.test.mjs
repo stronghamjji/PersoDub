@@ -151,10 +151,10 @@ test("a row carries the line number, who said it, both languages and whether it 
   // The header names the two languages the page chose, not "Original/Script".
   assert.match(html, /<div>Korean<\/div>/);
   assert.match(html, /<div>English<\/div>/);
-  // Speakers are numbered in the order they first speak, and coloured by that
-  // number -- the diarizer's own "SPEAKER_00" never reaches the screen.
-  assert.match(html, /class="spk-chip spk-1" title="Speaker 1"/);
-  assert.match(html, /class="spk-chip spk-2" title="Speaker 2"/);
+  // Speakers are numbered in the order they first speak -- one chip colour for
+  // all of them; the diarizer's own "SPEAKER_00" never reaches the screen.
+  assert.match(html, /class="spk-chip" title="Speaker 1"/);
+  assert.match(html, /class="spk-chip" title="Speaker 2"/);
   assert.doesNotMatch(html, /SPEAKER_0/);
   // Number, time, source and the editable translation.
   assert.match(html, /<div class="sc-n">1<\/div>/);
@@ -180,7 +180,7 @@ test("a row carries the line number, who said it, both languages and whether it 
 const ONE_ROW =
   '<div class="sc-row" data-start="1" data-end="2.5">\n' +
   '    <div class="sc-n">7</div>\n' +
-  '    <div><span class="spk-chip spk-1" title="Speaker 1"><i></i><b>Speaker 1</b></span></div>\n' +
+  '    <div><span class="spk-chip" title="Speaker 1"><b>Speaker 1</b></span></div>\n' +
   '    <div class="sc-time"><span class="sc-t-a">00:00:01.0</span><span\n' +
   '      class="sc-t-b"> – 00:00:02.5</span></div>\n' +
   '    <div class="sc-src">안녕</div>\n' +

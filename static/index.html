@@ -109,15 +109,6 @@
     --radius-lg: 12px;
     --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
 
-    /* One colour per speaker, cycled after the fourth. Each is a dot colour, the
-       pale background its chip sits on, and the ink that stays readable on that
-       background. Muted on purpose: four saturated chips down a column of text
-       shout louder than the words they label. */
-    --spk-1: #7B64C8; --spk-1-soft: #EDE7FF; --spk-1-ink: #4B3A8F;
-    --spk-2: #0F766E; --spk-2-soft: #CCFBF1; --spk-2-ink: #115E59;
-    --spk-3: #B4791A; --spk-3-soft: #FBEFD5; --spk-3-ink: #7C5211;
-    --spk-4: #C0587F; --spk-4-soft: #FBE4EE; --spk-4-ink: #8D3A58;
-
     /* The assistant is dark wherever it sits -- in both themes, unchanged by
        Appearance -- and these are its only colours. Lifted off black in 0.5.5
        so the column reads as a window of its own beside the work. */
@@ -674,23 +665,17 @@
     .sc-t-b { display: none; }
   }
 
-  /* Who is speaking, in that speaker's colour. (Not ".chip" -- the assistant
-     strip already has one of those, and its style block comes after this one.) */
+  /* Who is speaking. One chip in the app's own blue, not a colour per speaker:
+     four tinted chips down a column of text shouted louder than the words they
+     labelled, and the number in them is what tells the speakers apart (user,
+     2026-09-08). (Not ".chip" -- the assistant strip already has one of those,
+     and its style block comes after this one.) */
   .spk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
-    border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
-  .spk-chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block;
-    flex: 0 0 auto; }
-  /* The name is wrapped so the narrow table can leave the dot alone; it must not
-     read heavier than the chip it sits in. */
+    border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap;
+    background: var(--primary-soft); color: var(--primary-ink); }
+  /* The name is wrapped so the narrow table has something of its own to reach
+     for; it must not read heavier than the chip it sits in. */
   .spk-chip b { font-weight: inherit; }
-  .spk-1 { background: var(--spk-1-soft); color: var(--spk-1-ink); }
-  .spk-1 i { background: var(--spk-1); }
-  .spk-2 { background: var(--spk-2-soft); color: var(--spk-2-ink); }
-  .spk-2 i { background: var(--spk-2); }
-  .spk-3 { background: var(--spk-3-soft); color: var(--spk-3-ink); }
-  .spk-3 i { background: var(--spk-3); }
-  .spk-4 { background: var(--spk-4-soft); color: var(--spk-4-ink); }
-  .spk-4 i { background: var(--spk-4); }
 
   /* Play this line in the video; filled while it is the line playing. */
   .sc-listen { width: 26px; height: 26px; border-radius: 50%; padding: 0;
