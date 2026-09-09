@@ -269,3 +269,19 @@ def test_the_mask_at_a_seam_carries_both_sentences_and_the_stretches_do_not_move
     # for no reason.
     assert sub_list[1] == [short]
     assert sub_list[6] == [long_line]
+
+
+def test_the_tool_s_own_ffmpeg_is_used_where_the_computer_has_none(tmp_path, monkeypatch):
+    # A Windows kit need not have ffmpeg on PATH, and the eraser has to put the
+    # sound back without one. video-subtitle-remover ships a copy per platform.
+    monkeypatch.setattr(erase_subtitles.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(erase_subtitles.platform, "system", lambda: "Darwin")
+    bundled = tmp_path / "backend" / "ffmpeg" / "macos"
+    bundled.mkdir(parents=True)
+    (bundled / "ffmpeg").write_text("", encoding="utf-8")
+
+    assert erase_subtitles.find_tool("ffmpeg", str(tmp_path)) == str(bundled / "ffmpeg")
+    # No ffprobe is shipped, and asking a name that is not there would hang the
+    # run on a missing executable -- has_audio answers yes instead.
+    assert erase_subtitles.find_tool("ffprobe", str(tmp_path)) == "ffprobe"
+    assert erase_subtitles.has_audio("clip.mp4", "ffprobe") is True

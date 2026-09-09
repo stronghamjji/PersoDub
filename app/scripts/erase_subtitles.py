@@ -33,6 +33,8 @@ Coordinates are (ymin, ymax, xmin, xmax) -- rows first, not the usual (x, y).
 import argparse
 import json
 import os
+import platform
+import shutil
 import subprocess
 import sys
 import threading
@@ -58,14 +60,39 @@ def report_progress(remover, stop):
             print("progress %d%%" % percent, flush=True)
 
 
-def has_audio(path):
-    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0",
+def find_tool(name, vsr_dir):
+    """ffmpeg or ffprobe: the one on PATH, else the copy the tool ships.
+
+    A Windows kit need not have either on PATH, and video-subtitle-remover
+    carries an ffmpeg of its own for each platform (no ffprobe -- see
+    has_audio, which does without one).
+    """
+    found = shutil.which(name)
+    if found:
+        return found
+    if name == "ffmpeg":
+        windows = platform.system() == "Windows"
+        folder = {"Windows": "win_x64", "Linux": "linux_x64"}.get(platform.system(), "macos")
+        bundled = os.path.join(vsr_dir, "backend", "ffmpeg", folder,
+                               "ffmpeg.exe" if windows else "ffmpeg")
+        if os.path.exists(bundled):
+            return bundled
+    return name
+
+
+def has_audio(path, ffprobe):
+    """Whether `path` carries sound. Without an ffprobe to ask, the answer is
+    yes -- which makes the caller try the mux rather than skip it, and a mux
+    that was not needed costs a second and changes nothing."""
+    if not shutil.which(ffprobe) and not os.path.exists(ffprobe):
+        return True
+    r = subprocess.run([ffprobe, "-v", "error", "-select_streams", "a:0",
                         "-show_entries", "stream=index", "-of", "csv=p=0", path],
                        capture_output=True, text=True)
     return bool((r.stdout or "").strip())
 
 
-def restore_audio(source, out_path):
+def restore_audio(source, out_path, ffmpeg="ffmpeg", ffprobe="ffprobe"):
     """Put the original sound back when the tool dropped it.
 
     video-subtitle-remover does carry the audio over -- but it extracts it with
@@ -76,11 +103,11 @@ def restore_audio(source, out_path):
     neither works say so rather than throwing away a video that is otherwise
     exactly what was asked for.
     """
-    if not has_audio(source) or has_audio(out_path):
+    if not has_audio(source, ffprobe) or has_audio(out_path, ffprobe):
         return
     tmp = out_path + ".sound.mp4"
     for audio in (["-c:a", "copy"], ["-c:a", "aac", "-b:a", "192k"]):
-        cmd = (["ffmpeg", "-y", "-v", "error", "-i", out_path, "-i", source,
+        cmd = ([ffmpeg, "-y", "-v", "error", "-i", out_path, "-i", source,
                 "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy"] + audio
                + ["-shortest", "-movflags", "+faststart", tmp])
         if subprocess.run(cmd, capture_output=True).returncode == 0 and os.path.exists(tmp):
@@ -279,7 +306,8 @@ def main():
                  "second_pass": True}
     print("check " + json.dumps(check), flush=True)
 
-    restore_audio(input_path, out_path)
+    restore_audio(input_path, out_path,
+                  find_tool("ffmpeg", vsr_dir), find_tool("ffprobe", vsr_dir))
     print("done", flush=True)
 
 
