@@ -36,5 +36,13 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // Usage counts for finished dubs. The page hands over the raw log tail
   // because it cannot classify it -- main.js turns that into one published
   // word and drops the text. Nothing here reaches the network.
-  countDub: (status, detail) => ipcRenderer.send("shell:count-dub", { status, detail }),
+  countDub: (status, detail, job) => ipcRenderer.send("shell:count-dub", { status, detail, job }),
+  // Automatic failure reports (src/report.js). The page neither builds nor
+  // sends one -- it only gets to show what happened: the shell announces a
+  // report the moment it lands, and getLastReport answers for a page that
+  // loaded after that. `mode` is "on", "off" or "debug", so a build that
+  // cannot report (a from-source run, or the switch turned off) shows nothing
+  // rather than promising a report nobody will receive.
+  onReportSent: (cb) => ipcRenderer.on("shell:report-sent", (_e, sent) => cb(sent)),
+  getLastReport: () => ipcRenderer.invoke("shell:last-report"),
 });

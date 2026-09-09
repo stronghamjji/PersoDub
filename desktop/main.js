@@ -1,12 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
-import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, PACKS, PACK_DIRS } from "./src/installSpec.js";
+import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, torchVariantFor, PACKS, PACK_DIRS } from "./src/installSpec.js";
 import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED } from "./src/installer.js";
 import { revealAllowed } from "./src/revealPolicy.js";
 import { cancelCurrent } from "./src/exec.js";
@@ -17,7 +17,10 @@ import { extractTarGz } from "./src/extract.js";
 import { run } from "./src/exec.js";
 import { resolveUpdateMode, resolveFeed, nextUpdateState } from "./src/updater.js";
 import { findForeignLockers } from "./src/lockCheck.js";
-import { resolveAnalyticsMode, countEvent, classifyError } from "./src/analytics.js";
+import { resolveAnalyticsMode, countEvent, classifyError, loadState, saveState } from "./src/analytics.js";
+import { buildReport, collectEnvironment, maskText, resolveReportMode } from "./src/report.js";
+import { buildLogArchive } from "./src/reportLogs.js";
+import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./src/reportQueue.js";
 import { IS_WIN } from "./src/platform.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -67,19 +70,23 @@ let bootedKitDir = null;   // for the dub counts, which arrive long after boot
 // endpoint or a full disk costs a number and nothing else.
 const COUNT_ENDPOINT = "https://persodub-count.persodub.workers.dev";
 
-// Read fresh every time: the Settings switch writes PERSODUB_NO_ANALYTICS into
-// this same file, so turning counts off takes effect on the very next event
-// instead of waiting for a restart.
+// The environment the user's own switches live in: this process's, with the
+// kit's kit.env laid over it. Read fresh at every call, because Settings
+// writes those switches into that file and turning one off has to take effect
+// on the very next event rather than at the next restart. A GUI app's
+// process.env never carries them, which is why the file is read at all.
+function envWithKit(kitDir) {
+  try {
+    const kitEnvPath = kitDir ? join(kitDir, KIT_ENV) : null;
+    if (kitEnvPath && existsSync(kitEnvPath)) {
+      return { ...process.env, ...parseEnvFile(readFileSync(kitEnvPath, "utf8")) };
+    }
+  } catch { /* unreadable kit.env: fall back to process.env */ }
+  return process.env;
+}
+
 function analyticsMode(kitDir) {
-  // The off switch lives in the kit's kit.env beside the user's other
-  // settings, the same place the update check reads its own -- a GUI app's
-  // process.env never carries it.
-  let env = process.env;
-  const kitEnvPath = kitDir ? join(kitDir, KIT_ENV) : null;
-  if (kitEnvPath && existsSync(kitEnvPath)) {
-    env = { ...process.env, ...parseEnvFile(readFileSync(kitEnvPath, "utf8")) };
-  }
-  return resolveAnalyticsMode({ isPackaged: app.isPackaged, env });
+  return resolveAnalyticsMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
 }
 
 function countUsage(event, kitDir, errorCode, step) {
@@ -96,6 +103,238 @@ function countUsage(event, kitDir, errorCode, step) {
       step,
     });
   } catch { /* a count is never worth interrupting a launch for */ }
+}
+
+// Automatic failure reports. The count above says a dub failed; this says why
+// -- the machine, the step, the error, and the logs -- and it becomes a GitHub
+// issue without the user needing an account or knowing what an issue is.
+// What may leave is decided in src/report.js (an allow-list, masked); this is
+// the wiring: gather, send, and if that fails, keep it for the next launch.
+const REPORT_ENDPOINT = "https://persodub-report.persodub.workers.dev";
+// Reports wait here rather than in userData: a report belongs to the kit that
+// produced it, and a user who deletes a kit is done with its failures too.
+const reportsDir = (kitDir) => join(kitDir, "reports");
+// The install id lives in its own file, not analytics.json: the two switches
+// are independent, so a user who turned the counts off must not get an id
+// minted for them by the report path, or a file that says otherwise.
+const REPORT_STATE = () => join(app.getPath("userData"), "reports.json");
+// What the page shows once a report has gone out ("Report sent - #142").
+let lastReport = null;
+
+function reportMode(kitDir) {
+  return resolveReportMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
+}
+
+// The last lines of a file, as text. Reads the whole file: shell.log is the
+// shell's own, written a line at a time, and has never been large.
+function readFileText(path, maxBytes = 8 * 1024 * 1024) {
+  try {
+    const text = readFileSync(path, "utf8");
+    return text.length > maxBytes ? text.slice(-maxBytes) : text;
+  } catch {
+    return "";
+  }
+}
+
+// The backend's half: the failed job's stage and engines, and the two logs
+// only it knows where to find. A dead engine (the boot failures, which are
+// most of what this exists for) simply means the shell reports what it has.
+async function fetchBundle(jobId) {
+  if (!engines || !engines.url) return null;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 5000);
+  try {
+    const q = jobId ? `?job=${encodeURIComponent(jobId)}` : "";
+    const res = await fetch(`${engines.url}/api/report/bundle${q}`, { signal: abort.signal });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function postJson(url, body, timeoutMs = 8000) {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: abort.signal,
+    });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// The archive of full logs, sent after the report so the issue exists even
+// when this half fails. Its own request, its own retry.
+//
+// Three answers, not two. "gone" is the one that matters: the relay only
+// remembers a report id for a week, and a refusal that says the id is unknown
+// (or the archive is malformed) will say the same thing on every future
+// launch. Retrying that forever would be a request a day for nothing, so it is
+// treated as an answer and the queued copy is dropped.
+async function postLogs(id, archive, timeoutMs = 30000) {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${REPORT_ENDPOINT}/report/${encodeURIComponent(id)}/logs`, {
+      method: "POST",
+      headers: { "content-type": "application/gzip" },
+      body: archive,
+      signal: abort.signal,
+    });
+    if (res.ok) return "ok";
+    // 404 the id is forgotten, 413 the archive is too big, 410 gone: all final.
+    return [404, 410, 413].includes(res.status) ? "gone" : "retry";
+  } catch {
+    return "retry";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Everything about one failure, masked, in the shape the relay accepts. */
+async function collectReport({ kind, kitDir, step, code, message, jobId }) {
+  const home = app.getPath("home");
+  const bundle = await fetchBundle(jobId);
+  const job = (bundle && bundle.job) || {};
+  const shellLogText = maskText(readFileText(join(app.getPath("userData"), "logs", "shell.log")), { home, kit: kitDir });
+  const packs = (bundle && bundle.packs)
+    || Object.fromEntries(PACKS.map((p) => [p.id, packInstalled(kitDir, p.id) ? "ready" : "missing"]));
+  const report = buildReport({
+    kind,
+    step,
+    stage: job.stage,
+    stageMarker: job.stageMarker,
+    code,
+    // The job's own sentence when there is one: it is the line the user saw.
+    message: message || job.error || "",
+    home,
+    // The kit's own paths survive masking -- which model, which venv, which
+    // folder a step died in is the diagnosis. Everything else under home does not.
+    kit: kitDir,
+    version: app.getVersion(),
+    installId: loadState(REPORT_STATE()).device,
+    env: collectEnvironment({
+      appVersion: app.getVersion(),
+      kitVersion: readKitVersion(kitDir) || "",
+      torchVariant: torchVariantFor(kitDir),
+      packs,
+      freeDiskBytes: await freeSpaceAt(kitDir),
+    }),
+    logTails: {
+      shell: shellLogText,
+      app: (bundle && bundle.logTails && bundle.logTails.app) || "",
+      job: (bundle && bundle.logTails && bundle.logTails.job) || "",
+    },
+  });
+  const archive = buildLogArchive({
+    shell: shellLogText,
+    app: (bundle && bundle.logs && bundle.logs.app) || "",
+    job: (bundle && bundle.logs && bundle.logs.job) || "",
+  });
+  return { report, archive };
+}
+
+/** Write a report (and its archive) into the kit's queue for the next launch. */
+function queueReport(kitDir, entry, archive) {
+  try {
+    const dir = reportsDir(kitDir);
+    mkdirSync(dir, { recursive: true });
+    const base = queueBase(entry.report.fingerprint, Date.now());
+    writeFileSync(join(dir, `${base}${REPORT_EXT}`), JSON.stringify(entry));
+    if (archive) writeFileSync(join(dir, `${base}${ARCHIVE_EXT}`), archive);
+  } catch { /* a report that cannot be saved is a report that is lost, nothing more */ }
+}
+
+function announceReport(sent) {
+  lastReport = sent;
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send("shell:report-sent", sent);
+  }
+}
+
+/**
+ * Send one report, then its logs. Says what landed and leaves the keeping to
+ * the caller -- a first attempt starts a queue entry, a retry updates the one
+ * it already has, and the difference matters: re-queueing under a new name
+ * would restart the week a report is allowed to keep trying for.
+ */
+async function deliver(report, archive) {
+  const answer = await postJson(REPORT_ENDPOINT + "/report", report);
+  if (!answer || !answer.id) return { sent: false, id: null, logsSent: false };
+  const logs = archive ? await postLogs(answer.id, archive) : "ok";
+  announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
+  return { sent: true, id: answer.id, logsSent: logs !== "retry" };
+}
+
+function sendReport(opts) {
+  void (async () => {
+    try {
+      const kitDir = opts.kitDir;
+      if (!kitDir) return;
+      const mode = reportMode(kitDir);
+      if (mode === "off") return;
+      // The install id is minted (and written) only on a run that really
+      // reports -- the same rule the counts follow, so a machine that never
+      // reports never gets one, and no file appears claiming otherwise. It has
+      // to happen BEFORE the report is built, or the id in the report and the
+      // id on disk would be two different ids.
+      if (mode === "on") saveState(REPORT_STATE(), loadState(REPORT_STATE()));
+      const { report, archive } = await collectReport(opts);
+      if (mode === "debug") {
+        shellLog(`[persodub-report] would send: ${JSON.stringify(report)}`);
+        shellLog(`[persodub-report] would attach ${archive ? archive.length : 0} bytes of logs`);
+        return;
+      }
+      const { sent, id, logsSent } = await deliver(report, archive);
+      if (!sent) queueReport(kitDir, { report, id: null }, archive);
+      else if (!logsSent) queueReport(kitDir, { report, id }, archive);
+    } catch { /* a failure to report a failure stops here */ }
+  })();
+}
+
+/**
+ * Reports that could not be sent when they happened. Runs once a launch, after
+ * the app is up, and never blocks it: the network is the reason they are here.
+ */
+async function flushReports(kitDir) {
+  const dir = reportsDir(kitDir);
+  if (!kitDir || !existsSync(dir)) return;
+  let names = [];
+  try { names = readdirSync(dir); } catch { return; }
+  const { retry, expired } = partitionQueue(names);
+  const remove = (base) => {
+    for (const ext of [REPORT_EXT, ARCHIVE_EXT]) rmSync(join(dir, `${base}${ext}`), { force: true });
+  };
+  for (const base of expired) remove(base);
+  if (reportMode(kitDir) !== "on") return;   // off or debug: nothing leaves, nothing is deleted
+  for (const base of retry) {
+    let entry = null;
+    try { entry = JSON.parse(readFileSync(join(dir, `${base}${REPORT_EXT}`), "utf8")); } catch { entry = null; }
+    const archivePath = join(dir, `${base}${ARCHIVE_EXT}`);
+    const hasArchive = existsSync(archivePath);
+    const work = pendingWork(entry, { hasArchive });
+    if (work === "done") { remove(base); continue; }
+    const archive = hasArchive ? readFileSync(archivePath) : null;
+    if (work === "send") {
+      const { sent, id, logsSent } = await deliver(entry.report, archive);
+      if (sent && logsSent) remove(base);
+      // Sent, but its logs did not follow: keep the pair under the same name
+      // (so the week it has to try in keeps running) with the id written in,
+      // and only the upload is retried next launch.
+      else if (sent) writeFileSync(join(dir, `${base}${REPORT_EXT}`), JSON.stringify({ report: entry.report, id }));
+      continue;
+    }
+    if (await postLogs(entry.id, archive) !== "retry") remove(base);
+  }
 }
 
 // Auto-update (packaged builds only -- see src/updater.js for the decision
@@ -298,6 +537,7 @@ async function boot(win) {
       const tooLong = kitPathTooLong(cfg.kitDir);
       if (tooLong) {
         countUsage("install_failure", cfg.kitDir, "path-too-long");
+        sendReport({ kind: "install", kitDir: cfg.kitDir, code: "path-too-long", message: tooLong });
         await win.loadFile(join(HERE, "screens", "error.html"), {
           // No logDir: this stopped before a byte was written, so there is no
           // log to point at.
@@ -313,6 +553,7 @@ async function boot(win) {
       const noRoom = notEnoughSpace(stillNeeded, await freeSpaceAt(cfg.kitDir));
       if (noRoom) {
         countUsage("install_failure", cfg.kitDir, "disk-full");
+        sendReport({ kind: "install", kitDir: cfg.kitDir, code: "disk-full", message: noRoom });
         await win.loadFile(join(HERE, "screens", "error.html"), {
           query: { v: app.getVersion(), title: "Not enough space to install", message: noRoom },
         });
@@ -338,7 +579,10 @@ async function boot(win) {
           },
         });
       } catch (err) {
-        countUsage("install_failure", cfg.kitDir, classifyError(String((err && err.message) || err), { install: true }), failedStep);
+        const message = String((err && err.message) || err);
+        const code = classifyError(message, { install: true });
+        countUsage("install_failure", cfg.kitDir, code, failedStep);
+        sendReport({ kind: "install", kitDir: cfg.kitDir, code, step: failedStep, message });
         await win.loadFile(join(HERE, "screens", "error.html"), {
           query: {
             v: app.getVersion(),
@@ -371,11 +615,16 @@ async function boot(win) {
     shellLog(`PERSODUB_READY ${engines.url}`);
     bootedKitDir = cfg.kitDir;
     countUsage("app_launch", cfg.kitDir);
+    // Reports from earlier launches that had no network. Deliberately not
+    // awaited, and after the page is up: the queue is never the reason a
+    // launch is slow.
+    void flushReports(cfg.kitDir).catch(() => {});
   } catch (err) {
     // The kit installed fine and the app still cannot run. Such a machine fires
     // no other event -- install_failure's other codes do not apply and
     // PERSODUB_READY was never reached -- so without this it is invisible.
     countUsage("install_failure", cfg.kitDir, "engine-start");
+    sendReport({ kind: "install", kitDir: cfg.kitDir, code: "engine-start", message: String((err && err.message) || err) });
     await win.loadFile(join(HERE, "screens", "error.html"), {
       query: { v: app.getVersion(), message: String((err && err.message) || err), logDir: String((err && err.logDir) || "") },
     });
@@ -516,11 +765,16 @@ app.whenReady().then(() => {
   ipcMain.on("shell:count-dub", (_e, msg) => {
     const status = msg && msg.status;
     if (status !== "done" && status !== "error") return;
-    countUsage(
-      status === "done" ? "dub_success" : "dub_failure",
-      bootedKitDir,
-      status === "error" ? classifyError(String((msg && msg.detail) || "")) : undefined,
-    );
+    const detail = String((msg && msg.detail) || "");
+    const code = status === "error" ? classifyError(detail) : undefined;
+    countUsage(status === "done" ? "dub_success" : "dub_failure", bootedKitDir, code);
+    // Only a failure is worth a report, and only the shell may name the job:
+    // the page is a web page, so its id is checked against the shape a job id
+    // has before it is put in a URL.
+    if (status === "error") {
+      const jobId = /^[0-9a-f]{6,32}$/.test(String((msg && msg.job) || "")) ? msg.job : undefined;
+      sendReport({ kind: "dub", kitDir: bootedKitDir, code, message: detail, jobId });
+    }
   });
 
   // Packs: the heavy bundles (the engines venv with Demucs, the Ollama
@@ -616,6 +870,15 @@ app.whenReady().then(() => {
     const kitDir = installCtx ? installCtx.kitDir : bootedKitDir;
     return Object.fromEntries(PACKS.map((p) => [p.id, kitDir && packInstalled(kitDir, p.id) ? "ready" : "missing"]));
   });
+
+  // What the page needs to say "Report sent - #142": whether reports are on at
+  // all, and the last one that went out. A page that loads after the report
+  // was sent (the error screen's own reload) reads it back rather than missing
+  // the announcement.
+  ipcMain.handle("shell:last-report", async () => ({
+    mode: bootedKitDir ? reportMode(bootedKitDir) : "off",
+    last: lastReport,
+  }));
 
   ipcMain.on("shell:retry", guardedBoot);
   // app.quit() (not app.exit()) so will-quit still runs and stops the child
