@@ -118,16 +118,25 @@
     --spk-3: #B4791A; --spk-3-soft: #FBEFD5; --spk-3-ink: #7C5211;
     --spk-4: #C0587F; --spk-4-soft: #FBE4EE; --spk-4-ink: #8D3A58;
 
-    /* The assistant is dark wherever it sits; these are its only colours. */
-    --agent-bg: #18181b;
-    --agent-box: #27272a;
-    --agent-border: #3f3f46;
+    /* The assistant is dark wherever it sits -- in both themes, unchanged by
+       Appearance -- and these are its only colours. Lifted off black in 0.5.5
+       so the column reads as a window of its own beside the work. */
+    --agent-bg: #26262b;
+    --agent-box: #34343a;
+    --agent-border: #34343a;
+    /* Its heading row, and the box the message is typed into: the field is
+       sunk BELOW the panel and outlined above it, which is what says "type
+       here" without a word of instruction. */
+    --agent-head-bg: #2c2c32;
+    --agent-field: #1d1d21;
+    --agent-field-line: #4a4a52;
     --agent-fg: #e4e4e7;
     --agent-muted: #6b6b75;
-    /* The user's own message, and the tick on a finished step. Translucent
-       white rather than a colour: it has to sit on the strip's own dark. */
-    --agent-me-bg: rgba(255, 255, 255, 0.14);
-    --agent-me-border: rgba(255, 255, 255, 0.16);
+    /* The user's own message: the app's blue, deepened until white words sit
+       on it -- a translucent white wash was the same grey as the panel now. */
+    --agent-me-bg: #1d3a75;
+    --agent-me-border: #1d3a75;
+    --agent-me-fg: #dfe8ff;
     --agent-ok: #5ee07a;
     /* "This cannot answer until you do something" -- amber that reads on the
        strip's own dark, where the app's --warning-ink (drawn for a white
@@ -1522,6 +1531,7 @@
            than a control floating in the corner, which the user's own messages
            ran underneath. -->
       <div class="agent-head">
+        <svg class="icon agent-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
         <span class="agent-title">Dub Agent</span>
         <div class="assistant-state" id="assistantState" hidden></div>
         <!-- No arrow on screen: the top bar's pane button opens and closes the
@@ -1535,7 +1545,7 @@
       <div class="assistant-log" id="assistantLog"></div>
       <div class="assistant-foot">
         <textarea class="assistant-input" id="assistantInput" rows="1"
-                  placeholder="Message"></textarea>
+                  placeholder="Ask anything"></textarea>
         <div class="assistant-modelwrap">
           <button class="assistant-modelbtn" id="assistantModelBtn" type="button">
             <span id="assistantModelLabel">Model</span>
@@ -1875,7 +1885,7 @@
      Closed is gone entirely; the bar's pane button brings it back. */
   .agent { position: relative; flex: 0 0 auto; width: 320px; min-height: 0;
     display: flex; flex-direction: column;
-    background: var(--agent-bg); border-left: 2px solid var(--primary);
+    background: var(--agent-bg); border-left: 1px solid var(--agent-border);
     color: var(--agent-fg); }
   body:not(.agent-open) .agent { display: none; }
   /* Nothing yet while a dub runs, where the script the assistant would fix
@@ -1905,9 +1915,14 @@
      is on show at both sizes -- folded, it is the whole strip above the input
      row. Clear of the drag handle along the very top edge. */
   .agent-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-    padding: 0 12px 0 16px; height: 40px; box-sizing: border-box;
+    padding: 0 12px 0 16px; height: 52px; box-sizing: border-box;
+    background: var(--agent-head-bg);
     border-bottom: 1px solid var(--agent-border); }
   .agent-title { font-size: 0.82rem; font-weight: 700; }
+  /* A spark, so the row is the assistant's own title bar at a glance rather
+     than two words in a corner. Its blue is the app's, lightened to read on
+     the strip's dark. */
+  .agent-spark { width: 16px; height: 16px; color: #8FB8FF; }
   /* Pushed to the far right of the heading row -- the base rule below says
      flex:1 (it once had a row to itself), which parks its text next to the
      title instead. */
@@ -1928,8 +1943,8 @@
 
   .assistant-foot { display: flex; align-items: center; gap: 12px;
     margin: 6px 14px 12px; padding: 6px 6px 6px 16px; min-height: 48px;
-    border: 1px solid var(--agent-border); border-radius: 14px;
-    background: var(--agent-box); }
+    border: 1px solid var(--agent-field-line); border-radius: 8px;
+    background: var(--agent-field); }
   .assistant-input { flex: 1; resize: none; border: none; background: none;
     padding: 0; outline: none; font: inherit; font-size: 0.875rem;
     color: var(--agent-fg); max-height: 120px; }
@@ -1986,7 +2001,7 @@
     white-space: pre-wrap; word-break: break-word; }
   .bubble.me { align-self: flex-end; padding: 9px 12px; border-radius: 12px;
     border-bottom-right-radius: 3px; background: var(--agent-me-bg);
-    border: 1px solid var(--agent-me-border); color: var(--agent-fg); }
+    border: 1px solid var(--agent-me-border); color: var(--agent-me-fg); }
   .bubble.ai { align-self: flex-start; max-width: 640px; padding: 4px 2px;
     color: var(--agent-fg); }
   .bubble.ai code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

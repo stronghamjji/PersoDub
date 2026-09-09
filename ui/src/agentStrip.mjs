@@ -301,7 +301,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
           ? `${a.name} is not signed in - run ${a.login_command} in Terminal`
           : `${a.name} is not signed in`;
       } else if (document.body.classList.contains("agent-open")) {
-        input.placeholder = "Message";
+        input.placeholder = "Ask anything";
       } else if (screen === "home") {
         // No script on screen to point at, so no line-number example here.
         input.placeholder = "Ask anything";

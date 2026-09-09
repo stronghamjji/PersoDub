@@ -344,7 +344,7 @@ test("the four parts come up: the state line, the picker, the input and the butt
     assert.equal(h.$("assistantFold").getAttribute("aria-expanded"), "true");
     assert.equal(h.$("assistantFold").title, "Hide the conversation");
     assert.equal(h.log.stored.get("persodub.layout.agentOpen"), "1");
-    assert.equal(h.$("assistantInput").placeholder, "Message");
+    assert.equal(h.$("assistantInput").placeholder, "Ask anything");
     assert.equal(h.$("assistantInput").focused, true);
     // The strip follows the app's screens through document.body alone.
     assert.deepEqual(h.log.observed, ["body", { attributeFilter: ["data-screen"] }]);
@@ -367,7 +367,7 @@ test("a part that throws is said once and leaves the other three working", async
   try {
     await flush();
     assert.equal(h.$("assistantState").textContent, "Claude · signed in as me@example.com");
-    assert.equal(h.$("assistantInput").placeholder, "Message");
+    assert.equal(h.$("assistantInput").placeholder, "Ask anything");
     assert.equal(h.$("assistantGo").title, "Send");
     // Said once, however many repaints ran -- and it names the part.
     const said = h.log.errors.filter((a) => String(a[0]).includes("picker"));
