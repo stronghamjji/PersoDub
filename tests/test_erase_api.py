@@ -46,6 +46,7 @@ def erased(monkeypatch):
         log("progress 100%")
         with open(out, "wb") as f:
             f.write(b"clean-video")
+        return {"frames_checked": 114, "frames_with_text": 0, "sample_times": []}
 
     monkeypatch.setattr(eraser, "run_erase", fake_run_erase)
     return calls
@@ -298,3 +299,13 @@ def test_the_route_stops_refusing_the_moment_the_pack_is_installed(erased, tmp_p
     r = _start()
     assert r.status_code == 200
     assert _wait(r.json()["job_id"])["done"] is True
+
+
+def test_what_the_check_found_is_on_the_job_and_survives_a_restart(erased, tmp_path):
+    """"Is it really gone?" is the question this feature lives or dies on, so
+    the answer is stamped on the record rather than left in a log line."""
+    jid = _start(project="clip").json()["job_id"]
+    job = _wait(jid)
+    assert job["check"] == {"frames_checked": 114, "frames_with_text": 0, "sample_times": []}
+    with open(os.path.join(job["work_dir"], "job.json"), encoding="utf-8") as f:
+        assert json.load(f)["check"]["frames_checked"] == 114

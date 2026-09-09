@@ -182,9 +182,11 @@ def export_script(job_id: str, out_path: str) -> str:
 def get_job_status(job_id: str) -> dict:
     """Where the job is now, whether it finished, and what happened along the way.
 
-    A subtitle-erase job (erase_subtitles) also carries percent, done and the
-    path of the cleaned video -- it runs for minutes with nothing to read but
-    that number.
+    A subtitle-erase job (erase_subtitles) also carries percent, done, the path
+    of the cleaned video, and `check`: what the eraser found when it looked at
+    its own work -- how many sampled frames of the finished video still hold
+    writing, at what seconds, and how many it had to paint again. frames_with_text
+    0 is the answer the user is after; anything else names the moments to look at.
     """
     job = _job(job_id)
     info = {
@@ -200,6 +202,7 @@ def get_job_status(job_id: str) -> dict:
             info["percent"] = erase.get("percent")
             info["done"] = erase.get("done")
             info["result_path"] = (erase.get("result") or {}).get("out_path")
+            info["check"] = erase.get("check")
     return info
 
 
