@@ -233,3 +233,69 @@ def test_a_link_is_cut_after_it_is_fetched_and_the_record_says_so_at_once(monkey
     assert saved["before"]["trim"] == {"start": 2.0, "end": 8.0}
     # Cut: owed no longer, and written before anything else could happen.
     assert saved["after"]["trim_pending"] is False
+
+
+# ---------------------------------------------------------------------------
+# download_id: the New project screen already holds the file
+# ---------------------------------------------------------------------------
+
+def _hold(monkeypatch, tmp_path, title="Teach You a Lesson", url="https://youtu.be/abc"):
+    """A ready download in the holding folder, as app/api/downloads.py keeps one."""
+    from app.api import downloads as dl
+    d = dl.download_store.add_file(str(tmp_path / "ws"), title, 46,
+                                   lambda dest: open(dest, "wb").write(b"HELDMP4"))
+    d.url = url
+    return d
+
+
+def test_a_held_download_is_copied_in_and_never_fetched_again(monkeypatch, tmp_path):
+    held = _hold(monkeypatch, tmp_path)
+    seen = {}
+    monkeypatch.setattr(dub_api, "fetch_source",
+                        lambda *a, **kw: pytest.fail("the file is here already"))
+
+    def fake_run_dub(**kw):
+        seen["input"] = open(kw["video_path"], "rb").read()
+        with open(kw["out_path"], "wb") as f:
+            f.write(b"FAKEDUB")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1,
+                "auto_translated": False}
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
+
+    r = client.post("/api/dub/start", data={"language_code": "en", "download_id": held.id})
+    assert r.status_code == 200, r.text
+    jid = r.json()["job_id"]
+    assert _wait_done(jid) == "done"
+    assert seen["input"] == b"HELDMP4"
+    job = client.get(f"/api/dub/jobs/{jid}").json()
+    # The record still says where the video came from, for Projects.
+    assert job["from_link"] is True and job["project"] == "Teach You a Lesson"
+    assert job["trim_pending"] is False
+
+
+def test_a_held_download_is_cut_before_the_job_like_an_upload(monkeypatch, tmp_path):
+    held = _hold(monkeypatch, tmp_path)
+    cuts = []
+    monkeypatch.setattr(dub_api, "_cut_video", lambda src, start, end: cuts.append((start, end)))
+    monkeypatch.setattr(dub_api, "run_dub", lambda **kw: None)
+    monkeypatch.setattr(dub_api, "fetch_source", lambda *a, **kw: pytest.fail("no fetch"))
+    r = client.post("/api/dub/start",
+                    data={"language_code": "en", "download_id": held.id,
+                          "trim_start": "2", "trim_end": "17"})
+    assert r.status_code == 200, r.text
+    assert cuts == [(2.0, 17.0)]
+    job = client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()
+    assert job["trim"] == {"start": 2.0, "end": 17.0} and job["trim_pending"] is False
+
+
+def test_an_unknown_or_unfinished_download_id_is_refused():
+    r = client.post("/api/dub/start", data={"language_code": "en", "download_id": "nope"})
+    assert r.status_code == 404
+
+
+def test_download_id_is_one_source_not_an_extra_one(monkeypatch, tmp_path):
+    held = _hold(monkeypatch, tmp_path)
+    r = client.post("/api/dub/start",
+                    data={"language_code": "en", "download_id": held.id},
+                    files={"video": ("v.mp4", b"FAKE", "video/mp4")})
+    assert r.status_code == 422
