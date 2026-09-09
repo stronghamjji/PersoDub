@@ -349,13 +349,17 @@ test("the rail leads with the logo tile, and About shows it beside the name", ()
 // The three tools stand together in the rail, dubbing first, and the way home
 // is a house rather than a back arrow: both are what the user asked for after
 // running 0.5.5 on the mac (2026-09-09).
-test("the rail carries dubbing before projects, and the top bar's way out is Home", () => {
+test("the rail leads with the tools and keeps Projects at its foot, and the top bar's way out is Home", () => {
   const html = readFileSync(INDEX, "utf8");
   const dub = html.indexOf('id="dubToggle"');
-  const projects = html.indexOf('id="historyToggle"');
   const erase = html.indexOf('id="eraseToggle"');
-  assert.ok(dub > 0 && dub < projects && projects < erase,
-    "the rail order is Dubbing, Projects, Erase subtitles");
+  const spacer = html.indexOf('class="rail-spacer"');
+  const projects = html.indexOf('id="historyToggle"');
+  const settings = html.indexOf('id="settingsBtn"');
+  // The tools at the top, in the order they are used; Projects and Settings
+  // below the spacer, at the foot of the rail (user, 2026-09-09).
+  assert.ok(dub > 0 && dub < erase && erase < spacer && spacer < projects && projects < settings,
+    "the rail is Dubbing, Erase subtitles, then a gap, then Projects and Settings");
   assert.match(html, /id="dubToggle"[^>]*title="Dubbing"/);
   // Pressing it leaves the open job rather than hiding it behind another screen.
   assert.match(html, /\$\("dubToggle"\)\.addEventListener\("click", \(\) => resetForNewJob\(\)\)/);
