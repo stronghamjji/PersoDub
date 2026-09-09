@@ -19,6 +19,7 @@ import pytest
 
 from app import engines_status, eraser
 from app.jobs import JobCancelled
+from app.scripts import erase_subtitles
 
 ERASE_STUB = '''
 import argparse, json, os, shutil, sys, time
@@ -223,3 +224,37 @@ def test_the_pack_is_seen_the_moment_kit_env_names_it(tmp_path, monkeypatch):
     # Removing the pack takes the two lines back out, and no line means no pack.
     path.write_text("PERSODUB_NO_ANALYTICS=0\n", encoding="utf-8")
     assert engines_status.eraser_available() is False
+
+
+# --- the seam between two sentences ----------------------------------------
+
+def _detector_class(stretches):
+    class Detect:
+        @staticmethod
+        def find_continuous_ranges_with_same_mask(sub_list):
+            return list(stretches)
+    return Detect
+
+
+def test_the_mask_at_a_seam_carries_both_sentences_and_the_stretches_do_not_move():
+    """Where one line gives way to a longer one, the tool paints the changeover
+    frames with the OLD line's boxes and the new line's ends survive. Folding
+    the neighbours in fixes that without moving a single stretch edge."""
+    short = (100, 300, 660, 800)      # xmin, xmax, ymin, ymax
+    long_line = (20, 580, 660, 800)
+    sub_list = {1: [short], 2: [short], 3: [short],
+                4: [long_line], 5: [long_line], 6: [long_line]}
+    detector = _detector_class([(1, 3), (4, 6)])
+
+    erase_subtitles.widen_masks_at_seams(detector, frames=2)
+    stretches = detector.find_continuous_ranges_with_same_mask(sub_list)
+
+    assert stretches == [(1, 3), (4, 6)]
+    # The frames at the changeover now carry the longer line too, so the mask
+    # built from the first stretch covers its ends.
+    assert long_line in sub_list[3]
+    assert short in sub_list[4]
+    # Away from the seam nothing is added -- the picture there is not repainted
+    # for no reason.
+    assert sub_list[1] == [short]
+    assert sub_list[6] == [long_line]

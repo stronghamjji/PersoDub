@@ -85,6 +85,53 @@ def restore_audio(source, out_path):
     print("the sound could not be carried over", flush=True)
 
 
+# How many frames on either side of a stretch are folded into its mask.
+#
+# video-subtitle-remover cuts the video into stretches that share one mask, and
+# paints every frame of a stretch with the boxes IT found -- so at the frame
+# where one sentence gives way to the next, the new sentence is already on
+# screen while the old sentence's boxes are still the mask. If the new one is
+# the longer of the two, its ends fall outside that mask and survive: six
+# frames of a 685-frame video kept the ends of their line (Windows, 2026-09-09).
+# Four frames covers a changeover at 30fps; the tool's own timeline expand is
+# +-3, and this is the same idea applied to the mask rather than the timing.
+SEAM_FRAMES = 4
+
+
+def widen_masks_at_seams(detector_class, frames=SEAM_FRAMES):
+    """Fold each frame's neighbours into its own box list -- after the stretches
+    have been cut, so their edges do not move.
+
+    The checkout itself is never edited (the pack unpacks the original zip), so
+    this wraps the one call that sits between the two uses of the detector's
+    answer. `video_inpaint` asks find_continuous_ranges_with_same_mask where
+    the stretches are, and from then on reads the same dictionary only to build
+    each stretch's mask. Widening it inside the wrapper therefore leaves every
+    stretch exactly where the tool cut it, and adds to a stretch's mask only
+    the boxes of the frames just outside it -- which at a seam is both
+    sentences at once. Inside a stretch nothing changes: the mask there is
+    already the union of all its frames.
+    """
+    original = detector_class.find_continuous_ranges_with_same_mask
+
+    def widened(sub_list):
+        stretches = original(sub_list)
+        near = {}
+        for no in sub_list:
+            boxes = list(sub_list[no])
+            for other in range(no - frames, no + frames + 1):
+                for box in sub_list.get(other, ()):
+                    if box not in boxes:
+                        boxes.append(box)
+            near[no] = boxes
+        sub_list.update(near)
+        return stretches
+
+    # staticmethod, because video_inpaint calls this through the instance and a
+    # plain function there would be handed the detector as its first argument.
+    detector_class.find_continuous_ranges_with_same_mask = staticmethod(widened)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Erase burned-in subtitles from a video")
     ap.add_argument("--vsr-dir", required=True, help="the video-subtitle-remover checkout")
@@ -112,10 +159,12 @@ def main():
     from backend.config import config, tr
     from backend.main import SubtitleRemover
     from backend.tools.constant import InpaintMode
+    from backend.tools.subtitle_detect import SubtitleDetect
 
     config.set(config.interface, "en")
     tr.read(os.path.join(vsr_dir, "backend", "interface", "en.ini"), encoding="utf-8")
     config.inpaintMode.value = InpaintMode.STTN_DET
+    widen_masks_at_seams(SubtitleDetect)
 
     remover = SubtitleRemover(input_path)
     # Set before run(), or the result is written beside the ORIGINAL as
