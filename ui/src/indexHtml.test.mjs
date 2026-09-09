@@ -135,12 +135,28 @@ test("the erase screen has its three faces, and the rail button that opens it", 
 
 test("the erase screen says only what the mockup says", () => {
   const html = readFileSync(INDEX, "utf8");
+  // "Where are the subtitles?" was the band's own line; the band now names the
+  // screen and carries the estimate and the Erase button (user, 2026-09-09),
+  // and the box on the picture is still labelled "Subtitles".
   for (const words of ["Erase subtitles", "Drop a video", "MP4 or MOV", "Choose file…",
-                       "Where are the subtitles?", "Finding subtitles…", "Subtitles",
+                       "Finding subtitles…", "Subtitles",
                        "Add my subtitles (.srt)", "Start dubbing", "Download"]) {
     assert.ok(html.includes(`>${words}<`) || html.includes(`>${words}`),
       `the screen no longer says "${words}"`);
   }
+});
+
+// The two controls of an erase belong to the erase screen, not to the far end
+// of the top bar a window away from the box being placed (user, 2026-09-09).
+test("the estimate and the Erase button stand in the erase screen's own band", () => {
+  const html = readFileSync(INDEX, "utf8");
+  const band = html.slice(html.indexOf('id="eraseHead"'), html.indexOf('id="eraseTabs"'));
+  assert.ok(band.includes('id="eraseEst"') && band.includes('id="eraseRunBtn"'),
+    "both live in the band");
+  assert.match(band, /id="eraseEst"[^]*id="eraseRunBtn"/, "the minutes, then the button");
+  const topbar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('id="screen-home"'));
+  assert.ok(!topbar.includes('id="eraseRunBtn"') && !topbar.includes('id="eraseEst"'),
+    "and neither is left in the top bar");
 });
 
 test("the agent input ignores Enter pressed mid-composition", () => {

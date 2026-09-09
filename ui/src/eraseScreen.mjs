@@ -147,7 +147,10 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     // under them is in the same place before and after. While the erase runs
     // the strip goes: the question has been answered, and the row under the
     // picture is where the answer to "how long now" is.
-    $("eraseHead").hidden = view !== "area";
+    // The band is the screen's own title now, not just the question about the
+    // box: it stays up while the erase runs, and steps aside only for the
+    // tabs on a finished one (user, 2026-09-09).
+    $("eraseHead").hidden = done;
     $("eraseTabs").hidden = !done;
     $("eraseBox").hidden = view !== "area" || !area;
     $("eraseFinding").hidden = !finding;

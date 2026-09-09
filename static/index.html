@@ -524,8 +524,10 @@
   /* The same band as the Dub Agent's heading beside it: same height, same
      ground, same weight of word, so the two panes' tops are one line across
      the window rather than two that nearly agree (user, 2026-09-09). */
+  /* Standing in for the band above, so it is the band's own height. */
+  .erase-tabs { height: 52px; }
   .erase-head { flex: 0 0 auto; height: 52px; box-sizing: border-box;
-    display: flex; align-items: center; padding: 0 16px;
+    display: flex; align-items: center; gap: 12px; padding: 0 12px 0 16px;
     background: var(--head-bg);
     border-bottom: 1px solid var(--agent-border);
     font-size: var(--font-title); font-weight: 700; }
@@ -1623,11 +1625,6 @@
               aria-label="Back to the project you left" hidden>
         <svg class="icon" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
       </button>
-      <!-- The erase screen's own pair: what it will cost in minutes, and the
-           button that starts it. Both hidden by setTopbar on every other
-           screen, the way Export and Cancel are. -->
-      <span class="topbar-est" id="eraseEst" hidden></span>
-      <button class="btn btn-primary" id="eraseRunBtn" type="button" hidden>Erase</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
       <!-- Which panels are open. Each button presses the panel's own existing
@@ -1740,11 +1737,23 @@
             <span class="topbar-spacer"></span>
             <button class="btn btn-primary" id="erasePackBtn" type="button">Download</button>
           </div>
-          <div class="erase-head" id="eraseHead">Where are the subtitles?</div>
+          <!-- The band names the screen on the left and carries the two
+               controls that belong to it on the right: what the erase will
+               cost in minutes, and the button that starts it. They used to
+               live at the far end of the top bar, a window away from the box
+               being placed (user, 2026-09-09). Still #eraseEst and
+               #eraseRunBtn -- setTopbar shows and hides them exactly as it
+               did, and inside the screen they are away with it. -->
+          <div class="erase-head" id="eraseHead">
+            <span>Erase subtitles</span>
+            <span class="topbar-spacer"></span>
+            <span class="topbar-est" id="eraseEst" hidden></span>
+            <button class="btn btn-primary" id="eraseRunBtn" type="button" hidden>Erase</button>
+          </div>
           <!-- The finished screen's own tabs, in the strip the question was in,
                so the picture below never moves. Erased first: it is the video
                the user came here for. -->
-          <div class="video-tabs" id="eraseTabs" hidden>
+          <div class="video-tabs erase-tabs" id="eraseTabs" hidden>
             <button class="vtab" data-erase="original" type="button">Original</button>
             <button class="vtab active" data-erase="erased" type="button">Erased</button>
           </div>
