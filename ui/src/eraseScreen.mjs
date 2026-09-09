@@ -200,9 +200,11 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       // How long it took is what the result says; until then, where you are.
       // And how much of the video it is about, whenever that is not all of it:
       // without those four words the whole thing looks like it is going.
-      subtitle: done ? erasedFor()
-        : view === "drop" ? ""
-        : trimNote(source) ? `Erase subtitles · ${trimNote(source)}` : "Erase subtitles",
+      // The band below names the screen, so the top bar carries only what is
+      // its own: the file, and which part of it (user, 2026-09-09). A
+      // finished erase keeps its "Erased · 8 min" -- the band has stepped
+      // aside for the tabs by then, and nothing else says it is done.
+      subtitle: done ? erasedFor() : view === "drop" ? "" : trimNote(source),
       back: true,
       estimate: view === "area" ? estimateLabel(estSeconds()) : "",
       erase: view === "area",

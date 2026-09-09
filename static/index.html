@@ -524,8 +524,6 @@
   /* The same band as the Dub Agent's heading beside it: same height, same
      ground, same weight of word, so the two panes' tops are one line across
      the window rather than two that nearly agree (user, 2026-09-09). */
-  /* Standing in for the band above, so it is the band's own height. */
-  .erase-tabs { height: 52px; }
   .erase-head { flex: 0 0 auto; height: 52px; box-sizing: border-box;
     display: flex; align-items: center; gap: 12px; padding: 0 12px 0 16px;
     background: var(--head-bg);
@@ -748,8 +746,12 @@
      The point of the shape is rows: stacked, the table had a third of the
      screen's height and showed four lines; here it has all of it. */
 
+  /* No gap above: the two panes' bands have to begin on the same line as the
+     Dub Agent's heading beside them, and 6px of canvas over them was the
+     whole of the difference (user, 2026-09-09). The sides and the foot keep
+     theirs. */
   .done { flex: 1; min-height: 0; display: flex; flex-direction: column;
-    gap: 6px; padding: 6px; background: var(--canvas); }
+    gap: 6px; padding: 0 6px 6px; background: var(--canvas); }
   /* min-height, so a short window scrolls the finished screen rather than
      squeezing the table down to no rows at all. */
   /* position, so the handle that sits on the line above the timeline can be
@@ -773,9 +775,13 @@
     container: scriptpane / inline-size; }
   /* Every pane says what it is. 30px and quiet: it is a label, not a heading,
      and every pixel it takes is a row of script it takes away. */
-  .pane-head { flex: 0 0 auto; box-sizing: border-box; height: 30px; display: flex;
-    align-items: center; gap: 8px; padding: 0 14px; font-size: var(--font-label);
-    font-weight: 600; color: var(--foreground); }
+  /* One band across the top of the work area: this, the video tabs beside it
+     and the Dub Agent's heading are the same height on the same ground, so
+     the three panes begin on one line (user, 2026-09-09). */
+  .pane-head { flex: 0 0 auto; box-sizing: border-box; height: 52px; display: flex;
+    align-items: center; gap: 8px; padding: 0 16px; font-size: var(--font-title);
+    font-weight: 700; color: var(--foreground);
+    background: var(--head-bg); border-bottom: 1px solid var(--agent-border); }
   .pane-head .m { font-weight: 400; color: var(--muted-foreground); }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
     border-bottom: 1px solid var(--border); }
@@ -946,8 +952,8 @@
   .done-main.stacked > .video-pane { width: auto; min-width: 0;
     flex: 0 0 clamp(200px, 36vh, 440px); }
   .done-main.stacked > .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
-  .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
-    border-bottom: 1px solid var(--border); }
+  .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 52px; display: flex;
+    background: var(--head-bg); border-bottom: 1px solid var(--agent-border); }
   .vtab { flex: 1; border: none; background: none; cursor: pointer;
     font: inherit; font-size: var(--font-ui); color: var(--muted-foreground); }
   .vtab.active { color: var(--foreground); font-weight: 600;
@@ -3857,7 +3863,7 @@ function sizeVideoPane() {
   if (!w || !h) return;   // no metadata yet: the stylesheet's 42% stands
   // What is left for the picture once the tabs, the pane's own padding, the gap
   // under the picture and the row of controls have taken theirs.
-  const picture = Math.max(120, pane.clientHeight - 40 - 28 - 10 - 28);
+  const picture = Math.max(120, pane.clientHeight - 52 - 28 - 10 - 28);
   const want = Math.round((w / h) * picture) + 28;
   // Never more than 45% of the row, and -- while there is that much to give --
   // never so much that the table has under the 680px its six columns need
