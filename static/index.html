@@ -513,11 +513,12 @@
   /* The same drop zone as the home screen's, at the same size and in the same
      place on the window -- both ways into the app then look alike, and one
      stretched to fill a 1440px window was a very large amount of nothing. */
-  .erase-drop { flex: 1; min-height: 0; display: flex; padding: 22px; overflow-y: auto; }
+  .erase-drop { flex: 1; min-height: 0; display: flex; overflow-y: auto;
+    padding: 16px 22px max(22px, 8vh); }   /* #screen-home's, so the column lands on the same pixel */
   /* The zone, the OR line and the link field are one column down the middle,
      the same shape the home screen's two ways in have. */
   .erase-drop-col { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto;
-    display: flex; flex-direction: column; gap: 14px; }
+    display: flex; flex-direction: column; gap: 16px; }
   .erase-dl { font-size: var(--font-label); color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; }
   .erase-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -1744,10 +1745,14 @@
                fetches a link into the same holding area an upload lands in, so
                from the download's id on there is one road (user, 2026-09-09). -->
           <div class="erase-drop-col">
+            <!-- The one line the home screen has over its drop zone, so this
+                 way in says what it is for too (user, 2026-09-10). -->
+            <h1 class="home-title">Erasing subtitles from your video</h1>
+            <p class="home-sub">Drop a video or paste a link.</p>
             <div class="upload-zone" id="eraseZone" tabindex="0">
               <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-              <div class="upload-title">Drop a video</div>
-              <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose file…</button><span>MP4 or MOV</span></div>
+              <div class="upload-title">Drop your video here</div>
+              <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose File…</button><span>MP4 or MOV, up to 2 GB.</span></div>
               <input type="file" id="eraseInput" accept="video/*" hidden>
             </div>
             <div class="home-or"><span></span>OR<span></span></div>
