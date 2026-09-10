@@ -464,3 +464,26 @@ test("the subtitle toolbar says Saving, then Saved, and says so when it could no
   await Promise.resolve();
   assert.equal(el.textContent, "Not saved");
 });
+
+// A dub reporting its progress must not drag the screen back from wherever the
+// person went; a project the person clicked must open even so. The two go
+// through the same function, and the first version of the guard stopped both:
+// clicking a finished project on the first screen did nothing at all
+// (found on the mac, 2026-09-10).
+test("progress reports leave the screen alone, but an opened project takes it", () => {
+  const html = readFileSync(INDEX, "utf8");
+
+  // The guard exists, and it lets an opened job through.
+  assert.match(html, /if \(!opened && !JOB_SCREENS\.has\(document\.body\.dataset\.screen\)\)/);
+  assert.match(html, /const JOB_SCREENS = new Set\(\["running", "done", "failed"\]\);/);
+
+  // Only one of the two callers passes it. The poll must not.
+  assert.match(html, /handleJobUpdate\(job, \{ opened: true \}\);/);
+  assert.match(html, /onUpdate: \(job\) => \{ if \(myGeneration === state\.pollGeneration\) handleJobUpdate\(job\); \}/);
+  assert.equal((html.match(/handleJobUpdate\(job, \{ opened: true \}\)/g) || []).length, 1);
+
+  // Starting a dub shows the running screen itself rather than waiting for the
+  // first report to do it -- which the guard would now swallow.
+  const start = html.slice(html.indexOf("async function startDubbing"));
+  assert.ok(start.slice(0, start.indexOf("runPollLoop")).includes('showScreen("running")'));
+});

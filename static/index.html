@@ -3593,7 +3593,9 @@ async function resumeJob(jobId) {
     // Erasing subtitles is the other work this app does, and it has a screen of
     // its own: the same row, the same click, a different place to land.
     if (job.kind === "erase") { eraseScreen.openEraseJob(job); return; }
-    handleJobUpdate(job);
+    // Asked for by name, from wherever the person happens to be standing: this
+    // one is allowed to change the screen.
+    handleJobUpdate(job, { opened: true });
     noteLastScreen(jobId);
     // queued is alive too (handleJobUpdate paints it as waiting): a job
     // restored at launch while it waits in line must keep polling.
@@ -3767,7 +3769,10 @@ function runPollLoop(jobId, myGeneration) {
 // screen -- belongs to the person, not to the job.
 const JOB_SCREENS = new Set(["running", "done", "failed"]);
 
-async function handleJobUpdate(job) {
+// `opened` is the difference between the two ways this is called: the person
+// clicked the job (resumeJob), or the job reported in on its own (the poll).
+// Only the second one has to keep its hands off the screen.
+async function handleJobUpdate(job, { opened = false } = {}) {
   state.job = job;
   // The script assistant runs in its own module and cannot see `state`. Parking
   // the id here lets it answer "this job" without asking the user for a number
@@ -3779,7 +3784,7 @@ async function handleJobUpdate(job) {
   // reached until the dub ended (user, 2026-09-10). The job still updates --
   // its record, its row in Projects, the waiting card -- but it stops taking
   // the screen back from somewhere the person went on purpose.
-  if (!JOB_SCREENS.has(document.body.dataset.screen)) {
+  if (!opened && !JOB_SCREENS.has(document.body.dataset.screen)) {
     projects.renderHistory().catch(() => {});
     projects.renderQueueCard().catch(() => {});
     return;
