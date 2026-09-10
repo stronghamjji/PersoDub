@@ -407,7 +407,15 @@
   /* Clear of the window's own edge -- the topbar's 16px padding is the gap on
      the left, and the arrow on the right needs the same room to sit in. */
   #topbarForward { margin-right: 4px; }
-  .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  /* Nudged 2px down. Every box in this bar is centred on the same line, but a
+     line of text is not its box: the room a line reserves under the baseline
+     for descenders is empty in a title like "Erase subtitles", so the letters
+     ride 2px high beside an icon, which is symmetrical and does not
+     (user, 2026-09-10). This puts the capital-height band on the icons'
+     middle, which is the line the eye actually reads; a title with a g or a y
+     in it hangs below that, as it should. */
+  .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0;
+    position: relative; top: 2px; }
   /* The name is the user's to change: it reads as plain text until it is
      clicked, and the field it becomes is the same size in the same place so
      the bar does not move (user, 2026-09-10). */
