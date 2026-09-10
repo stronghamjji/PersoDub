@@ -1490,7 +1490,17 @@
   .modal-overlay { position: fixed; inset: 0; background: rgba(10,10,10,0.35); display: none; align-items: center; justify-content: center; z-index: 20; }
   .modal-overlay.open { display: flex; }
   .modal { width: min(560px, 92vw); max-height: 84vh; overflow-y: auto; background: var(--background); border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--background); }
+  /* No rule under the title and none over the buttons. A dialog is one small
+     panel; three bands drawn across something this size read as three things
+     stacked rather than one thing said (user, 2026-09-10, said again when a
+     new dialog turned up wearing them, 2026-09-11). The padding keeps them
+     apart; the sticky is kept for the one long dialog (Settings), where the
+     title has to stay put while the body scrolls under it. */
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 0; position: sticky; top: 0; background: var(--background); }
+  /* With the rule gone the two paddings met and left 28px of nothing under
+     the title. 8, the same gap the models dialog has always had between its
+     own title and the line under it. */
+  .modal-head + .modal-body { padding-top: 8px; }
   .modal-head h2 { margin: 0; }
   .modal-close { background: none; border: none; cursor: pointer; color: var(--muted-foreground); padding: 4px; border-radius: var(--radius-sm); }
   .modal-close:hover { background: var(--secondary); }
@@ -1548,7 +1558,7 @@
   .license-list { font-size: var(--font-label); color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
   .license-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
   .license-list li:last-child { border-bottom: none; }
-  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); position: sticky; bottom: 0; background: var(--background); }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 20px 18px; position: sticky; bottom: 0; background: var(--background); }
   /* Settings, the way a desktop app does it (2026-08-28): a row is a label
      and one control, links are coloured words rather than underlines, and a
      yes/no is a switch. Nothing here is a Save button -- edits save on the spot. */
