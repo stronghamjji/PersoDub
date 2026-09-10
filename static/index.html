@@ -76,6 +76,14 @@
     /* The page behind the work area -- a shade off the panels, so cards and the
        top bar read as sitting on top of it. */
     --canvas: #17171a;
+    /* The desk the panels rest on: darker than a panel, so each one reads as
+       its own card rather than one continuous wall (user, 2026-09-10). */
+    --desk: #0C0C0F;
+    /* One outline for everything a person can press: buttons, dropdowns,
+       fields and the boxes that behave like one. A border that only some of
+       them wore read as "these two are buttons and those are not" (user,
+       2026-09-10). */
+    --control-line: rgba(255, 255, 255, 0.18);
     --muted-foreground: #9a9aa6;
     --foreground: #ececf1;
     --background: #1e1e22;
@@ -181,6 +189,8 @@
     --accent: #eef3ff;
     --secondary: #ececf0;
     --canvas: #fafafa;
+    --desk: #e6e6ea;
+    --control-line: rgba(0, 0, 0, 0.20);
     --muted-foreground: #737373;
     --foreground: #0a0a0a;
     --background: #ffffff;
@@ -225,14 +235,17 @@
 
   /* ---------------- App shell ---------------- */
 
-  .app { height: 100vh; display: flex; }
+  /* Every panel is its own card on the desk: one gap between them and the
+     same gap to the window's edge, so nothing touches the edge and nothing
+     runs off the bottom (user, 2026-09-10). */
+  .app { height: 100vh; display: flex; gap: 8px; padding: 8px; background: var(--desk); }
 
   /* ---------------- RAIL ---------------- */
 
   .rail {
     flex: 0 0 60px;
     background: var(--background);
-    border-right: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -280,11 +293,14 @@
        sidebar past the width asked for. */
     min-width: 0;
     display: flex;
-    border-right: 1px solid var(--border);
-    background: var(--secondary);
+    background: transparent;
     transition: width 0.15s ease, opacity 0.15s ease;
   }
-  .history-scroll { flex: 1; min-width: 0; overflow-y: auto; padding-bottom: 12px; }
+  /* The list is a card like the others: it ends inside the window instead of
+     running off the bottom edge (user, 2026-09-10). */
+  .history-sidebar > *:not(.grip) { background: var(--background);
+    border-radius: var(--radius); overflow: hidden; }
+  .history-scroll { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 
   /* The 0.15s above is for opening and closing. Under the pointer it is the
      wrong thing entirely: every step of a drag would ease into place and the
@@ -295,11 +311,18 @@
   /* Nothing to drag while there is no list: the handle goes with it. */
   .history-sidebar.collapsed .grip { display: none; }
 
+  /* The same head every other panel wears: the word sits on the head's own
+     band in the panel's own white, not as a faint label above the list
+     (user, 2026-09-10). */
   .history-head {
-    padding: 12px 14px 8px;
-    font-size: var(--font-label); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-    color: var(--muted-foreground);
+    flex: 0 0 auto; box-sizing: border-box; height: 40px;
+    display: flex; align-items: center; padding: 0 14px;
+    background: var(--head-bg); border-bottom: 1px solid var(--agent-border);
+    font-size: var(--font-title); font-weight: 700;
+    color: var(--foreground);
   }
+  #historyList { flex: 1; min-height: 0; overflow-y: auto;
+    background: var(--background); padding-bottom: 8px; }
 
   .history-empty { padding: 6px 14px 14px; font-size: var(--font-ui); color: var(--muted-foreground); }
 
@@ -340,7 +363,7 @@
      and pushed half the list below the fold. */
   .job-meta { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: transparent; }
   /* The row under the top bar: the work, and the agent column beside it. */
   .mainrow { flex: 1; min-height: 0; display: flex; }
 
@@ -369,9 +392,8 @@
 .topbar {
     flex: 0 0 auto; height: 52px;
     display: flex; align-items: center; gap: 12px;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--background);
+    padding: 0 8px;
+    background: transparent;
   }
   /* Both top-bar arrows. A 32px round target with an 18px arrow inside it: the
      14px icon in a 18x14 box these were drawn at is under every platform's
@@ -417,7 +439,7 @@
   /* ---------------- Screens ---------------- */
   /* Exactly one of the three is on screen; showScreen() toggles `hidden`. */
 
-  .work { flex: 1; min-width: 0; min-height: 0; position: relative; background: var(--canvas); }
+  .work { flex: 1; min-width: 0; min-height: 0; position: relative; background: transparent; }
   .screen { position: absolute; inset: 0; overflow-y: auto; padding: 16px 22px 22px; }
 
   /* The done screen runs edge to edge: three named boxes laid on the app's
@@ -463,6 +485,9 @@
     aspect-ratio: 16 / 9;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg); }
   .running-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
+  /* A radius with nothing clipped is a square corner: the head and the tabs
+     painted over it (user, 2026-09-10). */
+  .video-pane, .timeline { overflow: hidden; }
   /* Nothing to say for a job with no trim, and nothing drawn either. */
   .running-trim { text-align: center; font-size: var(--font-label); color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; }
@@ -624,6 +649,7 @@
      window too short for the block, auto margins give up and let it start at the
      top and scroll, where centring would cut its head off. The bottom padding is
      the upward bias -- dead centre reads as low. */
+  #screen-done { padding: 0; }
   #screen-home { display: flex; padding-bottom: max(22px, 8vh); }
   #screen-home[hidden] { display: none; }
 
@@ -632,7 +658,7 @@
   .home-title { margin: 0; font-size: clamp(17px, 1.1vw, 19px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
   .home-sub { margin: -10px 0 6px; font-size: var(--font-ui); color: var(--muted-foreground); }
 
-  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--dropzone-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
+  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--control-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted-foreground); }
   .upload-zone.drag-over { border-color: var(--primary); background: var(--accent); }
   /* Grey like the edge around it: a big blue arrow said "drop a file" was the
@@ -694,20 +720,27 @@
   .btn-primary { background: var(--primary); color: var(--primary-foreground); }
   .btn-primary:hover { box-shadow: var(--focus-ring); }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
-  .btn-secondary { background: var(--secondary); color: var(--foreground); border: 1px solid var(--border); }
+  .btn-secondary { background: var(--secondary); color: var(--foreground); border: 1px solid var(--control-line); }
   /* A quiet button that still reads as a button: white, bordered, same box as
      the rest. (A bare text link, inside the 52px top bar, read as an
      underlined footnote beside the solid Export.) */
-  .btn-outline { background: var(--background); color: var(--foreground); border: 1px solid var(--border); }
+  .btn-outline { background: var(--background); color: var(--foreground); border: 1px solid var(--control-line); }
   .btn-outline:hover { background: var(--secondary); }
   .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* Stopping a job that is running: the one button on the progress card, and
+     it was grey on grey there. A white outline finds it without shouting the
+     way a filled red would (user, 2026-09-10). */
+  .btn-cancel { background: transparent; color: var(--foreground);
+    border: 1px solid rgba(255, 255, 255, 0.55); }
+  .btn-cancel:hover { background: rgba(255, 255, 255, 0.08); }
+  .cancel-stop { width: 16px; height: 16px; }
   /* The one button in the app that destroys something. */
   .btn-danger { background: var(--destructive); color: var(--primary-foreground); }
   .delete-error { margin: 10px 0 0; font-size: var(--font-label); color: var(--destructive); }
 
   .option-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
   .field label { display: block; font-size: var(--font-label); font-weight: 600; margin-bottom: 5px; }
-  select, input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); font-size: var(--font-ui); color: var(--foreground); font-family: inherit; }
+  select, input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 7px 9px; border: 1px solid var(--control-line); border-radius: var(--radius-sm); background: var(--background); font-size: var(--font-ui); color: var(--foreground); font-family: inherit; }
   select:focus, input:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus-ring); }
 
   details.advanced { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
@@ -763,13 +796,13 @@
      whole of the difference (user, 2026-09-09). The sides and the foot keep
      theirs. */
   .done { flex: 1; min-height: 0; display: flex; flex-direction: column;
-    gap: 6px; padding: 0 6px 6px; background: var(--canvas); }
+    gap: 8px; padding: 0; background: transparent; }
   /* min-height, so a short window scrolls the finished screen rather than
      squeezing the table down to no rows at all. */
   /* position, so the handle that sits on the line above the timeline can be
      hung off this pane's bottom edge. */
   .done-main { position: relative; flex: 1; min-height: 200px; display: flex;
-    flex-direction: row; gap: 6px; }
+    flex-direction: row; gap: 8px; }
   /* Too narrow for the two side by side (under 820 the video's 320px floor
      leaves the table less than 500): back to the old stack, video on top.
      The class is written by sizeVideoPane() off THIS box's width, not by a media
@@ -1121,7 +1154,9 @@
   .tl-zfit { width: auto; padding: 0 8px; font-size: var(--font-label); font-weight: 600; }
   .tl-zlv { min-width: 30px; text-align: center; color: var(--muted-foreground);
     font-size: var(--font-label); font-variant-numeric: tabular-nums; }
-  .tl-head { display: flex; align-items: center; gap: 14px; padding: 6px 14px;
+  .tl-head { box-sizing: border-box; height: 40px;
+    display: flex; align-items: center; gap: 14px; padding: 0 14px;
+    background: var(--head-bg); border-bottom: 1px solid var(--agent-border);
     font-size: var(--font-label); color: var(--muted-foreground); }
   .tl-title { font-weight: 600; color: var(--foreground); font-size: var(--font-title); }
   .tl-clock { font-variant-numeric: tabular-nums; }
@@ -1459,7 +1494,7 @@
      and an empty box must not leave a gap behind. */
   .trim:empty { display: none; }
   .trim { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
-    border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
+    border: 1px solid var(--control-line); border-radius: var(--radius); background: var(--background); }
   .trim-row { display: flex; align-items: center; gap: 10px; font-size: var(--font-label); }
   .trim-play { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
     border: 1.5px solid var(--primary-line); background: var(--background); color: var(--primary);
@@ -1731,8 +1766,8 @@
                 <!-- The word is its own element: paintCancel writes "Cancel"
                      and "Cancelling…" into it, and writing them into the
                      button itself wiped the square out of it. -->
-                <button class="btn btn-secondary btn-sm" id="cancelBtn" type="button" hidden>
-                  <svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/></svg><span id="cancelLabel">Cancel</span></button>
+                <button class="btn btn-cancel btn-sm" id="cancelBtn" type="button" hidden>
+                  <svg class="icon cancel-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2" fill="currentColor" stroke="none"/></svg><span id="cancelLabel">Cancel</span></button>
               </div>
             </div>
             <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
@@ -2350,8 +2385,8 @@
      Closed is gone entirely; the bar's pane button brings it back. */
   .agent { position: relative; flex: 0 0 auto; width: 320px; min-height: 0;
     display: flex; flex-direction: column;
-    background: var(--agent-bg); border-left: 1px solid var(--agent-border);
-    color: var(--agent-fg); }
+    background: var(--agent-bg); border-radius: var(--radius); overflow: hidden;
+    margin-left: 8px; color: var(--agent-fg); }
   body:not(.agent-open) .agent { display: none; }
   /* The running screen keeps the strip. It was taken off the page there --
      there is no script to fix yet -- but a dub in progress is exactly when a
