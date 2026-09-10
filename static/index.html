@@ -437,23 +437,29 @@
      overflows its scroll container cannot be scrolled back to its start edge,
      so on a narrow window the left of the video would be cut off for good. */
   #screen-running { display: flex; }
-  .running { margin: auto; display: flex; gap: 28px; align-items: stretch; }
+  /* Never wider than the screen it is on: the pair shrinks (the video first,
+     then the card, each to a floor) instead of running under the agent panel,
+     where the Cancel button was for the whole of a dub on a 1280px-wide
+     Windows laptop with the panel open (2026-09-10). */
+  .running { margin: auto; display: flex; gap: 28px; align-items: stretch; min-width: 0;
+    width: min(100%, calc(clamp(560px, 40vw, 880px) + 28px + clamp(420px, 26vw, 520px))); }
   /* The box and the line that says which part of the video is being dubbed,
      one under the other -- what sits beside the card is that column, not the
      box itself, so the caption lands under the box instead of next to it. */
-  .running-shot { align-self: center; display: flex; flex-direction: column; gap: 8px; }
+  .running-shot { align-self: center; display: flex; flex-direction: column; gap: 8px;
+    flex: 1 1 clamp(560px, 40vw, 880px); min-width: 280px; }
   /* A box of a fixed shape, never the video's own: a 9:16 phone clip let the
      block grow past 800px tall and dragged the card -- and the whole screen --
      up with it. 16:9 always, letterboxing whatever does not match, so the wait
      always looks the same shape. 560px in the window the app opens at, growing
      with a maximized one (40vw, to 880px) -- at the old fixed size the pair sat
-     as a small island in the middle of a 2000px screen. The 500px in the second
-     half is the card beside it plus the gap: on a narrow window the video takes
-     what is left instead, down to a floor. aspect-ratio holds the shape while the file is still loading, and
+     as a small island in the middle of a 2000px screen. The size is the
+     column's (.running-shot), which flexes down on a narrow screen; a formula
+     in vw could not see the rail or the agent panel, and the pair overflowed
+     under the panel. aspect-ratio holds the shape while the file is still loading, and
      if it never loads the veil still has something to sit on; align-self keeps
      the box at its own height when the card's steps make the row taller. */
-  .running-video { position: relative; flex: 0 0 auto; align-self: center;
-    width: min(clamp(560px, 40vw, 880px), max(280px, calc(100vw - 500px)));
+  .running-video { position: relative; flex: 0 0 auto; align-self: center; width: 100%;
     aspect-ratio: 16 / 9;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg); }
   .running-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -465,7 +471,7 @@
 
   /* 420px in the window the app opens at, growing with a maximized one so the
      pair does not sit as a small island in the middle of a wide screen. */
-  .progress-card { flex: 0 0 clamp(420px, 26vw, 520px); display: flex; flex-direction: column; gap: 16px;
+  .progress-card { flex: 0 1 clamp(420px, 26vw, 520px); min-width: 320px; display: flex; flex-direction: column; gap: 16px;
     padding: 22px 24px; background: var(--background);
     border: 1px solid var(--border); border-radius: var(--radius-lg); }
   .progress-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
