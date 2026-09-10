@@ -532,9 +532,10 @@
   .step-mark.todo { border: 2px solid var(--border); }
   .step-note { font-weight: 400; color: var(--muted-foreground); }
 
-  /* Pushed to the foot of the card, under a rule, so the steps stay the thing
-     you read first. */
-  .progress-card .raw-log { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; }
+  /* At the foot of the card, under a rule, so the steps stay the thing you
+     read first. The space above it belongs to .cancel-row now -- that is what
+     carries the margin-top:auto and pushes both of them down together. */
+  .progress-card .raw-log { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
 
   @media (prefers-reduced-motion: reduce) {
     .step-mark.current, .sc-wave:disabled svg { animation: none; }
@@ -738,11 +739,18 @@
   .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
   /* Stopping a job that is running: the one button on the progress card, and
      it was grey on grey there. A white outline finds it without shouting the
-     way a filled red would (user, 2026-09-10). */
+     way a filled red would (user, 2026-09-10). .30 rather than the .55 it
+     started at: standing alone at the foot of the card it no longer has to
+     fight the percentage beside it, and .55 there was the only thing on the
+     screen brighter than the writing. Still above the .18 every other control
+     uses, because this is the one way to stop what is running.
+     Its own row at the foot, above the log: beside the percentage the eye
+     read the two as one lump, and a number you read is not a button you press
+     (user, 2026-09-10). */
   .btn-cancel { background: transparent; color: var(--foreground);
-    border: 1px solid rgba(255, 255, 255, 0.55); }
+    border: 1px solid rgba(255, 255, 255, 0.30); }
   .btn-cancel:hover { background: rgba(255, 255, 255, 0.08); }
-  .cancel-stop { width: 16px; height: 16px; }
+  .cancel-row { display: flex; justify-content: flex-end; margin-top: auto; padding-top: 12px; }
   /* The one button in the app that destroys something. */
   .btn-danger { background: var(--destructive); color: var(--primary-foreground); }
   .delete-error { margin: 10px 0 0; font-size: var(--font-label); color: var(--destructive); }
@@ -1765,25 +1773,29 @@
             <div class="running-trim" id="runningTrim"></div>
           </div>
           <div class="progress-card" id="progressCard">
-            <!-- Cancel belongs beside the thing it cancels, not at the far
-                 end of the top bar (user, 2026-09-09): the eye is on the
-                 stage and the percentage, and that is where the way out has
-                 to be. Still #cancelBtn -- setTopbar and runningScreen show
-                 and word it exactly as before. -->
+            <!-- Cancel belongs on the card with the thing it cancels, not at
+                 the far end of the top bar (user, 2026-09-09) -- but at the
+                 foot of it rather than beside the percentage, where the two
+                 read as one lump (user, 2026-09-10). Still #cancelBtn --
+                 setTopbar and runningScreen show and word it exactly as
+                 before. -->
             <div class="progress-head">
               <b id="progressTitle">Separating audio</b>
               <div class="progress-head-end">
                 <span id="progressPct">0%</span>
-                <!-- The word is its own element: paintCancel writes "Cancel"
-                     and "Cancelling…" into it, and writing them into the
-                     button itself wiped the square out of it. -->
-                <button class="btn btn-cancel btn-sm" id="cancelBtn" type="button" hidden>
-                  <svg class="icon cancel-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2" fill="currentColor" stroke="none"/></svg><span id="cancelLabel">Cancel</span></button>
               </div>
             </div>
             <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
             <ol class="progress-steps" id="progressSteps"></ol>
             <div class="job-notice" id="jobNotice" hidden></div>
+            <div class="cancel-row">
+              <!-- The word is its own element: paintCancel writes "Cancel" and
+                   "Cancelling…" into it. The button used to hold a stop square
+                   as well, which writing into the button itself wiped out; the
+                   square is gone now (user, 2026-09-10) but the span stays,
+                   because that is what those two callers write to. -->
+              <button class="btn btn-cancel btn-sm" id="cancelBtn" type="button" hidden><span id="cancelLabel">Cancel</span></button>
+            </div>
             <details class="raw-log" id="rawLogDetails">
               <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
               <div class="log-box" id="logBox"></div>

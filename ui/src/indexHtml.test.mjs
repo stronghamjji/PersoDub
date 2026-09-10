@@ -402,8 +402,19 @@ test("Cancel sits in the progress card, and leaving an erase reopens the dialog 
   assert.ok(card.includes('id="cancelBtn"'), "Cancel is inside the progress card");
   const topbar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('id="screen-home"'));
   assert.ok(!topbar.includes('id="cancelBtn"'), "and no longer in the top bar");
-  // The percentage first, then the button: read, then press.
-  assert.match(card, /id="progressPct"[^]*id="cancelBtn"/);
+  // At the foot of the card, not beside the percentage: a number you read and
+  // a button you press sat as one lump there (user, 2026-09-10). The steps
+  // come first, then the button, then the log.
+  assert.match(card, /id="progressSteps"[^]*class="cancel-row"[^]*id="cancelBtn"/);
+  assert.ok(!/id="progressPct"[^]*id="cancelBtn"[^]*<\/div>\s*<div class="progress-bar"/.test(card),
+    "Cancel is out of the head row");
+  // The stop square is gone, and the row it now lives in is what holds the
+  // card's free space so the log stays at the foot with it.
+  assert.ok(!html.includes("cancel-stop"), "the stop square is gone");
+  assert.match(html, /\.cancel-row \{[^}]*margin-top: auto/);
+  assert.match(html, /\.progress-card \.raw-log \{ margin-top: 12px/);
+  // Lighter than it was, still above every other control's .18.
+  assert.match(html, /\.btn-cancel \{[^}]*border: 1px solid rgba\(255, 255, 255, 0\.30\)/);
   // Leaving: the dialog goes back up only when that is where the erase began.
   assert.match(html, /const back = eraseScreen\.origin\(\);/);
   assert.match(html, /document\.body\.dataset\.screen === "erase" && back/);

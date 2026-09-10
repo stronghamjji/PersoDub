@@ -252,8 +252,8 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     const status = getJobStatus();
     btn.hidden = !["running", "cancelling", "queued"].includes(status);
     btn.disabled = status === "cancelling";
-    // The label only: the button also holds the stop square, and writing the
-    // word into the button itself took the square with it.
+    // The label element, not the button: the word is written many times over
+    // a job's life, and the button is where any other child would live.
     ($("cancelLabel") || btn).textContent = status === "cancelling" ? "Cancelling…" : "Cancel";
   }
 
