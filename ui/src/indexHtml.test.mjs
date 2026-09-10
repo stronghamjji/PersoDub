@@ -167,6 +167,11 @@ test("the estimate and the Erase button stand in the row under the picture", () 
   assert.ok(row.includes('id="eraseEst"') && row.includes('id="eraseRunBtn"'),
     "both live in the row under the picture");
   assert.match(row, /id="eraseEst"[^]*id="eraseRunBtn"/, "the minutes, then the button");
+  // A hairline between the way out and the name of the screen, the same one
+  // the pane buttons stand behind at the other end of the bar. It comes and
+  // goes with the house (user, 2026-09-10).
+  assert.match(html, /id="topbarBack"[^]*<span class="tb-div" id="topbarHomeDiv" hidden><\/span>[^]*class="topbar-titles"/);
+  assert.match(html, /\$\("topbarHomeDiv"\)\.hidden = !back;/);
   // There is no band of the screen's own any more: it said "Erase subtitles"
   // directly under a top bar saying "Erase subtitles" (user, 2026-09-10).
   assert.ok(!html.includes('id="eraseHead"') && !html.includes("erase-head"),

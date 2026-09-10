@@ -1729,6 +1729,11 @@
               aria-label="Home" title="Home" hidden>
         <svg class="icon" viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.8V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9.8"/><path d="M10 20v-5.5h4V20"/></svg>
       </button>
+      <!-- The same hairline the pane buttons stand behind at the other end of
+           the bar: a way out of this screen and the name of it are two
+           different things, and nothing said so (user, 2026-09-10). It comes
+           and goes with the house, which is not there on the first screen. -->
+      <span class="tb-div" id="topbarHomeDiv" hidden></span>
       <div class="topbar-titles">
         <span class="topbar-title" id="topbarTitle">PersoDub</span>
         <input class="topbar-title topbar-rename" id="topbarRename" hidden
@@ -3061,6 +3066,7 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   $("topbarRename").hidden = true;
   $("topbarSub").textContent = subtitle;
   $("topbarBack").hidden = !back;
+  $("topbarHomeDiv").hidden = !back;
   $("cancelBtn").hidden = !running;
   // Only a finished job has anything to hand back.
   $("exportBtn").hidden = !done;
