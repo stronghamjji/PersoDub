@@ -53,8 +53,8 @@ export function lineOverBy(l) {
 
 // Sized by the stylesheet, not here: the narrow table takes both buttons down
 // a size, and an inline width would be the one thing it could not reach.
-// A triangle's weight is on its flat side, so its box centre is not its optical centre: drawn from 7.5 the shape sits 0.75 units right of the middle of a 24 box, and the margin-left that used to be here pushed it further the same way. Drawn from 6.75 it is centred on the box, and the nudge is gone (user, 2026-09-11).
-const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>';
+// A triangle has two centres and they are 1.75 units apart in a box this size: the middle of its box (6.75) and the middle of its weight (8.5). Neither alone looks right -- box-centred it leans left, weight-centred it leans right -- so it is drawn halfway between them, which is where it always was. What was wrong was the margin-left beside it, worth another 3.2 units at this size and pushing it well past both (user, 2026-09-11).
+const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
 // The "revert" arrow beside an edited line (renderScript): a curled-back
 // arrow, drawn like the rest of the app's icons.
 const UNDO_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>';
@@ -184,7 +184,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     box.innerHTML = `
     <div class="sc-row head">
       <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div>${escapeHtml(sourceName)}</div>
-      <div class="sc-h-play"></div><div>${escapeHtml(targetName)}</div>
+      <div class="sc-h-dst">${escapeHtml(targetName)}</div>
       <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;

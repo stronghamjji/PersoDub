@@ -150,7 +150,7 @@ test("a row carries the line number, who said it, both languages and whether it 
 
   // The header names the two languages the page chose, not "Original/Script".
   assert.match(html, /<div>Korean<\/div>/);
-  assert.match(html, /<div>English<\/div>/);
+  assert.match(html, /<div class="sc-h-dst">English<\/div>/);
   // Speakers are numbered in the order they first speak -- one chip colour for
   // all of them; the diarizer's own "SPEAKER_00" never reaches the screen.
   assert.match(html, /class="spk-chip" title="Speaker 1"/);
@@ -190,7 +190,7 @@ const ONE_ROW =
   // The icons are written out rather than imported: a pin that reads the same
   // constant the code does could not notice the constant changing.
   '      title="Play this line in the video">' +
-  '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>' +
+  '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>' +
   '</button>\n' +
   '    <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"\n' +
   '      data-line="7">Hello</div>\n' +
@@ -216,7 +216,7 @@ test("a row is byte for byte the row the page drew before this file existed", as
   assert.equal(html.slice(0, html.indexOf('<div class="sc-row" data-start')),
     '\n    <div class="sc-row head">\n' +
     '      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div>Korean</div>\n' +
-    '      <div class="sc-h-play"></div><div>English</div>\n' +
+    '      <div class="sc-h-dst">English</div>\n' +
     '      <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>\n' +
     '    </div>\n    ');
 });

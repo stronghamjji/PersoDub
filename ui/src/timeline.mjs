@@ -145,7 +145,7 @@ export function initTimelineUi({ $, getVideo, getClock, getSubStyle,
     <div class="tl-body">
       <div class="tl-names">
         <div class="tl-corner"></div>
-        <div class="tl-name strong">Target</div>
+        <div class="tl-name strong">Translated</div>
         <div class="tl-name">Original</div>
         <div class="tl-name strong tl-name-caps${getSubStyle().enabled ? "" : " off"}">
           <button class="tl-eye${getSubStyle().enabled ? " on" : ""}" id="tlSubEye" type="button"

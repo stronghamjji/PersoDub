@@ -216,6 +216,20 @@ test("stopping a dub is asked in the app's own dialog, not the browser's", () =>
     "window.confirm() is back in the running screen");
 });
 
+// The script table's two columns of words are named for what they are, not
+// for the languages in them: "Korean" next to "Original" read as a language
+// column rather than as the other half of a translation, and the languages
+// are in the top bar anyway (user, 2026-09-11). The timeline's lane beside it
+// says the same word.
+test("the script's two columns are Original and Translated, and so is the lane", () => {
+  const html = readFileSync(INDEX, "utf8");
+  assert.match(html, /return \{ source: "Original", target: "Translated" \};/);
+  assert.match(readFileSync(TIMELINE, "utf8"), /<div class="tl-name strong">Translated<\/div>/);
+  // The heading starts where its column starts -- at the play button, the way
+  // Original starts at its first letter.
+  assert.match(html, /\.sc-h-dst \{ grid-column: 5 \/ 7; \}/);
+});
+
 test("the agent input ignores Enter pressed mid-composition", () => {
   const html = readFileSync(STRIP, "utf8");
   const handler = html.match(/input\.addEventListener\("keydown"[\s\S]{0,600}/);

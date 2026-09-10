@@ -236,7 +236,7 @@ test("the strip is byte for byte the strip the page drew before this file existe
     '    <div class="tl-body">\n' +
     '      <div class="tl-names">\n' +
     '        <div class="tl-corner"></div>\n' +
-    '        <div class="tl-name strong">Target</div>\n' +
+    '        <div class="tl-name strong">Translated</div>\n' +
     '        <div class="tl-name">Original</div>\n' +
     '        <div class="tl-name strong tl-name-caps">\n' +
     '          <button class="tl-eye on" id="tlSubEye" type="button"\n' +
@@ -280,14 +280,14 @@ test("three lines land where their seconds are, and a long voice spills past its
 // The lanes are named for what they hold, not for the languages in them: the
 // table above already heads its columns with those, and "English / Korean"
 // down the side said nothing about which row was the dub (user, 2026-09-08).
-test("the lanes are named Target, Original and Subtitles", (t) => {
+test("the lanes are named Translated, Original and Subtitles", (t) => {
   const h = harness();
   t.after(h.log.restore);
 
   h.api.renderTimeline(LINES, 30);
   const names = h.box.innerHTML;
 
-  assert.ok(names.includes('<div class="tl-name strong">Target</div>'));
+  assert.ok(names.includes('<div class="tl-name strong">Translated</div>'));
   assert.ok(names.includes('<div class="tl-name">Original</div>'));
   assert.ok(names.includes(">Subtitles</div>"));
 });

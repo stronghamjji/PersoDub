@@ -922,7 +922,10 @@
   /* The translation cell is editable, and its click target hangs 4px to the
      left of the words (padding 2px 4px against margin -2px -4px), so its
      heading has to hang with it or the two are 4px apart. */
-  .sc-row.head > div:nth-child(6) { margin-left: -4px; }
+  /* The heading over the translation starts where its column starts -- at the
+     play button, the way Original starts at its first letter (user,
+     2026-09-11) -- so it spans the play track and the words together. */
+  .sc-h-dst { grid-column: 5 / 7; }
   .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
     align-items: center; position: sticky; top: 0; z-index: 1;
     background: var(--canvas); font-size: var(--font-label); font-weight: 600;
@@ -2033,7 +2036,7 @@
                   <span class="sub-ov-text" id="subMeasure" aria-hidden="true"
                         style="visibility:hidden;pointer-events:none;top:-9999px;font-size:100px;max-width:none;white-space:pre"></span>
                   <button class="video-bigplay" id="bigPlay" type="button" aria-label="Play">
-                    <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>
+                    <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
                   </button>
                 </div>
                 <!-- Outside .video-wrap on purpose: the frame clips at its
@@ -4008,13 +4011,12 @@ function langName(code) {
 // "Original / Script" said nothing about which languages were being compared.
 // The source is whichever the user chose, or -- when they left it on auto --
 // whatever was detected.
+// The two columns of words. "Original" and "Translated" rather than the two
+// language names: the pair is what the table is for, and "Korean" beside
+// "Original" read as a language column rather than as the other half of a
+// translation (user, 2026-09-11). The languages themselves are in the top bar.
 function scriptLangNames() {
-  const job = state.job || {};
-  return {
-    source: langName(job.source_lang || (job.result || {}).detected_source_language)
-      || "Original",
-    target: langName(job.language_code) || "Script",
-  };
+  return { source: "Original", target: "Translated" };
 }
 
 // ---------------- The finished screen ----------------
@@ -4155,8 +4157,8 @@ doneVideo.addEventListener("click", toggleDonePlay);
 // The small button under the picture says what pressing it will do, so it is
 // the pause sign while the video plays and the play sign the rest of the time.
 // Drawn, like every other mark in the app.
-// A triangle's weight is on its flat side, so its box centre is not its optical centre: drawn from 7.5 the shape sits 0.75 units right of the middle of a 24 box, and the margin-left that used to be here pushed it further the same way. Drawn from 6.75 it is centred on the box, and the nudge is gone (user, 2026-09-11).
-const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>';
+// A triangle has two centres and they are 1.75 units apart in a box this size: the middle of its box (6.75) and the middle of its weight (8.5). Neither alone looks right -- box-centred it leans left, weight-centred it leans right -- so it is drawn halfway between them, which is where it always was. What was wrong was the margin-left beside it, worth another 3.2 units at this size and pushing it well past both (user, 2026-09-11).
+const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
 const SMALL_PAUSE = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><path d="M8 5h3.2v14H8z"/><path d="M12.8 5H16v14h-3.2z"/></svg>';
 function paintPlayToggle() {
   const btn = $("playToggle");
