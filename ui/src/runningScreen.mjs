@@ -98,6 +98,11 @@ const CREDIT_MODALS = {
  *        the same reason; it is what decides whether Cancel is shown at all
  * @param {(jobId: string) => Promise} deps.onCancel  ask the server to stop the
  *        job (cancelDubJob)
+ * @param {() => Promise<boolean>} deps.askCancel  put the "Stop this dub?"
+ *        question to the user and resolve with their answer. The page's own
+ *        dialog, not window.confirm(): that one freezes every event in the
+ *        Electron shell while it is up, and Chromium writes its buttons in the
+ *        machine's language, so an English question came with Korean answers
  * @param {() => void} deps.onOpenSettings  open the Settings sheet, for the
  *        popup's in-app button ("Open Settings")
  * @param {(anchor: any, url: string) => void} deps.openExternal  arm the popup's
@@ -108,7 +113,7 @@ const CREDIT_MODALS = {
  * @returns the operations the rest of the page calls.
  */
 export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAndLog,
-                                      getJobId, getJobStatus, onCancel,
+                                      getJobId, getJobStatus, onCancel, askCancel,
                                       onOpenSettings, openExternal }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
@@ -260,7 +265,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
   $("cancelBtn").addEventListener("click", async () => {
     const jobId = getJobId();
     if (!jobId) return;
-    if (!confirm("Cancel this dubbing job?")) return;
+    if (!(await askCancel())) return;
     $("cancelBtn").disabled = true;
     ($("cancelLabel") || $("cancelBtn")).textContent = "Cancelling…";
     try {

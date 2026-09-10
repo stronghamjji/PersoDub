@@ -25,6 +25,8 @@ const TIMELINE = fileURLToPath(new URL("./timeline.mjs", import.meta.url));
 const STRIP = fileURLToPath(new URL("./agentStrip.mjs", import.meta.url));
 // The erase screen writes the box's own label, so the words live there.
 const ERASE = fileURLToPath(new URL("./eraseScreen.mjs", import.meta.url));
+// The running screen owns the Cancel button that asks the question.
+const RUNNING = fileURLToPath(new URL("./runningScreen.mjs", import.meta.url));
 
 // The line number comes along so a failure says where in the page to look --
 // the block itself starts a couple of thousand lines in.
@@ -179,6 +181,34 @@ test("the estimate and the Erase button stand in the row under the picture", () 
   // The box says whether the app is still looking.
   assert.match(html, /\.erase-zone\.finding \{ --zone-now: var\(--destructive\); \}/);
   assert.match(html, /\.erase-zone\.found \{ --zone-now: var\(--success\); \}/);
+});
+
+// Stopping a dub used to be asked with window.confirm(). That freezes every
+// event in the Electron shell while it is up, and Chromium writes its buttons
+// in the machine's own language -- an English question answered by Korean
+// buttons (found on Windows, 2026-09-10). It is the app's own dialog now, and
+// no confirm() is left anywhere on the page.
+test("stopping a dub is asked in the app's own dialog, not the browser's", () => {
+  const html = readFileSync(INDEX, "utf8");
+  for (const id of ["cancelDubOverlay", "cancelDubCloseX", "cancelDubKeepBtn", "cancelDubConfirmBtn"]) {
+    assert.ok(html.includes(`id="${id}"`), `${id} is missing from the stop-this-dub dialog`);
+  }
+  // The same head/body/foot the other alert dialogs have, and the same
+  // grammar: the way out is a ghost button, the deed is the red one.
+  const dlg = html.slice(html.indexOf('id="cancelDubOverlay"'), html.indexOf('id="deleteOverlay"'));
+  assert.match(dlg, /class="modal-head"[^]*class="modal-body"[^]*class="modal-foot"/);
+  assert.match(dlg, /class="btn btn-secondary" id="cancelDubKeepBtn"/);
+  assert.match(dlg, /class="btn btn-danger" id="cancelDubConfirmBtn"/);
+  // Backdrop and Escape both answer no, and the promise is settled either way
+  // -- a caller left awaiting a dialog nobody answered is a dead Cancel button.
+  assert.match(html, /closeCancelDub\(false\)/);
+  assert.match(html, /closeCancelDub\(true\)/);
+  assert.match(html, /askCancel: \(\) => askCancelDub\(\)/);
+  // Not one confirm() left on the page or in the running screen.
+  assert.ok(!/[^.\w]confirm\(/.test(html.replace(/closeCancelDub/g, "")),
+    "window.confirm() is back somewhere on the page");
+  assert.ok(!/[^.\w]confirm\(/.test(readFileSync(RUNNING, "utf8")),
+    "window.confirm() is back in the running screen");
 });
 
 test("the agent input ignores Enter pressed mid-composition", () => {

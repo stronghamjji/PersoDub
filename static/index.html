@@ -2409,6 +2409,30 @@
   </div>
 </div>
 
+<!-- Stopping a dub throws away the minutes it has already spent, so it is
+     asked before it happens -- and asked here rather than with
+     window.confirm(). That one freezes every event in the Electron shell
+     until it is dismissed, and Chromium writes its buttons in the machine's
+     own language, so an English question came with Korean answers
+     (found on Windows, 2026-09-10). -->
+<div class="modal-overlay" id="cancelDubOverlay">
+  <div class="modal" style="width: min(440px, 92vw)">
+    <div class="modal-head">
+      <h2>Stop this dub?</h2>
+      <button class="modal-close" id="cancelDubCloseX" type="button" aria-label="Close">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="margin: 0">The work done so far will be lost.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" id="cancelDubKeepBtn" type="button">Keep going</button>
+      <button class="btn btn-danger" id="cancelDubConfirmBtn" type="button">Stop it</button>
+    </div>
+  </div>
+</div>
+
 <!-- Deleting a project takes its whole folder with it, so it is asked here
      rather than with window.confirm(), which freezes every event in the
      Electron shell until it is dismissed. -->
@@ -3555,6 +3579,8 @@ const runningScreen = initRunningScreenUi({
   getJobId: () => state.jobId,
   getJobStatus: () => (state.job ? state.job.status : null),
   onCancel: (jobId) => cancelDubJob(jobId),
+  // The question, asked in the app's own dialog rather than the browser's.
+  askCancel: () => askCancelDub(),
   onOpenSettings: () => settings.openSettings(),
   // The popup's Recharge button is an anchor with target="_blank"; arming its
   // href is all the opening it needs. Handed in so the desktop shell could one
@@ -3592,11 +3618,47 @@ setInterval(() => { projects.renderQueueCard().catch(() => {}); }, 2500);
 // of work go with it.
 async function cancelQueuedJob(job) {
   const live = job.status !== "queued";
-  if (live && !confirm("Cancel this dubbing job?")) return;
+  if (live && !(await askCancelDub())) return;
   try { await fetch(`/api/dub/jobs/${job.id}/cancel`, { method: "POST" }); } catch { /* the next poll tells the truth */ }
   projects.renderQueueCard().catch(() => {});
   projects.renderHistory().catch(() => {});
 }
+
+// Stopping a dub is asked in a dialog of the app's own, for the same reasons
+// deleting is: window.confirm() freezes every event in the Electron shell
+// until it is dismissed, and Chromium writes its buttons in the machine's own
+// language -- an English question with Korean answers (Windows, 2026-09-10).
+// A promise, because both callers only want the yes or no: the running
+// screen's Cancel and a queued row's X.
+let answerCancelDub = null;
+
+function askCancelDub() {
+  // Asked twice over is one dialog: whoever asked first gets a No, so no
+  // caller is left waiting on a promise that never settles.
+  if (answerCancelDub) answerCancelDub(false);
+  $("cancelDubOverlay").classList.add("open");
+  $("cancelDubConfirmBtn").focus();
+  return new Promise((resolve) => { answerCancelDub = resolve; });
+}
+
+function closeCancelDub(answer) {
+  $("cancelDubOverlay").classList.remove("open");
+  const done = answerCancelDub;
+  answerCancelDub = null;
+  if (done) done(answer);
+}
+$("cancelDubCloseX").addEventListener("click", () => closeCancelDub(false));
+$("cancelDubKeepBtn").addEventListener("click", () => closeCancelDub(false));
+$("cancelDubConfirmBtn").addEventListener("click", () => closeCancelDub(true));
+// Backdrop and Escape both mean "no", the way they do on the delete dialog:
+// backing out is the reflex in front of a question like this, and the stopping
+// is the deliberate act.
+$("cancelDubOverlay").addEventListener("click", (e) => {
+  if (e.target === $("cancelDubOverlay")) closeCancelDub(false);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("cancelDubOverlay").classList.contains("open")) closeCancelDub(false);
+});
 
 // Deleting a project's folder cannot be undone, so it is asked in a dialog of
 // the app's own -- window.confirm() freezes every event in the Electron shell

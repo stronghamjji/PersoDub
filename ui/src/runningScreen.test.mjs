@@ -35,7 +35,9 @@ function makeEl(id) {
   };
 }
 
-/** A page, the calls the screen reaches out through, and the answer confirm gives. */
+/** A page, the calls the screen reaches out through, and the answer the
+    question gives. The question is the app's own dialog now, handed in like
+    every other way this screen reaches out (user, 2026-09-10). */
 function harness({ jobId = "j1", status = "running", confirmAnswer = true,
                    onCancel = null } = {}) {
   const els = new Map();
@@ -54,10 +56,10 @@ function harness({ jobId = "j1", status = "running", confirmAnswer = true,
   };
   const log = { homeNoticeAndLog: 0, cancelled: [], settings: 0, opened: [], warned: [] };
 
-  const real = { confirm: globalThis.confirm, warn: console.warn };
-  globalThis.confirm = () => confirmAnswer;
+  const real = { warn: console.warn };
   console.warn = (m) => log.warned.push(m);
-  log.restore = () => { globalThis.confirm = real.confirm; console.warn = real.warn; };
+  log.restore = () => { console.warn = real.warn; };
+  log.asked = 0;
 
   const api = initRunningScreenUi({
     $,
@@ -69,6 +71,7 @@ function harness({ jobId = "j1", status = "running", confirmAnswer = true,
     getJobId: () => jobId,
     getJobStatus: () => status,
     onCancel: onCancel || (async (id) => { log.cancelled.push(id); }),
+    askCancel: async () => { log.asked += 1; return confirmAnswer; },
     onOpenSettings: () => { log.settings += 1; },
     openExternal: (a, url) => { log.opened.push(url); a.href = url; },
   });
