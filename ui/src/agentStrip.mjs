@@ -74,7 +74,7 @@ export function loginWords(a) {
   if (a.logged_in) {
     return a.account ? `signed in as ${a.account}` : "signed in";
   }
-  return a.login_command ? `not signed in — run ${a.login_command} in Terminal` : "not signed in";
+  return "not signed in";
 }
 
 // The two faces of the button at the end of the input row. Drawn, like every
@@ -217,8 +217,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     return loginKnown(a) && !a.logged_in ? a : null;
   }
 
-  // The strip's first row. The command is a <code> element built as text, so
-  // nothing a server ever sends can become a tag.
+  // The strip's first row.
   function paintState() {
     const a = agentList.find((x) => x.id === chosen.agent);
     stateLine.textContent = "";
@@ -240,15 +239,12 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       stateLine.textContent = `${a.name} · ${loginWords(a)}`;
       return;
     }
+    // Both names, not the one that is picked: the person reading this has
+    // not signed in to either, and either will do. The row that named the
+    // picked one is right there; the how (a Terminal command) is said once,
+    // in the log, by loadAgents (user, 2026-09-10).
     stateLine.classList.add("warn");
-    stateLine.appendChild(document.createTextNode(`${a.name} · not signed in`));
-    if (a.login_command) {
-      stateLine.appendChild(document.createTextNode(" — run"));
-      const cmd = document.createElement("code");
-      cmd.textContent = a.login_command;
-      stateLine.appendChild(cmd);
-      stateLine.appendChild(document.createTextNode("in Terminal"));
-    }
+    stateLine.textContent = SIGN_IN;
   }
 
   // Which one it is showing, and whether it can be pressed. While a turn runs it
@@ -299,10 +295,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       } else if (signedOutChoice()) {
         // Pickable, but it cannot answer yet. The row that picked it says the
         // same thing; this is the one the user reads while typing.
-        const a = signedOutChoice();
-        input.placeholder = a.login_command
-          ? `${a.name} is not signed in - run ${a.login_command} in Terminal`
-          : `${a.name} is not signed in`;
+        input.placeholder = SIGN_IN_BOX;
       } else if (document.body.classList.contains("agent-open")) {
         input.placeholder = "Ask anything";
       } else if (screen === "home") {
@@ -433,7 +426,14 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     loadAgents({ login: true }).catch(() => {});
   }
   const CHECK_FAILED = "Could not check which assistants are available.";
-  const NONE_READY = "No assistant is ready - install Claude Code or Codex";
+  // What the strip says when it cannot answer, short enough for the heading
+  // row and the input box (user, 2026-09-10). The full stop is for the log.
+  const NONE_READY = "Install Claude Code or Codex";
+  const SIGN_IN = "Sign in to Claude or Codex.";
+  const SIGN_IN_BOX = "Sign in to Claude or Codex";
+  // The Terminal command is the one thing here a person cannot guess, and it
+  // is said once: the log keeps it, the rows and the heading stay short.
+  let signInHintSaid = false;
 
   async function loadAgents({ login = false } = {}) {
     // Whether the list arrived, said plainly. An empty list happens to mean the
@@ -447,7 +447,11 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       const r = await fetch("/api/agent/status" + (login ? "?login=1" : ""));
       agentList = (await r.json()).agents || [];
       arrived = true;
-      notice = "";
+      // Only the fetch's own notice is cleared here. NONE_READY is judged
+      // below, from what is in the list -- clearing it first is how the two
+      // loads of every launch (the plain one, then the login check) each said
+      // it: both had already started before either could mark it said.
+      if (notice === CHECK_FAILED) notice = "";
     } catch {
       agentList = [];
       // Say it once. A retry that fails again should not stack up bubbles.
@@ -490,11 +494,20 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     // installed, and "install one of these three" is the wrong thing to tell
     // someone who already has one. The fetch's own message stands instead.
     if (arrived && !agentList.some((a) => a.installed && a.supported)) {
-      if (notice !== NONE_READY) {
-        bubble("ai", "No assistant is ready. Install Claude Code or Codex — you only need one.");
-      }
+      if (notice !== NONE_READY) bubble("ai", NONE_READY + ".");
       notice = NONE_READY;
       paintChoice();
+    } else if (arrived && notice === NONE_READY) {
+      notice = "";   // one got installed since
+      paintChoice();
+    }
+    if (arrived && !signInHintSaid && signedOutChoice()) {
+      const cmds = agentList.filter((a) => loginKnown(a) && !a.logged_in && a.login_command)
+        .map((a) => a.login_command);
+      if (cmds.length) {
+        signInHintSaid = true;
+        bubble("ai", `To sign in, run ${cmds.join(" or ")} in Terminal.`);
+      }
     }
   }
 

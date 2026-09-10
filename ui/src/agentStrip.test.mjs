@@ -259,7 +259,7 @@ test("what a row says under a name, in every login state", () => {
 
   assert.equal(loginWords(CLAUDE), "signed in as me@example.com");
   assert.equal(loginWords({ ...CLAUDE, account: "" }), "signed in");
-  assert.equal(loginWords(CODEX), "not signed in — run codex login in Terminal");
+  assert.equal(loginWords(CODEX), "not signed in");
   assert.equal(loginWords({ ...CODEX, login_command: "" }), "not signed in");
 });
 
@@ -410,7 +410,7 @@ test("picking a model writes the choice down, and a saved one is read back", asy
     assert.equal(menu.hidden, false);
     // A heading, then one row per assistant.
     assert.deepEqual(menu.children.slice(1).map((r) => words(r.children[0])),
-      ["Claudesigned in as me@example.com", "Codexnot signed in — run codex login in Terminal"]);
+      ["Claudesigned in as me@example.com", "Codexnot signed in"]);
 
     // Into Codex, then its one model.
     await menu.children[2].fire("click", { stopPropagation() {} });
@@ -683,15 +683,32 @@ test("Enter is ignored while an IME is still settling a syllable", async () => {
   } finally { h.log.restore(); }
 });
 
+test("a signed-out choice: the line and the box name both assistants, the log says how once", async () => {
+  const h = harness({ agents: [CLAUDE, CODEX],
+                      stored: { "persodub.assistantChoice": JSON.stringify({ agent: "codex", model: "gpt", name: "Codex" }) } });
+  try {
+    await flush();
+    assert.equal(h.$("assistantState").textContent, "Sign in to Claude or Codex.");
+    assert.equal(h.$("assistantState").classList.contains("warn"), true);
+    assert.equal(h.$("assistantInput").placeholder, "Sign in to Claude or Codex");
+    // Asked twice (see below), said once -- and only the commands that apply.
+    assert.equal(h.log.calls.filter((c) => c.url.startsWith("/api/agent/status")).length, 2);
+    assert.deepEqual(h.$("assistantLog").children.map((d) => d.innerHTML),
+      ["To sign in, run codex login in Terminal."]);
+  } finally { h.log.restore(); }
+});
+
 test("with no assistant ready the strip says so once and sends nothing", async () => {
   const h = harness({ agents: [{ id: "claude", name: "Claude", installed: false,
                                  supported: true, models: [] }] });
   try {
     await flush();
     const said = h.$("assistantLog").children.map((d) => d.innerHTML);
-    assert.equal(said[0], "No assistant is ready. Install Claude Code or Codex — you only need one.");
-    assert.equal(h.$("assistantInput").placeholder,
-      "No assistant is ready - install Claude Code or Codex");
+    // The list is asked for twice on a screen where the strip is in use (the
+    // plain load, then the one that checks logins); the sentence shows once.
+    assert.equal(h.log.calls.filter((c) => c.url.startsWith("/api/agent/status")).length, 2);
+    assert.deepEqual(said, ["Install Claude Code or Codex."]);
+    assert.equal(h.$("assistantInput").placeholder, "Install Claude Code or Codex");
     assert.equal(h.$("assistantModelLabel").textContent, "Model");
   } finally { h.log.restore(); }
 });
