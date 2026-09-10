@@ -393,13 +393,13 @@ async function startUpdater(win, kitDir) {
       if (!win.isDestroyed()) win.webContents.send("shell:update-state", updateState);
     };
     autoUpdater.on("update-available", (info) => {
-      console.log(`PERSODUB_UPDATE available ${info?.version ?? ""}`);
+      shellLog(`PERSODUB_UPDATE available ${info?.version ?? ""}`);
       announce("update-available", info);
     });
     autoUpdater.on("download-progress", (info) => announce("download-progress", info));
     autoUpdater.on("update-downloaded", (info) => {
       updateDownloaded = true;
-      console.log(`PERSODUB_UPDATE downloaded ${info?.version ?? ""}`);
+      shellLog(`PERSODUB_UPDATE downloaded ${info?.version ?? ""}`);
       announce("update-downloaded", info);
       // Test-only hook: lets the end-to-end update test apply the swap without
       // a human clicking the banner. (true, false) = silent, no relaunch --
@@ -410,10 +410,10 @@ async function startUpdater(win, kitDir) {
         autoUpdater.quitAndInstall(true, false);
       }
     });
-    autoUpdater.on("error", (err) => console.warn("PERSODUB_UPDATE check failed:", String(err?.message || err)));
+    autoUpdater.on("error", (err) => shellLog(`PERSODUB_UPDATE check failed: ${String(err?.message || err)}`));
     await autoUpdater.checkForUpdates();
   } catch (err) {
-    console.warn("PERSODUB_UPDATE unavailable:", String((err && err.message) || err));
+    shellLog(`PERSODUB_UPDATE unavailable: ${String((err && err.message) || err)}`);
   }
 }
 
@@ -449,7 +449,7 @@ async function boot(win) {
       // payload whose KIT_VERSION is unreadable) means there's nothing to
       // compare a kit's version against: checkKit falls back to its
       // pre-versioning 4-file-only check so the dev loop still works.
-      console.warn("PERSODUB_KIT no bundled payload KIT_VERSION found -- version enforcement skipped, falling back to file-presence check");
+      shellLog("PERSODUB_KIT no bundled payload KIT_VERSION found -- version enforcement skipped, falling back to file-presence check");
     }
 
     // A kit installed before the settings file was renamed still calls it
@@ -458,7 +458,7 @@ async function boot(win) {
     // 30+ GB is downloaded again. Both candidate directories are tried
     // because the redirect below may still move the target.
     for (const dir of [cfg.kitDir, defaultKitDir({ ignoreLegacy: true })]) {
-      if (migrateKitEnv(dir)) console.log(`PERSODUB_KIT migrated mac.env -> kit.env in ${dir}`);
+      if (migrateKitEnv(dir)) shellLog(`PERSODUB_KIT migrated mac.env -> kit.env in ${dir}`);
     }
 
     // Prefer an existing kit (e.g. a mac_kit install); otherwise install into
@@ -492,10 +492,10 @@ async function boot(win) {
         if (freshKitDir !== cfg.kitDir && existsSync(oldModels) && !existsSync(newModels)) {
           mkdirSync(freshKitDir, { recursive: true });
           renameSync(oldModels, newModels);
-          console.log(`PERSODUB_KIT moved models from ${oldModels} to ${newModels}`);
+          shellLog(`PERSODUB_KIT moved models from ${oldModels} to ${newModels}`);
         }
       } catch (err) {
-        console.warn("PERSODUB_KIT could not carry models over:", String((err && err.message) || err));
+        shellLog(`PERSODUB_KIT could not carry models over: ${String((err && err.message) || err)}`);
       }
       abandonedKitDir = cfg.kitDir;
       cfg = { ...cfg, kitDir: freshKitDir };
@@ -524,7 +524,7 @@ async function boot(win) {
     if (kitOk && payload) {
       const open = await openSteps(toRun);
       unfinished = open.length > 0;
-      if (unfinished) console.log(`PERSODUB_KIT resuming an unfinished install: ${open.map((s) => s.id).join(", ")}`);
+      if (unfinished) shellLog(`PERSODUB_KIT resuming an unfinished install: ${open.map((s) => s.id).join(", ")}`);
     }
     if (!kitOk || unfinished) {
       if (!payload) {
@@ -596,7 +596,7 @@ async function boot(win) {
         return;
       }
     }
-    console.log(`PERSODUB_KIT kitDir=${cfg.kitDir} version=${kitVersion ?? "unknown"}`);
+    shellLog(`PERSODUB_KIT kitDir=${cfg.kitDir} version=${kitVersion ?? "unknown"}`);
   }
 
   // The update check starts here -- before the engines, which take up to a
@@ -661,7 +661,7 @@ ipcMain.handle("shell:reveal", (_e, target) => {
 app.whenReady().then(() => {
   // One greppable line naming the running version -- the e2e update test (and
   // any future bug report) reads it instead of guessing from filenames.
-  console.log(`PERSODUB_VERSION ${app.getVersion()}`);
+  shellLog(`PERSODUB_VERSION ${app.getVersion()}`);
 
   // The app server names the file (dub_en.mp4); the folder comes from the job's
   // date and project, so three episodes do not collapse into "dub_en (1).mp4".
@@ -902,7 +902,7 @@ app.whenReady().then(() => {
       });
       // One greppable line per check -- when a user reports the installer's
       // file-in-use dialog anyway, this says what the pre-flight saw.
-      console.log(`PERSODUB_UPDATE lock check: ${lockers.length} foreign holder(s)${lockers.length > 0 ? " -- " + lockers.map((l) => l.exe || l.name).join(", ") : ""}`);
+      shellLog(`PERSODUB_UPDATE lock check: ${lockers.length} foreign holder(s)${lockers.length > 0 ? " -- " + lockers.map((l) => l.exe || l.name).join(", ") : ""}`);
       if (lockers.length > 0) {
         const names = [...new Set(lockers.map((l) => l.name || l.exe))].join(", ");
         const { response } = await dialog.showMessageBox(win, {
