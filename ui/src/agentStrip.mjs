@@ -72,7 +72,9 @@ export function loginKnown(a) {
 export function loginWords(a) {
   if (!loginKnown(a)) return "";
   if (a.logged_in) {
-    return a.account ? `signed in as ${a.account}` : "signed in";
+    // "as" only when the account is an address, which says which one: a
+    // service's name ("claude.ai", "ChatGPT") only repeated the row's own.
+    return a.account && a.account.includes("@") ? `signed in as ${a.account}` : "signed in";
   }
   return "not signed in";
 }

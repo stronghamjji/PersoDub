@@ -259,6 +259,10 @@ test("what a row says under a name, in every login state", () => {
 
   assert.equal(loginWords(CLAUDE), "signed in as me@example.com");
   assert.equal(loginWords({ ...CLAUDE, account: "" }), "signed in");
+  // A service's name is not an account: "signed in as claude.ai" said nothing
+  // the row's own name had not (user, 2026-09-10). An address is.
+  assert.equal(loginWords({ ...CLAUDE, account: "claude.ai" }), "signed in");
+  assert.equal(loginWords({ ...CLAUDE, account: "ChatGPT" }), "signed in");
   assert.equal(loginWords(CODEX), "not signed in");
   assert.equal(loginWords({ ...CODEX, login_command: "" }), "not signed in");
 });
