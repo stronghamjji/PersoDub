@@ -414,11 +414,16 @@ test("picking a model writes the choice down, and a saved one is read back", asy
     assert.deepEqual(menu.children.slice(1).map((r) => words(r.children[0])),
       ["Claudesigned in as me@example.com", "Codexnot signed in"]);
 
-    // Into Codex, then its one model.
-    await menu.children[2].fire("click", { stopPropagation() {} });
+    // Codex is signed out, so its row is greyed out and does not open
+    // (user, 2026-09-10) -- picking one that cannot answer only moves the dead
+    // end to the first thing typed.
+    assert.equal(menu.children[2].disabled, true);
+
+    // Into Claude, then its first model.
+    await menu.children[1].fire("click", { stopPropagation() {} });
     await menu.children[1].fire("click");
-    assert.equal(JSON.parse(h.log.stored.get("persodub.assistantChoice")).agent, "codex");
-    assert.equal(h.$("assistantModelLabel").textContent, "Codex · gpt");
+    assert.equal(JSON.parse(h.log.stored.get("persodub.assistantChoice")).agent, "claude");
+    assert.equal(h.$("assistantModelLabel").textContent, "Claude · Opus");
     assert.equal(menu.hidden, true);
   } finally { h.log.restore(); }
 
@@ -685,21 +690,22 @@ test("Enter is ignored while an IME is still settling a syllable", async () => {
   } finally { h.log.restore(); }
 });
 
-// The line above has room for both names; the box is 107px wide and has room
-// for neither, so it says "agent" -- what the panel it sits in is called
-// (user, 2026-09-10).
-test("a signed-out choice: the line names both, the box says agent, the log says how once", async () => {
+// Three places, three jobs. The line above names both. The box reports the
+// state in three words, because an instruction written inside a text box reads
+// as an instruction to type into it. The log is the one with room to say what
+// to do (user, 2026-09-10).
+test("a signed-out choice: the line names both, the box says the state, the log says what to do", async () => {
   const h = harness({ agents: [CLAUDE, CODEX],
                       stored: { "persodub.assistantChoice": JSON.stringify({ agent: "codex", model: "gpt", name: "Codex" }) } });
   try {
     await flush();
     assert.equal(h.$("assistantState").textContent, "Sign in to Claude or Codex.");
     assert.equal(h.$("assistantState").classList.contains("warn"), true);
-    assert.equal(h.$("assistantInput").placeholder, "Sign in to an agent");
+    assert.equal(h.$("assistantInput").placeholder, "Not signed in");
     // Asked twice (see below), said once -- and only the commands that apply.
     assert.equal(h.log.calls.filter((c) => c.url.startsWith("/api/agent/status")).length, 2);
     assert.deepEqual(h.$("assistantLog").children.map((d) => d.innerHTML),
-      ["To sign in, run codex login in Terminal."]);
+      ["Sign in to Claude or Codex to use this. Run codex login in Terminal."]);
   } finally { h.log.restore(); }
 });
 

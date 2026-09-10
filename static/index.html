@@ -452,9 +452,12 @@
   .screen { position: absolute; inset: 0; overflow-y: auto; padding: 16px 22px 22px; }
 
   /* The done screen runs edge to edge: three named boxes laid on the app's
-     canvas with a 6px gap between them. Its own panes carry the padding. */
+     canvas with a 6px gap between them. Its own panes carry the padding.
+     A screen that paints a ground of its own is a card like every other pane
+     beside it, so it takes the same corner: square ones read as a slab
+     dropped on the window (user, 2026-09-10). */
   #screen-done { display: flex; flex-direction: column; padding: 0;
-    background: var(--canvas); }
+    background: var(--canvas); border-radius: var(--radius); overflow: hidden; }
 
   /* ---------------- Running: blurred original + progress card ---------------- */
   /* The two halves are one centred group: the source video on the left, out of
@@ -554,8 +557,11 @@
      of buttons at the foot. The finished screen's shape, so the wave and
      lip-sync panes that are coming can be dropped in under the picture without
      moving anything above them. */
+  /* Rounded for the same reason #screen-done is: its ground is lighter than
+     the desk behind it, so its edges are seen, and every other pane on the
+     window is a rounded card (user, 2026-09-10). */
   #screen-erase { display: flex; flex-direction: column; padding: 0;
-    background: var(--background); }
+    background: var(--background); border-radius: var(--radius); overflow: hidden; }
   /* The same drop zone as the home screen's, at the same size and in the same
      place on the window -- both ways into the app then look alike, and one
      stretched to fill a 1440px window was a very large amount of nothing. */

@@ -333,20 +333,25 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       menu.appendChild(head);
       for (const a of agentList) {
         const usable = a.installed && a.supported;
+        // Signed out is greyed out. Picking one that cannot answer only moves
+        // the dead end one step later, to the first thing the user types
+        // (user, 2026-09-10); the row still says why, and the log says how to
+        // fix it.
+        const signedOut = loginKnown(a) && !a.logged_in;
+        const pickable = usable && !signedOut;
         const row = menuRow(a.name, {
           note: !a.installed ? "not installed" : "",
           // Why this one cannot be picked, said where the picking happens -- or,
-          // for one that can, whether it is signed in. A signed-out assistant is
-          // still pickable: signing in is a thing the user can go and do.
+          // for one that can, whether it is signed in.
           sub: a.installed && !a.supported ? (a.reason || "not supported") : loginWords(a),
-          chevron: usable,
-          disabled: !usable,
+          chevron: pickable,
+          disabled: !pickable,
         });
         // Stopped here, because buildMenu() takes this very button off the page:
         // the click would then reach the document, which puts away any menu the
         // click landed outside of -- and a detached button is outside of it. That
         // is what closed the picker instead of opening the vendor's models.
-        if (usable) row.addEventListener("click", (e) => {
+        if (pickable) row.addEventListener("click", (e) => {
           e.stopPropagation(); menuLevel = a.id; buildMenu();
         });
         menu.appendChild(row);
@@ -434,10 +439,11 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   const SIGN_IN = "Sign in to Claude or Codex.";
   // The box is 107px wide at the panel's own width, so anything that names
   // both of them is cut off in it -- and cut without an ellipsis, so it reads
-  // as a broken word rather than a shortened line. "agent" is what the panel
-  // beside it is called (user, 2026-09-10); the line above, in the log, still
-  // names the two by name.
-  const SIGN_IN_BOX = "Sign in to an agent";
+  // as a broken word rather than a shortened line. It reports the state and
+  // nothing else: an instruction written inside a text box reads as an
+  // instruction to type into that box, and the log says what to do instead
+  // (user, 2026-09-10).
+  const SIGN_IN_BOX = "Not signed in";
   // The Terminal command is the one thing here a person cannot guess, and it
   // is said once: the log keeps it, the rows and the heading stay short.
   let signInHintSaid = false;
@@ -508,13 +514,16 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       notice = "";   // one got installed since
       paintChoice();
     }
+    // The log is where the sentence goes. The box beside it has room for three
+     // words and the picker for none, so this is the one place that can say
+     // both what is wrong and what to do about it (user, 2026-09-10). Said once
+     // -- it is the same sentence every time the strip is painted.
     if (arrived && !signInHintSaid && signedOutChoice()) {
       const cmds = agentList.filter((a) => loginKnown(a) && !a.logged_in && a.login_command)
         .map((a) => a.login_command);
-      if (cmds.length) {
-        signInHintSaid = true;
-        bubble("ai", `To sign in, run ${cmds.join(" or ")} in Terminal.`);
-      }
+      signInHintSaid = true;
+      bubble("ai", "Sign in to Claude or Codex to use this."
+        + (cmds.length ? ` Run ${cmds.join(" or ")} in Terminal.` : ""));
     }
   }
 
