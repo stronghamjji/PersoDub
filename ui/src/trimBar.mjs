@@ -74,7 +74,7 @@ export function initTrimBar({ $, prefix = "", getVideo, getClock = null,
     box.innerHTML = `
     <div class="trim-row">
       <button class="trim-play" id="${id("trimPlay")}" type="button" title="Play the selected part" aria-label="Play the selected part">
-        <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
+        <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>
         <svg class="ico-pause" viewBox="0 0 18 18" aria-hidden="true"><rect x="5" y="3" width="3" height="12" rx="1"/><rect x="10" y="3" width="3" height="12" rx="1"/></svg>
       </button>
       <span class="trim-label">Trim</span>

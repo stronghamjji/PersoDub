@@ -184,17 +184,19 @@ const ONE_ROW =
   '    <div class="sc-time"><span class="sc-t-a">00:00:01.0</span><span\n' +
   '      class="sc-t-b"> – 00:00:02.5</span></div>\n' +
   '    <div class="sc-src">안녕</div>\n' +
-  '    <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"\n' +
-  '      data-line="7">Hello</div>\n' +
-  '    <div class="sc-tools"><button class="sc-listen" data-play="7" type="button"\n' +
+  // Listen stands in its own column in front of the translation now, where
+  // the eye already is (user, 2026-09-11).
+  '    <button class="sc-listen" data-play="7" type="button"\n' +
   // The icons are written out rather than imported: a pin that reads the same
   // constant the code does could not notice the constant changing.
-  '        title="Play this line in the video">' +
-  '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>' +
-  '</button>' +
-  '<span class="sc-len"><span class="sc-num"><b>1.2s</b> / 1.5s · </span>' +
+  '      title="Play this line in the video">' +
+  '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>' +
+  '</button>\n' +
+  '    <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"\n' +
+  '      data-line="7">Hello</div>\n' +
+  '    <div class="sc-tools"><span class="sc-len"><span class="sc-num"><b>1.2s</b> / 1.5s · </span>' +
   '<span class="sc-under">−0.3s</span></span>' +
-  '<span class="sc-sp"></span><button class="sc-wave" data-voice="7"\n' +
+  '<span></span><button class="sc-wave" data-voice="7"\n' +
   '        type="button" title="Make this line\'s voice again">' +
   '<svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>' +
   '</button></div>\n' +
@@ -214,7 +216,8 @@ test("a row is byte for byte the row the page drew before this file existed", as
   assert.equal(html.slice(0, html.indexOf('<div class="sc-row" data-start')),
     '\n    <div class="sc-row head">\n' +
     '      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div>Korean</div>\n' +
-    '      <div>English</div>\n' +
+    '      <div class="sc-h-play"></div><div>English</div>\n' +
+    '      <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>\n' +
     '    </div>\n    ');
 });
 

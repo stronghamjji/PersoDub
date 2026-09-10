@@ -373,6 +373,12 @@
   /* Right of Export behind a hairline: [Cancel] [Export] | [list] [timeline]
      [agent]. A pressed button is an open panel. */
   .tb-div { width: 1px; height: 22px; background: var(--border); margin: 0 2px; flex: none; }
+  /* Sat nearer the title than the house: the house is an 18px icon centred in
+     a 32px button, so its own edge is 7px short of where the button ends,
+     while the title's first letter starts where its box does. The gaps were
+     25 and 16 measured off the pixels; this moves the rule 4px left to even
+     them (user, 2026-09-10). */
+  #topbarHomeDiv { margin-left: -2px; margin-right: 6px; }
   .pane-btn { width: 30px; height: 26px; border-radius: 7px; border: 0; background: transparent;
     display: grid; place-items: center; cursor: pointer; color: var(--muted-foreground); flex: none; }
   .pane-btn:hover { background: var(--secondary); }
@@ -904,10 +910,19 @@
      as long as it was there. Beside the words instead, a row is as tall as its
      text and the table shows two and a half times as many lines -- which is
      the whole reason the user asked for this shape. */
+  /* The last track is a number, not `auto`: the head row has no tools cell in
+     it, so an auto track was 0 wide up there and 200 wide on every row below,
+     and the column headings stood 200px right of the words they name
+     (user, 2026-09-11). 200 is the tools cell measured: 10 + 22 + 8 + 100 + 8
+     + 22 + 8 + 22. */
   .sc-row { display: grid;
-    grid-template-columns: 28px 34px 168px minmax(200px, 1fr) minmax(240px, 1.2fr) auto;
+    grid-template-columns: 28px 34px 168px minmax(200px, 1fr) 22px minmax(240px, 1.2fr) 170px;
     gap: 12px; align-items: center; padding: 8px 14px; font-size: var(--font-ui);
     line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 706px; }
+  /* The translation cell is editable, and its click target hangs 4px to the
+     left of the words (padding 2px 4px against margin -2px -4px), so its
+     heading has to hang with it or the two are 4px apart. */
+  .sc-row.head > div:nth-child(6) { margin-left: -4px; }
   .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
     align-items: center; position: sticky; top: 0; z-index: 1;
     background: var(--canvas); font-size: var(--font-label); font-weight: 600;
@@ -921,16 +936,37 @@
     font-size: var(--font-script); }
   .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere;
     font-size: var(--font-script); }
-  /* The row's own tools, at its right end: listen, the length, revert (only on
-     an edited line) and remake. Stuck to the right edge of the box, so a table
-     too wide for its pane scrolls its words sideways and never its buttons --
-     a control that has to be scrolled to is a control nobody finds. It carries
-     the row's own ground so the words pass under it rather than through it. */
+  /* The row's own tools, at its right end: the length, revert (only on an
+     edited line) and remake. Listen went to its own column in front of the
+     translation, where the eye already is (user, 2026-09-11). */
+  /* The two headings over them. "Voice" is wider than the 22px button it
+     names, so it is allowed to hang left over the revert slot, which is empty
+     in the head row anyway. */
+  .sc-row.head .sc-tools { background: var(--canvas); }
+  .sc-h-voice { justify-self: end; white-space: nowrap; }
+  /* Four fixed slots, not a flex row that fits itself to whatever the length
+     cell happens to say. As a flex row this cell was 149px wide on one line
+     and 189px on the next, and because the grid column it sits in is `auto`,
+     that difference came out of the two text columns beside it: the play
+     button moved 40px between rows and the translation started at a different
+     x on every line (user, 2026-09-11). The revert slot is kept empty rather
+     than left out, so the remake button does not step sideways on the one row
+     that has been edited.
+     Stuck to the right edge of the box, so a table too wide for its pane
+     scrolls its words sideways and never its buttons -- a control that has to
+     be scrolled to is a control nobody finds. It carries the row's own ground
+     so the words pass under it rather than through it. */
   .sc-tools { position: sticky; right: 0; z-index: 1; padding-left: 10px;
     background: var(--background); align-self: stretch;
-    display: flex; align-items: center; gap: 8px; }
+    display: grid; grid-template-columns: 100px 22px 22px;
+    align-items: center; gap: 8px; }
+  /* Left, not right: every one of these reads "N.Ns / N.Ns · " in tabular
+     figures, so aligning the starts puts all six numbers in a column and
+     leaves only the verdict ragged. Right-aligned it was the numbers that
+     were ragged, which is the half a reader actually compares
+     (user, 2026-09-11). */
+  .sc-len { text-align: left; }
   .sc-row.sc-now .sc-tools { background: color-mix(in srgb, var(--primary) 14%, var(--background)); }
-  .sc-tools .sc-sp { flex: 1; }
   .sc-len { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap;
     font-variant-numeric: tabular-nums; }
   .sc-len b { font-weight: 600; color: var(--foreground); }
@@ -946,13 +982,19 @@
      rest. The breakpoint stays at 787, where it was set when the speaker
      column was 100px wide, so the row tightens a little before it has to. */
   @container scriptpane (max-width: 787px) {
-    .sc-row { grid-template-columns: 28px 34px 90px minmax(120px, 1fr) minmax(160px, 1.2fr) auto;
+    .sc-row { grid-template-columns: 28px 34px 90px minmax(120px, 1fr) 22px minmax(160px, 1.2fr) 108px;
       gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
+    /* .sc-row.head sets its own padding and outranks the rule above, so it has
+       to be told too -- 14 against 12 put every heading 2px right of its
+       column (user, 2026-09-11). */
+    .sc-row.head { padding-left: 12px; padding-right: 12px; }
     .sc-t-b { display: none; }
     /* And the length keeps its verdict alone -- "fits", "+1.4s" -- rather than
        the two numbers it was worked out from. Those are on the timeline's bars
        and in the cell's own tooltip. */
     .sc-num { display: none; }
+    /* Only the verdict is left in it, so the slot the numbers needed is not. */
+    .sc-tools { grid-template-columns: 44px 22px 22px; gap: 6px; }
   }
 
   /* Narrower still -- a 13-inch window with the Dub Agent open leaves the table
@@ -960,7 +1002,7 @@
      instead of 100px pays for it, so every column simply draws closer and the
      one thing a line is found by -- when it starts -- stays on screen. */
   @container scriptpane (max-width: 640px) {
-    .sc-row { grid-template-columns: 28px 34px 74px minmax(100px, 1fr) minmax(130px, 1.2fr) auto;
+    .sc-row { grid-template-columns: 28px 34px 74px minmax(100px, 1fr) 22px minmax(130px, 1.2fr) 108px;
       gap: 8px; }
   }
 
@@ -1565,7 +1607,7 @@
   .trim-play .ico-pause { display: none; margin-left: 0; stroke: none; }
   .trim-play.playing .ico-play { display: none; }
   .trim-play.playing .ico-pause { display: block; }
-  .trim-play svg { width: 18px; height: 18px; margin-left: 2px; fill: currentColor;
+  .trim-play svg { width: 18px; height: 18px; fill: currentColor;
     stroke: currentColor; stroke-width: 3; stroke-linejoin: round; }
   .trim-label { font-weight: 600; }
   .trim-read { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
@@ -1991,7 +2033,7 @@
                   <span class="sub-ov-text" id="subMeasure" aria-hidden="true"
                         style="visibility:hidden;pointer-events:none;top:-9999px;font-size:100px;max-width:none;white-space:pre"></span>
                   <button class="video-bigplay" id="bigPlay" type="button" aria-label="Play">
-                    <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:4px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
+                    <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>
                   </button>
                 </div>
                 <!-- Outside .video-wrap on purpose: the frame clips at its
@@ -4113,7 +4155,8 @@ doneVideo.addEventListener("click", toggleDonePlay);
 // The small button under the picture says what pressing it will do, so it is
 // the pause sign while the video plays and the play sign the rest of the time.
 // Drawn, like every other mark in the app.
-const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+// A triangle's weight is on its flat side, so its box centre is not its optical centre: drawn from 7.5 the shape sits 0.75 units right of the middle of a 24 box, and the margin-left that used to be here pushed it further the same way. Drawn from 6.75 it is centred on the box, and the nudge is gone (user, 2026-09-11).
+const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>';
 const SMALL_PAUSE = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><path d="M8 5h3.2v14H8z"/><path d="M12.8 5H16v14h-3.2z"/></svg>';
 function paintPlayToggle() {
   const btn = $("playToggle");

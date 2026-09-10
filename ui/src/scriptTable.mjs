@@ -53,7 +53,8 @@ export function lineOverBy(l) {
 
 // Sized by the stylesheet, not here: the narrow table takes both buttons down
 // a size, and an inline width would be the one thing it could not reach.
-const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+// A triangle's weight is on its flat side, so its box centre is not its optical centre: drawn from 7.5 the shape sits 0.75 units right of the middle of a 24 box, and the margin-left that used to be here pushed it further the same way. Drawn from 6.75 it is centred on the box, and the nudge is gone (user, 2026-09-11).
+const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M6.75 5.5v13l10.5-6.5z"/></svg>';
 // The "revert" arrow beside an edited line (renderScript): a curled-back
 // arrow, drawn like the rest of the app's icons.
 const UNDO_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>';
@@ -122,19 +123,23 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // its indentation is output, not layout: it is deliberately NOT stepped in
     // with the rest of this file. The rows read byte for byte as they did when
     // this lived inline in static/index.html.
+    // An empty span rather than nothing at all: the tools cell is four fixed
+    // slots, and a missing third slot would slide the remake button left on
+    // the one row that has been edited (user, 2026-09-11).
     const undo = l.edited
       ? `<button class="sc-undo" data-undo="${l.line}" type="button"
-         title="Revert to the original translation" aria-label="Revert to the original translation">${UNDO_ICON}</button>` : "";
+         title="Revert to the original translation" aria-label="Revert to the original translation">${UNDO_ICON}</button>` : "<span></span>";
     return `<div class="sc-row" data-start="${l.start}" data-end="${l.end}">
     <div class="sc-n">${l.line}</div>
     <div>${chip}</div>
     <div class="sc-time"><span class="sc-t-a">${escapeHtml(fmtClockTenths(l.start))}</span><span
       class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
     <div class="sc-src">${escapeHtml(l.source || "—")}</div>
+    <button class="sc-listen" data-play="${l.line}" type="button"
+      title="Play this line in the video">${PLAY_ICON}</button>
     <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
       data-line="${l.line}">${escapeHtml(l.text)}</div>
-    <div class="sc-tools"><button class="sc-listen" data-play="${l.line}" type="button"
-        title="Play this line in the video">${PLAY_ICON}</button><span class="sc-len">${lengthCell}</span><span class="sc-sp"></span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
+    <div class="sc-tools"><span class="sc-len">${lengthCell}</span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
         type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
   </div>`;
   }
@@ -179,7 +184,8 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     box.innerHTML = `
     <div class="sc-row head">
       <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div>${escapeHtml(sourceName)}</div>
-      <div>${escapeHtml(targetName)}</div>
+      <div class="sc-h-play"></div><div>${escapeHtml(targetName)}</div>
+      <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;
     // The timeline draws the same lines, under the table, to the video's real
