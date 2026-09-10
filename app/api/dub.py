@@ -43,6 +43,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from app import dub_launch, engines_status, erase_launch, languages, media, runtime, state
 from app import models as model_store
@@ -397,6 +398,36 @@ def dub_job(jid: str):
     if j is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
     return j
+
+
+class TitleRequest(BaseModel):
+    title: str = ""
+
+
+# How long a shown name may be. The same 80 the folder name is cut to, so the
+# two never disagree about what "too long" means.
+MAX_TITLE = 80
+
+
+@router.post("/api/dub/jobs/{jid}/title")
+def dub_job_title(jid: str, body: TitleRequest):
+    """Rename what a project is shown as, without touching its folder.
+
+    A link brings its own title -- long enough to fill the top bar and to be
+    cut off in the Projects list -- and a file brings whatever it was called.
+    The folder keeps the name it was made with, because the files inside it
+    are already written there; only the shown name changes, and an empty one
+    puts the folder's name back (user, 2026-09-10).
+    """
+    j = state.job_store.get(jid)
+    if j is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    title = (body.title or "").strip()[:MAX_TITLE].strip()
+    state.job_store.update(jid, title=title)
+    work = j.get("work_dir")
+    if work:
+        state.job_store.persist(jid, work)
+    return {"title": title}
 
 
 @router.post("/api/dub/jobs/{jid}/redub")

@@ -48,7 +48,9 @@ logger = logging.getLogger("persodub.jobs")
 # held writing) -- the answer to "is it really gone?", which the screen and the
 # agent both show, so it has to outlive the run that measured it.
 SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lang",
-                "project", "day", "from_link", "created", "work_dir", "trim",
+                # "project" names the folder and never moves; "title" is what
+                # the screens show, and is the user's to change (2026-09-10).
+                "project", "title", "day", "from_link", "created", "work_dir", "trim",
                 "trim_pending", "error", "remade_as", "area", "check",
                 "stt_engine", "translator", "tts", "quality", "separation",
                 "dub_mode", "perso_project_seq",

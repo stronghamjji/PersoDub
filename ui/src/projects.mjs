@@ -36,6 +36,16 @@ const JOB_MARK = {
   running: '<circle cx="6" cy="6" r="3.6" style="fill:currentColor;stroke:none"/>',
 };
 /** The mark for a job's state -- "running" for anything still going. */
+/**
+ * What a project is called on screen: the name the user gave it, or the name
+ * its folder was made with. A link's own title is long enough to fill the top
+ * bar and to be cut off in this list, so it can be replaced (user,
+ * 2026-09-10). The folder never moves -- only this changes.
+ */
+export function shownName(job) {
+  return (job && job.title || "").trim() || (job && job.project) || "Dubbing";
+}
+
 export function jobMark(status) {
   return `<svg viewBox="0 0 12 12" aria-hidden="true">${JOB_MARK[status] || JOB_MARK.running}</svg>`;
 }
@@ -128,7 +138,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       const doing = isErase(job) ? "Erasing" : "Dubbing";
       const stateText = job.status === "cancelling" ? "Cancelling…"
         : live ? (pct != null ? `${doing} ${pct}%` : `${doing}…`) : "Waiting";
-      row.innerHTML = `<span class="q-name">${escapeHtml(job.project || "Dubbing")}${
+      row.innerHTML = `<span class="q-name">${escapeHtml(shownName(job))}${
         live ? `<div class="queue-bar"><i style="width:${pct ?? 0}%"></i></div>` : ""
       }</span><span class="q-state${live ? " run" : ""}">${stateText}</span>`;
       row.addEventListener("click", () => onOpenJob(job.id));
@@ -177,7 +187,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       row.className = "job-row" + (job.id === getActiveJobId() ? " current" : "");
       row.type = "button";
       row.innerHTML = `<span class="job-dot ${JOB_DOT[job.status] || "dot-running"}">${jobMark(job.status)}</span>
-      <div class="job-info"><div class="job-name">${isErase(job) ? ERASE_ICON : ""}${escapeHtml(job.project || "Dubbing")}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div></div>`;
+      <div class="job-info"><div class="job-name">${isErase(job) ? ERASE_ICON : ""}${escapeHtml(shownName(job))}</div><div class="job-meta">${escapeHtml(projectMeta(job))}</div></div>`;
       row.addEventListener("click", () => onOpenJob(job.id));
 
       const del = document.createElement("button");

@@ -408,8 +408,17 @@
      the left, and the arrow on the right needs the same room to sit in. */
   #topbarForward { margin-right: 4px; }
   .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  /* The name is the user's to change: it reads as plain text until it is
+     clicked, and the field it becomes is the same size in the same place so
+     the bar does not move (user, 2026-09-10). */
   .topbar-title { font-size: var(--font-title); font-weight: 600; letter-spacing: -0.01em;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #topbarTitle[data-editable="1"] { cursor: text; border-radius: var(--radius-sm);
+    padding: 2px 6px; margin: -2px -6px; }
+  #topbarTitle[data-editable="1"]:hover { background: var(--secondary); }
+  .topbar-rename { width: min(420px, 40vw); padding: 2px 6px; margin: -2px -6px;
+    border: 1px solid var(--primary); border-radius: var(--radius-sm);
+    background: var(--background); color: var(--foreground); font-family: inherit; }
   .topbar-sub { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap; }
   .topbar-spacer { flex: 1; }
 
@@ -1676,6 +1685,8 @@
       </button>
       <div class="topbar-titles">
         <span class="topbar-title" id="topbarTitle">PersoDub</span>
+        <input class="topbar-title topbar-rename" id="topbarRename" hidden
+               maxlength="80" spellcheck="false" aria-label="Project name">
         <span class="topbar-sub" id="topbarSub">Local dubbing</span>
       </div>
       <span class="topbar-spacer"></span>
@@ -2562,7 +2573,7 @@ import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
 import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "/js/eraseScreen.mjs";
-import { initProjectsUi } from "/js/projects.mjs";
+import { initProjectsUi, shownName } from "/js/projects.mjs";
 import { initRunningScreenUi, stoppedMark } from "/js/runningScreen.mjs";
 import { initScriptTableUi } from "/js/scriptTable.mjs";
 import { initTimelineUi, TL_LABEL_PX } from "/js/timeline.mjs";
@@ -2962,6 +2973,11 @@ function showScreen(name) {
 function setTopbar({ title, subtitle = "", running = false, done = false, back = false,
                      estimate = "", erase = false }) {
   $("topbarTitle").textContent = title;
+  // A job's name can be changed; the first screen's "PersoDub" cannot.
+  $("topbarTitle").dataset.editable = state.jobId ? "1" : "0";
+  $("topbarTitle").title = state.jobId ? "Click to rename" : "";
+  $("topbarTitle").hidden = false;
+  $("topbarRename").hidden = true;
   $("topbarSub").textContent = subtitle;
   $("topbarBack").hidden = !back;
   $("cancelBtn").hidden = !running;
@@ -3319,8 +3335,60 @@ $("linkInput").addEventListener("input", () => {
 // it starts, so the name is the same one whether the job is minutes or months
 // old -- the browser used to remember it, and forgot on every restart.
 function jobLabel(job) {
-  return job.project || "Dubbing";
+  return shownName(job);
 }
+
+// ---- Renaming a project ----------------------------------------------------
+// The name a link brings is the video's own, which fills the top bar and is
+// cut off in the Projects list; a file brings whatever it was called. The
+// folder keeps the name it was made with -- the files inside it are written
+// there already -- and this changes only what the screens show (user,
+// 2026-09-10).
+function startRename() {
+  const job = state.job;
+  if (!job || !state.jobId) return;
+  const field = $("topbarRename");
+  field.value = shownName(job);
+  $("topbarTitle").hidden = true;
+  field.hidden = false;
+  field.focus();
+  field.select();
+}
+
+async function finishRename(save) {
+  const field = $("topbarRename");
+  if (field.hidden) return;
+  const typed = field.value.trim();
+  field.hidden = true;
+  $("topbarTitle").hidden = false;
+  if (!save || !state.jobId) return;
+  // An unchanged name is not a save: the folder's own name coming back is,
+  // which is what an emptied field means.
+  if (typed === shownName(state.job)) return;
+  try {
+    const r = await fetch(`/api/dub/jobs/${state.jobId}/title`,
+      { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: typed }) });
+    if (!r.ok) throw new Error("rename failed");
+    const { title } = await r.json();
+    if (state.job) state.job.title = title;
+    $("topbarTitle").textContent = jobLabel(state.job || {});
+    projects.renderHistory().catch(() => {});
+  } catch {
+    // The name on screen is the one the server has; putting the old one back
+    // is the honest answer to a save that did not happen.
+    $("topbarTitle").textContent = jobLabel(state.job || {});
+  }
+}
+
+$("topbarTitle").addEventListener("click", () => {
+  if ($("topbarTitle").dataset.editable === "1") startRename();
+});
+$("topbarRename").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); finishRename(true); }
+  else if (e.key === "Escape") { e.preventDefault(); finishRename(false); }
+});
+$("topbarRename").addEventListener("blur", () => finishRename(true));
 
 // A job started with a Trim dubbed only part of the video, and both screens say
 // which part -- otherwise a ten-second result out of a half-hour video reads as

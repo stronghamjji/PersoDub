@@ -87,6 +87,7 @@ ROUTES = [
     ('POST', '/api/dub/jobs/{jid}/script/{line}'),
     ('POST', '/api/dub/jobs/{jid}/script/{line}/revert'),
     ('POST', '/api/dub/jobs/{jid}/script/{line}/voice'),
+    ('POST', '/api/dub/jobs/{jid}/title'),
     ('POST', '/api/dub/jobs/{jid}/voices/stale'),
     ('POST', '/api/dub/start'),
     ('POST', '/api/erase'),

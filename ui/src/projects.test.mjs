@@ -8,7 +8,7 @@
 // Run with: node --test ui/src/projects.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initProjectsUi, jobMark } from "./projects.mjs";
+import { initProjectsUi, jobMark, shownName } from "./projects.mjs";
 
 function makeEl(id) {
   return {
@@ -301,4 +301,13 @@ test("the card hides itself when the line is empty, and off the home screen it n
   await away.api.renderQueueCard();
   assert.equal(away.$("queueCard").hidden, true);
   assert.deepEqual(away.log.calls, []);
+});
+
+// The name a project is shown under: the user's own if they set one, the
+// folder's name otherwise (user, 2026-09-10).
+test("a renamed project shows the name it was given", () => {
+  assert.equal(shownName({ project: "clip10" }), "clip10");
+  assert.equal(shownName({ project: "clip10", title: "마이클 잭슨 Beat It" }), "마이클 잭슨 Beat It");
+  assert.equal(shownName({ project: "clip10", title: "   " }), "clip10", "blank is not a name");
+  assert.equal(shownName({}), "Dubbing", "and a job with neither still says something");
 });
