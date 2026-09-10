@@ -1030,7 +1030,11 @@
     border: 1.5px solid var(--primary-line); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; flex-shrink: 0; }
-  .sc-listen svg { width: 15px; height: 15px; }
+  /* 11 in a 22px ring, the half the app's other two play buttons keep (30 in
+     64, 14 in 28). At 15 the triangle all but touched the ring on its flat
+     side while the point had room to spare, and a shape crowding one edge
+     reads as crooked however exactly it is centred (user, 2026-09-11). */
+  .sc-listen svg { width: 11px; height: 11px; }
   .sc-listen:hover { border-color: var(--primary); }
   .sc-row.sc-now .sc-listen { background: var(--primary); border-color: var(--primary);
     color: var(--primary-foreground); }
