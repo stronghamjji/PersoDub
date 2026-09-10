@@ -1504,7 +1504,16 @@
   .modal-head h2 { margin: 0; }
   .modal-close { background: none; border: none; cursor: pointer; color: var(--muted-foreground); padding: 4px; border-radius: var(--radius-sm); }
   .modal-close:hover { background: var(--secondary); }
-  .modal-body { padding: 18px 20px; }
+  /* The app's own size, not the browser's. Nothing set one here, so every
+     dialog's message came out at the browser default 16px -- larger than the
+     13px title above it and half again the 12px buttons below, which is why
+     "Stop it" read as smaller than the sentence it answers
+     (user, 2026-09-11). 12 puts the three in order: title 13, message 12,
+     the small print 11. */
+  .modal-body { padding: 18px 20px; font-size: var(--font-ui); }
+  /* The models dialog's line is the message of that dialog, not a hint under
+     something else, so it is the message size too. */
+  #mnLine { font-size: var(--font-ui); }
   .settings-section { margin-bottom: 20px; }
   .settings-section:last-child { margin-bottom: 0; }
   .settings-section h3 { font-size: var(--font-label); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); margin: 0 0 10px; }
