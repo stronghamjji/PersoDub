@@ -245,3 +245,20 @@ def test_malgun_gothic_gets_its_bold_face_for_a_semibold_layout():
     lay = {"1": {**SOUL_LAYOUT["1"], "weight": 600}}
     ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, font="Apple SD Gothic Neo", layout=lay)
     assert "\\b600" in ass
+
+# libass wraps on its own at the Style's margins (6% each side, so 88% of the
+# width) while the page lets a line run to 92%. A line the page showed whole
+# came out folded in the burn, over a box drawn one line tall (Windows,
+# 2026-09-10). The page's lines are final: the words say so with \q2.
+def test_the_pages_lines_are_never_wrapped_again_by_libass():
+    ass = build_ass(SOUL_CUE, "white-box", width=1920, height=1080, layout=SOUL_LAYOUT)
+    words = [l for l in ass.splitlines() if l.startswith("Dialogue: 1,")][0]
+    assert "\\q2" in words
+    for preset in ("clean", "rainbow", "neon"):
+        ass = build_ass(SOUL_CUE, preset, width=1920, height=1080, layout=SOUL_LAYOUT)
+        assert all("\\q2" in l for l in ass.splitlines() if l.startswith("Dialogue:")), preset
+    # Without the page's measurement the burn breaks lines itself and libass
+    # may still fold a long one: nothing is pinned.
+    ass = build_ass(SOUL_CUE, "clean", width=1920, height=1080)
+    assert "\\q2" not in ass
+
