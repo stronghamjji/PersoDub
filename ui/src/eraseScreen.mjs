@@ -15,7 +15,7 @@ import { uploadDownload, downloadVideoUrl, suggestEraseArea, startErase,
          fetchErase, cancelDubJob, eraseVideoUrl, saveErased,
          startDownload, fetchDownload, eraseToDub } from "./dubApi.mjs";
 import { clampArea, defaultArea, dragArea, toScreen, videoPerScreen, isWhole,
-         estimateSeconds, estimateLabel, progressLine, isPackMissing,
+         estimateSeconds, estimateLabel, progressLine, isPackMissing, noGpuNote,
          packNeededLine, eraseView, workLength, trimNote } from "./eraseArea.mjs";
 import { initTrimBar } from "./trimBar.mjs";
 import { downloadsLabel } from "./format.mjs";
@@ -101,6 +101,15 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   // work; a Mac does it on its own chip and takes longer per second of video.
   const onWindows = /^win/i.test(navigator.platform || "")
     || /Windows/.test(navigator.userAgent || "");
+  // Which build this kit installed: "win-cpu" is a Windows machine with no
+  // NVIDIA card, where the same erase takes about five times as long
+  // (measured 2026-09-10). Asked once, and a failure leaves it unknown --
+  // no warning is better than a wrong one.
+  let platformKey = "";
+  fetch("/api/models").then((r) => r.json()).then((d) => {
+    platformKey = d.platform || "";
+    paint();
+  }).catch(() => {});
 
   // ---- Painting -------------------------------------------------------------
 
@@ -111,6 +120,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     // the user only found out about by waiting.
     return estimateSeconds(workLength(source), {
       whole: !!area && isWhole(area, frame.w, frame.h), windows: onWindows,
+      noGpu: platformKey === "win-cpu",
     });
   }
 
@@ -210,6 +220,11 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       // to this screen while it is the screen that is up.
       done,
     });
+    // The warning belongs to the screen where the box is placed, beside the
+    // minutes it explains; a result or a drop zone has nothing to warn about.
+    const gpuNote = view === "area" ? noGpuNote(platformKey) : "";
+    $("eraseNoGpu").textContent = gpuNote;
+    $("eraseNoGpu").hidden = !gpuNote;
     $("eraseRunBtn").disabled = !area || packMissing || finding;
     if (view === "area") drawBox();
   }

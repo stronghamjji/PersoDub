@@ -1785,6 +1785,10 @@
             <span class="topbar-spacer"></span>
             <button class="btn btn-primary" id="erasePackBtn" type="button">Download</button>
           </div>
+          <!-- A machine with no graphics card does this on its processor and
+               takes about five times as long. Said once, above the video, so
+               the minutes on the right are not read as a fault. -->
+          <div class="erase-notice" id="eraseNoGpu" hidden></div>
           <!-- The band names the screen on the left and carries the two
                controls that belong to it on the right: what the erase will
                cost in minutes, and the button that starts it. They used to

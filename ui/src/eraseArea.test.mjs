@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { MIN_H, MIN_W, RATE, SETUP_SECONDS, clampArea, toScreen, toVideo,
          videoPerScreen, dragArea, defaultArea, isWhole, estimateSeconds,
          estimateLabel, progressLine, erasePercent, isPackMissing,
-         packNeededLine, eraseView, workLength, trimNote } from "./eraseArea.mjs";
+         packNeededLine, eraseView, workLength, trimNote, NO_GPU_SLOWER, noGpuNote } from "./eraseArea.mjs";
 
 // A portrait clip in a stage wider and shorter than it is: the picture is
 // letterboxed down both sides, which is what the conversions have to allow for.
@@ -201,4 +201,22 @@ test("the screen says how much of the video is going, and only when some is not"
   assert.equal(trimNote(null), "");
   // Nothing to compare against is nothing to say.
   assert.equal(trimNote({ duration: 0, trim: { start: 0, end: 5 } }), "");
+});
+
+test("a machine with no GPU is told how much longer it will take", () => {
+  // Measured on Windows 2026-09-10: the same 10-second band took 7m25s with an
+  // RTX 3080 and 35m22s with the GPU hidden -- 4.8 times.
+  const gpu = estimateSeconds(10, { windows: true });
+  const cpu = estimateSeconds(10, { windows: true, noGpu: true });
+  assert.equal(cpu, Math.round(gpu * NO_GPU_SLOWER));
+  assert.ok(cpu > gpu * 4);
+  // A Mac does the work on its own chip; the multiplier is Windows-only.
+  assert.equal(estimateSeconds(10, { noGpu: true }), estimateSeconds(10));
+});
+
+test("the no-GPU warning is shown only to the machine that has none", () => {
+  assert.equal(noGpuNote("win-cpu"), "No graphics card found. Erasing will take about 5x longer.");
+  assert.equal(noGpuNote("win-gpu"), "");
+  assert.equal(noGpuNote("mac"), "");
+  assert.equal(noGpuNote(""), "");
 });

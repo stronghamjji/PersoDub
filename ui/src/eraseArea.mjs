@@ -21,6 +21,10 @@ export const MIN_W = 48;
 // Windows machine with a GPU (2026-09-04). Plus the fixed cost of loading the
 // detector, which a ten-second clip pays as surely as an hour-long one does.
 export const RATE = { mac: 50, windows: 37 };
+// A Windows machine with no NVIDIA card does the inpainting on the CPU. The
+// same ten-second band took 7m25s with an RTX 3080 and 35m22s with the GPU
+// hidden (measured 2026-09-10), and RATE.windows is the GPU figure.
+export const NO_GPU_SLOWER = 4.8;
 export const SETUP_SECONDS = 10;
 // Erasing the whole frame is inpainting everywhere rather than in one band.
 export const WHOLE_EXTRA = 1.3;
@@ -136,10 +140,21 @@ export function trimNote(source) {
 }
 
 /** How long this erase will take, in seconds. 0 when the length is unknown. */
-export function estimateSeconds(durationSec, { whole = false, windows = false } = {}) {
+export function estimateSeconds(durationSec, { whole = false, windows = false, noGpu = false } = {}) {
   if (!Number.isFinite(durationSec) || durationSec <= 0) return 0;
   const base = (windows ? RATE.windows : RATE.mac) * durationSec + SETUP_SECONDS;
-  return Math.round(whole ? base * WHOLE_EXTRA : base);
+  const slow = windows && noGpu ? NO_GPU_SLOWER : 1;
+  return Math.round((whole ? base * WHOLE_EXTRA : base) * slow);
+}
+
+/**
+ * The one line a machine with no graphics card is told before it starts, and
+ * "" for every other machine. Minutes are what the top bar already promises;
+ * this says why they are so many (user, 2026-09-10).
+ */
+export function noGpuNote(platformKey) {
+  return platformKey === "win-cpu"
+    ? "No graphics card found. Erasing will take about 5x longer." : "";
 }
 
 /** "About 9 min" for the top bar, or "" when there is nothing to promise. */
