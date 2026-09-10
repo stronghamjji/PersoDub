@@ -20,6 +20,16 @@ _PERCENT = re.compile(r"(\d+)%")
 _BAD = re.compile(r'[\\/:*?"<>|]+')
 
 
+def save_folder(chosen: str, day: str, project: str) -> str:
+    """Where a saved file goes: the folder the caller named, or -- the rule
+    every save in the app follows -- Downloads/<day>/<project>. The erased
+    video and a saved clip used to land loose in Downloads while the dub's
+    exports sat in their day-and-project folder (Windows, 2026-09-10)."""
+    if chosen:
+        return os.path.expanduser(chosen)
+    return os.path.join(os.path.expanduser("~/Downloads"), day, project)
+
+
 def file_stem(title: str) -> str:
     """A title as a file name: bad characters swapped, runs of space collapsed."""
     def swap(m):

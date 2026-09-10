@@ -181,3 +181,15 @@ def test_a_dropped_file_is_held_like_a_link_and_saves_a_stretch(monkeypatch, tmp
     assert r.status_code == 200, r.text
     assert os.path.basename(r.json()["path"]) == "my clip - take 2 (2s-17s).mp4"
     assert calls[-1][calls[-1].index("-t") + 1] == "15.000"
+
+
+def test_save_with_no_folder_goes_under_downloads_by_day_and_title(monkeypatch, tmp_path):
+    _wire(monkeypatch, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    did = client.post("/api/downloads", json={"url": "https://youtu.be/x"}).json()["id"]
+    _wait(did)
+    path = client.post(f"/api/downloads/{did}/save", json={}).json()["path"]
+    stem = "Teach You a Lesson - es tu vida - vívela (17-17)"
+    assert os.path.dirname(path) == os.path.join(str(tmp_path), "Downloads", time.strftime("%Y-%m-%d"), stem)
+    assert os.path.basename(path) == stem + ".mp4"

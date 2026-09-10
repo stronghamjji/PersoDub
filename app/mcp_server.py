@@ -684,7 +684,7 @@ def erase_subtitles(video_path: str, area: Union[str, List[int]] = "auto",
     video -- so it goes in the same queue a dub does and this answers at once
     with {job_id, status, area_used}. Follow it with get_job_status, which
     gives a percent, and once it says done=true call save_erased(job_id) to put
-    the cleaned video in the user's Downloads folder.
+    the cleaned video under the user's Downloads folder (Downloads/<day>/<project>).
 
     area is where to work: "auto" (the default -- the app looks for the
     subtitles first), "bottom" or "top" (that quarter of the frame), "whole"
@@ -722,8 +722,9 @@ def erase_subtitles(video_path: str, area: Union[str, List[int]] = "auto",
 def save_erased(job_id: str, dir: str = "") -> dict:
     """Save a finished erase job's cleaned video and return where it went.
 
-    dir is a folder the user names; left empty it goes to their Downloads
-    folder, named after the project with "(no subtitles)" on the end. An
+    dir is a folder the user names; left empty it goes to Downloads/<day>/
+    <project>, the folder the dub's exports use, named after the project with
+    "(no subtitles)" on the end. An
     existing file is never written over. Check get_job_status says done first.
     """
     body = {"dir": dir} if dir else {}

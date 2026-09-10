@@ -10,6 +10,7 @@ the in-place trim a dub runs on its own input.
 import os
 import shutil
 import subprocess
+import time
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -19,7 +20,7 @@ from pydantic import BaseModel
 from app import media, state
 from app.api._shared import free_path
 from app.api.clips import _clip_stamp
-from app.downloads import DownloadStore, file_stem
+from app.downloads import DownloadStore, file_stem, save_folder
 from app.source_fetch import FetchError
 from app.source_fetch import fetch as fetch_source
 from app.source_fetch import probe as probe_source
@@ -118,9 +119,9 @@ def downloads_save(did: str, body: DownloadSaveRequest):
     d = download_store.get(did)
     if d is None or d.status != "ready" or not os.path.exists(d.path):
         raise HTTPException(status_code=404, detail="Not downloaded yet")
-    folder = os.path.expanduser(body.dir or "~/Downloads")
-    os.makedirs(folder, exist_ok=True)
     stem = file_stem(d.title)
+    folder = save_folder(body.dir or "", time.strftime("%Y-%m-%d"), stem)
+    os.makedirs(folder, exist_ok=True)
     if body.start is None and body.end is None:
         out = free_path(os.path.join(folder, stem), ".mp4")
         shutil.copyfile(d.path, out)

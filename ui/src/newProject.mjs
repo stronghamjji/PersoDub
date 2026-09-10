@@ -19,6 +19,7 @@ import { LANGUAGES, fetchLanguages, startDownload, fetchDownload,
          downloadVideoUrl, uploadDownload, saveDownloadClip } from "./dubApi.mjs";
 import { fmtClock } from "./format.mjs";
 import { initTrimBar } from "./trimBar.mjs";
+import { downloadsLabel } from "./format.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
 // is the single most-glanced-at line in the dialog, and a flag says it faster
@@ -440,7 +441,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     $("projectShowWrap").hidden = true;
     try {
       const saved = await saveDownloadClip(np.downloadId, np.trim);
-      $("projectSaved").textContent = "Saved to Downloads";
+      $("projectSaved").textContent = `Saved to ${downloadsLabel(saved.path) || "Downloads"}`;
       // Where it went, for the Show beside that line. Only the desktop app can
       // open a folder; in a browser the line says where and stops there.
       savedClipPath = saved.path || "";

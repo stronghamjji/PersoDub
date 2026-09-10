@@ -32,6 +32,18 @@ export function formatBytes(n) {
 
 // All five of &<>"' -- the quotes included, so the same call is safe both
 // between tags and inside an attribute (the page interpolates it into both).
+/**
+ * "Downloads / 2026-09-10 / clip" out of a saved file's path: the folders
+ * under Downloads, without the file. "Downloads" for a file loose in it, ""
+ * for a path that is not under Downloads at all. Either kind of slash.
+ */
+export function downloadsLabel(path) {
+  const parts = String(path || "").split(/[\\/]+/);
+  const i = parts.indexOf("Downloads");
+  if (i < 0) return "";
+  return ["Downloads", ...parts.slice(i + 1, -1)].join(" / ");
+}
+
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }

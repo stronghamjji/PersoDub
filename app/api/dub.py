@@ -62,7 +62,7 @@ from app.perso_client import list_dubbing_spaces
 from app.pipeline import run_dub
 from app.settings_env import current_value
 from app.source_fetch import fetch as fetch_source
-from app.text.naming import next_free, safe_name
+from app.text.naming import next_free, project_name, safe_name
 
 router = APIRouter()
 
@@ -814,7 +814,7 @@ def dub_start(
     # screen probes a link before starting, and app/source_fetch.py's fetch()
     # returns nothing, so the server never learns it otherwise). Without one,
     # fall back to the uploaded filename or the URL.
-    project = safe_name(project or "")
+    project = project_name(project or "")
     if not project:
         project = safe_name(
             held.title if held else

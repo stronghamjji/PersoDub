@@ -34,8 +34,9 @@ from app import engines_status, erase_launch, eraser, media, state
 from app.api import downloads as downloads_api
 from app.api._shared import free_path, work_dir_of
 from app.api.dub import _job_dir, _today, check_space, launch_job
+from app.downloads import save_folder
 from app.jobs import kind_of
-from app.text.naming import safe_name
+from app.text.naming import project_name
 
 router = APIRouter()
 
@@ -207,7 +208,7 @@ def erase_start(
     _check_trim(trim_start, trim_end)
     title, _path, copy_into = _source(video, download_id)
 
-    project = safe_name(project or "") or safe_name(title or "")
+    project = project_name(project or "") or project_name(title or "")
     check_space(state.WORKSPACE)
     work = _job_dir(project, "erase")
     video_path = os.path.join(work, "input.mp4")
@@ -280,9 +281,10 @@ def erase_save(jid: str, body: SaveRequest):
     out = _erased_path(job)
     if not os.path.exists(out):
         raise HTTPException(404, "This video is not erased yet.")
-    folder = os.path.expanduser(body.dir or "~/Downloads")
+    project = job.get("project") or "video"
+    folder = save_folder(body.dir or "", job.get("day") or _today(), project)
     os.makedirs(folder, exist_ok=True)
-    dest = free_path(os.path.join(folder, "%s (no subtitles)" % (job.get("project") or "video")), ".mp4")
+    dest = free_path(os.path.join(folder, "%s (no subtitles)" % project), ".mp4")
     shutil.copyfile(out, dest)
     return {"path": dest}
 

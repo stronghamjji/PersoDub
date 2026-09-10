@@ -309,3 +309,17 @@ def test_what_the_check_found_is_on_the_job_and_survives_a_restart(erased, tmp_p
     assert job["check"] == {"frames_checked": 114, "frames_with_text": 0, "sample_times": []}
     with open(os.path.join(job["work_dir"], "job.json"), encoding="utf-8") as f:
         assert json.load(f)["check"]["frames_checked"] == 114
+
+
+def test_saving_with_no_folder_goes_under_downloads_by_day_and_project(erased, tmp_path, monkeypatch):
+    # The same rule the dub's exports follow (Downloads/<day>/<project>); the
+    # erased video landed loose in Downloads beside them (Windows, 2026-09-10).
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    jid = _start(project="my clip.mp4").json()["job_id"]
+    _wait(jid)
+    job = client.get("/api/erase/%s" % jid).json()
+    assert job["project"] == "my clip"
+    path = client.post("/api/erase/%s/save" % jid, json={}).json()["path"]
+    assert path == os.path.join(str(tmp_path), "Downloads", job["day"], "my clip", "my clip (no subtitles).mp4")
+    assert open(path, "rb").read() == b"clean-video"

@@ -1457,3 +1457,17 @@ def test_materialize_turns_a_perso_dub_editable(monkeypatch, tmp_path):
     assert body.get("readonly") is None
     assert body["lines"][0]["text"] == "Hi there"
     assert body["lines"][0]["source"] == "안녕"
+
+
+def test_a_project_named_after_the_file_loses_its_extension(monkeypatch):
+    def fake_run_dub(**kw):
+        open(kw["out_path"], "wb").write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "project": "trump_template_org.mp4"},
+    ).json()["job_id"]
+    assert client.get(f"/api/dub/jobs/{jid}").json()["project"] == "trump_template_org"

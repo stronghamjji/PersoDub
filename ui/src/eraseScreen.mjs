@@ -18,6 +18,7 @@ import { clampArea, defaultArea, dragArea, toScreen, videoPerScreen, isWhole,
          estimateSeconds, estimateLabel, progressLine, isPackMissing,
          packNeededLine, eraseView, workLength, trimNote } from "./eraseArea.mjs";
 import { initTrimBar } from "./trimBar.mjs";
+import { downloadsLabel } from "./format.mjs";
 
 // How often the erase is asked how far along it is. The same second the dub's
 // queue card uses: the percentage moves in visible steps and the answer is small.
@@ -642,6 +643,8 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       return;
     }
     savedPath = res.path || "";
+    // Which folder, the way the dub's export line says it.
+    $("eraseSavedWhere").textContent = downloadsLabel(savedPath) || "Downloads";
     // Show is the desktop app's; in a browser there is no file window to open,
     // so the line says where it went and stops there.
     $("eraseShowWrap").hidden = !reveal || !savedPath;
