@@ -138,7 +138,11 @@ test("the erase screen says only what the mockup says", () => {
   // "Where are the subtitles?" was the band's own line; the band now names the
   // screen and carries the estimate and the Erase button (user, 2026-09-09),
   // and the box on the picture is still labelled "Subtitles".
-  for (const words of ["Erase subtitles", "Drop a video", "MP4 or MOV", "Choose file…",
+  // The way in reads like the home screen's since 2026-09-10: a title, a line
+  // under it, and the zone's words in the home's case, singular.
+  for (const words of ["Erase subtitles", "Erasing subtitles from your video",
+                       "Drop a video or paste a link.", "Drop your video here",
+                       "MP4 or MOV, up to 2 GB.", "Choose File…",
                        "Finding subtitles…", "Subtitles",
                        "Add my subtitles (.srt)", "Start dubbing", "Download"]) {
     assert.ok(html.includes(`>${words}<`) || html.includes(`>${words}`),
