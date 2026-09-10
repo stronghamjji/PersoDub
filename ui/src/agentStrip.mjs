@@ -289,7 +289,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       // be installed, a model to be picked, or the user. A running dub is not on
       // the list -- the strip is off the page there, so nothing it said was read.
       if (failed) {
-        input.placeholder = "Nothing to fix here - dubbing did not finish";
+        input.placeholder = "Nothing to fix here";
       } else if (notice) {
         input.placeholder = notice;
       } else if (!chosen.agent) {
@@ -304,9 +304,9 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
         // No script on screen to point at, so no line-number example here.
         input.placeholder = "Ask anything";
       } else {
-        // Backticks, not quotes: the sentence contains both a double quote and an
-        // apostrophe, and a quote of either kind would end the string early.
-        input.placeholder = `Ask for a fix - e.g. "Shorten line 4 naturally so it matches the original's length"`;
+        // Three words, because the box is 107px wide: the example that used to
+        // stand here needed 382px and the user saw the first two words of it.
+        input.placeholder = "Ask for a fix";
       }
     });
     paintGo();
@@ -432,7 +432,12 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   // row and the input box (user, 2026-09-10). The full stop is for the log.
   const NONE_READY = "Install Claude Code or Codex";
   const SIGN_IN = "Sign in to Claude or Codex.";
-  const SIGN_IN_BOX = "Sign in to Claude or Codex";
+  // The box is 107px wide at the panel's own width, so anything that names
+  // both of them is cut off in it -- and cut without an ellipsis, so it reads
+  // as a broken word rather than a shortened line. "agent" is what the panel
+  // beside it is called (user, 2026-09-10); the line above, in the log, still
+  // names the two by name.
+  const SIGN_IN_BOX = "Sign in to an agent";
   // The Terminal command is the one thing here a person cannot guess, and it
   // is said once: the log keeps it, the rows and the heading stay short.
   let signInHintSaid = false;

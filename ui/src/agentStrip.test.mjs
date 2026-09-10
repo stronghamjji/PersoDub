@@ -360,8 +360,7 @@ test("the four parts come up: the state line, the picker, the input and the butt
   const shut = harness({ agents: [CLAUDE], stored: { "persodub.layout.agentOpen": "0" } });
   try {
     await flush();
-    assert.equal(shut.$("assistantInput").placeholder,
-      `Ask for a fix - e.g. "Shorten line 4 naturally so it matches the original's length"`);
+    assert.equal(shut.$("assistantInput").placeholder, "Ask for a fix");
     assert.equal(shut.$("assistantFold").getAttribute("aria-expanded"), "false");
   } finally { shut.log.restore(); }
 });
@@ -386,8 +385,7 @@ test("a job that stopped early locks the row and says why", async () => {
     await flush();
     assert.equal(h.$("assistantInput").disabled, true);
     assert.equal(h.$("assistantModelBtn").disabled, true);
-    assert.equal(h.$("assistantInput").placeholder,
-      "Nothing to fix here - dubbing did not finish");
+    assert.equal(h.$("assistantInput").placeholder, "Nothing to fix here");
   } finally { h.log.restore(); }
 });
 
@@ -687,14 +685,17 @@ test("Enter is ignored while an IME is still settling a syllable", async () => {
   } finally { h.log.restore(); }
 });
 
-test("a signed-out choice: the line and the box name both assistants, the log says how once", async () => {
+// The line above has room for both names; the box is 107px wide and has room
+// for neither, so it says "agent" -- what the panel it sits in is called
+// (user, 2026-09-10).
+test("a signed-out choice: the line names both, the box says agent, the log says how once", async () => {
   const h = harness({ agents: [CLAUDE, CODEX],
                       stored: { "persodub.assistantChoice": JSON.stringify({ agent: "codex", model: "gpt", name: "Codex" }) } });
   try {
     await flush();
     assert.equal(h.$("assistantState").textContent, "Sign in to Claude or Codex.");
     assert.equal(h.$("assistantState").classList.contains("warn"), true);
-    assert.equal(h.$("assistantInput").placeholder, "Sign in to Claude or Codex");
+    assert.equal(h.$("assistantInput").placeholder, "Sign in to an agent");
     // Asked twice (see below), said once -- and only the commands that apply.
     assert.equal(h.log.calls.filter((c) => c.url.startsWith("/api/agent/status")).length, 2);
     assert.deepEqual(h.$("assistantLog").children.map((d) => d.innerHTML),

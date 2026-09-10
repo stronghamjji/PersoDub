@@ -504,8 +504,13 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* 420px in the window the app opens at, growing with a maximized one so the
-     pair does not sit as a small island in the middle of a wide screen. */
-  .progress-card { flex: 0 1 clamp(420px, 26vw, 520px); min-width: 320px; display: flex; flex-direction: column; gap: 16px;
+     pair does not sit as a small island in the middle of a wide screen.
+     The floor is 280 rather than 320: at the smallest window the app allows
+     (960 CSS wide) the picture and the card together asked for 628px of a
+     624px work area, and the 4px they could not have came out as a scroll bar
+     along the bottom -- measured on Windows, 2026-09-10. 280 is the same floor
+     the picture beside it already had. */
+  .progress-card { flex: 0 1 clamp(420px, 26vw, 520px); min-width: 280px; display: flex; flex-direction: column; gap: 16px;
     padding: 22px 24px; background: var(--background);
     border: 1px solid var(--border); border-radius: var(--radius-lg); }
   .progress-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
