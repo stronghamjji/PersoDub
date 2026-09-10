@@ -694,6 +694,20 @@ test("Enter is ignored while an IME is still settling a syllable", async () => {
 // state in three words, because an instruction written inside a text box reads
 // as an instruction to type into it. The log is the one with room to say what
 // to do (user, 2026-09-10).
+// Nothing signed in: there is nothing to pick, so the picker leaves the row
+// and the box -- now the width of the whole row -- says the sentence in full
+// (user, 2026-09-10).
+test("with neither signed in the picker goes and the box says it in full", async () => {
+  const out = { ...CLAUDE, logged_in: false, account: "", login_command: "claude login" };
+  const h = harness({ agents: [out, CODEX] });
+  try {
+    await flush();
+    assert.equal(h.$("assistantModelWrap").hidden, true);
+    assert.equal(h.$("assistantMenu").hidden, true);
+    assert.equal(h.$("assistantInput").placeholder, "Sign in to Claude or Codex.");
+  } finally { h.log.restore(); }
+});
+
 test("a signed-out choice: the line names both, the box says the state, the log says what to do", async () => {
   const h = harness({ agents: [CLAUDE, CODEX],
                       stored: { "persodub.assistantChoice": JSON.stringify({ agent: "codex", model: "gpt", name: "Codex" }) } });
@@ -701,6 +715,10 @@ test("a signed-out choice: the line names both, the box says the state, the log 
     await flush();
     assert.equal(h.$("assistantState").textContent, "Sign in to Claude or Codex.");
     assert.equal(h.$("assistantState").classList.contains("warn"), true);
+    // Codex is the choice and is signed out, but Claude is signed in: the
+    // picker stays, because switching to it is the fix, and the box keeps the
+    // short line that fits beside it.
+    assert.equal(h.$("assistantModelWrap").hidden, false);
     assert.equal(h.$("assistantInput").placeholder, "Not signed in");
     // Asked twice (see below), said once -- and only the commands that apply.
     assert.equal(h.log.calls.filter((c) => c.url.startsWith("/api/agent/status")).length, 2);

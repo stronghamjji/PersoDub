@@ -2097,7 +2097,10 @@
       <div class="assistant-foot">
         <textarea class="assistant-input" id="assistantInput" rows="1"
                   placeholder="Ask anything"></textarea>
-        <div class="assistant-modelwrap">
+        <!-- The id is the module's handle: with nothing signed in it takes the
+             whole picker out of the row, and the box beside it gets the width
+             back (user, 2026-09-10). -->
+        <div class="assistant-modelwrap" id="assistantModelWrap">
           <button class="assistant-modelbtn" id="assistantModelBtn" type="button">
             <span id="assistantModelLabel">Model</span>
             <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>

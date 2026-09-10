@@ -219,6 +219,14 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     return loginKnown(a) && !a.logged_in ? a : null;
   }
 
+  // Is there any assistant that could answer right now? The picker is only
+  // worth a place in the row when there is: with both signed out it offers a
+  // choice between two things that cannot answer, and takes 109px of a 245px
+  // row to do it (user, 2026-09-10).
+  function anySignedIn() {
+    return agentList.some((a) => a.installed && a.supported && a.logged_in === true);
+  }
+
   // The strip's first row.
   function paintState() {
     const a = agentList.find((x) => x.id === chosen.agent);
@@ -282,6 +290,14 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     wire("picker", () => {
       modelLabel.textContent = labelFor(chosen, agentList, servedModel);
       modelBtn.disabled = failed;
+      // With nothing signed in there is nothing to pick, and the 109px it
+      // takes is 109px the sentence in the box needs (user, 2026-09-10). The
+      // wrap, not the button: the menu hangs off the wrap, and a menu left
+      // open over an empty row is the sort of thing that outlives its own
+      // trigger.
+      const away = !!signedOutChoice() && !anySignedIn();
+      $("assistantModelWrap").hidden = away;
+      if (away) menu.hidden = true;
     });
     wire("input", () => {
       input.disabled = failed;
@@ -295,9 +311,9 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       } else if (!chosen.agent) {
         input.placeholder = "Pick a model first";
       } else if (signedOutChoice()) {
-        // Pickable, but it cannot answer yet. The row that picked it says the
-        // same thing; this is the one the user reads while typing.
-        input.placeholder = SIGN_IN_BOX;
+        // It cannot answer yet. The row above says the same thing; this is the
+        // one the user reads while typing.
+        input.placeholder = anySignedIn() ? SIGN_IN_NARROW : SIGN_IN_BOX;
       } else if (document.body.classList.contains("agent-open")) {
         input.placeholder = "Ask anything";
       } else if (screen === "home") {
@@ -437,13 +453,13 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   // row and the input box (user, 2026-09-10). The full stop is for the log.
   const NONE_READY = "Install Claude Code or Codex";
   const SIGN_IN = "Sign in to Claude or Codex.";
-  // The box is 107px wide at the panel's own width, so anything that names
-  // both of them is cut off in it -- and cut without an ellipsis, so it reads
-  // as a broken word rather than a shortened line. It reports the state and
-  // nothing else: an instruction written inside a text box reads as an
-  // instruction to type into that box, and the log says what to do instead
-  // (user, 2026-09-10).
-  const SIGN_IN_BOX = "Not signed in";
+  // Two lines for two situations. With nothing signed in the picker leaves the
+  // row (there is nothing to pick), the box gets the whole width, and the
+  // sentence that names both fits in it. With one of the two signed in the
+  // picker stays -- switching to it is the fix -- and the box has 107px, which
+  // holds the state and nothing else (user, 2026-09-10).
+  const SIGN_IN_BOX = "Sign in to Claude or Codex.";
+  const SIGN_IN_NARROW = "Not signed in";
   // The Terminal command is the one thing here a person cannot guess, and it
   // is said once: the log keeps it, the rows and the heading stay short.
   let signInHintSaid = false;
