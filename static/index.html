@@ -996,6 +996,12 @@
     user-select: none; touch-action: none; font-weight: 700; line-height: normal;
     font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", sans-serif;
     white-space: pre-wrap; }
+  /* The words are the thing to press, and on a small picture they are a
+     hair: 9px tall at a 127px-wide video (2026-09-10). This invisible margin
+     is part of the press, so a finger or a pointer a few pixels off still
+     picks the subtitles instead of playing the video underneath. Drawn under
+     the handles, which come later in the element. */
+  .sub-ov-text::before { content: ""; position: absolute; inset: -10px -12px; }
   .sub-ov-text.sel { outline: 2px dashed var(--primary); outline-offset: 5px;
     border-radius: 4px; }
   /* One class per look -- close kin of app/subtitle_ass.py's real styles,
