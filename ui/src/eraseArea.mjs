@@ -108,6 +108,19 @@ export function defaultArea(videoW, videoH) {
   return clampArea([bottom - boxH, bottom, x0, x0 + boxW], videoW, videoH);
 }
 
+/**
+ * The line beside the minutes when the box has grown past half the frame.
+ * The estimate hardly follows the box's size -- only the whole frame costs
+ * more -- so the minutes alone never warn anybody that a box dragged out to
+ * cover two bands will take far longer (user, 2026-09-10).
+ */
+export function bigBoxNote(area, videoW, videoH) {
+  if (!area || !videoW || !videoH) return "";
+  const [y0, y1, x0, x1] = area;
+  const share = ((y1 - y0) * (x1 - x0)) / (videoW * videoH);
+  return share >= 0.5 ? "Larger area, longer wait." : "";
+}
+
 /** Is this box the whole frame? (Which costs more -- see WHOLE_EXTRA.) */
 export function isWhole(area, videoW, videoH) {
   const [y0, y1, x0, x1] = area;

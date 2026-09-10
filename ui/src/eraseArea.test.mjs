@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { MIN_H, MIN_W, RATE, SETUP_SECONDS, clampArea, toScreen, toVideo,
          videoPerScreen, dragArea, defaultArea, isWhole, estimateSeconds,
          estimateLabel, progressLine, erasePercent, isPackMissing,
-         packNeededLine, eraseView, workLength, trimNote, NO_GPU_SLOWER, noGpuNote } from "./eraseArea.mjs";
+         packNeededLine, eraseView, workLength, trimNote, NO_GPU_SLOWER, noGpuNote, bigBoxNote } from "./eraseArea.mjs";
 
 // A portrait clip in a stage wider and shorter than it is: the picture is
 // letterboxed down both sides, which is what the conversions have to allow for.
@@ -219,4 +219,22 @@ test("the no-GPU warning is shown only to the machine that has none", () => {
   assert.equal(noGpuNote("win-gpu"), "");
   assert.equal(noGpuNote("mac"), "");
   assert.equal(noGpuNote(""), "");
+});
+
+// --- the box that is offered before the look finishes -----------------------
+// The screen used to show nothing at all while the detector read the file --
+// a wait with no box in it, and the longer the video the longer the nothing
+// (user, 2026-09-10).
+
+test("a big box is called out, a subtitle band is not", () => {
+  // The estimate barely follows the box's size, so the minutes alone do not
+  // warn anybody: a line does.
+  const w = 1920, h = 1080;
+  assert.equal(bigBoxNote(defaultArea(w, h), w, h), "", "the band the screen opens with says nothing");
+  assert.equal(bigBoxNote([0, h, 0, w], w, h), "Larger area, longer wait.", "the whole frame does");
+  // Half the frame is where it starts being worth saying.
+  assert.equal(bigBoxNote([0, Math.round(h * 0.55), 0, w], w, h), "Larger area, longer wait.");
+  assert.equal(bigBoxNote([0, Math.round(h * 0.40), 0, w], w, h), "");
+  assert.equal(bigBoxNote(null, w, h), "", "no box, nothing to say");
+  assert.equal(bigBoxNote(defaultArea(w, h), 0, 0), "", "no frame yet, nothing to say");
 });

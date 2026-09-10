@@ -15,7 +15,7 @@ import { uploadDownload, downloadVideoUrl, suggestEraseArea, startErase,
          fetchErase, cancelDubJob, eraseVideoUrl, saveErased,
          startDownload, fetchDownload, eraseToDub } from "./dubApi.mjs";
 import { clampArea, defaultArea, dragArea, toScreen, videoPerScreen, isWhole,
-         estimateSeconds, estimateLabel, progressLine, isPackMissing, noGpuNote,
+         estimateSeconds, estimateLabel, progressLine, isPackMissing, noGpuNote, bigBoxNote,
          packNeededLine, eraseView, workLength, trimNote } from "./eraseArea.mjs";
 import { initTrimBar } from "./trimBar.mjs";
 import { downloadsLabel } from "./format.mjs";
@@ -70,6 +70,9 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   let installing = false;
   // Whether the app is still looking for the subtitles.
   let finding = false;
+  // Whether a hand has placed the box. The suggestion, when it lands, moves
+  // the box the screen opened with -- but never one the user already set.
+  let touched = false;
   // Which video the <video> is playing, so a repaint does not reload it.
   let playing = "";
   // Which of the two tabs is up once there is a result. Erased: it is the video
@@ -214,7 +217,9 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       // tabs by then, and nothing else says it is done.
       subtitle: done ? "Erased" : view === "drop" ? "" : trimNote(source),
       back: true,
-      estimate: view === "area" ? estimateLabel(estSeconds()) : "",
+      estimate: view === "area"
+        ? [estimateLabel(estSeconds()), bigBoxNote(area, frame.w, frame.h)].filter(Boolean).join(" · ")
+        : "",
       erase: view === "area",
       // The top bar's Export saves the erased video; the page hands the press
       // to this screen while it is the screen that is up.
@@ -239,7 +244,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   function reset() {
     stopWatching();
     source = null; area = null; job = null; frame = { w: 0, h: 0 };
-    packMissing = false; finding = false; savedPath = "";
+    packMissing = false; finding = false; touched = false; savedPath = "";
     tab = "erased";
     trimBar.clear();
     setVideo("");
@@ -432,11 +437,27 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   function begin() {
     setVideo(downloadVideoUrl(source.downloadId));
     finding = true;
+    touched = false;
     paint();
+    // A box to drag from the first moment. Reading the file for the writing
+    // takes as long as the file is long, and the screen used to show nothing
+    // at all until it came back (user, 2026-09-10). The suggestion replaces
+    // this one when it lands, unless a hand got there first.
+    offerDefaultBox();
     // After paint, so the ruler is measured off a bar that is on the screen:
     // ticks worked out against a width of zero come out as one tick.
     drawTrim();
     suggest();
+  }
+
+  /** The bottom band, placed as soon as the video knows its own size. */
+  async function offerDefaultBox() {
+    const mine = source;
+    const f = await framePlayed();
+    if (source !== mine || touched || area || !f.w || !f.h) return;
+    frame = f;
+    area = defaultArea(f.w, f.h);
+    paint();
   }
 
   // The frame's size. The suggestion carries it; before that (and if the
@@ -480,11 +501,13 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     finding = false;
     if (found && found.width && found.height) {
       frame = { w: found.width, h: found.height };
-      area = clampArea(found.area, frame.w, frame.h);
+      // The box the screen opened with moves to where the writing actually
+      // is -- but never out from under a hand that has already placed it.
+      if (!touched) area = clampArea(found.area, frame.w, frame.h);
     } else {
       frame = await framePlayed();
       if (source !== mine) return;
-      if (frame.w && frame.h) area = defaultArea(frame.w, frame.h);
+      if (frame.w && frame.h && !touched) area = defaultArea(frame.w, frame.h);
     }
     paint();
   }
@@ -513,7 +536,9 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     if (!drag || !drag.el.hasPointerCapture(e.pointerId)) return;
     area = dragArea(drag.from, drag.handle, (e.clientX - drag.x) * drag.scale,
                     (e.clientY - drag.y) * drag.scale, frame.w, frame.h);
+    touched = true;
     drawBox();
+    paint();
   });
   const endDrag = (e) => {
     if (!drag) return;
