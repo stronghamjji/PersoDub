@@ -55,6 +55,18 @@ async function gh(env, path, init = {}) {
   return res;
 }
 
+// GitHub's own sentence for a refusal ("Resource not accessible by personal
+// access token", "Not Found", …). Only that field: the rest of the body
+// quotes the request, which is somebody's crash report.
+async function githubReason(res) {
+  try {
+    const body = await res.json();
+    return String(body && body.message ? body.message : "").slice(0, 120);
+  } catch {
+    return "";
+  }
+}
+
 // A label the repository has never had is created on first use. 422 means it
 // already exists, which is the normal answer and not a problem.
 async function ensureLabels(env, labels) {
@@ -132,11 +144,14 @@ async function handleReport(request, env, ctx) {
       body: JSON.stringify({ title: issueTitle(report), body: issueBody(report), labels }),
     });
     if (!res.ok) {
-      // The status alone, never the body: GitHub quotes the request back, and
-      // the request is somebody's crash report. 401/403 is the token, 404 is
-      // the repository name -- both are set-up mistakes worth telling apart.
-      console.log(`relay github ${res.status} on create`);
-      return json({ error: "upstream", status: res.status }, 502);
+      // The status and GitHub's own one-line reason, never the rest of the
+      // body: that quotes the request back, and the request is somebody's
+      // crash report. 401/403 is the token, 404 is the repository name, and
+      // GitHub's sentence is what tells a scope problem from a blocked
+      // account -- the status alone left us guessing (2026-09-10).
+      const detail = await githubReason(res);
+      console.log(`relay github ${res.status} on create: ${detail}`);
+      return json({ error: "upstream", status: res.status, detail }, 502);
     }
     const made = await res.json();
     issue = made.number;

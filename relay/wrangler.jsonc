@@ -4,8 +4,9 @@
   // and nothing in the release pipeline should be able to reach it.
   //
   // GITHUB_TOKEN and LOG_SIGNING_KEY are secrets -- `wrangler secret put`,
-  // never this file. GITHUB_REPO points at the private test repository until
-  // the end-to-end run is proven; moving to the public one is this one line.
+  // never this file. GITHUB_REPO is the public repository: the relay signs in
+  // as a bot account whose token carries the public_repo scope, and a private
+  // repository is not reachable with that scope (2026-09-10).
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "persodub-report",
   "main": "report-worker.js",
@@ -18,7 +19,7 @@
   // to a log upload and the issue is created without the "Full logs" line.
   // "r2_buckets": [{ "binding": "LOGS", "bucket_name": "persodub-report-logs" }],
   "vars": {
-    "GITHUB_REPO": "stronghamjji/PersoDub-test",
+    "GITHUB_REPO": "stronghamjji/PersoDub",
     "MAX_PER_DAY": "5",
     "MAX_TOTAL_PER_DAY": "200"
   }

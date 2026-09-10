@@ -139,6 +139,13 @@ export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
   return { ok: true, report };
 }
 
+/** "An" before erase, install, agent and unknown; "A" before dub. Three of
+ *  the five kinds begin with a vowel, and the line read "A erase failed"
+ *  (2026-09-10). */
+function article(word) {
+  return /^[aeiou]/i.test(String(word || "")) ? "An" : "A";
+}
+
 // --- labels, title, body, comment ----------------------------------------
 
 /** The labels one report earns. Every one comes from a list above, so the set
@@ -194,7 +201,7 @@ export function issueBody(report, { logsUrl = "" } = {}) {
     ["Packs", packs.length ? packs.map(([id, s]) => `${id}=${s}`).join(", ") : "none"],
   ];
   return [
-    `A ${report.kind} failed on PersoDub ${report.version}. Reported automatically by the app.`,
+    `${article(report.kind)} ${report.kind} failed on PersoDub ${report.version}. Reported automatically by the app.`,
     "",
     "### Environment",
     "",

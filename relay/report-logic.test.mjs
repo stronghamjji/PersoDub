@@ -261,3 +261,14 @@ test("the link points at the relay, never at the bucket", () => {
   assert.equal(logUrl("https://relay.example/", "a".repeat(32), 123, "sig+/"),
     `https://relay.example/logs/${"a".repeat(32)}?exp=123&sig=sig%2B%2F`);
 });
+
+// "A erase failed" was what an erase report said (2026-09-10). Three of the
+// five kinds begin with a vowel, so the article is chosen, not written in.
+test("the first line takes the article the kind needs", () => {
+  const line = (kind) => issueBody({ ...validateReport({ ...GOOD, kind }).report }).split("\n")[0];
+  assert.match(line("dub"), /^A dub failed on PersoDub /);
+  assert.match(line("erase"), /^An erase failed on PersoDub /);
+  assert.match(line("install"), /^An install failed on PersoDub /);
+  assert.match(line("agent"), /^An agent failed on PersoDub /);
+  assert.match(line("unknown"), /^An unknown failed on PersoDub /);
+});
