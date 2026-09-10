@@ -560,7 +560,11 @@ export function buildSteps(ctx) {
   // follow it: the app reads their presence as "the pack is here", so they
   // are written from the same place the stamp saying the venv is complete
   // comes from.
-  const eraserVenv = venvStep("venv-eraser", "Installing the subtitle eraser",
+  // "2 of 2" with its own size: the pack's banner says the whole (7.9 GB on a
+  // Windows GPU machine) and the first step said 790 MB, which read as a
+  // tenfold contradiction until the second step named its share (2026-09-10).
+  const eraserVenv = venvStep("venv-eraser",
+                              `Installing its Python parts (2 of 2, about ${(venvEraserBytes(torchVariant) / GB).toFixed(1)} GB)`,
                               venvEraserBytes(torchVariant), "venv-eraser",
                               [torchEraser, ["-r", k(reqEraser)]], eraserImports);
 
@@ -754,7 +758,7 @@ export function buildSteps(ctx) {
       // pinned commit's zip. Its one top folder is stripped so backend/ sits
       // directly in eraser/vsr -- the path kit.env hands the app.
       id: "eraser-src",
-      title: "Downloading the subtitle eraser (~790 MB)",
+      title: "Downloading the eraser (1 of 2, 790 MB)",
       // The archive and the unpacked tree are on disk at the same time
       // (0.79 + 1.01 GB); the archive goes at the end of the step.
       bytes: 1.8 * GB,

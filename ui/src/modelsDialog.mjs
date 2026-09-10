@@ -55,7 +55,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       if (p.pct != null) packBusy.pct = p.pct;
       repaint();
       // The title alone as well as the whole line: a screen with room for one
-      // short sentence wants "Installing the subtitle eraser", not that plus
+      // short sentence wants "Installing its Python parts (2 of 2, …)", not that plus
       // the name of the wheel being fetched (user, 2026-09-09).
       tellPack({ id: packBusy.id, title: packBusy.title, line: packBusy.line, pct: packBusy.pct });
     });

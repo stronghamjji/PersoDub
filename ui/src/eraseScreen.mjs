@@ -532,7 +532,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     const pct = p.pct == null ? "" : ` · ${Math.round(p.pct)}%`;
     // The step and the percentage. The step's detail is the file being
     // fetched, which is a line of its own length and says nothing to anyone.
-    $("erasePackText").textContent = (p.title || "Downloading the subtitle eraser") + pct;
+    $("erasePackText").textContent = (p.title || "Downloading the eraser (1 of 2, 790 MB)") + pct;
   });
 
   $("erasePackBtn").addEventListener("click", async () => {
