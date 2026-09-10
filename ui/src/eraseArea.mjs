@@ -26,6 +26,12 @@ export const RATE = { mac: 50, windows: 37 };
 // hidden (measured 2026-09-10), and RATE.windows is the GPU figure.
 export const NO_GPU_SLOWER = 4.8;
 export const SETUP_SECONDS = 10;
+// When the erasing is done the tool reads finished frames back looking for
+// writing it missed, and spends up to a sixth of the erase doing it
+// (app/scripts/erase_subtitles.py, CHECK_BUDGET). That pass was not in the
+// estimate, so three runs measured on Windows came in 16-24% over what the
+// screen had promised, all in the same direction (2026-09-10).
+export const CHECK_SHARE_EXTRA = 1.15;
 // Erasing the whole frame is inpainting everywhere rather than in one band.
 export const WHOLE_EXTRA = 1.3;
 // A box this close to the frame's edges IS the whole frame, near enough.
@@ -157,7 +163,7 @@ export function estimateSeconds(durationSec, { whole = false, windows = false, n
   if (!Number.isFinite(durationSec) || durationSec <= 0) return 0;
   const base = (windows ? RATE.windows : RATE.mac) * durationSec + SETUP_SECONDS;
   const slow = windows && noGpu ? NO_GPU_SLOWER : 1;
-  return Math.round((whole ? base * WHOLE_EXTRA : base) * slow);
+  return Math.round((whole ? base * WHOLE_EXTRA : base) * CHECK_SHARE_EXTRA * slow);
 }
 
 /**

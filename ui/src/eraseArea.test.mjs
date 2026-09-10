@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { MIN_H, MIN_W, RATE, SETUP_SECONDS, clampArea, toScreen, toVideo,
          videoPerScreen, dragArea, defaultArea, isWhole, estimateSeconds,
          estimateLabel, progressLine, erasePercent, isPackMissing,
-         packNeededLine, eraseView, workLength, trimNote, NO_GPU_SLOWER, noGpuNote, bigBoxNote } from "./eraseArea.mjs";
+         packNeededLine, eraseView, workLength, trimNote, NO_GPU_SLOWER, noGpuNote, bigBoxNote, CHECK_SHARE_EXTRA } from "./eraseArea.mjs";
 
 // A portrait clip in a stage wider and shorter than it is: the picture is
 // letterboxed down both sides, which is what the conversions have to allow for.
@@ -105,8 +105,10 @@ test("the whole frame is the whole frame, near enough", () => {
 // -- what it will cost --------------------------------------------------------
 
 test("the estimate is this computer's rate times the length, plus the setup", () => {
-  assert.equal(estimateSeconds(10), RATE.mac * 10 + SETUP_SECONDS);
-  assert.equal(estimateSeconds(10, { windows: true }), RATE.windows * 10 + SETUP_SECONDS);
+  // Plus the check the eraser runs at the end -- see CHECK_SHARE_EXTRA.
+  assert.equal(estimateSeconds(10), Math.round((RATE.mac * 10 + SETUP_SECONDS) * CHECK_SHARE_EXTRA));
+  assert.equal(estimateSeconds(10, { windows: true }),
+               Math.round((RATE.windows * 10 + SETUP_SECONDS) * CHECK_SHARE_EXTRA));
   // Erasing everywhere costs more than erasing one band.
   assert.ok(estimateSeconds(10, { whole: true }) > estimateSeconds(10));
   // Nothing is promised for a length nobody knows.
@@ -115,7 +117,7 @@ test("the estimate is this computer's rate times the length, plus the setup", ()
 });
 
 test("the estimate is said in whole minutes, rounded up, or not at all", () => {
-  assert.equal(estimateLabel(estimateSeconds(10)), "About 9 min");   // 510s
+  assert.equal(estimateLabel(estimateSeconds(10)), "About 10 min");  // 587s
   assert.equal(estimateLabel(61), "About 2 min");
   assert.equal(estimateLabel(5), "About 1 min");                     // never "0 min"
   assert.equal(estimateLabel(0), "");
@@ -237,4 +239,17 @@ test("a big box is called out, a subtitle band is not", () => {
   assert.equal(bigBoxNote([0, Math.round(h * 0.40), 0, w], w, h), "");
   assert.equal(bigBoxNote(null, w, h), "", "no box, nothing to say");
   assert.equal(bigBoxNote(defaultArea(w, h), 0, 0), "", "no frame yet, nothing to say");
+});
+
+test("the estimate counts the check the eraser runs at the end", () => {
+  // Measured on Windows 2026-09-10: 10s with a GPU took 386s to the video and
+  // 445s to done -- the 59s difference is the pass that reads the finished
+  // frames back for writing the erase missed. Three runs came in 16-24% over
+  // the estimate, all in the same direction, because that pass was not in it.
+  const base = RATE.windows * 10 + SETUP_SECONDS;
+  assert.equal(estimateSeconds(10, { windows: true }), Math.round(base * CHECK_SHARE_EXTRA));
+  assert.ok(estimateSeconds(10, { windows: true }) > base, "longer than the erasing alone");
+  // Still in proportion for the other two.
+  assert.equal(estimateSeconds(10, { windows: true, noGpu: true }),
+               Math.round(base * CHECK_SHARE_EXTRA * NO_GPU_SLOWER));
 });

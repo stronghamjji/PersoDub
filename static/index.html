@@ -1565,7 +1565,7 @@
   /* A whole-width bordered row rather than a link, so it reads as the lid on
      everything the user does not normally have to open. */
   .advanced-btn { width: 100%; padding: 0 12px; justify-content: space-between;
-    background: var(--background); border: 1px solid var(--border); font-weight: 500; }
+    background: var(--background); border: 1px solid var(--control-line); font-weight: 500; }
   .advanced-btn > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
   .advanced-btn .chev { color: var(--muted-foreground); display: inline-flex;
     transition: transform 0.15s ease; }
@@ -3763,12 +3763,27 @@ function runPollLoop(jobId, myGeneration) {
   });
 }
 
+// The screens a job owns. Everywhere else -- the erase tool, the first
+// screen -- belongs to the person, not to the job.
+const JOB_SCREENS = new Set(["running", "done", "failed"]);
+
 async function handleJobUpdate(job) {
   state.job = job;
   // The script assistant runs in its own module and cannot see `state`. Parking
   // the id here lets it answer "this job" without asking the user for a number
   // they have no way of knowing.
   document.body.dataset.jobId = job.id;
+  // A dub reports its progress every second or so, and every report used to
+  // put its own screen back up: pressing Erase subtitles mid-dub lit the rail
+  // icon and then the running screen returned, so the tool could not be
+  // reached until the dub ended (user, 2026-09-10). The job still updates --
+  // its record, its row in Projects, the waiting card -- but it stops taking
+  // the screen back from somewhere the person went on purpose.
+  if (!JOB_SCREENS.has(document.body.dataset.screen)) {
+    projects.renderHistory().catch(() => {});
+    projects.renderQueueCard().catch(() => {});
+    return;
+  }
   const progress = parseProgress(job.logs);
   // "queued" is alive too -- it shows the waiting version of the running
   // screen rather than a failure, and starts by itself.
