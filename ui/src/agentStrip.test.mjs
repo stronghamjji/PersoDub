@@ -385,7 +385,7 @@ test("a job that stopped early locks the row and says why", async () => {
     await flush();
     assert.equal(h.$("assistantInput").disabled, true);
     assert.equal(h.$("assistantModelBtn").disabled, true);
-    assert.equal(h.$("assistantInput").placeholder, "Nothing to fix here");
+    assert.equal(h.$("assistantInput").placeholder, "Nothing to fix");
   } finally { h.log.restore(); }
 });
 

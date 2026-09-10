@@ -305,7 +305,11 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       // be installed, a model to be picked, or the user. A running dub is not on
       // the list -- the strip is off the page there, so nothing it said was read.
       if (failed) {
-        input.placeholder = "Nothing to fix here";
+        // Three words, not four. "Nothing to fix here" came within 3.6px of
+        // the end of the box on Windows, where the font is wider than the
+        // mac's -- close enough that the next font would cut it again
+        // (Windows measured it, 2026-09-11).
+        input.placeholder = "Nothing to fix";
       } else if (notice) {
         input.placeholder = notice;
       } else if (!chosen.agent) {
