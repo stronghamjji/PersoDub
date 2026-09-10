@@ -1452,6 +1452,13 @@
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
   .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 16px; }
+  /* Open Settings goes to the far left and the two answers stay together on
+     the right: a way out of the dialog and an answer to it are different
+     things, and packed side by side all three read as one row of equals.
+     It closes the hole in the middle too -- the buttons huddled at the right
+     end with the sentence alone on the left was the gap the user kept seeing
+     (user, 2026-09-10). */
+  .mn-buttons .settings-link { margin-right: auto; }
   /* Above the settings sheet: What's new can be opened FROM Settings, and a
      sibling overlay later in the DOM would otherwise paint over it. */
   #whatsNewOverlay { z-index: 30; }
