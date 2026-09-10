@@ -112,7 +112,7 @@ test("the New project dialog carries the three buttons, the download row and the
 test("the erase screen has its three faces, and the rail button that opens it", () => {
   const html = readFileSync(INDEX, "utf8");
   for (const id of ["eraseToggle", "screen-erase", "eraseDrop", "eraseZone", "eraseInput",
-                    "eraseBody", "erasePack", "erasePackText", "erasePackBtn", "eraseHead",
+                    "eraseBody", "erasePack", "erasePackText", "erasePackBtn",
                     "eraseTabs", "eraseStage", "eraseVideo", "eraseBox",
                     "eraseRow", "eraseState", "eraseSaved", "eraseShowWrap", "eraseShowBtn",
                     "eraseBarBox", "eraseFill", "eraseSrtBtn", "eraseSrtInput",
@@ -167,10 +167,10 @@ test("the estimate and the Erase button stand in the row under the picture", () 
   assert.ok(row.includes('id="eraseEst"') && row.includes('id="eraseRunBtn"'),
     "both live in the row under the picture");
   assert.match(row, /id="eraseEst"[^]*id="eraseRunBtn"/, "the minutes, then the button");
-  // The band above keeps the screen's name and nothing else.
-  const band = html.slice(html.indexOf('id="eraseHead"'), html.indexOf('id="eraseTabs"'));
-  assert.ok(!band.includes('id="eraseEst"') && !band.includes('id="eraseRunBtn"'),
-    "and neither is left in the band");
+  // There is no band of the screen's own any more: it said "Erase subtitles"
+  // directly under a top bar saying "Erase subtitles" (user, 2026-09-10).
+  assert.ok(!html.includes('id="eraseHead"') && !html.includes("erase-head"),
+    "the erase screen's title band is back");
   const topbar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('id="screen-home"'));
   assert.ok(!topbar.includes('id="eraseRunBtn"') && !topbar.includes('id="eraseEst"'),
     "nor in the top bar");

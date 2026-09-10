@@ -166,14 +166,10 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     $("eraseDrop").hidden = view !== "drop";
     $("eraseBody").hidden = view === "drop";
     $("erasePack").hidden = !packMissing || done;
-    // The question and the tabs take turns in the same strip, so the picture
-    // under them is in the same place before and after. While the erase runs
-    // the strip goes: the question has been answered, and the row under the
-    // picture is where the answer to "how long now" is.
-    // The band is the screen's own title now, not just the question about the
-    // box: it stays up while the erase runs, and steps aside only for the
-    // tabs on a finished one (user, 2026-09-09).
-    $("eraseHead").hidden = done;
+    // Only a finished erase has two videos to choose between, so the tabs are
+    // the only thing that ever stands above the picture. The screen's own
+    // title band went (user, 2026-09-10): the top bar was already saying the
+    // same three words an inch above it.
     $("eraseTabs").hidden = !done;
     $("eraseBox").hidden = view !== "area" || !area;
     // The box is the only thing that says whether the app is still looking:

@@ -587,14 +587,6 @@
      the box is being placed and once the erased video is in. In between, while
      the erase runs, the strip carries neither: the question has been answered
      and there is nothing yet to compare. */
-  /* The same band as the Dub Agent's heading beside it: same height, same
-     ground, same weight of word, so the two panes' tops are one line across
-     the window rather than two that nearly agree (user, 2026-09-09). */
-  .erase-head { flex: 0 0 auto; height: 40px; box-sizing: border-box;
-    display: flex; align-items: center; gap: 12px; padding: 0 12px 0 16px;
-    background: var(--head-bg);
-    border-bottom: 1px solid var(--agent-border);
-    font-size: var(--font-title); font-weight: 700; }
   /* The finished screen's tabs share a narrow pane and split it in two; these
      sit over a picture as wide as the window, where two labels a metre apart
      stop reading as a pair. They keep their own width, at the left. */
@@ -1893,15 +1885,12 @@
                takes about five times as long. Said once, above the video, so
                the minutes on the right are not read as a fault. -->
           <div class="erase-notice" id="eraseNoGpu" hidden></div>
-          <!-- The band only names the screen now. The minutes and the button
-               went down to the row under the picture, where the trim bar and
-               the picture itself already are: three things in three corners
-               of the window was the arrangement the user kept losing them in
-               (user, 2026-09-10). Still #eraseEst and #eraseRunBtn -- setTopbar
-               shows and hides them exactly as it did. -->
-          <div class="erase-head" id="eraseHead">
-            <span>Erase subtitles</span>
-          </div>
+          <!-- No band of the screen's own. It named the screen "Erase
+               subtitles" directly under a top bar already saying "Erase
+               subtitles", and once the minutes and the button left it for the
+               row under the picture there was nothing else in it
+               (user, 2026-09-10). The tabs a finished erase needs stand on
+               their own below. -->
           <!-- The finished screen's own tabs, in the strip the question was in,
                so the picture below never moves. Erased first: it is the video
                the user came here for. -->
