@@ -23,6 +23,8 @@ const INDEX = fileURLToPath(new URL("../../static/index.html", import.meta.url))
 // The timeline draws its own head and lane, so their ids live in the module.
 const TIMELINE = fileURLToPath(new URL("./timeline.mjs", import.meta.url));
 const STRIP = fileURLToPath(new URL("./agentStrip.mjs", import.meta.url));
+// The erase screen writes the box's own label, so the words live there.
+const ERASE = fileURLToPath(new URL("./eraseScreen.mjs", import.meta.url));
 
 // The line number comes along so a failure says where in the page to look --
 // the block itself starts a couple of thousand lines in.
@@ -109,7 +111,7 @@ test("the erase screen has its three faces, and the rail button that opens it", 
   const html = readFileSync(INDEX, "utf8");
   for (const id of ["eraseToggle", "screen-erase", "eraseDrop", "eraseZone", "eraseInput",
                     "eraseBody", "erasePack", "erasePackText", "erasePackBtn", "eraseHead",
-                    "eraseTabs", "eraseStage", "eraseVideo", "eraseBox", "eraseFinding",
+                    "eraseTabs", "eraseStage", "eraseVideo", "eraseBox",
                     "eraseRow", "eraseState", "eraseSaved", "eraseShowWrap", "eraseShowBtn",
                     "eraseBarBox", "eraseFill", "eraseSrtBtn", "eraseSrtInput",
                     "eraseCancelBtn", "eraseBackBtn", "eraseDubBtn",
@@ -142,25 +144,42 @@ test("the erase screen says only what the mockup says", () => {
   // under it, and the zone's words in the home's case, singular.
   for (const words of ["Erase subtitles", "Erasing subtitles from your video",
                        "Drop a video or paste a link.", "Drop your video here",
-                       "MP4 or MOV, up to 2 GB.", "Choose File…",
-                       "Finding subtitles…", "Subtitles",
+                       "MP4 or MOV, up to 2 GB.", "Choose File…", "Subtitles",
                        "Add my subtitles (.srt)", "Start dubbing", "Download"]) {
     assert.ok(html.includes(`>${words}<`) || html.includes(`>${words}`),
       `the screen no longer says "${words}"`);
   }
+  // "Finding subtitles…" moved off the page and into the box's own label,
+  // which the module writes (user, 2026-09-10).
+  assert.match(readFileSync(ERASE, "utf8"), /"Finding subtitles…" : "Subtitles"/);
 });
 
-// The two controls of an erase belong to the erase screen, not to the far end
-// of the top bar a window away from the box being placed (user, 2026-09-09).
-test("the estimate and the Erase button stand in the erase screen's own band", () => {
+// The two controls of an erase belong beside the picture they are about --
+// first out of the top bar and into the screen's band (user, 2026-09-09), then
+// out of the band and into the row under the picture, where the trim bar is:
+// the button in the window's far top corner and the trim in its far bottom one
+// was three things in three corners (user, 2026-09-10).
+test("the estimate and the Erase button stand in the row under the picture", () => {
   const html = readFileSync(INDEX, "utf8");
+  const row = html.slice(html.indexOf('id="eraseRow"'), html.indexOf('id="eraseError"'));
+  assert.ok(row.includes('id="eraseEst"') && row.includes('id="eraseRunBtn"'),
+    "both live in the row under the picture");
+  assert.match(row, /id="eraseEst"[^]*id="eraseRunBtn"/, "the minutes, then the button");
+  // The band above keeps the screen's name and nothing else.
   const band = html.slice(html.indexOf('id="eraseHead"'), html.indexOf('id="eraseTabs"'));
-  assert.ok(band.includes('id="eraseEst"') && band.includes('id="eraseRunBtn"'),
-    "both live in the band");
-  assert.match(band, /id="eraseEst"[^]*id="eraseRunBtn"/, "the minutes, then the button");
+  assert.ok(!band.includes('id="eraseEst"') && !band.includes('id="eraseRunBtn"'),
+    "and neither is left in the band");
   const topbar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('id="screen-home"'));
   assert.ok(!topbar.includes('id="eraseRunBtn"') && !topbar.includes('id="eraseEst"'),
-    "and neither is left in the top bar");
+    "nor in the top bar");
+  // Picture, trim bar and row are one column, all the width of the picture.
+  assert.match(html, /<div class="erase-mid">/);
+  assert.match(html, /\.erase-trim \{[^}]*width: var\(--erase-col, 100%\)/);
+  assert.match(html, /\.erase-row \{[^}]*width: var\(--erase-col, 100%\)/);
+  assert.match(html, /\.erase-stage \{[^}]*max-height: 780px/);
+  // The box says whether the app is still looking.
+  assert.match(html, /\.erase-zone\.finding \{ --zone-now: var\(--destructive\); \}/);
+  assert.match(html, /\.erase-zone\.found \{ --zone-now: var\(--success\); \}/);
 });
 
 test("the agent input ignores Enter pressed mid-composition", () => {

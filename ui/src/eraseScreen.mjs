@@ -135,8 +135,20 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     if (url) v.src = url; else { v.removeAttribute("src"); v.load(); }
   }
 
+  /**
+   * The width of the picture as it was actually laid out, published to the CSS
+   * so the trim bar and the row of controls under it come out the same width.
+   * A letterboxed video is narrower than its stage, and no CSS rule can ask a
+   * sibling how wide it turned out to be.
+   */
+  function sizeColumn() {
+    const w = $("eraseVideo").getBoundingClientRect().width;
+    if (w > 0) $("eraseBody").style.setProperty("--erase-col", `${Math.round(w)}px`);
+  }
+
   /** Draw the box where it stands, in the picture's own place on the screen. */
   function drawBox() {
+    sizeColumn();
     const stage = $("eraseStage").getBoundingClientRect();
     if (!area || !frame.w || !frame.h || !stage.width) return;
     const box = toScreen(area, stage, frame.w, frame.h);
@@ -164,8 +176,17 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     $("eraseHead").hidden = done;
     $("eraseTabs").hidden = !done;
     $("eraseBox").hidden = view !== "area" || !area;
-    $("eraseFinding").hidden = !finding;
-    $("eraseRow").hidden = view === "area";
+    // The box is the only thing that says whether the app is still looking:
+    // red and "Finding subtitles…" while it hunts, green and "Subtitles" once
+    // it has put the box on the writing, and the plain yellow of a box the
+    // user has taken hold of (user, 2026-09-10). The line over the picture's
+    // top left corner that used to say it is gone -- nobody read it there.
+    $("eraseBox").classList.toggle("finding", finding);
+    $("eraseBox").classList.toggle("found", !finding && !touched);
+    $("eraseBox").querySelector("b").textContent = finding ? "Finding subtitles…" : "Subtitles";
+    // The row carries the minutes and the Erase button now, so it is up while
+    // the box is being placed too.
+    $("eraseRow").hidden = false;
     // The trim bar belongs to the question "which part?", which is only asked
     // while the box is being placed. Emptied rather than hidden, so it also
     // lets go of the player it was scrubbing.
@@ -236,8 +257,11 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
 
   // The box is placed against the picture, so it has to be redrawn whenever the
   // picture changes size -- the window, the agent column folding, anything.
-  new ResizeObserver(() => { if (!$("eraseBox").hidden) drawBox(); })
+  new ResizeObserver(() => { sizeColumn(); if (!$("eraseBox").hidden) drawBox(); })
     .observe($("eraseStage"));
+  // A video that has just loaded is laid out after the poster space it had:
+  // the column has to be measured again once the real picture is in place.
+  $("eraseVideo").addEventListener("loadedmetadata", sizeColumn);
 
   // ---- Coming in ------------------------------------------------------------
 

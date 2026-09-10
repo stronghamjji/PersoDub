@@ -580,7 +580,16 @@
      sit over a picture as wide as the window, where two labels a metre apart
      stop reading as a pair. They keep their own width, at the left. */
   #eraseTabs .vtab { flex: 0 0 auto; padding: 0 22px; }
-  .erase-stage { position: relative; flex: 1; min-height: 0; margin: 14px;
+  /* The picture, the trim bar and the controls, one column down the middle.
+     --erase-col is the picture's own width, written by drawBox: CSS cannot
+     ask one child how wide a sibling turned out to be. */
+  .erase-mid { flex: 1; min-height: 0; padding: 14px; gap: 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  /* 780 rather than the whole height: at full height the trim bar and the
+     button are pushed to the window's edge, and shrinking the picture further
+     (620 was tried) empties the top and bottom instead (user, 2026-09-10). */
+  .erase-stage { position: relative; flex: 0 1 auto; min-height: 0; margin: 0;
+    max-height: 780px;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg);
     display: flex; align-items: center; justify-content: center; }
   .erase-stage video { display: block; max-width: 100%; max-height: 100%;
@@ -588,7 +597,7 @@
   /* The trim bar under the picture: one row and its ruler, no more. The
      picture above it keeps every pixel that is left, which is what a 13-inch
      window needs. */
-  .erase-trim { flex: 0 0 auto; margin: 0 14px 14px; }
+  .erase-trim { flex: 0 0 auto; margin: 0; width: var(--erase-col, 100%); max-width: 100%; }
   .erase-error { color: var(--destructive); font-size: var(--font-label);
     padding: 0 22px 14px; }
   .erase-error:empty { display: none; }
@@ -598,32 +607,37 @@
     padding: 8px 14px; background: var(--accent);
     border-bottom: 1px solid var(--border);
     font-size: var(--font-ui); color: var(--foreground); }
-  /* The box over the subtitles: yellow, dashed, with a handle at each corner.
-     Yellow because it has to be found on any frame of any video, and nothing
-     else in the app is that colour. */
-  .erase-zone { position: absolute; border: 2px dashed var(--zone);
-    background: color-mix(in srgb, var(--zone) 10%, transparent);
+  /* The box over the subtitles: dashed, with a handle at each corner. Its
+     colour is the one thing on this screen that says whether the app is still
+     looking: red while it hunts for the writing, green once it has found it
+     and put the box there (user, 2026-09-10). Yellow is what a box the user
+     has taken hold of goes back to -- from then on it is theirs, not a
+     finding, and nothing else in the app is that colour. */
+  .erase-zone { --zone-now: var(--zone);
+    position: absolute; border: 2px dashed var(--zone-now);
+    background: color-mix(in srgb, var(--zone-now) 12%, transparent);
     cursor: move; touch-action: none; }
-  /* Clear of the corner handle it would otherwise sit under. */
-  .erase-zone b { position: absolute; left: 10px; top: -19px;
-    font-size: var(--font-label); font-weight: 600; color: var(--zone);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+  .erase-zone.finding { --zone-now: var(--destructive); }
+  .erase-zone.found { --zone-now: var(--success); }
+  /* A chip rather than bare words: over a bright frame the thin coloured text
+     it used to be could not be read at all, and this line is now the only
+     place the screen says it is still looking. Clear of the corner handle it
+     would otherwise sit under. */
+  .erase-zone b { position: absolute; left: -2px; top: -26px;
+    padding: 2px 9px; border-radius: 5px; white-space: nowrap;
+    background: var(--zone-now); color: #12131a;
+    font-size: var(--font-label); font-weight: 700; }
   /* 11px, and each one hangs half outside its corner so the whole handle can be
      grabbed rather than only the half of it over the picture. */
   .erase-zone i { position: absolute; width: 11px; height: 11px;
-    background: var(--zone); border-radius: 2px; }
+    background: var(--zone-now); border-radius: 2px; }
   .erase-zone i[data-handle="nw"] { left: -6px; top: -6px; cursor: nwse-resize; }
   .erase-zone i[data-handle="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
   .erase-zone i[data-handle="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; }
   .erase-zone i[data-handle="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
-  /* What the app is doing before it can offer a box. One thin line on the
-     picture, top left, where it covers nothing that matters. */
-  .erase-finding { position: absolute; left: 0; right: 0; top: 0;
-    padding: 7px 14px; background: var(--thumb-badge);
-    color: var(--thumb-foreground); font-size: var(--font-label); }
   /* The one row of controls, one line high whatever it is carrying. */
   .erase-row { flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
-    padding: 0 14px 14px; }
+    margin: 0; padding: 0; width: var(--erase-col, 100%); max-width: 100%; }
   .erase-state { font-size: var(--font-ui); color: var(--foreground);
     font-variant-numeric: tabular-nums; }
   /* Why it stopped, in the same place the percentage was -- and it may be a
@@ -632,8 +646,10 @@
   .erase-bar { flex: 1; min-width: 0; }
   /* The way on, at the far end of the row -- the same place the New project
      dialog puts Start dubbing. Back stands there too: on a job that stopped
-     there is nothing between the reason and the one thing to do about it. */
-  #eraseDubBtn, #eraseBackBtn { margin-left: auto; }
+     there is nothing between the reason and the one thing to do about it.
+     The minutes and Erase are that same far end while the box is placed;
+     the two sets are never up at once. */
+  #eraseDubBtn, #eraseBackBtn, #eraseEst { margin-left: auto; }
   /* What Export has to say, and only after it has said it. */
   .erase-saved { display: inline-flex; align-items: center; gap: 6px;
     font-size: var(--font-label); color: var(--muted-foreground); }
@@ -1854,18 +1870,14 @@
                takes about five times as long. Said once, above the video, so
                the minutes on the right are not read as a fault. -->
           <div class="erase-notice" id="eraseNoGpu" hidden></div>
-          <!-- The band names the screen on the left and carries the two
-               controls that belong to it on the right: what the erase will
-               cost in minutes, and the button that starts it. They used to
-               live at the far end of the top bar, a window away from the box
-               being placed (user, 2026-09-09). Still #eraseEst and
-               #eraseRunBtn -- setTopbar shows and hides them exactly as it
-               did, and inside the screen they are away with it. -->
+          <!-- The band only names the screen now. The minutes and the button
+               went down to the row under the picture, where the trim bar and
+               the picture itself already are: three things in three corners
+               of the window was the arrangement the user kept losing them in
+               (user, 2026-09-10). Still #eraseEst and #eraseRunBtn -- setTopbar
+               shows and hides them exactly as it did. -->
           <div class="erase-head" id="eraseHead">
             <span>Erase subtitles</span>
-            <span class="topbar-spacer"></span>
-            <span class="topbar-est" id="eraseEst" hidden></span>
-            <button class="btn btn-primary" id="eraseRunBtn" type="button" hidden>Erase</button>
           </div>
           <!-- The finished screen's own tabs, in the strip the question was in,
                so the picture below never moves. Erased first: it is the video
@@ -1874,6 +1886,14 @@
             <button class="vtab" data-erase="original" type="button">Original</button>
             <button class="vtab active" data-erase="erased" type="button">Erased</button>
           </div>
+          <!-- The picture, the trim bar and the row of controls are one
+               column down the middle of the screen, all the same width: the
+               button at the far bottom corner of the window read as a long
+               way from the video it was about (user, 2026-09-10). The width
+               is the picture's own, which only the browser knows once it has
+               laid the video out -- drawBox measures it and writes it here as
+               --erase-col. -->
+          <div class="erase-mid">
           <div class="erase-stage" id="eraseStage">
             <video id="eraseVideo" playsinline muted></video>
             <!-- The one box. Drag the middle to move it, a corner to resize it;
@@ -1883,7 +1903,6 @@
               <b>Subtitles</b>
               <i data-handle="nw"></i><i data-handle="ne"></i><i data-handle="sw"></i><i data-handle="se"></i>
             </div>
-            <div class="erase-finding" id="eraseFinding" hidden>Finding subtitles…</div>
           </div>
           <!-- The New project dialog's own trim bar, drawn by the same module
                (ui/src/trimBar.mjs): the part it chooses is the part that gets
@@ -1905,6 +1924,10 @@
             <button class="btn btn-outline" id="eraseCancelBtn" type="button">Cancel</button>
             <button class="btn btn-outline" id="eraseBackBtn" type="button" hidden>Back</button>
             <button class="btn btn-primary" id="eraseDubBtn" type="button" hidden>Start dubbing</button>
+            <!-- What the erase will cost, and the button that starts it. -->
+            <span class="topbar-est" id="eraseEst" hidden></span>
+            <button class="btn btn-primary" id="eraseRunBtn" type="button" hidden>Erase</button>
+          </div>
           </div>
         </div>
         <div class="erase-error" id="eraseError"></div>
