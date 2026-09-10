@@ -597,7 +597,11 @@
   /* The trim bar under the picture: one row and its ruler, no more. The
      picture above it keeps every pixel that is left, which is what a 13-inch
      window needs. */
-  .erase-trim { flex: 0 0 auto; margin: 0; width: var(--erase-col, 100%); max-width: 100%; }
+  /* A little wider than the picture, never narrower than a ruler can be read
+     at: a portrait video is only a few hundred pixels across, and a ten-second
+     ruler squeezed into that has its labels dropped one by one. */
+  .erase-trim, .erase-row { width: max(var(--erase-col, 100%), 520px); max-width: 100%; }
+  .erase-trim { flex: 0 0 auto; margin: 0; }
   .erase-error { color: var(--destructive); font-size: var(--font-label);
     padding: 0 22px 14px; }
   .erase-error:empty { display: none; }
@@ -637,7 +641,7 @@
   .erase-zone i[data-handle="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
   /* The one row of controls, one line high whatever it is carrying. */
   .erase-row { flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
-    margin: 0; padding: 0; width: var(--erase-col, 100%); max-width: 100%; }
+    margin: 0; padding: 0; }
   .erase-state { font-size: var(--font-ui); color: var(--foreground);
     font-variant-numeric: tabular-nums; }
   /* Why it stopped, in the same place the percentage was -- and it may be a
