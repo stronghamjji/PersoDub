@@ -74,9 +74,6 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   // Which of the two tabs is up once there is a result. Erased: it is the video
   // the user came here for, and Original is the one to check it against.
   let tab = "erased";
-  // When Erase was pressed, so the finished screen can say how long it took.
-  // 0 for a result opened out of the Projects list, which nobody timed.
-  let startedAt = 0;
   // Where Export wrote the video, once it has. "" until then, which is what
   // keeps the "Saved to Downloads" line from claiming anything too early.
   let savedPath = "";
@@ -202,9 +199,9 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       // without those four words the whole thing looks like it is going.
       // The band below names the screen, so the top bar carries only what is
       // its own: the file, and which part of it (user, 2026-09-09). A
-      // finished erase keeps its "Erased · 8 min" -- the band has stepped
-      // aside for the tabs by then, and nothing else says it is done.
-      subtitle: done ? erasedFor() : view === "drop" ? "" : trimNote(source),
+      // finished erase says "Erased" -- the band has stepped aside for the
+      // tabs by then, and nothing else says it is done.
+      subtitle: done ? "Erased" : view === "drop" ? "" : trimNote(source),
       back: true,
       estimate: view === "area" ? estimateLabel(estSeconds()) : "",
       erase: view === "area",
@@ -214,17 +211,6 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     });
     $("eraseRunBtn").disabled = !area || packMissing || finding;
     if (view === "area") drawBox();
-  }
-
-  /**
-   * "Erased · 8 min" -- how long it actually took, timed on this screen. A job
-   * record keeps when it started and nothing about when it ended, so a result
-   * opened from the Projects list days later says plainly "Erased" rather than
-   * a number worked out from the estimate, which is not the same thing.
-   */
-  function erasedFor() {
-    if (!startedAt) return "Erased";
-    return `Erased · ${Math.max(1, Math.round((Date.now() - startedAt) / 60000))} min`;
   }
 
   // The box is placed against the picture, so it has to be redrawn whenever the
@@ -237,7 +223,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   function reset() {
     stopWatching();
     source = null; area = null; job = null; frame = { w: 0, h: 0 };
-    packMissing = false; finding = false; startedAt = 0; savedPath = "";
+    packMissing = false; finding = false; savedPath = "";
     tab = "erased";
     trimBar.clear();
     setVideo("");
@@ -586,7 +572,6 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       return;
     }
     job = { id: jid, status: "queued", percent: 0, done: false };
-    startedAt = Date.now();
     paint();
     onJobsChanged();
     watch(jid);
