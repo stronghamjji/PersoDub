@@ -5,6 +5,7 @@ import {
   KINDS,
   MAX_REPORT_BYTES,
   commentText,
+  countSighting,
   dayKey,
   issueBody,
   issueTitle,
@@ -16,9 +17,11 @@ import {
   newId,
   rateDecision,
   signLog,
+  tallyLine,
   validateReport,
   verifyLog,
   withLogsLine,
+  withTally,
 } from "./report-logic.js";
 import { buildReport, collectEnvironment, issueTitle as appIssueTitle, REPORT_KINDS } from "../desktop/src/report.js";
 import { ERROR_CODES as APP_ERROR_CODES } from "../desktop/src/analytics.js";
@@ -271,4 +274,55 @@ test("the first line takes the article the kind needs", () => {
   assert.match(line("install"), /^An install failed on PersoDub /);
   assert.match(line("agent"), /^An agent failed on PersoDub /);
   assert.match(line("unknown"), /^An unknown failed on PersoDub /);
+});
+
+// --- the tally line ------------------------------------------------------
+// One issue per failure, and the repeats counted in its body rather than
+// piled up as comments: a bot account's reaction cannot count past one, and
+// a hundred "+1" comments bury the report they are about (user, 2026-09-10).
+
+test("the tally says how many times and on what, newest counts included", () => {
+  const t1 = tallyLine({ count: 1, envs: ["win-gpu · windows 10.0.26100 · cu128"], versions: ["0.5.5"] });
+  assert.equal(t1, "Seen 1 time · win-gpu · windows 10.0.26100 · cu128 · 0.5.5");
+  const t47 = tallyLine({ count: 47, envs: ["win-gpu · win 10", "mac · mac 24"], versions: ["0.5.4", "0.5.5"] });
+  assert.equal(t47, "Seen 47 times · win-gpu · win 10, mac · mac 24 · 0.5.4, 0.5.5");
+});
+
+test("the tally replaces the one before it and never stacks", () => {
+  const body = "An erase failed on PersoDub 0.5.5. Reported automatically by the app.\n\n### Environment\n";
+  const once = withTally(body, { count: 2, envs: ["mac · mac 24"], versions: ["0.5.5"] });
+  assert.match(once, /Seen 2 times/);
+  assert.ok(once.startsWith("An erase failed"), "the report itself stays first");
+  assert.ok(once.includes("### Environment"), "and the rest of the body is untouched");
+  const twice = withTally(once, { count: 3, envs: ["mac · mac 24"], versions: ["0.5.5"] });
+  assert.match(twice, /Seen 3 times/);
+  assert.equal(twice.match(/Seen \d+ time/g).length, 1, "one tally, not two");
+});
+
+test("a body written before tallies existed grows one", () => {
+  const old = "An erase failed on PersoDub 0.5.5.\n\n### Environment\n| OS | mac |\n";
+  const out = withTally(old, { count: 5, envs: ["mac · mac 24"], versions: ["0.5.5"] });
+  assert.match(out, /Seen 5 times/);
+  assert.ok(out.includes("| OS | mac |"));
+});
+
+test("what a repeat adds to what was already counted", () => {
+  const seen = { count: 4, envs: ["mac · mac 24"], versions: ["0.5.4"] };
+  const { report } = validateReport(GOOD);
+  const next = countSighting(seen, report);
+  assert.equal(next.count, 5);
+  assert.deepEqual(next.envs, ["mac · mac 24", "win-gpu · windows 10.0.26100 · cu128"]);
+  assert.deepEqual(next.versions, ["0.5.4", "0.5.5"]);
+  // The same machine again adds to the count and to nothing else.
+  const again = countSighting(next, report);
+  assert.equal(again.count, 6);
+  assert.deepEqual(again.envs, next.envs);
+  assert.deepEqual(again.versions, next.versions);
+});
+
+test("the first sighting starts the tally at one", () => {
+  const { report } = validateReport(GOOD);
+  const first = countSighting(null, report);
+  assert.equal(first.count, 1);
+  assert.deepEqual(first.versions, ["0.5.5"]);
 });

@@ -229,6 +229,48 @@ export function issueBody(report, { logsUrl = "" } = {}) {
   ].join("\n");
 }
 
+// --- the tally -----------------------------------------------------------
+// The hundredth machine to hit one bug should not add the hundredth comment.
+// A reaction cannot say it either: reactions are one per account, and every
+// report arrives as the same bot, so the thumb would read 1 forever. The
+// count lives in the body instead, rewritten in place (user, 2026-09-10).
+
+const TALLY_MARK = "<!-- tally -->";
+
+/** "Seen 47 times · win-gpu · win 10, mac · mac 24 · 0.5.4, 0.5.5" */
+export function tallyLine({ count = 0, envs = [], versions = [] } = {}) {
+  const times = `Seen ${count} time${count === 1 ? "" : "s"}`;
+  return [times, envs.join(", "), versions.join(", ")].filter(Boolean).join(" · ");
+}
+
+/** The body with its tally brought up to date -- the line replaced where it
+ *  already stands, or added under the first paragraph where it does not.
+ *  Everything else in the body is left exactly as it was. */
+export function withTally(body, tally) {
+  const text = String(body ?? "");
+  const line = `${TALLY_MARK}\n${tallyLine(tally)}`;
+  const at = text.indexOf(TALLY_MARK);
+  if (at >= 0) {
+    const rest = text.indexOf("\n", text.indexOf("\n", at) + 1);
+    return text.slice(0, at) + line + (rest >= 0 ? text.slice(rest) : "\n");
+  }
+  const para = text.indexOf("\n\n");
+  return para < 0 ? `${text}\n\n${line}\n`
+    : `${text.slice(0, para)}\n\n${line}\n${text.slice(para)}`;
+}
+
+/** The tally after one more sighting. A machine already counted adds to the
+ *  number and to nothing else, so the lists stay the set of what is affected
+ *  rather than a log of who reported when. */
+export function countSighting(seen, report) {
+  const envs = [...((seen && seen.envs) || [])];
+  const versions = [...((seen && seen.versions) || [])];
+  const env = envLine(report);
+  if (env && !envs.includes(env)) envs.push(env);
+  if (report.version && !versions.includes(report.version)) versions.push(report.version);
+  return { count: ((seen && seen.count) || 0) + 1, envs, versions };
+}
+
 /** What a second (and hundredth) sighting adds to the issue that exists. */
 export function commentText(report, { logsUrl = "" } = {}) {
   const line = `+1 · ${envLine(report)} · ${report.version}`;

@@ -1,7 +1,7 @@
 import {
   MAX_LOG_BYTES,
   MAX_REPORT_BYTES,
-  commentText,
+  countSighting,
   dayKey,
   issueBody,
   issueTitle,
@@ -15,6 +15,7 @@ import {
   validateReport,
   verifyLog,
   withLogsLine,
+  withTally,
 } from "./report-logic.js";
 
 // The relay between a broken PersoDub and this repository's issues.
@@ -126,16 +127,25 @@ async function handleReport(request, env, ctx) {
   const known = await env.REPORTS.get(`fp:${report.fingerprint}`, "json");
   let issue = known && known.issue;
   let url = known && known.url;
-  let commentId = null;
+  const commentId = null;
+  // What the issue's body will say it has been seen: kept in KV beside the
+  // issue number, so a body somebody edits by hand cannot lose the count.
+  let tally = null;
 
   if (issue) {
-    // The hundredth machine to hit one bug adds a line to one issue, rather
-    // than opening the hundredth issue.
-    const res = await gh(env, `/issues/${issue}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ body: commentText(report) }),
-    });
-    if (res.ok) commentId = (await res.json()).id;
+    // The hundredth machine to hit one bug counts up in the issue it already
+    // has, rather than opening the hundredth issue OR adding the hundredth
+    // comment: the number and the machines it has been seen on are one line
+    // in the body, rewritten in place (user, 2026-09-10). A read before the
+    // write because the body is the thing being edited; a failure here loses
+    // a count, never the report.
+    tally = countSighting(known, report);
+    const got = await gh(env, `/issues/${issue}`);
+    if (got.ok) {
+      const body = withTally((await got.json()).body || "", tally);
+      await gh(env, `/issues/${issue}`, { method: "PATCH", body: JSON.stringify({ body }) });
+    }
+    await env.REPORTS.put(`fp:${report.fingerprint}`, JSON.stringify({ issue, url, ...tally }));
   } else {
     const labels = labelsFor(report);
     await ensureLabels(env, labels);
@@ -156,7 +166,8 @@ async function handleReport(request, env, ctx) {
     const made = await res.json();
     issue = made.number;
     url = made.html_url;
-    await env.REPORTS.put(`fp:${report.fingerprint}`, JSON.stringify({ issue, url }));
+    tally = countSighting(null, report);
+    await env.REPORTS.put(`fp:${report.fingerprint}`, JSON.stringify({ issue, url, ...tally }));
   }
 
   // What the log upload will need: which issue to hang the link on, and
