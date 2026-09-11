@@ -133,6 +133,11 @@ function renderReply(node, text) {
 // A step in progress, and the same step once the next one starts.
 const MARK_RUNNING = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg>';
 const MARK_DONE = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
+// A step that says something went wrong must not settle into a tick: "Codex is
+// not signed in" wearing a green check reads as a thing that worked
+// (Windows saw it, 2026-09-11). A dash -- it happened, it is over, it is not
+// an achievement.
+const MARK_NOTE = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 12h12"/></svg>';
 
 // "Rewriting a line" + [3] -> "Rewriting line 3"; + [1,3] -> "Rewriting lines
 // 1, 3". The label the server sends already ends in the words for one line, so
@@ -249,12 +254,13 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       stateLine.textContent = `${a.name} · ${loginWords(a)}`;
       return;
     }
-    // Both names, not the one that is picked: the person reading this has
-    // not signed in to either, and either will do. The row that named the
-    // picked one is right there; the how (a Terminal command) is said once,
-    // in the log, by loadAgents (user, 2026-09-10).
+    // Both names only when both are out: then either will do, and naming the
+    // one that happens to be picked hides the other. With one of them signed
+    // in, "sign in to Claude or Codex" is wrong about Claude and unhelpful
+    // about Codex -- the answer there is this one, by name, or switch to the
+    // other (Windows saw it, 2026-09-11).
     stateLine.classList.add("warn");
-    stateLine.textContent = SIGN_IN;
+    stateLine.textContent = anySignedIn() ? `${a.name} is not signed in.` : SIGN_IN;
   }
 
   // Which one it is showing, and whether it can be pressed. While a turn runs it
@@ -557,8 +563,13 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       const cmds = agentList.filter((a) => loginKnown(a) && !a.logged_in && a.login_command)
         .map((a) => a.login_command);
       signInHintSaid = true;
-      bubble("ai", "Sign in to Claude or Codex to use this."
-        + (cmds.length ? ` Run ${cmds.join(" or ")} in Terminal.` : ""));
+      // Same rule as the line above: name the one that is out when the other
+      // is there to switch to, and both when neither is.
+      const out = signedOutChoice();
+      const opening = anySignedIn()
+        ? `${out.name} is not signed in. Pick another assistant, or sign in.`
+        : "Sign in to Claude or Codex to use this.";
+      bubble("ai", opening + (cmds.length ? ` Run ${cmds.join(" or ")} in Terminal.` : ""));
     }
   }
 
@@ -615,7 +626,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     run.text.nodeValue = text;
     const settled = run.finished >= run.calls;
     const mark = run.node.querySelector(".chip-mark");
-    if (mark) mark.innerHTML = settled ? MARK_DONE : MARK_RUNNING;
+    if (mark) mark.innerHTML = settled ? (run.note ? MARK_NOTE : MARK_DONE) : MARK_RUNNING;
     if (settled) run.node.classList.add("chip-done");
     else run.node.classList.remove("chip-done");
     log.scrollTop = log.scrollHeight;
@@ -623,16 +634,19 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
 
   // One more call to a step. The same step as the one on screen grows that chip;
   // a different one starts a new chip and finishes whatever was above it.
-  function chipStep(label, line) {
+  function chipStep(label, line, note) {
     if (!run || run.label !== label) {
       settlePrevious();
       const d = document.createElement("div");
       d.className = "chip";
       d.innerHTML = '<span class="chip-mark">' + MARK_RUNNING + '</span>';
+      if (note) d.dataset.note = "1";
       const text = document.createTextNode("");
       d.appendChild(text);
       log.appendChild(d);
-      run = { label, lines: [], calls: 0, finished: 0, node: d, text };
+      // A transport step is the CLI telling us something went wrong, never a
+      // piece of work it finished: it settles with a dash rather than a tick.
+      run = { label, lines: [], calls: 0, finished: 0, node: d, text, note };
     }
     run.calls += 1;
     if (typeof line === "number" && !run.lines.includes(line)) {
@@ -665,7 +679,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     chips.forEach((c) => {
       c.classList.add("chip-done");
       const mark = c.querySelector(".chip-mark");
-      if (mark) mark.innerHTML = MARK_DONE;
+      if (mark) mark.innerHTML = c.dataset.note ? MARK_NOTE : MARK_DONE;
     });
   }
 
@@ -794,7 +808,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
             // A call the chip on screen is already counting has come back.
             chipFinished();
           } else if (ev.kind === "progress") {
-            clearDots(); chipStep(ev.label, ev.line);
+            clearDots(); chipStep(ev.label, ev.line, ev.tool === "transport");
             // Whatever the assistant says next belongs BELOW this step, not
             // appended to the paragraph above it. Without this, an assistant
             // that speaks before its first tool call -- which Codex does every

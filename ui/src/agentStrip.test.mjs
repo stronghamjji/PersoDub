@@ -694,6 +694,32 @@ test("Enter is ignored while an IME is still settling a syllable", async () => {
 // state in three words, because an instruction written inside a text box reads
 // as an instruction to type into it. The log is the one with room to say what
 // to do (user, 2026-09-10).
+// A step that reports a problem must not settle into a green tick. "Codex is
+// not signed in" wearing a check read as a thing that had worked (Windows saw
+// it, 2026-09-11). Transport steps -- the only kind that carries bad news --
+// settle with a dash instead.
+test("a step that reports trouble settles with a dash, not a tick", async () => {
+  const h = harness({ agents: [CLAUDE], chat: stream([
+    { kind: "progress", tool: "transport", label: "Codex is not signed in. Run codex login in Terminal." },
+    { kind: "progress", tool: "read_script", label: "Reading the script" },
+    { kind: "done", text: "" },
+  ]) });
+  try {
+    await flush();
+    h.$("assistantInput").value = "hi";
+    await h.$("assistantGo").fire("click");
+    await flush();
+    const chips = h.$("assistantLog").children.filter((d) => /chip/.test(d.className));
+    assert.equal(chips.length, 2, "one chip per step");
+    // The flag the mark is chosen from. The swap itself happens through
+    // querySelector(".chip-mark") on a node built from an HTML string, which
+    // only a real DOM can find -- so this pins the decision, and the page's
+    // own markup test pins the two marks being different shapes.
+    assert.equal(chips[0].dataset.note, "1", "the transport step is marked as a note");
+    assert.equal(chips[1].dataset.note, undefined, "a real step is not");
+  } finally { h.log.restore(); }
+});
+
 // Nothing signed in: there is nothing to pick, so the picker leaves the row
 // and the box -- now the width of the whole row -- says the sentence in full
 // (user, 2026-09-10).
@@ -708,12 +734,18 @@ test("with neither signed in the picker goes and the box says it in full", async
   } finally { h.log.restore(); }
 });
 
-test("a signed-out choice: the line names both, the box says the state, the log says what to do", async () => {
+// Three places, three jobs. The line above names the one that is out -- the
+// other is signed in and switching to it is the fix, so "sign in to Claude or
+// Codex" would be wrong about one and unhelpful about the other (Windows saw
+// it, 2026-09-11). The box reports the state in three words, because an
+// instruction written inside a text box reads as an instruction to type into
+// it. The log is the one with room to say what to do.
+test("one of two signed out: the line names it, the box says the state, the log says what to do", async () => {
   const h = harness({ agents: [CLAUDE, CODEX],
                       stored: { "persodub.assistantChoice": JSON.stringify({ agent: "codex", model: "gpt", name: "Codex" }) } });
   try {
     await flush();
-    assert.equal(h.$("assistantState").textContent, "Sign in to Claude or Codex.");
+    assert.equal(h.$("assistantState").textContent, "Codex is not signed in.");
     assert.equal(h.$("assistantState").classList.contains("warn"), true);
     // Codex is the choice and is signed out, but Claude is signed in: the
     // picker stays, because switching to it is the fix, and the box keeps the
@@ -723,7 +755,7 @@ test("a signed-out choice: the line names both, the box says the state, the log 
     // Asked twice (see below), said once -- and only the commands that apply.
     assert.equal(h.log.calls.filter((c) => c.url.startsWith("/api/agent/status")).length, 2);
     assert.deepEqual(h.$("assistantLog").children.map((d) => d.innerHTML),
-      ["Sign in to Claude or Codex to use this. Run codex login in Terminal."]);
+      ["Codex is not signed in. Pick another assistant, or sign in. Run codex login in Terminal."]);
   } finally { h.log.restore(); }
 });
 

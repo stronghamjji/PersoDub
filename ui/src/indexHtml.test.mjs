@@ -230,6 +230,20 @@ test("the script's two columns are Original and Translated, and so is the lane",
   assert.match(html, /\.sc-h-dst \{ grid-column: 5 \/ 7; \}/);
 });
 
+// A step that reports trouble and a step that finished must not wear the same
+// mark: "Codex is not signed in" under a green tick reads as a thing that
+// worked (Windows saw it, 2026-09-11).
+test("the agent's two settled marks are different shapes", () => {
+  const strip = readFileSync(STRIP, "utf8");
+  const done = strip.match(/const MARK_DONE = '([^']+)'/);
+  const note = strip.match(/const MARK_NOTE = '([^']+)'/);
+  assert.ok(done && note, "one of the two marks is gone");
+  assert.notEqual(done[1], note[1]);
+  // The tick turns a corner; the dash does not.
+  assert.match(done[1], /M5 13l4 4L19 7/);
+  assert.match(note[1], /M6 12h12/);
+});
+
 test("the agent input ignores Enter pressed mid-composition", () => {
   const html = readFileSync(STRIP, "utf8");
   const handler = html.match(/input\.addEventListener\("keydown"[\s\S]{0,600}/);
