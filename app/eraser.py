@@ -55,6 +55,29 @@ SUGGEST_TIMEOUT = 180
 NO_SUBTITLES_MARKS = ("NoSubtitleDetected", "No subtitles detected")
 NO_SUBTITLES_MESSAGE = "No subtitles were found in that area. Move the box and try again."
 
+# Lines the libraries underneath print in the ordinary course of starting up.
+# The failure sentence quotes the last thing the script said, and when a run is
+# killed outright that is whatever notice happened to be sitting there: a
+# forced stop showed the user "failed (Connectivity check to the model hoster
+# has been skipped...)", which is not an error at all -- it is Paddle saying a
+# check WE turned off was not run (Windows, 2026-09-11).
+QUIET_MARKS = (
+    "PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK",
+    "Connectivity check",
+    "Warning:", "warnings.warn", "UserWarning", "FutureWarning", "DeprecationWarning",
+)
+
+# Which half of the work it died in. The script's own percentages say: 0-50 is
+# the search, 50-100 the repainting. Naming the half is the difference between
+# "the eraser broke" and something the user can act on -- a band in the wrong
+# place fails in the first half, a video the decoder chokes on in the second.
+LOOKING = "The subtitle eraser stopped while looking for the subtitles."
+ERASING = "The subtitle eraser stopped while erasing them."
+# The same sentence the dubbing stages that run on this machine end with
+# (app/pipeline.py's CHECK_FILE): there is no service to ask about work done
+# here, so the file is the thing to look at.
+CHECK_FILE = "Check the video file."
+
 
 class EraserMissing(RuntimeError):
     """The subtitle-eraser pack is not installed on this computer. The routes
@@ -95,11 +118,25 @@ def _child_env():
     return {**os.environ, **CHILD_ENV}
 
 
+def _last_real_line(tail) -> str:
+    """The last thing the script said that was actually about a failure.
+
+    Startup notices are skipped: they are the only thing in the buffer when a
+    run is killed rather than broken, and quoting one tells the user the wrong
+    story entirely. If every line is a notice, say nothing rather than the
+    wrong thing -- the sentence in front of this already says what happened.
+    """
+    for line in reversed(tail):
+        if line.strip() and not any(mark in line for mark in QUIET_MARKS):
+            return line
+    return ""
+
+
 def _fail(what, tail):
     """A RuntimeError carrying the last thing the script said. One sentence for
     the user, then the line itself -- app/jobs.py shows this under the red bar."""
-    last = next((line for line in reversed(tail) if line.strip()), "")
-    return RuntimeError("%s (%s)" % (what, last[:200] or "no output"))
+    last = _last_real_line(tail)
+    return RuntimeError("%s (%s)" % (what, last[:200] or "no error was printed"))
 
 
 def run_erase(input_path, out_path, area, *, log, cancel_check,
@@ -144,6 +181,9 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
     threading.Thread(target=_drain_output, daemon=True).start()
 
     checked = None
+    # The last percentage seen, which is how the failure sentence knows which
+    # half of the work it died in.
+    reached = 0
     while True:
         try:
             line = lines.get(timeout=0.5)
@@ -159,6 +199,10 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
         # (its own banners, a library's tips) would say nothing to the user.
         if line.startswith("progress "):
             log(line)
+            try:
+                reached = int(line.split()[1].rstrip("%"))
+            except (IndexError, ValueError):
+                pass
         elif line.startswith(CHECK_PREFIX):
             try:
                 checked = json.loads(line[len(CHECK_PREFIX):])
@@ -171,9 +215,10 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
         # sentence says how. Every other failure keeps naming what went wrong.
         if any(mark in line for line in tail for mark in NO_SUBTITLES_MARKS):
             raise RuntimeError(NO_SUBTITLES_MESSAGE)
-        raise _fail("The subtitle eraser stopped with an error", tail)
+        raise _fail(f"{LOOKING if reached < 50 else ERASING} {CHECK_FILE}", tail)
     if not os.path.exists(out_path):
-        raise _fail("The subtitle eraser produced no video", list(errors))
+        raise _fail(f"The subtitle eraser finished without writing a video. {CHECK_FILE}",
+                    list(errors))
     return checked
 
 

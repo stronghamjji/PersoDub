@@ -35,6 +35,13 @@ if mode == "fail":
     print("a warning first", file=sys.stderr, flush=True)
     print("something went wrong deep inside", file=sys.stderr, flush=True)
     sys.exit(1)
+if mode == "killed":
+    # What a forced stop leaves behind: a long way in, and nothing in stderr
+    # but the notice Paddle prints on its way up.
+    print("progress 92%", flush=True)
+    print("Connectivity check to the model hoster has been skipped because "
+          "`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` is enabled.", file=sys.stderr, flush=True)
+    sys.exit(1)
 if mode == "nosub":
     print("Traceback (most recent call last):", file=sys.stderr, flush=True)
     print("    raise Exception(tr['Main']['NoSubtitleDetected'].format(self.video_path))",
@@ -648,3 +655,45 @@ def test_a_reader_that_was_stopped_also_answers():
     reader._buffer.get()                      # take the end marker away
     reader._stopped = True
     assert reader.read() == (False, None)
+
+
+# --- what a failed erase says ----------------------------------------------
+
+def test_a_startup_notice_is_never_quoted_as_the_reason(installed, tmp_path, monkeypatch):
+    """A run that is killed rather than broken leaves nothing in the buffer but
+    whatever the libraries said on their way up. Windows force-stopped a hung
+    erase and the user was told it had failed because of "Connectivity check to
+    the model hoster has been skipped because
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK is enabled" -- which is Paddle saying
+    a check WE turned off was not run (2026-09-11)."""
+    monkeypatch.setenv("STUB_MODE", "killed")
+    with pytest.raises(RuntimeError) as failed:
+        eraser.run_erase(_video(tmp_path), str(tmp_path / "erased.mp4"), (0, 100, 0, 100),
+                         log=lambda _: None, cancel_check=lambda: False)
+    said = str(failed.value)
+    assert "Connectivity check" not in said
+    assert "no error was printed" in said
+    # And it still says which half it was in, and what to look at.
+    assert said.startswith("The subtitle eraser stopped while erasing them.")
+    assert "Check the video file." in said
+
+
+def test_a_real_line_still_wins_over_the_notices_around_it():
+    notice = "Connectivity check to the model hoster has been skipped because x"
+    e = eraser._fail("The subtitle eraser stopped.",
+                     [notice, "RuntimeError: CUDA out of memory", "UserWarning: tidy up"])
+    assert "CUDA out of memory" in str(e)
+
+
+def test_a_failure_before_any_frame_was_painted_names_the_search(installed, tmp_path, monkeypatch):
+    """The search and the repainting fail for different reasons -- a band in
+    the wrong place in the first, a video the decoder chokes on in the second
+    -- and the percentage already knows which was running."""
+    monkeypatch.setenv("STUB_MODE", "fail")     # dies before any progress line
+    with pytest.raises(RuntimeError) as failed:
+        eraser.run_erase(_video(tmp_path), str(tmp_path / "erased.mp4"), None,
+                         log=lambda _: None, cancel_check=lambda: False)
+    said = str(failed.value)
+    assert said.startswith("The subtitle eraser stopped while looking for the subtitles.")
+    assert "Check the video file." in said
+    assert "something went wrong deep inside" in said
