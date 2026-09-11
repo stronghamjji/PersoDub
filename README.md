@@ -231,14 +231,17 @@ Keys are stored on your machine and take effect from your next dub — no restar
 
 ## Data and privacy
 
-**With the default engines, nothing leaves your machine.** Enabling an optional cloud
-engine sends only what that engine needs — a Perso key uploads the video for
-transcription, a Gemini key sends transcript text only, never the video or audio.
-PersoDub also reports a few anonymous usage counts (never your video, audio, or file
-content), which you can turn off in **Settings → Privacy**.
+**Your video never leaves this computer.** With the default settings, no video,
+audio, subtitle or file name goes anywhere.
 
-Full breakdown — exactly what's sent, what's tracked, and how to opt out of
-everything — is in **[docs/privacy.md](docs/privacy.md)**.
+What does leave is a handful of usage counts and, when something fails, a record
+of what went wrong. Both are turned off in **Settings → Privacy**.
+
+Cloud engines are not the default. Turn one on and your video goes to Perso for
+transcription, or the text to be translated goes to Google.
+
+Exactly what is sent, and how to turn all of it off, is in
+**[docs/privacy.md](docs/privacy.md)**.
 
 ### The Dub Agent and your files
 
