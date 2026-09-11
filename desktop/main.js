@@ -932,19 +932,29 @@ app.whenReady().then(() => {
       shellLog(`PERSODUB_UPDATE lock check: ${lockers.length} foreign holder(s)${lockers.length > 0 ? " -- " + lockers.map((l) => l.exe || l.name).join(", ") : ""}`);
       if (lockers.length > 0) {
         const names = [...new Set(lockers.map((l) => l.name || l.exe))].join(", ");
+        // In front, and awake. Parented to the window is not enough on
+        // Windows: the box opened behind the app and the user pressed
+        // Restart to update, saw nothing happen for three minutes, and had
+        // every reason to call the update broken (Windows, 2026-09-11).
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
         const { response } = await dialog.showMessageBox(win, {
           type: "warning",
           title: "PersoDub update",
           message: `Close ${names} first, then update`,
           detail:
             "That program is using files in PersoDub's installation folder, so the " +
-            "update would stall halfway through. Close it and click \"Restart to " +
-            "update\" again -- or choose Update anyway to try regardless.",
-          buttons: ["OK", "Update anyway"],
+            "update may stall halfway through. Close it and click \"Restart to " +
+            "update\" again, or update anyway and PersoDub will try regardless.",
+          // Update anyway leads, because it is the one that finishes: the
+          // other button asks the user to go and close something first, and
+          // they came here to update.
+          buttons: ["Update anyway", "Not now"],
           defaultId: 0,
-          cancelId: 0,
+          cancelId: 1,
         });
-        if (response === 0) return;
+        if (response === 1) return;
       }
     }
     const { default: electronUpdater } = await import("electron-updater");

@@ -103,12 +103,31 @@ export function parseLockers(stdout) {
 // Electron runs several processes (main, renderer, gpu) from the same exe;
 // match on exe name, case-insensitively, since Windows paths aren't
 // case-sensitive.
+// Holders nobody can do anything about, and that do not actually stop an
+// update. Windows Defender has a hand in the installation folder on every
+// Windows there is: it scans what it is told to scan and lets go when it is
+// done. Naming it produced an instruction the user cannot follow -- the
+// service is protected, it cannot be closed -- in front of an update that
+// then went through in nine seconds when told to go anyway (Windows,
+// 2026-09-11). A warning that is always there and always wrong is not a
+// warning.
+const HARMLESS = [
+  /msmpeng/i, /mssense/i, /securityhealth/i, /windows ?defender/i,
+  // The name comes back localised, which is why the Korean is here too.
+  /defender/i, /바이러스\s*백신/i,
+];
+
+export function isHarmlessLocker(locker) {
+  const text = `${locker.exe || ""} ${locker.name || ""}`;
+  return HARMLESS.some((re) => re.test(text));
+}
+
 export function foreignLockers(lockers, ownExePath) {
   // win32.basename explicitly: ownExePath is always a Windows path, but the
   // test suite also runs on Linux CI, where the platform default treats
   // backslashes as ordinary characters.
   const own = win32.basename(String(ownExePath)).toLowerCase();
-  return lockers.filter((l) => l.exe.toLowerCase() !== own);
+  return lockers.filter((l) => l.exe.toLowerCase() !== own && !isHarmlessLocker(l));
 }
 
 // -EncodedCommand sidesteps every quoting layer, -NoProfile keeps user

@@ -79,3 +79,28 @@ test("lockProbeScript makes PowerShell answer in UTF-8, so Korean app names surv
   assert.ok(enc > 0);
   assert.ok(enc < script.indexOf("Add-Type"), "set before anything prints");
 });
+
+// ---- holders nobody can close -------------------------------------------
+
+test("Windows Defender is not reported as something to close", () => {
+  // It has a hand in the install folder on every Windows there is, the
+  // service cannot be closed, and the update goes through anyway: nine
+  // seconds, once the user found the button (Windows, 2026-09-11). A warning
+  // that is always there and always wrong is not a warning.
+  const lockers = [
+    { pid: 1, name: "Microsoft Defender 바이러스 백신 서비스", exe: "MsMpEng.exe" },
+    { pid: 2, name: "Antimalware Service Executable", exe: "MsMpEng.exe" },
+    { pid: 3, name: "Windows Defender SmartScreen", exe: "smartscreen.exe" },
+  ];
+  assert.deepEqual(foreignLockers(lockers, "C:\\Apps\\PersoDub\\PersoDub.exe"), []);
+});
+
+test("a real holder is still named", () => {
+  const lockers = [
+    { pid: 1, name: "Microsoft Defender 바이러스 백신 서비스", exe: "MsMpEng.exe" },
+    { pid: 2, name: "Visual Studio Code", exe: "Code.exe" },
+  ];
+  const left = foreignLockers(lockers, "C:\\Apps\\PersoDub\\PersoDub.exe");
+  assert.equal(left.length, 1);
+  assert.equal(left[0].exe, "Code.exe");
+});
