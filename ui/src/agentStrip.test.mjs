@@ -488,6 +488,32 @@ test("a message sent while a dub runs actually goes out", async () => {
   } finally { h.log.restore(); }
 });
 
+// Unlocking the controls was not enough: submit() and ask() each kept their
+// own allow-list of screens, so the failed screen took the question, left the
+// words in the box and did nothing at all -- the same silent refusal the
+// running screen used to give (Windows found it, 2026-09-11).
+test("a question asked on the failed screen actually goes out", async () => {
+  const chat = stream([
+    { kind: "start", model: "claude-opus-4-6" },
+    { kind: "text", text: "Perso gave up on it." },
+    { kind: "done" },
+  ]);
+  const h = harness({ agents: [CLAUDE], chat, screen: "failed" });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "why did this fail?";
+    await input.fire("input", {});
+    await h.$("assistantGo").fire("click", {});
+    await flush(60);
+
+    const post = h.log.calls.find((c) => c.url === "/api/agent/chat");
+    assert.ok(post, "the turn was sent");
+    assert.equal(JSON.parse(post.body).message, "why did this fail?");
+    assert.equal(input.value, "", "and the box is emptied, as on every other screen");
+  } finally { h.log.restore(); }
+});
+
 test("a message carries the open job, and a rewritten line tells the page twice", async () => {
   const chat = stream([
     { kind: "start", model: "claude-opus-4-6" },

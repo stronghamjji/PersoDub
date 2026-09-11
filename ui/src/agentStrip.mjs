@@ -775,10 +775,8 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   }
 
   async function ask(message) {
-    // The same doors submit() holds open: a finished job, the home screen, or
-    // one that is running.
-    const screen = getScreen();
-    if (screen !== "done" && screen !== "home" && screen !== "running") return;
+    // The same allow-list submit() had stood here too, so removing one without
+    // the other would have moved the silent refusal rather than ended it.
     const token = ++turnToken;
     busy = true;
     paintGo();
@@ -926,16 +924,19 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   }
 
   function submit() {
-    // A finished job has a script to fix, the home screen has questions, and a
-    // running one has the two things people actually ask while they wait: stop
-    // it, and how far along is it. A job that left no script behind (failed) is
-    // the one screen with nothing to say -- its row is locked there anyway.
+    // No screen is refused. There was an allow-list here -- done, home,
+    // running -- and every screen outside it was turned away in silence: the
+    // strip open, the button pressable, the words left sitting in the box and
+    // nothing happening. Running was the first to be caught that way
+    // (2026-09-09) and failed was the second: the controls were unlocked
+    // without this line being unlocked with them, so the one screen where
+    // someone most wants to ask "why did this fail?" swallowed the question
+    // (Windows found it, 2026-09-11).
     //
-    // Running was refused here too until 2026-09-09, and refused in silence:
-    // the strip was open, the button was pressable, the words stayed in the box
-    // and nothing happened. That is what "why won't it stop when I ask?" was.
-    const screen = getScreen();
-    if (screen !== "done" && screen !== "home" && screen !== "running") return;
+    // If the strip can be typed into, what is typed gets sent. Whether there
+    // is a job to talk about is a separate question, and one the assistant
+    // answers better than a guard here can: the home screen has none either,
+    // and "dub the files in this folder" needs none.
     const message = input.value.trim();
     if (!message || busy) return;
     if (!chosen.agent) { menu.hidden = false; return; }
