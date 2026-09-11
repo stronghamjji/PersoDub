@@ -297,6 +297,15 @@ def parse_candidates_array(raw, n):
     if start == -1 or end == -1:
         raise ValueError("Could not find a JSON array in the candidates response: %s" % raw[:200])
     arr = json.loads(s[start:end + 1])
+    # One line asked for, the three candidates handed back bare: the model
+    # answered with the inner list rather than a list holding it. At n == 1
+    # there is nothing else a flat list of strings could mean, and this is the
+    # last-resort path -- reached only after a whole chunk has already failed
+    # -- so refusing it is what loses the fitting for the whole run. Seen on a
+    # real dub: four of six lines overrun their slot because this raised
+    # (Windows, 2026-09-11).
+    if n == 1 and len(arr) > 1 and all(isinstance(x, str) for x in arr):
+        arr = [arr]
     if len(arr) != n:
         raise ValueError("Candidate line count mismatch: got %d, need %d" % (len(arr), n))
     return [_split_candidates(item) for item in arr]

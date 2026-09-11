@@ -2,6 +2,8 @@
 """Length-fitting translation (len_fit) — verifies logic only, with a fake translator and no API calls."""
 import json
 
+import pytest
+
 from app.text.length_fit import (
     build_budget_prompt,
     build_candidates_prompt,
@@ -199,6 +201,35 @@ def test_candidates_one_candidate_fallback():
     parsed = parse_candidates_array(raw, 1)
     assert parsed[0] == ["다섯을 죽게 뒀어"]
     assert pick_candidate(parsed[0], "ko", 1.5) == "다섯을 죽게 뒀어"
+
+
+def test_candidates_flat_list_when_only_one_line_was_asked_for():
+    """The last-resort path asks for one line and the model hands back that
+    line's three candidates bare, without the list holding them. It raised,
+    the fitting was abandoned for the whole run, and four of six lines
+    overran their slot on a real dub (Windows, 2026-09-11). At n == 1 there is
+    nothing else a flat list of strings could mean."""
+    raw = json.dumps(["다섯을 죽게 뒀어", "다섯 명이 죽게 뒀어",
+                      "다섯 명이나 죽게 내버려 뒀잖아"], ensure_ascii=False)
+    parsed = parse_candidates_array(raw, 1)
+    assert len(parsed) == 1
+    assert len(parsed[0]) == 3
+    assert pick_candidate(parsed[0], "ko", 1.5) == "다섯을 죽게 뒀어"
+
+
+def test_a_flat_list_is_only_forgiven_when_one_line_was_asked_for():
+    """With more than one line asked for, a flat list is what it has always
+    been: one candidate per line. Nothing about that reading changes."""
+    raw = json.dumps(["첫 줄", "둘째 줄", "셋째 줄"], ensure_ascii=False)
+    parsed = parse_candidates_array(raw, 3)
+    assert parsed == [["첫 줄"], ["둘째 줄"], ["셋째 줄"]]
+
+
+def test_an_empty_array_still_fails_rather_than_becoming_an_empty_line():
+    """The forgiveness above must not turn "the model said nothing" into "this
+    line translates to nothing" -- that would ship a blank line silently."""
+    with pytest.raises(ValueError):
+        parse_candidates_array("[]", 1)
 
 
 def test_candidates_numbered_string_fallback():
