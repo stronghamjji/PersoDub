@@ -34,6 +34,7 @@ import argparse
 import json
 import os
 import platform
+import queue
 import shutil
 import subprocess
 import sys
@@ -188,6 +189,48 @@ def widen_masks(detector_class, frames=SEAM_FRAMES):
     # staticmethod, because video_inpaint calls this through the instance and a
     # plain function there would be handed the detector as its first argument.
     detector_class.find_continuous_ranges_with_same_mask = staticmethod(widened)
+
+
+def unhang_frame_reader(prefetcher_class):
+    """Make the frame reader answer "no more frames" instead of never
+    answering at all.
+
+    The tool reads frames off a background thread through a queue. That thread
+    puts exactly ONE (False, None) at the end of the video and then stops, so
+    anything that asks for a frame after that one waits on a queue nobody will
+    ever fill again. video_inpaint has two loops that read -- an outer one and
+    an inner one that runs to the end of a stretch -- and the inner one
+    swallowing the end marker leaves the outer one waiting for ever. The tool
+    knows: it clamps each stretch to the video's frame count for exactly this
+    reason (main.py, "否则会导致 ... 死锁").
+
+    The clamp is only as good as the frame count, and the frame count comes
+    from the container rather than from the decoder. A clip cut with
+    `ffmpeg -c copy` carries a header that promises more frames than the
+    decoder can actually produce, and then the clamp lets a stretch run past
+    the last real frame -- which is a hang, not a slow finish: Windows sat at
+    92% for 25 minutes with the GPU holding 7.7 GB, ffmpeg starved on the far
+    end of the pipe and nothing in any log (2026-09-11).
+
+    A reader that cannot answer is always worse than a short video, so this
+    waits a second at a time and gives up on a producer that has gone: every
+    read after the end answers (False, None), both loops end, and the frames
+    that were painted are written out.
+    """
+    def read(self):
+        while True:
+            try:
+                return self._buffer.get(timeout=1.0)
+            except queue.Empty:
+                # Nothing in the queue and nobody left to put anything in it.
+                # (A producer blocked on a full queue cannot reach this: the
+                # queue is not empty then.)
+                if self._stopped or not self._thread.is_alive():
+                    print("the video ended before the tool expected it to",
+                          file=sys.stderr, flush=True)
+                    return (False, None)
+
+    prefetcher_class.read = read
 
 
 # The band the user drew is not the band the tool is given. vsr only counts a
@@ -538,11 +581,13 @@ def main():
     from backend.main import SubtitleRemover
     from backend.tools.constant import InpaintMode
     from backend.tools.subtitle_detect import SubtitleDetect
+    from backend.tools.video_io import FramePrefetcher
 
     config.set(config.interface, "en")
     tr.read(os.path.join(vsr_dir, "backend", "interface", "en.ini"), encoding="utf-8")
     config.inpaintMode.value = InpaintMode.STTN_DET
     widen_masks(SubtitleDetect)
+    unhang_frame_reader(FramePrefetcher)
 
     import cv2
 

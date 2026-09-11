@@ -593,3 +593,58 @@ def test_the_whole_frame_is_not_a_band_to_widen():
     _seconds, band = erase_subtitles.erase_with_band(Remover, "in.mp4", "out.mp4",
                                                      None, 608, 1080)
     assert band is None
+
+
+# --- the frame reader that could not say "no more frames" -------------------
+
+class _Prefetcher:
+    """The tool's own FramePrefetcher, cut down to the three things the patch
+    touches: the queue, the stop flag and the reading thread."""
+
+    def __init__(self, frames):
+        import queue as _q
+        self._buffer = _q.Queue()
+        self._stopped = False
+        self._thread = _FakeThread(alive=True)
+        for f in frames:
+            self._buffer.put((True, f))
+        self._buffer.put((False, None))   # the ONE end marker, as the tool puts it
+
+    def read(self):
+        return self._buffer.get()
+
+
+class _FakeThread:
+    def __init__(self, alive):
+        self._alive = alive
+
+    def is_alive(self):
+        return self._alive
+
+
+def test_reading_past_the_end_of_the_video_answers_instead_of_hanging():
+    """The tool's reader puts one (False, None) at the end and then stops, so
+    the second read after the end waits on a queue nobody will fill. Its two
+    loops can both read -- the inner one to the end of a stretch -- and on a
+    clip whose header promises more frames than it can decode the inner loop
+    eats the end marker and the outer one hangs for ever: 25 minutes at 92%
+    with the GPU held and nothing in any log (Windows, 2026-09-11)."""
+    erase_subtitles.unhang_frame_reader(_Prefetcher)
+    reader = _Prefetcher(["a", "b"])
+
+    assert reader.read() == (True, "a")
+    assert reader.read() == (True, "b")
+    assert reader.read() == (False, None)     # the tool's own end marker
+    # The reading thread is gone now, which is where it used to hang.
+    reader._thread = _FakeThread(alive=False)
+    assert reader.read() == (False, None)
+    assert reader.read() == (False, None)     # and every time after that
+
+
+def test_a_reader_that_was_stopped_also_answers():
+    """stop() sets the flag and the thread leaves without an end marker."""
+    erase_subtitles.unhang_frame_reader(_Prefetcher)
+    reader = _Prefetcher([])
+    reader._buffer.get()                      # take the end marker away
+    reader._stopped = True
+    assert reader.read() == (False, None)
