@@ -2555,12 +2555,6 @@
      there is no script to fix yet -- but a dub in progress is exactly when a
      person turns to the assistant: to stop it, or to ask how far along it is
      (user, 2026-09-09). */
-  /* A cancelled or failed job has no script either, but its card stays on show
-     with the strip beneath it, so there the row is dimmed and locked -- a turn
-     would be paid for and answered by a script route that can only say 409.
-     The lock itself is the disabled attribute paintChoice() sets -- dimming
-     alone left the box one Tab away. */
-  body[data-screen="failed"] .assistant-foot { opacity: .6; }
   .assistant-input:disabled, .assistant-modelbtn:disabled { cursor: default; }
 
   /* The conversation fills the column between the heading and the input. */

@@ -300,35 +300,25 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   // is always pressable -- stopping is the whole point of it being there.
   function paintGo() {
     wire("send button", () => {
-      const screen = getScreen();
-      const locked = screen === "failed";
       const words = busy ? "Stop" : "Send";
       goIcon.innerHTML = busy ? GO_STOP : GO_SEND;
-      goBtn.disabled = locked || (!busy && !input.value.trim());
+      goBtn.disabled = !busy && !input.value.trim();
       goBtn.setAttribute("aria-label", words);
       goBtn.title = words;
     });
   }
 
   function paintChoice() {
-    // A dub that stopped early leaves no script behind, so the row is locked
-    // rather than left open: dimming alone is a picture of a lock, and a dimmed
-    // box is still one Tab away. A running dub takes the strip off the page
-    // altogether (see the CSS above); it is locked here as well so that nothing
-    // is live in the moment between one screen going and the next arriving.
+    // The screen only chooses the wording below. Nothing here is ever locked
+    // for the screen it is on: a failed dub and an empty home are both moments
+    // someone has a question (user, 2026-09-11).
     const screen = getScreen();
-    // A running dub used to lock the strip as well -- it was off the page
-    // there, so nothing it said was read. It stays now: stopping the dub and
-    // asking how far along it is are the two things a person turns to the
-    // assistant for while one runs (user, 2026-09-09).
-    const failed = screen === "failed";
     wire("status line", () => {
       ensureLoginChecked();
       paintState();
     });
     wire("picker", () => {
       modelLabel.textContent = labelFor(chosen, agentList, servedModel);
-      modelBtn.disabled = failed;
       // With nothing signed in there is nothing to pick, and the 109px it
       // takes is 109px the sentence in the box needs (user, 2026-09-10). The
       // wrap, not the button: the menu hangs off the wrap, and a menu left
@@ -339,17 +329,17 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       if (away) menu.hidden = true;
     });
     wire("input", () => {
-      input.disabled = failed;
+      // Never locked. A dub that failed used to grey the whole strip out --
+      // the reasoning being that a job with no script has nothing to fix --
+      // but "why did this fail?" is the question a person has at exactly that
+      // moment, and the assistant can read the log and answer it. It can also
+      // be asked to dub the files in a folder, which needs no open job at all
+      // (user, 2026-09-11).
+      input.disabled = false;
       // The one line the strip has to say what it is waiting for: an assistant to
       // be installed, a model to be picked, or the user. A running dub is not on
       // the list -- the strip is off the page there, so nothing it said was read.
-      if (failed) {
-        // Three words, not four. "Nothing to fix here" came within 3.6px of
-        // the end of the box on Windows, where the font is wider than the
-        // mac's -- close enough that the next font would cut it again
-        // (Windows measured it, 2026-09-11).
-        input.placeholder = "Nothing to fix";
-      } else if (notice) {
+      if (notice) {
         input.placeholder = notice;
       } else if (!chosen.agent) {
         input.placeholder = "Pick a model first";

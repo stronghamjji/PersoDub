@@ -401,13 +401,16 @@ test("a part that throws is said once and leaves the other three working", async
   } finally { h.log.restore(); }
 });
 
-test("a job that stopped early locks the row and says why", async () => {
+// A failed dub is when someone most wants to ask "why did this fail?", and a
+// folder of videos can be handed over with no job open at all. Nothing in the
+// strip is ever greyed out for the screen it is on (user, 2026-09-11).
+test("a job that stopped early leaves the row open", async () => {
   const h = harness({ agents: [CLAUDE], screen: "failed" });
   try {
     await flush();
-    assert.equal(h.$("assistantInput").disabled, true);
-    assert.equal(h.$("assistantModelBtn").disabled, true);
-    assert.equal(h.$("assistantInput").placeholder, "Nothing to fix");
+    assert.equal(h.$("assistantInput").disabled, false);
+    assert.equal(h.$("assistantModelBtn").disabled, false);
+    assert.notEqual(h.$("assistantInput").placeholder, "Nothing to fix");
   } finally { h.log.restore(); }
 });
 
