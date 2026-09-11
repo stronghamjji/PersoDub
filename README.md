@@ -12,11 +12,11 @@ your computer.
 [![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
 
 <p>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-0.5.4-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-0.5.4.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-0.6.0-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-0.6.0.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
-**macOS** — The button downloads the `.dmg` (0.5.4) straight away; open it and drag **PersoDub** into Applications.
+**macOS** — The button downloads the `.dmg` (0.6.0) straight away; open it and drag **PersoDub** into Applications.
 It's signed and notarized, so it opens with a normal double-click.
 
 **Windows** — Download and run the `.exe`. It isn't code-signed yet, so
@@ -40,9 +40,15 @@ original soundtrack. With the default settings, every one of those steps runs lo
 > is never sent anywhere for it.
 
 <p align="center">
-  <img src="docs/images/dub-agent.png" width="100%"
-       alt="A finished job with the Dub Agent open along the bottom: a request to shorten the lines that run over, the steps the agent took (reading the script, rewriting those lines, remaking the voices), and its reply. Above it the script sits as a table beside the player, with a timeline showing which voices fit.">
+  <img src="docs/images/finished-screen.png" width="100%"
+       alt="A finished job, English into Spanish: the script as a table on the left, each line with its original and its translation side by side and how much over or under its slot the dubbed line runs, two of them marked as fitting exactly; the player on the right showing the dubbed video with its translated subtitle; and a timeline underneath with a lane for the translation, a lane for the original and a lane for the subtitles.">
 </p>
+
+> **Subtitles burned into the picture?** The second tool on the left rail takes them
+> out. Draw a box over the writing, or let the app find it, then press **Erase**: it
+> repaints those frames and hands the clean video straight to a dub. It runs on your
+> computer like everything else, and it is slow, minutes for every minute of video,
+> so the screen says what it will cost before you start.
 
 > **PersoDub is under active development.** It is usable today.
 > macOS on Apple Silicon and Windows are supported; Linux is planned.
@@ -137,7 +143,7 @@ The source files live in [docs/demo](docs/demo).
 | **OS** | macOS 11 (Big Sur) or later, or Windows 10 (21H2) / Windows 11. Linux is [planned](docs/roadmap.md). |
 | **Graphics (Windows)** | An NVIDIA GPU is strongly recommended — AMD and Intel graphics are not accelerated. Everything works without one, just slower; see [Speed without a GPU](docs/faq.md#speed-without-a-gpu). |
 | **Memory** | 24 GB recommended, 16 GB minimum |
-| **Disk** | 30 GB free on macOS, 35 GB on Windows. The first setup is under 1 GB; the AI engine, translation runtime, and models download when you first dub — roughly 2–9 GB more depending on what you choose. |
+| **Disk** | 30 GB free on macOS, 35 GB on Windows. The first setup is under 1 GB; the AI engine, translation runtime, and models download when you first dub — roughly 2–9 GB more depending on what you choose. Erasing subtitles needs a pack of its own, downloaded the first time you use it: 3.9 GB on macOS, 4.4 GB on Windows without an NVIDIA GPU and 8.5 GB with one. |
 | **Network** | Required for the first-run download. Afterwards PersoDub runs offline unless you enable a cloud engine. |
 
 ## Installation
@@ -183,13 +189,18 @@ runtime, and models download — roughly 2–9 GB more depending on what you cho
 
 Each line has a play button to hear it alone and a waveform button to remake its voice
 after you edit the words; **Original** and **Dubbed** swap which file the player shows,
-and the **Dub Agent** strip along the bottom can fix lines for you (see
+and the **Dub Agent** panel on the right can fix lines for you (see
 [What is PersoDub?](#what-is-persodub)). Past jobs are under **Projects**, the folder
 icon on the left.
 
 Engine choices (transcription, translation, quality) live under the **Advanced
 options** toggle, collapsed by default — see [Configuration](#configuration) for what
 each default is and how to switch a step to a cloud engine.
+
+**Erasing subtitles** has a screen of its own, the second icon on the left rail. Drop a
+video or paste a link, check the box the app draws over the writing and drag it if it
+missed, then press **Erase**. When it finishes, **Export** saves the clean video and
+**Start dubbing** hands it to a new project.
 
 A screen-by-screen walkthrough, with screenshots of every option, is in
 **[docs/usage.md](docs/usage.md)**.
@@ -202,7 +213,7 @@ Russian · Spanish
 ## Configuration
 
 PersoDub works with no configuration: by default, transcription and speaker-labeling
-run on local Whisper + CAM++, and translation runs on local Gemma via Ollama.
+run on local Whisper + CAM++, and translation runs on local Hunyuan via Ollama.
 
 Want better quality? Add an API key in the app's **Settings** screen
 ([screenshot](docs/usage.md#settings)) to switch that one step to a cloud engine:
@@ -267,7 +278,7 @@ flowchart LR
     A["Video"] --> B["Source separation<br/>(Demucs)"]
     B --> C["Transcription<br/>(faster-whisper)"]
     C --> D["Speaker diarization<br/>(CAM++)"]
-    D --> E["Translation<br/>(Gemma via Ollama)"]
+    D --> E["Translation<br/>(Hunyuan via Ollama)"]
     E --> F["Speech synthesis<br/>(Qwen3-TTS)"]
     F --> G["Mix &amp; mux<br/>(FFmpeg)"]
     G --> H["Finished video<br/>(.mp4 + .srt)"]
@@ -332,7 +343,7 @@ PersoDub stands on these open-source projects.
 | [Demucs](https://github.com/adefossez/demucs) | Source separation — splits speech from background audio |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | Speech recognition |
 | [CAM++ (3D-Speaker)](https://github.com/modelscope/3D-Speaker) | Speaker diarization |
-| [Ollama](https://github.com/ollama/ollama) + [Gemma](https://github.com/google-deepmind/gemma) | Local translation model and runtime |
+| [Ollama](https://github.com/ollama/ollama) + [Hunyuan](https://github.com/Tencent-Hunyuan) | Local translation model and runtime |
 | [FFmpeg](https://github.com/FFmpeg/FFmpeg) | Video and audio processing |
 | [Electron](https://github.com/electron/electron) | Desktop application framework |
 
