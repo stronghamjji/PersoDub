@@ -336,6 +336,15 @@ test("a missing log tail leaves out its whole details block", () => {
 test("a failure the user can only fix themselves does not become an issue", () => {
   assert.equal(worthReporting("disk-full"), false);
   assert.equal(worthReporting("cloud-refused"), false);
+  for (const code of ["perso-busy", "perso-credits", "perso-key", "gemini-busy", "gemini-quota"]) {
+    assert.equal(worthReporting(code), false, code);
+  }
+});
+
+// A project Perso accepted and then gave up on is not the user's wallet or
+// their key: it may well be the shape of what we sent (user, 2026-09-11).
+test("a job Perso itself gave up on is still worth hearing about", () => {
+  assert.equal(worthReporting("perso-failed"), true);
 });
 
 test("everything else is still worth hearing about", () => {

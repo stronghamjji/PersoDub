@@ -22,7 +22,11 @@ export const INSTALL_STEPS = new Set(STEP_IDS);
 export const ERROR_CODES = new Set([
   "path-too-long", "disk-full", "network", "permission", "engine-start",
   "out-of-memory", "unsupported-format", "engine-crash", "step-failed",
-  "cloud-refused", "unknown",
+  // One per service and reason. "cloud-refused" is what 0.5.4 and earlier send
+  // and stays on the list for as long as they are running -- dropping it would
+  // turn every one of their refusals into "unknown".
+  "cloud-refused", "perso-busy", "perso-credits", "perso-key", "perso-failed",
+  "gemini-busy", "gemini-quota", "unknown",
 ]);
 
 /**
@@ -190,13 +194,24 @@ const ERROR_PATTERNS = [
   [/out of memory|ENOMEM|allocate/i,                 "out-of-memory"],
   [/unsupported|unrecognized codec|invalid data found/i, "unsupported-format"],
   [/did not become ready|exit \d+/i,                 "engine-crash"],
-  // The cloud service saying no. The five sentences in app/pipeline.py's
-  // _NOTICE_ERRORS (Perso unavailable, credits used up, key rejected; Gemini
-  // overloaded, quota used up) are the app's own published words, and none of them is a fact about the user's machine --
-  // counting them as "unknown" made a service outage look like a broken
-  // install (found rebuilding a real failed job as a report, 2026-09-09).
+  // The cloud service saying no. These sentences are the app's own published
+  // words (app/pipeline.py's _NOTICE_ERRORS), and none of them is a fact about
+  // the user's machine -- counting them as "unknown" made a service outage look
+  // like a broken install (found rebuilding a real failed job as a report,
+  // 2026-09-09).
+  //
+  // One word each, not a shared "cloud-refused": the counts are read a day at a
+  // time, and "Perso was overloaded on the 11th" is the sentence they have to be
+  // able to say. Lumped together, an outage and a used-up wallet were the same
+  // word (user, 2026-09-11).
+  //
   // Last in the table on purpose: every machine-side rule above is tried first.
-  [/temporarily unavailable|temporarily overloaded|credits are used up|quota is used up|rejected the api key/i, "cloud-refused"],
+  [/temporarily unavailable/i,        "perso-busy"],
+  [/credits are used up/i,            "perso-credits"],
+  [/rejected the api key/i,           "perso-key"],
+  [/could not finish this job/i,      "perso-failed"],
+  [/temporarily overloaded/i,         "gemini-busy"],
+  [/quota is used up/i,               "gemini-quota"],
 ];
 
 /** One published word for a whole error message. Never the message itself.

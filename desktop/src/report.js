@@ -46,8 +46,13 @@ export const MAX_MESSAGE_CHARS = 500;
 // Deliberately short. "network" is not on it: a download that will not come
 // is as often our URL or our checksum as it is their wifi. Neither is
 // "unknown", which is the whole reason this exists -- a failure nobody has
-// seen before is exactly the one worth hearing about.
-export const USER_SIDE_CODES = new Set(["disk-full", "cloud-refused"]);
+// seen before is exactly the one worth hearing about. Nor is "perso-failed":
+// a project Perso accepted and then gave up on may well be the shape of what
+// we sent it, which is ours to look at.
+export const USER_SIDE_CODES = new Set([
+  "disk-full", "cloud-refused",
+  "perso-busy", "perso-credits", "perso-key", "gemini-busy", "gemini-quota",
+]);
 
 /** Is this failure worth an issue, or is it the user's own machine saying no? */
 export function worthReporting(code) {
