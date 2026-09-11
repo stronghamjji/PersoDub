@@ -622,6 +622,8 @@
   .erase-error { color: var(--destructive); font-size: var(--font-label);
     padding: 0 22px 14px; }
   .erase-error:empty { display: none; }
+  /* In the column, the same width as the row above it. */
+  .erase-log { width: max(var(--erase-col, 100%), 520px); max-width: 100%; }
   /* The pack line. The accent ground of the app's other "you need this first"
      panels, and the same 32px button as everywhere else. */
   .erase-notice { flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
@@ -659,6 +661,10 @@
   /* The one row of controls, one line high whatever it is carrying. */
   .erase-row { flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
     margin: 0; padding: 0; }
+  /* The reason takes as much of the row as it needs and wraps; the buttons
+     keep their one line. "Try again" broke in half next to a two-line
+     sentence before this. */
+  .erase-row .btn { flex: 0 0 auto; white-space: nowrap; }
   .erase-state { font-size: var(--font-ui); color: var(--foreground);
     font-variant-numeric: tabular-nums; }
   /* Why it stopped, in the same place the percentage was -- and it may be a
@@ -670,7 +676,11 @@
      there is nothing between the reason and the one thing to do about it.
      The minutes and Erase are that same far end while the box is placed;
      the two sets are never up at once. */
-  #eraseDubBtn, #eraseBackBtn, #eraseEst { margin-left: auto; }
+  #eraseDubBtn, #eraseBackBtn, #eraseRetryBtn, #eraseEst { margin-left: auto; }
+  /* Back and Try again stand together: whichever of the two is first takes
+     the gap, and the second one follows it. A job opened out of the Projects
+     list has no Back, and then Try again is the one that goes to the end. */
+  #eraseBackBtn:not([hidden]) + #eraseRetryBtn { margin-left: 8px; }
   /* What Export has to say, and only after it has said it. */
   .erase-saved { display: inline-flex; align-items: center; gap: 6px;
     font-size: var(--font-label); color: var(--muted-foreground); }
@@ -2006,11 +2016,28 @@
             <div class="progress-bar erase-bar" id="eraseBarBox"><div id="eraseFill"></div></div>
             <button class="btn btn-outline" id="eraseCancelBtn" type="button">Cancel</button>
             <button class="btn btn-outline" id="eraseBackBtn" type="button" hidden>Back</button>
+            <!-- The dub's failure card has had Try again since the start: this
+                 screen had only Back, and Back is nowhere to go when the job
+                 was opened out of the Projects list rather than drawn on this
+                 screen (user, 2026-09-11). The video is in the job's own
+                 folder either way. -->
+            <button class="btn btn-primary" id="eraseRetryBtn" type="button" hidden>Try again</button>
             <button class="btn btn-primary" id="eraseDubBtn" type="button" hidden>Start dubbing</button>
             <!-- What the erase will cost, and the button that starts it. -->
             <span class="topbar-est" id="eraseEst" hidden></span>
             <button class="btn btn-primary" id="eraseRunBtn" type="button" hidden>Erase</button>
           </div>
+          <!-- The same fold the dub's failure card carries, and for the same
+               reason: the one sentence on the row says what stopped, and this
+               is where somebody who wants to know more, or to paste it to us,
+               looks. In the column with the row rather than across the screen,
+               and its own element rather than the dub's #rawLogDetails -- that
+               one is moved between two screens already, and a third place to
+               be would leave it on whichever screen saw it last. -->
+          <details class="raw-log erase-log" id="eraseLogDetails" hidden>
+            <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
+            <div class="log-box" id="eraseLogBox"></div>
+          </details>
           </div>
         </div>
         <div class="erase-error" id="eraseError"></div>

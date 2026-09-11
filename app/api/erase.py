@@ -244,6 +244,55 @@ def erase_start(
     return {"job_id": jid, "status": state.job_store.get(jid)["status"]}
 
 
+@router.post("/api/erase/{jid}/retry")
+def erase_retry(jid: str):
+    """Run this erase again from the top, on the video already in its folder.
+
+    The dub's own Try again (app/api/dub.py's dub_job_retry), which this
+    mirrors: the failure card had no way forward at all, so the only way to
+    have another go was to find the video and drop it in again -- and a job
+    opened out of the Projects list has no held video behind it, so there was
+    nothing on screen to drop (user, 2026-09-11).
+
+    input.mp4 is the video as the first run worked on it, trim and all, so
+    nothing is cut a second time. The band travels with it: the user drew that
+    box once, and a failure is not a reason to make them draw it again.
+    """
+    job = _erase_job(jid)
+    if job.get("status") in ("running", "cancelling"):
+        raise HTTPException(409, "This job is still running.")
+    work_dir = work_dir_of(job)
+    source_video = os.path.join(work_dir, "input.mp4")
+    if not os.path.exists(source_video):
+        raise HTTPException(409, "This job's video is no longer on disk.")
+    _require_eraser()
+
+    project = job.get("project") or os.path.basename(work_dir)
+    check_space(state.WORKSPACE)
+    work = _job_dir(project, "erase")
+    shutil.copyfile(source_video, os.path.join(work, "input.mp4"))
+
+    fields = {
+        "kind": "erase",
+        "project": project,
+        "day": _today(),
+        "work_dir": work,
+        "area": job.get("area"),
+        "from_link": False,
+        # Already cut into the copy above. Kept on the record so the screen can
+        # still say which part of the original this is.
+        "trim": job.get("trim"),
+    }
+
+    def _target(new_jid, log):
+        return erase_launch.work_for(
+            {**fields, "id": new_jid},
+            cancel_check=lambda: state.job_store.is_cancel_requested(new_jid))(log)
+
+    new_jid = launch_job(work, fields, "%s (erasing subtitles)" % project, _target)
+    return {"job_id": new_jid, "status": state.job_store.get(new_jid)["status"]}
+
+
 @router.get("/api/erase/{jid}")
 def erase_job(jid: str):
     """One erase job: its record, how far along it is, and whether the cleaned

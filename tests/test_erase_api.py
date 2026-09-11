@@ -323,3 +323,48 @@ def test_saving_with_no_folder_goes_under_downloads_by_day_and_project(erased, t
     path = client.post("/api/erase/%s/save" % jid, json={}).json()["path"]
     assert path == os.path.join(str(tmp_path), "Downloads", job["day"], "my clip", "my clip (no subtitles).mp4")
     assert open(path, "rb").read() == b"clean-video"
+
+
+# --- Try again --------------------------------------------------------------
+
+def test_try_again_runs_the_same_video_in_the_same_band(erased, tmp_path):
+    """The failure screen had only Back, and Back is nowhere to go when the
+    job was opened out of the Projects list rather than drawn on that screen:
+    the only way to have another go was to find the video and drop it in
+    again (user, 2026-09-11). The job's own folder has it."""
+    first = _start(area="[10, 20, 30, 40]", project="clip").json()["job_id"]
+    _wait(first)
+    erased.clear()
+
+    r = client.post("/api/erase/%s/retry" % first)
+    assert r.status_code == 200
+    second = r.json()["job_id"]
+    assert second != first
+    _wait(second)
+
+    # The same band, its own folder, and the video came out of the old job
+    # rather than from the user.
+    assert len(erased) == 1
+    assert list(erased[0]["area"]) == [10, 20, 30, 40]
+    before, after = (state.job_store.get(j)["work_dir"] for j in (first, second))
+    assert after != before
+    assert erased[0]["src"] == os.path.join(after, "input.mp4")
+    assert os.path.exists(os.path.join(before, "input.mp4")), "the old job keeps its own"
+    again = state.job_store.get(second)
+    assert again["kind"] == "erase"
+    assert again["project"] == state.job_store.get(first)["project"]
+
+
+def test_try_again_on_a_job_whose_video_is_gone_says_so(erased):
+    jid = _start(project="clip").json()["job_id"]
+    _wait(jid)
+    os.remove(os.path.join(state.job_store.get(jid)["work_dir"], "input.mp4"))
+    r = client.post("/api/erase/%s/retry" % jid)
+    assert r.status_code == 409 and "no longer on disk" in r.json()["detail"]
+
+
+def test_try_again_refuses_a_dub(erased):
+    """The other way round from the dub route's own guard: this one would
+    erase subtitles from a video somebody asked to have dubbed."""
+    r = client.post("/api/erase/does-not-exist/retry")
+    assert r.status_code == 404

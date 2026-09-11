@@ -348,6 +348,16 @@ export async function startErase({ downloadId, area, project, trim = null }, { b
   return (await res.json()).job_id;
 }
 
+/**
+ * POST /api/erase/{jid}/retry -- run the same erase again, on the video and
+ * in the band the failed job already has. Answers with the new job's id.
+ */
+export async function retryErase(jid, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/erase/${jid}/retry`, { method: "POST" });
+  if (!res.ok) throw await downloadError(res, "Couldn't start it again.");
+  return (await res.json()).job_id;
+}
+
 /** GET /api/erase/{jid} -- the record, plus `percent` and `done`. */
 export async function fetchErase(jid, { baseUrl = "" } = {}) {
   const res = await fetch(`${baseUrl}/api/erase/${jid}`);

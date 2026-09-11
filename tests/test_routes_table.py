@@ -93,6 +93,7 @@ ROUTES = [
     ('POST', '/api/erase'),
     ('POST', '/api/erase/suggest'),
     ('POST', '/api/erase/{jid}/dub'),
+    ('POST', '/api/erase/{jid}/retry'),
     ('POST', '/api/erase/{jid}/save'),
     ('POST', '/api/models/{mid}/cancel'),
     ('POST', '/api/models/{mid}/download'),

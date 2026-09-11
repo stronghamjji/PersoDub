@@ -12,7 +12,7 @@
 // Everything this file touches is #screen-erase and the top bar's two erase
 // controls, which setTopbar hides for every other screen.
 import { uploadDownload, downloadVideoUrl, suggestEraseArea, startErase,
-         fetchErase, cancelDubJob, eraseVideoUrl, saveErased,
+         fetchErase, retryErase, cancelDubJob, eraseVideoUrl, saveErased,
          startDownload, fetchDownload, eraseToDub } from "./dubApi.mjs";
 import { clampArea, defaultArea, dragArea, toScreen, videoPerScreen, isWhole,
          estimateSeconds, estimateLabel, progressLine, isPackMissing, noGpuNote, bigBoxNote,
@@ -193,6 +193,12 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     // Back is the way to the box that has to change -- which is only somewhere
     // to go while this screen still has the video that box was drawn on.
     $("eraseBackBtn").hidden = view !== "failed" || !area;
+    // Try again and the log are the dub failure card's two, on this screen for
+    // the same reasons: Back is nowhere to go when the job came out of the
+    // Projects list, and the row's one sentence is all there was to read.
+    $("eraseRetryBtn").hidden = view !== "failed";
+    $("eraseLogDetails").hidden = view !== "failed";
+    if (view === "failed") $("eraseLogBox").textContent = (job.logs || []).join("\n");
     $("eraseDubBtn").hidden = !done;
     $("eraseSaved").hidden = !done || !savedPath;
     $("eraseState").classList.toggle("bad", view === "failed");
@@ -314,7 +320,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     reset();
     source = { downloadId: "", title: rec.project || "", duration: 0, trim: null };
     job = { id: rec.id, status: rec.status, percent: 0, done: false,
-            error: rec.error || "" };
+            error: rec.error || "", logs: [] };
     paint();
     catchUp(rec.id);
   }
@@ -331,7 +337,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     }
     if (!job || job.id !== jid) return;
     job = { id: jid, status: j.status, percent: j.percent || 0,
-            done: !!j.done, error: j.error || "" };
+            done: !!j.done, error: j.error || "", logs: j.logs || [] };
     paint();
     if (["queued", "running", "cancelling"].includes(j.status)) watch(jid);
   }
@@ -661,6 +667,26 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     paint();
   });
 
+  // The same video, the same box, from the top. The job's folder still holds
+  // the video it worked on, so nothing is uploaded and nothing is re-cut.
+  $("eraseRetryBtn").addEventListener("click", async () => {
+    if (!job) return;
+    const from = job.id;
+    $("eraseRetryBtn").disabled = true;
+    $("eraseError").textContent = "";
+    try {
+      const jid = await retryErase(from);
+      job = { id: jid, status: "queued", percent: 0, done: false, error: "", logs: [] };
+      paint();
+      onJobsChanged();
+      catchUp(jid);
+    } catch (e) {
+      $("eraseError").textContent = e.message;
+    } finally {
+      $("eraseRetryBtn").disabled = false;
+    }
+  });
+
   function stopWatching() {
     clearInterval(timer);
     timer = null;
@@ -678,7 +704,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       } catch { return; }
       if (!job || job.id !== jid) { stopWatching(); return; }
       job = { id: jid, status: j.status, percent: j.percent || 0,
-              done: !!j.done, error: j.error || "" };
+              done: !!j.done, error: j.error || "", logs: j.logs || [] };
       if (!["queued", "running", "cancelling"].includes(j.status)) {
         stopWatching();
         onJobsChanged();
