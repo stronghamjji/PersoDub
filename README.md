@@ -345,6 +345,8 @@ PersoDub stands on these open-source projects.
 | [CAM++ (3D-Speaker)](https://github.com/modelscope/3D-Speaker) | Speaker diarization |
 | [Ollama](https://github.com/ollama/ollama) + [Hunyuan](https://github.com/Tencent-Hunyuan) | Local translation model and runtime |
 | [FFmpeg](https://github.com/FFmpeg/FFmpeg) | Video and audio processing |
+| [video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover) | Erasing subtitles burned into the picture |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Fetching a video from a pasted link |
 | [Electron](https://github.com/electron/electron) | Desktop application framework |
 
 ## Official source
