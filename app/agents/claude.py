@@ -13,6 +13,8 @@ without a CLI installed -- see tests/test_agents_claude.py.
 """
 from typing import List, Optional
 
+from app.agents import base
+
 # What each handle is called on screen. The agent reaches our script tools
 # through MCP, which prefixes them with the server name.
 TOOL_LABELS = {
@@ -116,6 +118,13 @@ def translate(event: dict) -> List[dict]:
         if not isinstance(text, str):
             text = ""
         if event.get("is_error"):
+            # "Not logged in · Please run /login" is the CLI's own REPL command
+            # and means nothing to someone looking at this panel. Said plainly
+            # instead, with the CLI's words folded under Details, the same way
+            # a signed-out Codex is handled (user found both, 2026-09-11).
+            if base.is_signed_out("claude", text):
+                return [{"kind": "error", "message": base.signed_out_line("claude"),
+                         "detail": text, "signed_out": True}]
             return [{"kind": "error", "message": text or "The assistant stopped before finishing."}]
         return [{"kind": "done", "text": text}]
 

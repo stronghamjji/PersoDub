@@ -7,6 +7,7 @@ than as a blank chat panel.
 """
 import json
 
+from app.agents import base
 from app.agents.claude import translate
 
 
@@ -217,3 +218,36 @@ def test_the_prompt_says_todays_tools_beat_yesterdays_no():
     from app.agents.claude import SYSTEM_PROMPT
     assert "earlier in this conversation" in SYSTEM_PROMPT
     assert "current tool list" in SYSTEM_PROMPT
+
+
+def test_a_signed_out_claude_says_what_to_do_rather_than_quoting_its_repl():
+    """The CLI answers "Not logged in · Please run /login". /login is a command
+    inside its own REPL and means nothing to someone looking at the panel --
+    the user signed out to see this screen and got exactly that (2026-09-11).
+    The CLI's words stay, folded under Details, and the flag is what tells the
+    screen to ask again who is signed in."""
+    out = translate({"type": "result", "is_error": True,
+                     "result": "Not logged in · Please run /login"})
+    assert out == [{"kind": "error",
+                    "message": base.signed_out_line("claude"),
+                    "detail": "Not logged in · Please run /login",
+                    "signed_out": True}]
+
+
+def test_any_other_failure_is_still_the_cli_own_words():
+    """Only the signed-out one is translated. Everything else is the CLI's
+    account of what happened, which beats anything invented here."""
+    out = translate({"type": "result", "is_error": True, "result": "rate limit reached"})
+    assert out == [{"kind": "error", "message": "rate limit reached"}]
+
+
+def test_the_two_clis_say_being_signed_out_in_quite_different_words():
+    """Which is why the reader knows each one's way of saying it rather than
+    looking for one phrase. Neither CLI's wording matches the other's."""
+    assert base.is_signed_out("claude", "Not logged in · Please run /login")
+    assert not base.is_signed_out("codex", "Not logged in · Please run /login")
+    assert base.is_signed_out("codex", "unexpected status 401 Unauthorized")
+    assert not base.is_signed_out("claude", "unexpected status 401 Unauthorized")
+    # An assistant this file has never heard of gets a sentence, not a crash.
+    assert not base.is_signed_out("nobody", "401")
+    assert base.signed_out_line("nobody") == "The assistant is not signed in."

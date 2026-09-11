@@ -460,7 +460,12 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
    * failure that was the signing out (user found it, 2026-09-11).
    */
   function recheckLogin() {
+    // Twice. The server keeps each answer for a minute and refreshes behind
+    // the request, so the first ask starts a fresh check and hands back the
+    // stale one it already had -- which is the very answer being corrected.
+    // The second ask, a moment later, is the one that gets the new value.
     loadAgents({ login: true }).catch(() => {});
+    setTimeout(() => { if (stripInUse()) loadAgents().catch(() => {}); }, 1800);
   }
   const CHECK_FAILED = "Could not check which assistants are available.";
   // What the strip says when it cannot answer, short enough for the heading
@@ -824,10 +829,11 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
             clearDots();
             settlePrevious();
             showError(ev.message, ev.detail);
-            // The CLI just told us it has no credentials. The strip above
-            // still says the opposite, because it asked at launch and this
-            // happened after.
-            if (/not signed in/i.test(String(ev.message || ""))) recheckLogin();
+            // The CLI just told us it has no credentials -- a flag from the
+            // reader that knows each CLI's way of saying it, not a phrase
+            // matched here. The strip above still says the opposite, because
+            // it asked at launch and this happened after (user, 2026-09-11).
+            if (ev.signed_out) recheckLogin();
           } else if (ev.kind === "done") {
             clearDots();
             settlePrevious();

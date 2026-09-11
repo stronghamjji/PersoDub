@@ -304,7 +304,8 @@ def test_the_turn_that_died_signed_out_says_what_to_do_and_keeps_the_rest():
            'authentication in header, url: https://api.openai.com/v1/responses, '
            'cf-ray: a392f369dabfea1c-ICN, request id: req_342ebbd')
     out = ev('{"type":"turn.failed","error":{"message":%s}}' % json.dumps(raw))
-    assert out == [{"kind": "error", "message": codex.SIGNED_OUT, "detail": raw}]
+    assert out == [{"kind": "error", "message": codex.SIGNED_OUT,
+                    "detail": raw, "signed_out": True}]
 
 
 def test_a_turn_that_failed_for_any_other_reason_is_passed_through():

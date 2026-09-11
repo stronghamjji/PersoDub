@@ -18,12 +18,16 @@ translate() is a pure function so it can be tested against recorded lines
 without a CLI installed -- see tests/test_agents_codex.py.
 """
 import json
-import re
 from typing import List
 
 # The chat panel's own vocabulary, shared with the other backends: which CLI is
 # behind the strip must not change what a step is called on screen.
+from app.agents import base
 from app.agents.claude import SYSTEM_PROMPT, TOOL_LABELS, line_arg
+
+# The sentence a signed-out Codex gets instead of its own 401s. Kept as a
+# name here because this file is where the translating happens.
+SIGNED_OUT = base.signed_out_line("codex")
 
 
 def translate(event: dict) -> List[dict]:
@@ -56,8 +60,9 @@ def translate(event: dict) -> List[dict]:
                    or "The assistant stopped before finishing.")
         # A 401 is a sentence the user can act on, not a URL and a trace id.
         # The CLI's own words are kept, folded away under "Details".
-        if is_unauthorized(message):
-            return [{"kind": "error", "message": SIGNED_OUT, "detail": message}]
+        if base.is_signed_out("codex", message):
+            return [{"kind": "error", "message": SIGNED_OUT,
+                     "detail": message, "signed_out": True}]
         return [{"kind": "error", "message": message}]
 
     if kind == "error":
@@ -69,19 +74,6 @@ def translate(event: dict) -> List[dict]:
         return [_transport_error(event.get("message"))]
 
     return []
-
-
-# What a signed-out CLI's complaints look like on the wire. Codex does not say
-# "you are signed out" -- it says 401, ten times over, once per retry, each one
-# carrying a URL and a trace id (seen when the user signed out mid-session,
-# 2026-09-11). Nothing about that tells the person what to do.
-_UNAUTHORIZED = re.compile(r"\b401\b|unauthorized|missing bearer", re.I)
-SIGNED_OUT = "Codex is not signed in. Run codex login in Terminal."
-
-
-def is_unauthorized(message) -> bool:
-    """Is this complaint the CLI having no credentials?"""
-    return isinstance(message, str) and bool(_UNAUTHORIZED.search(message))
 
 
 def _transport_error(message) -> dict:
@@ -97,7 +89,7 @@ def _transport_error(message) -> dict:
         message = "The assistant lost its connection."
     # Every retry says the same thing, so they all become the same step and
     # the panel counts them in one chip instead of printing ten.
-    if is_unauthorized(message):
+    if base.is_signed_out("codex", message):
         return {"kind": "progress", "tool": "transport", "label": SIGNED_OUT}
     if len(message) > 120:
         message = message[:119].rstrip() + "…"
