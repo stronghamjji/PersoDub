@@ -226,8 +226,13 @@ def unhang_frame_reader(prefetcher_class):
                 # (A producer blocked on a full queue cannot reach this: the
                 # queue is not empty then.)
                 if self._stopped or not self._thread.is_alive():
-                    print("the video ended before the tool expected it to",
-                          file=sys.stderr, flush=True)
+                    # On stdout with the prefix the job log keeps, not on
+                    # stderr: stderr is only ever read back on a failure, and
+                    # this happens on runs that go on to succeed. It is the
+                    # one line that says the video was shorter than its own
+                    # header claimed, which is worth having on the record.
+                    print("note the video ended before the tool expected it to",
+                          flush=True)
                     return (False, None)
 
     prefetcher_class.read = read

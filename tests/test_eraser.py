@@ -49,6 +49,8 @@ if mode == "nosub":
     print("Exception: No subtitles detected. Check file: /Users/x/holiday.mp4",
           file=sys.stderr, flush=True)
     sys.exit(1)
+if mode == "note":
+    print("note the video ended before the tool expected it to", flush=True)
 for percent in (10, 55, 100):
     print("progress %d%%" % percent, flush=True)
 if mode == "slow":
@@ -697,3 +699,17 @@ def test_a_failure_before_any_frame_was_painted_names_the_search(installed, tmp_
     assert said.startswith("The subtitle eraser stopped while looking for the subtitles.")
     assert "Check the video file." in said
     assert "something went wrong deep inside" in said
+
+
+def test_a_note_from_the_script_lands_on_the_job_log(installed, tmp_path, monkeypatch):
+    """Not a percentage and not an error: something the run noticed and worked
+    around. The video being shorter than its own header claims is the one that
+    exists, and without it on the record nobody can tell afterwards whether a
+    run took that path (2026-09-11)."""
+    monkeypatch.setenv("STUB_MODE", "note")
+    lines = []
+    eraser.run_erase(_video(tmp_path), str(tmp_path / "erased.mp4"), None,
+                     log=lines.append, cancel_check=lambda: False)
+    assert any("ended before the tool expected" in line for line in lines)
+    # And it is not mistaken for a percentage.
+    assert all(not line.startswith("note ") for line in lines)

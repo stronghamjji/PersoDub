@@ -41,6 +41,11 @@ CHILD_ENV = {"PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK": "True"}
 # record, where the screen and the agent read them.
 CHECK_PREFIX = "check "
 
+# A line the script wants on the job's record but that is not a percentage:
+# something it noticed and worked around. Rare, and the kind of thing nobody
+# can reconstruct afterwards if it is not written down.
+NOTE_PREFIX = "note "
+
 # How long suggest_area may take before it is given up on. It reads a dozen
 # frames -- 27 seconds on this Mac for a 10-second clip (2026-09-09), most of
 # it loading the detector, and seeking through a long video costs more. Three
@@ -203,6 +208,8 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
                 reached = int(line.split()[1].rstrip("%"))
             except (IndexError, ValueError):
                 pass
+        elif line.startswith(NOTE_PREFIX):
+            log("   %s" % line[len(NOTE_PREFIX):])
         elif line.startswith(CHECK_PREFIX):
             try:
                 checked = json.loads(line[len(CHECK_PREFIX):])
