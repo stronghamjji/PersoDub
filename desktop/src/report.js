@@ -37,6 +37,23 @@ export const MAX_MESSAGE_CHARS = 500;
  *  - "on":    send.
  * An off switch beats debug, the same way it does for the counts.
  */
+// Failures that are the user's own situation rather than something anyone
+// here can fix. They are still classified, still counted, and still shown on
+// screen -- they just do not become an issue, because an issue is a thing
+// somebody has to read and close and there is nothing to change in the code
+// (user, 2026-09-11).
+//
+// Deliberately short. "network" is not on it: a download that will not come
+// is as often our URL or our checksum as it is their wifi. Neither is
+// "unknown", which is the whole reason this exists -- a failure nobody has
+// seen before is exactly the one worth hearing about.
+export const USER_SIDE_CODES = new Set(["disk-full", "cloud-refused"]);
+
+/** Is this failure worth an issue, or is it the user's own machine saying no? */
+export function worthReporting(code) {
+  return !USER_SIDE_CODES.has(code);
+}
+
 export function resolveReportMode({ isPackaged, env }) {
   if (!isPackaged) return "off";
   if ((env.PERSODUB_NO_REPORTS || "") === "1") return "off";

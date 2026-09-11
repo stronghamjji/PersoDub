@@ -27,6 +27,32 @@ import { CHECK_ICON_SM } from "./icons.mjs";
 // model of that size, so this menu does not go stale.
 const MODEL_LABELS = { fable: "Fable", opus: "Opus", sonnet: "Sonnet", haiku: "Haiku" };
 
+/**
+ * The model's own name, as the CLI reported it, made readable.
+ *
+ * The picker can only offer aliases -- neither CLI will list what it has, so
+ * the four Claude ones are written down here and Codex has none at all. But
+ * once a turn runs the CLI says exactly what answered: "claude-opus-5",
+ * "gpt-5.6-sol". That was being matched back to its alias and thrown away, so
+ * the strip said "Opus" about a thing that had just called itself opus-5
+ * (user, 2026-09-11).
+ *
+ * Anthropic's ids are "claude-<family>-<version parts>", so those become
+ * "Opus 5" and "Fable 5.1"; a trailing date stamp is not a version and is
+ * dropped. Everything else is left exactly as the vendor spells it -- Codex's
+ * names are its own and guessing at them would only get them wrong.
+ */
+export function modelName(id) {
+  const raw = String(id || "").trim();
+  if (!raw) return "";
+  const parts = raw.split("-");
+  if (parts[0] !== "claude" || parts.length < 2) return raw;
+  const family = MODEL_LABELS[parts[1]] || (parts[1].charAt(0).toUpperCase() + parts[1].slice(1));
+  // 6 digits or more is a date, not a version: claude-haiku-4-5-20251001.
+  const version = parts.slice(2).filter((p) => /^\d{1,5}$/.test(p));
+  return version.length ? `${family} ${version.join(".")}` : family;
+}
+
 // The picker's "this one is chosen" tick. Drawn, not typed: a typed tick is a
 // different shape in every font, and the rest of the app's marks are SVG.
 // It is icons.mjs's tick at the picker's smaller size.
@@ -48,12 +74,19 @@ export function labelFor(chosen, agentList, servedModel) {
   // runs the picker is locked and the list may not have come back, and a strip
   // that forgets which assistant was chosen reads as no choice at all.
   const name = a ? a.name : (chosen.name || chosen.agent);
-  const model = servedModel || chosen.model;
+  // The served id when a turn has told us one, the alias until then: the real
+  // name cannot be known before the CLI has answered once.
+  if (servedModel) return `${name} · ${modelName(servedModel)}`;
+  const model = chosen.model;
   return model ? `${name} · ${MODEL_LABELS[model] || model}` : name;
 }
 
-// The server names the model it ran ("start"), which is not always the one
-// asked for. Match it back to an alias so the picker reads the truth.
+/**
+ * Which of the picker's aliases a reported id belongs to, or "" for one this
+ * app has no alias for -- Codex's names are all of those. The strip shows the
+ * id itself now (see modelName), so this is only for matching a running model
+ * back to a row in the picker.
+ */
 export function aliasOf(id) {
   return Object.keys(MODEL_LABELS).find((k) => String(id || "").includes(k)) || "";
 }
@@ -811,10 +844,12 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
           let ev;
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.kind === "start") {
-            // Which model actually answered. The picker says so rather than
-            // repeating the request back; the saved choice is left alone.
-            const alias = aliasOf(ev.model);
-            if (alias && alias !== servedModel) { servedModel = alias; paintChoice(); }
+            // Which model actually answered, in its own words:
+            // "claude-opus-5", "gpt-5.6-sol". It used to be matched back to
+            // its alias, so a thing that had just called itself opus-5 was
+            // shown as "Opus" (user, 2026-09-11). The saved choice is left
+            // alone -- this says what answered, not what to ask for next.
+            if (ev.model && ev.model !== servedModel) { servedModel = ev.model; paintChoice(); }
           } else if (ev.kind === "progress" && ev.done) {
             // A call the chip on screen is already counting has come back.
             chipFinished();

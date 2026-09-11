@@ -12,6 +12,7 @@ import {
   normalizeLine,
   reportBytes,
   resolveReportMode,
+  worthReporting,
 } from "./report.js";
 
 // ---- the off switches --------------------------------------------------
@@ -326,4 +327,26 @@ test("a missing log tail leaves out its whole details block", () => {
   const body = issueBody(buildReport({ ...SAMPLE, logTails: { shell: "one line", app: "", job: "" } }));
   assert.match(body, /shell\.log \(tail\)/);
   assert.ok(!body.includes("persodub.log (tail)"));
+});
+
+// Every failure is classified and counted. Only the ones somebody here could
+// act on become a GitHub issue -- an issue is a thing a person has to read
+// and close, and there is nothing to change in the code when a disk is full
+// (user, 2026-09-11).
+test("a failure the user can only fix themselves does not become an issue", () => {
+  assert.equal(worthReporting("disk-full"), false);
+  assert.equal(worthReporting("cloud-refused"), false);
+});
+
+test("everything else is still worth hearing about", () => {
+  for (const code of ["engine-crash", "engine-start", "step-failed", "out-of-memory",
+                      "unsupported-format", "path-too-long", "permission"]) {
+    assert.equal(worthReporting(code), true, code);
+  }
+  // A download that will not come is as often our URL or our checksum as it
+  // is their wifi.
+  assert.equal(worthReporting("network"), true);
+  // And the whole point of the thing: a failure nobody has seen before.
+  assert.equal(worthReporting("unknown"), true);
+  assert.equal(worthReporting(undefined), true);
 });

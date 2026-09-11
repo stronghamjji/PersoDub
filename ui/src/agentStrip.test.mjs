@@ -19,7 +19,7 @@
 // Run with: node --test ui/src/agentStrip.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initAgentStripUi, loginWords, loginKnown, labelFor, aliasOf, chipText,
+import { initAgentStripUi, loginWords, loginKnown, labelFor, aliasOf, modelName, chipText,
          menuRow, replyHtml } from "./agentStrip.mjs";
 
 function makeEl(id) {
@@ -274,13 +274,35 @@ test("the picker's label names the assistant and the model actually served", () 
   // The list has not come back: the name saved with the pick stands in.
   assert.equal(labelFor(chosen, [], ""), "Claude · Opus");
   assert.equal(labelFor({ agent: "claude", model: "opus" }, [], ""), "claude · Opus");
-  // What the CLI said it ran wins over what was asked for.
-  assert.equal(labelFor(chosen, [CLAUDE], "haiku"), "Claude · Haiku");
+  // What the CLI said it ran wins over what was asked for -- and it is said
+  // in the CLI's own words, version and all. The alias is all the picker can
+  // offer, because neither CLI will list what it has; the id is what comes
+  // back once something has actually answered (user, 2026-09-11).
+  assert.equal(labelFor(chosen, [CLAUDE], "claude-haiku-4-5-20251001"), "Claude · Haiku 4.5");
+  assert.equal(labelFor(chosen, [CLAUDE], "claude-opus-5"), "Claude · Opus 5");
+  assert.equal(labelFor({ agent: "codex", model: "" }, [CODEX], "gpt-5.6-sol"), "Codex · gpt-5.6-sol");
   assert.equal(labelFor({ agent: "codex", model: "" }, [CODEX], ""), "Codex");
 
   assert.equal(aliasOf("claude-opus-4-6-20260514"), "opus");
   assert.equal(aliasOf("gpt-5"), "");
   assert.equal(aliasOf(null), "");
+});
+
+// Anthropic spells its ids "claude-<family>-<version>"; everyone else spells
+// them their own way and guessing would only get them wrong.
+test("a model id is made readable without being rewritten", () => {
+  assert.equal(modelName("claude-opus-5"), "Opus 5");
+  assert.equal(modelName("claude-fable-5-1"), "Fable 5.1");
+  // A date stamp on the end is not a version.
+  assert.equal(modelName("claude-haiku-4-5-20251001"), "Haiku 4.5");
+  // A family this app has no label for still reads as a name.
+  assert.equal(modelName("claude-newthing-2"), "Newthing 2");
+  assert.equal(modelName("claude-opus"), "Opus");
+  // Anyone else's id is left exactly as they spell it.
+  assert.equal(modelName("gpt-5.6-sol"), "gpt-5.6-sol");
+  assert.equal(modelName("o3"), "o3");
+  assert.equal(modelName(""), "");
+  assert.equal(modelName(null), "");
 });
 
 test("a run of edits is one chip that lists its lines", () => {
@@ -502,8 +524,9 @@ test("a message carries the open job, and a rewritten line tells the page twice"
     assert.equal(words(chip), "Rewriting line 4");
     const said = drawn.find((d) => d.className.includes("bubble ai"));
     assert.equal(said.innerHTML, "Shortened <strong>line 4</strong>.");
-    // The model the CLI actually ran is what the picker ends up saying.
-    assert.equal(h.$("assistantModelLabel").textContent, "Claude · Opus");
+    // The model the CLI actually ran is what the picker ends up saying --
+    // its own id, version and all, not the alias it was asked for.
+    assert.equal(h.$("assistantModelLabel").textContent, "Claude · Opus 4.6");
   } finally { h.log.restore(); }
 });
 

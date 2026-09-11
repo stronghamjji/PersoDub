@@ -172,13 +172,14 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     // same three words an inch above it.
     $("eraseTabs").hidden = !done;
     $("eraseBox").hidden = view !== "area" || !area;
-    // The box is the only thing that says whether the app is still looking:
-    // red and "Finding subtitles…" while it hunts, green and "Subtitles" once
-    // it has put the box on the writing, and the plain yellow of a box the
-    // user has taken hold of (user, 2026-09-10). The line over the picture's
-    // top left corner that used to say it is gone -- nobody read it there.
+    // Two states, not three: red and "Finding subtitles…" while the app hunts
+    // for the writing, green and "Subtitles" once it has stopped. A third --
+    // back to yellow the moment a hand moved the box -- was never asked for
+    // and read as the app having lost something (user, 2026-09-11). The line
+    // over the picture's top left corner that used to say it is gone; nobody
+    // read it there.
     $("eraseBox").classList.toggle("finding", finding);
-    $("eraseBox").classList.toggle("found", !finding && !touched);
+    $("eraseBox").classList.toggle("found", !finding);
     $("eraseBox").querySelector("b").textContent = finding ? "Finding subtitles…" : "Subtitles";
     // The row carries the minutes and the Erase button now, so it is up while
     // the box is being placed too.

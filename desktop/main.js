@@ -18,7 +18,7 @@ import { run } from "./src/exec.js";
 import { resolveUpdateMode, resolveFeed, nextUpdateState } from "./src/updater.js";
 import { findForeignLockers } from "./src/lockCheck.js";
 import { resolveAnalyticsMode, countEvent, classifyError, loadState, saveState } from "./src/analytics.js";
-import { buildReport, collectEnvironment, maskText, resolveReportMode } from "./src/report.js";
+import { buildReport, collectEnvironment, maskText, resolveReportMode, worthReporting } from "./src/report.js";
 import { buildLogArchive } from "./src/reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./src/reportQueue.js";
 import { IS_WIN } from "./src/platform.js";
@@ -284,6 +284,15 @@ function sendReport(opts) {
       if (!kitDir) return;
       const mode = reportMode(kitDir);
       if (mode === "off") return;
+      // Every failure is classified and counted; only the ones somebody here
+      // could act on become an issue. A full disk and a refused cloud key are
+      // the user's own situation -- they are told on screen, and an issue
+      // about them is one more thing for a person to read and close
+      // (user, 2026-09-11).
+      if (!worthReporting(opts.code)) {
+        shellLog(`[persodub-report] not sent (${opts.code}): the user's own situation`);
+        return;
+      }
       // The install id is minted (and written) only on a run that really
       // reports -- the same rule the counts follow, so a machine that never
       // reports never gets one, and no file appears claiming otherwise. It has
