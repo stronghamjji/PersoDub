@@ -121,3 +121,17 @@ test("errorText survives an empty or missing error", () => {
   // not "". Nothing ever throws one of those; pinned so it stays deliberate.
   assert.equal(errorText(new Error("")), "Error");
 });
+
+
+import { downloadsLabel } from "./format.mjs";
+
+test("downloadsLabel names the folders under Downloads, on either kind of slash", () => {
+  assert.equal(downloadsLabel("/Users/x/Downloads/2026-09-10/clip/clip (no subtitles).mp4"),
+    "Downloads / 2026-09-10 / clip");
+  assert.equal(downloadsLabel("C:\\Users\\x\\Downloads\\2026-09-10\\clip\\dub_ko.mp4"),
+    "Downloads / 2026-09-10 / clip");
+  // A file loose in Downloads, and a file somewhere else entirely.
+  assert.equal(downloadsLabel("/Users/x/Downloads/clip.mp4"), "Downloads");
+  assert.equal(downloadsLabel("/elsewhere/clip.mp4"), "");
+  assert.equal(downloadsLabel(""), "");
+});

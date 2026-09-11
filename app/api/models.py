@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app import models
 from app import models as model_store
 from app import setup as dub_setup
 from app.settings_env import current_value
@@ -68,8 +69,12 @@ def models_list():
     """The model catalog with each model's download state -- what the
     Settings catalog, the advanced-options status lines and the dub-start
     warning dialog all render from. Always-installed models stay out: the
-    install itself guarantees them and there is nothing to manage."""
-    return {"models": model_store.status_rows()}
+    install itself guarantees them and there is nothing to manage.
+
+    platform is the key the sizes were picked by ("mac", "win-gpu",
+    "win-cpu") -- the erase screen reads it to warn a machine with no GPU
+    that the work will take about five times as long (2026-09-10)."""
+    return {"models": model_store.status_rows(), "platform": models.platform_key()}
 
 
 def _model_or_404(mid: str):

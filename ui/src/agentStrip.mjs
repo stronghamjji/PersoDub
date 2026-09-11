@@ -27,6 +27,32 @@ import { CHECK_ICON_SM } from "./icons.mjs";
 // model of that size, so this menu does not go stale.
 const MODEL_LABELS = { fable: "Fable", opus: "Opus", sonnet: "Sonnet", haiku: "Haiku" };
 
+/**
+ * The model's own name, as the CLI reported it, made readable.
+ *
+ * The picker can only offer aliases -- neither CLI will list what it has, so
+ * the four Claude ones are written down here and Codex has none at all. But
+ * once a turn runs the CLI says exactly what answered: "claude-opus-5",
+ * "gpt-5.6-sol". That was being matched back to its alias and thrown away, so
+ * the strip said "Opus" about a thing that had just called itself opus-5
+ * (user, 2026-09-11).
+ *
+ * Anthropic's ids are "claude-<family>-<version parts>", so those become
+ * "Opus 5" and "Fable 5.1"; a trailing date stamp is not a version and is
+ * dropped. Everything else is left exactly as the vendor spells it -- Codex's
+ * names are its own and guessing at them would only get them wrong.
+ */
+export function modelName(id) {
+  const raw = String(id || "").trim();
+  if (!raw) return "";
+  const parts = raw.split("-");
+  if (parts[0] !== "claude" || parts.length < 2) return raw;
+  const family = MODEL_LABELS[parts[1]] || (parts[1].charAt(0).toUpperCase() + parts[1].slice(1));
+  // 6 digits or more is a date, not a version: claude-haiku-4-5-20251001.
+  const version = parts.slice(2).filter((p) => /^\d{1,5}$/.test(p));
+  return version.length ? `${family} ${version.join(".")}` : family;
+}
+
 // The picker's "this one is chosen" tick. Drawn, not typed: a typed tick is a
 // different shape in every font, and the rest of the app's marks are SVG.
 // It is icons.mjs's tick at the picker's smaller size.
@@ -48,12 +74,19 @@ export function labelFor(chosen, agentList, servedModel) {
   // runs the picker is locked and the list may not have come back, and a strip
   // that forgets which assistant was chosen reads as no choice at all.
   const name = a ? a.name : (chosen.name || chosen.agent);
-  const model = servedModel || chosen.model;
+  // The served id when a turn has told us one, the alias until then: the real
+  // name cannot be known before the CLI has answered once.
+  if (servedModel) return `${name} · ${modelName(servedModel)}`;
+  const model = chosen.model;
   return model ? `${name} · ${MODEL_LABELS[model] || model}` : name;
 }
 
-// The server names the model it ran ("start"), which is not always the one
-// asked for. Match it back to an alias so the picker reads the truth.
+/**
+ * Which of the picker's aliases a reported id belongs to, or "" for one this
+ * app has no alias for -- Codex's names are all of those. The strip shows the
+ * id itself now (see modelName), so this is only for matching a running model
+ * back to a row in the picker.
+ */
 export function aliasOf(id) {
   return Object.keys(MODEL_LABELS).find((k) => String(id || "").includes(k)) || "";
 }
@@ -72,9 +105,11 @@ export function loginKnown(a) {
 export function loginWords(a) {
   if (!loginKnown(a)) return "";
   if (a.logged_in) {
-    return a.account ? `signed in as ${a.account}` : "signed in";
+    // "as" only when the account is an address, which says which one: a
+    // service's name ("claude.ai", "ChatGPT") only repeated the row's own.
+    return a.account && a.account.includes("@") ? `signed in as ${a.account}` : "signed in";
   }
-  return a.login_command ? `not signed in — run ${a.login_command} in Terminal` : "not signed in";
+  return "not signed in";
 }
 
 // The two faces of the button at the end of the input row. Drawn, like every
@@ -131,6 +166,11 @@ function renderReply(node, text) {
 // A step in progress, and the same step once the next one starts.
 const MARK_RUNNING = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg>';
 const MARK_DONE = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
+// A step that says something went wrong must not settle into a tick: "Codex is
+// not signed in" wearing a green check reads as a thing that worked
+// (Windows saw it, 2026-09-11). A dash -- it happened, it is over, it is not
+// an achievement.
+const MARK_NOTE = '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 12h12"/></svg>';
 
 // "Rewriting a line" + [3] -> "Rewriting line 3"; + [1,3] -> "Rewriting lines
 // 1, 3". The label the server sends already ends in the words for one line, so
@@ -217,8 +257,15 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     return loginKnown(a) && !a.logged_in ? a : null;
   }
 
-  // The strip's first row. The command is a <code> element built as text, so
-  // nothing a server ever sends can become a tag.
+  // Is there any assistant that could answer right now? The picker is only
+  // worth a place in the row when there is: with both signed out it offers a
+  // choice between two things that cannot answer, and takes 109px of a 245px
+  // row to do it (user, 2026-09-10).
+  function anySignedIn() {
+    return agentList.some((a) => a.installed && a.supported && a.logged_in === true);
+  }
+
+  // The strip's first row.
   function paintState() {
     const a = agentList.find((x) => x.id === chosen.agent);
     stateLine.textContent = "";
@@ -240,75 +287,75 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       stateLine.textContent = `${a.name} · ${loginWords(a)}`;
       return;
     }
+    // Both names only when both are out: then either will do, and naming the
+    // one that happens to be picked hides the other. With one of them signed
+    // in, "sign in to Claude or Codex" is wrong about Claude and unhelpful
+    // about Codex -- the answer there is this one, by name, or switch to the
+    // other (Windows saw it, 2026-09-11).
     stateLine.classList.add("warn");
-    stateLine.appendChild(document.createTextNode(`${a.name} · not signed in`));
-    if (a.login_command) {
-      stateLine.appendChild(document.createTextNode(" — run"));
-      const cmd = document.createElement("code");
-      cmd.textContent = a.login_command;
-      stateLine.appendChild(cmd);
-      stateLine.appendChild(document.createTextNode("in Terminal"));
-    }
+    stateLine.textContent = anySignedIn() ? `${a.name} is not signed in.` : SIGN_IN;
   }
 
   // Which one it is showing, and whether it can be pressed. While a turn runs it
   // is always pressable -- stopping is the whole point of it being there.
   function paintGo() {
     wire("send button", () => {
-      const screen = getScreen();
-      const locked = screen === "running" || screen === "failed";
       const words = busy ? "Stop" : "Send";
       goIcon.innerHTML = busy ? GO_STOP : GO_SEND;
-      goBtn.disabled = locked || (!busy && !input.value.trim());
+      goBtn.disabled = !busy && !input.value.trim();
       goBtn.setAttribute("aria-label", words);
       goBtn.title = words;
     });
   }
 
   function paintChoice() {
-    // A dub that stopped early leaves no script behind, so the row is locked
-    // rather than left open: dimming alone is a picture of a lock, and a dimmed
-    // box is still one Tab away. A running dub takes the strip off the page
-    // altogether (see the CSS above); it is locked here as well so that nothing
-    // is live in the moment between one screen going and the next arriving.
+    // The screen only chooses the wording below. Nothing here is ever locked
+    // for the screen it is on: a failed dub and an empty home are both moments
+    // someone has a question (user, 2026-09-11).
     const screen = getScreen();
-    const running = screen === "running";
-    const failed = screen === "failed";
     wire("status line", () => {
       ensureLoginChecked();
       paintState();
     });
     wire("picker", () => {
       modelLabel.textContent = labelFor(chosen, agentList, servedModel);
-      modelBtn.disabled = running || failed;
+      // With nothing signed in there is nothing to pick, and the 109px it
+      // takes is 109px the sentence in the box needs (user, 2026-09-10). The
+      // wrap, not the button: the menu hangs off the wrap, and a menu left
+      // open over an empty row is the sort of thing that outlives its own
+      // trigger.
+      const away = !!signedOutChoice() && !anySignedIn();
+      $("assistantModelWrap").hidden = away;
+      if (away) menu.hidden = true;
     });
     wire("input", () => {
-      input.disabled = running || failed;
+      // Never locked. A dub that failed used to grey the whole strip out --
+      // the reasoning being that a job with no script has nothing to fix --
+      // but "why did this fail?" is the question a person has at exactly that
+      // moment, and the assistant can read the log and answer it. It can also
+      // be asked to dub the files in a folder, which needs no open job at all
+      // (user, 2026-09-11).
+      input.disabled = false;
       // The one line the strip has to say what it is waiting for: an assistant to
       // be installed, a model to be picked, or the user. A running dub is not on
       // the list -- the strip is off the page there, so nothing it said was read.
-      if (failed) {
-        input.placeholder = "Nothing to fix here - this dub did not finish";
-      } else if (notice) {
+      if (notice) {
         input.placeholder = notice;
       } else if (!chosen.agent) {
         input.placeholder = "Pick a model first";
       } else if (signedOutChoice()) {
-        // Pickable, but it cannot answer yet. The row that picked it says the
-        // same thing; this is the one the user reads while typing.
-        const a = signedOutChoice();
-        input.placeholder = a.login_command
-          ? `${a.name} is not signed in - run ${a.login_command} in Terminal`
-          : `${a.name} is not signed in`;
+        // It cannot answer yet. The row above says the same thing; this is the
+        // one the user reads while typing.
+        input.placeholder = anySignedIn() ? SIGN_IN_NARROW : SIGN_IN_BOX;
       } else if (document.body.classList.contains("agent-open")) {
-        input.placeholder = "Message";
+        input.placeholder = "Ask anything";
       } else if (screen === "home") {
         // No script on screen to point at, so no line-number example here.
         input.placeholder = "Ask anything";
       } else {
-        // Backticks, not quotes: the sentence contains both a double quote and an
-        // apostrophe, and a quote of either kind would end the string early.
-        input.placeholder = `Ask for a fix - e.g. "Shorten line 4 naturally so it matches the original's length"`;
+        // Three words, because the box is 107px wide: the example that used to
+        // stand here needed 382px and the user saw the first two words of it.
+        input.placeholder = "Ask for a fix";
       }
     });
     paintGo();
@@ -335,20 +382,25 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       menu.appendChild(head);
       for (const a of agentList) {
         const usable = a.installed && a.supported;
+        // Signed out is greyed out. Picking one that cannot answer only moves
+        // the dead end one step later, to the first thing the user types
+        // (user, 2026-09-10); the row still says why, and the log says how to
+        // fix it.
+        const signedOut = loginKnown(a) && !a.logged_in;
+        const pickable = usable && !signedOut;
         const row = menuRow(a.name, {
           note: !a.installed ? "not installed" : "",
           // Why this one cannot be picked, said where the picking happens -- or,
-          // for one that can, whether it is signed in. A signed-out assistant is
-          // still pickable: signing in is a thing the user can go and do.
+          // for one that can, whether it is signed in.
           sub: a.installed && !a.supported ? (a.reason || "not supported") : loginWords(a),
-          chevron: usable,
-          disabled: !usable,
+          chevron: pickable,
+          disabled: !pickable,
         });
         // Stopped here, because buildMenu() takes this very button off the page:
         // the click would then reach the document, which puts away any menu the
         // click landed outside of -- and a detached button is outside of it. That
         // is what closed the picker instead of opening the vendor's models.
-        if (usable) row.addEventListener("click", (e) => {
+        if (pickable) row.addEventListener("click", (e) => {
           e.stopPropagation(); menuLevel = a.id; buildMenu();
         });
         menu.appendChild(row);
@@ -397,6 +449,14 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       menuLevel = "";
       buildMenu();
       menu.hidden = false;
+      // And ask who is signed in, because signing in happens in a Terminal
+      // while this window is open: the user ran codex login and the picker
+      // still said "not signed in", with no way to correct it but a restart
+      // (user, 2026-09-11). Opening the picker is exactly when it matters and
+      // is the one moment worth a child process for -- the server keeps its
+      // answer a minute, so holding the menu open costs nothing more. The
+      // answer lands after the menu is drawn, so it is drawn again.
+      recheckLogin(() => { if (!menu.hidden) buildMenu(); });
     });
 
     // It now opens upward, over the timeline, so a click anywhere else has to put
@@ -413,14 +473,12 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
 
   let recheckedLogin = false;   // see loadAgents: one second look, never a loop
   // Each check is a child process, so none is started until the strip is on
-  // screen AND there is something to say to it. A running dub hides the strip,
-  // so that is no reason to start one -- and the "agent-open" class outlives
-  // the screen that set it, which is why the screen is asked first rather than
-  // the class alone.
+  // screen AND there is something to say to it. The "agent-open" class outlives
+  // the screen that set it, which is why the screen is asked as well as the
+  // class.
   function stripInUse() {
     const screen = getScreen();
-    if (screen === "running") return false;
-    return screen === "home" || screen === "done"
+    return screen === "home" || screen === "done" || screen === "running"
       || document.body.classList.contains("agent-open");
   }
 
@@ -431,8 +489,39 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     loginAsked = true;
     loadAgents({ login: true }).catch(() => {});
   }
+
+  /**
+   * Ask again whether the CLIs are signed in. Called when a turn ends in the
+   * CLI saying it has no credentials: the strip asks once per launch, so
+   * signing out while the app is open left it saying "signed in" under a
+   * failure that was the signing out (user found it, 2026-09-11).
+   */
+  function recheckLogin(after) {
+    // Twice. The server keeps each answer for a minute and refreshes behind
+    // the request, so the first ask starts a fresh check and hands back the
+    // stale one it already had -- which is the very answer being corrected.
+    // The second ask, a moment later, is the one that gets the new value.
+    const done = after || (() => {});
+    loadAgents({ login: true }).then(done).catch(() => {});
+    setTimeout(() => {
+      if (stripInUse()) loadAgents().then(done).catch(() => {});
+    }, 1800);
+  }
   const CHECK_FAILED = "Could not check which assistants are available.";
-  const NONE_READY = "No assistant is ready - install Claude Code or Codex";
+  // What the strip says when it cannot answer, short enough for the heading
+  // row and the input box (user, 2026-09-10). The full stop is for the log.
+  const NONE_READY = "Install Claude Code or Codex";
+  const SIGN_IN = "Sign in to Claude or Codex.";
+  // Two lines for two situations. With nothing signed in the picker leaves the
+  // row (there is nothing to pick), the box gets the whole width, and the
+  // sentence that names both fits in it. With one of the two signed in the
+  // picker stays -- switching to it is the fix -- and the box has 107px, which
+  // holds the state and nothing else (user, 2026-09-10).
+  const SIGN_IN_BOX = "Sign in to Claude or Codex.";
+  const SIGN_IN_NARROW = "Not signed in";
+  // The Terminal command is the one thing here a person cannot guess, and it
+  // is said once: the log keeps it, the rows and the heading stay short.
+  let signInHintSaid = false;
 
   async function loadAgents({ login = false } = {}) {
     // Whether the list arrived, said plainly. An empty list happens to mean the
@@ -446,7 +535,11 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       const r = await fetch("/api/agent/status" + (login ? "?login=1" : ""));
       agentList = (await r.json()).agents || [];
       arrived = true;
-      notice = "";
+      // Only the fetch's own notice is cleared here. NONE_READY is judged
+      // below, from what is in the list -- clearing it first is how the two
+      // loads of every launch (the plain one, then the login check) each said
+      // it: both had already started before either could mark it said.
+      if (notice === CHECK_FAILED) notice = "";
     } catch {
       agentList = [];
       // Say it once. A retry that fails again should not stack up bubbles.
@@ -489,11 +582,28 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     // installed, and "install one of these three" is the wrong thing to tell
     // someone who already has one. The fetch's own message stands instead.
     if (arrived && !agentList.some((a) => a.installed && a.supported)) {
-      if (notice !== NONE_READY) {
-        bubble("ai", "No assistant is ready. Install Claude Code or Codex — you only need one.");
-      }
+      if (notice !== NONE_READY) bubble("ai", NONE_READY + ".");
       notice = NONE_READY;
       paintChoice();
+    } else if (arrived && notice === NONE_READY) {
+      notice = "";   // one got installed since
+      paintChoice();
+    }
+    // The log is where the sentence goes. The box beside it has room for three
+     // words and the picker for none, so this is the one place that can say
+     // both what is wrong and what to do about it (user, 2026-09-10). Said once
+     // -- it is the same sentence every time the strip is painted.
+    if (arrived && !signInHintSaid && signedOutChoice()) {
+      const cmds = agentList.filter((a) => loginKnown(a) && !a.logged_in && a.login_command)
+        .map((a) => a.login_command);
+      signInHintSaid = true;
+      // Same rule as the line above: name the one that is out when the other
+      // is there to switch to, and both when neither is.
+      const out = signedOutChoice();
+      const opening = anySignedIn()
+        ? `${out.name} is not signed in. Pick another assistant, or sign in.`
+        : "Sign in to Claude or Codex to use this.";
+      bubble("ai", opening + (cmds.length ? ` Run ${cmds.join(" or ")} in Terminal.` : ""));
     }
   }
 
@@ -550,7 +660,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     run.text.nodeValue = text;
     const settled = run.finished >= run.calls;
     const mark = run.node.querySelector(".chip-mark");
-    if (mark) mark.innerHTML = settled ? MARK_DONE : MARK_RUNNING;
+    if (mark) mark.innerHTML = settled ? (run.note ? MARK_NOTE : MARK_DONE) : MARK_RUNNING;
     if (settled) run.node.classList.add("chip-done");
     else run.node.classList.remove("chip-done");
     log.scrollTop = log.scrollHeight;
@@ -558,16 +668,19 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
 
   // One more call to a step. The same step as the one on screen grows that chip;
   // a different one starts a new chip and finishes whatever was above it.
-  function chipStep(label, line) {
+  function chipStep(label, line, note) {
     if (!run || run.label !== label) {
       settlePrevious();
       const d = document.createElement("div");
       d.className = "chip";
       d.innerHTML = '<span class="chip-mark">' + MARK_RUNNING + '</span>';
+      if (note) d.dataset.note = "1";
       const text = document.createTextNode("");
       d.appendChild(text);
       log.appendChild(d);
-      run = { label, lines: [], calls: 0, finished: 0, node: d, text };
+      // A transport step is the CLI telling us something went wrong, never a
+      // piece of work it finished: it settles with a dash rather than a tick.
+      run = { label, lines: [], calls: 0, finished: 0, node: d, text, note };
     }
     run.calls += 1;
     if (typeof line === "number" && !run.lines.includes(line)) {
@@ -600,7 +713,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     chips.forEach((c) => {
       c.classList.add("chip-done");
       const mark = c.querySelector(".chip-mark");
-      if (mark) mark.innerHTML = MARK_DONE;
+      if (mark) mark.innerHTML = c.dataset.note ? MARK_NOTE : MARK_DONE;
     });
   }
 
@@ -662,9 +775,8 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   }
 
   async function ask(message) {
-    // The same doors submit() holds open: a finished job, or the home screen.
-    const screen = getScreen();
-    if (screen !== "done" && screen !== "home") return;
+    // The same allow-list submit() had stood here too, so removing one without
+    // the other would have moved the silent refusal rather than ended it.
     const token = ++turnToken;
     busy = true;
     paintGo();
@@ -697,7 +809,14 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
           model: chosen.model,
           // Whatever job is on screen. Without it the assistant asks for a job
           // number the user never sees.
-          job_id: getJobId(),
+          //
+          // Except on the erase screen: the id parked for the strip is the
+          // last DUB opened, and an erase is a different job with no script
+          // at all. Sending it there had the assistant answering about a dub
+          // the user was not looking at -- and "fix line 3" would have gone
+          // to it (Windows saw the first half of that, 2026-09-11). No id is
+          // the honest answer: the home screen sends none either.
+          job_id: getScreen() === "erase" ? null : getJobId(),
         }),
       });
       if (!res.ok) {
@@ -720,15 +839,17 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
           let ev;
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.kind === "start") {
-            // Which model actually answered. The picker says so rather than
-            // repeating the request back; the saved choice is left alone.
-            const alias = aliasOf(ev.model);
-            if (alias && alias !== servedModel) { servedModel = alias; paintChoice(); }
+            // Which model actually answered, in its own words:
+            // "claude-opus-5", "gpt-5.6-sol". It used to be matched back to
+            // its alias, so a thing that had just called itself opus-5 was
+            // shown as "Opus" (user, 2026-09-11). The saved choice is left
+            // alone -- this says what answered, not what to ask for next.
+            if (ev.model && ev.model !== servedModel) { servedModel = ev.model; paintChoice(); }
           } else if (ev.kind === "progress" && ev.done) {
             // A call the chip on screen is already counting has come back.
             chipFinished();
           } else if (ev.kind === "progress") {
-            clearDots(); chipStep(ev.label, ev.line);
+            clearDots(); chipStep(ev.label, ev.line, ev.tool === "transport");
             // Whatever the assistant says next belongs BELOW this step, not
             // appended to the paragraph above it. Without this, an assistant
             // that speaks before its first tool call -- which Codex does every
@@ -763,6 +884,11 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
             clearDots();
             settlePrevious();
             showError(ev.message, ev.detail);
+            // The CLI just told us it has no credentials -- a flag from the
+            // reader that knows each CLI's way of saying it, not a phrase
+            // matched here. The strip above still says the opposite, because
+            // it asked at launch and this happened after (user, 2026-09-11).
+            if (ev.signed_out) recheckLogin();
           } else if (ev.kind === "done") {
             clearDots();
             settlePrevious();
@@ -805,11 +931,19 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   }
 
   function submit() {
-    // A finished job has a script to fix, and the home screen has questions.
-    // Nothing here may start a turn against a job the pipeline is still
-    // rendering (running), or one that left no script behind (failed).
-    const screen = getScreen();
-    if (screen !== "done" && screen !== "home") return;
+    // No screen is refused. There was an allow-list here -- done, home,
+    // running -- and every screen outside it was turned away in silence: the
+    // strip open, the button pressable, the words left sitting in the box and
+    // nothing happening. Running was the first to be caught that way
+    // (2026-09-09) and failed was the second: the controls were unlocked
+    // without this line being unlocked with them, so the one screen where
+    // someone most wants to ask "why did this fail?" swallowed the question
+    // (Windows found it, 2026-09-11).
+    //
+    // If the strip can be typed into, what is typed gets sent. Whether there
+    // is a job to talk about is a separate question, and one the assistant
+    // answers better than a guard here can: the home screen has none either,
+    // and "dub the files in this folder" needs none.
     const message = input.value.trim();
     if (!message || busy) return;
     if (!chosen.agent) { menu.hidden = false; return; }

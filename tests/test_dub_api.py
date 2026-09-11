@@ -1457,3 +1457,60 @@ def test_materialize_turns_a_perso_dub_editable(monkeypatch, tmp_path):
     assert body.get("readonly") is None
     assert body["lines"][0]["text"] == "Hi there"
     assert body["lines"][0]["source"] == "안녕"
+
+
+def test_a_project_named_after_the_file_loses_its_extension(monkeypatch):
+    def fake_run_dub(**kw):
+        open(kw["out_path"], "wb").write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
+    jid = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "project": "trump_template_org.mp4"},
+    ).json()["job_id"]
+    assert client.get(f"/api/dub/jobs/{jid}").json()["project"] == "trump_template_org"
+
+# --- the name a project is shown under -------------------------------------
+# A link brings its own title, long enough to fill the top bar and to be cut
+# off in the Projects list; a file brings whatever it was called. The folder
+# keeps the name it was made with -- the files inside it are already there --
+# and the screen shows a name of the user's own (user, 2026-09-10).
+
+def _one_job(monkeypatch, project="clip10"):
+    def fake_run_dub(**kw):
+        open(kw["out_path"], "wb").write(b"FAKEMP4")
+        return {"job_id": "x", "out_path": kw["out_path"], "num_segments": 1}
+
+    monkeypatch.setattr(dub_api, "run_dub", fake_run_dub)
+    return client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "Korean", "language_code": "ko", "project": project},
+    ).json()["job_id"]
+
+
+def test_a_project_can_be_renamed_without_moving_its_folder(monkeypatch):
+    jid = _one_job(monkeypatch)
+    before = client.get(f"/api/dub/jobs/{jid}").json()
+    r = client.post(f"/api/dub/jobs/{jid}/title", json={"title": "  마이클 잭슨 Beat It  "})
+    assert r.status_code == 200, r.text
+    after = client.get(f"/api/dub/jobs/{jid}").json()
+    assert after["title"] == "마이클 잭슨 Beat It", "trimmed, and kept"
+    assert after["project"] == before["project"], "the folder's name never moves"
+    assert after["work_dir"] == before["work_dir"]
+
+
+def test_an_empty_name_puts_the_folder_name_back(monkeypatch):
+    jid = _one_job(monkeypatch, project="clip10")
+    client.post(f"/api/dub/jobs/{jid}/title", json={"title": "something"})
+    client.post(f"/api/dub/jobs/{jid}/title", json={"title": "   "})
+    assert client.get(f"/api/dub/jobs/{jid}").json().get("title", "") == ""
+
+
+def test_a_very_long_name_is_cut_and_a_missing_job_is_404(monkeypatch):
+    jid = _one_job(monkeypatch)
+    client.post(f"/api/dub/jobs/{jid}/title", json={"title": "가" * 300})
+    assert len(client.get(f"/api/dub/jobs/{jid}").json()["title"]) == 80
+    assert client.post("/api/dub/jobs/nope/title", json={"title": "x"}).status_code == 404

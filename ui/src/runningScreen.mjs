@@ -30,8 +30,21 @@ const STAGE_NAMES = stepLabels(STAGES);
 // token is what the code elsewhere tests. Said in plain words here, where the
 // only audience is the person reading the screen.
 const ERROR_SENTENCES = {
-  interrupted: "The app was closed before this dub finished.",
+  interrupted: "The app was closed before dubbing finished.",
 };
+
+// The mark above that sentence on a job that stopped. Two states share the one
+// screen and only the words told them apart, so a stopped job read the same as
+// a finished one until it was read: a stop square when someone cancelled it, an
+// exclamation when it failed on its own.
+const STOPPED_MARKS = {
+  cancelled: '<rect x="6.5" y="6.5" width="11" height="11" rx="2"/>',
+  error: '<path d="M12 7.5v5.5"/><path d="M12 16.6h.01"/>',
+};
+/** The mark for a job that stopped -- anything not cancelled has failed. */
+export function stoppedMark(status) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${STOPPED_MARKS[status] || STOPPED_MARKS.error}</svg>`;
+}
 
 // Out-of-credits / quota popup: pop once per job on the first exhaustion-type
 // notice. The inline yellow notice line stays either way, so the reason
@@ -85,6 +98,11 @@ const CREDIT_MODALS = {
  *        the same reason; it is what decides whether Cancel is shown at all
  * @param {(jobId: string) => Promise} deps.onCancel  ask the server to stop the
  *        job (cancelDubJob)
+ * @param {() => Promise<boolean>} deps.askCancel  put the "Stop this dub?"
+ *        question to the user and resolve with their answer. The page's own
+ *        dialog, not window.confirm(): that one freezes every event in the
+ *        Electron shell while it is up, and Chromium writes its buttons in the
+ *        machine's language, so an English question came with Korean answers
  * @param {() => void} deps.onOpenSettings  open the Settings sheet, for the
  *        popup's in-app button ("Open Settings")
  * @param {(anchor: any, url: string) => void} deps.openExternal  arm the popup's
@@ -95,7 +113,7 @@ const CREDIT_MODALS = {
  * @returns the operations the rest of the page calls.
  */
 export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAndLog,
-                                      getJobId, getJobStatus, onCancel,
+                                      getJobId, getJobStatus, onCancel, askCancel,
                                       onOpenSettings, openExternal }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
@@ -239,15 +257,17 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     const status = getJobStatus();
     btn.hidden = !["running", "cancelling", "queued"].includes(status);
     btn.disabled = status === "cancelling";
-    btn.textContent = status === "cancelling" ? "Cancelling…" : "Cancel";
+    // The label element, not the button: the word is written many times over
+    // a job's life, and the button is where any other child would live.
+    ($("cancelLabel") || btn).textContent = status === "cancelling" ? "Cancelling…" : "Cancel";
   }
 
   $("cancelBtn").addEventListener("click", async () => {
     const jobId = getJobId();
     if (!jobId) return;
-    if (!confirm("Cancel this dubbing job?")) return;
+    if (!(await askCancel())) return;
     $("cancelBtn").disabled = true;
-    $("cancelBtn").textContent = "Cancelling…";
+    ($("cancelLabel") || $("cancelBtn")).textContent = "Cancelling…";
     try {
       await onCancel(jobId);
     } catch (e) {

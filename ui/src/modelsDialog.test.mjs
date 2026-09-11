@@ -127,7 +127,7 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
 
   h.api.showModelsDialog(DETAIL_TWO);
 
-  assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB of AI models to dub this video?");
+  assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB of AI models to start dubbing?");
   assert.equal(h.$("mnLine").textContent, "They are saved on this computer and only download once.");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnProgress").hidden, true);
@@ -142,7 +142,7 @@ test("one missing model is named in the title instead of totalled", (t) => {
 
   h.api.showModelsDialog({ missing: [{ id: "hunyuan", name: "Hunyuan", bytes: 1.1 * 1024 ** 3 }] });
 
-  assert.equal(h.$("mnTitle").textContent, "Download Hunyuan (1.1 GB) to dub this video?");
+  assert.equal(h.$("mnTitle").textContent, "Download Hunyuan (1.1 GB) to start dubbing?");
 });
 
 test("Download and Start fetches only what is missing and swaps the buttons", async (t) => {
@@ -386,7 +386,7 @@ test("Download and Start installs the packs through the desktop app first, then 
   t.after(h.state.restore);
   await h.api.refreshModels();
   h.api.showModelsDialog(PACK_409);
-  assert.equal(h.$("mnTitle").textContent, "Download 4.6 GB to dub this video?");   // 4.9e9 bytes
+  assert.equal(h.$("mnTitle").textContent, "Download 4.6 GB to start dubbing?");   // 4.9e9 bytes
   h.$("mnDownload").click();
   await settle(); await settle(); await settle();
   assert.deepEqual(shell.asked, ["install engine"]);
@@ -534,6 +534,41 @@ test("a pack being installed reads as downloading in the rows the page paints, a
   const row = h.$("modelsList").children[0];
   assert.equal(row.children[2].textContent, "Stopped: Health check timed out");
   assert.equal(row.children[3].textContent, "Resume");
+});
+
+// A pack can be started from a screen that is not this dialog. That screen is
+// told the same progress and the same refusal, or the button it owns looks
+// dead (user, 2026-09-09: the erase screen's Download).
+test("a watcher outside the dialog is told the progress, and the reason a pack failed", async (t) => {
+  const shell = fakeShell({ install: async () => ({ ok: false, reason: "No room on the disk." }) });
+  const h = harness({ rows: [ENGINE], shell });
+  await h.api.refreshModels();
+  const seen = [];
+  h.api.onPackProgress((p) => seen.push(p));
+
+  const running = h.api.installPack("engine");
+  shell.progress({ pack: "engine", state: "progress", title: "Downloading", detail: "half way", pct: 50 });
+  await running;
+  await settle();
+
+  // The title travels apart from the line: a screen with room for one short
+  // sentence takes the title alone.
+  assert.deepEqual(seen[0],
+    { id: "engine", title: "Downloading", line: "Downloading: half way", pct: 50 });
+  assert.deepEqual(seen.at(-1), { id: "engine", error: "AI engine: No room on the disk." });
+});
+
+test("a watcher outside the dialog hears when the pack is finally there", async (t) => {
+  const shell = fakeShell();
+  const h = harness({ rows: [ENGINE], shell });
+  await h.api.refreshModels();
+  const seen = [];
+  h.api.onPackProgress((p) => seen.push(p));
+
+  await h.api.installPack("engine");
+  await settle();
+
+  assert.deepEqual(seen.at(-1), { id: "engine", done: true });
 });
 
 test("downloadAll installs the packs first, one after another, then downloads the models", async (t) => {

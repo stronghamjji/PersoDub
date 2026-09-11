@@ -38,7 +38,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   // progress line. Packs (the engines venv, the Ollama runtime) are the
   // shell's to install: this page asks over `shell` (window.persodubShell,
   // absent in a plain browser) and follows the progress events it sends.
-  let packBusy = null;     // { id, name, line, pct }
+  let packBusy = null;     // { id, name, title, line, pct }
   let packFailed = null;   // { id, reason } until the next attempt or refresh clears it
   const PACK_HINT = "Installed by the desktop app";
 
@@ -49,16 +49,35 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       if (!p || !p.pack || !packBusy || packBusy.id !== p.pack) return;
       // A detail that only restates the title ("Downloading the translation
       // runtime: Downloading the translation runtime", 2026-09-08) shows once.
+      packBusy.title = p.title || "";
       packBusy.line = p.state === "progress" && p.detail && p.detail !== p.title ? `${p.title}: ${p.detail}` : (p.title || "");
       // The shell sends the pack's overall percent on every event.
       if (p.pct != null) packBusy.pct = p.pct;
       repaint();
+      // The title alone as well as the whole line: a screen with room for one
+      // short sentence wants "Installing its Python parts (2 of 2, …)", not that plus
+      // the name of the wheel being fetched (user, 2026-09-09).
+      tellPack({ id: packBusy.id, title: packBusy.title, line: packBusy.line, pct: packBusy.pct });
     });
   }
 
   function showPackError(text) {
     $("mnError").textContent = text;
     $("modelsError").textContent = text;
+  }
+
+  // Whoever else is drawing this install. A pack can be started from a screen
+  // that is not this dialog -- the erase screen's own Download row -- and that
+  // screen has to be told what the dialog is told: an error written only into
+  // #mnError is written into a dialog nobody has open (user, 2026-09-09).
+  const packWatchers = new Set();
+  function onPackProgress(fn) {
+    packWatchers.add(fn);
+    return () => packWatchers.delete(fn);
+  }
+  function tellPack(info) {
+    // A watcher paints; one that throws must not take the install down with it.
+    for (const fn of packWatchers) { try { fn(info); } catch { /* painter, not gate */ } }
   }
 
   // Resolves true once the pack is on disk and its process is up. A failure
@@ -68,12 +87,16 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     const name = (modelRow(id) || {}).name || id;
     if (!shell || !shell.installPack) {
       showPackError(`${name}: ${PACK_HINT}.`);
+      tellPack({ id, error: `${name}: ${PACK_HINT}.` });
       return false;
     }
     if (packBusy) {
       // One at a time, and the one running keeps its place on screen: a second
       // press used to take over the busy slot and show the first as paused.
-      if (packBusy.id !== id) showPackError(`${packBusy.name} is still installing. Wait for it to finish.`);
+      if (packBusy.id !== id) {
+        showPackError(`${packBusy.name} is still installing. Wait for it to finish.`);
+        tellPack({ id, error: `${packBusy.name} is still installing. Wait for it to finish.` });
+      }
       return false;
     }
     packBusy = { id, name, line: "", pct: null };
@@ -88,9 +111,11 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     repaint();
     if (packFailed) {
       showPackError(`${name}: ${packFailed.reason}`);
+      tellPack({ id, error: `${name}: ${packFailed.reason}` });
       return false;
     }
     showPackError("");   // a "still installing" notice from a second press is over
+    tellPack({ id, done: true });
     return true;
   }
   async function cancelPack(id) {
@@ -401,7 +426,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   return {
     // used by the page
     showModelsDialog, refreshModels, modelRow, downloadModel, downloadAll, cancelModel,
-    repaint, reopenDialogOrSettings, startPolling,
+    repaint, reopenDialogOrSettings, startPolling, onPackProgress,
     // used by tests only -- Remove is drawn by this file and clicked through
     // its own row, so the page never names it. Reachable so the test can.
     removeModel, installPack, removePack,

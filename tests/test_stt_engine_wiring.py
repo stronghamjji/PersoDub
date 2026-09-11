@@ -134,7 +134,7 @@ def test_stt_engine_local_failure_raises(monkeypatch, tmp_path):
         assert False, "expected RuntimeError to propagate"
     except RuntimeError as e:
         assert "no segments" in str(e)
-    assert any("Local STT failed" in m for m in logs)
+    assert any("Speech recognition failed on this computer" in m for m in logs)
 
 
 class _FakePerso:

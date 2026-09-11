@@ -12,10 +12,14 @@ export function tarBinary({ platform = process.platform, env = process.env, exis
   return exists(system) ? system : "tar";
 }
 
-export async function extractTarGz(file, destDir) {
+// strip: how many leading path parts to drop, for an archive that wraps its
+// contents in one folder (GitHub's source zips: video-subtitle-remover-<sha>/)
+// -- so destDir ends up holding that folder's contents, not the folder.
+export async function extractTarGz(file, destDir, { strip = 0 } = {}) {
   mkdirSync(destDir, { recursive: true });
   // bsdtar (macOS, and Windows 10 1803+) autodetects the compression format
   // from the archive itself, so a single "-xf" handles both the Python
   // .tar.gz and the Windows Ollama .zip -- no per-format branch needed.
-  await run([tarBinary(), "-xf", file, "-C", destDir]);
+  await run([tarBinary(), "-xf", file, "-C", destDir,
+             ...(strip ? ["--strip-components", String(strip)] : [])]);
 }

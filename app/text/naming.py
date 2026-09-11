@@ -28,6 +28,19 @@ def safe_name(raw, max_len=80):
     return name[:max_len].strip(" .")
 
 
+# What a video is called on disk. Only these come off the end of a project
+# name: "v1.2 intro" and "notes.txt" are names, not a name and an extension.
+_VIDEO_EXT = re.compile(r"\.(mp4|mov|m4v|mkv|webm|avi)$", re.IGNORECASE)
+
+
+def project_name(raw):
+    # type: (str) -> str
+    """safe_name, minus a trailing video extension. A project named after the
+    uploaded file kept its ".mp4", so its Downloads folder was "clip.mp4/" next
+    to "clip/" for the same video that came in by link (2026-09-10)."""
+    return safe_name(_VIDEO_EXT.sub("", safe_name(raw)))
+
+
 def next_free(base, taken):
     # type: (str, Iterable[str]) -> Optional[str]
     """`base`, or `base_001`.. if it is taken. None once three digits run out."""

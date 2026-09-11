@@ -2,7 +2,7 @@ import json
 import threading
 import time
 
-from app.jobs import JobCancelled, JobStore, error_text_for_ui
+from app.jobs import JobCancelled, JobStore, error_text_for_ui, kind_of
 from app.perso_client import PersoCreditExhaustedError
 
 
@@ -388,6 +388,34 @@ def test_separation_choice_survives_persist_and_shows_in_the_list(tmp_path):
     store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
     assert store2.get(jid)["separation"] == "perso"
     assert store2.all()[0]["separation"] == "perso"
+
+
+def test_what_kind_of_job_it_is_survives_a_restart(tmp_path):
+    # The boot re-arm has nothing but job.json to tell an erase from a dub, and
+    # it starts them with different work.
+    (tmp_path / "x").mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="queued", kind="erase", project="a",
+                  area=[660, 800, 0, 608])
+    store.persist(jid, str(tmp_path / "x"))
+    store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
+    assert store2.get(jid)["kind"] == "erase"
+    assert store2.get(jid)["area"] == [660, 800, 0, 608]
+    assert store2.all()[0]["kind"] == "erase"
+
+
+def test_a_job_that_says_nothing_about_its_kind_is_a_dub(tmp_path):
+    # Every job this app made until subtitle erasing arrived, and every job a
+    # dub makes now -- nothing writes "dub" onto a record.
+    (tmp_path / "x").mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, status="done", project="a")
+    store.persist(jid, str(tmp_path / "x"))
+    store2 = JobStore(log_dir=str(tmp_path)); store2.restore(str(tmp_path))
+    assert kind_of(store2.get(jid)) == "dub"
+    assert store2.all()[0]["kind"] == "dub"
 
 
 # --- what a failed job shows the user --------------------------------------

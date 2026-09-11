@@ -141,7 +141,6 @@ function harness({ room = 600, innerHeight = 900, innerWidth = 1600,
 
   const api = initTimelineUi({
     $,
-    scriptLangNames: () => ({ source: "Korean", target: "English" }),
     getVideo: () => video,
     getClock: () => "00:00:00.0 / 00:00:30.0",
     getSubStyle: () => subStyle,
@@ -237,8 +236,8 @@ test("the strip is byte for byte the strip the page drew before this file existe
     '    <div class="tl-body">\n' +
     '      <div class="tl-names">\n' +
     '        <div class="tl-corner"></div>\n' +
-    '        <div class="tl-name strong">English</div>\n' +
-    '        <div class="tl-name">Korean</div>\n' +
+    '        <div class="tl-name strong">Translated</div>\n' +
+    '        <div class="tl-name">Original</div>\n' +
     '        <div class="tl-name strong tl-name-caps">\n' +
     '          <button class="tl-eye on" id="tlSubEye" type="button"\n' +
     '            title="Subtitles on or off" aria-label="Subtitles on or off">' +
@@ -276,6 +275,50 @@ test("three lines land where their seconds are, and a long voice spills past its
   // The subtitle lane draws one block per line, over the same seconds.
   assert.ok(track.includes('<div class="tl-cap" data-idx="2"\n' +
                            '      style="left:100.0px;width:20.0px"'));
+});
+
+// The lanes are named for what they hold, not for the languages in them: the
+// table above already heads its columns with those, and "English / Korean"
+// down the side said nothing about which row was the dub (user, 2026-09-08).
+test("the lanes are named Translated, Original and Subtitles", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.renderTimeline(LINES, 30);
+  const names = h.box.innerHTML;
+
+  assert.ok(names.includes('<div class="tl-name strong">Translated</div>'));
+  assert.ok(names.includes('<div class="tl-name">Original</div>'));
+  assert.ok(names.includes(">Subtitles</div>"));
+});
+
+// One voice needs no telling apart, so the badge would be a "1" on every bar.
+test("one speaker gets no badge on the bars", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.renderTimeline(LINES.map((l) => ({ ...l, speaker: "SPEAKER_00" })), 30);
+
+  assert.equal(h.$("timelineTrack").innerHTML.includes("tl-spk"), false);
+});
+
+// Two or more, and each Target bar leads with the number the table's chip
+// gives that speaker -- numbered in the order they first speak.
+test("two speakers put their letter at the head of each Target bar", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.renderTimeline([
+    { ...LINES[0], speaker: "SPEAKER_01" },   // speaks first, so it is 1
+    { ...LINES[1], speaker: "SPEAKER_00" },
+    { ...LINES[2], speaker: "SPEAKER_01" },   // no voice on disk: slot only
+  ], 30);
+  const track = h.$("timelineTrack").innerHTML;
+
+  assert.ok(track.includes('title="Hello"><i class="tl-spk" title="Speaker 1">A</i>Hello'));
+  assert.ok(track.includes('title="Over"><i class="tl-spk" title="Speaker 2">B</i>Over'));
+  // The original lane and the slots stay bare -- the badge belongs to the dub.
+  assert.equal((track.match(/tl-spk/g) || []).length, 2);
 });
 
 test("a second is never drawn smaller than ten pixels, and the ruler thins its labels", (t) => {
@@ -630,8 +673,9 @@ function laidOut(stored) {
   const h = harness({ stored });
   h.$("timeline").offsetHeight = 150;
   h.$("historySidebar").offsetWidth = 260;
-  h.$("videoPane").offsetHeight = 200;
+  h.$("videoPane").offsetWidth = 400;
   h.$("doneMain").offsetHeight = 800;
+  h.$("doneMain").offsetWidth = 1000;
   h.$("agentStrip").offsetWidth = 400;
   return h;
 }
@@ -640,7 +684,7 @@ test("remembered pane sizes come back, clamped to the window as it stands now", 
   const h = laidOut({
     "persodub.layout.timelineHeight": "300",
     "persodub.layout.sidebarW": "999",     // saved on a much wider window
-    "persodub.layout.videoHeight": "200",
+    "persodub.layout.videoWidth": "400",
     "persodub.layout.agentWidth": "400",
   });
   t.after(h.log.restore);
@@ -650,7 +694,7 @@ test("remembered pane sizes come back, clamped to the window as it stands now", 
   assert.equal(h.$("timeline").style.height, "300px");
   assert.equal(h.$("historySidebar").style["--sidebar-w"], "480px",
     "480px of project names is as much as anyone wants");
-  assert.equal(h.$("videoPane").style.flex, "0 0 200px");
+  assert.equal(h.$("videoPane").style.width, "400px");
   assert.equal(h.$("agentStrip").style.width, "400px");
   assert.equal(h.log.clipped, 1, "the names are re-measured for their new column");
 
@@ -687,13 +731,13 @@ test("a grip drag sizes the pane below the line, and remembers what ended up on 
   // A press that never moved changes nothing and remembers nothing.
   const still = laidOut({});
   t.after(still.log.restore);
-  still.$("gripPanes").fire("pointerdown", evt({}, { clientY: 500 }));
-  still.$("gripPanes").fire("pointermove", { clientY: 500 });
+  still.$("gripPanes").fire("pointerdown", evt({}, { clientX: 500 }));
+  still.$("gripPanes").fire("pointermove", { clientX: 500 });
   still.$("gripPanes").fire("pointerup", {});
-  assert.equal(still.log.stored.has("persodub.layout.videoHeight"), false);
+  assert.equal(still.log.stored.has("persodub.layout.videoWidth"), false);
 });
 
-test("the grips left of and above their pane count the drag the other way round", (t) => {
+test("the grip left of its pane counts the drag the other way round", (t) => {
   const h = laidOut({});
   t.after(h.log.restore);
 
@@ -702,13 +746,13 @@ test("the grips left of and above their pane count the drag the other way round"
   h.$("gripSidebar").fire("pointermove", { clientX: 340 });
   assert.equal(h.$("historySidebar").style["--sidebar-w"], "300px");
 
-  // The video pane is above its handle: pulling that line down grows it, and
-  // the script keeps 240px of what the screen has.
-  h.$("gripPanes").fire("pointerdown", evt({}, { clientY: 400 }));
-  h.$("gripPanes").fire("pointermove", { clientY: 500 });
-  assert.equal(h.$("videoPane").style.flex, "0 0 300px");
-  h.$("gripPanes").fire("pointermove", { clientY: 5000 });
-  assert.equal(h.$("videoPane").style.flex, "0 0 560px", "800px of room, less 240");
+  // Layout G: the video pane is RIGHT of its handle, so pulling that line left
+  // grows it -- and it never takes more than 45% of the row.
+  h.$("gripPanes").fire("pointerdown", evt({}, { clientX: 900 }));
+  h.$("gripPanes").fire("pointermove", { clientX: 870 });
+  assert.equal(h.$("videoPane").style.width, "430px");
+  h.$("gripPanes").fire("pointermove", { clientX: 100 });
+  assert.equal(h.$("videoPane").style.width, "450px", "45% of a 1000px row");
 });
 
 test("a window that changed size refits once a frame, and a track that changed width is redrawn", (t) => {

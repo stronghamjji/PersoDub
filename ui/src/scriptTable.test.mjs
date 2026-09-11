@@ -149,12 +149,12 @@ test("a row carries the line number, who said it, both languages and whether it 
   const html = h.$("scriptBox").innerHTML;
 
   // The header names the two languages the page chose, not "Original/Script".
-  assert.match(html, /<div>Korean<\/div>/);
-  assert.match(html, /<div>English<\/div>/);
-  // Speakers are numbered in the order they first speak, and coloured by that
-  // number -- the diarizer's own "SPEAKER_00" never reaches the screen.
-  assert.match(html, /class="spk-chip spk-1" title="Speaker 1"/);
-  assert.match(html, /class="spk-chip spk-2" title="Speaker 2"/);
+  assert.match(html, /<div class="sc-h-src">Korean<\/div>/);
+  assert.match(html, /<div class="sc-h-dst">English<\/div>/);
+  // Speakers are numbered in the order they first speak -- one chip colour for
+  // all of them; the diarizer's own "SPEAKER_00" never reaches the screen.
+  assert.match(html, /class="spk-chip" title="Speaker 1"/);
+  assert.match(html, /class="spk-chip" title="Speaker 2"/);
   assert.doesNotMatch(html, /SPEAKER_0/);
   // Number, time, source and the editable translation.
   assert.match(html, /<div class="sc-n">1<\/div>/);
@@ -162,9 +162,9 @@ test("a row carries the line number, who said it, both languages and whether it 
   assert.match(html, /class="sc-src">안녕하세요</);
   assert.match(html, /class="sc-dst" contenteditable="plaintext-only"[\s\S]*?data-line="1">Hello 1</);
   // The three verdicts: fits, runs over by this much, and is this much short.
-  assert.match(html, /<b>0\.9s<\/b> \/ 1\.0s · <span class="sc-fit">fits<\/span>/);
-  assert.match(html, /<b>2\.4s<\/b> \/ 1\.0s · <span class="sc-over">\+1\.4s<\/span>/);
-  assert.match(html, /<b>0\.2s<\/b> \/ 1\.0s · <span class="sc-under">−0\.8s<\/span>/);
+  assert.match(html, /<b>0\.9s<\/b> \/ 1\.0s · <\/span><span class="sc-fit">fits<\/span>/);
+  assert.match(html, /<b>2\.4s<\/b> \/ 1\.0s · <\/span><span class="sc-over">\+1\.4s<\/span>/);
+  assert.match(html, /<b>0\.2s<\/b> \/ 1\.0s · <\/span><span class="sc-under">−0\.8s<\/span>/);
 
   // The strip under the table draws the same lines, to the video's own length.
   assert.deepEqual(h.log.timeline, [[3, 30]]);
@@ -180,25 +180,26 @@ test("a row carries the line number, who said it, both languages and whether it 
 const ONE_ROW =
   '<div class="sc-row" data-start="1" data-end="2.5">\n' +
   '    <div class="sc-n">7</div>\n' +
-  '    <div><span class="spk-chip spk-1" title="Speaker 1"><i></i><b>Speaker 1</b></span></div>\n' +
+  '    <div><span class="spk-chip" title="Speaker 1" aria-label="Speaker 1"><b>A</b></span></div>\n' +
   '    <div class="sc-time"><span class="sc-t-a">00:00:01.0</span><span\n' +
   '      class="sc-t-b"> – 00:00:02.5</span></div>\n' +
   '    <div class="sc-src">안녕</div>\n' +
-  '    <div>\n' +
-  '      <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"\n' +
-  '        data-line="7">Hello</div>\n' +
-  '      <div class="sc-tools"><button class="sc-listen" data-play="7" type="button"\n' +
+  // Listen stands in its own column in front of the translation now, where
+  // the eye already is (user, 2026-09-11).
+  '    <button class="sc-listen" data-play="7" type="button"\n' +
   // The icons are written out rather than imported: a pin that reads the same
   // constant the code does could not notice the constant changing.
-  '          title="Play this line in the video">' +
-  '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>' +
-  '</button>' +
-  '<span class="sc-len"><b>1.2s</b> / 1.5s · <span class="sc-under">−0.3s</span></span>' +
-  '<span class="sc-sp"></span><button class="sc-wave" data-voice="7"\n' +
-  '          type="button" title="Make this line\'s voice again">' +
+  '      title="Play this line in the video">' +
+  '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>' +
+  '</button>\n' +
+  '    <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"\n' +
+  '      data-line="7">Hello</div>\n' +
+  '    <div class="sc-tools"><span class="sc-len"><span class="sc-num"><b>1.2s</b> / 1.5s · </span>' +
+  '<span class="sc-under">−0.3s</span></span>' +
+  '<span></span><button class="sc-wave" data-voice="7"\n' +
+  '        type="button" title="Make this line\'s voice again">' +
   '<svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>' +
   '</button></div>\n' +
-  '    </div>\n' +
   '  </div>';
 
 test("a row is byte for byte the row the page drew before this file existed", async (t) => {
@@ -214,8 +215,9 @@ test("a row is byte for byte the row the page drew before this file existed", as
   // And the header above it, indentation included.
   assert.equal(html.slice(0, html.indexOf('<div class="sc-row" data-start')),
     '\n    <div class="sc-row head">\n' +
-    '      <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div>Time</div><div>Korean</div>\n' +
-    '      <div>English</div>\n' +
+    '      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div class="sc-h-src">Korean</div>\n' +
+    '      <div class="sc-h-dst">English</div>\n' +
+    '      <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>\n' +
     '    </div>\n    ');
 });
 
@@ -511,7 +513,7 @@ test("a read-only Perso script cannot be typed into until its bar is pressed", a
   const bar = box.children[0];
   assert.equal(bar.className, "script-empty");
   const [note, btn] = bar.children;
-  assert.equal(note.textContent, "This Perso dub is read-only. ");
+  assert.equal(note.textContent, "This Perso dubbing is read-only. ");
   assert.equal(btn.textContent, "Make it editable");
 
   await btn.fire("click");

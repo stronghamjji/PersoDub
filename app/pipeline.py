@@ -22,8 +22,10 @@ from app.perso_client import (
     PersoClient,
     PersoCreditExhaustedError,
     PersoInvalidKeyError,
+    PersoProjectFailedError,
     PersoUnavailableError,
     perso_to_cues,
+    short_reason,
 )
 from app.qwen_pipeline import cleanup_takes, run_qwen_dub
 from app.scripts.check_leakage import _validate_manifest_spans, measure_leakage
@@ -93,31 +95,57 @@ def _check_cancel(cancel_check: Optional[Callable[[], bool]], log: Callable[[str
 # exception attribute holding a clickable link, or None when the fix lives
 # inside the app (Settings) rather than on the web -- the wording of each
 # message is a user decision (2026-08-06), so change it here and nowhere else.
+# Where to take a failure that is not the user's to fix. The stage sentence
+# says which part stopped; this says who can answer for it, because "Perso STT
+# failed" on its own left the user with nowhere to go (user, 2026-09-11). Left
+# off the two the user CAN fix -- recharging and correcting a key are not
+# questions for Perso.
+ASK_PERSO = "Ask Perso if it keeps happening."
+ASK_GOOGLE = "Ask Google if it keeps happening."
+CHECK_FILE = "Check the video file."
+
 _NOTICE_ERRORS = {
     PersoCreditExhaustedError: (
         "perso_credit_exhausted",
         "Perso credits are used up. Recharge to continue.",
         "link",
+        "",
     ),
     PersoInvalidKeyError: (
         "perso_invalid_key",
         "Perso rejected the API key. Open Settings and check the key.",
         None,
+        "",
     ),
     PersoUnavailableError: (
         "perso_unavailable",
         "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again.",
         None,
+        ASK_PERSO,
+    ),
+    # Reached, accepted, worked on, given up. The other three are about not
+    # getting to Perso at all; this one has an answer from Perso saying the
+    # project is over, and the user needs to be told which -- silence here is
+    # what left a failed project looking like a running one (user,
+    # 2026-09-11). The sentence carries Perso's own reason and code, appended
+    # by raise_notice, so the screen and Perso's dashboard read alike.
+    PersoProjectFailedError: (
+        "perso_project_failed",
+        "Perso could not finish this job. Try again, or check the project on Perso.",
+        None,
+        ASK_PERSO,
     ),
     GeminiQuotaExhaustedError: (
         "gemini_quota_exhausted",
         "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset.",
         "link",
+        "",
     ),
     GeminiUnavailableError: (
         "gemini_unavailable",
         "Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again.",
         None,
+        ASK_GOOGLE,
     ),
 }
 
@@ -127,6 +155,7 @@ _NOTICE_ERRORS = {
 # and that is what an unexpected provider error must keep landing in.
 _PERSO_NOTICE_ERRORS = (
     PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError,
+    PersoProjectFailedError,
 )
 _GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError)
 
@@ -149,7 +178,19 @@ def raise_notice(e, log, on_notice) -> NoReturn:
             break
     else:  # pragma: no cover -- callers only pass types listed above
         raise e
-    notice_type, msg, link_attr = entry
+    notice_type, msg, link_attr, ask = entry
+    # Perso's own words, kept whole and put after ours: the sentence above
+    # says what to do, and this says what Perso said, so the screen can be
+    # held up against Perso's dashboard (user, 2026-09-11).
+    said = getattr(e, "reason", "") or ""
+    code = getattr(e, "code", "") or ""
+    if said or code:
+        msg = f"{msg} Perso said: {said or 'no reason given'}"
+        if code:
+            msg = f"{msg} ({code})"
+    # Last, after their own words: the code is the thing to quote when asking.
+    if ask:
+        msg = f"{msg} {ask}"
     notice = {"type": notice_type, "message": msg}
     if link_attr:
         notice["link"] = getattr(e, link_attr)
@@ -359,7 +400,12 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
     except _PERSO_NOTICE_ERRORS as e:
         _raise_notice(e, log, on_notice)
     except Exception as e:
-        msg = f"Perso separation failed ({str(e)[:80]}). Check Settings, or switch separation back to Local."
+        # short_reason, not str(e): httpx's text ends in the address it called,
+        # and a sentence that finishes with a URL reads as somewhere the user
+        # is being sent (user, 2026-09-11). The whole of it goes to the log.
+        logger.warning("Perso separation failed: %s", e)
+        msg = (f"Perso separation failed ({short_reason(e)}). Check Settings, "
+               f"or switch separation back to Local. {ASK_PERSO}")
         log(f"   Error: {msg}")
         raise RuntimeError(msg) from e
     # What THIS job consumed, not just the balance -- log-only, a surprise in
@@ -393,7 +439,11 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
         try:
             sep_paths = SeparationEngine().separate(video_path, work_dir)
         except Exception as e:
-            raise RuntimeError(f"Local separation failed, aborting (no container fallback): {str(e)[:200]}")
+            # This one runs on the user's own machine, so there is nobody to
+            # ask: the file is the thing to look at.
+            raise RuntimeError(
+                f"Voice separation failed on this computer. {CHECK_FILE} "
+                f"({str(e)[:160]})")
     return sep_paths["vocals"], sep_paths["background"], perso_client
 
 
@@ -440,8 +490,9 @@ def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, l
     except _PERSO_NOTICE_ERRORS as e:
         _raise_notice(e, log, on_notice)
     except Exception as e:
-        msg = (f"Perso STT failed ({str(e)[:80]}). Check Settings, "
-               f"or switch to Whisper (free, offline).")
+        logger.warning("Perso STT failed: %s", e)
+        msg = (f"Perso STT failed ({short_reason(e)}). Check Settings, "
+               f"or switch to Whisper (free, offline). {ASK_PERSO}")
         log(f"   Error: {msg}")
         raise RuntimeError(msg) from e
 
@@ -464,9 +515,14 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log):
             video_path, language=source_language_code, log=log,
             on_language=lambda c: detected.__setitem__("code", c),
         )
+    except JobCancelled:
+        raise  # a user cancel is not a failure of this stage
     except Exception as e:
-        log(f"   Error: Local STT failed ({str(e)[:120]})")
-        raise
+        # Was re-raised bare, which put a library's own words on the failure
+        # card with no hint of which part had stopped (user, 2026-09-11).
+        msg = f"Speech recognition failed on this computer. {CHECK_FILE} ({str(e)[:120]})"
+        log(f"   Error: {msg}")
+        raise RuntimeError(msg) from e
     # Local Whisper sets no speaker_id -- CAM++ can still label the cues it produced.
     return src_cues, detected["code"], diar_engine or "campplus"
 
@@ -549,6 +605,19 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
             )
         except _GEMINI_NOTICE_ERRORS as e:
             _raise_notice(e, log, on_notice)
+        except JobCancelled:
+            raise  # a user cancel is not a translation failure
+        except Exception as e:
+            # Anything Gemini throws that is not one of the two above still
+            # came from Google, and a local model's failure is nobody's to
+            # ask about. Either way the sentence names the translator, so
+            # the card says which part stopped (user, 2026-09-11).
+            logger.warning("Translation failed (%s): %s", engine_label, e)
+            where = ASK_GOOGLE if "gemini" in tr_name.lower() else \
+                "Try again, or pick another translator in Settings."
+            msg = f"Translation failed ({tr_name}: {str(e)[:120]}). {where}"
+            log(f"   Error: {msg}")
+            raise RuntimeError(msg) from e
         auto_translated = True
     else:
         _log_stage(log, "translate", "Using the provided translated subtitles")

@@ -10,6 +10,7 @@ be exposed in code or logs.
 """
 import logging
 import os
+import re
 import sys
 import time
 from typing import List, Optional
@@ -123,6 +124,27 @@ class PersoUnavailableError(RuntimeError):
     and nothing to fix on their side -- retrying later is the only remedy."""
 
 
+class PersoProjectFailedError(RuntimeError):
+    """Perso took the job, worked on it, and gave up.
+
+    Not an HTTP status -- the request succeeded and the answer said the
+    project had failed. The three above are about reaching Perso at all; this
+    one is about a project that was reached and did not finish, which is a
+    different thing to tell the user and a different thing to do about it.
+
+    Carries Perso's own words so the screen can show exactly what the user
+    will read on Perso's own dashboard: nothing here rewrites them.
+    """
+
+    def __init__(self, what: str, reason: str = "", code: str = ""):
+        self.what = what
+        self.reason = reason
+        self.code = code
+        said = reason or "no reason given"
+        super().__init__(f"{what} failed: {said} ({code})" if code
+                         else f"{what} failed: {said}")
+
+
 def _dubbing_space_candidates(api_key: str, base_url: str = BASE_URL) -> list:
     """Raw workspace dicts the key can dub in (GET /portal/api/v1/spaces).
 
@@ -202,6 +224,65 @@ def list_dubbing_spaces(api_key: str, base_url: str = BASE_URL) -> list:
                     "name": s.get("spaceName") or s.get("name") or f"space {seq}",
                     "tier": s.get("tier"), "credits": credits})
     return out
+
+
+# Perso says a project failed in more than one way, and only one of them was
+# being read. A dub whose cloud project had already failed went on polling for
+# the full hour while Perso's own dashboard said it was over (user,
+# 2026-09-11). The words here are Perso's, kept as Perso wrote them: the
+# reason, and any code it gave, travel to the screen unchanged so the two
+# sides can be compared without a translation in between.
+_FAILED_WORDS = re.compile(r"fail|error|abort|reject|cancel", re.I)
+
+# Where Perso has been seen to put a code. Read in this order, first one wins.
+_CODE_FIELDS = ("errorCode", "failCode", "code", "errorType")
+
+
+# Anything with "://" in it and whatever follows, plus the "for url" that
+# httpx puts in front of it.
+_URL_IN_TEXT = re.compile(r"\s*(?:for url\s*)?'?\S+://\S+'?", re.I)
+
+
+def short_reason(e) -> str:
+    """One short clause from an exception, fit to show a person.
+
+    httpx writes "Client error '400 Bad Request' for url
+    'https://api.perso.ai/file/api/upload/video'", and that whole thing was
+    going on screen -- so the message ended in an address that looked like
+    somewhere the user was being sent, when it is this app's own call to
+    Perso (user, 2026-09-11). The address is dropped here and kept in the
+    log, where it is the diagnosis.
+    """
+    text = " ".join(str(e or "").split())
+    text = _URL_IN_TEXT.sub("", text).strip(" .,:;")
+    return text[:80] if text else type(e).__name__
+
+
+def perso_failure(res):
+    # type: (dict) -> tuple
+    """Has this project failed, and in Perso's own words?
+
+    Returns (failed, (reason, code)) -- both exactly as Perso spelled them,
+    because the point of showing them is to match what the user sees on
+    Perso's own side, and a rewrite in between would defeat that.
+    """
+    if not isinstance(res, dict):
+        return False, ("", "")
+    reason = str(res.get("progressReason") or "").strip()
+    flagged = bool(res.get("hasFailed") or res.get("isFailed") or res.get("failed"))
+    # "Completed" wins, however the sentence goes on: a reason can carry a
+    # word like "cancelled" while describing something that did finish.
+    done = reason.lower().startswith("completed")
+    said_failed = not done and bool(_FAILED_WORDS.search(reason))
+    if not (flagged or said_failed):
+        return False, ("", "")
+    code = ""
+    for key in _CODE_FIELDS:
+        value = res.get(key)
+        if value not in (None, ""):
+            code = str(value)
+            break
+    return True, (reason, code)
 
 
 def _raise_for_status(r: httpx.Response) -> None:
@@ -573,6 +654,7 @@ class PersoClient:
     def _wait_completed(self, project_seq: int, space: int, timeout_s: int = 3600,
                         what: str = "Perso STT") -> None:
         deadline = time.time() + timeout_s
+        said = None
         while time.time() < deadline:
             if self.cancel_check and self.cancel_check():
                 from app.jobs import JobCancelled
@@ -582,13 +664,24 @@ class PersoClient:
                 headers=self._headers, timeout=60,
             )
             _raise_for_status(r)
-            res = r.json().get("result", {})
-            if res.get("hasFailed"):
-                raise RuntimeError(f"{what} failed: {res.get('progressReason')}")
-            if res.get("progressReason") == "Completed":
+            res = r.json().get("result", {}) or {}
+            # Every change of mind, written down. This loop used to run for up
+            # to an hour saying nothing at all, so when the user saw "failed"
+            # on Perso's own dashboard while this app carried on there was no
+            # record of what Perso had actually been telling us
+            # (user, 2026-09-11).
+            reason = str(res.get("progressReason") or "")
+            if reason != said:
+                logger.info("%s project %s: %s", what, project_seq, reason or "(no reason given)")
+                said = reason
+            failed, (why, code) = perso_failure(res)
+            if failed:
+                logger.warning("%s project %s failed: %s %s", what, project_seq, why, code)
+                raise PersoProjectFailedError(what, why, code)
+            if reason == "Completed":
                 return
             time.sleep(self.poll_interval)
-        raise TimeoutError(f"{what} timed out")
+        raise TimeoutError(f"{what} timed out after {timeout_s}s (last said: {said or 'nothing'})")
 
     def _fetch_script_timestamps(self, project_seq: int, space: int) -> list:
         r = httpx.get(

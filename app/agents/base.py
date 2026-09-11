@@ -190,6 +190,36 @@ def _run_quiet(cmd: List[str]) -> tuple:
     return r.returncode, r.stdout or "", r.stderr or ""
 
 
+# --- A CLI with no credentials ----------------------------------------------
+# Neither of them says "you are signed out" when a turn fails. Codex says 401,
+# once per retry, ten times over, each line carrying a URL and a trace id;
+# Claude says "Not logged in · Please run /login", which is its own REPL's
+# command and means nothing outside it. The user signed each of them out in
+# turn to see those screens and got a wall of that (2026-09-11).
+_SIGNED_OUT = {
+    "codex": re.compile(r"\b401\b|unauthorized|missing bearer", re.I),
+    "claude": re.compile(r"not\s+logged\s+in|please\s+run\s*/login", re.I),
+}
+
+# What to say instead. Each names the one command that fixes it, because
+# "sign in" on its own leaves the reader looking for a button that is not there.
+SIGNED_OUT_LINE = {
+    "codex": "Codex is not signed in. Run codex login in Terminal.",
+    "claude": "Claude is not signed in. Run claude in Terminal, then /login.",
+}
+
+
+def is_signed_out(kind: str, message) -> bool:
+    """Is this the CLI complaining that it has no credentials?"""
+    pattern = _SIGNED_OUT.get(kind)
+    return bool(pattern and isinstance(message, str) and pattern.search(message))
+
+
+def signed_out_line(kind: str) -> str:
+    """The sentence to show in place of the CLI's own words."""
+    return SIGNED_OUT_LINE.get(kind, "The assistant is not signed in.")
+
+
 def login_state(kind: str, binary: str) -> dict:
     """Is this CLI signed in, and with what kind of account?
 

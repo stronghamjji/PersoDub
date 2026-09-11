@@ -19,7 +19,7 @@
 // Run with: node --test ui/src/agentStrip.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initAgentStripUi, loginWords, loginKnown, labelFor, aliasOf, chipText,
+import { initAgentStripUi, loginWords, loginKnown, labelFor, aliasOf, modelName, chipText,
          menuRow, replyHtml } from "./agentStrip.mjs";
 
 function makeEl(id) {
@@ -259,7 +259,11 @@ test("what a row says under a name, in every login state", () => {
 
   assert.equal(loginWords(CLAUDE), "signed in as me@example.com");
   assert.equal(loginWords({ ...CLAUDE, account: "" }), "signed in");
-  assert.equal(loginWords(CODEX), "not signed in — run codex login in Terminal");
+  // A service's name is not an account: "signed in as claude.ai" said nothing
+  // the row's own name had not (user, 2026-09-10). An address is.
+  assert.equal(loginWords({ ...CLAUDE, account: "claude.ai" }), "signed in");
+  assert.equal(loginWords({ ...CLAUDE, account: "ChatGPT" }), "signed in");
+  assert.equal(loginWords(CODEX), "not signed in");
   assert.equal(loginWords({ ...CODEX, login_command: "" }), "not signed in");
 });
 
@@ -270,13 +274,35 @@ test("the picker's label names the assistant and the model actually served", () 
   // The list has not come back: the name saved with the pick stands in.
   assert.equal(labelFor(chosen, [], ""), "Claude · Opus");
   assert.equal(labelFor({ agent: "claude", model: "opus" }, [], ""), "claude · Opus");
-  // What the CLI said it ran wins over what was asked for.
-  assert.equal(labelFor(chosen, [CLAUDE], "haiku"), "Claude · Haiku");
+  // What the CLI said it ran wins over what was asked for -- and it is said
+  // in the CLI's own words, version and all. The alias is all the picker can
+  // offer, because neither CLI will list what it has; the id is what comes
+  // back once something has actually answered (user, 2026-09-11).
+  assert.equal(labelFor(chosen, [CLAUDE], "claude-haiku-4-5-20251001"), "Claude · Haiku 4.5");
+  assert.equal(labelFor(chosen, [CLAUDE], "claude-opus-5"), "Claude · Opus 5");
+  assert.equal(labelFor({ agent: "codex", model: "" }, [CODEX], "gpt-5.6-sol"), "Codex · gpt-5.6-sol");
   assert.equal(labelFor({ agent: "codex", model: "" }, [CODEX], ""), "Codex");
 
   assert.equal(aliasOf("claude-opus-4-6-20260514"), "opus");
   assert.equal(aliasOf("gpt-5"), "");
   assert.equal(aliasOf(null), "");
+});
+
+// Anthropic spells its ids "claude-<family>-<version>"; everyone else spells
+// them their own way and guessing would only get them wrong.
+test("a model id is made readable without being rewritten", () => {
+  assert.equal(modelName("claude-opus-5"), "Opus 5");
+  assert.equal(modelName("claude-fable-5-1"), "Fable 5.1");
+  // A date stamp on the end is not a version.
+  assert.equal(modelName("claude-haiku-4-5-20251001"), "Haiku 4.5");
+  // A family this app has no label for still reads as a name.
+  assert.equal(modelName("claude-newthing-2"), "Newthing 2");
+  assert.equal(modelName("claude-opus"), "Opus");
+  // Anyone else's id is left exactly as they spell it.
+  assert.equal(modelName("gpt-5.6-sol"), "gpt-5.6-sol");
+  assert.equal(modelName("o3"), "o3");
+  assert.equal(modelName(""), "");
+  assert.equal(modelName(null), "");
 });
 
 test("a run of edits is one chip that lists its lines", () => {
@@ -344,7 +370,7 @@ test("the four parts come up: the state line, the picker, the input and the butt
     assert.equal(h.$("assistantFold").getAttribute("aria-expanded"), "true");
     assert.equal(h.$("assistantFold").title, "Hide the conversation");
     assert.equal(h.log.stored.get("persodub.layout.agentOpen"), "1");
-    assert.equal(h.$("assistantInput").placeholder, "Message");
+    assert.equal(h.$("assistantInput").placeholder, "Ask anything");
     assert.equal(h.$("assistantInput").focused, true);
     // The strip follows the app's screens through document.body alone.
     assert.deepEqual(h.log.observed, ["body", { attributeFilter: ["data-screen"] }]);
@@ -356,8 +382,7 @@ test("the four parts come up: the state line, the picker, the input and the butt
   const shut = harness({ agents: [CLAUDE], stored: { "persodub.layout.agentOpen": "0" } });
   try {
     await flush();
-    assert.equal(shut.$("assistantInput").placeholder,
-      `Ask for a fix - e.g. "Shorten line 4 naturally so it matches the original's length"`);
+    assert.equal(shut.$("assistantInput").placeholder, "Ask for a fix");
     assert.equal(shut.$("assistantFold").getAttribute("aria-expanded"), "false");
   } finally { shut.log.restore(); }
 });
@@ -367,7 +392,7 @@ test("a part that throws is said once and leaves the other three working", async
   try {
     await flush();
     assert.equal(h.$("assistantState").textContent, "Claude · signed in as me@example.com");
-    assert.equal(h.$("assistantInput").placeholder, "Message");
+    assert.equal(h.$("assistantInput").placeholder, "Ask anything");
     assert.equal(h.$("assistantGo").title, "Send");
     // Said once, however many repaints ran -- and it names the part.
     const said = h.log.errors.filter((a) => String(a[0]).includes("picker"));
@@ -376,14 +401,29 @@ test("a part that throws is said once and leaves the other three working", async
   } finally { h.log.restore(); }
 });
 
-test("a running dub locks the row, and a failed one says why", async () => {
+// A failed dub is when someone most wants to ask "why did this fail?", and a
+// folder of videos can be handed over with no job open at all. Nothing in the
+// strip is ever greyed out for the screen it is on (user, 2026-09-11).
+test("a job that stopped early leaves the row open", async () => {
   const h = harness({ agents: [CLAUDE], screen: "failed" });
   try {
     await flush();
-    assert.equal(h.$("assistantInput").disabled, true);
-    assert.equal(h.$("assistantModelBtn").disabled, true);
-    assert.equal(h.$("assistantInput").placeholder,
-      "Nothing to fix here - this dub did not finish");
+    assert.equal(h.$("assistantInput").disabled, false);
+    assert.equal(h.$("assistantModelBtn").disabled, false);
+    assert.notEqual(h.$("assistantInput").placeholder, "Nothing to fix");
+  } finally { h.log.restore(); }
+});
+
+// It used to lock this one too, and the strip was off the page besides. A dub
+// in progress is exactly when someone asks the assistant to stop it (user,
+// 2026-09-09).
+test("a dub in progress leaves the row open", async () => {
+  const h = harness({ agents: [CLAUDE], screen: "running" });
+  try {
+    await flush();
+    assert.equal(h.$("assistantInput").disabled, false);
+    assert.equal(h.$("assistantModelBtn").disabled, false);
+    assert.equal(h.$("assistantGo").getAttribute("aria-label"), "Send");
   } finally { h.log.restore(); }
 });
 
@@ -397,13 +437,18 @@ test("picking a model writes the choice down, and a saved one is read back", asy
     assert.equal(menu.hidden, false);
     // A heading, then one row per assistant.
     assert.deepEqual(menu.children.slice(1).map((r) => words(r.children[0])),
-      ["Claudesigned in as me@example.com", "Codexnot signed in — run codex login in Terminal"]);
+      ["Claudesigned in as me@example.com", "Codexnot signed in"]);
 
-    // Into Codex, then its one model.
-    await menu.children[2].fire("click", { stopPropagation() {} });
+    // Codex is signed out, so its row is greyed out and does not open
+    // (user, 2026-09-10) -- picking one that cannot answer only moves the dead
+    // end to the first thing typed.
+    assert.equal(menu.children[2].disabled, true);
+
+    // Into Claude, then its first model.
+    await menu.children[1].fire("click", { stopPropagation() {} });
     await menu.children[1].fire("click");
-    assert.equal(JSON.parse(h.log.stored.get("persodub.assistantChoice")).agent, "codex");
-    assert.equal(h.$("assistantModelLabel").textContent, "Codex · gpt");
+    assert.equal(JSON.parse(h.log.stored.get("persodub.assistantChoice")).agent, "claude");
+    assert.equal(h.$("assistantModelLabel").textContent, "Claude · Opus");
     assert.equal(menu.hidden, true);
   } finally { h.log.restore(); }
 
@@ -417,6 +462,76 @@ test("picking a model writes the choice down, and a saved one is read back", asy
 });
 
 // -- a turn ---------------------------------------------------------------
+
+// The strip was unlocked on the running screen but submit() still turned the
+// message away, in silence: the words stayed in the box and nothing happened.
+// That is exactly what "why won't it stop when I ask?" was (user, 2026-09-09).
+test("a message sent while a dub runs actually goes out", async () => {
+  const chat = stream([
+    { kind: "start", model: "claude-opus-4-6" },
+    { kind: "text", text: "Stopping it." },
+    { kind: "done" },
+  ]);
+  const h = harness({ agents: [CLAUDE], chat, screen: "running" });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "중단해줘";
+    await input.fire("input", {});
+    await h.$("assistantGo").fire("click", {});
+    await flush(60);
+
+    const post = h.log.calls.find((c) => c.url === "/api/agent/chat");
+    assert.ok(post, "the turn was sent");
+    assert.equal(JSON.parse(post.body).message, "중단해줘");
+    assert.equal(input.value, "", "and the box is emptied, as on every other screen");
+  } finally { h.log.restore(); }
+});
+
+// Unlocking the controls was not enough: submit() and ask() each kept their
+// own allow-list of screens, so the failed screen took the question, left the
+// words in the box and did nothing at all -- the same silent refusal the
+// running screen used to give (Windows found it, 2026-09-11).
+test("a question asked on the failed screen actually goes out", async () => {
+  const chat = stream([
+    { kind: "start", model: "claude-opus-4-6" },
+    { kind: "text", text: "Perso gave up on it." },
+    { kind: "done" },
+  ]);
+  const h = harness({ agents: [CLAUDE], chat, screen: "failed" });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "why did this fail?";
+    await input.fire("input", {});
+    await h.$("assistantGo").fire("click", {});
+    await flush(60);
+
+    const post = h.log.calls.find((c) => c.url === "/api/agent/chat");
+    assert.ok(post, "the turn was sent");
+    assert.equal(JSON.parse(post.body).message, "why did this fail?");
+    assert.equal(input.value, "", "and the box is emptied, as on every other screen");
+  } finally { h.log.restore(); }
+});
+
+// The strip's job id is the last dub opened; an erase is a different job with
+// no script. Handing the assistant the dub had it answering about a job the
+// user was not looking at (Windows, 2026-09-11).
+test("on the erase screen no job is claimed, and the message still goes", async () => {
+  const chat = stream([{ kind: "text", text: "That screen erases subtitles." }, { kind: "done" }]);
+  const h = harness({ agents: [CLAUDE], chat, screen: "erase", jobId: "abc123" });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "what is this screen for?";
+    await input.fire("input", {});
+    await h.$("assistantGo").fire("click", {});
+    await flush(60);
+    const post = h.log.calls.find((c) => c.url === "/api/agent/chat");
+    assert.ok(post, "the turn was sent");
+    assert.equal(JSON.parse(post.body).job_id, null);
+  } finally { h.log.restore(); }
+});
 
 test("a message carries the open job, and a rewritten line tells the page twice", async () => {
   const chat = stream([
@@ -457,8 +572,9 @@ test("a message carries the open job, and a rewritten line tells the page twice"
     assert.equal(words(chip), "Rewriting line 4");
     const said = drawn.find((d) => d.className.includes("bubble ai"));
     assert.equal(said.innerHTML, "Shortened <strong>line 4</strong>.");
-    // The model the CLI actually ran is what the picker ends up saying.
-    assert.equal(h.$("assistantModelLabel").textContent, "Claude · Opus");
+    // The model the CLI actually ran is what the picker ends up saying --
+    // its own id, version and all, not the alias it was asked for.
+    assert.equal(h.$("assistantModelLabel").textContent, "Claude · Opus 4.6");
   } finally { h.log.restore(); }
 });
 
@@ -645,15 +761,86 @@ test("Enter is ignored while an IME is still settling a syllable", async () => {
   } finally { h.log.restore(); }
 });
 
+// Three places, three jobs. The line above names both. The box reports the
+// state in three words, because an instruction written inside a text box reads
+// as an instruction to type into it. The log is the one with room to say what
+// to do (user, 2026-09-10).
+// A step that reports a problem must not settle into a green tick. "Codex is
+// not signed in" wearing a check read as a thing that had worked (Windows saw
+// it, 2026-09-11). Transport steps -- the only kind that carries bad news --
+// settle with a dash instead.
+test("a step that reports trouble settles with a dash, not a tick", async () => {
+  const h = harness({ agents: [CLAUDE], chat: stream([
+    { kind: "progress", tool: "transport", label: "Codex is not signed in. Run codex login in Terminal." },
+    { kind: "progress", tool: "read_script", label: "Reading the script" },
+    { kind: "done", text: "" },
+  ]) });
+  try {
+    await flush();
+    h.$("assistantInput").value = "hi";
+    await h.$("assistantGo").fire("click");
+    await flush();
+    const chips = h.$("assistantLog").children.filter((d) => /chip/.test(d.className));
+    assert.equal(chips.length, 2, "one chip per step");
+    // The flag the mark is chosen from. The swap itself happens through
+    // querySelector(".chip-mark") on a node built from an HTML string, which
+    // only a real DOM can find -- so this pins the decision, and the page's
+    // own markup test pins the two marks being different shapes.
+    assert.equal(chips[0].dataset.note, "1", "the transport step is marked as a note");
+    assert.equal(chips[1].dataset.note, undefined, "a real step is not");
+  } finally { h.log.restore(); }
+});
+
+// Nothing signed in: there is nothing to pick, so the picker leaves the row
+// and the box -- now the width of the whole row -- says the sentence in full
+// (user, 2026-09-10).
+test("with neither signed in the picker goes and the box says it in full", async () => {
+  const out = { ...CLAUDE, logged_in: false, account: "", login_command: "claude login" };
+  const h = harness({ agents: [out, CODEX] });
+  try {
+    await flush();
+    assert.equal(h.$("assistantModelWrap").hidden, true);
+    assert.equal(h.$("assistantMenu").hidden, true);
+    assert.equal(h.$("assistantInput").placeholder, "Sign in to Claude or Codex.");
+  } finally { h.log.restore(); }
+});
+
+// Three places, three jobs. The line above names the one that is out -- the
+// other is signed in and switching to it is the fix, so "sign in to Claude or
+// Codex" would be wrong about one and unhelpful about the other (Windows saw
+// it, 2026-09-11). The box reports the state in three words, because an
+// instruction written inside a text box reads as an instruction to type into
+// it. The log is the one with room to say what to do.
+test("one of two signed out: the line names it, the box says the state, the log says what to do", async () => {
+  const h = harness({ agents: [CLAUDE, CODEX],
+                      stored: { "persodub.assistantChoice": JSON.stringify({ agent: "codex", model: "gpt", name: "Codex" }) } });
+  try {
+    await flush();
+    assert.equal(h.$("assistantState").textContent, "Codex is not signed in.");
+    assert.equal(h.$("assistantState").classList.contains("warn"), true);
+    // Codex is the choice and is signed out, but Claude is signed in: the
+    // picker stays, because switching to it is the fix, and the box keeps the
+    // short line that fits beside it.
+    assert.equal(h.$("assistantModelWrap").hidden, false);
+    assert.equal(h.$("assistantInput").placeholder, "Not signed in");
+    // Asked twice (see below), said once -- and only the commands that apply.
+    assert.equal(h.log.calls.filter((c) => c.url.startsWith("/api/agent/status")).length, 2);
+    assert.deepEqual(h.$("assistantLog").children.map((d) => d.innerHTML),
+      ["Codex is not signed in. Pick another assistant, or sign in. Run codex login in Terminal."]);
+  } finally { h.log.restore(); }
+});
+
 test("with no assistant ready the strip says so once and sends nothing", async () => {
   const h = harness({ agents: [{ id: "claude", name: "Claude", installed: false,
                                  supported: true, models: [] }] });
   try {
     await flush();
     const said = h.$("assistantLog").children.map((d) => d.innerHTML);
-    assert.equal(said[0], "No assistant is ready. Install Claude Code or Codex — you only need one.");
-    assert.equal(h.$("assistantInput").placeholder,
-      "No assistant is ready - install Claude Code or Codex");
+    // The list is asked for twice on a screen where the strip is in use (the
+    // plain load, then the one that checks logins); the sentence shows once.
+    assert.equal(h.log.calls.filter((c) => c.url.startsWith("/api/agent/status")).length, 2);
+    assert.deepEqual(said, ["Install Claude Code or Codex."]);
+    assert.equal(h.$("assistantInput").placeholder, "Install Claude Code or Codex");
     assert.equal(h.$("assistantModelLabel").textContent, "Model");
   } finally { h.log.restore(); }
 });

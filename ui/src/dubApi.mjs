@@ -50,6 +50,8 @@ function qualityModeToNTakes(qualityMode) {
  *
  * @param {Object} opts
  * @param {File|Blob} opts.video - required video file
+ * @param {string} [opts.downloadId] - a video the app is already holding
+ *        (a fetched link or a copied file); sent instead of the file or the link
  * @param {string} [opts.sourceLang] - source language code (with targetLang, the preferred path)
  * @param {string} [opts.targetLang] - target language code from LANGUAGES
  * @param {"ko_to_en"|"en_to_ko"} [opts.direction] - legacy dubbing direction (fallback)
@@ -83,7 +85,7 @@ export async function fetchLanguages({ baseUrl = "" } = {}) {
 }
 
 export function buildDubFormData(opts) {
-  if (!opts || (!opts.video && !opts.sourceUrl)) {
+  if (!opts || (!opts.video && !opts.sourceUrl && !opts.downloadId)) {
     throw new Error("A video file or a link is required.");
   }
   let language, language_code, sourceCode = null;
@@ -108,8 +110,12 @@ export function buildDubFormData(opts) {
   const nTakes = opts.nTakesOverride ?? qualityModeToNTakes(opts.qualityMode ?? "fast");
 
   const fd = new FormData();
-  // Exactly one source -- the server rejects both (app/api/dub.py:dub_start).
-  if (opts.video) fd.append("video", opts.video);
+  // Exactly one source -- the server rejects two (app/api/dub.py:dub_start).
+  // The held file wins whenever there is one: the link is already fetched and
+  // the dropped file already copied, so sending either again would fetch or
+  // upload the same video a second time.
+  if (opts.downloadId) fd.append("download_id", opts.downloadId);
+  else if (opts.video) fd.append("video", opts.video);
   else fd.append("source_url", opts.sourceUrl);
   fd.append("language", language);
   fd.append("language_code", language_code);
@@ -228,6 +234,161 @@ export async function probeSource(url, { baseUrl = "" } = {}) {
     err.reason = detail.reason || "unknown";
     throw err;
   }
+  return res.json();
+}
+
+// ---- The holding area behind the New project dialog ------------------------
+// A pasted link is fetched into the app's own folder, and a dropped file is
+// copied into it, before anything else happens (app/api/downloads.py). From
+// then on there is one file on this computer, and the dialog plays it, cuts a
+// clip out of it and hands it to a dub by id -- never fetching or uploading
+// the same video a second time.
+
+/** The message an /api/downloads or /api/erase error carries, whichever shape
+ * it came in -- and the `reason` beside it, which is how a 409 that only wants
+ * a pack downloaded is told from a failure. */
+async function downloadError(res, fallback) {
+  const body = await res.json().catch(() => ({}));
+  const detail = body.detail;
+  const message = typeof detail === "string" ? detail : (detail || {}).message;
+  const err = new Error(message || fallback);
+  err.reason = (detail || {}).reason || "unknown";
+  err.status = res.status;
+  return err;
+}
+
+/** POST /api/downloads -- start fetching a link; answers with the id to poll. */
+export async function startDownload(url, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/downloads`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) throw await downloadError(res, "Couldn't fetch the video.");
+  return (await res.json()).id;
+}
+
+/**
+ * GET /api/downloads/{id} -- the held video's record:
+ * {status: probing|downloading|ready|failed, percent, title, duration_sec, error}.
+ */
+export async function fetchDownload(id, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/downloads/${id}`);
+  if (!res.ok) throw await downloadError(res, "Lost track of the download.");
+  return res.json();
+}
+
+/** Where the held video plays from, once its record says ready. */
+export function downloadVideoUrl(id, { baseUrl = "" } = {}) {
+  return `${baseUrl}/api/downloads/${id}/video`;
+}
+
+/**
+ * POST /api/downloads/upload -- put a dropped file in the holding area too, so
+ * the three buttons under it work the same whichever way the video arrived.
+ * Returns the record.
+ */
+export async function uploadDownload(file, durationSec, { baseUrl = "" } = {}) {
+  const fd = new FormData();
+  fd.append("video", file);
+  if (durationSec) fd.append("duration_sec", String(durationSec));
+  const res = await fetch(`${baseUrl}/api/downloads/upload`, { method: "POST", body: fd });
+  if (!res.ok) throw await downloadError(res, "Couldn't hold on to this file.");
+  return res.json();
+}
+
+/**
+ * POST /api/downloads/{id}/save -- write the held video out as a file of its
+ * own: the chosen stretch, or all of it when there is no trim. Returns
+ * {path, seconds}.
+ */
+export async function saveDownloadClip(id, trim, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/downloads/${id}/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(trim ? { start: trim.start, end: trim.end } : {}),
+  });
+  if (!res.ok) throw await downloadError(res, "Couldn't save the clip.");
+  return res.json();
+}
+
+// ---- Erasing the subtitles burned into a video -----------------------------
+// app/api/erase.py, all of it working on a video the holding area above is
+// already keeping, so nothing here uploads one. Every route can answer 409
+// {reason: "pack_missing"} -- the eraser is not part of the base install --
+// and downloadError puts that reason on the thrown error, which is how
+// ui/src/eraseScreen.mjs knows to offer the download instead of the failure.
+
+/** POST /api/erase/suggest -- where this video's subtitles look to be. */
+export async function suggestEraseArea(downloadId, { baseUrl = "" } = {}) {
+  const fd = new FormData();
+  fd.append("download_id", downloadId);
+  const res = await fetch(`${baseUrl}/api/erase/suggest`, { method: "POST", body: fd });
+  if (!res.ok) throw await downloadError(res, "Couldn't look for the subtitles.");
+  return res.json();
+}
+
+/**
+ * POST /api/erase -- queue the erase; answers with the job id to follow.
+ * `trim` is {start, end} in seconds, or null for the whole video: the app cuts
+ * the video down first and the cut IS the job, exactly as it is for a dub.
+ */
+export async function startErase({ downloadId, area, project, trim = null }, { baseUrl = "" } = {}) {
+  const fd = new FormData();
+  fd.append("download_id", downloadId);
+  fd.append("area", Array.isArray(area) ? JSON.stringify(area) : String(area || "whole"));
+  if (project) fd.append("project", project);
+  // Both or neither: the route refuses one without the other.
+  if (trim) {
+    fd.append("trim_start", String(trim.start));
+    fd.append("trim_end", String(trim.end));
+  }
+  const res = await fetch(`${baseUrl}/api/erase`, { method: "POST", body: fd });
+  if (!res.ok) throw await downloadError(res, "Couldn't start erasing.");
+  return (await res.json()).job_id;
+}
+
+/**
+ * POST /api/erase/{jid}/retry -- run the same erase again, on the video and
+ * in the band the failed job already has. Answers with the new job's id.
+ */
+export async function retryErase(jid, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/erase/${jid}/retry`, { method: "POST" });
+  if (!res.ok) throw await downloadError(res, "Couldn't start it again.");
+  return (await res.json()).job_id;
+}
+
+/** GET /api/erase/{jid} -- the record, plus `percent` and `done`. */
+export async function fetchErase(jid, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/erase/${jid}`);
+  if (!res.ok) throw await downloadError(res, "Lost track of the erase.");
+  return res.json();
+}
+
+/** Where the two videos play from: the cleaned one, and the one that came in. */
+export function eraseVideoUrl(jid, which = "erased", { baseUrl = "" } = {}) {
+  return `${baseUrl}/api/erase/${jid}${which === "original" ? "/original" : "/video"}`;
+}
+
+/** POST /api/erase/{jid}/save -- write the cleaned video into Downloads. */
+export async function saveErased(jid, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/erase/${jid}/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) throw await downloadError(res, "Couldn't save the video.");
+  return res.json();
+}
+
+/**
+ * POST /api/erase/{jid}/dub -- hand the cleaned video back to the holding area
+ * so a new project can be started on it. Returns {download_id, title,
+ * duration_sec}; no dub is started here.
+ */
+export async function eraseToDub(jid, { baseUrl = "" } = {}) {
+  const res = await fetch(`${baseUrl}/api/erase/${jid}/dub`, { method: "POST" });
+  if (!res.ok) throw await downloadError(res, "Couldn't open the erased video.");
   return res.json();
 }
 

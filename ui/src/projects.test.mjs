@@ -8,7 +8,7 @@
 // Run with: node --test ui/src/projects.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initProjectsUi } from "./projects.mjs";
+import { initProjectsUi, jobMark, shownName } from "./projects.mjs";
 
 function makeEl(id) {
   return {
@@ -103,6 +103,26 @@ test("the sidebar paints a row per job, marks the open one and says which way ea
   assert.match(second.innerHTML, /class="job-dot dot-running"/);
 });
 
+// Five colours are one colour to a reader who does not see them, so every state
+// carries its own shape too. The colour class is still there; this pins the mark.
+test("every job state is a shape as well as a colour", () => {
+  const marks = {
+    done: jobMark("done"), queued: jobMark("queued"), running: jobMark("running"),
+    error: jobMark("error"), cancelled: jobMark("cancelled"),
+  };
+  for (const [state, svg] of Object.entries(marks)) {
+    assert.match(svg, /^<svg viewBox="0 0 12 12"/, `${state} is not a 12px mark`);
+  }
+  assert.match(marks.done, /<path d="M2\.6 6\.4/, "done is a tick");
+  assert.match(marks.queued, /<circle cx="6" cy="6" r="3\.6"\/>/, "waiting is an empty ring");
+  assert.doesNotMatch(marks.queued, /fill:currentColor/);
+  assert.match(marks.running, /fill:currentColor/, "running fills that ring");
+  assert.equal((marks.error.match(/<path/g) || []).length, 2, "a failure is a cross");
+  assert.match(marks.cancelled, /<circle[\s\S]*<path/, "cancelled is the ring struck through");
+  // Anything the server has no mark for is still going.
+  assert.equal(jobMark("separating"), marks.running);
+});
+
 test("a row opens its job, and its Delete button asks the page instead", async (t) => {
   const h = harness({
     responses: { [JOBS]: ok({ jobs: [{ id: "j1", status: "done", project: "Interview" }] }) },
@@ -190,6 +210,55 @@ test("Up next shows the job on air with its percent and the line waiting behind 
   assert.deepEqual(h.log.opened, ["q1"]);
 });
 
+test("an erase row wears the eraser and says what it did, not which languages", async (t) => {
+  const h = harness({
+    responses: {
+      [JOBS]: ok({ jobs: [
+        { id: "e1", kind: "erase", status: "done", project: "clip10" },
+        { id: "e2", kind: "erase", status: "running", project: "shorts" },
+        { id: "e3", kind: "erase", status: "error", project: "broken" },
+        { id: "d1", status: "done", project: "Interview", source_lang: "ko", language_code: "en" },
+      ] }),
+    },
+  });
+  t.after(h.log.restore);
+
+  await h.api.renderHistory();
+  const rows = h.$("historyList").children.map((l) => l.children[0]);
+  assert.match(rows[0].innerHTML, /class="job-kind"/, "an erase row has no eraser on it");
+  assert.match(rows[0].innerHTML, />Erased</);
+  assert.match(rows[1].innerHTML, />Erasing</);
+  // A job that stopped says what it was; the dot beside it says how it ended.
+  assert.match(rows[2].innerHTML, />Erase subtitles</);
+  assert.match(rows[2].innerHTML, /class="job-dot dot-error"/);
+  // A dub is unchanged -- no eraser, and the two languages as before.
+  assert.doesNotMatch(rows[3].innerHTML, /class="job-kind"/);
+  assert.match(rows[3].innerHTML, /Korean → English/);
+  // And a click on an erase row is handed back like any other.
+  await rows[0].fire("click");
+  assert.deepEqual(h.log.opened, ["e1"]);
+});
+
+test("an erase in the line counts itself from its own log line", async (t) => {
+  const h = harness({
+    responses: {
+      [JOBS]: ok({ jobs: [
+        { id: "e1", kind: "erase", status: "running", project: "clip10" },
+      ] }),
+      // The eraser prints this and nothing a dub's stage counter would find.
+      "/api/dub/jobs/e1": ok({ logs: ["progress 12%", "progress 43%"] }),
+    },
+  });
+  t.after(h.log.restore);
+
+  await h.api.renderQueueCard();
+  const row = h.$("queueRows").children[0].children[0];
+  assert.match(row.innerHTML, /Erasing 43%/);
+  assert.match(row.innerHTML, /class="queue-bar"><i style="width:43%"/);
+  // The X beside it stops an erase, and says so.
+  assert.equal(h.$("queueRows").children[0].children[1].title, "Cancel erasing");
+});
+
 test("a queue row's X hands the job to the page, and a job on its way out has none", async (t) => {
   const h = harness({
     responses: {
@@ -232,4 +301,13 @@ test("the card hides itself when the line is empty, and off the home screen it n
   await away.api.renderQueueCard();
   assert.equal(away.$("queueCard").hidden, true);
   assert.deepEqual(away.log.calls, []);
+});
+
+// The name a project is shown under: the user's own if they set one, the
+// folder's name otherwise (user, 2026-09-10).
+test("a renamed project shows the name it was given", () => {
+  assert.equal(shownName({ project: "clip10" }), "clip10");
+  assert.equal(shownName({ project: "clip10", title: "마이클 잭슨 Beat It" }), "마이클 잭슨 Beat It");
+  assert.equal(shownName({ project: "clip10", title: "   " }), "clip10", "blank is not a name");
+  assert.equal(shownName({}), "Dubbing", "and a job with neither still says something");
 });

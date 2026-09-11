@@ -12,7 +12,7 @@
 // Run with: node --test ui/src/runningScreen.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initRunningScreenUi } from "./runningScreen.mjs";
+import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { parseProgress } from "./dubApi.mjs";
 
 function makeEl(id) {
@@ -35,7 +35,9 @@ function makeEl(id) {
   };
 }
 
-/** A page, the calls the screen reaches out through, and the answer confirm gives. */
+/** A page, the calls the screen reaches out through, and the answer the
+    question gives. The question is the app's own dialog now, handed in like
+    every other way this screen reaches out (user, 2026-09-10). */
 function harness({ jobId = "j1", status = "running", confirmAnswer = true,
                    onCancel = null } = {}) {
   const els = new Map();
@@ -54,10 +56,10 @@ function harness({ jobId = "j1", status = "running", confirmAnswer = true,
   };
   const log = { homeNoticeAndLog: 0, cancelled: [], settings: 0, opened: [], warned: [] };
 
-  const real = { confirm: globalThis.confirm, warn: console.warn };
-  globalThis.confirm = () => confirmAnswer;
+  const real = { warn: console.warn };
   console.warn = (m) => log.warned.push(m);
-  log.restore = () => { globalThis.confirm = real.confirm; console.warn = real.warn; };
+  log.restore = () => { console.warn = real.warn; };
+  log.asked = 0;
 
   const api = initRunningScreenUi({
     $,
@@ -69,6 +71,7 @@ function harness({ jobId = "j1", status = "running", confirmAnswer = true,
     getJobId: () => jobId,
     getJobStatus: () => status,
     onCancel: onCancel || (async (id) => { log.cancelled.push(id); }),
+    askCancel: async () => { log.asked += 1; return confirmAnswer; },
     onOpenSettings: () => { log.settings += 1; },
     openExternal: (a, url) => { log.opened.push(url); a.href = url; },
   });
@@ -155,7 +158,7 @@ test("a failed job's reason is written into both screens, in plain words", (t) =
   h.api.paintNotices({ id: "j1", status: "error", error: "interrupted" });
   for (const id of ["jobNotice", "doneNotice"]) {
     assert.equal(h.$(id).hidden, false);
-    assert.equal(h.$(id).innerHTML, "The app was closed before this dub finished.");
+    assert.equal(h.$(id).innerHTML, "The app was closed before dubbing finished.");
   }
 });
 
@@ -276,7 +279,8 @@ test("a job already on its way out says so, and cannot be asked twice", (t) => {
   t.after(h.log.restore);
 
   h.api.paintCancel();
-  assert.equal(h.$("cancelBtn").textContent, "Cancelling…");
+  // The word lives in its own element beside the stop square (2026-09-09).
+  assert.equal(h.$("cancelLabel").textContent, "Cancelling…");
   assert.equal(h.$("cancelBtn").disabled, true);
 });
 
@@ -288,7 +292,7 @@ test("pressing Cancel asks once, then disables itself while the server answers",
   await btn.fire("click", {});
   assert.deepEqual(h.log.cancelled, ["j1"]);
   assert.equal(btn.disabled, true);
-  assert.equal(btn.textContent, "Cancelling…");
+  assert.equal(h.$("cancelLabel").textContent, "Cancelling…");
 });
 
 test("answering no to the question stops nothing", async (t) => {
@@ -325,4 +329,22 @@ test("reset takes both reason lines away, red included", (t) => {
   assert.equal(h.$("jobNotice").hidden, true);
   assert.equal(h.$("doneNotice").hidden, true);
   assert.ok(!h.$("jobNotice").classList.contains("danger"));
+});
+
+// -- a job that stopped -----------------------------------------------------
+
+// Cancelled and failed share one screen and, until now, only the sentence told
+// them apart -- so the screen read the same as a finished one at a glance.
+test("a stopped job wears a mark: a stop square cancelled, an exclamation failed", () => {
+  const cancelled = stoppedMark("cancelled");
+  const failed = stoppedMark("error");
+
+  assert.match(cancelled, /^<svg viewBox="0 0 24 24"/);
+  assert.match(cancelled, /<rect /, "cancelled is a stop square");
+  assert.doesNotMatch(cancelled, /<path /);
+  assert.match(failed, /<path d="M12 7\.5v5\.5"\/><path d="M12 16\.6h\.01"\/>/,
+    "a failure is a stroke and the dot under it");
+  // Anything the server did not call cancelled has failed.
+  assert.equal(stoppedMark("interrupted"), failed);
+  assert.equal(stoppedMark(undefined), failed);
 });

@@ -1,8 +1,9 @@
 {"notes": [
-    "Perso dubbing can target every language Perso offers, 77 in all, with regional variants such as English (UK) and Portuguese (Portugal).",
-    "While AI packs download, the dialog shows the percent; Hide moves it to the top bar until you bring it back.",
-    "Subtitled exports match the work screen's size, and export again after an update changed how they are drawn.",
-    "Windows updates install without the setup wizard, and the pre-update check reads correctly in Korean.",
-    "A download that was interrupted says so and resumes where it left off when you press Download and Start."
+    "Erase subtitles: a new tool on the left rail removes burned-in subtitles from a video or a link, then hands the clean video to dubbing.",
+    "Paste a link and the video is fetched before the New project dialog opens. Save clip keeps a trimmed copy.",
+    "A new look: dark theme, blue accents, and a rail with Dubbing, Erase subtitles, Projects and Settings.",
+    "The Dub Agent answers while a dub is running and can stop it when asked.",
+    "When something fails, a report is sent automatically. Turn it off in Settings.",
+    "The work screen fits narrow windows, and Cancel stays on screen with the agent panel open."
   ]
 }

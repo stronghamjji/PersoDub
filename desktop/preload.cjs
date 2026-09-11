@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // the page has no other way to know one landed -- the Export dialog's "where
   // it goes" line reads this and says where it went.
   onDownloadDone: (cb) => ipcRenderer.on("shell:download-done", (_e, info) => cb(info)),
+  // "Saved to Downloads · Show": show a file the app just wrote in Finder or
+  // Explorer. main.js opens only what is inside Downloads or the kit, so this
+  // is a request rather than a command.
+  revealPath: (path) => ipcRenderer.invoke("shell:reveal", path),
   // Settings' "Restart now" button. Keys/workspace only apply on the next
   // start, and asking a non-technical user to quit and reopen by hand was
   // the step that silently didn't happen.
@@ -32,5 +36,19 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // Usage counts for finished dubs. The page hands over the raw log tail
   // because it cannot classify it -- main.js turns that into one published
   // word and drops the text. Nothing here reaches the network.
-  countDub: (status, detail) => ipcRenderer.send("shell:count-dub", { status, detail }),
+  countDub: (status, detail, job) => ipcRenderer.send("shell:count-dub", { status, detail, job }),
+  // The same for an erase. It goes down its own road -- the erase screen polls
+  // its own job and never touches handleJobUpdate -- so it needed its own way
+  // to say how it ended. Subtitle erasing is the new thing in 0.5.5 and so the
+  // likeliest to fail on someone else's machine, and it was the one kind of
+  // failure that sent nothing at all (user, 2026-09-11).
+  countErase: (status, detail, job) => ipcRenderer.send("shell:count-erase", { status, detail, job }),
+  // Automatic failure reports (src/report.js). The page neither builds nor
+  // sends one -- it only gets to show what happened: the shell announces a
+  // report the moment it lands, and getLastReport answers for a page that
+  // loaded after that. `mode` is "on", "off" or "debug", so a build that
+  // cannot report (a from-source run, or the switch turned off) shows nothing
+  // rather than promising a report nobody will receive.
+  onReportSent: (cb) => ipcRenderer.on("shell:report-sent", (_e, sent) => cb(sent)),
+  getLastReport: () => ipcRenderer.invoke("shell:last-report"),
 });

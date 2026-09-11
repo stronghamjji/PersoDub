@@ -14,6 +14,7 @@ import {
   applyEngineAvailability,
   engineChips,
   startedLabel,
+  startErase,
 } from "./dubApi.mjs";
 
 test("buildDubFormData sends exactly the fields app/main.py:dub_start expects", () => {
@@ -300,6 +301,27 @@ test("buildDubFormData: same-language guard does not fire when source is auto (e
   );
 });
 
+test("a video the app is already holding is sent by id, and by id alone", () => {
+  // The dialog hands over all three: the dropped file it is playing, the link
+  // it was pasted, and the id of the copy in the holding area. Sending the file
+  // or the link as well would upload or fetch the same video a second time --
+  // and the server rejects two sources outright.
+  const fd = buildDubFormData({ downloadId: "d1", video: new Blob(["x"]),
+                                sourceUrl: "https://x/y", targetLang: "ko" });
+
+  assert.equal(fd.get("download_id"), "d1");
+  assert.equal(fd.get("video"), null);
+  assert.equal(fd.get("source_url"), null);
+});
+
+test("a held video is a source of its own -- no file and no link needed", () => {
+  const fd = buildDubFormData({ downloadId: "d1", targetLang: "ko", trim: { start: 2, end: 8 } });
+
+  assert.equal(fd.get("download_id"), "d1");
+  assert.equal(fd.get("trim_start"), "2");
+  assert.throws(() => buildDubFormData({ targetLang: "ko" }), /video/);
+});
+
 test("buildDubFormData sends trim_start/trim_end only when a trim is given", () => {
   const fd = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", trim: { start: 2, end: 8 } });
   assert.equal(fd.get("trim_start"), "2"); assert.equal(fd.get("trim_end"), "8");
@@ -527,4 +549,27 @@ test("every stage's own marker parses back to that stage", () => {
     assert.equal(p.label, s.label, `${s.name} should show as "${s.label}"`);
     assert.ok(p.stage >= 1 && p.stage <= p.total);
   });
+});
+
+test("startErase carries the trim, both fields or neither -- the route refuses one", async () => {
+  const sent = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    sent.push({ url, body: opts.body });
+    return { ok: true, json: async () => ({ job_id: "e1" }) };
+  };
+  try {
+    await startErase({ downloadId: "d1", area: [1, 2, 3, 4], project: "A talk",
+                       trim: { start: 2, end: 12 } });
+    await startErase({ downloadId: "d1", area: "whole" });
+  } finally {
+    globalThis.fetch = real;
+  }
+
+  assert.equal(sent[0].url, "/api/erase");
+  assert.equal(sent[0].body.get("area"), "[1,2,3,4]");
+  assert.equal(sent[0].body.get("trim_start"), "2");
+  assert.equal(sent[0].body.get("trim_end"), "12");
+  assert.equal(sent[1].body.get("trim_start"), null);
+  assert.equal(sent[1].body.get("trim_end"), null);
 });

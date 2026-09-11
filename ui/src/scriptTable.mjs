@@ -1,6 +1,6 @@
 // The script table on the finished screen: one row per line of the dub --
-// number, speaker, time, the source line, play, the line itself (editable),
-// how long its voice runs, and make that voice again. The whole loop of
+// number, speaker, time, the source line, the line itself (editable), and at
+// the row's right end play, how long its voice runs, and make that voice again. The whole loop of
 // reading a dub and fixing it lives here: draw the table, take an edit,
 // save it, revert it, re-speak one line.
 //
@@ -24,10 +24,12 @@
 // bars by the same rule, and one rule for "too long" said in two places is how
 // the two would come to disagree.
 //
-// The elements this file touches: #scriptBox and #scriptSaving, both inside
-// the script pane. It never reaches the top bar, the timeline or `state`.
+// The elements this file touches: #scriptBox, #scriptSaving and #scriptCount --
+// the count beside the pane's own name -- all three inside the script pane. It
+// never reaches the top bar, the timeline or `state`.
 import { escapeHtml, fmtClockTenths, errorText } from "./format.mjs";
 import { CHECK_ICON, REMAKE_ICON } from "./icons.mjs";
+import { numberSpeakers, speakerLetter } from "./speakers.mjs";
 
 // A hair over the slot is not "too long" -- the assembly step lets a line spill
 // that much into the silence after it.
@@ -51,22 +53,11 @@ export function lineOverBy(l) {
 
 // Sized by the stylesheet, not here: the narrow table takes both buttons down
 // a size, and an inline width would be the one thing it could not reach.
-const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+// A triangle has two centres and they are 1.75 units apart in a box this size: the middle of its box (6.75) and the middle of its weight (8.5). Neither alone looks right -- box-centred it leans left, weight-centred it leans right -- so it is drawn halfway between them, which is where it always was. What was wrong was the margin-left beside it, worth another 3.2 units at this size and pushing it well past both (user, 2026-09-11).
+const PLAY_ICON = '<svg viewBox="0 0 24 24" style="fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
 // The "revert" arrow beside an edited line (renderScript): a curled-back
 // arrow, drawn like the rest of the app's icons.
 const UNDO_ICON = '<svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>';
-
-// Speaker labels are the diarizer's own ("SPEAKER_00"), which mean nothing to a
-// reader. Number them in the order they first speak instead, and give each a
-// colour -- four of them, cycled, because a video with five speakers is rare
-// and five colours down a column of text is a mess.
-function numberSpeakers(lines) {
-  const seen = new Map();
-  for (const l of lines) {
-    if (l.speaker && !seen.has(l.speaker)) seen.set(l.speaker, seen.size + 1);
-  }
-  return seen;
-}
 
 /**
  * Wire the script table to a page.
@@ -107,10 +98,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
 
   function scriptRow(l, speakers) {
     const n = speakers.get(l.speaker);
-    // The name is a title as well as words, so the compact table can drop to the
-    // colour dot alone and still say who is speaking on hover.
+    // The name is a title as well as words, so a chip the narrow table has
+    // squeezed still says who is speaking on hover.
     const chip = n
-      ? `<span class="spk-chip spk-${(n - 1) % 4 + 1}" title="Speaker ${n}"><i></i><b>Speaker ${n}</b></span>` : "";
+      ? `<span class="spk-chip" title="Speaker ${n}" aria-label="Speaker ${n}"><b>${speakerLetter(n)}</b></span>` : "";
     const over = lineOverBy(l);
     // "1.6s / 0.2s · +1.4s": how long the voice is, how long the slot is, and
     // the difference in one glance -- red when it runs over, grey when it is
@@ -119,7 +110,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const verdict = over ? `<span class="sc-over">+${over.toFixed(1)}s</span>`
       : under > 0.3 ? `<span class="sc-under">−${under.toFixed(1)}s</span>`
       : `<span class="sc-fit">fits</span>`;
-    const lengthCell = `<b>${lineLength(l).toFixed(1)}s</b> / ${l.slot.toFixed(1)}s · ${verdict}`;
+    // The verdict is the answer; the two numbers behind it are the working.
+    // A narrow table drops the working (the stylesheet hides .sc-num) and keeps
+    // the answer, so the row still says whether the line fits.
+    const lengthCell = `<span class="sc-num"><b>${lineLength(l).toFixed(1)}s</b> / ${l.slot.toFixed(1)}s · </span>${verdict}`;
     // Filled means "the words changed and the voice has not caught up". Both
     // halves are needed: `edited` is per line, and `voice_stale` (a file older
     // than the script) is what says the remake has not happened since.
@@ -129,22 +123,24 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // its indentation is output, not layout: it is deliberately NOT stepped in
     // with the rest of this file. The rows read byte for byte as they did when
     // this lived inline in static/index.html.
+    // An empty span rather than nothing at all: the tools cell is four fixed
+    // slots, and a missing third slot would slide the remake button left on
+    // the one row that has been edited (user, 2026-09-11).
     const undo = l.edited
       ? `<button class="sc-undo" data-undo="${l.line}" type="button"
-         title="Revert to the original translation" aria-label="Revert to the original translation">${UNDO_ICON}</button>` : "";
+         title="Revert to the original translation" aria-label="Revert to the original translation">${UNDO_ICON}</button>` : "<span></span>";
     return `<div class="sc-row" data-start="${l.start}" data-end="${l.end}">
     <div class="sc-n">${l.line}</div>
     <div>${chip}</div>
     <div class="sc-time"><span class="sc-t-a">${escapeHtml(fmtClockTenths(l.start))}</span><span
       class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
     <div class="sc-src">${escapeHtml(l.source || "—")}</div>
-    <div>
-      <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-        data-line="${l.line}">${escapeHtml(l.text)}</div>
-      <div class="sc-tools"><button class="sc-listen" data-play="${l.line}" type="button"
-          title="Play this line in the video">${PLAY_ICON}</button><span class="sc-len">${lengthCell}</span><span class="sc-sp"></span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
-          type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
-    </div>
+    <button class="sc-listen" data-play="${l.line}" type="button"
+      title="Play this line in the video">${PLAY_ICON}</button>
+    <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
+      data-line="${l.line}">${escapeHtml(l.text)}</div>
+    <div class="sc-tools"><span class="sc-len">${lengthCell}</span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
+        type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
   </div>`;
   }
 
@@ -167,6 +163,11 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const data = await fetch(`/api/dub/jobs/${jobId}/script`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
+    // Beside the pane's name: how much script there is. Empty when there is
+    // none, so the label reads as "Script" alone.
+    const count = $("scriptCount");
+    if (count) count.textContent = data && data.lines && data.lines.length
+      ? `${data.lines.length} lines` : "";
     if (!data || !data.lines || !data.lines.length) {
       const perso = isPersoJob();
       box.innerHTML = `<div class="script-empty">${perso
@@ -182,8 +183,9 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // the column it had inline rather than stepping in with this file.
     box.innerHTML = `
     <div class="sc-row head">
-      <div class="sc-h-n">#</div><div class="sc-h-spk">Speaker</div><div>Time</div><div>${escapeHtml(sourceName)}</div>
-      <div>${escapeHtml(targetName)}</div>
+      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div class="sc-h-src">${escapeHtml(sourceName)}</div>
+      <div class="sc-h-dst">${escapeHtml(targetName)}</div>
+      <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers)).join("")}`;
     // The timeline draws the same lines, under the table, to the video's real
@@ -205,14 +207,14 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       // gets crushed into the first one and looks like nothing happened.
       bar.style.gridColumn = "1 / -1";
       const note = document.createElement("span");
-      note.textContent = "This Perso dub is read-only. ";
+      note.textContent = "This Perso dubbing is read-only. ";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "keys-link";
       btn.textContent = "Make it editable";
       btn.addEventListener("click", async () => {
         btn.disabled = true;
-        note.textContent = "Fetching this dub from Perso… ";
+        note.textContent = "Fetching from Perso… ";
         try {
           const r = await fetch(`/api/dub/jobs/${jobId}/perso/materialize`, { method: "POST" });
           if (!r.ok) {

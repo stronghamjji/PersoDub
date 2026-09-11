@@ -62,6 +62,15 @@ AGENT_DIR = os.path.join(PERSODUB_LOG_DIR, "agent")
 # happens on a thread of its own. /api/agent/status answers from what is known
 # this instant: the picker has to open now, not when a CLI feels like replying.
 AGENT_LOGIN_TTL = 60.0
+# What a deliberate ask is held to instead. A minute is right for the page
+# asking in passing, and wrong for the one moment the user is standing there:
+# they signed in (or out) in a Terminal and opened the picker to see it. Held
+# to the minute, the picker showed the old answer three opens running and only
+# came right on the fourth, fifty seconds later -- which reads as broken
+# (Windows measured it, 2026-09-11). Only ?login=1 gets this, and only the
+# strip's own moments send it, so the extra cost is one child process per
+# picker-open at worst.
+AGENT_LOGIN_ASK_TTL = 5.0
 _login_cache = {}          # agent id -> {"logged_in", "account", "at"}
 _login_busy = set()        # ids with a check already running
 _login_broken = set()      # ids whose check has already been complained about
@@ -93,12 +102,31 @@ def _login_refresh(key: str, binary: str) -> None:
             _login_busy.discard(key)
 
 
+def _models_of(driver) -> list:
+    """What this assistant may be asked for. A driver with a models() knows
+    how to find out; one without has a written-down MODELS; one that is not
+    installed has neither."""
+    if not driver:
+        return []
+    finder = getattr(driver, "models", None)
+    if callable(finder):
+        try:
+            return list(finder())
+        except Exception:  # noqa: BLE001 -- a bad config file is not a broken app
+            logger.debug("Could not read %s's model", getattr(driver, "__name__", "?"))
+            return []
+    return list(getattr(driver, "MODELS", []))
+
+
 def _login_of(key: str, binary: str, ask: bool) -> dict:
     """What is known about this CLI's login right now, refreshing behind us.
 
     `ask` is what allows a check to be started at all: every check is a child
     process, and the first screen -- where the assistant is not even on show --
-    must not start one. The screen asks the first time the strip is visible.
+    must not start one. The screen asks the first time the strip is visible,
+    and again whenever the user opens the picker -- which is also why an ask is
+    held to the shorter of the two lifetimes above: it is the moment somebody
+    is standing there waiting to see the answer change.
 
     None for `logged_in` means "we cannot say yet", never "signed out" -- the
     screen shows nothing rather than an accusation it has not checked.
@@ -106,7 +134,8 @@ def _login_of(key: str, binary: str, ask: bool) -> dict:
     now = time.monotonic()
     with _login_lock:
         row = _login_cache.get(key)
-        stale = row is None or now - row["at"] >= AGENT_LOGIN_TTL
+        ttl = AGENT_LOGIN_ASK_TTL if ask else AGENT_LOGIN_TTL
+        stale = row is None or now - row["at"] >= ttl
         start = bool(ask and stale and binary and key not in _login_busy)
         if start:
             _login_busy.add(key)
@@ -169,7 +198,11 @@ def agent_status(login: int = 0):
             # Why it is greyed out, in the picker's own words. Empty when the
             # assistant is usable, and "not installed" is the panel's line.
             "reason": "" if driver else meta.get("reason", ""),
-            "models": driver.MODELS if driver else [],
+            # A driver that can work out its own list at run time says so
+            # with models(); the rest have theirs written down. Codex is the
+            # first of the former -- the one model it is set up to use lives
+            # in its config and nowhere else (user, 2026-09-11).
+            "models": _models_of(driver),
         })
     return {"agents": out}
 

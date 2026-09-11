@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- The dark ground is on the element itself, not only in the stylesheet: the
+     window is painted before a byte of CSS is parsed, and a white flash there
+     is the first thing a dark app should not do. -->
+<html style="background:#1e1e22">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
@@ -48,68 +52,122 @@
     defaults stay in localStorage.
 -->
 <title>PersoDub</title>
+<!-- The saved Appearance, read before the first paint. Not a module: a module
+     is deferred, and by the time it ran the dark page would already have been
+     drawn once in the light theme and swapped under the reader's eyes. -->
+<script>try{var t=localStorage.getItem("persodub.theme");if(t==="light")document.documentElement.dataset.theme="light";}catch(e){}</script>
 <style>
+  /* Two sheets, one set of names. The app is dark by default from 0.5.5 on
+     (user, 2026-09-08) and the light sheet below is the same variables wearing
+     the values the app had before; Settings > Appearance puts data-theme on
+     <html> to swap them. Everything a theme cannot change -- radii, the focus
+     ring, the assistant's own colours -- stays here and is written once. */
   :root {
-    --primary: #7B64C8;
-    --primary-soft: #EDE7FF;
-    --primary-line: #C7B9FF;
-    --primary-foreground: #fafafa;
-    --accent: #f7f5fd;
-    --secondary: #f5f5f5;
-    /* The page behind the work area -- a shade off white, so cards and the
+    --primary: #166CFB;
+    --primary-soft: #172a55;
+    --primary-line: #3f6ad1;
+    --primary-foreground: #ffffff;
+    /* Words ON --primary-soft. --primary-line is the line around that chip and
+       is far too dark to read on it here, the way --primary-line is far too
+       pale to read on it in the light sheet -- so the ink is its own name. */
+    --primary-ink: #9EC1FF;
+    --accent: #1d2540;
+    --secondary: #26262b;
+    /* The page behind the work area -- a shade off the panels, so cards and the
        top bar read as sitting on top of it. */
-    --canvas: #fafafa;
-    --muted-foreground: #737373;
-    --foreground: #0a0a0a;
-    --background: #ffffff;
-    --border: #e5e5e5;
+    --canvas: #17171a;
+    /* The desk the panels rest on: darker than a panel, so each one reads as
+       its own card rather than one continuous wall (user, 2026-09-10). */
+    --desk: #0C0C0F;
+    /* One outline for everything a person can press: buttons, dropdowns,
+       fields and the boxes that behave like one. A border that only some of
+       them wore read as "these two are buttons and those are not" (user,
+       2026-09-10). */
+    --control-line: rgba(255, 255, 255, 0.18);
+    --muted-foreground: #9a9aa6;
+    --foreground: #ececf1;
+    --background: #1e1e22;
+    --border: #2c2c32;
     /* The lines between the finished screen's three panes (video, script,
-       timeline): heavier and darker than --border, which was too faint to say
-       where one pane ends and the next begins (user, 2026-09-02). */
-    --divider: #c4c4cb;
-    --success: #11ad32;
-    /* Timeline bars that fit: one notch softer than --success, matched to --destructive. */
-    --timeline-fit: #55A071;
+       timeline): heavier than --border, which was too faint to say where one
+       pane ends and the next begins (user, 2026-09-02). */
+    --divider: #3a3a42;
+    --success: #3fbf5f;
+    /* "Ready" in words, which needs more contrast than the dots --success
+       paints: on white the dot green reads at 3:1, under what small bold text
+       needs. */
+    --success-ink: #3fbf5f;
+    /* Timeline bars that fit: violet, so a bar is never mistaken for one of the
+       blue buttons it sits under (user, 2026-09-08). */
+    --timeline-fit: #8B5CF6;
     --warning: #dfa11a;
-    /* The Settings save-failure panel: pale amber with ink dark enough to
+    /* The Settings save-failure panel: a dark amber with ink light enough to
        read on it. --warning itself is the border and the icon, and is far too
-       light to write words in. */
-    --warning-soft: #fff7e6;
-    --warning-ink: #7a5200;
-    --destructive: #C96A6A;
+       bright to write words on. */
+    --warning-soft: #3a2f12;
+    --warning-ink: #ffd98a;
+    --destructive: #d97777;
+    /* The box drawn over the subtitles on the erase screen. One value for both
+       sheets: it is drawn on the picture, which is neither light nor dark, and
+       a yellow this saturated is on nothing else in the app. */
+    --zone: #ffd34d;
     /* The letterbox behind a video still, and the badges that sit on top of
        it. Dark on purpose in both cases -- a frame can be any colour. */
     --thumb-bg: #111111;
     --thumb-badge: rgba(0, 0, 0, 0.6);
     /* Text that sits on top of that dark frame. */
     --thumb-foreground: #fafafa;
-    /* The trim bar's empty track -- a touch darker than --secondary so the
-       hatching over it stays readable. */
-    --trim-track: #f1f1f4;
+    /* The trim bar's empty track -- a touch off --secondary so the hatching
+       over it stays readable. */
+    --trim-track: #2c2c32;
+    /* The outline on the one button inside the drop zone. Full contrast in
+       both sheets: it sits on the zone rather than in a row of buttons, and
+       --border there left it looking switched off (user, 2026-09-08). */
+    --outline-button: #ffffff;
+    /* The drop zone's dashed edge at rest. Grey, the weight of the link field
+       under it: in blue the zone read as the main way in and the link as an
+       afterthought, when the two are equals (user, 2026-09-09). It turns
+       --primary only while a file is being dragged over it. */
+    --dropzone-line: #4a4a52;
+    /* Type. Small and dense, the way a video editor's panels are (user,
+       2026-09-09): one size for the interface, one for the labels beside it,
+       one for the few real headings, and a larger one for the only text on
+       this screen that is actually read -- the script's two columns. Nothing
+       goes under 11px, where Korean stops being legible. */
+    --font-ui: 12px;
+    --font-label: 11px;
+    --font-title: 13px;
+    --font-script: 13.5px;
     --radius: 8px;
     --radius-sm: 6px;
     --radius-lg: 12px;
-    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
 
-    /* One colour per speaker, cycled after the fourth. Each is a dot colour, the
-       pale background its chip sits on, and the ink that stays readable on that
-       background. Muted on purpose: four saturated chips down a column of text
-       shout louder than the words they label. */
-    --spk-1: #7B64C8; --spk-1-soft: #EDE7FF; --spk-1-ink: #4B3A8F;
-    --spk-2: #0F766E; --spk-2-soft: #CCFBF1; --spk-2-ink: #115E59;
-    --spk-3: #B4791A; --spk-3-soft: #FBEFD5; --spk-3-ink: #7C5211;
-    --spk-4: #C0587F; --spk-4-soft: #FBE4EE; --spk-4-ink: #8D3A58;
-
-    /* The assistant is dark wherever it sits; these are its only colours. */
-    --agent-bg: #18181b;
-    --agent-box: #27272a;
-    --agent-border: #3f3f46;
+    /* The assistant is dark wherever it sits -- in both themes, unchanged by
+       Appearance -- and these are its only colours. Lifted off black in 0.5.5
+       so the column reads as a window of its own beside the work. */
+    --agent-bg: #26262b;
+    --agent-box: #34343a;
+    --agent-border: #34343a;
+    /* Its heading row, and the box the message is typed into: the field is
+       sunk BELOW the panel and outlined above it, which is what says "type
+       here" without a word of instruction. */
+    --agent-head-bg: #2c2c32;
+    /* The band across the top of the work area. The Dub Agent's heading sits
+       in it too, so a screen's own strip and the assistant's read as one row
+       rather than two nearly-alike ones (user, 2026-09-09). Dark mode gives
+       it the agent's own grey; in light mode it follows the page, since the
+       assistant stays dark in both themes by design. */
+    --head-bg: #2c2c32;
+    --agent-field: #1d1d21;
+    --agent-field-line: #4a4a52;
     --agent-fg: #e4e4e7;
     --agent-muted: #6b6b75;
-    /* The user's own message, and the tick on a finished step. Translucent
-       white rather than a colour: it has to sit on the strip's own dark. */
-    --agent-me-bg: rgba(255, 255, 255, 0.14);
-    --agent-me-border: rgba(255, 255, 255, 0.16);
+    /* The user's own message: the app's blue, deepened until white words sit
+       on it -- a translucent white wash was the same grey as the panel now. */
+    --agent-me-bg: #1d3a75;
+    --agent-me-border: #1d3a75;
+    --agent-me-fg: #dfe8ff;
     --agent-ok: #5ee07a;
     /* "This cannot answer until you do something" -- amber that reads on the
        strip's own dark, where the app's --warning-ink (drawn for a white
@@ -118,6 +176,40 @@
     /* Quiet, but still readable: 8.2:1 on the strip, where --agent-muted is
        3.4:1 and belongs on things nobody has to read. */
     --agent-soft: #a1a1aa;
+  }
+
+  /* The light sheet. Same names, same jobs -- only the values change, so every
+     rule below this block is written once and works in both. */
+  html[data-theme="light"] {
+    --primary: #166CFB;
+    --primary-soft: #E3EDFF;
+    --primary-line: #9EC1FF;
+    --primary-foreground: #ffffff;
+    --primary-ink: #1d4ed8;
+    --accent: #eef3ff;
+    --secondary: #ececf0;
+    --canvas: #fafafa;
+    --desk: #e6e6ea;
+    --control-line: rgba(0, 0, 0, 0.20);
+    --muted-foreground: #737373;
+    --foreground: #0a0a0a;
+    --background: #ffffff;
+    --border: #e5e5e5;
+    --divider: #c4c4cb;
+    --success: #11ad32;
+    --success-ink: #2a8a4a;
+    --timeline-fit: #8B5CF6;
+    --warning: #dfa11a;
+    --warning-soft: #fff7e6;
+    --warning-ink: #7a5200;
+    --destructive: #C96A6A;
+    --thumb-bg: #111111;
+    --thumb-badge: rgba(0, 0, 0, 0.6);
+    --thumb-foreground: #fafafa;
+    --trim-track: #f1f1f4;
+    --outline-button: #0a0a0a;
+    --dropzone-line: var(--border);
+    --head-bg: #ececf0;
   }
 
   * { box-sizing: border-box; }
@@ -143,14 +235,17 @@
 
   /* ---------------- App shell ---------------- */
 
-  .app { height: 100vh; display: flex; }
+  /* Every panel is its own card on the desk: one gap between them and the
+     same gap to the window's edge, so nothing touches the edge and nothing
+     runs off the bottom (user, 2026-09-10). */
+  .app { height: 100vh; display: flex; gap: 8px; padding: 8px; background: var(--desk); }
 
   /* ---------------- RAIL ---------------- */
 
   .rail {
     flex: 0 0 60px;
     background: var(--background);
-    border-right: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -174,6 +269,10 @@
   .rail-item .icon { width: 20px; height: 20px; stroke-width: 2; }
 
   .rail-item.active { background: var(--primary); color: var(--primary-foreground); }
+  .rail-item.brand { background: none; }
+  .rail-logo { width: 30px; height: 30px; border-radius: 8px; display: block; }
+  .about-brand { display: inline-flex; align-items: center; gap: 8px; }
+  .about-logo { width: 22px; height: 22px; border-radius: 6px; }
   .rail-item:hover:not(.active) { color: var(--foreground); background: var(--secondary); }
   .rail-spacer { flex: 1; }
 
@@ -194,11 +293,14 @@
        sidebar past the width asked for. */
     min-width: 0;
     display: flex;
-    border-right: 1px solid var(--border);
-    background: var(--secondary);
+    background: transparent;
     transition: width 0.15s ease, opacity 0.15s ease;
   }
-  .history-scroll { flex: 1; min-width: 0; overflow-y: auto; padding-bottom: 12px; }
+  /* The list is a card like the others: it ends inside the window instead of
+     running off the bottom edge (user, 2026-09-10). */
+  .history-sidebar > *:not(.grip) { background: var(--background);
+    border-radius: var(--radius); overflow: hidden; }
+  .history-scroll { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 
   /* The 0.15s above is for opening and closing. Under the pointer it is the
      wrong thing entirely: every step of a drag would ease into place and the
@@ -209,40 +311,59 @@
   /* Nothing to drag while there is no list: the handle goes with it. */
   .history-sidebar.collapsed .grip { display: none; }
 
+  /* The same head every other panel wears: the word sits on the head's own
+     band in the panel's own white, not as a faint label above the list
+     (user, 2026-09-10). */
   .history-head {
-    padding: 12px 14px 8px;
-    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-    color: var(--muted-foreground);
+    flex: 0 0 auto; box-sizing: border-box; height: 40px;
+    display: flex; align-items: center; padding: 0 14px;
+    background: var(--head-bg); border-bottom: 1px solid var(--agent-border);
+    font-size: var(--font-title); font-weight: 700;
+    color: var(--foreground);
   }
+  #historyList { flex: 1; min-height: 0; overflow-y: auto;
+    background: var(--background); padding-bottom: 8px; }
 
-  .history-empty { padding: 6px 14px 14px; font-size: 0.78rem; color: var(--muted-foreground); }
+  .history-empty { padding: 6px 14px 14px; font-size: var(--font-ui); color: var(--muted-foreground); }
 
   .job-row { display: flex; align-items: center; gap: 9px; padding: 9px 14px; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font: inherit; color: inherit; }
   .job-row:hover, .job-row.current { background: var(--accent); }
   /* dot- prefixed on purpose: a bare .done here is the finished screen's own
      layout class, which laid the dot out as a flex column and left it 0px wide
      -- so every finished job used to sit in the list with no dot at all. */
-  .job-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .job-dot.dot-running { background: var(--primary); box-shadow: var(--focus-ring); }
-  .job-dot.dot-done { background: var(--success); }
-  .job-dot.dot-error { background: var(--destructive); }
-  .job-dot.dot-cancelled { background: var(--muted-foreground); }
-  .job-dot.dot-queued { background: var(--primary-line); }
+  /* A state's mark, not only its colour: the shape is drawn by jobMark() in
+     ui/src/projects.mjs and these rules only say what colour it wears -- the
+     same five colours the plain dots had. */
+  .job-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+    display: inline-grid; place-items: center; }
+  .job-dot svg { width: 12px; height: 12px; fill: none; stroke: currentColor;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .job-dot.dot-running { color: var(--primary); box-shadow: var(--focus-ring); }
+  .job-dot.dot-done { color: var(--success); }
+  .job-dot.dot-error { color: var(--destructive); }
+  .job-dot.dot-cancelled { color: var(--muted-foreground); }
+  .job-dot.dot-queued { color: var(--primary-line); }
   .job-row .job-info { min-width: 0; }
   /* The row itself is a <button>, so the delete control sits beside it rather
      than inside. It stays hidden until the row is hovered or it has focus --
      an always-visible delete next to every job invites the wrong click. */
   .job-line { display: flex; align-items: center; }
   .job-line .job-row { flex: 1; min-width: 0; }
-  .job-del { border: none; background: none; cursor: pointer; padding: 6px 10px; color: var(--muted-foreground); font: inherit; font-size: 0.78rem; opacity: 0; flex-shrink: 0; }
+  .job-del { border: none; background: none; cursor: pointer; padding: 6px 10px; color: var(--muted-foreground); font: inherit; font-size: var(--font-label); opacity: 0; flex-shrink: 0; }
   .job-line:hover .job-del, .job-del:focus-visible { opacity: 1; }
   .job-del:hover { color: var(--destructive); }
-  .job-name { font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-name { font-size: var(--font-ui); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The rail's eraser, shrunk, in front of the name of a job that erased
+     subtitles rather than dubbed. Muted: it says what kind of work this was,
+     and the name beside it is still the thing to read. */
+  .job-name .job-kind { width: 13px; height: 13px; vertical-align: -2px;
+    margin-right: 5px; stroke: currentColor; fill: none; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; color: var(--muted-foreground); }
   /* One line, clipped: left to wrap it ran to three lines in a 230px sidebar
      and pushed half the list below the fold. */
-  .job-meta { font-size: 0.7rem; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-meta { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: transparent; }
   /* The row under the top bar: the work, and the agent column beside it. */
   .mainrow { flex: 1; min-height: 0; display: flex; }
 
@@ -252,10 +373,20 @@
   /* Right of Export behind a hairline: [Cancel] [Export] | [list] [timeline]
      [agent]. A pressed button is an open panel. */
   .tb-div { width: 1px; height: 22px; background: var(--border); margin: 0 2px; flex: none; }
+  /* Sat nearer the title than the house: the house is an 18px icon centred in
+     a 32px button, so its own edge is 7px short of where the button ends,
+     while the title's first letter starts where its box does. The gaps were
+     25 and 16 measured off the pixels; this moves the rule 4px left to even
+     them (user, 2026-09-10). */
+  #topbarHomeDiv { margin-left: -2px; margin-right: 6px; }
   .pane-btn { width: 30px; height: 26px; border-radius: 7px; border: 0; background: transparent;
     display: grid; place-items: center; cursor: pointer; color: var(--muted-foreground); flex: none; }
   .pane-btn:hover { background: var(--secondary); }
-  .pane-btn.on { background: var(--primary-soft); color: var(--primary); }
+  /* --primary-ink, not --primary: the app's blue on the pale blue behind it
+     reads at 2.9:1 in the dark sheet and 4.1:1 in the light one -- under what a
+     control needs in either. The ink is the colour drawn to sit on that
+     background (user, 2026-09-09). */
+  .pane-btn.on { background: var(--primary-soft); color: var(--primary-ink); }
   .pane-btn[disabled] { opacity: 0.35; cursor: default; }
   .pane-btn[disabled]:hover { background: transparent; }
   .pane-btn svg { width: 17px; height: 17px; }
@@ -267,9 +398,8 @@
 .topbar {
     flex: 0 0 auto; height: 52px;
     display: flex; align-items: center; gap: 12px;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--background);
+    padding: 0 8px;
+    background: transparent;
   }
   /* Both top-bar arrows. A 32px round target with an 18px arrow inside it: the
      14px icon in a 18x14 box these were drawn at is under every platform's
@@ -283,24 +413,35 @@
   /* Clear of the window's own edge -- the topbar's 16px padding is the gap on
      the left, and the arrow on the right needs the same room to sit in. */
   #topbarForward { margin-right: 4px; }
-  .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-  .topbar-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+  /* Nudged 2px down. Every box in this bar is centred on the same line, but a
+     line of text is not its box: the room a line reserves under the baseline
+     for descenders is empty in a title like "Erase subtitles", so the letters
+     ride 2px high beside an icon, which is symmetrical and does not
+     (user, 2026-09-10). This puts the capital-height band on the icons'
+     middle, which is the line the eye actually reads; a title with a g or a y
+     in it hangs below that, as it should. */
+  .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0;
+    position: relative; top: 2px; }
+  /* The name is the user's to change: it reads as plain text until it is
+     clicked, and the field it becomes is the same size in the same place so
+     the bar does not move (user, 2026-09-10). */
+  .topbar-title { font-size: var(--font-title); font-weight: 600; letter-spacing: -0.01em;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .topbar-sub { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; }
+  #topbarTitle[data-editable="1"] { cursor: text; border-radius: var(--radius-sm);
+    padding: 2px 6px; margin: -2px -6px; }
+  #topbarTitle[data-editable="1"]:hover { background: var(--secondary); }
+  .topbar-rename { width: min(420px, 40vw); padding: 2px 6px; margin: -2px -6px;
+    border: 1px solid var(--primary); border-radius: var(--radius-sm);
+    background: var(--background); color: var(--foreground); font-family: inherit; }
+  .topbar-sub { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap; }
   .topbar-spacer { flex: 1; }
-  /* The one filled button up here, sized for the top bar rather than for a
-     dialog: 32px tall like the two arrows beside it, with the same room left
-     and right of what is inside it, and the icon exactly one gap from the
-     word. Its right edge lands on the top bar's own 16px padding -- where
-     Cancel already ends. */
-  #exportBtn { height: 32px; padding: 0 14px; gap: 6px; }
 
   /* The one job-wide message line (a credit warning, or why a dub failed).
      It sits in the progress card, right under the four steps -- the place the
      eye already is while a job runs. */
   #jobNotice { margin-top: 0; }
 
-  .job-notice { font-size: 0.82rem; color: var(--warning); margin-top: 6px; }
+  .job-notice { font-size: var(--font-ui); color: var(--warning); margin-top: 6px; }
   /* Red, not amber: amber blended into the surrounding hint text and the
      0-credit warning went unseen (user feedback 2026-08-06). */
   .job-notice.danger { color: var(--destructive); font-weight: 600; }
@@ -310,24 +451,27 @@
      leaves the user dubbing on the old key without knowing. */
   .settings-alert { display: flex; align-items: center; gap: 10px; margin-top: 12px;
     padding: 12px 14px; background: var(--warning-soft); border: 1px solid var(--warning);
-    border-radius: var(--radius); color: var(--warning-ink); font-size: 0.9rem; font-weight: 600; }
+    border-radius: var(--radius); color: var(--warning-ink); font-size: var(--font-ui); font-weight: 600; }
   .settings-alert .icon { color: var(--warning); }
   .job-notice a { color: var(--warning); font-weight: 600; }
 
   details.raw-log { margin-top: 8px; }
-  details.raw-log summary { cursor: pointer; font-size: 0.76rem; color: var(--muted-foreground); list-style: none; display: flex; align-items: center; gap: 4px; }
-  .log-box { margin-top: 8px; background: var(--secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 0.72rem; color: var(--muted-foreground); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; max-height: 140px; overflow-y: auto; }
+  details.raw-log summary { cursor: pointer; font-size: var(--font-label); color: var(--muted-foreground); list-style: none; display: flex; align-items: center; gap: 4px; }
+  .log-box { margin-top: 8px; background: var(--secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: var(--font-label); color: var(--muted-foreground); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; max-height: 140px; overflow-y: auto; }
 
   /* ---------------- Screens ---------------- */
   /* Exactly one of the three is on screen; showScreen() toggles `hidden`. */
 
-  .work { flex: 1; min-width: 0; min-height: 0; position: relative; background: var(--canvas); }
+  .work { flex: 1; min-width: 0; min-height: 0; position: relative; background: transparent; }
   .screen { position: absolute; inset: 0; overflow-y: auto; padding: 16px 22px 22px; }
 
-  /* The done screen runs edge to edge: two panes divided by a line, and the
-     timeline under them. Its own panes carry the padding. */
+  /* The done screen runs edge to edge: three named boxes laid on the app's
+     canvas with a 6px gap between them. Its own panes carry the padding.
+     A screen that paints a ground of its own is a card like every other pane
+     beside it, so it takes the same corner: square ones read as a slab
+     dropped on the window (user, 2026-09-10). */
   #screen-done { display: flex; flex-direction: column; padding: 0;
-    background: var(--background); }
+    background: var(--canvas); border-radius: var(--radius); overflow: hidden; }
 
   /* ---------------- Running: blurred original + progress card ---------------- */
   /* The two halves are one centred group: the source video on the left, out of
@@ -341,46 +485,63 @@
      overflows its scroll container cannot be scrolled back to its start edge,
      so on a narrow window the left of the video would be cut off for good. */
   #screen-running { display: flex; }
-  .running { margin: auto; display: flex; gap: 28px; align-items: stretch; }
+  /* Never wider than the screen it is on: the pair shrinks (the video first,
+     then the card, each to a floor) instead of running under the agent panel,
+     where the Cancel button was for the whole of a dub on a 1280px-wide
+     Windows laptop with the panel open (2026-09-10). */
+  .running { margin: auto; display: flex; gap: 28px; align-items: stretch; min-width: 0;
+    width: min(100%, calc(clamp(560px, 40vw, 880px) + 28px + clamp(420px, 26vw, 520px))); }
   /* The box and the line that says which part of the video is being dubbed,
      one under the other -- what sits beside the card is that column, not the
      box itself, so the caption lands under the box instead of next to it. */
-  .running-shot { align-self: center; display: flex; flex-direction: column; gap: 8px; }
+  .running-shot { align-self: center; display: flex; flex-direction: column; gap: 8px;
+    flex: 1 1 clamp(560px, 40vw, 880px); min-width: 280px; }
   /* A box of a fixed shape, never the video's own: a 9:16 phone clip let the
      block grow past 800px tall and dragged the card -- and the whole screen --
      up with it. 16:9 always, letterboxing whatever does not match, so the wait
      always looks the same shape. 560px in the window the app opens at, growing
      with a maximized one (40vw, to 880px) -- at the old fixed size the pair sat
-     as a small island in the middle of a 2000px screen. The 500px in the second
-     half is the card beside it plus the gap: on a narrow window the video takes
-     what is left instead, down to a floor. aspect-ratio holds the shape while the file is still loading, and
+     as a small island in the middle of a 2000px screen. The size is the
+     column's (.running-shot), which flexes down on a narrow screen; a formula
+     in vw could not see the rail or the agent panel, and the pair overflowed
+     under the panel. aspect-ratio holds the shape while the file is still loading, and
      if it never loads the veil still has something to sit on; align-self keeps
      the box at its own height when the card's steps make the row taller. */
-  .running-video { position: relative; flex: 0 0 auto; align-self: center;
-    width: min(clamp(560px, 40vw, 880px), max(280px, calc(100vw - 500px)));
+  .running-video { position: relative; flex: 0 0 auto; align-self: center; width: 100%;
     aspect-ratio: 16 / 9;
     border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg); }
   .running-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
+  /* A radius with nothing clipped is a square corner: the head and the tabs
+     painted over it (user, 2026-09-10). */
+  .video-pane, .timeline { overflow: hidden; }
   /* Nothing to say for a job with no trim, and nothing drawn either. */
-  .running-trim { text-align: center; font-size: 12px; color: var(--muted-foreground);
+  .running-trim { text-align: center; font-size: var(--font-label); color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; }
   .running-trim:empty { display: none; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* 420px in the window the app opens at, growing with a maximized one so the
-     pair does not sit as a small island in the middle of a wide screen. */
-  .progress-card { flex: 0 0 clamp(420px, 26vw, 520px); display: flex; flex-direction: column; gap: 16px;
+     pair does not sit as a small island in the middle of a wide screen.
+     The floor is 280 rather than 320: at the smallest window the app allows
+     (960 CSS wide) the picture and the card together asked for 628px of a
+     624px work area, and the 4px they could not have came out as a scroll bar
+     along the bottom -- measured on Windows, 2026-09-10. 280 is the same floor
+     the picture beside it already had. */
+  .progress-card { flex: 0 1 clamp(420px, 26vw, 520px); min-width: 280px; display: flex; flex-direction: column; gap: 16px;
     padding: 22px 24px; background: var(--background);
     border: 1px solid var(--border); border-radius: var(--radius-lg); }
-  .progress-head { display: flex; align-items: baseline; justify-content: space-between; }
-  .progress-head b { font-size: 15px; font-weight: 600; }
-  .progress-head span { font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .progress-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
+  /* The percentage and the way out, in that order: the number is what is read,
+     the button is what is pressed. */
+  .progress-head-end { display: flex; align-items: center; gap: 12px; }
+  .progress-head b { font-size: var(--font-title); font-weight: 600; }
+  .progress-head span { font-size: var(--font-label); color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
   .progress-bar { height: 6px; border-radius: 3px; background: var(--primary-soft); overflow: hidden; }
   .progress-bar > div { height: 100%; width: 0; border-radius: 3px; background: var(--primary); transition: width 0.4s ease; }
 
   .progress-steps { list-style: none; margin: 0; padding: 4px 0 0;
     display: flex; flex-direction: column; gap: 12px; }
-  .progress-steps li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--muted-foreground); }
+  .progress-steps li { display: flex; align-items: center; gap: 10px; font-size: var(--font-ui); color: var(--muted-foreground); }
   .progress-steps li.current { color: var(--foreground); font-weight: 600; }
   .step-mark { flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%;
     display: inline-flex; align-items: center; justify-content: center; }
@@ -393,16 +554,150 @@
   .step-mark.todo { border: 2px solid var(--border); }
   .step-note { font-weight: 400; color: var(--muted-foreground); }
 
-  /* Pushed to the foot of the card, under a rule, so the steps stay the thing
-     you read first. */
-  .progress-card .raw-log { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; }
+  /* At the foot of the card, under a rule, so the steps stay the thing you
+     read first. The space above it belongs to .cancel-row now -- that is what
+     carries the margin-top:auto and pushes both of them down together. */
+  .progress-card .raw-log { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
 
   @media (prefers-reduced-motion: reduce) {
     .step-mark.current, .sc-wave:disabled svg { animation: none; }
     .progress-bar > div { transition: none; }
   }
 
-  h2 { margin: 0 0 3px; font-size: 0.98rem; }
+  /* ---------------- Erase subtitles ---------------- */
+  /* One screen, three faces (drop a video / place the box / the result), all
+     three the same column: a 40px strip that says what to do or which video is
+     showing, the picture under it taking every pixel that is left, and one row
+     of buttons at the foot. The finished screen's shape, so the wave and
+     lip-sync panes that are coming can be dropped in under the picture without
+     moving anything above them. */
+  /* Rounded for the same reason #screen-done is: its ground is lighter than
+     the desk behind it, so its edges are seen, and every other pane on the
+     window is a rounded card (user, 2026-09-10). */
+  #screen-erase { display: flex; flex-direction: column; padding: 0;
+    background: var(--background); border-radius: var(--radius); overflow: hidden; }
+  /* The same drop zone as the home screen's, at the same size and in the same
+     place on the window -- both ways into the app then look alike, and one
+     stretched to fill a 1440px window was a very large amount of nothing. */
+  .erase-drop { flex: 1; min-height: 0; display: flex; overflow-y: auto;
+    padding: 16px 22px max(22px, 8vh); }   /* #screen-home's, so the column lands on the same pixel */
+  /* The zone, the OR line and the link field are one column down the middle,
+     the same shape the home screen's two ways in have. */
+  .erase-drop-col { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto;
+    display: flex; flex-direction: column; gap: 16px; }
+  .erase-dl { font-size: var(--font-label); color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums; }
+  .erase-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  /* The one instruction on this screen, in the strip the tabs take over once
+     there is a result -- both are 40px, so the picture is the same size while
+     the box is being placed and once the erased video is in. In between, while
+     the erase runs, the strip carries neither: the question has been answered
+     and there is nothing yet to compare. */
+  /* The finished screen's tabs share a narrow pane and split it in two; these
+     sit over a picture as wide as the window, where two labels a metre apart
+     stop reading as a pair. They keep their own width, at the left. */
+  #eraseTabs .vtab { flex: 0 0 auto; padding: 0 22px; }
+  /* The picture, the trim bar and the controls, one column down the middle.
+     --erase-col is the picture's own width, written by drawBox: CSS cannot
+     ask one child how wide a sibling turned out to be. */
+  .erase-mid { flex: 1; min-height: 0; padding: 14px; gap: 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  /* 780 rather than the whole height: at full height the trim bar and the
+     button are pushed to the window's edge, and shrinking the picture further
+     (620 was tried) empties the top and bottom instead (user, 2026-09-10). */
+  .erase-stage { position: relative; flex: 0 1 auto; min-height: 0; margin: 0;
+    max-height: 780px;
+    border-radius: var(--radius); overflow: hidden; background: var(--thumb-bg);
+    display: flex; align-items: center; justify-content: center; }
+  .erase-stage video { display: block; max-width: 100%; max-height: 100%;
+    object-fit: contain; }
+  /* The trim bar under the picture: one row and its ruler, no more. The
+     picture above it keeps every pixel that is left, which is what a 13-inch
+     window needs. */
+  /* A little wider than the picture, never narrower than a ruler can be read
+     at: a portrait video is only a few hundred pixels across, and a ten-second
+     ruler squeezed into that has its labels dropped one by one. */
+  .erase-trim, .erase-row { width: max(var(--erase-col, 100%), 520px); max-width: 100%; }
+  .erase-trim { flex: 0 0 auto; margin: 0; }
+  .erase-error { color: var(--destructive); font-size: var(--font-label);
+    padding: 0 22px 14px; }
+  .erase-error:empty { display: none; }
+  /* In the column it is under the thing it is about, and the padding that
+     held it off the screen's edge is not wanted there. */
+  .erase-mid > .erase-error { width: max(var(--erase-col, 100%), 520px);
+    max-width: 100%; padding: 0; }
+  /* In the column, the same width as the row above it. */
+  .erase-log { width: max(var(--erase-col, 100%), 520px); max-width: 100%; }
+  /* The pack line. The accent ground of the app's other "you need this first"
+     panels, and the same 32px button as everywhere else. */
+  .erase-notice { flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px; background: var(--accent);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--font-ui); color: var(--foreground); }
+  /* The box over the subtitles: dashed, with a handle at each corner. Its
+     colour is the one thing on this screen that says whether the app is still
+     looking: red while it hunts for the writing, green once it has found it
+     and put the box there (user, 2026-09-10). Yellow is what a box the user
+     has taken hold of goes back to -- from then on it is theirs, not a
+     finding, and nothing else in the app is that colour. */
+  .erase-zone { --zone-now: var(--zone);
+    position: absolute; border: 2px dashed var(--zone-now);
+    background: color-mix(in srgb, var(--zone-now) 12%, transparent);
+    cursor: move; touch-action: none; }
+  .erase-zone.finding { --zone-now: var(--destructive); }
+  .erase-zone.found { --zone-now: var(--success); }
+  /* A chip rather than bare words: over a bright frame the thin coloured text
+     it used to be could not be read at all, and this line is now the only
+     place the screen says it is still looking. Clear of the corner handle it
+     would otherwise sit under. */
+  .erase-zone b { position: absolute; left: -2px; top: -26px;
+    padding: 2px 9px; border-radius: 5px; white-space: nowrap;
+    background: var(--zone-now); color: #12131a;
+    font-size: var(--font-label); font-weight: 700; }
+  /* 11px, and each one hangs half outside its corner so the whole handle can be
+     grabbed rather than only the half of it over the picture. */
+  .erase-zone i { position: absolute; width: 11px; height: 11px;
+    background: var(--zone-now); border-radius: 2px; }
+  .erase-zone i[data-handle="nw"] { left: -6px; top: -6px; cursor: nwse-resize; }
+  .erase-zone i[data-handle="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
+  .erase-zone i[data-handle="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; }
+  .erase-zone i[data-handle="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+  /* The one row of controls, one line high whatever it is carrying. */
+  .erase-row { flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
+    margin: 0; padding: 0; }
+  /* The reason takes as much of the row as it needs and wraps; the buttons
+     keep their one line. "Try again" broke in half next to a two-line
+     sentence before this. */
+  .erase-row .btn { flex: 0 0 auto; white-space: nowrap; }
+  .erase-state { font-size: var(--font-ui); color: var(--foreground);
+    font-variant-numeric: tabular-nums; }
+  /* Why it stopped, in the same place the percentage was -- and it may be a
+     whole sentence, so this one is allowed to wrap. */
+  .erase-state.bad { color: var(--destructive); white-space: normal; }
+  .erase-bar { flex: 1; min-width: 0; }
+  /* The way on, at the far end of the row -- the same place the New project
+     dialog puts Start dubbing. Back stands there too: on a job that stopped
+     there is nothing between the reason and the one thing to do about it.
+     The minutes and Erase are that same far end while the box is placed;
+     the two sets are never up at once. */
+  #eraseDubBtn, #eraseBackBtn, #eraseRetryBtn, #eraseEst { margin-left: auto; }
+  /* Back and Try again stand together: whichever of the two is first takes
+     the gap, and the second one follows it. A job opened out of the Projects
+     list has no Back, and then Try again is the one that goes to the end. */
+  #eraseBackBtn:not([hidden]) + #eraseRetryBtn { margin-left: 8px; }
+  /* What Export has to say, and only after it has said it. */
+  .erase-saved { display: inline-flex; align-items: center; gap: 6px;
+    font-size: var(--font-label); color: var(--muted-foreground); }
+  /* The "Show" that opens the folder a file was just written into -- here and
+     beside the New project dialog's Save clip. A link rather than a button:
+     it sits inside a sentence, and there is already a button box on this row. */
+  .show-link { border: none; background: none; padding: 0; cursor: pointer;
+    font: inherit; color: var(--primary-ink); text-decoration: underline; }
+  /* The estimate beside the Erase button: a label, not a second title. */
+  .topbar-est { font-size: var(--font-label); color: var(--muted-foreground);
+    white-space: nowrap; }
+
+  h2 { margin: 0 0 3px; font-size: var(--font-title); }
 
   /* ---------------- Home: headline, drop zone, link field ---------------- */
   /* One column, so the two ways in (drop a file, paste a link) sit one under
@@ -415,53 +710,59 @@
      window too short for the block, auto margins give up and let it start at the
      top and scroll, where centring would cut its head off. The bottom padding is
      the upward bias -- dead centre reads as low. */
+  #screen-done { padding: 0; }
   #screen-home { display: flex; padding-bottom: max(22px, 8vh); }
   #screen-home[hidden] { display: none; }
 
   .home { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto;
     display: flex; flex-direction: column; gap: 16px; }
-  .home-title { margin: 0; font-size: clamp(22px, 1.4vw, 26px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
-  .home-sub { margin: -10px 0 6px; font-size: 14px; color: var(--muted-foreground); }
+  .home-title { margin: 0; font-size: clamp(17px, 1.1vw, 19px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+  .home-sub { margin: -10px 0 6px; font-size: var(--font-ui); color: var(--muted-foreground); }
 
-  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--primary-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
+  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--control-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted-foreground); }
   .upload-zone.drag-over { border-color: var(--primary); background: var(--accent); }
-  .upload-zone .icon-lg { width: clamp(30px, 2.2vw, 38px); height: clamp(30px, 2.2vw, 38px); color: var(--primary); }
-  .upload-title { color: var(--foreground); font-weight: 600; font-size: clamp(16px, 1vw, 20px); }
+  /* Grey like the edge around it: a big blue arrow said "drop a file" was the
+     main way in, next to a link field the same size as a hint. Both turn blue
+     together, and only while a file is actually over the zone. */
+  .upload-zone .icon-lg { width: clamp(30px, 2.2vw, 38px); height: clamp(30px, 2.2vw, 38px); color: var(--muted-foreground); }
+  .upload-zone.drag-over .icon-lg { color: var(--primary); }
+  .upload-title { color: var(--foreground); font-weight: 600; font-size: 14px; }
   /* A button, not an underlined word: a desktop app opens a file picker from a
      button, and "Choose File…" with the ellipsis is the platform's own wording
      for one (2026-08-28). */
-  .upload-hint { font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .upload-choose { font-size: 0.84rem; }
+  .upload-hint { font-size: var(--font-label); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .upload-choose { font-size: var(--font-ui);
+    border-color: var(--outline-button); color: var(--outline-button); }
 
   /* A rule either side of the word, so "OR" reads as a divider, not a label. */
-  .home-or { display: flex; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: 11.5px; letter-spacing: 0.06em; }
+  .home-or { display: flex; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: var(--font-label); letter-spacing: 0.06em; }
   .home-or span { flex: 1; height: 1px; background: var(--border); }
 
   .link-field { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); cursor: text; color: var(--muted-foreground); }
   .link-field:focus-within { border-color: var(--primary); box-shadow: var(--focus-ring); }
-  .link-field input { flex: 1; min-width: 0; border: none; background: none; padding: 0; font-family: inherit; font-size: 13.5px; color: var(--foreground); }
+  .link-field input { flex: 1; min-width: 0; border: none; background: none; padding: 0; font-family: inherit; font-size: var(--font-ui); color: var(--foreground); }
   .link-field input:focus { outline: none; }
 
   .link-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--secondary); }
   .link-card.error { border-color: var(--destructive); }
   .link-card .lc-row { display: flex; gap: 12px; align-items: flex-start; }
   .link-card img { width: 120px; border-radius: var(--radius-sm); flex: none; }
-  .link-card .lc-title { font-weight: 600; font-size: 0.86rem; color: var(--foreground); margin-bottom: 3px; }
-  .link-card .lc-meta { font-size: 0.78rem; color: var(--muted-foreground); }
-  .link-card .lc-msg { font-size: 0.83rem; color: var(--foreground); margin: 0 0 4px; }
-  .link-card .lc-sub { font-size: 0.78rem; color: var(--muted-foreground); margin: 0 0 10px; }
-  .link-card .lc-loading { font-size: 0.8rem; color: var(--muted-foreground); }
+  .link-card .lc-title { font-weight: 600; font-size: var(--font-ui); color: var(--foreground); margin-bottom: 3px; }
+  .link-card .lc-meta { font-size: var(--font-label); color: var(--muted-foreground); }
+  .link-card .lc-msg { font-size: var(--font-ui); color: var(--foreground); margin: 0 0 4px; }
+  .link-card .lc-sub { font-size: var(--font-label); color: var(--muted-foreground); margin: 0 0 10px; }
+  .link-card .lc-loading { font-size: var(--font-label); color: var(--muted-foreground); }
 
   /* Auto-update banner: appears only in the desktop shell, only after a new
      version finished downloading. Quiet by design -- no modal, no countdown. */
   .update-banner { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
     display: none; align-items: center; gap: 12px; padding: 10px 16px;
     background: var(--foreground); color: var(--background); border-radius: 999px;
-    font-size: 0.82rem; box-shadow: 0 4px 14px rgba(0,0,0,0.25); z-index: 60; }
+    font-size: var(--font-ui); box-shadow: 0 4px 14px rgba(0,0,0,0.25); z-index: 60; }
   .update-banner.shown { display: flex; }
   .update-banner button { border: none; border-radius: 999px; padding: 6px 14px;
-    font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    font-size: var(--font-ui); font-weight: 600; cursor: pointer;
     background: var(--background); color: var(--foreground); }
   /* The post-update notice reuses the pill: same place, same shape, so the
      "Restart to update" pill before the restart and this one after it read
@@ -470,87 +771,131 @@
   .update-banner .link { background: none; color: var(--primary-line); padding: 0; }
   .update-banner .link:hover { text-decoration: underline; }
 
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 0.84rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+  /* Every button in the app is this box: 32px tall, 14px of room either side,
+     one radius and one type size -- the top bar's Export, which is the button
+     the eye is calibrated on. A 44px Start beside a 32px Export said the two
+     belonged to different apps (user, 2026-09-09). Height rather than vertical
+     padding, so a label that wraps cannot make one button taller than the one
+     beside it. */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--radius-sm); height: 32px; padding: 0 14px; font-size: var(--font-ui); font-weight: 600; cursor: pointer; font-family: inherit; }
   .btn-primary { background: var(--primary); color: var(--primary-foreground); }
   .btn-primary:hover { box-shadow: var(--focus-ring); }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
-  .btn-secondary { background: var(--secondary); color: var(--foreground); border: 1px solid var(--border); }
+  .btn-secondary { background: var(--secondary); color: var(--foreground); border: 1px solid var(--control-line); }
   /* A quiet button that still reads as a button: white, bordered, same box as
      the rest. (A bare text link, inside the 52px top bar, read as an
      underlined footnote beside the solid Export.) */
-  .btn-outline { background: var(--background); color: var(--foreground); border: 1px solid var(--border); }
+  .btn-outline { background: var(--background); color: var(--foreground); border: 1px solid var(--control-line); }
   .btn-outline:hover { background: var(--secondary); }
   .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* Stopping a job that is running: the one button on the progress card, and
+     it was grey on grey there. A white outline finds it without shouting the
+     way a filled red would (user, 2026-09-10). .30 rather than the .55 it
+     started at: standing alone at the foot of the card it no longer has to
+     fight the percentage beside it, and .55 there was the only thing on the
+     screen brighter than the writing. Still above the .18 every other control
+     uses, because this is the one way to stop what is running.
+     Its own row at the foot, above the log: beside the percentage the eye
+     read the two as one lump, and a number you read is not a button you press
+     (user, 2026-09-10). */
+  .btn-cancel { background: transparent; color: var(--foreground);
+    border: 1px solid rgba(255, 255, 255, 0.30); }
+  .btn-cancel:hover { background: rgba(255, 255, 255, 0.08); }
+  .cancel-row { display: flex; justify-content: flex-end; margin-top: auto; padding-top: 12px; }
   /* The one button in the app that destroys something. */
   .btn-danger { background: var(--destructive); color: var(--primary-foreground); }
-  .delete-error { margin: 10px 0 0; font-size: 0.8rem; color: var(--destructive); }
+  .delete-error { margin: 10px 0 0; font-size: var(--font-label); color: var(--destructive); }
 
   .option-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
-  .field label { display: block; font-size: 0.76rem; font-weight: 600; margin-bottom: 5px; }
-  select, input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); font-size: 0.84rem; color: var(--foreground); font-family: inherit; }
+  .field label { display: block; font-size: var(--font-label); font-weight: 600; margin-bottom: 5px; }
+  select, input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 7px 9px; border: 1px solid var(--control-line); border-radius: var(--radius-sm); background: var(--background); font-size: var(--font-ui); color: var(--foreground); font-family: inherit; }
   select:focus, input:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus-ring); }
 
   details.advanced { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
-  details.advanced summary { cursor: pointer; font-weight: 600; font-size: 0.84rem; color: var(--primary); list-style: none; display: flex; align-items: center; gap: 5px; }
+  details.advanced summary { cursor: pointer; font-weight: 600; font-size: var(--font-ui); color: var(--primary); list-style: none; display: flex; align-items: center; gap: 5px; }
   .advanced-body { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
   /* Deliberately louder than the hints above it. This is the only way out of
      the greyed-out "needs API key" options -- as muted grey at hint size it
      read as a footnote and went unnoticed. */
   .keys-link { display: inline-flex; align-items: center; gap: 7px; margin-top: 16px; padding: 9px 13px;
     border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--accent);
-    color: var(--primary); font-family: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
+    color: var(--primary); font-family: inherit; font-size: var(--font-ui); font-weight: 600; cursor: pointer; }
   .keys-link:hover { border-color: var(--primary); }
-  .form-error { color: var(--destructive); font-size: 0.8rem; }
+  .form-error { color: var(--destructive); font-size: var(--font-label); }
 
   /* ---------------- Up next: the waiting line on the first screen ------- */
   .queue-card { margin-top: 2px; background: var(--background); text-align: left;
     border: 1px solid var(--border); border-radius: var(--radius-lg); }
   .queue-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px 8px; }
-  .queue-head b { font-size: 0.85rem; }
-  .queue-head span { font-size: 0.72rem; color: var(--muted-foreground); }
+  .queue-head b { font-size: var(--font-title); }
+  .queue-head span { font-size: var(--font-label); color: var(--muted-foreground); }
   .queue-line { display: flex; align-items: center; border-top: 1px solid var(--border); }
   .queue-row { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
     padding: 9px 16px; border: none;
-    background: none; font-size: 0.8rem; text-align: left; cursor: pointer;
+    background: none; font-size: var(--font-ui); text-align: left; cursor: pointer;
     color: var(--foreground); }
   .queue-row:hover { background: var(--accent); }
   .queue-row .q-name { flex: 1; min-width: 0; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
-  .queue-row .q-state { flex: none; font-size: 0.72rem; color: var(--muted-foreground); }
+  .queue-row .q-state { flex: none; font-size: var(--font-label); color: var(--muted-foreground); }
   .queue-row .q-state.run { color: var(--primary); font-weight: 600; }
   .queue-bar { height: 4px; border-radius: 2px; background: var(--secondary);
     overflow: hidden; margin-top: 4px; }
   .queue-bar > i { display: block; height: 100%; background: var(--primary); }
   .queue-x { flex: none; border: none; background: none; cursor: pointer;
-    color: var(--muted-foreground); font-size: 0.85rem; padding: 2px 6px;
+    color: var(--muted-foreground); font-size: var(--font-ui); padding: 2px 6px;
     margin-right: 10px; border-radius: 6px; }
   .queue-x:hover { background: var(--secondary); color: var(--foreground); }
   /* An empty error line is still a flex item, and would leave a gap under the
      link field for a message that is not there. */
   .form-error:empty { display: none; }
 
-  /* ---------------- Done: the script beside the video ---------------- */
-  /* The script is the screen. The video is beside it at a fixed width so the
-     table keeps the room it needs, and the two panes' first rows -- the table's
-     header and the video's tabs -- are both 40px, so the line under them runs
-     unbroken across the whole screen. */
+  /* ---------------- Done: layout G ---------------- */
+  /* Premiere's shape, which the user picked on 2026-09-08: the script wide on
+     the LEFT, the video on the right at its own aspect, the timeline across the
+     foot of both. Three boxes on the canvas with a 6px gutter between them --
+     no dividing lines except where a handle sits -- so each one reads as a
+     panel with a name (Script / the Original-Dubbing tabs / Timeline).
+     The point of the shape is rows: stacked, the table had a third of the
+     screen's height and showed four lines; here it has all of it. */
 
-  .done { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  /* No gap above: the two panes' bands have to begin on the same line as the
+     Dub Agent's heading beside them, and 6px of canvas over them was the
+     whole of the difference (user, 2026-09-09). The sides and the foot keep
+     theirs. */
+  .done { flex: 1; min-height: 0; display: flex; flex-direction: column;
+    gap: 8px; padding: 0; background: transparent; }
   /* min-height, so a short window scrolls the finished screen rather than
      squeezing the table down to no rows at all. */
   /* position, so the handle that sits on the line above the timeline can be
      hung off this pane's bottom edge. */
   .done-main { position: relative; flex: 1; min-height: 200px; display: flex;
-    flex-direction: column; }
+    flex-direction: row; gap: 8px; }
+  /* Too narrow for the two side by side (under 820 the video's 320px floor
+     leaves the table less than 500): back to the old stack, video on top.
+     The class is written by sizeVideoPane() off THIS box's width, not by a media
+     query off the window's -- with the agent column open a 1440px window leaves
+     the work area 830px, and the window's width would say "wide" about a box
+     that is not. */
+  .done-main.stacked { flex-direction: column-reverse; }
   /* A container, so the table below can pick its own width off THIS pane rather
      than off the window: the grip between the panes changes it with the window
      standing still. */
-  /* The line the video/script divider lives on -- drawn, so the drag is
-     discoverable (user, 2026-09-01), with a small grab pill in the middle. */
-  .script-pane { position: relative; border-top: 3px solid var(--divider);
+  .script-pane { position: relative;
     flex: 1 1 auto; min-width: 0; min-height: 120px; display: flex;
-    flex-direction: column; border-right: 1px solid var(--border);
+    flex-direction: column; background: var(--background);
+    border-radius: var(--radius); overflow: hidden;
     container: scriptpane / inline-size; }
+  /* Every pane says what it is. 30px and quiet: it is a label, not a heading,
+     and every pixel it takes is a row of script it takes away. */
+  /* One band across the top of the work area: this, the video tabs beside it
+     and the Dub Agent's heading are the same height on the same ground, so
+     the three panes begin on one line (user, 2026-09-09). */
+  .pane-head { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
+    align-items: center; gap: 8px; padding: 0 16px; font-size: var(--font-title);
+    font-weight: 700; color: var(--foreground);
+    background: var(--head-bg); border-bottom: 1px solid var(--agent-border); }
+  .pane-head .m { font-weight: 400; color: var(--muted-foreground); }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
     border-bottom: 1px solid var(--border); }
   #scriptBox { flex: 1; min-height: 0; overflow: auto; }
@@ -559,10 +904,10 @@
   .script-status { position: absolute; right: 16px; bottom: 14px; z-index: 2;
     padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px;
     background: var(--background); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-    font-size: 0.74rem; color: var(--primary); }
+    font-size: var(--font-label); color: var(--primary); }
   .script-status:empty { display: none; }
   .script-empty { padding: 30px 14px; text-align: center;
-    color: var(--muted-foreground); font-size: 0.84rem; }
+    color: var(--muted-foreground); font-size: var(--font-ui); }
 
   /* One grid row per line, not a table: the columns have to hold their width
      down the page whatever a cell contains, and every one of them is a
@@ -572,30 +917,74 @@
      five words a line), and the row's min-width is the sum of everything at
      that floor. Below it the pane scrolls sideways instead of grinding the two
      languages down to one or two words a line, which is what 1fr alone did. */
-  /* Five columns (2026-08-28): number, speaker, time, the original, and the
-     translation -- whose cell carries its own tool line (listen, length,
-     revert, remake) above the words. The three columns those tools used to
-     take (play, length, remake) are gone, so a line is read in one place. */
+  /* Six columns: number, speaker, time, the original, the translation, and the
+     line's own tools (listen, length, revert, remake) at the right end.
+     The tools sat ON TOP of the words until layout G (2026-09-08): a second
+     line inside the translation cell, which cost every row 26px of height for
+     as long as it was there. Beside the words instead, a row is as tall as its
+     text and the table shows two and a half times as many lines -- which is
+     the whole reason the user asked for this shape. */
+  /* The last track is a number, not `auto`: the head row has no tools cell in
+     it, so an auto track was 0 wide up there and 200 wide on every row below,
+     and the column headings stood 200px right of the words they name
+     (user, 2026-09-11). 200 is the tools cell measured: 10 + 22 + 8 + 100 + 8
+     + 22 + 8 + 22. */
   .sc-row { display: grid;
-    grid-template-columns: 28px 100px 168px minmax(180px, 1fr) minmax(220px, 1.2fr);
-    gap: 12px; align-items: start; padding: 11px 14px; font-size: 0.84rem;
-    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 772px; }
+    grid-template-columns: 28px 34px 168px minmax(200px, 1fr) 22px minmax(240px, 1.2fr) 170px;
+    gap: 12px; align-items: center; padding: 8px 14px; font-size: var(--font-ui);
+    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 706px; }
+  /* The translation cell is editable, and its click target hangs 4px to the
+     left of the words (padding 2px 4px against margin -2px -4px), so its
+     heading has to hang with it or the two are 4px apart. */
+  /* The heading over the translation starts where its column starts -- at the
+     play button, the way Original starts at its first letter (user,
+     2026-09-11) -- so it spans the play track and the words together. */
+  .sc-h-dst { grid-column: 5 / 7; }
   .sc-row.head { box-sizing: border-box; height: 40px; padding: 0 14px;
     align-items: center; position: sticky; top: 0; z-index: 1;
-    background: var(--canvas); font-size: 0.69rem; font-weight: 600;
+    background: var(--canvas); font-size: var(--font-label); font-weight: 600;
     letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
   /* The line the video is on right now, so the eye can follow the script. */
   .sc-row.sc-now { background: color-mix(in srgb, var(--primary) 14%, transparent); }
-  .sc-n { color: var(--muted-foreground); font-variant-numeric: tabular-nums; padding-top: 2px; }
-  .sc-time { color: var(--primary); font-size: 0.75rem; font-variant-numeric: tabular-nums;
-    white-space: nowrap; padding-top: 3px; }
-  .sc-src { color: var(--muted-foreground); min-width: 0; overflow-wrap: anywhere; }
-  .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere; }
-  /* The tool line above the words: listen and the length on the left, revert
-     (only on an edited line) and remake on the right. */
-  .sc-tools { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-  .sc-tools .sc-sp { flex: 1; }
-  .sc-len { font-size: 0.78rem; color: var(--muted-foreground); white-space: nowrap;
+  .sc-n { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .sc-time { color: var(--primary); font-size: var(--font-label); font-variant-numeric: tabular-nums;
+    white-space: nowrap; }
+  .sc-src { color: var(--muted-foreground); min-width: 0; overflow-wrap: anywhere;
+    font-size: var(--font-script); }
+  .sc-dst { color: var(--foreground); min-width: 0; overflow-wrap: anywhere;
+    font-size: var(--font-script); }
+  /* The row's own tools, at its right end: the length, revert (only on an
+     edited line) and remake. Listen went to its own column in front of the
+     translation, where the eye already is (user, 2026-09-11). */
+  /* The two headings over them. "Voice" is wider than the 22px button it
+     names, so it is allowed to hang left over the revert slot, which is empty
+     in the head row anyway. */
+  .sc-row.head .sc-tools { background: var(--canvas); }
+  .sc-h-voice { justify-self: end; white-space: nowrap; }
+  /* Four fixed slots, not a flex row that fits itself to whatever the length
+     cell happens to say. As a flex row this cell was 149px wide on one line
+     and 189px on the next, and because the grid column it sits in is `auto`,
+     that difference came out of the two text columns beside it: the play
+     button moved 40px between rows and the translation started at a different
+     x on every line (user, 2026-09-11). The revert slot is kept empty rather
+     than left out, so the remake button does not step sideways on the one row
+     that has been edited.
+     Stuck to the right edge of the box, so a table too wide for its pane
+     scrolls its words sideways and never its buttons -- a control that has to
+     be scrolled to is a control nobody finds. It carries the row's own ground
+     so the words pass under it rather than through it. */
+  .sc-tools { position: sticky; right: 0; z-index: 1; padding-left: 10px;
+    background: var(--background); align-self: stretch;
+    display: grid; grid-template-columns: 100px 22px 22px;
+    align-items: center; gap: 8px; }
+  /* Left, not right: every one of these reads "N.Ns / N.Ns · " in tabular
+     figures, so aligning the starts puts all six numbers in a column and
+     leaves only the verdict ragged. Right-aligned it was the numbers that
+     were ragged, which is the half a reader actually compares
+     (user, 2026-09-11). */
+  .sc-len { text-align: left; }
+  .sc-row.sc-now .sc-tools { background: color-mix(in srgb, var(--primary) 14%, var(--background)); }
+  .sc-len { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap;
     font-variant-numeric: tabular-nums; }
   .sc-len b { font-weight: 600; color: var(--foreground); }
   .sc-over { color: var(--destructive); font-weight: 600; }
@@ -603,49 +992,90 @@
   .sc-fit { color: var(--success); font-weight: 600; }
 
   /* ---------------- The script table, narrow ---------------- */
-  /* 772px is the row above at its floors, so a pane thinner than that would
+  /* 706px is the row above at its floors, so a pane thinner than that would
      grow a sideways scrollbar. Under that width the row keeps its number and
      speaker (user decision 2026-08-27) and drops only the end of the slot --
      the start is what finds a line, and the length beside the words says the
-     rest. 787 is 772 plus room for a vertical scrollbar on the systems that
-     draw one inside the box (macOS draws none). */
+     rest. The breakpoint stays at 787, where it was set when the speaker
+     column was 100px wide, so the row tightens a little before it has to. */
   @container scriptpane (max-width: 787px) {
-    .sc-row { grid-template-columns: 28px 100px 90px minmax(120px, 1fr) minmax(160px, 1.2fr);
+    .sc-row { grid-template-columns: 28px 34px 90px minmax(120px, 1fr) 22px minmax(160px, 1.2fr) 108px;
       gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
+    /* .sc-row.head sets its own padding and outranks the rule above, so it has
+       to be told too -- 14 against 12 put every heading 2px right of its
+       column (user, 2026-09-11). */
+    .sc-row.head { padding-left: 12px; padding-right: 12px; }
     .sc-t-b { display: none; }
+    /* And the length keeps its verdict alone -- "fits", "+1.4s" -- rather than
+       the two numbers it was worked out from. Those are on the timeline's bars
+       and in the cell's own tooltip. */
+    .sc-num { display: none; }
+    /* Only the verdict is left in it, so the slot the numbers needed is not. */
+    .sc-tools { grid-template-columns: 44px 22px 22px; gap: 6px; }
   }
 
-  /* Who is speaking, in that speaker's colour. (Not ".chip" -- the assistant
-     strip already has one of those, and its style block comes after this one.) */
-  .spk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
-    border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
-  .spk-chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block;
-    flex: 0 0 auto; }
-  /* The name is wrapped so the narrow table can leave the dot alone; it must not
-     read heavier than the chip it sits in. */
+  /* Narrower still -- a 13-inch window with the Dub Agent open leaves the table
+     about 560px. The clock used to be dropped here; a speaker column of 34px
+     instead of 100px pays for it, so every column simply draws closer and the
+     one thing a line is found by -- when it starts -- stays on screen. */
+  @container scriptpane (max-width: 640px) {
+    .sc-row { grid-template-columns: 28px 34px 74px minmax(100px, 1fr) 22px minmax(130px, 1.2fr) 108px;
+      gap: 8px; }
+  }
+
+  /* Narrower again, and this time something has to go. The rule above cannot
+     shrink below 568px, and the pane can: the finished screen puts the script
+     beside the video AND the Dub Agent, which on a 1300px window leaves it
+     about 450. Under that the row simply overflowed its pane and the text was
+     cut off mid-word -- on the translation, the one column anybody is there to
+     read, while the source beside it stayed whole (found taking a screenshot,
+     2026-09-11).
+     So the source folds away. It is the line as it was said, and what is being
+     checked here is the line as it will be spoken; the original is still on the
+     timeline's own lane and under the play button. Six tracks now, and the
+     cells fall into them in order, so only the heading needs re-placing. */
+  @container scriptpane (max-width: 568px) {
+    .sc-row { grid-template-columns: 28px 30px 66px 22px minmax(120px, 1fr) 100px;
+      gap: 6px; padding-left: 10px; padding-right: 10px; }
+    .sc-row.head { padding-left: 10px; padding-right: 10px; }
+    .sc-src, .sc-h-src { display: none; }
+    .sc-h-dst { grid-column: 4 / 6; }
+    .sc-tools { grid-template-columns: 40px 22px 22px; gap: 5px; }
+  }
+
+  /* Who is speaking. One chip in the app's own blue, not a colour per speaker:
+     four tinted chips down a column of text shouted louder than the words they
+     labelled, and the letter in them is what tells the speakers apart -- a
+     letter, not a number, because the # column beside it already counts, and
+     two columns of digits read as one (user, 2026-09-08). The chip is a fixed
+     24px so the letters line up down the column.
+     (Not ".chip" -- the assistant strip already has one of those,
+     and its style block comes after this one.) */
+  .spk-chip { display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; padding: 3px 0;
+    border-radius: 999px; font-size: var(--font-label); font-weight: 600; white-space: nowrap;
+    background: var(--primary-soft); color: var(--primary-ink); }
+  /* The letter is wrapped so the narrow table has something of its own to
+     reach for; it must not read heavier than the chip it sits in. */
   .spk-chip b { font-weight: inherit; }
-  .spk-1 { background: var(--spk-1-soft); color: var(--spk-1-ink); }
-  .spk-1 i { background: var(--spk-1); }
-  .spk-2 { background: var(--spk-2-soft); color: var(--spk-2-ink); }
-  .spk-2 i { background: var(--spk-2); }
-  .spk-3 { background: var(--spk-3-soft); color: var(--spk-3-ink); }
-  .spk-3 i { background: var(--spk-3); }
-  .spk-4 { background: var(--spk-4-soft); color: var(--spk-4-ink); }
-  .spk-4 i { background: var(--spk-4); }
 
   /* Play this line in the video; filled while it is the line playing. */
-  .sc-listen { width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  .sc-listen { width: 22px; height: 22px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--primary-line); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; flex-shrink: 0; }
-  .sc-listen svg { width: 15px; height: 15px; }
+  /* 11 in a 22px ring, the half the app's other two play buttons keep (30 in
+     64, 14 in 28). At 15 the triangle all but touched the ring on its flat
+     side while the point had room to spare, and a shape crowding one edge
+     reads as crooked however exactly it is centred (user, 2026-09-11). */
+  .sc-listen svg { width: 11px; height: 11px; }
   .sc-listen:hover { border-color: var(--primary); }
   .sc-row.sc-now .sc-listen { background: var(--primary); border-color: var(--primary);
     color: var(--primary-foreground); }
 
   /* Make this line's voice again. Filled means the words were changed and the
      voice has not caught up with them yet. */
-  .sc-wave { width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  .sc-wave { width: 22px; height: 22px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--primary); background: var(--background);
     color: var(--primary); display: inline-flex; align-items: center;
     justify-content: center; cursor: pointer; flex-shrink: 0; }
@@ -680,28 +1110,37 @@
 
   /* ---------------- Done: the video pane ---------------- */
 
-  /* The table is the point of this screen, so the default split leans its way:
-     enough room is left beside the video for both language columns to read as
-     sentences at 1280px and up. The grip is there for anyone who would rather
-     have the bigger picture. */
-  /* 0 1: the video is the pane that gives way. Down to the window the app opens
-     at there is nothing to give -- it is already at the 320px floor Task 10 set
-     -- and below that the table simply takes whatever is left. */
-  .video-pane { flex: 0 0 clamp(200px, 36vh, 440px); min-width: 0; min-height: 180px;
-    display: flex; flex-direction: column; background: var(--canvas); }
-  /* A portrait clip is drawn to the pane's height, so it gets more of it:
-     46vh leaves a 13-inch window (800px tall) about 200px of table. */
-  .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
+  /* The table is the point of this screen, so the video takes only the width
+     its own shape needs: sizeVideoPane() measures the clip and writes the
+     width, between a 320px floor and 45% of the row -- a portrait clip ends up
+     narrow, a wide one broad, and whatever is left over is the table's. The
+     grip on its left edge is there for anyone who wants it otherwise; a width
+     they dragged is remembered and wins over the measurement.
+     position, for that handle. */
+  .video-pane { position: relative; flex: 0 0 auto; width: 42%;
+    min-width: 320px; min-height: 180px;
+    display: flex; flex-direction: column; background: var(--background);
+    border-radius: var(--radius); }
+  /* Stacked, the pane is as wide as the screen and it is the HEIGHT that is
+     shared -- the old rule, kept for the narrow window. A portrait clip is
+     drawn to the pane's height, so it gets more of it: 46vh leaves a 13-inch
+     window (800px tall) about 200px of table. */
+  .done-main.stacked > .video-pane { width: auto; min-width: 0;
+    flex: 0 0 clamp(200px, 36vh, 440px); }
+  .done-main.stacked > .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
   .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
-    border-bottom: 1px solid var(--border); }
+    background: var(--head-bg); border-bottom: 1px solid var(--agent-border); }
   .vtab { flex: 1; border: none; background: none; cursor: pointer;
-    font: inherit; font-size: 0.78rem; color: var(--muted-foreground); }
+    font: inherit; font-size: var(--font-ui); color: var(--muted-foreground); }
   .vtab.active { color: var(--foreground); font-weight: 600;
     box-shadow: inset 0 -2px 0 var(--primary); }
   .video-body { padding: 14px; display: flex; flex-direction: column; gap: 10px;
     flex: 1; min-height: 0; position: relative; }
-  .video-wrap { position: relative; border-radius: var(--radius); overflow: hidden;
-    background: var(--thumb-bg); display: flex; justify-content: center;
+  /* No ground of its own: beside the table the pane is as wide as the clip
+     needs, but a wide clip in a tall pane still leaves room over and under it,
+     and a black band there read as part of the picture. The dark ground belongs
+     to the picture itself (below), so what is left over is simply the pane. */
+  .video-wrap { position: relative; display: flex; justify-content: center;
     align-items: center; flex: 1; min-height: 0; }
   /* Capped in height as well as width: a portrait clip at full height pushed
      the playhead and the controls under the bottom of the window. What is left
@@ -721,6 +1160,12 @@
     user-select: none; touch-action: none; font-weight: 700; line-height: normal;
     font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", sans-serif;
     white-space: pre-wrap; }
+  /* The words are the thing to press, and on a small picture they are a
+     hair: 9px tall at a 127px-wide video (2026-09-10). This invisible margin
+     is part of the press, so a finger or a pointer a few pixels off still
+     picks the subtitles instead of playing the video underneath. Drawn under
+     the handles, which come later in the element. */
+  .sub-ov-text::before { content: ""; position: absolute; inset: -10px -12px; }
   .sub-ov-text.sel { outline: 2px dashed var(--primary); outline-offset: 5px;
     border-radius: 4px; }
   /* One class per look -- close kin of app/subtitle_ass.py's real styles,
@@ -750,22 +1195,31 @@
     padding: 0.08em 0.5em; border-radius: 0.1em; }
   .sub-ov-white-box { color: #3a332c; background: #fff;
     padding: 0.1em 0.55em; border-radius: 0.1em; font-weight: 600; }
+  /* One row, whatever is in it: beside the table the video pane is only as wide
+     as the clip needs, and a bar allowed to wrap broke "A +" over two lines and
+     pushed its own buttons out of reach. It floats over the picture, so a bar
+     wider than the pane simply overhangs it. */
   .sub-toolbar { position: absolute; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 4px; z-index: 6;
+    display: flex; flex-wrap: nowrap; white-space: nowrap;
+    align-items: center; gap: 4px; z-index: 6;
     background: rgba(24, 24, 27, 0.92); border: 1px solid var(--agent-border);
     border-radius: 10px; padding: 5px 7px; }
-  .sub-toolbar button { min-width: 26px; height: 24px; border: 0; border-radius: 6px;
-    background: transparent; color: var(--agent-fg); font: inherit; font-size: 0.8rem;
+  .sub-toolbar button { flex: 0 0 auto; min-width: 26px; height: 24px; border: 0; border-radius: 6px;
+    background: transparent; color: var(--agent-fg); font: inherit; font-size: var(--font-ui);
     cursor: pointer; padding: 0 7px; }
   .sub-toolbar button:hover { background: var(--agent-border); }
-  .sub-size { color: var(--agent-muted); font-size: 0.7rem; min-width: 36px;
+  .sub-size { color: var(--agent-muted); font-size: var(--font-label); min-width: 36px;
     text-align: center; font-variant-numeric: tabular-nums; }
   .sub-sep { width: 1px; height: 16px; background: var(--agent-border); margin: 0 2px; }
+  /* Nothing to say: the mark and the line before it are both away, so the bar
+     is the width of its buttons again. */
+  #subSaved:empty, .sub-sep:has(+ #subSaved:empty) { display: none; }
+  #subSaved { min-width: 0; color: var(--agent-fg); }
   .sub-style { color: #c9b8ff; font-weight: 600; }
   .sub-seg { display: inline-flex; background: #111; border: 1px solid var(--agent-border);
     border-radius: 7px; padding: 2px; gap: 2px; }
-  .sub-seg button { min-width: 0; height: 20px; font-size: 0.68rem; padding: 0 8px; }
-  .sub-seg button.on { background: var(--primary); color: #fff; }
+  .sub-seg button { min-width: 0; height: 20px; font-size: var(--font-label); padding: 0 8px; }
+  .sub-seg button.on { background: var(--primary); color: var(--primary-foreground); }
   /* The box-width handles on the selected subtitles' sides. */
   .sub-wh { position: absolute; top: 50%; margin-top: -11px; width: 5px; height: 22px;
     border-radius: 3px; background: var(--primary); box-shadow: 0 0 0 1.5px #fff;
@@ -783,7 +1237,7 @@
   .sub-style-menu button:hover { border-color: var(--primary); }
   .sub-style-menu button.on { border-color: var(--primary); background: #2d2440; }
   .sub-style-menu .sample { font-weight: 700; font-size: 15px; line-height: 1.3; }
-  .sub-style-menu .nm { font-size: 0.64rem; color: var(--agent-muted); }
+  .sub-style-menu .nm { font-size: var(--font-label); color: var(--agent-muted); }
 
   .video-bigplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
@@ -802,7 +1256,7 @@
   .video-play:hover { border-color: var(--primary); color: var(--primary); }
   .video-play.playing { background: var(--primary); border-color: var(--primary);
     color: var(--primary-foreground); }
-  .video-time { font-size: 0.78rem; color: var(--muted-foreground);
+  .video-time { font-size: var(--font-label); color: var(--muted-foreground);
     font-variant-numeric: tabular-nums; }
 
   /* ---------------- Done: the timeline ---------------- */
@@ -817,23 +1271,25 @@
      sit on one line (user, 2026-09-02). A fixed 192 left 10px of nothing under
      the lanes. The handle on its top line still writes an inline height. */
   .timeline { flex: 0 0 auto; height: auto; display: flex; flex-direction: column;
-    border-top: 3px solid var(--divider); background: var(--background); }
+    background: var(--background); border-radius: var(--radius); }
   /* Nothing to draw (no script, or no job open) must leave no empty strip. */
   .timeline:empty { display: none; }
   /* Zoom, next to the clock: out, the level, in, and back to fit-all. */
   .tl-zoom { display: inline-flex; align-items: center; gap: 2px; }
   .tl-zbtn { width: 26px; height: 22px; border: 1px solid var(--border); background: var(--background);
-    border-radius: 6px; cursor: pointer; font-size: 0.85rem; line-height: 1;
+    border-radius: 6px; cursor: pointer; font-size: var(--font-ui); line-height: 1;
     color: var(--foreground); display: grid; place-items: center; }
   .tl-zbtn:hover { border-color: var(--primary); color: var(--primary); }
   .tl-zbtn:disabled { opacity: 0.35; cursor: default; }
   .tl-zbtn:disabled:hover { border-color: var(--border); color: var(--foreground); }
-  .tl-zfit { width: auto; padding: 0 8px; font-size: 0.7rem; font-weight: 600; }
+  .tl-zfit { width: auto; padding: 0 8px; font-size: var(--font-label); font-weight: 600; }
   .tl-zlv { min-width: 30px; text-align: center; color: var(--muted-foreground);
-    font-size: 0.7rem; font-variant-numeric: tabular-nums; }
-  .tl-head { display: flex; align-items: center; gap: 14px; padding: 6px 14px;
-    font-size: 0.75rem; color: var(--muted-foreground); }
-  .tl-title { font-weight: 600; color: var(--foreground); }
+    font-size: var(--font-label); font-variant-numeric: tabular-nums; }
+  .tl-head { box-sizing: border-box; height: 40px;
+    display: flex; align-items: center; gap: 14px; padding: 0 14px;
+    background: var(--head-bg); border-bottom: 1px solid var(--agent-border);
+    font-size: var(--font-label); color: var(--muted-foreground); }
+  .tl-title { font-weight: 600; color: var(--foreground); font-size: var(--font-title); }
   .tl-clock { font-variant-numeric: tabular-nums; }
   .tl-legend { display: inline-flex; gap: 10px; margin-left: auto; }
   .tl-legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -858,7 +1314,7 @@
   .timeline.folded .tl-fold .icon { transform: rotate(180deg); }
 
   .tl-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 110px 1fr; }
-  .tl-names { display: flex; flex-direction: column; font-size: 0.72rem;
+  .tl-names { display: flex; flex-direction: column; font-size: var(--font-label);
     color: var(--muted-foreground); border-right: 1px solid var(--border); }
   /* Empty, and exactly as tall as the ruler the two lanes sit under. */
   .tl-corner { height: 18px; }
@@ -869,13 +1325,13 @@
   .tl-name .tl-eye { width: 22px; height: 20px; border: 0; background: none;
     cursor: pointer; padding: 0; margin-right: 5px; color: var(--muted-foreground);
     display: inline-grid; place-items: center; border-radius: 5px; }
-  .tl-name .tl-eye:hover { background: var(--primary-soft); color: var(--primary); }
+  .tl-name .tl-eye:hover { background: var(--primary-soft); color: var(--primary-ink); }
   .tl-name .tl-eye.on { color: var(--primary); }
   .tl-name .tl-eye svg { width: 15px; height: 15px; fill: none; stroke: currentColor;
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .tl-cap { position: absolute; top: 4px; height: 26px; border-radius: 5px;
     background: var(--primary-soft); border: 1px solid var(--primary);
-    color: var(--spk-1-ink); font-size: 0.68rem; line-height: 24px;
+    color: var(--primary-ink); font-size: var(--font-label); line-height: 24px;
     box-sizing: border-box; }
   .tl-cap-txt { display: block; padding: 0 8px; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
@@ -887,12 +1343,12 @@
   .tl-cap.trimming { box-shadow: 0 0 0 2px var(--primary); z-index: 2; }
   /* This line keeps its own box width: the dot says so, and puts it back. */
   .tl-exdot { position: absolute; top: -7px; right: -7px; width: 15px; height: 15px;
-    border-radius: 50%; background: var(--primary); color: #fff; font-size: 9px;
+    border-radius: 50%; background: var(--primary); color: var(--primary-foreground); font-size: 9px;
     line-height: 15px; text-align: center; box-shadow: 0 0 0 2px var(--background);
     cursor: pointer; z-index: 3; }
   .tl-lane-caps.off, .tl-name-caps.off { opacity: 0.35; }
   .tl-trim-tip { position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
-    background: var(--agent-bg); color: #fff; font-size: 0.62rem; padding: 2px 7px;
+    background: var(--agent-bg); color: #fff; font-size: var(--font-label); padding: 2px 7px;
     border-radius: 5px; white-space: nowrap; z-index: 3; }
   /* Only the track scrolls sideways: the two language names have to stay put.
      The scrollbar is always there, like Premiere's timeline panel, not only
@@ -906,7 +1362,7 @@
   /* Also a way into the video: press anywhere on it to go to that moment. */
   .tl-ruler { position: relative; height: 18px; cursor: pointer; }
   .tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); }
-  .tl-tick span { position: absolute; top: 2px; left: 4px; font-size: 0.63rem;
+  .tl-tick span { position: absolute; top: 2px; left: 4px; font-size: var(--font-label);
     color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 
   .tl-lane { position: relative; height: 34px; }
@@ -914,13 +1370,21 @@
      every block the same size whether or not its kind draws one. */
   .tl-blk { position: absolute; top: 4px; height: 26px; box-sizing: border-box;
     border: 1px solid transparent; border-radius: 5px; padding: 0 7px;
-    font: inherit; font-size: 0.7rem; line-height: 24px; text-align: left;
+    font: inherit; font-size: var(--font-label); line-height: 24px; text-align: left;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     background: none; cursor: pointer; }
   /* The room the line has. Dotted, and under the voice bar, so a voice that
      runs long is seen poking out of it. */
   .tl-slot { border-color: var(--primary-line); border-style: dashed; }
   .tl-voice { background: var(--timeline-fit); color: var(--primary-foreground); }
+  /* Who is speaking, at the head of the bar -- drawn only when the script has
+     more than one voice. A punched-out square rather than a colour per
+     speaker: four tinted bars down a strip fought with the buttons above it,
+     and a number can be read straight off (user, 2026-09-08). */
+  .tl-spk { display: inline-block; min-width: 14px; height: 14px; line-height: 14px;
+    padding: 0 3px; margin-right: 5px; border-radius: 4px; vertical-align: 1px;
+    background: rgba(0, 0, 0, 0.35); font-size: 0.58rem; font-style: normal;
+    text-align: center; }
   /* A voice that runs long: solid red as far as its slot, then a red tint for
      the part past it, laid over whatever is there. A tint, so the NEXT line's
      bar and words -- drawn after this one -- still read through it, while the
@@ -986,12 +1450,16 @@
   .grip-y { left: 0; right: 0; height: 6px; cursor: row-resize; }
   .grip-y::after { left: 0; right: 0; top: 0; height: 1px; }
 
-  /* Video over script: the line between them is the script pane's top edge. */
-  #gripPanes { left: 0; right: 0; top: -6px; }
-  #gripPanes::before { content: ""; position: absolute; left: 50%; top: 4px;
-    width: 44px; height: 4px; margin-left: -22px; border-radius: 2px;
+  /* Script beside video: the handle lies in the 6px gutter left of the video
+     pane, with a small grab pill in the middle so the drag is discoverable
+     (user, 2026-09-01). Stacked, the two panes are sized by the window instead
+     and there is nothing here to drag. */
+  #gripPanes { left: -6px; top: 0; }
+  #gripPanes::before { content: ""; position: absolute; top: 50%; left: 1px;
+    width: 4px; height: 44px; margin-top: -22px; border-radius: 2px;
     background: var(--border); }
   #gripPanes:hover::before, #gripPanes.dragging::before { background: var(--primary); }
+  .done-main.stacked #gripPanes { display: none; }
   /* Outside the sidebar rather than inside it, the same way as the one above:
      the last 6px inside belong to a row's Delete button, and a handle over
      those would eat the click aimed at it. The 6px it reaches into instead are
@@ -1014,8 +1482,15 @@
     padding: 30px; }
   .done-fail-body { width: min(560px, 100%); display: flex; flex-direction: column;
     gap: 12px; }
+  /* Grey and quiet: it says which of the two stories this is before the
+     sentence under it is read, and does not shout about a stopped job. */
+  .done-fail-mark { width: 40px; height: 40px; border-radius: 50%; align-self: center;
+    display: grid; place-items: center;
+    background: var(--secondary); color: var(--muted-foreground); }
+  .done-fail-mark svg { width: 20px; height: 20px; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .done-fail-why { margin: 0; text-align: center; color: var(--foreground);
-    font-size: 0.9rem; }
+    font-size: var(--font-ui); }
   .done-fail .job-notice { margin: 0; text-align: center; }
   /* As wide as its words: stretched across the whole column it read as the
      screen's main action rather than the way out of a dead end. */
@@ -1028,19 +1503,19 @@
   .export-list { display: flex; flex-direction: column; gap: 8px; }
   .export-list a { display: flex; align-items: center; gap: 10px; padding: 11px 13px;
     border: 1px solid var(--border); border-radius: var(--radius-sm);
-    text-decoration: none; color: var(--foreground); font-size: 0.86rem; font-weight: 600; }
+    text-decoration: none; color: var(--foreground); font-size: var(--font-ui); font-weight: 600; }
   .export-list a:hover { border-color: var(--primary); background: var(--accent); }
   .export-list .icon { color: var(--primary); }
   /* The click's own receipt, on the row that was clicked: "Saving..." while the
      file lands, a green check and "Saved" once it has, gone again a moment
      later so the row can be used twice. */
-  .export-list a .export-state { margin-left: auto; font-size: 0.78rem; font-weight: 500;
+  .export-list a .export-state { margin-left: auto; font-size: var(--font-label); font-weight: 500;
     color: var(--muted-foreground); display: inline-flex; align-items: center; gap: 5px; }
   .export-list a.saved { border-color: var(--success); }
   .export-list a.saved > .icon { color: var(--success); }
   /* Quiet enough not to compete with the links above it, and it wraps rather
      than pushing the dialog wider -- a project name can be long. */
-  .export-where { margin: 12px 0 0; font-size: 0.76rem; color: var(--muted-foreground);
+  .export-where { margin: 12px 0 0; font-size: var(--font-label); color: var(--muted-foreground);
     line-height: 1.45; word-break: break-word; }
 
 
@@ -1049,64 +1524,97 @@
   .modal-overlay { position: fixed; inset: 0; background: rgba(10,10,10,0.35); display: none; align-items: center; justify-content: center; z-index: 20; }
   .modal-overlay.open { display: flex; }
   .modal { width: min(560px, 92vw); max-height: 84vh; overflow-y: auto; background: var(--background); border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--background); }
+  /* No rule under the title and none over the buttons. A dialog is one small
+     panel; three bands drawn across something this size read as three things
+     stacked rather than one thing said (user, 2026-09-10, said again when a
+     new dialog turned up wearing them, 2026-09-11). The padding keeps them
+     apart; the sticky is kept for the one long dialog (Settings), where the
+     title has to stay put while the body scrolls under it. */
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 0; position: sticky; top: 0; background: var(--background); }
+  /* With the rule gone the two paddings met and left 28px of nothing under
+     the title. 8, the same gap the models dialog has always had between its
+     own title and the line under it. */
+  .modal-head + .modal-body { padding-top: 8px; }
   .modal-head h2 { margin: 0; }
   .modal-close { background: none; border: none; cursor: pointer; color: var(--muted-foreground); padding: 4px; border-radius: var(--radius-sm); }
   .modal-close:hover { background: var(--secondary); }
-  .modal-body { padding: 18px 20px; }
+  /* The app's own size, not the browser's. Nothing set one here, so every
+     dialog's message came out at the browser default 16px -- larger than the
+     13px title above it and half again the 12px buttons below, which is why
+     "Stop it" read as smaller than the sentence it answers
+     (user, 2026-09-11). 12 puts the three in order: title 13, message 12,
+     the small print 11. */
+  .modal-body { padding: 18px 20px; font-size: var(--font-ui); }
+  /* The models dialog's line is the message of that dialog, not a hint under
+     something else, so it is the message size too. */
+  #mnLine { font-size: var(--font-ui); }
   .settings-section { margin-bottom: 20px; }
   .settings-section:last-child { margin-bottom: 0; }
-  .settings-section h3 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); margin: 0 0 10px; }
-  .settings-row { margin-bottom: 12px; }
+  .settings-section h3 { font-size: var(--font-label); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); margin: 0 0 10px; }
+  /* One size for a settings row and everything inside it: the labels and the
+     model names had no size of their own and were reading at the root's 16px,
+     a size nothing else on screen wears any more. */
+  .settings-row { margin-bottom: 12px; font-size: var(--font-ui); }
   .settings-row:last-child { margin-bottom: 0; }
-  .settings-hint { font-size: 0.74rem; color: var(--muted-foreground); margin-top: 4px; }
+  .settings-hint { font-size: var(--font-label); color: var(--muted-foreground); margin-top: 4px; }
   .settings-hint.model-busy { color: var(--destructive); font-weight: 600; }
-  .settings-hint.model-ok { color: #2a8a4a; font-weight: 600; }
+  .settings-hint.model-ok { color: var(--success-ink); font-weight: 600; }
   /* The sentence takes the room and wraps; the button keeps to one line at
      the same size as its neighbours -- a wrapped "Download (1.0 GB)" stood
      twice as tall as the Resume beside it (user, 2026-09-07). */
   .model-line { display: flex; align-items: center; gap: 8px; }
   .model-line > span { flex: 1 1 auto; min-width: 0; }
   .model-line .keys-link { margin: 0; flex: none; white-space: nowrap; }
-  .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: #fff;
-               font-size: 0.74rem; font-weight: 600; padding: 4px 10px; cursor: pointer; }
-  #modelsFold > summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+  .topbar-dl { border: none; border-radius: 999px; background: var(--primary); color: var(--primary-foreground);
+               font-size: var(--font-label); font-weight: 600; padding: 4px 10px; cursor: pointer; }
+  #modelsFold > summary { cursor: pointer; font-size: var(--font-ui); font-weight: 600; }
   #modelsFold[open] > summary { margin-bottom: 6px; }
   .model-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 10px; }
-  .model-hint { display: block; font-size: 0.72rem; color: var(--muted-foreground); font-weight: 400; margin-top: 2px; }
-  .model-size { color: var(--muted-foreground); font-size: 0.8rem; }
+  .model-hint { display: block; font-size: var(--font-label); color: var(--muted-foreground); font-weight: 400; margin-top: 2px; }
+  .model-size { color: var(--muted-foreground); font-size: var(--font-label); }
   /* A long status ("Stopped: …") must not squeeze the name into one word per
      line: it keeps to its column and trims with an ellipsis. */
   .model-row > .settings-hint { max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .model-btn { height: 30px; padding: 0 12px; font-size: 0.78rem; }
+  .model-btn { padding: 0 12px; }
   /* What the dub will download, by name: the one place a first-time user
      learns what each thing is before it costs gigabytes. */
   .mn-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
-  .mn-items li { display: grid; gap: 2px; font-size: 0.84rem; }
+  .mn-items li { display: grid; gap: 2px; font-size: var(--font-ui); }
   .mn-items li b { font-weight: 600; }
-  .mn-items li span { color: var(--muted-foreground); font-size: 0.78rem; }
+  .mn-items li span { color: var(--muted-foreground); font-size: var(--font-label); }
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
-  .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 16px; }
+  /* Open Settings goes to the far left and the two answers stay together on
+     the right: a way out of the dialog and an answer to it are different
+     things, and packed side by side all three read as one row of equals.
+     It closes the hole in the middle too -- the buttons huddled at the right
+     end with the sentence alone on the left was the gap the user kept seeing
+     (user, 2026-09-10). */
+  .mn-buttons .settings-link { margin-right: auto; }
   /* Above the settings sheet: What's new can be opened FROM Settings, and a
      sibling overlay later in the DOM would otherwise paint over it. */
   #whatsNewOverlay { z-index: 30; }
   #dubModeHint, #sepHint, #sttHint, #translateHint, #voiceHint { white-space: pre-line; }
   .wn-list { margin: 0; padding-left: 18px; }
-  .wn-list li { font-size: 0.85rem; line-height: 1.6; margin: 4px 0; }
-  .license-list { font-size: 0.78rem; color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
+  .wn-list li { font-size: var(--font-ui); line-height: 1.6; margin: 4px 0; }
+  .license-list { font-size: var(--font-label); color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }
   .license-list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
   .license-list li:last-child { border-bottom: none; }
-  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); position: sticky; bottom: 0; background: var(--background); }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 20px 18px; position: sticky; bottom: 0; background: var(--background); }
   /* Settings, the way a desktop app does it (2026-08-28): a row is a label
      and one control, links are coloured words rather than underlines, and a
      yes/no is a switch. Nothing here is a Save button -- edits save on the spot. */
-  .settings-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.84rem; }
+  .settings-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--font-ui); }
   .settings-link { display: inline-block; margin-top: 6px; padding: 0; border: none; background: none;
-    color: var(--primary); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+    color: var(--primary); font: inherit; font-size: var(--font-ui); font-weight: 600; cursor: pointer; text-decoration: none; }
   .settings-link:hover { text-decoration: underline; }
   .settings-line .settings-link { margin-top: 0; }
-  .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
+  /* A picker on a settings row is one control beside its label, not a field
+     across the whole sheet -- selects are width:100% everywhere else. */
+  .settings-select { width: auto; min-width: 120px; }
+  /* The same box, in quieter type. */
+  .btn-sm { padding: 0 12px; font-size: var(--font-label); }
   input.switch { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; margin: 0; border-radius: 10px;
     background: var(--border); position: relative; cursor: pointer; transition: background 0.15s ease; }
   input.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
@@ -1128,17 +1636,23 @@
   .project-thumb video { display: block; width: 100%; max-height: 200px; object-fit: contain; }
   .project-dur { position: absolute; right: 8px; bottom: 8px; padding: 2px 7px;
     background: var(--thumb-badge); color: var(--primary-foreground);
-    border-radius: var(--radius-sm); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+    border-radius: var(--radius-sm); font-size: var(--font-label); font-variant-numeric: tabular-nums; }
   .project-replace { position: absolute; left: 8px; top: 8px; padding: 3px 8px; border: none;
     background: var(--thumb-badge); color: var(--primary-foreground);
-    border-radius: var(--radius-sm); font-family: inherit; font-size: 0.72rem;
+    border-radius: var(--radius-sm); font-family: inherit; font-size: var(--font-label);
     text-decoration: underline; cursor: pointer; }
+  /* How far along the link's download is: the same bar the running screen
+     uses, on one muted line under the still. */
+  .dl-row { display: flex; align-items: center; gap: 10px;
+    font-size: var(--font-label); color: var(--muted-foreground); }
+  .dl-row .progress-bar { flex: 1; }
+  #dlPercent { font-variant-numeric: tabular-nums; }
   /* Filled in by renderTrim(); a link (no local file to scrub) never gets one,
      and an empty box must not leave a gap behind. */
   .trim:empty { display: none; }
   .trim { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
-    border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
-  .trim-row { display: flex; align-items: center; gap: 10px; font-size: 0.78rem; }
+    border: 1px solid var(--control-line); border-radius: var(--radius); background: var(--background); }
+  .trim-row { display: flex; align-items: center; gap: 10px; font-size: var(--font-label); }
   .trim-play { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
     border: 1.5px solid var(--primary-line); background: var(--background); color: var(--primary);
     display: inline-flex; align-items: center; justify-content: center; padding: 0; }
@@ -1153,7 +1667,7 @@
   .trim-play .ico-pause { display: none; margin-left: 0; stroke: none; }
   .trim-play.playing .ico-play { display: none; }
   .trim-play.playing .ico-pause { display: block; }
-  .trim-play svg { width: 18px; height: 18px; margin-left: 2px; fill: currentColor;
+  .trim-play svg { width: 18px; height: 18px; fill: currentColor;
     stroke: currentColor; stroke-width: 3; stroke-linejoin: round; }
   .trim-label { font-weight: 600; }
   .trim-read { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
@@ -1165,7 +1679,7 @@
      clock hanging to its right. */
   .trim-ruler { position: relative; height: 16px; overflow: hidden; }
   .trim-tick { position: absolute; top: 0; bottom: 4px; border-left: 1px solid var(--border); }
-  .trim-tick span { position: absolute; top: 1px; left: 4px; font-size: 0.63rem;
+  .trim-tick span { position: absolute; top: 1px; left: 4px; font-size: var(--font-label);
     color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
   /* Hatched = not being dubbed. */
   .trim-hatch { position: absolute; top: 0; bottom: 0;
@@ -1198,8 +1712,8 @@
   .option-grid.two { grid-template-columns: 1fr 1fr; }
   /* A whole-width bordered row rather than a link, so it reads as the lid on
      everything the user does not normally have to open. */
-  .advanced-btn { width: 100%; height: 42px; padding: 0 12px; justify-content: space-between;
-    background: var(--background); border: 1px solid var(--border); font-weight: 500; }
+  .advanced-btn { width: 100%; padding: 0 12px; justify-content: space-between;
+    background: var(--background); border: 1px solid var(--control-line); font-weight: 500; }
   .advanced-btn > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
   .advanced-btn .chev { color: var(--muted-foreground); display: inline-flex;
     transition: transform 0.15s ease; }
@@ -1210,22 +1724,70 @@
   /* A sentence, not a field: it belongs under the whole grid rather than in a
      column beside one. The grid's own gap already spaces it. */
   #advancedKeysLink { grid-column: 1 / -1; margin-top: 0; }
-  .start-btn { width: 100%; height: 44px; font-size: 0.92rem; }
+  /* The two that end here sit left, the one that goes on to a dub sits right,
+     where the eye leaves the row. All three are the app's one button box. */
+  .project-actions { display: flex; align-items: center; gap: 8px; }
+  .project-actions .btn-primary { margin-left: auto; }
+  /* What Save clip has to say, and only after it has said it. */
+  .project-saved { display: flex; align-items: center; gap: 6px;
+    font-size: var(--font-label); color: var(--muted-foreground); }
+  .project-saved:has(#projectSaved:empty) { display: none; }
 </style>
 
 <div class="app">
   <!-- ============ RAIL ============ -->
   <div class="rail">
-    <button class="rail-item active" title="Dubbing" type="button" aria-label="Dubbing">
-      <!-- Speech: a waveform with a pen across it -- what this app does to a
-           video, rather than the microphone every other app uses. -->
-      <svg class="icon" viewBox="0 0 24 24"><path d="M3 12h2"/><path d="M7 8v8"/><path d="M11 5v14"/><path d="M15 9v6"/><path d="M14.5 21l5.5-5.5 1.8 1.8L16.3 22.8H14.5z"/><path d="M18.6 16.9l1.8 1.8"/></svg>
+    <!-- The logo tile stands where the waveform icon was (user, 2026-09-08),
+         and it is the way to the project itself (user, 2026-09-09). The window
+         has no address bar, so the link leaves for the user's own browser --
+         desktop/main.js hands every http(s) window.open to the OS. -->
+    <button class="rail-item brand" id="brandBtn" type="button"
+            title="PersoDub on GitHub" aria-label="PersoDub on GitHub">
+      <img class="rail-logo" src="/logo.png" alt="">
     </button>
+    <!-- The tools stand together at the top, dubbing first: it is what the app
+         is for, and a rail that led with Projects made the way home a guess
+         (user, 2026-09-09). The mockup's icon -- a waveform with a pencil
+         across it, sound being rewritten. The waveform is balanced -- highest
+         in the middle, the same on both sides -- and the pencil lies over it
+         rather than beside it, which is the shape the user picked from five
+         drawn at rail size (2026-09-09). Pressing it leaves whatever job is
+         open, the same step the home button in the top bar takes. -->
+    <button class="rail-item" id="dubToggle" title="Dubbing" type="button" aria-label="Dubbing">
+      <svg class="icon" viewBox="0 0 24 24">
+        <!-- The pencil is IN FRONT: the mask cuts the bars away around it, so
+             it reads as one thing on any background the tile happens to have.
+             The cut is 3.4 wide against a 2-wide stroke: wide enough to say
+             "in front" at 20px, narrow enough that the two bars behind the
+             pencil keep their length and the waveform stays balanced. -->
+        <defs><mask id="dubPencilCut" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+          <rect x="0" y="0" width="24" height="24" fill="#fff"/>
+          <g stroke="#000" fill="#000" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M12.6 20.6l.7-2.3 5.9-5.9a1.3 1.3 0 0 1 1.8 0l.6.6a1.3 1.3 0 0 1 0 1.8l-5.9 5.9a1 1 0 0 1-.4.2z"/>
+          </g>
+        </mask></defs>
+        <!-- The waveform: highest in the middle, the same on both sides. -->
+        <g mask="url(#dubPencilCut)">
+          <path d="M4 9.5v5"/><path d="M8 6.5v11"/><path d="M12 4v16"/><path d="M16 6.5v11"/><path d="M20 9.5v5"/>
+        </g>
+        <path d="M12.6 20.6l.7-2.3 5.9-5.9a1.3 1.3 0 0 1 1.8 0l.6.6a1.3 1.3 0 0 1 0 1.8l-5.9 5.9a1 1 0 0 1-.4.2z"/>
+        <path d="M18.6 13.4l1.9 1.9"/>
+      </svg>
+    </button>
+    <!-- Erasing the subtitles burned into a video: its own screen, so its own
+         rail icon (the chrome rule at the top of this file). A frame with a
+         line of writing in it, and a rubber over the corner. -->
+    <button class="rail-item" id="eraseToggle" title="Erase subtitles" type="button" aria-label="Erase subtitles">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="2.5" y="5" width="15" height="11" rx="2"/><path d="M6 12.5h4"/><path d="M13.5 21l6.8-6.8a1.6 1.6 0 0 0 0-2.3l-1.7-1.7a1.6 1.6 0 0 0-2.3 0L9.5 17z"/><path d="M12 14.5l3.5 3.5"/></svg>
+    </button>
+    <div class="rail-spacer"></div>
+    <!-- Projects sits at the foot of the rail, apart from the tools above it:
+         it is a drawer of past work rather than a place to go, and the user
+         wanted the three tools to stand alone (2026-09-09). -->
     <button class="rail-item" id="historyToggle" title="Projects" type="button" aria-label="Toggle projects">
       <!-- Projects: a folder -->
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     </button>
-    <div class="rail-spacer"></div>
     <button class="rail-item" id="settingsBtn" title="Settings" type="button" aria-label="Open settings">
       <svg class="icon" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.6"/>
@@ -1262,14 +1824,22 @@
     <!-- The app's only chrome: who we are (or which job is open), what it is
          doing, and the one or two buttons that apply right now. -->
     <div class="topbar" id="topbar">
-      <!-- A tailed arrow, not a chevron: this leaves the job for the list of
-           projects, which is a place to go back to rather than a step back. -->
+      <!-- A house, not an arrow: this does not step back through what you did,
+           it leaves the job for the screen every job starts on (user,
+           2026-09-02). Same step the rail's Dubbing icon takes. -->
       <button class="topbar-back" id="topbarBack" type="button"
-              aria-label="Back to projects" title="Back to projects" hidden>
-        <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
+              aria-label="Home" title="Home" hidden>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.8V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9.8"/><path d="M10 20v-5.5h4V20"/></svg>
       </button>
+      <!-- The same hairline the pane buttons stand behind at the other end of
+           the bar: a way out of this screen and the name of it are two
+           different things, and nothing said so (user, 2026-09-10). It comes
+           and goes with the house, which is not there on the first screen. -->
+      <span class="tb-div" id="topbarHomeDiv" hidden></span>
       <div class="topbar-titles">
         <span class="topbar-title" id="topbarTitle">PersoDub</span>
+        <input class="topbar-title topbar-rename" id="topbarRename" hidden
+               maxlength="80" spellcheck="false" aria-label="Project name">
         <span class="topbar-sub" id="topbarSub">Local dubbing</span>
       </div>
       <span class="topbar-spacer"></span>
@@ -1282,7 +1852,6 @@
               aria-label="Back to the project you left" hidden>
         <svg class="icon" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
       </button>
-      <button class="btn btn-outline" id="cancelBtn" type="button" hidden>Cancel</button>
       <button class="btn btn-primary" id="exportBtn" type="button" hidden>
         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Export</button>
       <!-- Which panels are open. Each button presses the panel's own existing
@@ -1349,16 +1918,153 @@
             <div class="running-trim" id="runningTrim"></div>
           </div>
           <div class="progress-card" id="progressCard">
-            <div class="progress-head"><b id="progressTitle">Separating audio</b><span id="progressPct">0%</span></div>
+            <!-- Cancel belongs on the card with the thing it cancels, not at
+                 the far end of the top bar (user, 2026-09-09) -- but at the
+                 foot of it rather than beside the percentage, where the two
+                 read as one lump (user, 2026-09-10). Still #cancelBtn --
+                 setTopbar and runningScreen show and word it exactly as
+                 before. -->
+            <div class="progress-head">
+              <b id="progressTitle">Separating audio</b>
+              <div class="progress-head-end">
+                <span id="progressPct">0%</span>
+              </div>
+            </div>
             <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
             <ol class="progress-steps" id="progressSteps"></ol>
             <div class="job-notice" id="jobNotice" hidden></div>
+            <div class="cancel-row">
+              <!-- The word is its own element: paintCancel writes "Cancel" and
+                   "Cancelling…" into it. The button used to hold a stop square
+                   as well, which writing into the button itself wiped out; the
+                   square is gone now (user, 2026-09-10) but the span stays,
+                   because that is what those two callers write to. -->
+              <button class="btn btn-cancel btn-sm" id="cancelBtn" type="button" hidden><span id="cancelLabel">Cancel</span></button>
+            </div>
             <details class="raw-log" id="rawLogDetails">
               <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
               <div class="log-box" id="logBox"></div>
             </details>
           </div>
         </div>
+      </section>
+
+      <!-- ============ ERASE SUBTITLES ============ -->
+      <!-- Taking the subtitles burned into a video back out of it. One section
+           with three faces, swapped by ui/src/eraseScreen.mjs: the drop zone,
+           the box over the subtitles, and the erased video. The top bar carries
+           what this will cost in minutes and the one button that applies. -->
+      <section class="screen" id="screen-erase" hidden>
+        <div class="erase-drop" id="eraseDrop">
+          <!-- A file or a link, the two ways in the home screen has. The app
+               fetches a link into the same holding area an upload lands in, so
+               from the download's id on there is one road (user, 2026-09-09). -->
+          <div class="erase-drop-col">
+            <!-- The one line the home screen has over its drop zone, so this
+                 way in says what it is for too (user, 2026-09-10). -->
+            <h1 class="home-title">Erasing subtitles from your video</h1>
+            <p class="home-sub">Drop a video or paste a link.</p>
+            <div class="upload-zone" id="eraseZone" tabindex="0">
+              <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <div class="upload-title">Drop your video here</div>
+              <div class="upload-hint"><button class="btn btn-outline upload-choose" type="button">Choose File…</button><span>MP4 or MOV, up to 2 GB.</span></div>
+              <input type="file" id="eraseInput" accept="video/*" hidden>
+            </div>
+            <div class="home-or"><span></span>OR<span></span></div>
+            <label class="link-field"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+              <input id="eraseLinkInput" type="url" placeholder="Paste a YouTube, TikTok or Reels link" autocomplete="off"></label>
+            <!-- What the fetch is doing, in the words the New project dialog
+                 uses for the same wait. -->
+            <div class="erase-dl" id="eraseDlRow" hidden></div>
+            <div class="form-error" id="eraseDropError"></div>
+          </div>
+        </div>
+        <div class="erase-body" id="eraseBody" hidden>
+          <!-- The eraser is not part of the base install. One line above the
+               video, because it is about the app rather than about this
+               video -- the box below can still be placed while it downloads. -->
+          <div class="erase-notice" id="erasePack" hidden>
+            <span id="erasePackText"></span>
+            <span class="topbar-spacer"></span>
+            <button class="btn btn-primary" id="erasePackBtn" type="button">Download</button>
+          </div>
+          <!-- A machine with no graphics card does this on its processor and
+               takes about five times as long. Said once, above the video, so
+               the minutes on the right are not read as a fault. -->
+          <div class="erase-notice" id="eraseNoGpu" hidden></div>
+          <!-- No band of the screen's own. It named the screen "Erase
+               subtitles" directly under a top bar already saying "Erase
+               subtitles", and once the minutes and the button left it for the
+               row under the picture there was nothing else in it
+               (user, 2026-09-10). The tabs a finished erase needs stand on
+               their own below. -->
+          <!-- The finished screen's own tabs, in the strip the question was in,
+               so the picture below never moves. Erased first: it is the video
+               the user came here for. -->
+          <div class="video-tabs erase-tabs" id="eraseTabs" hidden>
+            <button class="vtab" data-erase="original" type="button">Original</button>
+            <button class="vtab active" data-erase="erased" type="button">Erased</button>
+          </div>
+          <!-- The picture, the trim bar and the row of controls are one
+               column down the middle of the screen, all the same width: the
+               button at the far bottom corner of the window read as a long
+               way from the video it was about (user, 2026-09-10). The width
+               is the picture's own, which only the browser knows once it has
+               laid the video out -- drawBox measures it and writes it here as
+               --erase-col. -->
+          <div class="erase-mid" id="eraseMid">
+          <div class="erase-stage" id="eraseStage">
+            <video id="eraseVideo" playsinline muted></video>
+            <!-- The one box. Drag the middle to move it, a corner to resize it;
+                 stretched to the edges it erases the whole frame, which is why
+                 there is no second control for that. -->
+            <div class="erase-zone" id="eraseBox" hidden>
+              <b>Subtitles</b>
+              <i data-handle="nw"></i><i data-handle="ne"></i><i data-handle="sw"></i><i data-handle="se"></i>
+            </div>
+          </div>
+          <!-- The New project dialog's own trim bar, drawn by the same module
+               (ui/src/trimBar.mjs): the part it chooses is the part that gets
+               erased, and its readout is where "15s of 60s" is read. Empty --
+               and so not there at all -- on every face but the box. -->
+          <div class="trim erase-trim" id="eraseTrimBox"></div>
+          <!-- One row, one line high: how far along the erase is and the way to
+               stop it, or -- when it stopped by itself -- why, and the way back
+               to the box to try a different one. -->
+          <div class="erase-row" id="eraseRow" hidden>
+            <span class="erase-state" id="eraseState"></span>
+            <!-- Where Export answers. A line, not a dialog: the file is already
+                 written by the time this appears, the same way Save clip says
+                 so in the New project dialog. -->
+            <span class="erase-saved" id="eraseSaved" hidden>Saved to <span id="eraseSavedWhere">Downloads</span><span id="eraseShowWrap" hidden>· <button type="button" class="show-link" id="eraseShowBtn">Show</button></span></span>
+            <div class="progress-bar erase-bar" id="eraseBarBox"><div id="eraseFill"></div></div>
+            <button class="btn btn-outline" id="eraseCancelBtn" type="button">Cancel</button>
+            <button class="btn btn-outline" id="eraseBackBtn" type="button" hidden>Back</button>
+            <!-- The dub's failure card has had Try again since the start: this
+                 screen had only Back, and Back is nowhere to go when the job
+                 was opened out of the Projects list rather than drawn on this
+                 screen (user, 2026-09-11). The video is in the job's own
+                 folder either way. -->
+            <button class="btn btn-primary" id="eraseRetryBtn" type="button" hidden>Try again</button>
+            <button class="btn btn-primary" id="eraseDubBtn" type="button" hidden>Start dubbing</button>
+            <!-- What the erase will cost, and the button that starts it. -->
+            <span class="topbar-est" id="eraseEst" hidden></span>
+            <button class="btn btn-primary" id="eraseRunBtn" type="button" hidden>Erase</button>
+          </div>
+          <!-- The same fold the dub's failure card carries, and for the same
+               reason: the one sentence on the row says what stopped, and this
+               is where somebody who wants to know more, or to paste it to us,
+               looks. In the column with the row rather than across the screen,
+               and its own element rather than the dub's #rawLogDetails -- that
+               one is moved between two screens already, and a third place to
+               be would leave it on whichever screen saw it last. -->
+          <details class="raw-log erase-log" id="eraseLogDetails" hidden>
+            <summary><svg class="icon icon-sm chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Raw log</summary>
+            <div class="log-box" id="eraseLogBox"></div>
+          </details>
+          </div>
+        </div>
+        <div class="erase-error" id="eraseError"></div>
       </section>
 
       <!-- ============ DONE ============ -->
@@ -1368,6 +2074,21 @@
       <section class="screen" id="screen-done" hidden>
         <div class="done" id="doneLayout" hidden>
           <div class="done-main" id="doneMain">
+            <div class="script-pane" id="scriptPane">
+              <!-- The pane's name, the way the video pane has its tabs and the
+                   timeline its heading row: three named boxes with a 6px gap
+                   between them (layout G, user 2026-09-08). #scriptCount is
+                   filled by scriptTable.mjs with how many lines there are. -->
+              <div class="pane-head">Script <span class="m" id="scriptCount"></span></div>
+              <!-- The same notice line the running screen carries, on the
+                   screen that replaced it. Hidden unless there is one, and
+                   moved into the failure block when the job failed. -->
+              <div class="job-notice" id="doneNotice" hidden></div>
+              <div id="scriptBox"></div>
+              <!-- Saving, remaking, and anything that went wrong while doing
+                   either. Empty -- and so invisible -- the rest of the time. -->
+              <div class="script-status" id="scriptSaving"></div>
+            </div>
             <div class="video-pane" id="videoPane">
               <div class="video-tabs">
                 <button class="vtab" data-src="original" type="button">Original</button>
@@ -1387,7 +2108,7 @@
                   <span class="sub-ov-text" id="subMeasure" aria-hidden="true"
                         style="visibility:hidden;pointer-events:none;top:-9999px;font-size:100px;max-width:none;white-space:pre"></span>
                   <button class="video-bigplay" id="bigPlay" type="button" aria-label="Play">
-                    <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round;margin-left:4px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
+                    <svg viewBox="0 0 24 24" style="width:30px;height:30px;fill:currentColor;stroke:currentColor;stroke-width:3;stroke-linejoin:round"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>
                   </button>
                 </div>
                 <!-- Outside .video-wrap on purpose: the frame clips at its
@@ -1404,9 +2125,19 @@
                     <button id="subScopeAll" class="on" type="button">All lines</button>
                     <button id="subScopeOne" type="button">This line</button>
                   </span>
+                  <!-- The same mark the script table keeps in its own corner:
+                       "Saving…", then "Saved" for a moment, then nothing. A
+                       look is written to the job the moment it is changed, and
+                       without this there was no way to know it (user). -->
+                  <span class="sub-sep"></span>
+                  <span class="sub-size" id="subSaved"></span>
                 </div>
                 <div class="sub-style-menu" id="subStyleMenu" hidden></div>
-                <div class="video-under">
+                <!-- Tied to the picture by placeVideoUnder, not to the pane:
+                     a portrait clip in a wide pane sits in the middle, and this
+                     row used to stay hard against the pane's left edge with
+                     nothing above it (user, 2026-09-09). -->
+                <div class="video-under" id="videoUnder">
                   <!-- Filled in by paintPlayToggle: play or pause, whichever
                        the video is not doing right now. -->
                   <button class="video-play" id="playToggle" type="button"
@@ -1414,19 +2145,9 @@
                   <div class="video-time" id="videoTime">00:00:00.0 / 00:00:00.0</div>
                 </div>
               </div>
-            </div>
-            <div class="script-pane" id="scriptPane">
-              <!-- The same notice line the running screen carries, on the
-                   screen that replaced it. Hidden unless there is one, and
-                   moved into the failure block when the job failed. -->
-              <div class="job-notice" id="doneNotice" hidden></div>
-              <div id="scriptBox"></div>
-              <!-- Saving, remaking, and anything that went wrong while doing
-                   either. Empty -- and so invisible -- the rest of the time. -->
-              <div class="script-status" id="scriptSaving"></div>
-              <!-- Drag the line between the video above and the table. -->
-              <div class="grip grip-y" id="gripPanes" role="separator"
-                   aria-orientation="horizontal" aria-label="Resize the video"></div>
+              <!-- Drag the line between the table left of it and the video. -->
+              <div class="grip grip-x" id="gripPanes" role="separator"
+                   aria-orientation="vertical" aria-label="Resize the video"></div>
             </div>
             
             <!-- Drag the line between the two panes and the timeline. -->
@@ -1440,6 +2161,8 @@
              which are moved in here from the screens that normally hold them. -->
         <div class="done-fail" id="doneFail" hidden>
           <div class="done-fail-body" id="doneFailBody">
+            <!-- Filled by stoppedMark() -- a stop square, or an exclamation. -->
+            <div class="done-fail-mark" id="doneFailMark"></div>
             <p class="done-fail-why" id="doneFailWhy"></p>
             <!-- The same video, back in the New project dialog: a job that
                  failed is nearly always retried with one option changed, and
@@ -1470,6 +2193,7 @@
            than a control floating in the corner, which the user's own messages
            ran underneath. -->
       <div class="agent-head">
+        <svg class="icon agent-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
         <span class="agent-title">Dub Agent</span>
         <div class="assistant-state" id="assistantState" hidden></div>
         <!-- No arrow on screen: the top bar's pane button opens and closes the
@@ -1483,8 +2207,11 @@
       <div class="assistant-log" id="assistantLog"></div>
       <div class="assistant-foot">
         <textarea class="assistant-input" id="assistantInput" rows="1"
-                  placeholder="Message"></textarea>
-        <div class="assistant-modelwrap">
+                  placeholder="Ask anything"></textarea>
+        <!-- The id is the module's handle: with nothing signed in it takes the
+             whole picker out of the row, and the box beside it gets the width
+             back (user, 2026-09-10). -->
+        <div class="assistant-modelwrap" id="assistantModelWrap">
           <button class="assistant-modelbtn" id="assistantModelBtn" type="button">
             <span id="assistantModelLabel">Model</span>
             <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
@@ -1517,6 +2244,10 @@
     </button></div>
     <div class="modal-body">
       <div class="project-thumb" id="projectThumb"><video id="projectVideo" muted playsinline></video><span class="project-dur" id="projectDur"></span><button class="project-replace" id="projectReplace" type="button">Replace</button></div>
+      <!-- A pasted link is fetched into the app the moment this dialog opens.
+           This row is how far along that is; it goes when the video itself can
+           be played. -->
+      <div class="dl-row" id="dlRow" hidden>Downloaded<div class="progress-bar"><div id="dlFill"></div></div><span id="dlPercent">0%</span></div>
       <div class="trim" id="trimBox"></div>
       <div class="option-grid two">
         <div class="field"><label for="sourceLangSelect">Original language</label><select id="sourceLangSelect"><option value="" selected>Auto-detect</option></select></div>
@@ -1538,7 +2269,15 @@
       <!-- Start's own error line: the first screen's #formError sits behind the
            dimmed overlay, where a failed start would never be read. -->
       <div class="form-error" id="projectError"></div>
-      <button class="btn btn-primary start-btn" id="startBtn" type="button">Start dubbing</button>
+      <!-- Three things can be done with the video that is now on this
+           computer. Two of them end here (a clip saved, the subtitles erased);
+           only the third goes on to a dub, which is why it alone is filled. -->
+      <div class="project-actions">
+        <button class="btn btn-outline" id="saveClipBtn" type="button">Save clip</button>
+        <button class="btn btn-outline" id="eraseBtn" type="button">Erase subtitles</button>
+        <button class="btn btn-primary" id="startBtn" type="button">Start dubbing</button>
+      </div>
+      <div class="project-saved"><span id="projectSaved"></span><span id="projectShowWrap" hidden>· <button type="button" class="show-link" id="projectShow">Show</button></span></div>
     </div>
   </div>
 </div>
@@ -1571,7 +2310,7 @@
      link to the list. The list itself (below) opens only from that link and
      from the version in Settings -- it no longer pops up on its own (user,
      2026-09-02). -->
-<div class="update-banner" id="updatedNotice" hidden><span id="updatedText"></span><button class="link" id="updatedWhatsNew" type="button">What&#8217;s new</button></div>
+<div class="update-banner" id="updatedNotice" hidden><span id="updatedText"></span><button class="link" id="updatedWhatsNew" type="button">What&#8217;s new</button><button class="link" id="updatedClose" type="button" aria-label="Close" title="Close">&#215;</button></div>
 
 <div class="modal-overlay" id="whatsNewOverlay">
   <div class="modal" style="max-width: 430px">
@@ -1589,13 +2328,16 @@
       <h2 id="mnTitle" style="margin: 0 0 8px"></h2>
       <p class="settings-hint" id="mnLine" style="margin: 0"></p>
       <ul class="mn-items" id="mnItems" hidden></ul>
-      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or dub with the Perso API using your key: Open Settings.</p>
+      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or use the Perso API with your key: Open Settings.</p>
       <div class="mn-progress" id="mnProgress" hidden><div id="mnBar"></div></div>
       <div class="form-error" id="mnError"></div>
       <div class="mn-buttons">
+        <!-- Open Settings is a way out, not a second answer: as a third button
+             of the same weight the eye had to choose between three, and the one
+             that matters is Download and Start. -->
+        <button class="settings-link" id="mnSettings" type="button">Open Settings</button>
         <button class="btn btn-outline" id="mnCancel" type="button">Cancel</button>
         <button class="btn btn-outline" id="mnHide" type="button" hidden>Hide</button>
-        <button class="btn btn-outline" id="mnSettings" type="button">Open Settings</button>
         <button class="btn btn-primary" id="mnDownload" type="button">Download and Start</button>
       </div>
     </div>
@@ -1611,6 +2353,21 @@
       </button>
     </div>
     <div class="modal-body">
+      <div class="settings-section">
+        <h3>Appearance</h3>
+        <!-- Dark is the app (0.5.5); this is the way back to the old light
+             sheet. It takes effect on the spot, like everything else in here,
+             and is remembered in the browser rather than in kit.env: it is a
+             property of this screen, not of the engine. -->
+        <div class="settings-row settings-line">
+          <label for="themeSelect">Theme</label>
+          <select id="themeSelect" class="settings-select">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+      </div>
+
       <div class="settings-section">
         <h3>Models</h3>
         <!-- Folded to one summary line by default (the open list made Settings
@@ -1683,12 +2440,22 @@
         <div class="settings-row">
           <label for="analyticsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
             <span>Send anonymous usage counts</span>
-            <input type="checkbox" class="switch" id="analyticsToggle">
+            <input type="checkbox" class="switch" id="analyticsToggle" checked>
           </label>
           <!-- Saves on the spot: the shell re-reads the file before every
                count, so promising a restart would be wrong. The hint is empty
                until a save fails -- the label says what the switch does. -->
           <div class="settings-hint" id="analyticsHint"></div>
+        </div>
+        <div class="settings-row">
+          <label for="reportsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+            <span>Send failure reports automatically</span>
+            <input type="checkbox" class="switch" id="reportsToggle" checked>
+          </label>
+          <!-- Separate from the counts: this one carries what broke, so it is
+               its own choice. Nothing personal leaves -- keys and folder names
+               are taken out first (desktop/src/report.js). -->
+          <div class="settings-hint" id="reportsHint">Keys and folder names are removed first.</div>
         </div>
       </div>
 
@@ -1705,8 +2472,9 @@
         <div class="settings-line">
           <!-- The version itself opens What's new: one less link on the row
                (user feedback 2026-09-01), and the version is the natural place
-               to ask what changed. -->
-          <button class="settings-link" id="aboutVersion" type="button" title="What&#8217;s new">PersoDub</button>
+               to ask what changed. The logo sits on this line at text height
+               (user, 2026-09-08: a big one threw the row off). -->
+          <span class="about-brand"><img class="about-logo" src="/logo.png" alt=""><button class="settings-link" id="aboutVersion" type="button" title="What&#8217;s new">PersoDub</button></span>
           <button class="settings-link" id="ackToggle" type="button" aria-expanded="false">Acknowledgements</button>
         </div>
         <div id="ackList" hidden>
@@ -1748,6 +2516,30 @@
     <div class="modal-foot">
       <button class="btn btn-secondary" id="creditCloseBtn" type="button">Close</button>
       <a class="btn btn-primary" id="creditRechargeBtn" href="#" target="_blank" rel="noopener">Recharge</a>
+    </div>
+  </div>
+</div>
+
+<!-- Stopping a dub throws away the minutes it has already spent, so it is
+     asked before it happens -- and asked here rather than with
+     window.confirm(). That one freezes every event in the Electron shell
+     until it is dismissed, and Chromium writes its buttons in the machine's
+     own language, so an English question came with Korean answers
+     (found on Windows, 2026-09-10). -->
+<div class="modal-overlay" id="cancelDubOverlay">
+  <div class="modal" style="width: min(440px, 92vw)">
+    <div class="modal-head">
+      <h2>Stop this dub?</h2>
+      <button class="modal-close" id="cancelDubCloseX" type="button" aria-label="Close">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="margin: 0">The work done so far will be lost.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" id="cancelDubKeepBtn" type="button">Keep going</button>
+      <button class="btn btn-danger" id="cancelDubConfirmBtn" type="button">Stop it</button>
     </div>
   </div>
 </div>
@@ -1807,22 +2599,13 @@
      Closed is gone entirely; the bar's pane button brings it back. */
   .agent { position: relative; flex: 0 0 auto; width: 320px; min-height: 0;
     display: flex; flex-direction: column;
-    background: var(--agent-bg); border-left: 2px solid var(--primary);
-    color: var(--agent-fg); }
+    background: var(--agent-bg); border-radius: var(--radius); overflow: hidden;
+    margin-left: 8px; color: var(--agent-fg); }
   body:not(.agent-open) .agent { display: none; }
-  /* Nothing yet while a dub runs, where the script the assistant would fix
-     does not exist. A greyed-out row there was just a thing that could not be
-     used taking up the bottom of the screen, so it goes off the page instead.
-     The home screen keeps the strip: there is no job there either, but the
-     assistant can still be asked things, and this is where batch requests
-     will land. */
-  body[data-screen="running"] .agent { display: none; }
-  /* A cancelled or failed job has no script either, but its card stays on show
-     with the strip beneath it, so there the row is dimmed and locked -- a turn
-     would be paid for and answered by a script route that can only say 409.
-     The lock itself is the disabled attribute paintChoice() sets -- dimming
-     alone left the box one Tab away. */
-  body[data-screen="failed"] .assistant-foot { opacity: .6; }
+  /* The running screen keeps the strip. It was taken off the page there --
+     there is no script to fix yet -- but a dub in progress is exactly when a
+     person turns to the assistant: to stop it, or to ask how far along it is
+     (user, 2026-09-09). */
   .assistant-input:disabled, .assistant-modelbtn:disabled { cursor: default; }
 
   /* The conversation fills the column between the heading and the input. */
@@ -1838,13 +2621,18 @@
      row. Clear of the drag handle along the very top edge. */
   .agent-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
     padding: 0 12px 0 16px; height: 40px; box-sizing: border-box;
+    background: var(--agent-head-bg);   /* --head-bg's dark value, by design */
     border-bottom: 1px solid var(--agent-border); }
-  .agent-title { font-size: 0.82rem; font-weight: 700; }
+  .agent-title { font-size: var(--font-title); font-weight: 700; }
+  /* A spark, so the row is the assistant's own title bar at a glance rather
+     than two words in a corner. Its blue is the app's, lightened to read on
+     the strip's dark. */
+  .agent-spark { width: 16px; height: 16px; color: #8FB8FF; }
   /* Pushed to the far right of the heading row -- the base rule below says
      flex:1 (it once had a row to itself), which parks its text next to the
      title instead. */
   .agent-head .assistant-state { flex: 0 1 auto; margin-left: auto;
-    text-align: right; font-size: 0.7rem; color: var(--agent-muted); }
+    text-align: right; font-size: var(--font-label); color: var(--agent-muted); }
   .agent-fold[hidden] { display: none; }
 
   /* Folds the conversation away and brings it back. A square big enough to hit
@@ -1860,17 +2648,17 @@
 
   .assistant-foot { display: flex; align-items: center; gap: 12px;
     margin: 6px 14px 12px; padding: 6px 6px 6px 16px; min-height: 48px;
-    border: 1px solid var(--agent-border); border-radius: 14px;
-    background: var(--agent-box); }
+    border: 1px solid var(--agent-field-line); border-radius: 8px;
+    background: var(--agent-field); }
   .assistant-input { flex: 1; resize: none; border: none; background: none;
-    padding: 0; outline: none; font: inherit; font-size: 0.875rem;
+    padding: 0; outline: none; font: inherit; font-size: var(--font-ui);
     color: var(--agent-fg); max-height: 120px; }
   .assistant-input::placeholder { color: var(--agent-muted); }
 
   .assistant-modelwrap { position: relative; flex-shrink: 0; }
   .assistant-modelbtn { display: inline-flex; align-items: center; gap: 5px;
     cursor: pointer; border: none; background: none; color: var(--agent-fg);
-    padding: 5px 8px; font: inherit; font-size: 0.8125rem; white-space: nowrap; }
+    padding: 5px 8px; font: inherit; font-size: var(--font-ui); white-space: nowrap; }
   .assistant-modelbtn:hover { color: var(--agent-muted); }
 
   /* Send, and stop. 32px to match the picker's height, at the end of the row.
@@ -1893,10 +2681,10 @@
   .assistant-menu { position: absolute; bottom: 36px; right: 0; z-index: 50; width: 216px;
     background: var(--agent-box); border: 1px solid var(--agent-border); border-radius: 10px;
     box-shadow: 0 -10px 28px rgba(0,0,0,.34); padding: 6px; max-height: 60vh; overflow-y: auto; }
-  .menu-group { font-size: 0.68rem; color: var(--agent-muted); letter-spacing: .05em;
+  .menu-group { font-size: var(--font-label); color: var(--agent-muted); letter-spacing: .05em;
     text-transform: uppercase; padding: 8px 9px 4px; display: flex; justify-content: space-between; }
   .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 7px 9px; border-radius: 7px; cursor: pointer; font-size: 0.86rem;
+    padding: 7px 9px; border-radius: 7px; cursor: pointer; font-size: var(--font-ui);
     color: var(--agent-fg); border: none; background: none; width: 100%; text-align: left;
     font-family: inherit; }
   .menu-item:hover { background: var(--agent-bg); }
@@ -1909,16 +2697,16 @@
   .menu-right, .menu-back { display: inline-flex; align-items: center; gap: 5px; }
   /* A name, and under it the reason that name cannot be picked. */
   .menu-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .menu-name em { font-style: normal; font-size: 0.7rem; line-height: 1.35;
+  .menu-name em { font-style: normal; font-size: var(--font-label); line-height: 1.35;
     color: var(--agent-muted); white-space: normal; }
 
   /* What the user said is the only thing with a shape around it; everything the
      assistant says is plain text on the strip, the way a terminal answers. */
-  .bubble { max-width: 88%; font-size: 0.84rem; line-height: 1.55;
+  .bubble { max-width: 88%; font-size: var(--font-ui); line-height: 1.55;
     white-space: pre-wrap; word-break: break-word; }
   .bubble.me { align-self: flex-end; padding: 9px 12px; border-radius: 12px;
     border-bottom-right-radius: 3px; background: var(--agent-me-bg);
-    border: 1px solid var(--agent-me-border); color: var(--agent-fg); }
+    border: 1px solid var(--agent-me-border); color: var(--agent-me-fg); }
   .bubble.ai { align-self: flex-start; max-width: 640px; padding: 4px 2px;
     color: var(--agent-fg); }
   .bubble.ai code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1926,7 +2714,7 @@
   /* A tool call is a status line, never raw JSON: the user should never see the
      wire format of whichever CLI is behind the strip. */
   .chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px;
-    padding: 2px 2px; font-size: 0.78rem; color: var(--agent-muted); }
+    padding: 2px 2px; font-size: var(--font-label); color: var(--agent-muted); }
   /* "chip-done", not "done": the finished screen's own layout class is .done,
      and a chip that matched it inherited that column layout. */
   .chip.chip-done { color: var(--agent-fg); }
@@ -1944,26 +2732,26 @@
   @keyframes think { 0%, 60%, 100% { opacity: .28; transform: translateY(0); }
                      30% { opacity: 1; transform: translateY(-3px); } }
   @media (prefers-reduced-motion: reduce) { .thinking i { animation: none; opacity: .6; } }
-  .thinking span { font-size: 0.78rem; color: var(--agent-muted); margin-left: 4px; }
+  .thinking span { font-size: var(--font-label); color: var(--agent-muted); margin-left: 4px; }
   /* "You stopped this one." Under whatever the turn had already said, muted:
      it is a fact about the answer, not a failure and not part of the answer. */
-  .assistant-stopped { align-self: stretch; font-size: 0.78rem;
+  .assistant-stopped { align-self: stretch; font-size: var(--font-label);
     color: var(--agent-muted); }
   .assistant-err { align-self: stretch; padding: 9px 11px; border-radius: 9px;
-    font-size: 0.8rem; color: var(--destructive); border: 1px solid var(--destructive); }
+    font-size: var(--font-label); color: var(--destructive); border: 1px solid var(--destructive); }
   /* The CLI's own last words, folded away. The sentence above is what the user
      needs; this is for the one time in ten they want to know exactly what a
      tool said, or to read it out to somebody who can help. */
   .assistant-err details { margin-top: 6px; }
   .assistant-err summary { cursor: pointer; color: var(--agent-muted); }
   .assistant-err pre { margin: 6px 0 0; padding: 8px; border-radius: 6px;
-    background: var(--agent-box); color: var(--agent-fg); font-size: 0.72rem;
+    background: var(--agent-box); color: var(--agent-fg); font-size: var(--font-label);
     white-space: pre-wrap; word-break: break-word; max-height: 160px;
     overflow: auto; }
 
   /* The left half of the heading row: one line, muted, and never in the way.
      The fold sits beside it now, so it no longer keeps a corner clear. */
-  .assistant-state { flex: 1; min-width: 0; padding: 0; font-size: 0.72rem;
+  .assistant-state { flex: 1; min-width: 0; padding: 0; font-size: var(--font-label);
     /* Not --agent-muted: at this size that grey measures 3.4:1 on the strip's
        own dark, and this is a line the user is meant to read and act on. */
     color: var(--agent-soft); display: flex; align-items: center; gap: 5px;
@@ -1981,8 +2769,9 @@ import { initModelsUi } from "/js/modelsDialog.mjs";
 import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
-import { initProjectsUi } from "/js/projects.mjs";
-import { initRunningScreenUi } from "/js/runningScreen.mjs";
+import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "/js/eraseScreen.mjs";
+import { initProjectsUi, shownName } from "/js/projects.mjs";
+import { initRunningScreenUi, stoppedMark } from "/js/runningScreen.mjs";
 import { initScriptTableUi } from "/js/scriptTable.mjs";
 import { initTimelineUi, TL_LABEL_PX } from "/js/timeline.mjs";
 import { updateBannerView } from "/js/updateBanner.mjs";
@@ -2055,10 +2844,7 @@ $("historySidebar").addEventListener("transitionend", () => projects.markClipped
 // elsewhere.
 function paintPanes() {
   $("paneList").classList.toggle("on", !$("historySidebar").classList.contains("collapsed"));
-  const running = document.body.dataset.screen === "running";
-  $("paneAgent").disabled = running;
-  $("paneAgent").classList.toggle(
-    "on", !running && document.body.classList.contains("agent-open"));
+  $("paneAgent").classList.toggle("on", document.body.classList.contains("agent-open"));
   const done = document.body.dataset.screen === "done";
   $("paneTimeline").disabled = !done;
   $("paneTimeline").classList.toggle(
@@ -2133,24 +2919,23 @@ async function checkWhatsNew() {
     return;
   }
   if (seen === whatsNew.version) return;
-  try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
+  // Not marked seen here: the banner stays, launch after launch, until the
+  // person closes it or opens the list (user, 2026-09-08 -- the six-second
+  // version was gone before anyone looked up from the Updating screen).
   showUpdatedNotice();
 }
-// "Updated to 0.4.4 · What's new": six seconds, then gone on its own; a
-// pointer resting on it keeps it. Adobe and the App Store call the list
-// "What's new", so the link does too.
-let updatedTimer = null;
-function hideUpdatedNotice() { clearTimeout(updatedTimer); $("updatedNotice").hidden = true; }
+// "Updated to 0.4.4 · What's new · ×": stays until closed. Adobe and the App
+// Store call the list "What's new", so the link does too.
+function hideUpdatedNotice() {
+  $("updatedNotice").hidden = true;
+  try { if (whatsNew && whatsNew.version) localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
+}
 function showUpdatedNotice() {
-  const el = $("updatedNotice");
   $("updatedText").textContent = `Updated to ${whatsNew.version}`;
-  el.hidden = false;
-  const arm = () => { clearTimeout(updatedTimer); updatedTimer = setTimeout(hideUpdatedNotice, 6000); };
-  el.onmouseenter = () => clearTimeout(updatedTimer);
-  el.onmouseleave = arm;
-  arm();
+  $("updatedNotice").hidden = false;
 }
 $("updatedWhatsNew").addEventListener("click", () => { hideUpdatedNotice(); showWhatsNew(); });
+$("updatedClose").addEventListener("click", hideUpdatedNotice);
 $("wnOk").addEventListener("click", () => {
   try { localStorage.setItem(WHATS_NEW_SEEN, whatsNew.version); } catch { /* fine */ }
   $("whatsNewOverlay").classList.remove("open");
@@ -2307,9 +3092,13 @@ function paintModelStatusLines(rows) {
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
           || rows.find((m) => m.state === "downloading");
   // The chip stands in for the download dialog, not beside it: it shows only
-  // once Hide closed the dialog (the dialog itself carries the percent).
+  // once Hide closed the dialog (the dialog itself carries the percent). Same
+  // rule for the erase screen, which draws its pack's percentage on its own
+  // line -- the chip beside it was the same number twice (user, 2026-09-09).
   const dialogOpen = $("modelsNeededOverlay").classList.contains("open");
-  $("topbarDl").hidden = !dl || dialogOpen;
+  const shownElsewhere = dl && dl.id === ERASER_PACK_ID
+    && document.body.dataset.screen === "erase";
+  $("topbarDl").hidden = !dl || dialogOpen || shownElsewhere;
   if (dl) $("topbarDl").textContent = `${dl.name} · ${dl.progress ?? 0}%`;
 }
 
@@ -2321,7 +3110,7 @@ for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
 // the hint slots render these with pre-line whitespace.
 const ENGINE_HINTS = {
   dubMode: { local: ["Runs on your desktop, free.", "You can edit the script after."],
-             perso: ["Perso dubs it start to finish.", "Uses Perso credits."] },
+             perso: ["Perso does the dubbing start to finish.", "Uses Perso credits."] },
   sep: { local: ["Runs on your desktop, free.", "For accuracy, use the API."],
          perso: ["Most accurate.", "Uses Perso credits."] },
   stt: { local: ["Runs on your desktop, free.", "For accuracy, use the API."],
@@ -2361,21 +3150,43 @@ models.refreshModels();
 // shows its card inside #screen-done, but nothing on it can be fixed, so the
 // agent strip has to be able to tell the two apart.
 const SCREEN_SECTION = { failed: "done" };
+// The screens the rail's Dubbing icon owns: home, and the three a job moves
+// through after it.
+const DUB_SCREENS = new Set(["home", "running", "done", "failed"]);
 function showScreen(name) {
   const id = `screen-${SCREEN_SECTION[name] || name}`;
   for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== id;
   document.body.dataset.screen = name;   // the assistant reads this
+  // The rail says which screen is up. Only the screens a rail icon owns: the
+  // folder beside it is a fold, not a place, and lights up with its sidebar.
+  $("eraseToggle").classList.toggle("active", name === "erase");
+  // Dubbing owns the first screen and every screen a dub passes through, so
+  // the icon stays lit from the drop to the finished video.
+  $("dubToggle").classList.toggle("active", DUB_SCREENS.has(name));
 }
 
 // The top bar carries the whole state of the app: what is open, what it is
 // doing, and the one or two buttons that apply right now.
-function setTopbar({ title, subtitle = "", running = false, done = false, back = false }) {
+function setTopbar({ title, subtitle = "", running = false, done = false, back = false,
+                     estimate = "", erase = false }) {
   $("topbarTitle").textContent = title;
+  // A job's name can be changed; the first screen's "PersoDub" cannot.
+  $("topbarTitle").dataset.editable = state.jobId ? "1" : "0";
+  $("topbarTitle").title = state.jobId ? "Click to rename" : "";
+  $("topbarTitle").hidden = false;
+  $("topbarRename").hidden = true;
   $("topbarSub").textContent = subtitle;
   $("topbarBack").hidden = !back;
+  $("topbarHomeDiv").hidden = !back;
   $("cancelBtn").hidden = !running;
   // Only a finished job has anything to hand back.
   $("exportBtn").hidden = !done;
+  // The erase screen's pair. Named here rather than left to that screen so
+  // that every other call to setTopbar puts them away without knowing they
+  // exist -- which is the whole point of one top bar.
+  $("eraseEst").textContent = estimate;
+  $("eraseEst").hidden = !estimate;
+  $("eraseRunBtn").hidden = !erase;
   paintForward();
 }
 
@@ -2512,7 +3323,55 @@ const newProject = initNewProjectUi({
     clearLink();
   },
   onPickFile: () => videoInput.click(),
+  onErase: (source) => eraseScreen.openEraseWith(source),
+  // Only the desktop app can open a folder (see the erase screen's own Show).
+  reveal: window.persodubShell?.revealPath
+    ? (path) => window.persodubShell.revealPath(path) : null,
 });
+
+// ---------------- Erase subtitles ----------------
+// The rail's third screen, and everything inside #screen-erase, belongs to
+// ui/src/eraseScreen.mjs. What the page hands it is what is the page's: the
+// one way screens are swapped, the one top bar, and the one rule about which
+// files this app takes -- videoProblem, shared with the home drop zone, so a
+// file refused on one screen is refused on the other in the same words.
+const eraseScreen = initEraseScreenUi({
+  $, showScreen, setTopbar, checkFile: videoProblem,
+  // The eraser arrives as a pack, and packs are the models controller's to
+  // install: it owns the progress the top-bar chip and Settings both show.
+  installPack: (id) => models.installPack(id),
+  packRow: (id) => models.modelRow(id),
+  // ...and the progress and the refusals that go with it, so the erase screen
+  // can draw them where the button was pressed.
+  onPackProgress: (fn) => models.onPackProgress(fn),
+  // An erase is a job like any other, so the list and the waiting line have a
+  // new row the moment one starts and a changed one when it ends.
+  onJobsChanged: () => {
+    projects.renderHistory().catch(() => {});
+    projects.renderQueueCard().catch(() => {});
+  },
+  // The way on from an erased video: the New project dialog, opened on the
+  // cleaned file rather than the one with the writing still on it.
+  onDub: (source) => newProject.openNewProject(source),
+  // Only the desktop app can open a folder. In a browser there is none to
+  // open, and the "Show" beside "Saved to Downloads" stays away.
+  reveal: window.persodubShell?.revealPath
+    ? (path) => window.persodubShell.revealPath(path) : null,
+  // The trim bar under the picture is the New project dialog's, drawn by the
+  // same module, so it needs the same three from the page.
+  playRange,
+  cancelRange,
+  labelPx: () => TL_LABEL_PX,
+});
+$("eraseToggle").addEventListener("click", () => eraseScreen.openErase());
+// The project's own page. window.open rather than an <a>: the shell hands
+// every http(s) open to the OS browser (desktop/main.js), and in a plain
+// browser it is a new tab either way.
+const REPO_URL = "https://github.com/stronghamjji/PersoDub";
+$("brandBtn").addEventListener("click", () => window.open(REPO_URL, "_blank", "noopener"));
+// The rail's way home. Same call as the top bar's house: a job left open is
+// left properly, not just hidden behind another screen.
+$("dubToggle").addEventListener("click", () => resetForNewJob());
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
@@ -2674,8 +3533,60 @@ $("linkInput").addEventListener("input", () => {
 // it starts, so the name is the same one whether the job is minutes or months
 // old -- the browser used to remember it, and forgot on every restart.
 function jobLabel(job) {
-  return job.project || "Dubbing";
+  return shownName(job);
 }
+
+// ---- Renaming a project ----------------------------------------------------
+// The name a link brings is the video's own, which fills the top bar and is
+// cut off in the Projects list; a file brings whatever it was called. The
+// folder keeps the name it was made with -- the files inside it are written
+// there already -- and this changes only what the screens show (user,
+// 2026-09-10).
+function startRename() {
+  const job = state.job;
+  if (!job || !state.jobId) return;
+  const field = $("topbarRename");
+  field.value = shownName(job);
+  $("topbarTitle").hidden = true;
+  field.hidden = false;
+  field.focus();
+  field.select();
+}
+
+async function finishRename(save) {
+  const field = $("topbarRename");
+  if (field.hidden) return;
+  const typed = field.value.trim();
+  field.hidden = true;
+  $("topbarTitle").hidden = false;
+  if (!save || !state.jobId) return;
+  // An unchanged name is not a save: the folder's own name coming back is,
+  // which is what an emptied field means.
+  if (typed === shownName(state.job)) return;
+  try {
+    const r = await fetch(`/api/dub/jobs/${state.jobId}/title`,
+      { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: typed }) });
+    if (!r.ok) throw new Error("rename failed");
+    const { title } = await r.json();
+    if (state.job) state.job.title = title;
+    $("topbarTitle").textContent = jobLabel(state.job || {});
+    projects.renderHistory().catch(() => {});
+  } catch {
+    // The name on screen is the one the server has; putting the old one back
+    // is the honest answer to a save that did not happen.
+    $("topbarTitle").textContent = jobLabel(state.job || {});
+  }
+}
+
+$("topbarTitle").addEventListener("click", () => {
+  if ($("topbarTitle").dataset.editable === "1") startRename();
+});
+$("topbarRename").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); finishRename(true); }
+  else if (e.key === "Escape") { e.preventDefault(); finishRename(false); }
+});
+$("topbarRename").addEventListener("blur", () => finishRename(true));
 
 // A job started with a Trim dubbed only part of the video, and both screens say
 // which part -- otherwise a ten-second result out of a half-hour video reads as
@@ -2742,7 +3653,15 @@ function resetForNewJob() {
 }
 // The back arrow is the way out of a finished job -- the same "start another
 // one" the New job button used to be, in the place a back arrow belongs.
-$("topbarBack").addEventListener("click", resetForNewJob);
+$("topbarBack").addEventListener("click", () => {
+  // Leaving the erase screen that a New project dialog sent us to puts that
+  // dialog back, with the same video and the same trim -- home would throw
+  // away the video the user was in the middle of (user, 2026-09-09).
+  const back = eraseScreen.origin();
+  const fromDialog = document.body.dataset.screen === "erase" && back;
+  resetForNewJob();
+  if (fromDialog) newProject.openNewProject(back);
+});
 
 function renderLog(job) {
   $("logBox").textContent = (job.logs || []).join("\n");
@@ -2766,6 +3685,8 @@ const runningScreen = initRunningScreenUi({
   getJobId: () => state.jobId,
   getJobStatus: () => (state.job ? state.job.status : null),
   onCancel: (jobId) => cancelDubJob(jobId),
+  // The question, asked in the app's own dialog rather than the browser's.
+  askCancel: () => askCancelDub(),
   onOpenSettings: () => settings.openSettings(),
   // The popup's Recharge button is an anchor with target="_blank"; arming its
   // href is all the opening it needs. Handed in so the desktop shell could one
@@ -2803,11 +3724,47 @@ setInterval(() => { projects.renderQueueCard().catch(() => {}); }, 2500);
 // of work go with it.
 async function cancelQueuedJob(job) {
   const live = job.status !== "queued";
-  if (live && !confirm("Cancel this dubbing job?")) return;
+  if (live && !(await askCancelDub())) return;
   try { await fetch(`/api/dub/jobs/${job.id}/cancel`, { method: "POST" }); } catch { /* the next poll tells the truth */ }
   projects.renderQueueCard().catch(() => {});
   projects.renderHistory().catch(() => {});
 }
+
+// Stopping a dub is asked in a dialog of the app's own, for the same reasons
+// deleting is: window.confirm() freezes every event in the Electron shell
+// until it is dismissed, and Chromium writes its buttons in the machine's own
+// language -- an English question with Korean answers (Windows, 2026-09-10).
+// A promise, because both callers only want the yes or no: the running
+// screen's Cancel and a queued row's X.
+let answerCancelDub = null;
+
+function askCancelDub() {
+  // Asked twice over is one dialog: whoever asked first gets a No, so no
+  // caller is left waiting on a promise that never settles.
+  if (answerCancelDub) answerCancelDub(false);
+  $("cancelDubOverlay").classList.add("open");
+  $("cancelDubConfirmBtn").focus();
+  return new Promise((resolve) => { answerCancelDub = resolve; });
+}
+
+function closeCancelDub(answer) {
+  $("cancelDubOverlay").classList.remove("open");
+  const done = answerCancelDub;
+  answerCancelDub = null;
+  if (done) done(answer);
+}
+$("cancelDubCloseX").addEventListener("click", () => closeCancelDub(false));
+$("cancelDubKeepBtn").addEventListener("click", () => closeCancelDub(false));
+$("cancelDubConfirmBtn").addEventListener("click", () => closeCancelDub(true));
+// Backdrop and Escape both mean "no", the way they do on the delete dialog:
+// backing out is the reflex in front of a question like this, and the stopping
+// is the deliberate act.
+$("cancelDubOverlay").addEventListener("click", (e) => {
+  if (e.target === $("cancelDubOverlay")) closeCancelDub(false);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("cancelDubOverlay").classList.contains("open")) closeCancelDub(false);
+});
 
 // Deleting a project's folder cannot be undone, so it is asked in a dialog of
 // the app's own -- window.confirm() freezes every event in the Electron shell
@@ -2869,7 +3826,12 @@ async function resumeJob(jobId) {
   try {
     const job = await (await fetch(`/api/dub/jobs/${jobId}`)).json();
     if (job.detail) throw new Error("This job is no longer available (server may have restarted).");
-    handleJobUpdate(job);
+    // Erasing subtitles is the other work this app does, and it has a screen of
+    // its own: the same row, the same click, a different place to land.
+    if (job.kind === "erase") { eraseScreen.openEraseJob(job); return; }
+    // Asked for by name, from wherever the person happens to be standing: this
+    // one is allowed to change the screen.
+    handleJobUpdate(job, { opened: true });
     noteLastScreen(jobId);
     // queued is alive too (handleJobUpdate paints it as waiting): a job
     // restored at launch while it waits in line must keep polling.
@@ -2930,7 +3892,9 @@ async function restartVoiceEngine() {
 async function startDubbing() {
   $("projectError").textContent = "";
   const np = state.newProject;
-  if (!np || (!np.file && !np.probe)) {
+  // Three ways a video can be in this dialog: dropped, pasted as a link, or
+  // already in the app's hands (the erase screen's result).
+  if (!np || (!np.file && !np.probe && !np.downloadId)) {
     $("projectError").textContent = "Choose a video first."; return;
   }
 
@@ -2945,7 +3909,7 @@ async function startDubbing() {
     state.pollGeneration += 1;
     const myGeneration = state.pollGeneration;
 
-    const label = np.file ? np.file.name : np.probe.title;
+    const label = np.file ? np.file.name : (np.probe ? np.probe.title : (np.title || "Dubbing"));
     // The server has the job on file already, so the sidebar only has to ask
     // again -- the new row comes back with it.
     projects.renderHistory().catch(() => {});
@@ -2979,7 +3943,7 @@ async function startBatchDubbing(files) {
     const opts = newProject.readOptions();
     for (const f of files) {
       const fd = buildDubFormData({ ...opts, video: f, sourceUrl: null,
-                                    project: undefined, trim: null });
+                                    downloadId: null, project: undefined, trim: null });
       await startDubJob(fd);
     }
     newProject.closeNewProject();
@@ -3037,12 +4001,30 @@ function runPollLoop(jobId, myGeneration) {
   });
 }
 
-async function handleJobUpdate(job) {
+// The screens a job owns. Everywhere else -- the erase tool, the first
+// screen -- belongs to the person, not to the job.
+const JOB_SCREENS = new Set(["running", "done", "failed"]);
+
+// `opened` is the difference between the two ways this is called: the person
+// clicked the job (resumeJob), or the job reported in on its own (the poll).
+// Only the second one has to keep its hands off the screen.
+async function handleJobUpdate(job, { opened = false } = {}) {
   state.job = job;
   // The script assistant runs in its own module and cannot see `state`. Parking
   // the id here lets it answer "this job" without asking the user for a number
   // they have no way of knowing.
   document.body.dataset.jobId = job.id;
+  // A dub reports its progress every second or so, and every report used to
+  // put its own screen back up: pressing Erase subtitles mid-dub lit the rail
+  // icon and then the running screen returned, so the tool could not be
+  // reached until the dub ended (user, 2026-09-10). The job still updates --
+  // its record, its row in Projects, the waiting card -- but it stops taking
+  // the screen back from somewhere the person went on purpose.
+  if (!opened && !JOB_SCREENS.has(document.body.dataset.screen)) {
+    projects.renderHistory().catch(() => {});
+    projects.renderQueueCard().catch(() => {});
+    return;
+  }
   const progress = parseProgress(job.logs);
   // "queued" is alive too -- it shows the waiting version of the running
   // screen rather than a failure, and starts by itself.
@@ -3073,7 +4055,10 @@ async function handleJobUpdate(job) {
 
   // Desktop only: in a plain browser persodubShell is undefined and nothing is
   // counted, which is the intended behaviour -- the counts describe app installs.
-  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(-6).join("\n"));
+  // The id goes with it: a failure report is built in the shell, and without
+  // the job it cannot ask the engine which stage died or read that job's own
+  // log -- it would travel with the app log alone and no "3/6 translate".
+  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(-6).join("\n"), job.id);
 
   await renderDone(job);
 }
@@ -3092,13 +4077,12 @@ function langName(code) {
 // "Original / Script" said nothing about which languages were being compared.
 // The source is whichever the user chose, or -- when they left it on auto --
 // whatever was detected.
+// The two columns of words. "Original" and "Translated" rather than the two
+// language names: the pair is what the table is for, and "Korean" beside
+// "Original" read as a language column rather than as the other half of a
+// translation (user, 2026-09-11). The languages themselves are in the top bar.
 function scriptLangNames() {
-  const job = state.job || {};
-  return {
-    source: langName(job.source_lang || (job.result || {}).detected_source_language)
-      || "Original",
-    target: langName(job.language_code) || "Script",
-  };
+  return { source: "Original", target: "Translated" };
 }
 
 // ---------------- The finished screen ----------------
@@ -3161,11 +4145,13 @@ async function renderDone(job) {
   $("doneLayout").hidden = !finished;
   $("doneFail").hidden = finished;
   timeline.fitLayout();   // the two panes have a width to measure only now they are on show
+  sizeVideoPane();        // and only now can the row say whether the two fit side by side
   if (!finished) {
     // Cancelled and failed are two different stories, and neither has a screen
     // of its own: the back chevron in the top bar is the way out of both. The
     // reason itself is the notice line's job -- it is the copy that carries the
     // Recharge link, and one sentence said twice reads as a bug.
+    $("doneFailMark").innerHTML = stoppedMark(job.status);
     $("doneFailWhy").textContent = job.status === "cancelled"
       ? "This dubbing job was cancelled."
       : "Dubbing didn't finish.";
@@ -3237,7 +4223,8 @@ doneVideo.addEventListener("click", toggleDonePlay);
 // The small button under the picture says what pressing it will do, so it is
 // the pause sign while the video plays and the play sign the rest of the time.
 // Drawn, like every other mark in the app.
-const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none;margin-left:2px"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
+// A triangle has two centres and they are 1.75 units apart in a box this size: the middle of its box (6.75) and the middle of its weight (8.5). Neither alone looks right -- box-centred it leans left, weight-centred it leans right -- so it is drawn halfway between them, which is where it always was. What was wrong was the margin-left beside it, worth another 3.2 units at this size and pushing it well past both (user, 2026-09-11).
+const SMALL_PLAY = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><path d="M7.5 5.5v13l10.5-6.5z"/></svg>';
 const SMALL_PAUSE = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;stroke:none"><path d="M8 5h3.2v14H8z"/><path d="M12.8 5H16v14h-3.2z"/></svg>';
 function paintPlayToggle() {
   const btn = $("playToggle");
@@ -3255,12 +4242,45 @@ paintPlayToggle();
 for (const e of ["play", "playing"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = true; paintPlayToggle(); });
 for (const e of ["pause", "ended", "emptied"]) doneVideo.addEventListener(e, () => { $("bigPlay").hidden = false; paintPlayToggle(); });
 for (const e of ["timeupdate", "loadedmetadata", "seeked"]) doneVideo.addEventListener(e, paintPlayhead);
-// A portrait clip gets a taller pane by default: drawn to the pane's width it
-// came out thumbnail-sized on a laptop screen (user, 2026-09-02). A height the
-// user has dragged still wins -- that is an inline style.
-doneVideo.addEventListener("loadedmetadata", () => {
-  $("videoPane").classList.toggle("portrait", doneVideo.videoHeight > doneVideo.videoWidth);
-});
+// Layout G: the video pane is only as wide as the clip inside it needs to be at
+// the height the row gives it -- a portrait clip ends up narrow, a wide one
+// broad -- between a 320px floor and 45% of the row. Whatever is left over is
+// the table's, which is the whole point of the shape (user, 2026-09-08).
+// Below 820px there is not enough room for both (the video's floor is 320, and
+// under 500 the table is more sideways scrolling than table), so the pane goes
+// back to being a band above the table and is sized by its height again --
+// taller for a portrait clip (user, 2026-09-02).
+// A width the user has dragged wins over the measurement: that is a remembered
+// size, and timeline.fitLayout() is what puts it back.
+const VIDEO_PANE_KEY = "persodub.layout.videoWidth";
+function sizeVideoPane() {
+  const pane = $("videoPane"), main = $("doneMain");
+  const room = main.clientWidth;
+  if (!room) return;   // the screen is not on show, so there is nothing to measure
+  const stacked = room < 820;
+  main.classList.toggle("stacked", stacked);
+  pane.classList.toggle("portrait", doneVideo.videoHeight > doneVideo.videoWidth);
+  let saved = 0;
+  try { saved = Number(localStorage.getItem(VIDEO_PANE_KEY)); } catch { /* private window */ }
+  if (stacked || saved > 0) { if (stacked) pane.style.width = ""; return; }
+  const w = doneVideo.videoWidth, h = doneVideo.videoHeight;
+  if (!w || !h) return;   // no metadata yet: the stylesheet's 42% stands
+  // What is left for the picture once the tabs, the pane's own padding, the gap
+  // under the picture and the row of controls have taken theirs.
+  const picture = Math.max(120, pane.clientHeight - 40 - 28 - 10 - 28);
+  const want = Math.round((w / h) * picture) + 28;
+  // Never more than 45% of the row, and -- while there is that much to give --
+  // never so much that the table has under the 680px its six columns need
+  // before it starts scrolling sideways.
+  const most = Math.max(320, Math.min(Math.round(room * 0.45), room - 6 - 680));
+  pane.style.width = `${Math.min(Math.max(want, 320), most)}px`;
+}
+doneVideo.addEventListener("loadedmetadata", sizeVideoPane);
+// The row itself, not the window: opening or closing the Dub Agent column and
+// dragging the projects list both change how much room the two panes have with
+// the window standing still. Writing the video pane's width does not change
+// this box's, so there is no loop to fall into.
+new ResizeObserver(sizeVideoPane).observe($("doneMain"));
 
 // Is the video inside this line right now? The table's highlighted row and the
 // timeline's highlighted bars are the same answer, so they ask it the same way.
@@ -3289,15 +4309,16 @@ function paintPlayhead() {
 }
 
 // Original / Dubbed. The same moment in the same video, so the position and
-// whether it was playing both survive the swap.
-for (const tab of document.querySelectorAll(".vtab")) {
+// whether it was playing both survive the swap. Only this pane's tabs: the
+// erase screen has a pair of its own, wired by its own module.
+for (const tab of document.querySelectorAll("#videoPane .vtab")) {
   tab.addEventListener("click", () => showVideoSource(tab.dataset.src));
 }
 
 // Which of the two tabs is lit. Three places change doneSource, and every one
 // of them has to say so on screen.
 function paintVideoTabs() {
-  for (const tab of document.querySelectorAll(".vtab")) {
+  for (const tab of document.querySelectorAll("#videoPane .vtab")) {
     tab.classList.toggle("active", tab.dataset.src === doneSource);
   }
 }
@@ -3348,7 +4369,13 @@ function reloadDoneVideo() {
 }
 
 // ---------------- Export dialog ----------------
-$("exportBtn").addEventListener("click", openExport);
+// One Export button, two things to hand back: a finished dub, which has a
+// dialog of choices behind it, and an erased video, which has exactly one file
+// and one place for it -- so that one saves straight away and says so.
+$("exportBtn").addEventListener("click", () => {
+  if (document.body.dataset.screen === "erase") eraseScreen.exportErased();
+  else openExport();
+});
 function closeExport() { $("exportOverlay").classList.remove("open"); }
 $("exportCloseX").addEventListener("click", closeExport);
 // Backdrop and Escape, the same way out the other dialogs give.
@@ -3529,18 +4556,40 @@ const SUB_LEGACY = { variety: "neon-yellow", box: "sticker" };
 // The looks that have a background box -- the only ones a width applies to.
 const SUB_BOXED = new Set(["sticker", "soft-card", "lower-bar", "black-box", "white-box"]);
 
+// The mark at the right end of the subtitle toolbar. The script table keeps
+// one exactly like it (scriptTable.mjs's scriptSaving) and for the same reason:
+// a look is written to the job as soon as it is changed, and a change that
+// leaves no trace on screen reads as a change that did not happen.
+let subSavedTimer = null;
+function subSaved(text) {
+  clearTimeout(subSavedTimer);
+  $("subSaved").textContent = text || "";
+}
+
 function saveSubStyle() {
   subStyleRev++;
   clearTimeout(subStyleTimer);
+  subSaved("Saving…");
   subStyleTimer = setTimeout(() => {
     if (!subStyleJobId) return;
     // What the player showed goes with the settings, so the burn draws that.
     const lay = subLayoutAll();
     if (lay) subStyle.layout = lay;
+    // Which save this is: a later one overtaking this one owns the mark, so an
+    // older answer must not write "Saved" over its "Saving…".
+    const mine = subStyleRev;
     fetch(`/api/dub/jobs/${subStyleJobId}/subtitle_style`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(subStyle),
-    }).catch(() => { /* the next save tries again */ });
+    }).then((r) => {
+      if (mine !== subStyleRev) return;
+      if (!r.ok) { subSaved("Not saved"); return; }
+      subSaved("Saved");
+      subSavedTimer = setTimeout(() => subSaved(""), 2000);
+    }).catch(() => {
+      // The next save tries again; until then the toolbar says so.
+      if (mine === subStyleRev) subSaved("Not saved");
+    });
   }, 350);
 }
 
@@ -3585,6 +4634,32 @@ function syncSubOverlayBox() {
   subOverlay.style.height = pic.height + "px";
   return pic;
 }
+
+/**
+ * The row under the picture, put where the picture is: same left edge, same
+ * width. Both are read off pictureRect, so the play button and the clock move
+ * with the video instead of with the pane around it.
+ */
+function placeVideoUnder() {
+  const under = $("videoUnder");
+  if (!doneVideo.videoWidth || !doneVideo.videoHeight || !doneVideo.offsetWidth) {
+    under.style.marginLeft = "";
+    under.style.width = "";
+    return;
+  }
+  const pic = pictureRect({ left: doneVideo.offsetLeft, top: doneVideo.offsetTop,
+                            width: doneVideo.offsetWidth, height: doneVideo.offsetHeight,
+                            videoWidth: doneVideo.videoWidth, videoHeight: doneVideo.videoHeight });
+  under.style.marginLeft = Math.round(pic.left) + "px";
+  under.style.width = Math.round(pic.width) + "px";
+}
+
+/** Everything that hangs off the picture, after the picture has moved. */
+function syncVideoChrome() {
+  placeVideoUnder();
+  if (!subOverlay.hidden) updateSubtitleNow();
+}
+doneVideo.addEventListener("loadedmetadata", placeVideoUnder);
 
 // ---- The ruler: the burn's font, measured by the browser ----
 // One canvas measures text in the font ffmpeg will draw with, at 100 px, so
@@ -3731,6 +4806,8 @@ function placeSubToolbar() {
 function subSelect(on) {
   subSelected = on;
   subToolbar.hidden = !on;
+  // A bar that has left the screen must not come back still saying "Saved".
+  if (!on) subSaved("");
   if (!on) subMenu.hidden = true;
   subOvText.classList.toggle("sel", on);
   if (on) {
@@ -3853,7 +4930,19 @@ $("videoPane").addEventListener("click", (e) => {
 for (const e of ["timeupdate", "seeked", "loadedmetadata", "play", "pause"]) {
   doneVideo.addEventListener(e, updateSubtitleNow);
 }
-window.addEventListener("resize", () => { if (!subOverlay.hidden) updateSubtitleNow(); });
+window.addEventListener("resize", syncVideoChrome);
+// And whenever the player's own box changes without the window moving: layout G
+// sizes the video pane off the row it is in, so opening the Dub Agent or
+// dragging the divider moves the picture and the subtitles have to follow it.
+//
+// The WRAP is watched as well as the video, and it is the one that matters
+// while a divider is dragged: a portrait clip is as tall as the pane allows,
+// so widening the pane does not change the video's SIZE at all -- only where
+// it sits inside a wider box. The video's own observer never fired, and the
+// subtitle stayed at the old left edge, out on the dark beside the picture
+// (user, 2026-09-09).
+new ResizeObserver(syncVideoChrome).observe(doneVideo);
+new ResizeObserver(syncVideoChrome).observe(doneVideo.parentElement);
 
 // ---------------- Done: the timeline ----------------
 // The strip under the script table -- the ruler, the three lanes over it, the
@@ -3870,7 +4959,6 @@ window.addEventListener("resize", () => { if (!subOverlay.hidden) updateSubtitle
 // re-measure for the sidebar grip.
 const timeline = initTimelineUi({
   $,
-  scriptLangNames,
   getVideo: () => doneVideo,
   getClock: () => doneClock,
   getSubStyle: () => subStyle,

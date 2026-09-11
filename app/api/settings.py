@@ -21,9 +21,11 @@ from app.settings_env import (
     current_value,
     read_analytics_off,
     read_key_status,
+    read_reports_off,
     read_value,
     write_analytics_off,
     write_keys,
+    write_reports_off,
 )
 
 router = APIRouter()
@@ -34,6 +36,7 @@ class SettingsRequest(BaseModel):
     perso_api_key: Optional[str] = None
     perso_space_seq: Optional[str] = None
     analytics_off: Optional[bool] = None
+    reports_off: Optional[bool] = None
 
 
 @router.get("/api/settings")
@@ -58,6 +61,7 @@ def settings_get():
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
             "perso_signup_link": SIGNUP_LINK,
             "analytics_off": read_analytics_off(),
+            "reports_off": read_reports_off(),
             # The folder every finished video is saved in. Only the server knows
             # it -- the desktop shell can point the workspace anywhere -- so the
             # screen cannot tell the user where their videos are without this.
@@ -96,6 +100,10 @@ def settings_post(body: SettingsRequest):
     # kit.env before every count, so the next event already obeys the switch.
     if body.analytics_off is not None:
         write_analytics_off(body.analytics_off)
+    # The same story for the failure reports, and the same lack of a restart:
+    # the shell re-reads kit.env before it sends one.
+    if body.reports_off is not None:
+        write_reports_off(body.reports_off)
     return {"gemini_key_set": status["GEMINI_API_KEY"], "perso_key_set": status["PERSO_API_KEY"],
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
             "restart_required": False}

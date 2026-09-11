@@ -22,6 +22,7 @@ from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app import engines_status, languages
@@ -130,6 +131,13 @@ def tts_say(body: SayRequest):
 
 # --- What this machine can do, and what changed in this release -------------
 
+@router.get("/logo.png")
+def logo():
+    """The app's logo tile (static/logo.png), for the rail and Settings > About."""
+    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "static", "logo.png"),
+                        media_type="image/png")
+
+
 @router.get("/api/languages")
 def api_languages():
     """The languages each dubbing path offers: local = the model's ten,
@@ -171,6 +179,9 @@ def engines_status_route():
         "hunyuan_available": engines_status.hunyuan_available(),
         "gemini_available": engines_status.gemini_available(),
         "perso_available": engines_status.perso_available(),
+        # Not a dubbing engine: the screen reads it to know whether Erase
+        # subtitles can be offered at all on this computer.
+        "eraser_available": engines_status.eraser_available(),
     }
 
 

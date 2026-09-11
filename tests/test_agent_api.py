@@ -33,6 +33,17 @@ def _settled(key, login=True, secs=4.0):
     return rows
 
 
+def _settled_to(key, want, secs=4.0):
+    """Poll until that assistant's login answer is `want`. Unlike _settled, the
+    answer it is waiting for replaces an answer that is already there."""
+    deadline = time.monotonic() + secs
+    rows = _rows(login=True)
+    while rows[key]["logged_in"] is not want and time.monotonic() < deadline:
+        time.sleep(0.02)
+        rows = _rows(login=True)
+    return rows
+
+
 def test_status_names_both_and_says_which_can_answer():
     rows = _rows()
     assert set(rows) == {"claude", "codex"}
@@ -58,11 +69,27 @@ def test_an_assistant_that_cannot_answer_says_why(monkeypatch):
     assert rows["codex"]["reason"] == ""
 
 
-def test_only_claude_offers_a_choice_of_models():
-    """Codex names its models by version, which would go stale in a picker."""
+def test_claude_offers_its_aliases_and_codex_the_one_it_is_set_to(monkeypatch, tmp_path):
+    """Claude's four aliases are its own vocabulary and are written down.
+    Codex has no list and no command that would give one -- every subcommand
+    was checked, and it accepts a model it has never heard of without a word.
+    What it does have is the one model it is set up to use, in its own config
+    (user, 2026-09-11)."""
+    (tmp_path / "config.toml").write_text('model = "gpt-6-astra"\n', encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
     rows = _rows()
     assert "fable" in rows["claude"]["models"]
-    assert rows["codex"]["models"] == []
+    assert rows["codex"]["models"] == ["gpt-6-astra"]
+
+
+def test_a_codex_that_has_not_said_which_model_offers_none(monkeypatch, tmp_path):
+    """No config, or one that names no model: the picker leaves Codex as the
+    single unopenable row it was before, rather than inventing a name."""
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    assert _rows()["codex"]["models"] == []
+    (tmp_path / "config.toml").write_text("[profile.x]\nmodel = \"inside-a-profile\"\n",
+                                          encoding="utf-8")
+    assert _rows()["codex"]["models"] == []
 
 
 def test_status_never_starts_a_cli(monkeypatch):
@@ -279,3 +306,34 @@ def test_the_message_after_a_stop_carries_the_conversation_on(monkeypatch, tmp_p
     r = client.post("/api/agent/chat", json={"message": "그럼 이렇게", "agent": "claude"})
     assert r.status_code == 200
     assert "-c" in seen["args"]          # Claude's "carry on" flag
+
+
+def test_a_deliberate_ask_does_not_get_a_minute_old_answer(monkeypatch):
+    """Signing out in a Terminal and opening the picker showed "signed in"
+    three opens running, and only came right on the fourth, fifty seconds
+    later: every open was inside the minute the answer is kept for, so none of
+    them started a fresh check (Windows measured it, 2026-09-11).
+
+    The minute stands for the page asking in passing. An ask -- ?login=1, which
+    only the strip's own moments send -- is held to a few seconds instead.
+    """
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    agent_api._login_cache.clear()
+    agent_api._login_busy.clear()
+
+    answer = {"logged_in": True, "account": "ChatGPT"}
+    monkeypatch.setattr(agent_api.agent_base, "login_state", lambda kind, binary: dict(answer))
+    assert _settled("codex")["codex"]["logged_in"] is True
+
+    # They sign out in a Terminal. The app is none the wiser yet.
+    answer = {"logged_in": False, "account": ""}
+
+    # Ten seconds later: inside the minute, outside the few seconds an ask gets.
+    for key in agent_api._login_cache:
+        agent_api._login_cache[key]["at"] -= 10.0
+    # A passing look still answers from what it has and starts nothing.
+    assert _rows()["codex"]["logged_in"] is True
+    assert agent_api._login_busy == set()
+
+    # Opening the picker starts the check, and the answer that lands is the new one.
+    assert _settled_to("codex", False)["codex"]["logged_in"] is False

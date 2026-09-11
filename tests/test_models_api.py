@@ -137,3 +137,12 @@ def test_download_refuses_when_disk_is_short(monkeypatch):
 
 def test_unknown_model_is_404():
     assert client.post("/api/models/nope/download").status_code == 404
+
+def test_the_catalog_says_which_platform_its_sizes_are_for(monkeypatch):
+    # The erase screen needs to know a Windows machine has no GPU: the same
+    # key the pack sizes are picked by answers it (2026-09-10).
+    from app import models as models_mod
+    monkeypatch.setattr(models_mod, "platform_key", lambda: "win-cpu")
+    assert client.get("/api/models").json()["platform"] == "win-cpu"
+    monkeypatch.setattr(models_mod, "platform_key", lambda: "mac")
+    assert client.get("/api/models").json()["platform"] == "mac"

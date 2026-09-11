@@ -65,7 +65,8 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     assert body.pop("workspace") == state.WORKSPACE
     assert body == {"gemini_key_set": False, "perso_key_set": False,
                     "gemini_api_key": None, "perso_api_key": None,
-                    "perso_space_seq": None, "analytics_off": False}
+                    "perso_space_seq": None, "analytics_off": False,
+                    "reports_off": False}
 
 
 def test_get_carries_the_utm_tagged_signup_link(tmp_path, monkeypatch):
@@ -288,6 +289,43 @@ def test_saving_only_the_switch_leaves_the_saved_keys_alone(tmp_path, monkeypatc
     kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
     client.post("/api/settings", json={"analytics_off": True})
     assert "GEMINI_API_KEY=gvalue" in (kit / "kit.env").read_text(encoding="utf-8")
+
+
+# --- the failure-reports switch --------------------------------------------
+
+def test_get_reports_failure_reports_on_when_nothing_says_otherwise(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE)
+    assert client.get("/api/settings").json()["reports_off"] is False
+
+
+def test_get_reflects_failure_reports_turned_off(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_REPORTS=1\n")
+    assert client.get("/api/settings").json()["reports_off"] is True
+
+
+def test_the_reports_switch_writes_the_line_the_shell_reads(tmp_path, monkeypatch):
+    # Same arrangement as the counts: one line in kit.env, re-read by the
+    # desktop shell before every report, so there is no second place to disagree.
+    kit = _kit(tmp_path, monkeypatch, BASE)
+    assert client.post("/api/settings", json={"reports_off": True}).status_code == 200
+    assert "PERSODUB_NO_REPORTS=1" in (kit / "kit.env").read_text(encoding="utf-8")
+
+
+def test_the_reports_switch_can_be_turned_back_on(tmp_path, monkeypatch):
+    _kit(tmp_path, monkeypatch, BASE + "PERSODUB_NO_REPORTS=1\n")
+    client.post("/api/settings", json={"reports_off": False})
+    assert client.get("/api/settings").json()["reports_off"] is False
+
+
+def test_the_two_switches_are_independent(tmp_path, monkeypatch):
+    # Turning the counts off must not silence the crash reports, and the other
+    # way round: they are separate promises to the user.
+    kit = _kit(tmp_path, monkeypatch, BASE)
+    client.post("/api/settings", json={"analytics_off": True})
+    text = (kit / "kit.env").read_text(encoding="utf-8")
+    assert "PERSODUB_NO_ANALYTICS=1" in text
+    assert "PERSODUB_NO_REPORTS=1" not in text
+    assert client.get("/api/settings").json()["reports_off"] is False
 
 
 # --- POST /api/perso/spaces/preview (workspaces for a TYPED, unsaved key) ---

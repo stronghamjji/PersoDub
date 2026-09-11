@@ -374,6 +374,33 @@ test("a dropped download is recognised", () => {
   assert.equal(classifyError("connect ETIMEDOUT 1.2.3.4:443"), "network");
 });
 
+// The cloud saying no is not the machine failing. These sentences are the
+// app's own (app/pipeline.py's _NOTICE_ERRORS), and the first is what a real
+// failed dub carried on 2026-09-09 -- counted as "unknown" until now, so an
+// outage on Perso's side looked exactly like a broken install. One word each,
+// because the counts are read a day at a time and an outage and a used-up
+// wallet are not the same news (user, 2026-09-11).
+test("a cloud service that refused is named by service and reason", () => {
+  assert.equal(classifyError("Perso's server is temporarily unavailable. Wait a few minutes, then run this job again. Ask Perso if it keeps happening."), "perso-busy");
+  assert.equal(classifyError("Perso credits are used up. Recharge to continue."), "perso-credits");
+  assert.equal(classifyError("Perso rejected the API key. Open Settings and check the key."), "perso-key");
+  assert.equal(classifyError("Perso could not finish this job. Try again, or check the project on Perso. Perso said: FAILED (E_TTS_TIMEOUT) Ask Perso if it keeps happening."), "perso-failed");
+  assert.equal(classifyError("Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again. Ask Google if it keeps happening."), "gemini-busy");
+  assert.equal(classifyError("Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset."), "gemini-quota");
+  // A machine-side rule still wins: those are tried first, in order.
+  assert.equal(classifyError("ENOSPC: no space left while the service was temporarily unavailable"), "disk-full");
+});
+
+test("a refused connection is recognised in either spelling", () => {
+  // The engines fail through Python, which writes the sentence rather than the
+  // errno. The first line here is what a real dub left behind on 2026-08-26
+  // when the voice engine was not running -- the commonest local failure of
+  // all, and it used to count as "unknown".
+  assert.equal(classifyError("ConnectError: [Errno 61] Connection refused"), "network");
+  assert.equal(classifyError("ConnectionResetError(54, 'Connection reset by peer')"), "network");
+  assert.equal(classifyError("connect ECONNREFUSED 127.0.0.1:51801"), "network");
+});
+
 test("a blocked write is recognised", () => {
   assert.equal(classifyError("EACCES: permission denied, mkdir '/Users/x/Library/PersoDub'"), "permission");
 });

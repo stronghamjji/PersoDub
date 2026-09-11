@@ -37,9 +37,21 @@ logger = logging.getLogger("persodub.jobs")
 # repeat the same choices instead of falling back to today's defaults. A job.json
 # written before they existed simply has no such keys -- every reader treats them
 # as unknown and shows nothing.
-SAVED_FIELDS = ("id", "status", "language", "language_code", "source_lang",
-                "project", "day", "from_link", "created", "work_dir", "trim",
-                "trim_pending", "error", "remade_as",
+# `kind` says what work a job is: a dub, or erasing the subtitles burned into
+# a video ("erase" -- app/erase_launch.py). It is saved because the boot re-arm
+# has nothing but job.json to tell the two apart, and it is read through
+# kind_of below, so a record written before erasing existed still reads as the
+# dub it was. `area` is the band of the frame an erase worked in ("whole" for
+# all of it), for the same reason: a job that waits out a restart must come
+# back to the part of the video its user picked. `check` is what the eraser
+# found when it looked at its own finished video (how many sampled frames still
+# held writing) -- the answer to "is it really gone?", which the screen and the
+# agent both show, so it has to outlive the run that measured it.
+SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lang",
+                # "project" names the folder and never moves; "title" is what
+                # the screens show, and is the user's to change (2026-09-10).
+                "project", "title", "day", "from_link", "created", "work_dir", "trim",
+                "trim_pending", "error", "remade_as", "area", "check",
                 "stt_engine", "translator", "tts", "quality", "separation",
                 "dub_mode", "perso_project_seq",
                 # What the boot re-arm needs to rebuild a queued job's work:
@@ -52,6 +64,17 @@ SAVED_FIELDS = ("id", "status", "language", "language_code", "source_lang",
 # -- open, delete, retry -- by id, so shipping the user's home directory in
 # every row would be for nothing.
 LIST_FIELDS = tuple(f for f in SAVED_FIELDS if f not in ("work_dir", "source_url"))
+
+
+def kind_of(job: dict) -> str:
+    """What kind of work this job is: "dub" or "erase".
+
+    The one place the default lives. Nothing writes "dub" onto a record -- a
+    dub is what every job in this app was until subtitle erasing arrived, so a
+    record that says nothing is one, whether it came from a file written last
+    year or from a job started a second ago.
+    """
+    return job.get("kind") or "dub"
 
 
 class JobCancelled(Exception):
@@ -188,7 +211,7 @@ class JobStore:
         with self._lock:
             jobs = [dict(j) for j in self._jobs.values()]
         jobs.sort(key=lambda j: j.get("created") or "", reverse=True)
-        return [{k: j.get(k) for k in LIST_FIELDS} for j in jobs]
+        return [{**{k: j.get(k) for k in LIST_FIELDS}, "kind": kind_of(j)} for j in jobs]
 
     @staticmethod
     def _saved(j: dict) -> dict:

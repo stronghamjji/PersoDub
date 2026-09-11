@@ -3,8 +3,8 @@
 // is left -- there is no Save button (2026-08-28), a desktop app's settings
 // take effect as they are changed. It also owns the Perso workspace picker
 // (including the preview of a key that has only been pasted), the
-// Show-in-Finder button, the usage-counts switch and the Acknowledgements
-// fold.
+// Show-in-Finder button, the Appearance picker, the usage-counts switch and
+// the Acknowledgements fold.
 //
 // What is NOT here: the Models catalog rows inside the sheet belong to
 // ui/src/modelsDialog.mjs -- this file only asks for a repaint when the sheet
@@ -187,14 +187,32 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
         $("aboutVersion").textContent = `PersoDub ${st.app_version}`;
       }
       $("analyticsToggle").checked = !st.analytics_off;
+      $("reportsToggle").checked = !st.reports_off;
     } catch {
       $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
     }
   }
 
+  // Appearance. Dark is the app; "light" is the only other value, and the only
+  // one written down -- an unreadable or missing entry is dark, which is what
+  // the boot script at the top of static/index.html assumes too.
+  const THEME_KEY = "persodub.theme";
+  function savedTheme() {
+    try { return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark"; }
+    catch { return "dark"; }   // private window
+  }
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    if (theme === "light") root.dataset.theme = "light";
+    else delete root.dataset.theme;
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* private window */ }
+  }
+  $("themeSelect").addEventListener("change", () => applyTheme($("themeSelect").value));
+
   // Opening the sheet: the saved values first, then the models catalog
   // (not awaited -- the sheet opens without waiting on it), then the sheet.
   async function openSettings() {
+    $("themeSelect").value = savedTheme();
     await loadSavedSetup();
     refreshModelCatalog();
     $("settingsOverlay").classList.add("open");
@@ -321,6 +339,28 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
       return r.ok;
     } catch { return false; }
   }
+
+  // The same shape for the same reason: one POST is the whole switch, and the
+  // shell re-reads the file before it sends anything.
+  async function setFailureReports(on) {
+    try {
+      const r = await fetch("/api/settings", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reports_off: !on }),
+      });
+      return r.ok;
+    } catch { return false; }
+  }
+
+  $("reportsToggle").addEventListener("change", async () => {
+    const on = $("reportsToggle").checked;
+    if (await setFailureReports(on)) {
+      $("reportsHint").textContent = "Keys and folder names are removed first.";
+      return;
+    }
+    $("reportsToggle").checked = !on;
+    $("reportsHint").textContent = "Could not save that. Is the engine running?";
+  });
 
   $("analyticsToggle").addEventListener("change", async () => {
     const on = $("analyticsToggle").checked;

@@ -589,3 +589,170 @@ def test_queue_dub_knows_persos_languages_on_the_perso_path_only(monkeypatch, tm
     out = mcp_server.queue_dub(str(video), "hi", dub_mode="perso", confirm=True)
     assert out["job_id"] == "j1"
     assert calls["data"]["language"] == "Hindi" and calls["data"]["language_code"] == "hi"
+
+
+# --- fetching a link, and rubbing out subtitles ------------------------------
+
+def test_download_video_waits_until_the_file_is_really_there(monkeypatch):
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda url, **kw: _Response(200, {"id": "d1"}))
+    answers = [
+        _Response(200, {"status": "downloading", "percent": 40}),
+        _Response(200, {"status": "ready", "path": "/w/downloads/d1/source.mp4",
+                        "title": "a clip", "duration_sec": 61.0}),
+    ]
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda url, **kw: answers.pop(0))
+    monkeypatch.setattr(mcp_server.time, "sleep", lambda _s: None)
+    assert mcp_server.download_video("https://example.com/v") == {
+        "path": "/w/downloads/d1/source.mp4", "title": "a clip",
+        "duration_sec": 61.0, "download_id": "d1",
+    }
+
+
+def test_download_video_repeats_the_reason_a_link_failed(monkeypatch):
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda url, **kw: _Response(200, {"id": "d1"}))
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda url, **kw: _Response(
+        200, {"status": "failed", "error": "This video is private."}))
+    with pytest.raises(ValueError, match="private"):
+        mcp_server.download_video("https://example.com/v")
+
+
+def test_erase_subtitles_turns_bottom_into_the_bottom_quarter(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    monkeypatch.setattr(mcp_server.media, "video_size", lambda p: (608, 1080))
+    calls = {}
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        calls["url"], calls["data"] = url, data
+        return _Response(200, {"job_id": "e1", "status": "running"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.erase_subtitles(str(video), area="bottom", start=20, end=30)
+    assert out == {"job_id": "e1", "status": "running",
+                   "area_used": "the bottom quarter of the frame"}
+    assert calls["url"] == "%s/api/erase" % mcp_server.API
+    assert calls["data"]["area"] == "[810, 1080, 0, 608]"
+    # One call does the cut and the erase -- not cut_clip and then this.
+    assert calls["data"]["trim_start"] == "20" and calls["data"]["trim_end"] == "30"
+
+
+def test_erase_subtitles_asks_the_app_where_the_subtitles_are_first(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    posted = []
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        posted.append(url)
+        if url.endswith("/suggest"):
+            return _Response(200, {"found": True, "area": [614, 847, 23, 571],
+                                   "width": 608, "height": 1080})
+        return _Response(200, {"job_id": "e1", "status": "queued"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.erase_subtitles(str(video))
+    assert posted == ["%s/api/erase/suggest" % mcp_server.API,
+                      "%s/api/erase" % mcp_server.API]
+    assert out["area_used"] == "where the subtitles were found"
+
+
+def test_erase_subtitles_passes_a_box_through_and_names_the_whole_frame(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    calls = []
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        calls.append(data["area"])
+        return _Response(200, {"job_id": "e1", "status": "running"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    mcp_server.erase_subtitles(str(video), area=[660, 800, 0, 608])
+    mcp_server.erase_subtitles(str(video), area="whole")
+    assert calls == ["[660, 800, 0, 608]", "whole"]
+
+
+def test_erase_subtitles_says_plainly_that_the_eraser_is_not_installed(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda url, **kw: _Response(
+        409, {"detail": {"reason": "pack_missing", "pack": "subtitle-eraser"}}))
+    with pytest.raises(ValueError, match="not installed on this computer"):
+        mcp_server.erase_subtitles(str(video), area="whole")
+
+
+def test_erase_subtitles_refuses_a_video_that_is_not_there(tmp_path):
+    with pytest.raises(ValueError, match="No such video"):
+        mcp_server.erase_subtitles(str(tmp_path / "nope.mp4"), area="whole")
+
+
+def test_save_erased_returns_where_the_file_went(monkeypatch):
+    posted = {}
+
+    def fake_post(url, json=None, timeout=None):
+        posted["url"], posted["json"] = url, json
+        return _Response(200, {"path": "/Users/x/Downloads/clip (no subtitles).mp4"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    out = mcp_server.save_erased("e1")
+    assert out["path"].endswith("(no subtitles).mp4")
+    assert posted["url"] == "%s/api/erase/e1/save" % mcp_server.API
+    assert posted["json"] == {}
+
+
+def test_get_job_status_of_an_erase_carries_the_percent_and_the_file(monkeypatch):
+    def fake_get(url, **kw):
+        if url.endswith("/api/dub/jobs/e1"):
+            return _Response(200, {"status": "done", "kind": "erase", "logs": []})
+        return _Response(200, {"percent": 100, "done": True,
+                               "result": {"out_path": "/w/day/clip_erase/erased.mp4"},
+                               "check": {"frames_checked": 114, "frames_with_text": 0,
+                                         "sample_times": []}})
+
+    monkeypatch.setattr(mcp_server.httpx, "get", fake_get)
+    out = mcp_server.get_job_status("e1")
+    assert out["percent"] == 100 and out["done"] is True
+    assert out["result_path"].endswith("erased.mp4")
+    # "Is it really gone?" -- the agent can answer it without opening the video.
+    assert out["check"]["frames_with_text"] == 0
+
+
+JOBS = {"jobs": [
+    {"id": "e1", "kind": "erase", "status": "running", "project": "clip8"},
+    {"id": "d2", "kind": "dub", "status": "queued", "project": "clip9"},
+    {"id": "d3", "kind": "dub", "status": "done", "project": "clip7"},
+]}
+
+
+def test_list_jobs_names_what_is_running_so_stop_it_can_find_a_job(monkeypatch):
+    # "Stop the subtitle erase" -- work started on the screen has an id nobody
+    # has seen, and without this the assistant had nothing to cancel by
+    # (user, 2026-09-09).
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda url, **kw: _Response(200, JOBS))
+    out = mcp_server.list_jobs()
+    assert [j["id"] for j in out] == ["e1", "d2"]
+    assert out[0] == {"id": "e1", "kind": "erase", "title": "clip8", "status": "running"}
+
+
+def test_list_jobs_can_list_the_finished_ones_too(monkeypatch):
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda url, **kw: _Response(200, JOBS))
+    assert [j["id"] for j in mcp_server.list_jobs(active_only=False)] == ["e1", "d2", "d3"]
+
+
+def test_list_videos_names_the_videos_the_app_is_holding(monkeypatch, tmp_path):
+    held = tmp_path / "source.mp4"
+    held.write_bytes(b"video-bytes")
+    (tmp_path / "in the folder.mp4").write_bytes(b"video-bytes")
+    monkeypatch.setattr(mcp_server.httpx, "get", lambda url, **kw: _Response(
+        200, {"downloads": [{"status": "ready", "path": str(held), "title": "a fetched link"},
+                            {"status": "downloading", "path": "", "title": "not yet"}]}))
+    out = mcp_server.list_videos(str(tmp_path))
+    assert out["videos"][0]["name"] == "a fetched link"
+    assert out["videos"][0]["held"] is True
+    assert "not yet" not in [v["name"] for v in out["videos"]]
+
+
+def test_list_videos_still_lists_the_folder_when_the_app_is_closed(monkeypatch, tmp_path):
+    (tmp_path / "clip.mp4").write_bytes(b"video-bytes")
+
+    def closed(url, **kw):
+        raise httpx.ConnectError("nope")
+
+    monkeypatch.setattr(mcp_server.httpx, "get", closed)
+    assert [v["name"] for v in mcp_server.list_videos(str(tmp_path))["videos"]] == ["clip.mp4"]

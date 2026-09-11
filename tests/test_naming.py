@@ -2,7 +2,7 @@
 """Turning a video's title into a folder name. Pure string work, no filesystem."""
 import unicodedata
 
-from app.text.naming import next_free, safe_name
+from app.text.naming import next_free, project_name, safe_name
 
 
 def test_keeps_a_plain_name_as_is():
@@ -153,3 +153,14 @@ def test_job_dir_cannot_be_walked_out_of_the_workspace(tmp_path, monkeypatch):
         real = dub_api.os.path.realpath(work)
         root = dub_api.os.path.realpath(str(tmp_path))
         assert real.startswith(root + dub_api.os.sep), f"{hostile!r} escaped to {real}"
+
+
+def test_project_name_drops_a_video_extension_and_nothing_else():
+    # A project named after an uploaded file used to keep its ".mp4", so the
+    # Downloads folder for it was "clip.mp4/" beside "clip/" for the same
+    # video that came in by link (Windows, 2026-09-10).
+    assert project_name("trump_template_org.mp4") == "trump_template_org"
+    assert project_name("clip.MOV") == "clip"
+    assert project_name("v1.2 intro") == "v1.2 intro"
+    assert project_name("notes.txt") == "notes.txt"
+    assert project_name("") == ""

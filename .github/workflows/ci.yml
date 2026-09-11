@@ -79,6 +79,11 @@ jobs:
       - run: node --test ui/src/*.test.mjs
       - run: node ui/check-inline.mjs
       - run: for f in ui/src/*.mjs; do node --check "$f" || exit 1; done
+      # The report relay's own rules (relay/report-logic.js): what a report has
+      # to be, which labels it earns, how a log link is signed. It rides in this
+      # job rather than a job of its own because it is the same kind of check --
+      # plain ESM on node:test, nothing to learn from a second runner.
+      - run: node --test relay/*.test.mjs
 
   # Fails the build if a credential was ever committed, on this branch or
   # anywhere in the history behind it. gitleaks is fetched from its own release

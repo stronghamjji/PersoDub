@@ -213,6 +213,12 @@ def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
                   else "\\b%d" % lay["weight"])
         else:
             wt = ""
+        # The page's lines are final. libass wraps on its own at the Style's
+        # margins (6% a side, 88% of the width) and the page lets a line run to
+        # 92%: a line shown whole came out folded over a box drawn one line
+        # tall (Windows, 2026-09-10). \q2 turns that wrapping off.
+        if lay:
+            wt = "\\q2" + wt
         if p["uppercase"]:
             text = text.upper()
             lines = [l.upper() for l in lines]

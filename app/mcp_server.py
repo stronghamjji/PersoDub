@@ -15,18 +15,26 @@ deliberately absent. Starting a dub (queue_dub) exists since 2026-09-01, behind
 the same confirm gate as every other spending tool: nothing starts until the
 user has been asked and agreed.
 """
+import json
 import math
 import os
+import time
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import httpx
 from mcp.server.mcpserver import MCPServer
 
-from app import languages
+from app import languages, media
 from app.dub_script import edit_line, export_srt, load_lines
 
 API = os.environ.get("PERSODUB_API", "http://127.0.0.1:8000")
+
+# How long download_video waits for a link, and how often it asks. Ten minutes
+# covers a long video on a slow line; past that the tool answers rather than
+# holding the conversation open, and the download carries on without it.
+DOWNLOAD_WAIT = 600
+DOWNLOAD_POLL = 5
 
 
 def _offline() -> ValueError:
@@ -172,14 +180,30 @@ def export_script(job_id: str, out_path: str) -> str:
 
 @mcp.tool()
 def get_job_status(job_id: str) -> dict:
-    """Where the job is now, whether it finished, and what happened along the way."""
+    """Where the job is now, whether it finished, and what happened along the way.
+
+    A subtitle-erase job (erase_subtitles) also carries percent, done, the path
+    of the cleaned video, and `check`: what the eraser found when it looked at
+    its own work -- how many sampled frames of the finished video still hold
+    writing, at what seconds, and how many it had to paint again. frames_with_text
+    0 is the answer the user is after; anything else names the moments to look at.
+    """
     job = _job(job_id)
-    return {
+    info = {
         "status": job.get("status"),
         "error": job.get("error"),
         "notices": job.get("notices") or [],
         "logs": (job.get("logs") or [])[-20:],
     }
+    if job.get("kind") == "erase":
+        r = _api_get("/api/erase/%s" % job_id, timeout=10.0)
+        if r.status_code == 200:
+            erase = r.json()
+            info["percent"] = erase.get("percent")
+            info["done"] = erase.get("done")
+            info["result_path"] = (erase.get("result") or {}).get("out_path")
+            info["check"] = erase.get("check")
+    return info
 
 
 @mcp.tool()
@@ -485,6 +509,10 @@ def list_videos(folder: str) -> dict:
     subfolders are not entered. Each entry carries name, path (hand this to
     the other tools), size_mb and modified. This plus the user's word is how
     "the second one" or "the newest one" becomes a real file path.
+
+    The videos PersoDub is holding are listed first, marked held=true: a link
+    the user fetched on the New project screen is a real file on this computer,
+    sitting where they would never think to look for it.
     """
     root = os.path.expanduser(folder)
     if not os.path.isdir(root):
@@ -508,9 +536,39 @@ def list_videos(folder: str) -> dict:
             "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
         })
     videos.sort(key=lambda v: v.pop("_mtime"), reverse=True)
+    held = _held_videos()
     # A folder of thousands would drown the conversation; the newest 100 is
     # every realistic ask, and the count says when there were more.
-    return {"folder": root, "total": len(videos), "videos": videos[:100]}
+    return {"folder": root, "total": len(videos) + len(held),
+            "videos": held + videos[:100]}
+
+
+def _held_videos() -> List[dict]:
+    """The videos the app is holding right now, in the shape of the entries
+    above plus held=true.
+
+    The app being closed is not an error here: the folder the user asked about
+    is still on disk, and listing it is most of what was wanted.
+    """
+    try:
+        r = _api_get("/api/downloads", timeout=10.0)
+        r.raise_for_status()
+        rows = r.json()["downloads"]
+    except Exception:
+        return []
+    out = []
+    for d in rows:
+        if d.get("status") != "ready" or not d.get("path") or not os.path.exists(d["path"]):
+            continue
+        st = os.stat(d["path"])
+        out.append({
+            "name": d.get("title") or "video",
+            "path": d["path"],
+            "size_mb": round(st.st_size / (1024 * 1024), 1),
+            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+            "held": True,
+        })
+    return out
 
 
 @mcp.tool()
@@ -534,15 +592,187 @@ def cut_clip(video_path: str, start: str, end: str) -> dict:
 
 
 @mcp.tool()
+def download_video(url: str) -> dict:
+    """Fetch ONE video from a link onto this computer and wait for it.
+
+    Free and local (yt-dlp on this machine) -- no Perso, no credits, no
+    confirmation needed. Answers when the file is really there, which can take
+    a few minutes on a long video, and returns {path, title, duration_sec,
+    download_id}: hand `path` to erase_subtitles, cut_clip, extract_subtitles
+    or queue_dub. The video is kept in PersoDub's own workspace, not in the
+    user's Downloads folder.
+    """
+    r = _api_post("/api/downloads", json={"url": url}, timeout=30.0)
+    if r.status_code in (404, 422):
+        detail = r.json().get("detail", "could not fetch that link")
+        raise ValueError(detail if isinstance(detail, str)
+                         else detail.get("message") or str(detail))
+    r.raise_for_status()
+    did = r.json()["id"]
+    info = {}
+    deadline = time.time() + DOWNLOAD_WAIT
+    while time.time() < deadline:
+        s = _api_get("/api/downloads/%s" % did, timeout=10.0)
+        s.raise_for_status()
+        info = s.json()
+        if info.get("status") == "ready":
+            return {"path": info["path"], "title": info["title"],
+                    "duration_sec": info["duration_sec"], "download_id": did}
+        if info.get("status") == "failed":
+            raise ValueError(info.get("error") or "could not fetch that link")
+        time.sleep(DOWNLOAD_POLL)
+    raise ValueError("this download is still %s after %d minutes -- it is carrying on, "
+                     "ask again in a while" % (info.get("status") or "running", DOWNLOAD_WAIT // 60))
+
+
+def _erase_area(path: str, area):
+    """The band to erase, as the route wants it, and a phrase naming it.
+
+    "auto" asks the app where the subtitles look to be -- the same detector
+    that will do the erasing, so the box offered is the box worked in.
+    "bottom"/"top" are that quarter of the frame, worked out from the video's
+    own size. "whole" is every pixel (slower, but it catches writing anywhere),
+    and four numbers are passed through as they stand.
+    """
+    if isinstance(area, (list, tuple)):
+        if len(area) != 4:
+            raise ValueError("an area given as numbers must be [ymin, ymax, xmin, xmax]")
+        return [int(v) for v in area], "the box you gave"
+    word = (area or "auto").strip().lower()
+    if word == "whole":
+        return "whole", "the whole frame"
+    if word == "auto":
+        with open(path, "rb") as f:
+            r = _api_post("/api/erase/suggest",
+                          files={"video": (os.path.basename(path), f, "video/mp4")},
+                          timeout=600.0)
+        _check_eraser(r)
+        found = r.json()
+        return found["area"], ("where the subtitles were found" if found.get("found")
+                               else "the bottom of the frame -- none were found")
+    if word in ("bottom", "top"):
+        w, h = media.video_size(path)
+        if not (w and h):
+            raise ValueError("could not read this video's size -- give the area as "
+                             '[ymin, ymax, xmin, xmax], or use "whole"')
+        band = [int(h * 0.75), h, 0, w] if word == "bottom" else [0, int(h * 0.25), 0, w]
+        return band, "the %s quarter of the frame" % word
+    raise ValueError('area must be "auto", "bottom", "top", "whole", '
+                     "or [ymin, ymax, xmin, xmax]")
+
+
+def _check_eraser(r) -> None:
+    """Turn an erase route's refusal into a sentence. The 409 is the pack, not
+    a model, so there is no size to name -- the user installs it from the
+    screen, and nothing here can do it for them."""
+    if r.status_code == 409:
+        raise ValueError("The subtitle eraser is not installed on this computer. Ask "
+                         "the user to install it from the Erase subtitles screen.")
+    if r.status_code in (400, 404, 422, 503, 507):
+        detail = r.json().get("detail", "could not erase this video's subtitles")
+        raise ValueError(detail if isinstance(detail, str) else str(detail))
+    r.raise_for_status()
+
+
+@mcp.tool()
+def erase_subtitles(video_path: str, area: Union[str, List[int]] = "auto",
+                    start: Optional[float] = None,
+                    end: Optional[float] = None) -> dict:
+    """Rub out the subtitles BURNED INTO a video and keep the rest of the picture.
+
+    Free and local (no Perso, no credits), but slow -- minutes per minute of
+    video -- so it goes in the same queue a dub does and this answers at once
+    with {job_id, status, area_used}. Follow it with get_job_status, which
+    gives a percent, and once it says done=true call save_erased(job_id) to put
+    the cleaned video under the user's Downloads folder (Downloads/<day>/<project>).
+
+    area is where to work: "auto" (the default -- the app looks for the
+    subtitles first), "bottom" or "top" (that quarter of the frame), "whole"
+    (every pixel: about twice as slow, but it catches writing anywhere), or
+    exact numbers [ymin, ymax, xmin, xmax]. A narrow band is faster and safer;
+    writing outside it is left alone.
+
+    start and end (seconds, both or neither) cut the video down first, so one
+    call does what would otherwise be two: "cut 20-30 s and erase the subtitles
+    at the bottom" is erase_subtitles(path, area="bottom", start=20, end=30),
+    not cut_clip followed by this.
+
+    This is for writing baked into the picture. Subtitles the user can turn off
+    are not this; a script the actors read is get_script.
+    """
+    path = os.path.expanduser(video_path)
+    if not os.path.isfile(path):
+        raise ValueError("No such video: %s" % video_path)
+    if (start is None) != (end is None):
+        raise ValueError("give both start and end, or neither")
+    band, area_used = _erase_area(path, area)
+    fields = {"area": band if band == "whole" else json.dumps(band)}
+    if start is not None:
+        fields["trim_start"] = str(start)
+        fields["trim_end"] = str(end)
+    with open(path, "rb") as f:
+        r = _api_post("/api/erase", data=fields,
+                      files={"video": (os.path.basename(path), f, "video/mp4")},
+                      timeout=600.0)
+    _check_eraser(r)
+    return {**r.json(), "area_used": area_used}
+
+
+@mcp.tool()
+def save_erased(job_id: str, dir: str = "") -> dict:
+    """Save a finished erase job's cleaned video and return where it went.
+
+    dir is a folder the user names; left empty it goes to Downloads/<day>/
+    <project>, the folder the dub's exports use, named after the project with
+    "(no subtitles)" on the end. An
+    existing file is never written over. Check get_job_status says done first.
+    """
+    body = {"dir": dir} if dir else {}
+    r = _api_post("/api/erase/%s/save" % job_id, json=body, timeout=120.0)
+    _check_eraser(r)
+    return r.json()
+
+
+@mcp.tool()
+def list_jobs(active_only: bool = True) -> List[dict]:
+    """What PersoDub is working on right now, newest first.
+
+    Each entry carries id, kind ("dub" or "erase"), title and status. This is
+    how "stop it", "how far along is it?" or "what is it doing?" becomes a job
+    id: work the user started on the screen has an id they have never seen and
+    cannot be asked for. Follow it with get_job_status for the percentage, or
+    cancel_dub to stop one.
+
+    active_only lists only what is queued, running or stopping. False lists
+    the finished ones too, newest first.
+    """
+    r = _api_get("/api/dub/jobs", timeout=10.0)
+    r.raise_for_status()
+    body = r.json()
+    jobs = body.get("jobs", body) if isinstance(body, dict) else body
+    live = ("queued", "running", "cancelling")
+    out = []
+    for j in jobs:
+        status = j.get("status") or ""
+        if active_only and status not in live:
+            continue
+        out.append({"id": j.get("id"), "kind": j.get("kind") or "dub",
+                    "title": j.get("project") or "", "status": status})
+    return out
+
+
+@mcp.tool()
 def cancel_dub(job_id: str) -> dict:
-    """Cancel ONE dub AT ONCE: a waiting job leaves the line, a running one
-    stops at its next safe point.
+    """Cancel ONE job AT ONCE -- a dub or a subtitle erase: a waiting job
+    leaves the line, a running one stops at its next safe point.
 
     Never ask the user to confirm first -- "cancel it" IS the confirmation,
     and a cancel is urgent (asking again meant the job sometimes finished
     before the user could answer). A job that already ended
     (done/error/cancelled) has nothing left to stop. Job ids come from
-    queue_dub and get_job_status.
+    queue_dub, erase_subtitles and list_jobs -- and list_jobs is the one to
+    use when the user says "stop it" about work they started on the screen,
+    whose id they have never seen.
     """
     job = _job(job_id)
     status = job.get("status")

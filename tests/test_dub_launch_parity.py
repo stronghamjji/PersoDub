@@ -431,9 +431,11 @@ _CLOUD_FAILURES = [
      {"type": "perso_invalid_key",
       "message": "Perso rejected the API key. Open Settings and check the key."}),
     ("PersoUnavailableError",
-     "   Error: Perso's server is temporarily unavailable. Wait a few minutes, then run this job again.",
+     "   Error: Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
+     " Ask Perso if it keeps happening.",
      {"type": "perso_unavailable",
-      "message": "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."}),
+      "message": "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again."
+                 " Ask Perso if it keeps happening."}),
 ]
 
 
