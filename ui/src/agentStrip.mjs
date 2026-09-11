@@ -452,6 +452,16 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     loginAsked = true;
     loadAgents({ login: true }).catch(() => {});
   }
+
+  /**
+   * Ask again whether the CLIs are signed in. Called when a turn ends in the
+   * CLI saying it has no credentials: the strip asks once per launch, so
+   * signing out while the app is open left it saying "signed in" under a
+   * failure that was the signing out (user found it, 2026-09-11).
+   */
+  function recheckLogin() {
+    loadAgents({ login: true }).catch(() => {});
+  }
   const CHECK_FAILED = "Could not check which assistants are available.";
   // What the strip says when it cannot answer, short enough for the heading
   // row and the input box (user, 2026-09-10). The full stop is for the log.
@@ -814,6 +824,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
             clearDots();
             settlePrevious();
             showError(ev.message, ev.detail);
+            // The CLI just told us it has no credentials. The strip above
+            // still says the opposite, because it asked at launch and this
+            // happened after.
+            if (/not signed in/i.test(String(ev.message || ""))) recheckLogin();
           } else if (ev.kind === "done") {
             clearDots();
             settlePrevious();

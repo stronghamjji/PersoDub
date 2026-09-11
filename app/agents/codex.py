@@ -18,6 +18,7 @@ translate() is a pure function so it can be tested against recorded lines
 without a CLI installed -- see tests/test_agents_codex.py.
 """
 import json
+import re
 from typing import List
 
 # The chat panel's own vocabulary, shared with the other backends: which CLI is
@@ -53,6 +54,10 @@ def translate(event: dict) -> List[dict]:
     if kind == "turn.failed":
         message = ((event.get("error") or {}).get("message")
                    or "The assistant stopped before finishing.")
+        # A 401 is a sentence the user can act on, not a URL and a trace id.
+        # The CLI's own words are kept, folded away under "Details".
+        if is_unauthorized(message):
+            return [{"kind": "error", "message": SIGNED_OUT, "detail": message}]
         return [{"kind": "error", "message": message}]
 
     if kind == "error":
@@ -66,6 +71,19 @@ def translate(event: dict) -> List[dict]:
     return []
 
 
+# What a signed-out CLI's complaints look like on the wire. Codex does not say
+# "you are signed out" -- it says 401, ten times over, once per retry, each one
+# carrying a URL and a trace id (seen when the user signed out mid-session,
+# 2026-09-11). Nothing about that tells the person what to do.
+_UNAUTHORIZED = re.compile(r"\b401\b|unauthorized|missing bearer", re.I)
+SIGNED_OUT = "Codex is not signed in. Run codex login in Terminal."
+
+
+def is_unauthorized(message) -> bool:
+    """Is this complaint the CLI having no credentials?"""
+    return isinstance(message, str) and bool(_UNAUTHORIZED.search(message))
+
+
 def _transport_error(message) -> dict:
     """One of Codex's connection complaints, as a step rather than a failure.
 
@@ -77,6 +95,10 @@ def _transport_error(message) -> dict:
     """
     if not isinstance(message, str) or not message:
         message = "The assistant lost its connection."
+    # Every retry says the same thing, so they all become the same step and
+    # the panel counts them in one chip instead of printing ten.
+    if is_unauthorized(message):
+        return {"kind": "progress", "tool": "transport", "label": SIGNED_OUT}
     if len(message) > 120:
         message = message[:119].rstrip() + "…"
     return {"kind": "progress", "tool": "transport", "label": message}

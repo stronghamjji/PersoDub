@@ -7,6 +7,7 @@ change shows up here rather than as a blank chat panel.
 """
 import json
 
+from app.agents import codex
 from app.agents.codex import translate
 
 
@@ -263,8 +264,8 @@ def test_retry_chatter_is_a_step_not_a_failure():
     """Recorded 2026-08-26 against an empty CODEX_HOME: a failing run printed
     eleven of these before saying how it really ended. A run that reconnects
     and then answers prints them too, so red would be a lie."""
-    out = ev('{"type":"error","message":"Reconnecting... 2/5 (unexpected status '
-             '401 Unauthorized)"}')
+    out = ev('{"type":"error","message":"Reconnecting... 2/5 (stream closed '
+             'before completion)"}')
     assert out[0]["kind"] == "progress"
     assert "Reconnecting" in out[0]["label"]
 
@@ -272,11 +273,45 @@ def test_retry_chatter_is_a_step_not_a_failure():
 def test_a_long_connection_complaint_is_trimmed_to_fit_a_chip():
     """The real ones carry a URL and a trace id -- 180 characters of nothing
     the reader can use."""
-    out = ev('{"type":"error","message":"Reconnecting... 2/5 (unexpected status '
-             '401 Unauthorized: Missing bearer or basic authentication in header, '
-             'url: wss://api.openai.com/v1/responses, cf-ray: a30e73aadc4aea17-ICN)"}')
+    out = ev('{"type":"error","message":"Reconnecting... 2/5 (stream closed before '
+             'completion, url: wss://api.openai.com/v1/responses, cf-ray: '
+             'a30e73aadc4aea17-ICN, request id: req_342ebbd77b7d419aa8dca77091b1aee7)"}')
     assert len(out[0]["label"]) <= 120
     assert out[0]["label"].endswith("…")
+
+
+def test_a_signed_out_cli_says_so_once_instead_of_ten_times():
+    """Codex never says "you are signed out". It says 401, once per retry, ten
+    times over, each line carrying a URL and a trace id -- and then the same
+    thing again in red at the end. The user signed out mid-session and got a
+    wall of that (2026-09-11). Every retry now carries the same words, so the
+    panel counts them in one chip rather than printing ten."""
+    for wire in ('Reconnecting... 2/5 (unexpected status 401 Unauthorized: '
+                 'Missing bearer or basic authentication in header, url: wss://a)',
+                 'unexpected status 401 Unauthorized: Missing bearer',
+                 'Falling back from WebSockets to HTTPS transport. unexpected '
+                 'status 401 Unauthorized: Missing bearer'):
+        out = ev('{"type":"error","message":%s}' % json.dumps(wire))
+        assert out[0]["kind"] == "progress", wire
+        assert out[0]["label"] == codex.SIGNED_OUT, wire
+
+
+def test_the_turn_that_died_signed_out_says_what_to_do_and_keeps_the_rest():
+    """The red line at the end was the raw 401: a URL, a cf-ray and a request
+    id, and nothing the reader could act on. The CLI's own words are still
+    there, folded away under Details."""
+    raw = ('unexpected status 401 Unauthorized: Missing bearer or basic '
+           'authentication in header, url: https://api.openai.com/v1/responses, '
+           'cf-ray: a392f369dabfea1c-ICN, request id: req_342ebbd')
+    out = ev('{"type":"turn.failed","error":{"message":%s}}' % json.dumps(raw))
+    assert out == [{"kind": "error", "message": codex.SIGNED_OUT, "detail": raw}]
+
+
+def test_a_turn_that_failed_for_any_other_reason_is_passed_through():
+    """Only 401 is translated: everything else is the CLI's own account of
+    what happened, which is better than anything this file could invent."""
+    out = ev('{"type":"turn.failed","error":{"message":"model overloaded"}}')
+    assert out == [{"kind": "error", "message": "model overloaded"}]
 
 
 def test_a_connection_complaint_with_nothing_in_it_still_says_something():
