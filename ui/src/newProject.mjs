@@ -328,6 +328,13 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
                          // with the video: the dub then translates these instead
                          // of listening to the audio for them.
                          sourceSrt: source.sourceSrt || null };
+    // Say so when the user brought their own script. Without this the dialog
+    // is identical either way, and the only clue that the file was taken is
+    // the dub coming out translated rather than transcribed -- minutes later
+    // (user, 2026-09-11).
+    const srt = state.newProject.sourceSrt;
+    $("projectSrt").hidden = !srt;
+    if (srt) $("projectSrt").textContent = `Using your subtitles: ${srt.name}`;
     stopWatching();
     releaseProjectVideo();
     const v = $("projectVideo");

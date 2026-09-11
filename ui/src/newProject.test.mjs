@@ -512,6 +512,26 @@ test("a clip that cannot be saved says so on the red line, and claims nothing", 
   assert.equal(h.$("saveClipBtn").disabled, false);
 });
 
+// Coming back from the erase screen by way of "Dub with my subtitles", the
+// user's own script rides along and the dub translates it instead of listening
+// for the words. The dialog looked exactly the same either way, so there was
+// no telling the file had been taken until the dub came out minutes later
+// (user, 2026-09-11).
+test("a script brought from the erase screen is named on the dialog", async (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const srt = { name: "22편_es.srt" };
+
+  h.api.openNewProject({ downloadId: "d1", title: "A talk", duration_sec: 30, sourceSrt: srt });
+  assert.equal(h.state.newProject.sourceSrt, srt);
+  assert.equal(h.$("projectSrt").hidden, false);
+  assert.equal(h.$("projectSrt").textContent, "Using your subtitles: 22편_es.srt");
+
+  // And the next video, opened without one, must not still be wearing it.
+  h.api.openNewProject({ downloadId: "d2", title: "Another" });
+  assert.equal(h.$("projectSrt").hidden, true);
+});
+
 test("Erase subtitles hands the held video over and gets out of the way", async (t) => {
   const h = await readyDialog();
   t.after(h.log.restore);
