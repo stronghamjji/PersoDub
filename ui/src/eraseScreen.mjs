@@ -165,6 +165,14 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     const done = view === "done";
     $("eraseDrop").hidden = view !== "drop";
     $("eraseBody").hidden = view === "drop";
+    // The red line goes where the eye already is. At the foot of the screen it
+    // was 257 pixels below the picture it was about, with nothing in between,
+    // and the two did not read as one thing (Windows measured it,
+    // 2026-09-11). It cannot simply live in the column: a file refused before
+    // there is any video to show is reported in it too, and the column is not
+    // on the page then.
+    const host = view === "drop" ? $("screen-erase") : $("eraseMid");
+    if ($("eraseError").parentElement !== host) host.appendChild($("eraseError"));
     $("erasePack").hidden = !packMissing || done;
     // Only a finished erase has two videos to choose between, so the tabs are
     // the only thing that ever stands above the picture. The screen's own

@@ -622,6 +622,10 @@
   .erase-error { color: var(--destructive); font-size: var(--font-label);
     padding: 0 22px 14px; }
   .erase-error:empty { display: none; }
+  /* In the column it is under the thing it is about, and the padding that
+     held it off the screen's edge is not wanted there. */
+  .erase-mid > .erase-error { width: max(var(--erase-col, 100%), 520px);
+    max-width: 100%; padding: 0; }
   /* In the column, the same width as the row above it. */
   .erase-log { width: max(var(--erase-col, 100%), 520px); max-width: 100%; }
   /* The pack line. The accent ground of the app's other "you need this first"
@@ -1988,7 +1992,7 @@
                is the picture's own, which only the browser knows once it has
                laid the video out -- drawBox measures it and writes it here as
                --erase-col. -->
-          <div class="erase-mid">
+          <div class="erase-mid" id="eraseMid">
           <div class="erase-stage" id="eraseStage">
             <video id="eraseVideo" playsinline muted></video>
             <!-- The one box. Drag the middle to move it, a corner to resize it;

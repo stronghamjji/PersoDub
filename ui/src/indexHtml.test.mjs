@@ -179,7 +179,7 @@ test("the estimate and the Erase button stand in the row under the picture", () 
   assert.ok(!topbar.includes('id="eraseRunBtn"') && !topbar.includes('id="eraseEst"'),
     "nor in the top bar");
   // Picture, trim bar and row are one column, all the width of the picture.
-  assert.match(html, /<div class="erase-mid">/);
+  assert.match(html, /<div class="erase-mid" id="eraseMid">/);
   assert.match(html, /\.erase-trim, \.erase-row \{ width: max\(var\(--erase-col, 100%\), 520px\)/);
   assert.match(html, /\.erase-stage \{[^}]*max-height: 780px/);
   // The box says whether the app is still looking.

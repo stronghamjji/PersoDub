@@ -70,6 +70,11 @@ QUIET_MARKS = (
     "PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK",
     "Connectivity check",
     "Warning:", "warnings.warn", "UserWarning", "FutureWarning", "DeprecationWarning",
+    # Windows writes its own notices into the same pipe: a shell command that
+    # matched no files says "INFO: Could not find files for the given
+    # pattern(s)", which arrived in the parentheses as the reason a kill had
+    # failed the run (Windows, 2026-09-11).
+    "INFO:",
 )
 
 # Which half of the work it died in. The script's own percentages say: 0-50 is
