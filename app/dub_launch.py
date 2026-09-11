@@ -28,6 +28,7 @@ from app.jobs import JobCancelled
 from app.perso_client import (
     PersoCreditExhaustedError,
     PersoInvalidKeyError,
+    PersoProjectFailedError,
     PersoUnavailableError,
 )
 from app.pipeline import raise_notice
@@ -97,7 +98,12 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
             state.job_store.persist(jid, os.path.dirname(out_path))
     except JobCancelled:
         raise
-    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
+    # The fourth is a project Perso took and gave up on: the request was fine,
+    # the answer said it had failed. Without it here a cloud dub that Perso
+    # abandoned fell through to the generic handler and lost Perso's own
+    # reason on the way (user, 2026-09-11).
+    except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError,
+            PersoProjectFailedError) as e:
         # The same three messages the stages report, from the same table
         # (app/pipeline.py's _NOTICE_ERRORS). They used to be hand-copied here,
         # so the wording could drift on one path and not the other.

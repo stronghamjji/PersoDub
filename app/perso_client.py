@@ -124,6 +124,27 @@ class PersoUnavailableError(RuntimeError):
     and nothing to fix on their side -- retrying later is the only remedy."""
 
 
+class PersoProjectFailedError(RuntimeError):
+    """Perso took the job, worked on it, and gave up.
+
+    Not an HTTP status -- the request succeeded and the answer said the
+    project had failed. The three above are about reaching Perso at all; this
+    one is about a project that was reached and did not finish, which is a
+    different thing to tell the user and a different thing to do about it.
+
+    Carries Perso's own words so the screen can show exactly what the user
+    will read on Perso's own dashboard: nothing here rewrites them.
+    """
+
+    def __init__(self, what: str, reason: str = "", code: str = ""):
+        self.what = what
+        self.reason = reason
+        self.code = code
+        said = reason or "no reason given"
+        super().__init__(f"{what} failed: {said} ({code})" if code
+                         else f"{what} failed: {said}")
+
+
 def _dubbing_space_candidates(api_key: str, base_url: str = BASE_URL) -> list:
     """Raw workspace dicts the key can dub in (GET /portal/api/v1/spaces).
 
@@ -221,12 +242,12 @@ def perso_failure(res):
     # type: (dict) -> tuple
     """Has this project failed, and in Perso's own words?
 
-    Returns (failed, detail). `detail` is the reason and the code exactly as
-    Perso spelled them -- nothing here rewrites either, because the point of
-    showing it is to match what the user sees on Perso's side.
+    Returns (failed, (reason, code)) -- both exactly as Perso spelled them,
+    because the point of showing them is to match what the user sees on
+    Perso's own side, and a rewrite in between would defeat that.
     """
     if not isinstance(res, dict):
-        return False, ""
+        return False, ("", "")
     reason = str(res.get("progressReason") or "").strip()
     flagged = bool(res.get("hasFailed") or res.get("isFailed") or res.get("failed"))
     # "Completed" wins, however the sentence goes on: a reason can carry a
@@ -234,15 +255,14 @@ def perso_failure(res):
     done = reason.lower().startswith("completed")
     said_failed = not done and bool(_FAILED_WORDS.search(reason))
     if not (flagged or said_failed):
-        return False, ""
+        return False, ("", "")
     code = ""
     for key in _CODE_FIELDS:
         value = res.get(key)
         if value not in (None, ""):
             code = str(value)
             break
-    detail = reason or "no reason given"
-    return True, f"{detail} ({code})" if code else detail
+    return True, (reason, code)
 
 
 def _raise_for_status(r: httpx.Response) -> None:
@@ -634,9 +654,10 @@ class PersoClient:
             if reason != said:
                 logger.info("%s project %s: %s", what, project_seq, reason or "(no reason given)")
                 said = reason
-            failed, detail = perso_failure(res)
+            failed, (why, code) = perso_failure(res)
             if failed:
-                raise RuntimeError(f"{what} failed: {detail}")
+                logger.warning("%s project %s failed: %s %s", what, project_seq, why, code)
+                raise PersoProjectFailedError(what, why, code)
             if reason == "Completed":
                 return
             time.sleep(self.poll_interval)

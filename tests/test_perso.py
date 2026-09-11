@@ -12,6 +12,7 @@ from app.perso_client import (
     PersoClient,
     PersoCreditExhaustedError,
     PersoInvalidKeyError,
+    PersoProjectFailedError,
     PersoUnavailableError,
     perso_failure,
     perso_to_cues,
@@ -878,37 +879,66 @@ def test_dub_video_sends_the_region_tag_when_the_language_has_one(monkeypatch, t
 # match what the user is reading on the other side.
 def test_the_flag_perso_was_already_setting_is_still_a_failure():
     assert perso_failure({"hasFailed": True, "progressReason": "Something broke"}) == (
-        True, "Something broke")
+        True, ("Something broke", ""))
 
 
 def test_a_reason_that_says_it_failed_is_a_failure_with_no_flag_at_all():
     for reason in ("Failed", "FAILED", "Error", "Aborted", "Rejected by the service"):
-        failed, detail = perso_failure({"progressReason": reason})
+        failed, (why, code) = perso_failure({"progressReason": reason})
         assert failed, reason
-        assert detail == reason
+        assert why == reason
+        assert code == ""
 
 
 def test_perso_error_code_travels_beside_the_reason():
     assert perso_failure({"progressReason": "FAILED", "errorCode": "E_TTS_TIMEOUT"}) == (
-        True, "FAILED (E_TTS_TIMEOUT)")
+        True, ("FAILED", "E_TTS_TIMEOUT"))
     # Whichever of the field names it used.
     assert perso_failure({"isFailed": True, "progressReason": "Error", "code": 1234}) == (
-        True, "Error (1234)")
-    # And a failure with no code still says what it can.
-    assert perso_failure({"hasFailed": True}) == (True, "no reason given")
+        True, ("Error", "1234"))
+    # A failure with neither still counts as one.
+    assert perso_failure({"hasFailed": True}) == (True, ("", ""))
 
 
 def test_completed_wins_however_the_sentence_goes_on():
     """A finished project may mention a cancelled segment. Reading the word
     "cancelled" there and calling the whole thing a failure would turn a good
     dub into a red screen."""
-    assert perso_failure({"progressReason": "Completed"}) == (False, "")
-    assert perso_failure({"progressReason": "Completed with cancelled segments"}) == (False, "")
+    assert perso_failure({"progressReason": "Completed"}) == (False, ("", ""))
+    assert perso_failure({"progressReason": "Completed with cancelled segments"}) == (False, ("", ""))
     # Unless Perso itself says it failed, which outranks the sentence.
     assert perso_failure({"hasFailed": True, "progressReason": "Completed"})[0] is True
 
 
 def test_a_project_still_working_is_not_a_failure():
-    assert perso_failure({"progressReason": "Translating"}) == (False, "")
-    assert perso_failure({}) == (False, "")
-    assert perso_failure(None) == (False, "")
+    assert perso_failure({"progressReason": "Translating"}) == (False, ("", ""))
+    assert perso_failure({}) == (False, ("", ""))
+    assert perso_failure(None) == (False, ("", ""))
+
+
+def test_the_screen_gets_our_sentence_and_persos_words_after_it():
+    """A failed Perso project has to say two things: what the user can do,
+    and what Perso itself said -- so the screen can be held up against
+    Perso's own dashboard (user, 2026-09-11)."""
+    import app.pipeline as pipeline
+    notices = []
+    try:
+        pipeline.raise_notice(
+            PersoProjectFailedError("Perso dubbing", "FAILED", "E_TTS_TIMEOUT"),
+            lambda _m: None, notices.append)
+    except RuntimeError as e:
+        said = str(e)
+    assert said.startswith("Perso could not finish this job.")
+    assert "Perso said: FAILED (E_TTS_TIMEOUT)" in said
+    assert notices[0]["type"] == "perso_project_failed"
+    assert notices[0]["message"] == said
+
+
+def test_a_failure_perso_gave_no_words_for_says_only_our_sentence():
+    """Rather than "Perso said: " trailing off into nothing."""
+    import app.pipeline as pipeline
+    try:
+        pipeline.raise_notice(PersoProjectFailedError("Perso STT"), lambda _m: None, None)
+    except RuntimeError as e:
+        said = str(e)
+    assert said == "Perso could not finish this job. Try again, or check the project on Perso."

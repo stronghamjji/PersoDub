@@ -22,6 +22,7 @@ from app.perso_client import (
     PersoClient,
     PersoCreditExhaustedError,
     PersoInvalidKeyError,
+    PersoProjectFailedError,
     PersoUnavailableError,
     perso_to_cues,
 )
@@ -109,6 +110,17 @@ _NOTICE_ERRORS = {
         "Perso's server is temporarily unavailable. Wait a few minutes, then run this job again.",
         None,
     ),
+    # Reached, accepted, worked on, given up. The other three are about not
+    # getting to Perso at all; this one has an answer from Perso saying the
+    # project is over, and the user needs to be told which -- silence here is
+    # what left a failed project looking like a running one (user,
+    # 2026-09-11). The sentence carries Perso's own reason and code, appended
+    # by raise_notice, so the screen and Perso's dashboard read alike.
+    PersoProjectFailedError: (
+        "perso_project_failed",
+        "Perso could not finish this job. Try again, or check the project on Perso.",
+        None,
+    ),
     GeminiQuotaExhaustedError: (
         "gemini_quota_exhausted",
         "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset.",
@@ -127,6 +139,7 @@ _NOTICE_ERRORS = {
 # and that is what an unexpected provider error must keep landing in.
 _PERSO_NOTICE_ERRORS = (
     PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError,
+    PersoProjectFailedError,
 )
 _GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError)
 
@@ -150,6 +163,15 @@ def raise_notice(e, log, on_notice) -> NoReturn:
     else:  # pragma: no cover -- callers only pass types listed above
         raise e
     notice_type, msg, link_attr = entry
+    # Perso's own words, kept whole and put after ours: the sentence above
+    # says what to do, and this says what Perso said, so the screen can be
+    # held up against Perso's dashboard (user, 2026-09-11).
+    said = getattr(e, "reason", "") or ""
+    code = getattr(e, "code", "") or ""
+    if said or code:
+        msg = f"{msg} Perso said: {said or 'no reason given'}"
+        if code:
+            msg = f"{msg} ({code})"
     notice = {"type": notice_type, "message": msg}
     if link_attr:
         notice["link"] = getattr(e, link_attr)
