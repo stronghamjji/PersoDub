@@ -211,6 +211,14 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     // the picture comes from the job's own folder: the original while it runs,
     // and whichever tab is up once there is a result.
     if (view === "working" && !playing) setVideo(eraseVideoUrl(job.id, "original"));
+    // A finished erase is the thing the user came for, so it is a video they
+    // can play and hear -- not a still. Everywhere else on this screen the
+    // picture is a backdrop for the box being drawn on it, where a play bar
+    // over the writing and a burst of sound would both be in the way: muted
+    // and no controls there, both back here (user, 2026-09-11).
+    const player = $("eraseVideo");
+    player.controls = done;
+    player.muted = !done;
     if (done) {
       setVideo(eraseVideoUrl(job.id, tab));
       for (const el of $("eraseTabs").querySelectorAll(".vtab")) {

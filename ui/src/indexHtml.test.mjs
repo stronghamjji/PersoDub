@@ -244,6 +244,21 @@ test("the agent's two settled marks are different shapes", () => {
   assert.match(note[1], /M6 12h12/);
 });
 
+// The erase screen's one <video> wears two hats. While the box is being drawn
+// it is a backdrop -- a play bar over the writing and a burst of sound would
+// both be in the way -- so the markup ships it muted and bare. A finished
+// erase is the thing the user came for and was still a still picture with no
+// way to play it (user, 2026-09-11).
+test("a finished erase is a video you can play, and the backdrop is not", () => {
+  const html = readFileSync(INDEX, "utf8");
+  // As it ships: no controls, muted.
+  assert.match(html, /<video id="eraseVideo" playsinline muted><\/video>/);
+  // And the screen turns both on for the finished face and off again after.
+  const erase = readFileSync(ERASE, "utf8");
+  assert.match(erase, /player\.controls = done;/);
+  assert.match(erase, /player\.muted = !done;/);
+});
+
 test("the agent input ignores Enter pressed mid-composition", () => {
   const html = readFileSync(STRIP, "utf8");
   const handler = html.match(/input\.addEventListener\("keydown"[\s\S]{0,600}/);

@@ -426,6 +426,14 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       menuLevel = "";
       buildMenu();
       menu.hidden = false;
+      // And ask who is signed in, because signing in happens in a Terminal
+      // while this window is open: the user ran codex login and the picker
+      // still said "not signed in", with no way to correct it but a restart
+      // (user, 2026-09-11). Opening the picker is exactly when it matters and
+      // is the one moment worth a child process for -- the server keeps its
+      // answer a minute, so holding the menu open costs nothing more. The
+      // answer lands after the menu is drawn, so it is drawn again.
+      recheckLogin(() => { if (!menu.hidden) buildMenu(); });
     });
 
     // It now opens upward, over the timeline, so a click anywhere else has to put
@@ -465,13 +473,16 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
    * signing out while the app is open left it saying "signed in" under a
    * failure that was the signing out (user found it, 2026-09-11).
    */
-  function recheckLogin() {
+  function recheckLogin(after) {
     // Twice. The server keeps each answer for a minute and refreshes behind
     // the request, so the first ask starts a fresh check and hands back the
     // stale one it already had -- which is the very answer being corrected.
     // The second ask, a moment later, is the one that gets the new value.
-    loadAgents({ login: true }).catch(() => {});
-    setTimeout(() => { if (stripInUse()) loadAgents().catch(() => {}); }, 1800);
+    const done = after || (() => {});
+    loadAgents({ login: true }).then(done).catch(() => {});
+    setTimeout(() => {
+      if (stripInUse()) loadAgents().then(done).catch(() => {});
+    }, 1800);
   }
   const CHECK_FAILED = "Could not check which assistants are available.";
   // What the strip says when it cannot answer, short enough for the heading
