@@ -10,6 +10,7 @@ be exposed in code or logs.
 """
 import logging
 import os
+import re
 import sys
 import time
 from typing import List, Optional
@@ -202,6 +203,46 @@ def list_dubbing_spaces(api_key: str, base_url: str = BASE_URL) -> list:
                     "name": s.get("spaceName") or s.get("name") or f"space {seq}",
                     "tier": s.get("tier"), "credits": credits})
     return out
+
+
+# Perso says a project failed in more than one way, and only one of them was
+# being read. A dub whose cloud project had already failed went on polling for
+# the full hour while Perso's own dashboard said it was over (user,
+# 2026-09-11). The words here are Perso's, kept as Perso wrote them: the
+# reason, and any code it gave, travel to the screen unchanged so the two
+# sides can be compared without a translation in between.
+_FAILED_WORDS = re.compile(r"fail|error|abort|reject|cancel", re.I)
+
+# Where Perso has been seen to put a code. Read in this order, first one wins.
+_CODE_FIELDS = ("errorCode", "failCode", "code", "errorType")
+
+
+def perso_failure(res):
+    # type: (dict) -> tuple
+    """Has this project failed, and in Perso's own words?
+
+    Returns (failed, detail). `detail` is the reason and the code exactly as
+    Perso spelled them -- nothing here rewrites either, because the point of
+    showing it is to match what the user sees on Perso's side.
+    """
+    if not isinstance(res, dict):
+        return False, ""
+    reason = str(res.get("progressReason") or "").strip()
+    flagged = bool(res.get("hasFailed") or res.get("isFailed") or res.get("failed"))
+    # "Completed" wins, however the sentence goes on: a reason can carry a
+    # word like "cancelled" while describing something that did finish.
+    done = reason.lower().startswith("completed")
+    said_failed = not done and bool(_FAILED_WORDS.search(reason))
+    if not (flagged or said_failed):
+        return False, ""
+    code = ""
+    for key in _CODE_FIELDS:
+        value = res.get(key)
+        if value not in (None, ""):
+            code = str(value)
+            break
+    detail = reason or "no reason given"
+    return True, f"{detail} ({code})" if code else detail
 
 
 def _raise_for_status(r: httpx.Response) -> None:
@@ -573,6 +614,7 @@ class PersoClient:
     def _wait_completed(self, project_seq: int, space: int, timeout_s: int = 3600,
                         what: str = "Perso STT") -> None:
         deadline = time.time() + timeout_s
+        said = None
         while time.time() < deadline:
             if self.cancel_check and self.cancel_check():
                 from app.jobs import JobCancelled
@@ -582,13 +624,23 @@ class PersoClient:
                 headers=self._headers, timeout=60,
             )
             _raise_for_status(r)
-            res = r.json().get("result", {})
-            if res.get("hasFailed"):
-                raise RuntimeError(f"{what} failed: {res.get('progressReason')}")
-            if res.get("progressReason") == "Completed":
+            res = r.json().get("result", {}) or {}
+            # Every change of mind, written down. This loop used to run for up
+            # to an hour saying nothing at all, so when the user saw "failed"
+            # on Perso's own dashboard while this app carried on there was no
+            # record of what Perso had actually been telling us
+            # (user, 2026-09-11).
+            reason = str(res.get("progressReason") or "")
+            if reason != said:
+                logger.info("%s project %s: %s", what, project_seq, reason or "(no reason given)")
+                said = reason
+            failed, detail = perso_failure(res)
+            if failed:
+                raise RuntimeError(f"{what} failed: {detail}")
+            if reason == "Completed":
                 return
             time.sleep(self.poll_interval)
-        raise TimeoutError(f"{what} timed out")
+        raise TimeoutError(f"{what} timed out after {timeout_s}s (last said: {said or 'nothing'})")
 
     def _fetch_script_timestamps(self, project_seq: int, space: int) -> list:
         r = httpx.get(

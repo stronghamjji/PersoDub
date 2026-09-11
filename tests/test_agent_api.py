@@ -58,11 +58,27 @@ def test_an_assistant_that_cannot_answer_says_why(monkeypatch):
     assert rows["codex"]["reason"] == ""
 
 
-def test_only_claude_offers_a_choice_of_models():
-    """Codex names its models by version, which would go stale in a picker."""
+def test_claude_offers_its_aliases_and_codex_the_one_it_is_set_to(monkeypatch, tmp_path):
+    """Claude's four aliases are its own vocabulary and are written down.
+    Codex has no list and no command that would give one -- every subcommand
+    was checked, and it accepts a model it has never heard of without a word.
+    What it does have is the one model it is set up to use, in its own config
+    (user, 2026-09-11)."""
+    (tmp_path / "config.toml").write_text('model = "gpt-6-astra"\n', encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
     rows = _rows()
     assert "fable" in rows["claude"]["models"]
-    assert rows["codex"]["models"] == []
+    assert rows["codex"]["models"] == ["gpt-6-astra"]
+
+
+def test_a_codex_that_has_not_said_which_model_offers_none(monkeypatch, tmp_path):
+    """No config, or one that names no model: the picker leaves Codex as the
+    single unopenable row it was before, rather than inventing a name."""
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    assert _rows()["codex"]["models"] == []
+    (tmp_path / "config.toml").write_text("[profile.x]\nmodel = \"inside-a-profile\"\n",
+                                          encoding="utf-8")
+    assert _rows()["codex"]["models"] == []
 
 
 def test_status_never_starts_a_cli(monkeypatch):

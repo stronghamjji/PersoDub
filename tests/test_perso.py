@@ -13,6 +13,7 @@ from app.perso_client import (
     PersoCreditExhaustedError,
     PersoInvalidKeyError,
     PersoUnavailableError,
+    perso_failure,
     perso_to_cues,
     pick_speaker_spans,
 )
@@ -868,3 +869,46 @@ def test_dub_video_sends_the_region_tag_when_the_language_has_one(monkeypatch, t
     pc.dub_video(str(src), str(tmp_path / "out.mp4"), "ko", "en", num_speakers=1, target_tag="en-GB")
     url, body = next(c for c in calls["post"] if c[0].endswith("/translate"))
     assert body["targetLanguages"] == [{"languageCode": "en", "ttsModel": "AUDIO_ENGINE_V3", "languageTag": "en-GB"}]
+
+
+# Perso says a project failed in more than one way and only one of them was
+# being read, so a dub whose cloud project had already failed went on polling
+# for the full hour while Perso's own dashboard said it was over (user,
+# 2026-09-11). Perso's words travel unchanged: the point of showing them is to
+# match what the user is reading on the other side.
+def test_the_flag_perso_was_already_setting_is_still_a_failure():
+    assert perso_failure({"hasFailed": True, "progressReason": "Something broke"}) == (
+        True, "Something broke")
+
+
+def test_a_reason_that_says_it_failed_is_a_failure_with_no_flag_at_all():
+    for reason in ("Failed", "FAILED", "Error", "Aborted", "Rejected by the service"):
+        failed, detail = perso_failure({"progressReason": reason})
+        assert failed, reason
+        assert detail == reason
+
+
+def test_perso_error_code_travels_beside_the_reason():
+    assert perso_failure({"progressReason": "FAILED", "errorCode": "E_TTS_TIMEOUT"}) == (
+        True, "FAILED (E_TTS_TIMEOUT)")
+    # Whichever of the field names it used.
+    assert perso_failure({"isFailed": True, "progressReason": "Error", "code": 1234}) == (
+        True, "Error (1234)")
+    # And a failure with no code still says what it can.
+    assert perso_failure({"hasFailed": True}) == (True, "no reason given")
+
+
+def test_completed_wins_however_the_sentence_goes_on():
+    """A finished project may mention a cancelled segment. Reading the word
+    "cancelled" there and calling the whole thing a failure would turn a good
+    dub into a red screen."""
+    assert perso_failure({"progressReason": "Completed"}) == (False, "")
+    assert perso_failure({"progressReason": "Completed with cancelled segments"}) == (False, "")
+    # Unless Perso itself says it failed, which outranks the sentence.
+    assert perso_failure({"hasFailed": True, "progressReason": "Completed"})[0] is True
+
+
+def test_a_project_still_working_is_not_a_failure():
+    assert perso_failure({"progressReason": "Translating"}) == (False, "")
+    assert perso_failure({}) == (False, "")
+    assert perso_failure(None) == (False, "")

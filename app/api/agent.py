@@ -93,6 +93,22 @@ def _login_refresh(key: str, binary: str) -> None:
             _login_busy.discard(key)
 
 
+def _models_of(driver) -> list:
+    """What this assistant may be asked for. A driver with a models() knows
+    how to find out; one without has a written-down MODELS; one that is not
+    installed has neither."""
+    if not driver:
+        return []
+    finder = getattr(driver, "models", None)
+    if callable(finder):
+        try:
+            return list(finder())
+        except Exception:  # noqa: BLE001 -- a bad config file is not a broken app
+            logger.debug("Could not read %s's model", getattr(driver, "__name__", "?"))
+            return []
+    return list(getattr(driver, "MODELS", []))
+
+
 def _login_of(key: str, binary: str, ask: bool) -> dict:
     """What is known about this CLI's login right now, refreshing behind us.
 
@@ -169,7 +185,11 @@ def agent_status(login: int = 0):
             # Why it is greyed out, in the picker's own words. Empty when the
             # assistant is usable, and "not installed" is the panel's line.
             "reason": "" if driver else meta.get("reason", ""),
-            "models": driver.MODELS if driver else [],
+            # A driver that can work out its own list at run time says so
+            # with models(); the rest have theirs written down. Codex is the
+            # first of the former -- the one model it is set up to use lives
+            # in its config and nowhere else (user, 2026-09-11).
+            "models": _models_of(driver),
         })
     return {"agents": out}
 

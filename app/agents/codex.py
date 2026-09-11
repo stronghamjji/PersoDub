@@ -18,7 +18,9 @@ translate() is a pure function so it can be tested against recorded lines
 without a CLI installed -- see tests/test_agents_codex.py.
 """
 import json
-from typing import List
+import os
+import re
+from typing import List, Optional
 
 # The chat panel's own vocabulary, shared with the other backends: which CLI is
 # behind the strip must not change what a step is called on screen.
@@ -148,11 +150,49 @@ def _item(kind: str, item: dict) -> List[dict]:
     return []
 
 
-# Codex names its models by version ("gpt-5.5"), and a list of those in the
-# picker would go stale with the next release. Empty means the picker offers the
-# CLI itself and Codex answers with whatever the user set it up to use -- so
-# nothing here passes -m, and there is no half-built model path to trip over.
+# Codex names its models by version ("gpt-5.5"), and a written-down list of
+# those would go stale with the next release. It has no command that will list
+# them either -- every subcommand was checked, and it accepts a model name it
+# has never heard of without a word (2026-09-11). So nothing is written down
+# here, and nothing passes -m: Codex answers with whatever it is set up to use.
 MODELS: List[str] = []
+
+
+def _codex_home() -> str:
+    """Where Codex keeps its config, the way Codex decides it."""
+    return os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
+
+
+# The one model Codex is set up to answer with, read straight out of its own
+# config. `codex doctor` says the same thing but takes four seconds; this is a
+# line in a file. Without it the picker offered a row saying "Codex" and the
+# strip said "Codex" beside it, neither of which is a model name -- and the
+# user had no way to line up what they picked here with what they type in a
+# terminal (user, 2026-09-11).
+def configured_model(home: Optional[str] = None) -> str:
+    path = os.path.join(home or _codex_home(), "config.toml")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                # Top level only: a model named inside a [profile.x] section
+                # belongs to that profile, not to a plain run.
+                if line.startswith("["):
+                    break
+                m = re.match(r'^model\s*=\s*["\']([^"\']+)["\']', line)
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return ""
+
+
+def models() -> List[str]:
+    """What the picker may offer. One row when Codex has said which model it
+    uses, none at all when it has not -- an empty list is the picker leaving
+    Codex as a single unopenable row, which is what it did before."""
+    name = configured_model()
+    return [name] if name else []
 
 
 def _toml(value) -> str:
