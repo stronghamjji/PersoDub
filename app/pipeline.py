@@ -24,8 +24,8 @@ from app.perso_client import (
     PersoInvalidKeyError,
     PersoProjectFailedError,
     PersoUnavailableError,
-    short_reason,
     perso_to_cues,
+    short_reason,
 )
 from app.qwen_pipeline import cleanup_takes, run_qwen_dub
 from app.scripts.check_leakage import _validate_manifest_spans, measure_leakage

@@ -26,8 +26,12 @@ export const ERROR_CODES = [
   "path-too-long", "disk-full", "network", "permission", "engine-start",
   "out-of-memory", "unsupported-format", "engine-crash", "step-failed",
   // The cloud service refused -- not the machine's fault, and worth its own
-  // word so an outage cannot be read as a broken install.
-  "cloud-refused", "unknown",
+  // word so an outage cannot be read as a broken install. "cloud-refused" was
+  // one word for all six until 0.6.0 and stays for as long as 0.5.4 and
+  // earlier are still running.
+  "cloud-refused", "perso-busy", "perso-credits", "perso-key", "perso-failed",
+  "gemini-busy", "gemini-quota",
+  "unknown",
 ];
 export const PLATFORM_KEYS = ["mac", "win-gpu", "win-cpu"];
 

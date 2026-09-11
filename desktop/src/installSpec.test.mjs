@@ -800,7 +800,11 @@ test("venv-eraser is done only once the eraser can be imported", async () => {
   const check = argvs.find((a) => a.join(" ").includes("import backend.main"));
   assert.ok(check, argvs.map((a) => a.join(" ")).join("\n"));
   assert.equal(check[0], venvBin(join(ctx.kitDir, "venv-eraser"), "python"));
-  assert.ok(check[2].includes(join(ctx.kitDir, "eraser", "vsr")), check[2]);
+  // The path travels inside a Python snippet, so it is JSON-quoted: on Windows
+  // every separator in it is doubled and a plain includes() of the real path
+  // cannot match (CI found it, 2026-09-11). Compare what was quoted, not how.
+  assert.ok(check[2].includes(JSON.stringify(join(ctx.kitDir, "eraser", "vsr")).slice(1, -1)),
+            check[2]);
   assert.equal(await step.isDone(), true);
 });
 

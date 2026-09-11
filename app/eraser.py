@@ -15,6 +15,7 @@ pipeline, it has no stage boundary to stop at politely -- one blocking call
 does the whole video -- so a cancelled job's process is killed.
 """
 import collections
+import contextlib
 import json
 import os
 import queue
@@ -209,10 +210,11 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
         # (its own banners, a library's tips) would say nothing to the user.
         if line.startswith("progress "):
             log(line)
-            try:
+            # A line that is not "progress 42%" after all leaves `reached`
+            # where it was: the stage the sentence names is then the last one
+            # we did hear about, which is the right answer anyway.
+            with contextlib.suppress(IndexError, ValueError):
                 reached = int(line.split()[1].rstrip("%"))
-            except (IndexError, ValueError):
-                pass
         elif line.startswith(NOTE_PREFIX):
             log("   %s" % line[len(NOTE_PREFIX):])
         elif line.startswith(CHECK_PREFIX):

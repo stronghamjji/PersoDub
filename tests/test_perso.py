@@ -16,8 +16,8 @@ from app.perso_client import (
     PersoUnavailableError,
     perso_failure,
     perso_to_cues,
-    short_reason,
     pick_speaker_spans,
+    short_reason,
 )
 
 FIXTURE = os.environ.get(

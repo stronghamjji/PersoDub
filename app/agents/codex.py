@@ -172,7 +172,7 @@ def _codex_home() -> str:
 def configured_model(home: Optional[str] = None) -> str:
     path = os.path.join(home or _codex_home(), "config.toml")
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
                 # Top level only: a model named inside a [profile.x] section

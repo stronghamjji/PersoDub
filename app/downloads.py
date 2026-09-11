@@ -27,7 +27,11 @@ def save_folder(chosen: str, day: str, project: str) -> str:
     exports sat in their day-and-project folder (Windows, 2026-09-10)."""
     if chosen:
         return os.path.expanduser(chosen)
-    return os.path.join(os.path.expanduser("~/Downloads"), day, project)
+    # expanduser only replaces the "~": a "/" written after it survives, so on
+    # Windows this came back as C:\Users\me/Downloads\2026-09-11\clip and the
+    # path the app reported was not the path Windows would have written (CI
+    # found it, 2026-09-11). Every separator comes from os.path.join now.
+    return os.path.join(os.path.expanduser("~"), "Downloads", day, project)
 
 
 def file_stem(title: str) -> str:
