@@ -16,6 +16,7 @@ from app.perso_client import (
     PersoUnavailableError,
     perso_failure,
     perso_to_cues,
+    short_reason,
     pick_speaker_spans,
 )
 
@@ -930,6 +931,8 @@ def test_the_screen_gets_our_sentence_and_persos_words_after_it():
         said = str(e)
     assert said.startswith("Perso could not finish this job.")
     assert "Perso said: FAILED (E_TTS_TIMEOUT)" in said
+    # Who to ask comes last, after the code they will be asked to quote.
+    assert said.endswith("Ask Perso if it keeps happening.")
     assert notices[0]["type"] == "perso_project_failed"
     assert notices[0]["message"] == said
 
@@ -941,4 +944,29 @@ def test_a_failure_perso_gave_no_words_for_says_only_our_sentence():
         pipeline.raise_notice(PersoProjectFailedError("Perso STT"), lambda _m: None, None)
     except RuntimeError as e:
         said = str(e)
-    assert said == "Perso could not finish this job. Try again, or check the project on Perso."
+    assert said == ("Perso could not finish this job. Try again, or check the project on Perso."
+                    " Ask Perso if it keeps happening.")
+
+
+def test_a_shown_reason_never_ends_in_an_address():
+    """httpx writes "Client error '400 Bad Request' for url
+    'https://api.perso.ai/file/api/upload/video'" and the whole of it was
+    going on screen, so the sentence finished with an address that looked
+    like somewhere the user was being sent -- it is this app's own call to
+    Perso (user, 2026-09-11). The address belongs in the log."""
+    said = short_reason(
+        "Client error '400 Bad Request' for url 'https://api.perso.ai/file/api/upload/video'")
+    assert said == "Client error '400 Bad Request'"
+    assert "://" not in said
+    assert short_reason("Server error 502 for url https://api.perso.ai/x") == "Server error 502"
+
+
+def test_a_reason_with_no_address_is_left_alone():
+    assert short_reason("timed out") == "timed out"
+    assert short_reason(TimeoutError("timed out")) == "timed out"
+
+
+def test_an_exception_with_nothing_to_say_is_named_rather_than_blank():
+    """"Perso separation failed ()" says less than nothing."""
+    assert short_reason(ValueError()) == "ValueError"
+    assert short_reason("") == "str"

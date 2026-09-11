@@ -376,3 +376,51 @@ def test_gemini_unavailable_fails_the_job_with_a_try_later_notice(monkeypatch, t
     assert len(notices) == 1
     assert notices[0]["type"] == "gemini_unavailable"
     assert "link" not in notices[0]
+
+
+class _GeminiBoom(FakeTranslator):
+    """A Gemini failure that is neither quota nor 503 -- a bad gateway, say."""
+    display_name = "Gemini"
+
+    def _ask(self, prompt):
+        raise RuntimeError("Server error '502 Bad Gateway'")
+
+
+class _LocalBoom(FakeTranslator):
+    display_name = "Gemma"
+
+    def _ask(self, prompt):
+        raise RuntimeError("model file is corrupt")
+
+
+def test_an_unexpected_gemini_failure_names_the_part_and_sends_them_to_google(
+        monkeypatch, tmp_path):
+    # The card used to show the library's own words with no hint of which
+    # stage had stopped or who could answer for it (user, 2026-09-11).
+    _stub_run_dub_until_translation(monkeypatch)
+    video = tmp_path / "in.mp4"; video.write_bytes(b"vid")
+    with pytest.raises(RuntimeError) as e:
+        pipeline.run_dub(
+            video_path=str(video), out_path=str(tmp_path / "out.mp4"),
+            srt_path=None, language="Korean", language_code="ko",
+            translator=_GeminiBoom(),
+        )
+    assert str(e.value).startswith("Translation failed (Gemini:")
+    assert "502 Bad Gateway" in str(e.value)
+    assert str(e.value).endswith("Ask Google if it keeps happening.")
+
+
+def test_a_local_translator_failing_points_at_settings_not_at_google(
+        monkeypatch, tmp_path):
+    # Nobody to ask about a model running on the user's own machine.
+    _stub_run_dub_until_translation(monkeypatch)
+    video = tmp_path / "in.mp4"; video.write_bytes(b"vid")
+    with pytest.raises(RuntimeError) as e:
+        pipeline.run_dub(
+            video_path=str(video), out_path=str(tmp_path / "out.mp4"),
+            srt_path=None, language="Korean", language_code="ko",
+            translator=_LocalBoom(),
+        )
+    assert str(e.value).startswith("Translation failed (Gemma:")
+    assert "Google" not in str(e.value)
+    assert "pick another translator in Settings" in str(e.value)

@@ -178,7 +178,8 @@ def test_local_separation_failure_aborts_job_with_no_fallback(monkeypatch, tmp_p
         )
         assert False, "expected RuntimeError to propagate"
     except RuntimeError as e:
-        assert "Local separation failed" in str(e)
+        assert "Voice separation failed on this computer" in str(e)
+        assert "Check the video file." in str(e)
 
 
 def test_n_takes_reaches_run_qwen_dub(monkeypatch, tmp_path):

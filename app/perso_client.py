@@ -238,6 +238,26 @@ _FAILED_WORDS = re.compile(r"fail|error|abort|reject|cancel", re.I)
 _CODE_FIELDS = ("errorCode", "failCode", "code", "errorType")
 
 
+# Anything with "://" in it and whatever follows, plus the "for url" that
+# httpx puts in front of it.
+_URL_IN_TEXT = re.compile(r"\s*(?:for url\s*)?'?\S+://\S+'?", re.I)
+
+
+def short_reason(e) -> str:
+    """One short clause from an exception, fit to show a person.
+
+    httpx writes "Client error '400 Bad Request' for url
+    'https://api.perso.ai/file/api/upload/video'", and that whole thing was
+    going on screen -- so the message ended in an address that looked like
+    somewhere the user was being sent, when it is this app's own call to
+    Perso (user, 2026-09-11). The address is dropped here and kept in the
+    log, where it is the diagnosis.
+    """
+    text = " ".join(str(e or "").split())
+    text = _URL_IN_TEXT.sub("", text).strip(" .,:;")
+    return text[:80] if text else type(e).__name__
+
+
 def perso_failure(res):
     # type: (dict) -> tuple
     """Has this project failed, and in Perso's own words?
