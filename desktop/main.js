@@ -779,6 +779,24 @@ app.whenReady().then(() => {
     }
   });
 
+  // An erase that failed. Same rules as a dub's: only a failure travels, a
+  // cancel is not one, and the job id is checked against the shape an id has
+  // before it goes anywhere near a URL. Erasing subtitles is the new thing in
+  // 0.5.5 and so the likeliest of the three to fail on a machine nobody here
+  // has seen -- and it was the only kind that sent nothing at all
+  // (user, 2026-09-11).
+  ipcMain.on("shell:count-erase", (_e, msg) => {
+    const status = msg && msg.status;
+    if (status !== "done" && status !== "error") return;
+    const detail = String((msg && msg.detail) || "");
+    const code = status === "error" ? classifyError(detail) : undefined;
+    countUsage(status === "done" ? "erase_success" : "erase_failure", bootedKitDir, code);
+    if (status === "error") {
+      const jobId = /^[0-9a-f]{6,32}$/.test(String((msg && msg.job) || "")) ? msg.job : undefined;
+      sendReport({ kind: "erase", kitDir: bootedKitDir, code, message: detail, jobId });
+    }
+  });
+
   // Packs: the heavy bundles (the engines venv with Demucs, the Ollama
   // runtime) the first install leaves out. The page asks for one when a dub
   // needs it; the install runs the pack's own steps from the table the boot

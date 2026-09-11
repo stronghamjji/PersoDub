@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // because it cannot classify it -- main.js turns that into one published
   // word and drops the text. Nothing here reaches the network.
   countDub: (status, detail, job) => ipcRenderer.send("shell:count-dub", { status, detail, job }),
+  // The same for an erase. It goes down its own road -- the erase screen polls
+  // its own job and never touches handleJobUpdate -- so it needed its own way
+  // to say how it ended. Subtitle erasing is the new thing in 0.5.5 and so the
+  // likeliest to fail on someone else's machine, and it was the one kind of
+  // failure that sent nothing at all (user, 2026-09-11).
+  countErase: (status, detail, job) => ipcRenderer.send("shell:count-erase", { status, detail, job }),
   // Automatic failure reports (src/report.js). The page neither builds nor
   // sends one -- it only gets to show what happened: the shell announces a
   // report the moment it lands, and getLastReport answers for a page that

@@ -9,7 +9,7 @@ import { STEP_IDS } from "./installSpec.js";
 // README's "Usage counts" -- the two must not drift.
 
 const DAILY_EVENTS = new Set(["app_launch"]);
-const FAILURE_EVENTS = new Set(["dub_failure", "install_failure"]);
+const FAILURE_EVENTS = new Set(["dub_failure", "install_failure", "erase_failure"]);
 
 // The published list. An error code that is not on it becomes "unknown" rather
 // than travelling verbatim -- that is what keeps a stray path or message, which

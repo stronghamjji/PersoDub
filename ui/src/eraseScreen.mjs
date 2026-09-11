@@ -192,7 +192,6 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     // Back is the way to the box that has to change -- which is only somewhere
     // to go while this screen still has the video that box was drawn on.
     $("eraseBackBtn").hidden = view !== "failed" || !area;
-    $("eraseSrtBtn").hidden = !done;
     $("eraseDubBtn").hidden = !done;
     $("eraseSaved").hidden = !done || !savedPath;
     $("eraseState").classList.toggle("bad", view === "failed");
@@ -682,6 +681,16 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       if (!["queued", "running", "cancelling"].includes(j.status)) {
         stopWatching();
         onJobsChanged();
+        // Tell the shell how it ended, the way a dub does. An erase never
+        // touches handleJobUpdate -- it is watched from here -- so nothing
+        // was saying, and a failed erase was the one kind of failure that
+        // sent no report at all (user, 2026-09-11). In a plain browser
+        // persodubShell is undefined and nothing is sent, which is the point:
+        // the counts and the reports describe app installs.
+        const how = j.status === "done" ? "done" : j.status === "cancelled" ? "cancelled" : "error";
+        if (how !== "cancelled") {
+          window.persodubShell?.countErase?.(how, j.error || "", jid);
+        }
       }
       paint();
     }, POLL_MS);
@@ -720,12 +729,11 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
   }
   $("eraseShowBtn").addEventListener("click", () => { if (reveal && savedPath) reveal(savedPath); });
 
-  // Both ways on are the same errand: the erased video goes back into the
-  // holding area under an id of its own, and the New project dialog opens on
-  // that id -- so the dub reads the cleaned file, not the one with the writing
-  // still on it. The only difference is whether the user brought subtitles.
-  async function handOn(sourceSrt) {
-    const btn = sourceSrt ? $("eraseSrtBtn") : $("eraseDubBtn");
+  // The way on: the erased video goes back into the holding area under an id
+  // of its own, and the New project dialog opens on that id -- so the dub
+  // reads the cleaned file, not the one with the writing still on it.
+  async function handOn() {
+    const btn = $("eraseDubBtn");
     const label = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Opening…";
@@ -733,7 +741,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     try {
       const held = await eraseToDub(job.id);
       onDub({ downloadId: held.download_id, title: held.title,
-              duration_sec: held.duration_sec, sourceSrt: sourceSrt || null });
+              duration_sec: held.duration_sec });
     } catch (e) {
       $("eraseError").textContent = e.message;
     } finally {
@@ -741,13 +749,7 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
       btn.textContent = label;
     }
   }
-  $("eraseDubBtn").addEventListener("click", () => { if (job && job.done) handOn(null); });
-  $("eraseSrtBtn").addEventListener("click", () => $("eraseSrtInput").click());
-  $("eraseSrtInput").addEventListener("change", () => {
-    const file = $("eraseSrtInput").files && $("eraseSrtInput").files[0];
-    $("eraseSrtInput").value = "";
-    if (file && job && job.done) handOn(file);
-  });
+  $("eraseDubBtn").addEventListener("click", () => { if (job && job.done) handOn(); });
 
   // ---- The drop zone --------------------------------------------------------
   const zone = $("eraseZone");

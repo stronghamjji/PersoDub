@@ -1998,8 +1998,6 @@
                stop it, or -- when it stopped by itself -- why, and the way back
                to the box to try a different one. -->
           <div class="erase-row" id="eraseRow" hidden>
-            <button class="btn btn-outline" id="eraseSrtBtn" type="button" hidden>Dub with my subtitles (.srt)</button>
-            <input type="file" id="eraseSrtInput" accept=".srt,text/plain" hidden>
             <span class="erase-state" id="eraseState"></span>
             <!-- Where Export answers. A line, not a dialog: the file is already
                  written by the time this appears, the same way Save clip says
@@ -2219,11 +2217,6 @@
       </div>
       <!-- Start's own error line: the first screen's #formError sits behind the
            dimmed overlay, where a failed start would never be read. -->
-      <!-- The subtitle file the user brought from the erase screen. Nothing on
-           this dialog said it had come along, so pressing "Dub with my
-           subtitles" looked exactly like pressing "Start dubbing" and there
-           was no way to tell the file had been taken (user, 2026-09-11). -->
-      <p class="settings-hint" id="projectSrt" hidden></p>
       <div class="form-error" id="projectError"></div>
       <!-- Three things can be done with the video that is now on this
            computer. Two of them end here (a clip saved, the subtitles erased);

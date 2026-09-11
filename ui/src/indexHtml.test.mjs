@@ -115,7 +115,7 @@ test("the erase screen has its three faces, and the rail button that opens it", 
                     "eraseBody", "erasePack", "erasePackText", "erasePackBtn",
                     "eraseTabs", "eraseStage", "eraseVideo", "eraseBox",
                     "eraseRow", "eraseState", "eraseSaved", "eraseShowWrap", "eraseShowBtn",
-                    "eraseBarBox", "eraseFill", "eraseSrtBtn", "eraseSrtInput",
+                    "eraseBarBox", "eraseFill",
                     "eraseCancelBtn", "eraseBackBtn", "eraseDubBtn",
                     "eraseEst", "eraseRunBtn"]) {
     assert.ok(html.includes(`id="${id}"`), `${id} is missing from the erase screen`);
@@ -133,7 +133,6 @@ test("the erase screen has its three faces, and the rail button that opens it", 
   // Every button on the screen is the app's one button box.
   assert.match(html, /class="btn btn-primary" id="eraseRunBtn"/, "Erase is the filled button");
   assert.match(html, /class="btn btn-primary" id="eraseDubBtn"/, "Start dubbing is filled");
-  assert.match(html, /class="btn btn-outline" id="eraseSrtBtn"/, "Dub with my subtitles is a ghost button");
   assert.match(html, /class="btn btn-outline" id="eraseCancelBtn"/, "Cancel is a ghost button");
 });
 
@@ -147,7 +146,7 @@ test("the erase screen says only what the mockup says", () => {
   for (const words of ["Erase subtitles", "Erasing subtitles from your video",
                        "Drop a video or paste a link.", "Drop your video here",
                        "MP4 or MOV, up to 2 GB.", "Choose File…", "Subtitles",
-                       "Dub with my subtitles (.srt)", "Start dubbing", "Download"]) {
+                       "Start dubbing", "Download"]) {
     assert.ok(html.includes(`>${words}<`) || html.includes(`>${words}`),
       `the screen no longer says "${words}"`);
   }

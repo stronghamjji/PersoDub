@@ -323,18 +323,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
                          // There is nothing to fetch and nothing to upload --
                          // the id, the name and the length are known already.
                          downloadId: source.downloadId || null,
-                         title: source.title || "",
-                         // Subtitles the user brought themselves, when they came
-                         // with the video: the dub then translates these instead
-                         // of listening to the audio for them.
-                         sourceSrt: source.sourceSrt || null };
-    // Say so when the user brought their own script. Without this the dialog
-    // is identical either way, and the only clue that the file was taken is
-    // the dub coming out translated rather than transcribed -- minutes later
-    // (user, 2026-09-11).
-    const srt = state.newProject.sourceSrt;
-    $("projectSrt").hidden = !srt;
-    if (srt) $("projectSrt").textContent = `Using your subtitles: ${srt.name}`;
+                         title: source.title || "" };
     stopWatching();
     releaseProjectVideo();
     const v = $("projectVideo");
@@ -506,7 +495,6 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       project: np.probe ? np.probe.title : (np.title || undefined),
       // Subtitles the user supplied for the source language: the dub translates
       // these instead of transcribing the audio.
-      sourceSrt: np.sourceSrt || null,
       // The part of the video the trim bar has selected, or null for all of it.
       trim: np.trim || null,
     };
