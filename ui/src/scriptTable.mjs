@@ -183,7 +183,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // the column it had inline rather than stepping in with this file.
     box.innerHTML = `
     <div class="sc-row head">
-      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div>${escapeHtml(sourceName)}</div>
+      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div class="sc-h-src">${escapeHtml(sourceName)}</div>
       <div class="sc-h-dst">${escapeHtml(targetName)}</div>
       <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>
     </div>

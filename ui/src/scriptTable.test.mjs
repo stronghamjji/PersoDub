@@ -149,7 +149,7 @@ test("a row carries the line number, who said it, both languages and whether it 
   const html = h.$("scriptBox").innerHTML;
 
   // The header names the two languages the page chose, not "Original/Script".
-  assert.match(html, /<div>Korean<\/div>/);
+  assert.match(html, /<div class="sc-h-src">Korean<\/div>/);
   assert.match(html, /<div class="sc-h-dst">English<\/div>/);
   // Speakers are numbered in the order they first speak -- one chip colour for
   // all of them; the diarizer's own "SPEAKER_00" never reaches the screen.
@@ -215,7 +215,7 @@ test("a row is byte for byte the row the page drew before this file existed", as
   // And the header above it, indentation included.
   assert.equal(html.slice(0, html.indexOf('<div class="sc-row" data-start')),
     '\n    <div class="sc-row head">\n' +
-    '      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div>Korean</div>\n' +
+    '      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div class="sc-h-src">Korean</div>\n' +
     '      <div class="sc-h-dst">English</div>\n' +
     '      <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>\n' +
     '    </div>\n    ');

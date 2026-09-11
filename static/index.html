@@ -1023,6 +1023,26 @@
       gap: 8px; }
   }
 
+  /* Narrower again, and this time something has to go. The rule above cannot
+     shrink below 568px, and the pane can: the finished screen puts the script
+     beside the video AND the Dub Agent, which on a 1300px window leaves it
+     about 450. Under that the row simply overflowed its pane and the text was
+     cut off mid-word -- on the translation, the one column anybody is there to
+     read, while the source beside it stayed whole (found taking a screenshot,
+     2026-09-11).
+     So the source folds away. It is the line as it was said, and what is being
+     checked here is the line as it will be spoken; the original is still on the
+     timeline's own lane and under the play button. Six tracks now, and the
+     cells fall into them in order, so only the heading needs re-placing. */
+  @container scriptpane (max-width: 568px) {
+    .sc-row { grid-template-columns: 28px 30px 66px 22px minmax(120px, 1fr) 100px;
+      gap: 6px; padding-left: 10px; padding-right: 10px; }
+    .sc-row.head { padding-left: 10px; padding-right: 10px; }
+    .sc-src, .sc-h-src { display: none; }
+    .sc-h-dst { grid-column: 4 / 6; }
+    .sc-tools { grid-template-columns: 40px 22px 22px; gap: 5px; }
+  }
+
   /* Who is speaking. One chip in the app's own blue, not a colour per speaker:
      four tinted chips down a column of text shouted louder than the words they
      labelled, and the letter in them is what tells the speakers apart -- a
