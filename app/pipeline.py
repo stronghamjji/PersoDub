@@ -515,6 +515,8 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log):
             video_path, language=source_language_code, log=log,
             on_language=lambda c: detected.__setitem__("code", c),
         )
+    except JobCancelled:
+        raise  # a user cancel is not a failure of this stage
     except Exception as e:
         # Was re-raised bare, which put a library's own words on the failure
         # card with no hint of which part had stopped (user, 2026-09-11).

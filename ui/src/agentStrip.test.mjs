@@ -514,6 +514,25 @@ test("a question asked on the failed screen actually goes out", async () => {
   } finally { h.log.restore(); }
 });
 
+// The strip's job id is the last dub opened; an erase is a different job with
+// no script. Handing the assistant the dub had it answering about a job the
+// user was not looking at (Windows, 2026-09-11).
+test("on the erase screen no job is claimed, and the message still goes", async () => {
+  const chat = stream([{ kind: "text", text: "That screen erases subtitles." }, { kind: "done" }]);
+  const h = harness({ agents: [CLAUDE], chat, screen: "erase", jobId: "abc123" });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "what is this screen for?";
+    await input.fire("input", {});
+    await h.$("assistantGo").fire("click", {});
+    await flush(60);
+    const post = h.log.calls.find((c) => c.url === "/api/agent/chat");
+    assert.ok(post, "the turn was sent");
+    assert.equal(JSON.parse(post.body).job_id, null);
+  } finally { h.log.restore(); }
+});
+
 test("a message carries the open job, and a rewritten line tells the page twice", async () => {
   const chat = stream([
     { kind: "start", model: "claude-opus-4-6" },

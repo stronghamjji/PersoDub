@@ -809,7 +809,14 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
           model: chosen.model,
           // Whatever job is on screen. Without it the assistant asks for a job
           // number the user never sees.
-          job_id: getJobId(),
+          //
+          // Except on the erase screen: the id parked for the strip is the
+          // last DUB opened, and an erase is a different job with no script
+          // at all. Sending it there had the assistant answering about a dub
+          // the user was not looking at -- and "fix line 3" would have gone
+          // to it (Windows saw the first half of that, 2026-09-11). No id is
+          // the honest answer: the home screen sends none either.
+          job_id: getScreen() === "erase" ? null : getJobId(),
         }),
       });
       if (!res.ok) {
