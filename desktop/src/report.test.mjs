@@ -373,3 +373,18 @@ test("a doubled-backslash Windows path is masked like a single one", () => {
 test("the Perso workspace name is masked in the message too", () => {
   assert.equal(maskText("   Perso workspace: mahop072 (#603412)"), "   Perso workspace: * (#603412)");
 });
+
+// The kit's paths stay readable on purpose, but workspace/<day>/<project> is
+// named after the video. The backend masked it; the shell did not, and the
+// error message the page hands over only ever passes the shell (2026-09-15).
+test("the project folder under the kit's workspace is masked, the rest of the path kept", () => {
+  const kit = "C:\\Users\\Jane\\AppData\\Local\\PersoDub";
+  const home = "C:\\Users\\Jane";
+  const out = maskText("FileNotFoundError: " + kit + "\\app\\workspace\\2026-09-11\\My Holiday Video_ko\\input.mp4", { home, kit });
+  assert.ok(!out.includes("Holiday"), out);
+  assert.ok(out.includes("workspace\\2026-09-11\\*\\input.mp4"), out);
+  const mac = maskText("open /Users/jane/Library/Application Support/PersoDub/app/workspace/2026-09-11/secret_erase/erased.mp4",
+                       { home: "/Users/jane", kit: "/Users/jane/Library/Application Support/PersoDub" });
+  assert.ok(!mac.includes("secret"), mac);
+  assert.ok(mac.includes("workspace/2026-09-11/*/erased.mp4"), mac);
+});

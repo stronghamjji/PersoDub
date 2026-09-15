@@ -62,11 +62,21 @@ const DOUBLED_SEP = /\\\\/g;
 // stage that spends its credits. The backend masks it in the log tails; the
 // message took another road and arrived with the name on it (#41).
 const WORKSPACE_RE = /(Perso workspace: )[^(\n]+(\(#\d+\))/g;
+// workspace/<day>/<project>: the project folder is named after the video,
+// and the kit's paths are otherwise kept readable. The app's shell masks it
+// from 0.6.1; this covers the 0.6.0 builds.
+const WS_HEAD = "(workspace[\\\\/]\\d{4}-\\d{2}-\\d{2}[\\\\/])";
+const WORKSPACE_PROJECT = [
+  new RegExp(WS_HEAD + "[^\\\\/\\n]+?(?=[\\\\/])", "g"),
+  new RegExp(WS_HEAD + "[^\\\\/\\s\"']+", "g"),
+];
 
 export function maskAgain(text) {
-  return String(text ?? "")
+  let out = String(text ?? "")
     .replace(DOUBLED_SEP, "\\")
-    .replace(WORKSPACE_RE, "$1* $2")
+    .replace(WORKSPACE_RE, "$1* $2");
+  for (const re of WORKSPACE_PROJECT) out = out.replace(re, "$1*");
+  return out
     .replace(URL_RE, (url) => {
       const m = /^(https?:\/\/)([^/?#]+)/i.exec(url);
       return m ? `${m[1]}${m[2]}/...` : "[URL]";
