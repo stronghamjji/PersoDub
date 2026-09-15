@@ -76,6 +76,24 @@ function str(value, max) {
   return typeof value === "string" ? maskAgain(value).slice(0, max) : "";
 }
 
+// The app's error text is the tail of a job log, and a job log opens with
+// the video's own name: a title, a link, a file name. A job that died in its
+// first stages has that line at the top of the tail, and twelve issues went
+// up with a user's video title in them (2026-09-15). 0.6.1 stops sending it;
+// this is for every 0.6.0 still out there. Only the first line, only on a
+// job's report: an install's message is one bare sentence and is the error.
+// A line the app writes is a stage marker ("1/6 ..."), an indented detail,
+// or one of a few bare words; a first line shaped like none of those is the
+// name.
+const KEPT_BARE = /^(?:\d{1,2}\/\d{1,2}\s|\s|\w*Error:|Done!|interrupted|Cancel|Perso |Warning:)/;
+export function scrubMessage(text, kind) {
+  const lines = String(text ?? "").split("\n");
+  if ((kind === "dub" || kind === "erase") && lines.length && lines[0] !== "" && !KEPT_BARE.test(lines[0])) {
+    lines.shift();
+  }
+  return lines.join("\n").trim();
+}
+
 function oneOf(value, list, fallback) {
   return list.includes(value) ? value : fallback;
 }
@@ -119,7 +137,7 @@ export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
     stage: SAFE_ID_RE.test(raw.stage || "") ? raw.stage : "",
     stageMarker: /^\d{1,2}\/\d{1,2}$/.test(raw.stageMarker || "") ? raw.stageMarker : "",
     code: oneOf(raw.code, ERROR_CODES, "unknown"),
-    message: str(raw.message, 500),
+    message: scrubMessage(str(raw.message, 500), oneOf(raw.kind, KINDS, "unknown")),
     env: {
       platformKey: oneOf(env.platformKey, PLATFORM_KEYS, "unknown"),
       os: str(env.os, 60),

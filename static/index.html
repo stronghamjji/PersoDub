@@ -4058,7 +4058,10 @@ async function handleJobUpdate(job, { opened = false } = {}) {
   // The id goes with it: a failure report is built in the shell, and without
   // the job it cannot ask the engine which stage died or read that job's own
   // log -- it would travel with the app log alone and no "3/6 translate".
-  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(-6).join("\n"), job.id);
+  // Never the first line: a job log opens with the video's own name -- a
+  // title, a link, a file name -- and on a job that died early that line was
+  // inside the last six and went into twelve public issues (2026-09-15).
+  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(1).slice(-6).join("\n"), job.id);
 
   await renderDone(job);
 }

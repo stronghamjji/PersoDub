@@ -22,6 +22,7 @@ import {
   verifyLog,
   withLogsLine,
   withTally,
+  scrubMessage,
 } from "./report-logic.js";
 import { buildReport, collectEnvironment, issueTitle as appIssueTitle, REPORT_KINDS } from "../desktop/src/report.js";
 import { ERROR_CODES as APP_ERROR_CODES } from "../desktop/src/analytics.js";
@@ -90,10 +91,10 @@ test("a made-up step or stage is dropped", () => {
 test("the relay masks again, for the sake of the builds it cannot fix", () => {
   const { report } = validateReport({
     ...GOOD,
-    message: "at /Users/jane/kit with sk-abcd1234efgh5678",
+    message: "Error: at /Users/jane/kit with sk-abcd1234efgh5678",
     logTails: { shell: "GET https://cdn.example.com/a/b?token=zzz", app: "", job: "" },
   });
-  assert.equal(report.message, "at ~/kit with [REDACTED]");
+  assert.equal(report.message, "Error: at ~/kit with [REDACTED]");
   assert.equal(report.logTails.shell, "GET https://cdn.example.com/...");
 });
 
@@ -325,4 +326,42 @@ test("the first sighting starts the tally at one", () => {
   const first = countSighting(null, report);
   assert.equal(first.count, 1);
   assert.deepEqual(first.versions, ["0.5.5"]);
+});
+
+// ---- what a message may still carry -------------------------------------
+
+// The tail of a job log opens with the video's own name when the job died
+// early, and that name reached twelve public issues (2026-09-15).
+test("a video's name is dropped from the message, the stages and the error stay", () => {
+  const raw = [
+    "Uzak Şehir 29. Bölüm (run again)",
+    "1/6 Separating background audio locally (Demucs)…",
+    "   Perso workspace: mahop072 (#603412)",
+    "Error: RuntimeError: Voice separation failed on this computer. Check the video file.",
+    "interrupted",
+  ].join("\n");
+  const out = scrubMessage(raw, "dub");
+  assert.ok(!out.includes("Uzak"), out);
+  assert.ok(out.startsWith("1/6 Separating"), out);
+  assert.ok(out.includes("   Perso workspace"), out);
+  assert.ok(out.includes("Error: RuntimeError"), out);
+  assert.ok(out.endsWith("interrupted"), out);
+});
+
+test("a message with only the name in it becomes empty rather than the name", () => {
+  assert.equal(scrubMessage("my holiday.mp4", "dub"), "");
+  assert.equal(scrubMessage("https://youtu.be/abc", "erase"), "");
+});
+
+test("an install's one-line message is the error and is kept whole", () => {
+  assert.equal(scrubMessage("spawn UNKNOWN", "install"), "spawn UNKNOWN");
+  assert.equal(scrubMessage("Health check timed out after 120000ms", "install"),
+               "Health check timed out after 120000ms");
+});
+
+test("validateReport scrubs the message before anything reads it", () => {
+  const r = validateReport({ ...GOOD, message: "Secret Title\n2/6 Transcribing…\n   Error: x" });
+  assert.ok(r.ok);
+  assert.ok(!r.report.message.includes("Secret Title"));
+  assert.ok(r.report.message.includes("2/6 Transcribing"));
 });
