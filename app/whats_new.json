@@ -1,5 +1,6 @@
 {
   "notes": [
-    "Failure reports carry less: the same masking rules apply on every end, and a report holds what diagnosing the failure needs and not much else."
+    "Failure reports carry less: the same masking rules apply on every end, and a report holds what diagnosing the failure needs and not much else.",
+    "Windows: the update's own warning now comes to the front, and Windows Defender no longer counts as something to close first."
   ]
 }
