@@ -359,3 +359,17 @@ test("everything else is still worth hearing about", () => {
   assert.equal(worthReporting("unknown"), true);
   assert.equal(worthReporting(undefined), true);
 });
+
+// Python writes a Windows path with every backslash doubled, and the masks
+// only knew the single kind: the account name went out on four reports
+// (2026-09-15).
+test("a doubled-backslash Windows path is masked like a single one", () => {
+  const home = "C:\\Users\\Jane";
+  const out = maskText("Command '['C:\\\\Users\\\\Jane\\\\Videos\\\\clip.mov']", { home });
+  assert.ok(!out.includes("Jane"), out);
+  assert.ok(out.includes("~\\\u2026\\*.mov"), out);
+});
+
+test("the Perso workspace name is masked in the message too", () => {
+  assert.equal(maskText("   Perso workspace: mahop072 (#603412)"), "   Perso workspace: * (#603412)");
+});

@@ -53,8 +53,20 @@ const HOME_RE = /(\/(?:Users|home)\/[^/\s"']+|[A-Za-z]:\\Users\\[^\\\s"']+)/gi;
  * issue it opens is public forever. The relay is the one place that can be
  * fixed for every version at once.
  */
+// A Windows path inside a Python error is written with every backslash
+// doubled (repr does that), and a doubled path matched none of the masks:
+// four issues went up with a user's account name in C:\\Users\\<name>\\...
+// (2026-09-15). Halved before anything looks at it.
+const DOUBLED_SEP = /\\\\/g;
+// The Perso workspace is the user's account, named in the job log by the
+// stage that spends its credits. The backend masks it in the log tails; the
+// message took another road and arrived with the name on it (#41).
+const WORKSPACE_RE = /(Perso workspace: )[^(\n]+(\(#\d+\))/g;
+
 export function maskAgain(text) {
   return String(text ?? "")
+    .replace(DOUBLED_SEP, "\\")
+    .replace(WORKSPACE_RE, "$1* $2")
     .replace(URL_RE, (url) => {
       const m = /^(https?:\/\/)([^/?#]+)/i.exec(url);
       return m ? `${m[1]}${m[2]}/...` : "[URL]";

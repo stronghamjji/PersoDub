@@ -365,3 +365,15 @@ test("validateReport scrubs the message before anything reads it", () => {
   assert.ok(!r.report.message.includes("Secret Title"));
   assert.ok(r.report.message.includes("2/6 Transcribing"));
 });
+
+// Four issues carried a Windows account name because Python doubles the
+// backslashes in a path and the masks only knew the single kind (2026-09-15).
+test("a doubled-backslash Windows path is still a home path", () => {
+  const out = maskAgain("Command '['C:\\\\Users\\\\yonav\\\\AppData\\\\Local\\\\PersoDub\\\\x.exe']");
+  assert.ok(!out.includes("yonav"), out);
+  assert.ok(out.includes("~\\AppData"), out);
+});
+
+test("the Perso workspace name is masked, its number kept", () => {
+  assert.equal(maskAgain("   Perso workspace: mahop072 (#603412)"), "   Perso workspace: * (#603412)");
+});

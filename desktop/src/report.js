@@ -140,8 +140,18 @@ function collapseUnderHome(rest) {
  * The paths are settled before the keys on purpose: done the other way round,
  * rule 5 ate the path segments rules 2 and 3 exist to keep readable.
  */
+// A Windows path inside a Python error comes with every backslash doubled
+// (repr does that), and a doubled path matched none of the forms below: the
+// user's account name went out in C:\\Users\\<name>\\... on four reports
+// (2026-09-15). Halved first, so the rest of this sees one path shape.
+const DOUBLED_SEP = /\\\\/g;
+// The Perso workspace is the user's account. The backend masks it in the
+// log tails; the error message the page hands over is the raw log, so it is
+// masked here as well.
+const WORKSPACE_RE = /(Perso workspace: )[^(\n]+(\(#\d+\))/g;
+
 export function maskText(text, { home = "", kit = "" } = {}) {
-  let out = String(text ?? "");
+  let out = String(text ?? "").replace(DOUBLED_SEP, "\\").replace(WORKSPACE_RE, "$1* $2");
   out = out.replace(URL_PATTERN, (url) => {
     try {
       const u = new URL(url);
