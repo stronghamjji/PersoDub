@@ -374,8 +374,8 @@ test("a doubled-backslash Windows path is still a home path", () => {
   assert.ok(out.includes("~\\AppData"), out);
 });
 
-test("the Perso workspace name is masked, its number kept", () => {
-  assert.equal(maskAgain("   Perso workspace: mahop072 (#603412)"), "   Perso workspace: * (#603412)");
+test("the Perso workspace name and number are both masked", () => {
+  assert.equal(maskAgain("   Perso workspace: mahop072 (#603412)"), "   Perso workspace: *");
 });
 
 test("the workspace project folder, named after the video, is masked on the way past", () => {

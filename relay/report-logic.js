@@ -61,7 +61,9 @@ const DOUBLED_SEP = /\\\\/g;
 // The Perso workspace is the user's account, named in the job log by the
 // stage that spends its credits. The backend masks it in the log tails; the
 // message took another road and arrived with the name on it (#41).
-const WORKSPACE_RE = /(Perso workspace: )[^(\n]+(\(#\d+\))/g;
+// Name and number both (user decision, 2026-09-15): the number names one
+// account as surely as the name does.
+const WORKSPACE_RE = /(Perso workspace: )[^\n]*?\(#\d+\)/g;
 // workspace/<day>/<project>: the project folder is named after the video,
 // and the kit's paths are otherwise kept readable. The app's shell masks it
 // from 0.6.1; this covers the 0.6.0 builds.
@@ -74,7 +76,7 @@ const WORKSPACE_PROJECT = [
 export function maskAgain(text) {
   let out = String(text ?? "")
     .replace(DOUBLED_SEP, "\\")
-    .replace(WORKSPACE_RE, "$1* $2");
+    .replace(WORKSPACE_RE, "$1*");
   for (const re of WORKSPACE_PROJECT) out = out.replace(re, "$1*");
   return out
     .replace(URL_RE, (url) => {

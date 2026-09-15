@@ -148,7 +148,10 @@ const DOUBLED_SEP = /\\\\/g;
 // The Perso workspace is the user's account. The backend masks it in the
 // log tails; the error message the page hands over is the raw log, so it is
 // masked here as well.
-const WORKSPACE_RE = /(Perso workspace: )[^(\n]+(\(#\d+\))/g;
+// Name and number both: the number names one account as surely as the name
+// does, and in a public issue it ties that account's reports together
+// (user decision, 2026-09-15).
+const WORKSPACE_RE = /(Perso workspace: )[^\n]*?\(#\d+\)/g;
 // The kit's own paths are kept readable below, and one folder under them is
 // not the app's but the user's: workspace/<day>/<project>, and a project is
 // named after the video it was made from. The backend's masker knows this
@@ -162,7 +165,7 @@ const WORKSPACE_PROJECT = [
 ];
 
 export function maskText(text, { home = "", kit = "" } = {}) {
-  let out = String(text ?? "").replace(DOUBLED_SEP, "\\").replace(WORKSPACE_RE, "$1* $2");
+  let out = String(text ?? "").replace(DOUBLED_SEP, "\\").replace(WORKSPACE_RE, "$1*");
   for (const re of WORKSPACE_PROJECT) out = out.replace(re, "$1*");
   out = out.replace(URL_PATTERN, (url) => {
     try {

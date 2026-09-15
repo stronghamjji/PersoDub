@@ -195,7 +195,7 @@ def test_the_cloud_account_behind_a_job_is_not_a_fact_about_the_failure():
     # what support asks for and says nothing on its own (found in a real
     # report, 2026-09-09).
     assert mask_text("   Perso workspace: CommunitySpotLight (#114)") == \
-        "   Perso workspace: * (#114)"
+        "   Perso workspace: *"
     assert mask_text("   Perso credits used: 6 (186815 left)") == \
         "   Perso credits used: 6 (*)"
 

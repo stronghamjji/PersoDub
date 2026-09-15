@@ -371,7 +371,7 @@ test("a doubled-backslash Windows path is masked like a single one", () => {
 });
 
 test("the Perso workspace name is masked in the message too", () => {
-  assert.equal(maskText("   Perso workspace: mahop072 (#603412)"), "   Perso workspace: * (#603412)");
+  assert.equal(maskText("   Perso workspace: mahop072 (#603412)"), "   Perso workspace: *");
 });
 
 // The kit's paths stay readable on purpose, but workspace/<day>/<project> is
