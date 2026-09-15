@@ -65,7 +65,7 @@ A report carries the machine (operating system and version, CPU, memory, free di
 which torch build, which packs are installed), where it stopped, one error code off a
 fixed list, the error sentence, your app version, a random install ID, and the logs:
 the last 200 lines of each in the issue itself, and the three logs in full as an
-attached archive, kept for 30 days behind a signed link.
+attached archive, kept for 40 days behind a signed link.
 
 Before anything leaves your machine, every line of it is put through three rules: a
 path under your home folder is cut down to `~/…/*.mp4` — the name of the folder and the
