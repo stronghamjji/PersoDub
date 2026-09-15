@@ -140,8 +140,33 @@ function collapseUnderHome(rest) {
  * The paths are settled before the keys on purpose: done the other way round,
  * rule 5 ate the path segments rules 2 and 3 exist to keep readable.
  */
+// A Windows path inside a Python error comes with every backslash doubled
+// (repr does that), and a doubled path matched none of the forms below: the
+// user's account name went out in C:\\Users\\<name>\\... on four reports
+// (2026-09-15). Halved first, so the rest of this sees one path shape.
+const DOUBLED_SEP = /\\\\/g;
+// The Perso workspace is the user's account. The backend masks it in the
+// log tails; the error message the page hands over is the raw log, so it is
+// masked here as well.
+// Name and number both: the number names one account as surely as the name
+// does, and in a public issue it ties that account's reports together
+// (user decision, 2026-09-15).
+const WORKSPACE_RE = /(Perso workspace: )[^\n]*?\(#\d+\)/g;
+// The kit's own paths are kept readable below, and one folder under them is
+// not the app's but the user's: workspace/<day>/<project>, and a project is
+// named after the video it was made from. The backend's masker knows this
+// (app/report_mask.py); this one did not, and the error message the page
+// hands over never passes the backend. Two passes, the same as there: a name
+// with spaces runs to the next separator, a bare one to the next space.
+const WS_HEAD = "(workspace[\\\\/]\\d{4}-\\d{2}-\\d{2}[\\\\/])";
+const WORKSPACE_PROJECT = [
+  new RegExp(WS_HEAD + "[^\\\\/\\n]+?(?=[\\\\/])", "g"),
+  new RegExp(WS_HEAD + "[^\\\\/\\s\"']+", "g"),
+];
+
 export function maskText(text, { home = "", kit = "" } = {}) {
-  let out = String(text ?? "");
+  let out = String(text ?? "").replace(DOUBLED_SEP, "\\").replace(WORKSPACE_RE, "$1*");
+  for (const re of WORKSPACE_PROJECT) out = out.replace(re, "$1*");
   out = out.replace(URL_PATTERN, (url) => {
     try {
       const u = new URL(url);

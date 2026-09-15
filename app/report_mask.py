@@ -58,9 +58,11 @@ _EXTENSION = re.compile(r"^[A-Za-z0-9]{1,8}$")
 # The account behind the cloud, which the job log names twice: the workspace it
 # dubbed in, and what that workspace has left to spend. Neither is a fact about
 # the failure, and both belong to whoever is running the app -- the workspace
-# NAME is a company, the balance is its books. The workspace number stays: it
-# is what support asks for, and it says nothing on its own.
-_PERSO_WORKSPACE = re.compile(r"(Perso workspace:\s*).+?(\s*\(#\d+\))")
+# NAME is a company, the balance is its books. The number used to stay, for
+# support to match against; but a number that names one account, in a public
+# issue, ties every report from that account together, and that is
+# identification by another road (user decision, 2026-09-15). Both go.
+_PERSO_WORKSPACE = re.compile(r"(Perso workspace:\s*).+?(\(#\d+\))")
 _PERSO_CREDITS = re.compile(r"(Perso credits used:\s*\d+\s*\()[^)]*(\))")
 
 REDACTED = "[REDACTED]"
@@ -129,7 +131,7 @@ def mask_text(text: str, home: str = "", kit: str = "") -> str:
             out = re.sub(re.escape(form), lambda _m, r=mask: r, out, flags=re.IGNORECASE)
     for pattern in _WORKSPACE_PROJECT:
         out = pattern.sub(lambda m: m.group(1) + "*", out)
-    out = _PERSO_WORKSPACE.sub(lambda m: m.group(1) + "*" + m.group(2), out)
+    out = _PERSO_WORKSPACE.sub(lambda m: m.group(1) + "*", out)
     out = _PERSO_CREDITS.sub(lambda m: m.group(1) + "*" + m.group(2), out)
     if home:
         for form in dict.fromkeys(_separator_forms(home)):
