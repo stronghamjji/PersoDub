@@ -17,6 +17,8 @@ import subprocess
 import tempfile
 from typing import Callable, List, Optional
 
+from app.run_errors import describe_exit_failure, describe_start_failure
+
 # Dedicated venv with faster-whisper installed (see app/docs/INTEGRATION_SPEC.md
 # for how it was set up). Override with STT_PYTHON for a different interpreter
 # (see env.server.example for this server's actual path).
@@ -64,13 +66,10 @@ def transcribe_local(
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         except Exception as e:
-            raise RuntimeError("local STT failed to run (%s)" % str(e)[:200]) from e
+            raise RuntimeError(describe_start_failure("local STT", e, timeout)) from e
 
         if r.returncode != 0 or not os.path.exists(out_path):
-            raise RuntimeError(
-                "local STT exited with an error (%s)"
-                % (r.stderr.strip()[-300:] or "no output produced")
-            )
+            raise RuntimeError(describe_exit_failure("local STT", r))
 
         try:
             with open(out_path, encoding="utf-8") as f:

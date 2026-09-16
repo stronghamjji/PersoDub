@@ -374,6 +374,24 @@ test("a dropped download is recognised", () => {
   assert.equal(classifyError("connect ETIMEDOUT 1.2.3.4:443"), "network");
 });
 
+// The twenty reports of 2026-09-11..15 that arrived as "unknown". Both
+// sentences are real: the first is app/run_errors.py's, the second is what
+// torch says when the machine has no room left to allocate in.
+test("a stage that ran out of time is its own word, not a crash", () => {
+  assert.equal(classifyError("local separation timed out after 900 seconds"), "timeout");
+  assert.equal(classifyError("local STT timed out after 900 seconds"), "timeout");
+  // A connection that timed out is still the network's business, because that
+  // rule is tried first.
+  assert.equal(classifyError("connect ETIMEDOUT 1.2.3.4:443"), "network");
+});
+
+test("torch's own wording for a machine with no memory left is recognised", () => {
+  assert.equal(
+    classifyError("DefaultCPUAllocator: not enough memory: you tried to allocate 2147483648 bytes"),
+    "out-of-memory",
+  );
+});
+
 // The cloud saying no is not the machine failing. These sentences are the
 // app's own (app/pipeline.py's _NOTICE_ERRORS), and the first is what a real
 // failed dub carried on 2026-09-09 -- counted as "unknown" until now, so an
@@ -471,4 +489,41 @@ test("the failing step travels all the way to the wire", async () => {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].step, "ollama-runtime");
   assert.equal(sent[0].error_code, "disk-full");
+});
+
+// ---- the four families that used to arrive as "unknown" ----------------
+// Every sentence below is real text from an issue filed between 2026-09-11
+// and 2026-09-15, when thirty of thirty-two reports were classified
+// "unknown" and the dashboard could say nothing about any of them.
+
+test("model files that never arrived are named", () => {
+  assert.equal(classifyError(
+    "RuntimeError: hf download exited 1: huggingface_hub.errors.LocalEntryNotFoundError: An error " +
+    "happened while trying to locate the files on the Hub"), "model-download");
+});
+
+test("the voice engine's own 500 is ours; a cloud 500 is not", () => {
+  assert.equal(classifyError(
+    "HTTPStatusError: Server error '500 Internal Server Error' for url 'http://127.0.0.1:8731/clone'"),
+    "engine-500");
+  // Same status from somewhere that is not this machine stays unclassified
+  // rather than being blamed on the local engine.
+  assert.equal(classifyError("Server error '500 Internal Server Error' for url 'https://api.perso.ai/x'"),
+    "unknown");
+});
+
+test("Perso refusing the request is not Perso being out of credit", () => {
+  assert.equal(classifyError("RuntimeError: Perso STT failed (Client error '400 Bad Request')"),
+    "perso-bad-request");
+  assert.equal(classifyError("Perso credits are used up. Recharge to continue."), "perso-credits");
+});
+
+test("a translation that came back as something other than JSON is named", () => {
+  assert.equal(classifyError(
+    "Translation failed (Ollama (local LLM) - hy-mt2:1.8b): Could not find a JSON array in the response"),
+    "translate-parse");
+  assert.equal(classifyError("Translated line count mismatch: got 0, need 1"), "translate-parse");
+  // But a translation that failed because the cloud said no is news about the
+  // cloud: those rules are tried first.
+  assert.equal(classifyError("Translation failed: Gemini's quota is used up"), "gemini-quota");
 });

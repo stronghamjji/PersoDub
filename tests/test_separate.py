@@ -69,12 +69,35 @@ def test_separate_raises_on_subprocess_exception(monkeypatch, tmp_path):
     import sys
 
     def boom(*a, **k):
-        raise TimeoutError("timed out")
+        raise OSError("no such file")
 
     monkeypatch.setattr(sep.subprocess, "run", boom)
     engine = sep.SeparationEngine(python_path=sys.executable)
-    with pytest.raises(RuntimeError, match="failed to run"):
+    with pytest.raises(RuntimeError, match="failed to start"):
         engine.separate("/fake/video.mp4", str(tmp_path))
+
+
+# The failure of 2026-09-11..15: eleven separations gave up at the 900-second
+# limit and every report said only "failed to run (Command '['C:\\Users\\...".
+# TimeoutExpired writes the whole command line before the reason, so the
+# reason has to be said first or it does not survive the trip.
+def test_separate_says_it_timed_out_before_anything_else(monkeypatch, tmp_path):
+    import sys
+
+    long_command = [r"C:\Users\someone\AppData\Local\PersoDub\engines_venv\Scripts\python.exe",
+                    r"C:\Users\someone\AppData\Local\PersoDub\app\scripts\demucs_separate.py"]
+
+    def boom(*a, **k):
+        raise sep.subprocess.TimeoutExpired(cmd=long_command, timeout=900)
+
+    monkeypatch.setattr(sep.subprocess, "run", boom)
+    engine = sep.SeparationEngine(python_path=sys.executable, timeout=900)
+    with pytest.raises(RuntimeError) as caught:
+        engine.separate("/fake/video.mp4", str(tmp_path))
+    said = str(caught.value)
+    assert "timed out after 900 seconds" in said
+    assert said.index("timed out") < 40, said
+    assert "python.exe" not in said, said
 
 
 def test_separate_raises_when_script_reports_failure(monkeypatch, tmp_path):
