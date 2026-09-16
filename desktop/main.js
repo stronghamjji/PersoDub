@@ -17,7 +17,7 @@ import { extractTarGz } from "./src/extract.js";
 import { run } from "./src/exec.js";
 import { resolveUpdateMode, resolveFeed, nextUpdateState } from "./src/updater.js";
 import { findForeignLockers } from "./src/lockCheck.js";
-import { resolveAnalyticsMode, countEvent, classifyError, loadState, saveState } from "./src/analytics.js";
+import { resolveAnalyticsMode, countEvent, classifyError, dubFacts, loadState, saveState } from "./src/analytics.js";
 import { buildReport, collectEnvironment, maskText, resolveReportMode, worthReporting } from "./src/report.js";
 import { buildLogArchive } from "./src/reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./src/reportQueue.js";
@@ -89,7 +89,11 @@ function analyticsMode(kitDir) {
   return resolveAnalyticsMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
 }
 
-function countUsage(event, kitDir, errorCode, step) {
+// Whether a Perso key is set -- decided here so the key itself never comes
+// near the count; what travels is yes or no.
+const hasPersoKey = (kitDir) => (envWithKit(kitDir).PERSO_API_KEY || "").trim() !== "";
+
+function countUsage(event, kitDir, errorCode, step, facts = {}) {
   try {
     const mode = analyticsMode(kitDir);
     if (mode === "off") return;
@@ -101,6 +105,9 @@ function countUsage(event, kitDir, errorCode, step) {
       version: app.getVersion(),
       errorCode,
       step,
+      // A dub's Perso facts (dubFacts) or a launch's key flag; analytics.js
+      // decides which of them may leave and in what words.
+      ...facts,
     });
   } catch { /* a count is never worth interrupting a launch for */ }
 }
@@ -146,6 +153,24 @@ async function fetchBundle(jobId) {
   try {
     const q = jobId ? `?job=${encodeURIComponent(jobId)}` : "";
     const res = await fetch(`${engines.url}/api/report/bundle${q}`, { signal: abort.signal });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// A finished job's own record: which engines it ran, what it spent on Perso
+// and how long the video was, for the usage count -- which must not take the
+// page's word for any of it. A backend that will not answer costs the facts,
+// never the count.
+async function fetchJob(jobId) {
+  if (!jobId || !engines || !engines.url) return null;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 3000);
+  try {
+    const res = await fetch(`${engines.url}/api/dub/jobs/${jobId}`, { signal: abort.signal });
     return res.ok ? await res.json() : null;
   } catch {
     return null;
@@ -625,7 +650,7 @@ async function boot(win) {
     await win.loadURL(engines.url);
     shellLog(`PERSODUB_READY ${engines.url}`);
     bootedKitDir = cfg.kitDir;
-    countUsage("app_launch", cfg.kitDir);
+    countUsage("app_launch", cfg.kitDir, undefined, undefined, { persoKey: hasPersoKey(cfg.kitDir) });
     // Reports from earlier launches that had no network. Deliberately not
     // awaited, and after the page is up: the queue is never the reason a
     // launch is slow.
@@ -773,17 +798,20 @@ app.whenReady().then(() => {
   // reason -- it is a web page served over http -- so the status is checked
   // against the two that count and the detail is reduced to one published
   // word here. A cancel is not a failure and is deliberately not counted.
-  ipcMain.on("shell:count-dub", (_e, msg) => {
+  ipcMain.on("shell:count-dub", async (_e, msg) => {
     const status = msg && msg.status;
     if (status !== "done" && status !== "error") return;
     const detail = String((msg && msg.detail) || "");
     const code = status === "error" ? classifyError(detail) : undefined;
-    countUsage(status === "done" ? "dub_success" : "dub_failure", bootedKitDir, code);
-    // Only a failure is worth a report, and only the shell may name the job:
-    // the page is a web page, so its id is checked against the shape a job id
-    // has before it is put in a URL.
+    // Only the shell may name the job: the page is a web page, so its id is
+    // checked against the shape a job id has before it is put in a URL.
+    const jobId = /^[0-9a-f]{6,32}$/.test(String((msg && msg.job) || "")) ? msg.job : undefined;
+    // Which parts went through Perso, what it cost and how long the video
+    // was -- off the job's own record, not the page's message.
+    const facts = dubFacts(await fetchJob(jobId));
+    countUsage(status === "done" ? "dub_success" : "dub_failure", bootedKitDir, code, undefined, facts);
+    // Only a failure is worth a report.
     if (status === "error") {
-      const jobId = /^[0-9a-f]{6,32}$/.test(String((msg && msg.job) || "")) ? msg.job : undefined;
       sendReport({ kind: "dub", kitDir: bootedKitDir, code, message: detail, jobId });
     }
   });

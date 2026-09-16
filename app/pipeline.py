@@ -24,6 +24,7 @@ from app.perso_client import (
     PersoInvalidKeyError,
     PersoProjectFailedError,
     PersoUnavailableError,
+    note_credits,
     perso_to_cues,
     short_reason,
 )
@@ -409,15 +410,9 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
                f"or switch separation back to Local. {ASK_PERSO}")
         log(f"   Error: {msg}")
         raise RuntimeError(msg) from e
-    # What THIS job consumed, not just the balance -- log-only, a surprise in
-    # the credits payload must never discard the paid result (STT stage rule).
-    try:
-        if ws and ws.get("credits") is not None:
-            after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
-            if after is not None:
-                log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
-    except Exception as e:
-        logger.debug("No credits line after Perso separation (%s)", type(e).__name__)
+    # What THIS job consumed, not just the balance -- a surprise in the
+    # credits payload must never discard the paid result (STT stage rule).
+    note_credits(ws, pc, log, "Perso separation")
     return sep_paths, pc
 
 
@@ -451,7 +446,8 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
 
 
 def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, log):
-    """Stage 2/6 -- Perso cloud STT (diarization & timestamps). Returns cues.
+    """Stage 2/6 -- Perso cloud STT (diarization & timestamps). Returns
+    (cues, client) -- the client so the job can report what the stage spent.
 
     A failure FAILS the job -- the user picked Perso, and silently substituting
     the local engine meant paid-quality was quietly downgraded with only a log
@@ -477,17 +473,13 @@ def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, l
         if not perso_cues:
             raise RuntimeError("Perso result is empty")
         # What THIS job consumed (balance before minus after), not just the
-        # remaining balance (user feedback 2026-08-06). Log-only: by this
-        # point transcription has succeeded AND been billed, so a surprise
-        # in the credits payload must never discard the paid result.
-        try:
-            if ws and ws.get("credits") is not None:
-                after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
-                if after is not None:
-                    log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
-        except Exception as e:
-            logger.debug("No credits line after Perso STT (%s)", type(e).__name__)
-        return perso_cues
+        # remaining balance (user feedback 2026-08-06). By this point
+        # transcription has succeeded AND been billed, so a surprise in
+        # the credits payload must never discard the paid result.
+        note_credits(ws, pc, log, "Perso STT")
+        # The client goes back with the cues, as _stage_separate's does: it
+        # carries what this stage spent, which the finished job reports.
+        return perso_cues, pc
     except JobCancelled:
         raise  # a user cancel is not a Perso failure -- don't rewrap it
     except _PERSO_NOTICE_ERRORS as e:
@@ -757,7 +749,7 @@ def run_dub(
     detected_code = None
     perso_cues = None
     if stt_engine == "perso":
-        perso_cues = _stage_transcribe_perso(
+        perso_cues, perso_client = _stage_transcribe_perso(
             video_path, perso_client, cancel_check, on_notice, log)
     if perso_cues is None:
         src_cues, detected_code, diar_engine = _stage_transcribe_local(
@@ -799,6 +791,11 @@ def run_dub(
         "num_segments": len(segments),
         "auto_translated": auto_translated,
         "detected_source_language": detected_code,
+        # For the usage count: what the job spent on Perso (None when no stage
+        # went there) and how long the video was. The probe just succeeded in
+        # _stage_finish, so asking again is safe.
+        "perso_credits": getattr(perso_client, "credits_used", None),
+        "duration": _video_duration(video_path),
     }
 
 

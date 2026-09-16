@@ -48,8 +48,12 @@ assistant means nothing runs and nothing is sent.
 PersoDub reports six events — app launch, dub finished, dub failed, subtitles erased,
 erasing failed, install failed — to see how many installs finish a dub. Each carries the app version, your operating
 system, a random install ID, and on a failure one short code off a fixed list. A failed
-install also names which of its ten steps it stopped at, again off a fixed list. Never
-your video, audio, subtitles, filenames, paths or error text; no IP address is stored.
+install also names which of its ten steps it stopped at, again off a fixed list. From
+0.6.2 a dub also says which of its parts went through Perso — transcription, separation,
+or the whole dub — each as one of two words, how many Perso credits that one job used,
+and the video's length in whole minutes; and a launch says whether a Perso key is set,
+as yes or no. Never your video, audio, subtitles, filenames, paths, error text, key,
+workspace or balance; no IP address is stored.
 
 A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
 with `PERSODUB_NO_ANALYTICS=1` in the kit's `kit.env`; it applies to the next event, no

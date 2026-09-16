@@ -19,7 +19,6 @@ seams the tests fake (run_dub, the cloud path, the download, the trim) come in
 as arguments so app/api/dub.py can keep passing its own module attributes,
 which is where they have always been patched.
 """
-import logging
 import os
 from typing import Optional
 
@@ -34,8 +33,6 @@ from app.perso_client import (
 from app.pipeline import raise_notice
 from app.pipeline import run_dub as _run_dub
 from app.source_fetch import fetch as _fetch_source
-
-logger = logging.getLogger("persodub.dub_launch")
 
 
 def language_name(code: str, dub_mode: str = "local") -> str:
@@ -108,14 +105,15 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
         # (app/pipeline.py's _NOTICE_ERRORS). They used to be hand-copied here,
         # so the wording could drift on one path and not the other.
         raise_notice(e, log, lambda n: state.job_store.append_notice(jid, n))
+    perso_client.note_credits(ws, pc, log, "the Perso cloud dub")
+    # The length is for the usage count, and a probe that fails must not fail
+    # a dub Perso has already delivered.
     try:
-        if ws and ws.get("credits") is not None:
-            after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
-            if after is not None:
-                log(f"   Perso credits used: {int(ws['credits']) - int(after)} ({after} left)")
-    except Exception as e:
-        logger.debug("No credits line after the Perso cloud dub (%s)", type(e).__name__)
-    return {"job_id": jid, "out_path": out_path, "num_segments": 0, "dub_mode": "perso"}
+        duration = media.video_duration(video_path)
+    except Exception:
+        duration = None
+    return {"job_id": jid, "out_path": out_path, "num_segments": 0, "dub_mode": "perso",
+            "perso_credits": getattr(pc, "credits_used", None), "duration": duration}
 
 
 def work_for(job, *, cancel_check, on_notice, voices_only=False,

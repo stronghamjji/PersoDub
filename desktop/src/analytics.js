@@ -62,8 +62,19 @@ export function shouldReport({ event, lastDay, today }) {
   return lastDay !== today;
 }
 
+const DUB_EVENTS = new Set(["dub_success", "dub_failure"]);
+
+// Which side a stage ran on, off the job's own engine field. "perso" is the
+// one word that means Perso; any other engine the job could name is this
+// machine, and the engine's name itself never travels.
+const persoOrLocal = (v) => (v === "perso" ? "perso" : "local");
+// A count that is a count: a whole, non-negative number. Anything else is left
+// out of the message, and the table stores NULL for it.
+const isCount = (n) => Number.isInteger(n) && n >= 0;
+
 /** The whole message. A field not named here cannot leave. */
-export function buildPayload({ event, os, version, device, errorCode, step }) {
+export function buildPayload({ event, os, version, device, errorCode, step,
+                               engines, credits, minutes, persoKey }) {
   const payload = { event, os, version, device };
   if (FAILURE_EVENTS.has(event)) {
     payload.error_code = ERROR_CODES.has(errorCode) ? errorCode : "unknown";
@@ -74,7 +85,40 @@ export function buildPayload({ event, os, version, device, errorCode, step }) {
   if (event === "install_failure" && step !== undefined) {
     payload.step = INSTALL_STEPS.has(step) ? step : "unknown";
   }
+  // Which parts of a dub went through Perso, what that one job cost, and how
+  // long the video was (0.6.2) -- read off the job's record (dubFacts), so a
+  // dub the shell could not look up says nothing rather than "local". Two
+  // words for the stages and two whole numbers: no engine name, no balance,
+  // no title.
+  if (DUB_EVENTS.has(event)) {
+    if (engines) {
+      payload.stt = persoOrLocal(engines.stt_engine);
+      payload.separation = persoOrLocal(engines.separation);
+      payload.mode = persoOrLocal(engines.dub_mode);
+    }
+    if (isCount(credits)) payload.credits = credits;
+    if (isCount(minutes)) payload.minutes = minutes;
+  }
+  // Whether a Perso key is set when the app starts -- yes or no, never the key.
+  if (event === "app_launch" && typeof persoKey === "boolean") {
+    payload.perso_key = persoKey ? "yes" : "no";
+  }
   return payload;
+}
+
+/**
+ * What a job's own record tells the count: its engine fields, the Perso
+ * credits it spent and its length in whole minutes. A record the shell could
+ * not fetch gives nothing, and buildPayload then sends nothing for it.
+ */
+export function dubFacts(job) {
+  if (!job || typeof job !== "object") return {};
+  const { stt_engine, separation, dub_mode } = job;
+  return {
+    engines: { stt_engine, separation, dub_mode },
+    credits: job.perso_credits,
+    minutes: Number.isFinite(job.duration) ? Math.round(job.duration / 60) : undefined,
+  };
 }
 
 /**
@@ -148,6 +192,7 @@ export function saveState(file, { device, lastDay = null }) {
  */
 export async function countEvent(event, {
   mode, stateFile, url, os, version, errorCode, step,
+  engines, credits, minutes, persoKey,
   today = new Date().toISOString().slice(0, 10),
   timeoutMs, fetchImpl, log = console.log,
 }) {
@@ -158,7 +203,8 @@ export async function countEvent(event, {
   const state = loadState(stateFile);
   if (!shouldReport({ event, lastDay: state.lastDay, today })) return false;
 
-  const payload = buildPayload({ event, os, version, device: state.device, errorCode, step });
+  const payload = buildPayload({ event, os, version, device: state.device, errorCode, step,
+                                 engines, credits, minutes, persoKey });
 
   if (mode === "debug") {
     log(`[persodub-analytics] would send: ${JSON.stringify(payload)}`);
