@@ -18,9 +18,8 @@ import shutil
 import subprocess
 from typing import Dict, Optional
 
-from app.run_errors import describe_exit_failure, describe_start_failure
-
 from app.config import SEP_MODEL_DIR, SEP_PYTHON
+from app.run_errors import describe_exit_failure, describe_start_failure
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "demucs_separate.py")
 
