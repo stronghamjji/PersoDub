@@ -1,6 +1,6 @@
 {
   "notes": [
-    "Failure reports carry less: the same masking rules apply on every end, and a report holds what diagnosing the failure needs and not much else.",
-    "Windows: the update's own warning now comes to the front, and Windows Defender no longer counts as something to close first."
+    "A failure report now leads with the line that stopped the job, says timeout or out of memory instead of \"check the video file\", and names five kinds of failure that used to be \"unknown\".",
+    "Usage counts say which parts of a dub went through Perso and whether a Perso key is set. The key, the workspace and the balance stay on your computer."
   ]
 }
