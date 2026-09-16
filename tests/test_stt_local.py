@@ -66,11 +66,31 @@ def test_raises_on_subprocess_exception(monkeypatch, audio_file):
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)  # any existing file
 
     def boom(*a, **k):
-        raise TimeoutError("timed out")
+        raise OSError("no such file")
 
     monkeypatch.setattr(stt_local.subprocess, "run", boom)
-    with pytest.raises(RuntimeError, match="failed to run"):
+    with pytest.raises(RuntimeError, match="failed to start"):
         stt_local.transcribe_local(audio_file)
+
+
+# Nine of the thirty-two reports in the four days after 0.6.0 were this, all
+# of them on Macs good enough to do the work: faster-whisper runs on the CPU
+# there, and large-v3 on a ten-minute video does not finish inside 900s.
+def test_transcribe_says_it_timed_out(monkeypatch, audio_file):
+    monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
+    monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
+
+    def boom(*a, **k):
+        raise stt_local.subprocess.TimeoutExpired(
+            cmd=["/Users/someone/Library/Application Support/PersoDub/engines_venv/bin/python",
+                 "whisper_transcribe.py"],
+            timeout=900,
+        )
+
+    monkeypatch.setattr(stt_local.subprocess, "run", boom)
+    with pytest.raises(RuntimeError) as caught:
+        stt_local.transcribe_local(audio_file, timeout=900)
+    assert "timed out after 900 seconds" in str(caught.value)
 
 
 def test_raises_on_nonzero_exit(monkeypatch, audio_file):

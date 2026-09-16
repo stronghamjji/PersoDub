@@ -206,6 +206,38 @@ export function maskTail(text, { home = "", kit = "", maxLines = MAX_LOG_LINES }
   return maskText(lines.slice(-maxLines).join("\n"), { home, kit }).trim();
 }
 
+/**
+ * The message a report carries, cut to fit without losing the reason.
+ *
+ * What arrives is the tail of a job log: a few progress lines, then the line
+ * that says what went wrong. Cutting the first MAX_MESSAGE_CHARS of that kept
+ * the progress and threw away the reason -- five translation failures in four
+ * days all arrived reading "Error: Translation failed (Oll" and stopped there
+ * (2026-09-15). So the failing line goes first, and the lines above it follow
+ * for as long as there is room.
+ */
+export function messageForReport(text, { max = MAX_MESSAGE_CHARS } = {}) {
+  const body = String(text ?? "").trim();
+  if (body.length <= max) return body;
+  const lines = body.split(/\r?\n/);
+  // The last line that announces a failure, whatever wrote it: the job log's
+  // own "Error:", a Python exception, or a stage saying it failed.
+  let at = -1;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (/\b(error|failed|exception|traceback)\b/i.test(lines[i])) { at = i; break; }
+  }
+  if (at < 0) return body.slice(-max).trim();   // no reason to find: keep the end
+  const kept = [lines[at].slice(0, max)];
+  let used = kept[0].length;
+  for (let i = at - 1; i >= 0; i -= 1) {
+    const room = max - used - 1;
+    if (room <= 0 || lines[i].length > room) break;
+    kept.unshift(lines[i]);
+    used += lines[i].length + 1;
+  }
+  return kept.join("\n").trim();
+}
+
 // --- Fingerprint -------------------------------------------------------
 
 /**
@@ -334,7 +366,7 @@ export function buildReport({
     stage: isInstall ? "" : safeId(stage),
     stageMarker: /^\d{1,2}\/\d{1,2}$/.test(String(stageMarker || "")) ? String(stageMarker) : "",
     code: ERROR_CODES.has(code) ? code : "unknown",
-    message: maskText(message, { home, kit }).slice(0, MAX_MESSAGE_CHARS),
+    message: messageForReport(maskText(message, { home, kit })),
     env: machine,
     packs: packs ?? envPacks ?? {},
     logTails: {

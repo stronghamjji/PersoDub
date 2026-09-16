@@ -12,9 +12,9 @@
 
 export const MAX_REPORT_BYTES = 64 * 1024;
 export const MAX_LOG_BYTES = 5 * 1024 * 1024;
-// How long a signed log link stays good for. The same 30 days the bucket's
-// lifecycle rule deletes the object after, so a live link never points at a
-// file that has already gone.
+// How long an archive lives, set on the bucket itself by the expire-30d
+// lifecycle rule. Nothing in this file counts the days any more; the note is
+// here because the KV entry that remembers the object outlives it on purpose.
 export const LOG_TTL_DAYS = 30;
 
 // The published vocabularies, copied from the app deliberately and checked
@@ -24,13 +24,17 @@ export const LOG_TTL_DAYS = 30;
 export const KINDS = ["install", "dub", "erase", "agent", "unknown"];
 export const ERROR_CODES = [
   "path-too-long", "disk-full", "network", "permission", "engine-start",
-  "out-of-memory", "unsupported-format", "engine-crash", "step-failed",
+  // "timeout" arrived in 0.6.1: a stage that ran out of its allowance, which
+  // until then was a crash with no word of its own.
+  "out-of-memory", "timeout", "unsupported-format", "engine-crash", "step-failed",
   // The cloud service refused -- not the machine's fault, and worth its own
   // word so an outage cannot be read as a broken install. "cloud-refused" was
   // one word for all six until 0.6.0 and stays for as long as 0.5.4 and
   // earlier are still running.
   "cloud-refused", "perso-busy", "perso-credits", "perso-key", "perso-failed",
   "gemini-busy", "gemini-quota",
+  // Four families that were all "unknown" until 0.6.1.
+  "model-download", "engine-500", "perso-bad-request", "translate-parse",
   "unknown",
 ];
 export const PLATFORM_KEYS = ["mac", "win-gpu", "win-cpu"];
@@ -233,8 +237,28 @@ function details(title, body) {
   return body ? `<details><summary>${title}</summary>\n\n\`\`\`\n${body}\n\`\`\`\n\n</details>\n` : "";
 }
 
+/** What the private dashboard shows beside an archive, so a list of them can
+ *  be read without opening any. Written when the report arrives (which is the
+ *  only time these facts are in hand) and copied onto the stored object. Short
+ *  strings only: this rides along as R2 metadata, which is capped. */
+export function logSummary(report, issue) {
+  return {
+    issue: String(issue ?? ""),
+    kind: report.kind || "unknown",
+    stage: report.stage || report.step || "",
+    marker: report.stageMarker || "",
+    code: report.code || "unknown",
+    platform: report.env.platformKey || "",
+    os: report.env.os || "",
+    cpu: String(report.env.cpu || "").slice(0, 60),
+    ram: report.env.ramGb == null ? "" : String(report.env.ramGb),
+    disk: report.env.freeDiskGb == null ? "" : String(report.env.freeDiskGb),
+    version: report.version || "",
+  };
+}
+
 /** The issue a first sighting opens. */
-export function issueBody(report, { logsUrl = "" } = {}) {
+export function issueBody(report, { logsRef = "" } = {}) {
   const e = report.env;
   const packs = Object.entries(report.packs);
   const rows = [
@@ -269,7 +293,7 @@ export function issueBody(report, { logsUrl = "" } = {}) {
     details("persodub.log (tail)", report.logTails.app),
     details("job log (tail)", report.logTails.job),
     "",
-    logsUrl ? `Full logs: ${logsUrl}` : "",
+    logsRef ? logsLine(logsRef) : "",
     `Fingerprint: \`${report.fingerprint}\``,
     "",
   ].join("\n");
@@ -318,15 +342,24 @@ export function countSighting(seen, report) {
 }
 
 /** What a second (and hundredth) sighting adds to the issue that exists. */
-export function commentText(report, { logsUrl = "" } = {}) {
+export function commentText(report, { logsRef = "" } = {}) {
   const line = `+1 · ${envLine(report)} · ${report.version}`;
-  return logsUrl ? `${line}\n\nFull logs: ${logsUrl}` : line;
+  return logsRef ? `${line}\n\n${logsLine(logsRef)}` : line;
+}
+
+/** The issue is public, so it never carries a link to the archive: a signed
+ *  URL written here would let anybody who reads the issue download somebody
+ *  else's logs for as long as the signature lasts. It names the archive
+ *  instead, and the operator fetches it from the private dashboard, which is
+ *  already behind a password (2026-09-16). */
+export function logsLine(logsRef) {
+  return `Full logs: kept, id \`${logsRef}\``;
 }
 
 /** One line appended to an existing body or comment when the logs land after
  *  it was written. Idempotent by the caller: it checks for the line first. */
-export function withLogsLine(text, logsUrl) {
-  return text.includes("Full logs:") ? text : `${text.trimEnd()}\n\nFull logs: ${logsUrl}\n`;
+export function withLogsLine(text, logsRef) {
+  return text.includes("Full logs:") ? text : `${text.trimEnd()}\n\n${logsLine(logsRef)}\n`;
 }
 
 // --- rate limits ---------------------------------------------------------
@@ -367,48 +400,7 @@ export function logObjectKey({ fingerprint, id, now = Date.now() }) {
   return `${dayKey(now).slice(0, 7)}/${fingerprint}/${id}.tar.gz`;
 }
 
-function base64url(bytes) {
-  let s = "";
-  for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-async function hmacKey(secret) {
-  return crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
-  );
-}
-
-/** The signature on a log link. Over both the id and the expiry, so neither
- *  can be changed without the secret -- an expiry that could be edited would
- *  be no expiry at all. */
-export async function signLog(id, exp, secret) {
-  const mac = await crypto.subtle.sign("HMAC", await hmacKey(secret), new TextEncoder().encode(`${id}.${exp}`));
-  return base64url(mac);
-}
-
-/** Whether a link is this relay's, and still good. Compared in constant time
- *  by length-then-xor: a comparison that returns early leaks the signature one
- *  character at a time. */
-export async function verifyLog(id, exp, sig, secret, now = Date.now()) {
-  if (!ID_RE.test(String(id || ""))) return false;
-  const expiry = Number(exp);
-  if (!Number.isFinite(expiry) || expiry * 1000 < now) return false;
-  const expected = await signLog(id, expiry, secret);
-  const a = String(sig || "");
-  if (a.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0;
-}
-
-/** The link that goes in the issue: this Worker's own, not the bucket's. */
-export function logUrl(base, id, exp, sig) {
-  return `${String(base).replace(/\/+$/, "")}/logs/${id}?exp=${exp}&sig=${encodeURIComponent(sig)}`;
-}
-
-/** When a link signed now should stop working. */
-export function logExpiry(now = Date.now(), days = LOG_TTL_DAYS) {
-  return Math.floor((now + days * 24 * 60 * 60 * 1000) / 1000);
-}
+// A signed download link used to live here, and the relay put it in the issue.
+// The issue is public, so that link handed every reader a stranger's logs for
+// as long as the signature lasted. Nothing signs or serves an archive now: the
+// logs leave the bucket only through the private dashboard (2026-09-16).

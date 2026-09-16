@@ -9,6 +9,7 @@ import {
   issueTitle,
   maskTail,
   maskText,
+  messageForReport,
   normalizeLine,
   reportBytes,
   resolveReportMode,
@@ -387,4 +388,39 @@ test("the project folder under the kit's workspace is masked, the rest of the pa
                        { home: "/Users/jane", kit: "/Users/jane/Library/Application Support/PersoDub" });
   assert.ok(!mac.includes("secret"), mac);
   assert.ok(mac.includes("workspace/2026-09-11/*/erased.mp4"), mac);
+});
+
+// ---- the message keeps the reason -------------------------------------
+// Five translation failures in four days arrived as "Error: Translation
+// failed (Oll" and stopped there: the tail of a job log was cut from the
+// front, so the progress lines above survived and the reason did not
+// (2026-09-15).
+
+test("a message that fits is left alone", () => {
+  assert.equal(messageForReport("  Error: it broke  "), "Error: it broke");
+});
+
+test("the failing line survives the cut, the progress above it gives way", () => {
+  const filler = "WARNING line 7: no candidate fit the window, using the fullest available";
+  const log = [filler, filler, filler, filler, filler, filler, filler, filler,
+               "Error: Translation failed (Ollama hy-mt2:1.8b): Could not find a JSON array"].join("\n");
+  const out = messageForReport(log, { max: 200 });
+  assert.ok(out.length <= 200, out.length);
+  assert.ok(out.includes("Could not find a JSON array"), out);
+});
+
+test("as much context as fits comes with it, oldest lines dropped first", () => {
+  const out = messageForReport(["first", "second", "Error: the reason"].join("\n"), { max: 26 });
+  assert.equal(out, "second\nError: the reason");
+});
+
+test("with no failing line to find, the end is kept rather than the start", () => {
+  const out = messageForReport("aaaa\nbbbb\ncccc", { max: 9 });
+  assert.equal(out, "bbbb\ncccc");
+});
+
+test("a single line longer than the budget is cut but still leads with itself", () => {
+  const out = messageForReport("Error: " + "x".repeat(400), { max: 50 });
+  assert.equal(out.length, 50);
+  assert.ok(out.startsWith("Error: "), out);
 });
