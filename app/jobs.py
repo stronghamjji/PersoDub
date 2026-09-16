@@ -54,6 +54,10 @@ SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lan
                 "trim_pending", "error", "remade_as", "area", "check",
                 "stt_engine", "translator", "tts", "quality", "separation",
                 "dub_mode", "perso_project_seq",
+                # What a finished dub cost in Perso credits and how long the
+                # video was -- lifted off the result for the usage count the
+                # shell sends the moment a job is done (desktop/main.js).
+                "perso_credits", "duration",
                 # What the boot re-arm needs to rebuild a queued job's work:
                 # the speaker count, and (for a link job still waiting to
                 # download) the link itself.
@@ -471,10 +475,16 @@ class JobStore:
                 # keeps the record, and the done screen names the source column
                 # from it. A language the user actually chose is never overwritten.
                 detected = result.get("detected_source_language") if isinstance(result, dict) else None
+                # The Perso credits spent and the video's length travel the
+                # same way, and land on the record BEFORE the status flips:
+                # the shell reads them off the job the moment it sees "done".
+                spent = {k: result[k] for k in ("perso_credits", "duration")
+                         if isinstance(result, dict) and result.get(k) is not None}
                 with self._lock:
                     if self._jobs[jid]["status"] == "cancelling":
                         self._jobs[jid]["status"] = "cancelled"
                     else:
+                        self._jobs[jid].update(spent)
                         self._jobs[jid]["status"] = "done"
                         self._jobs[jid]["result"] = result
                         if detected and not self._jobs[jid].get("source_lang"):

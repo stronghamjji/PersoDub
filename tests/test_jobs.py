@@ -447,3 +447,25 @@ def test_a_failed_job_writes_its_traceback_to_the_job_log():
     j = _wait(store, store.run_async(boom))
     assert j["error"] == "Unexpected error (AttributeError) - see the job log"
     assert any("Traceback (most recent call last)" in line for line in j["logs"])
+
+
+def test_run_async_lifts_perso_credits_and_duration_onto_the_record():
+    # What a dub spent on Perso and how long the video was travel in the
+    # result, and land on the record before the status flips -- the shell
+    # reads them off the job the moment it sees "done" -- and are saved with it.
+    store = JobStore()
+    jid = store.run_async(lambda log: {"ok": True, "perso_credits": 7, "duration": 150.2})
+    j = _wait(store, jid)
+    assert j["status"] == "done"
+    assert j["perso_credits"] == 7
+    assert j["duration"] == 150.2
+    saved = JobStore._saved(j)
+    assert saved["perso_credits"] == 7 and saved["duration"] == 150.2
+
+
+def test_run_async_leaves_the_record_alone_when_the_result_says_nothing():
+    store = JobStore()
+    jid = store.run_async(lambda log: {"ok": True, "perso_credits": None})
+    j = _wait(store, jid)
+    assert j["status"] == "done"
+    assert "perso_credits" not in j and "duration" not in j

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { getFreePort } from "./freePort.js";
-import { resolveAnalyticsMode, shouldReport, buildPayload, report } from "./analytics.js";
+import { resolveAnalyticsMode, shouldReport, buildPayload, dubFacts, report } from "./analytics.js";
 
 // A server that records what it was posted. Real HTTP, no mocks -- the point of
 // these tests is that a request actually leaves (or actually does not).
@@ -471,4 +471,56 @@ test("the failing step travels all the way to the wire", async () => {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].step, "ollama-runtime");
   assert.equal(sent[0].error_code, "disk-full");
+});
+
+// ---- the Perso columns (0.6.2): two words, two counts, one yes/no ----
+
+test("a dub names which parts went through Perso, in two words only", () => {
+  const p = buildPayload({
+    event: "dub_success", os: "mac", version: "0.6.2", device: "a".repeat(32),
+    engines: { stt_engine: "perso", separation: "demucs", dub_mode: "local" },
+    credits: 12, minutes: 3,
+  });
+  assert.equal(p.stt, "perso");
+  assert.equal(p.separation, "local");   // never "demucs": the engine's name stays home
+  assert.equal(p.mode, "local");
+  assert.equal(p.credits, 12);
+  assert.equal(p.minutes, 3);
+});
+
+test("a dub the shell could not look up says nothing, not local", () => {
+  const p = buildPayload({ event: "dub_success", os: "mac", version: "0.6.2", device: "a".repeat(32) });
+  assert.equal("stt" in p, false);
+  assert.equal("mode" in p, false);
+  assert.equal("credits" in p, false);
+});
+
+test("a count that is not a whole non-negative number is left out", () => {
+  const base = { event: "dub_success", os: "mac", version: "0.6.2", device: "a".repeat(32) };
+  assert.equal("credits" in buildPayload({ ...base, credits: -1 }), false);
+  assert.equal("credits" in buildPayload({ ...base, credits: 1.5 }), false);
+  assert.equal("minutes" in buildPayload({ ...base, minutes: "3" }), false);
+  assert.equal(buildPayload({ ...base, minutes: 0 }).minutes, 0);
+});
+
+test("a launch says whether a Perso key is set, as yes or no, and nothing else does", () => {
+  const base = { os: "mac", version: "0.6.2", device: "a".repeat(32) };
+  assert.equal(buildPayload({ ...base, event: "app_launch", persoKey: true }).perso_key, "yes");
+  assert.equal(buildPayload({ ...base, event: "app_launch", persoKey: false }).perso_key, "no");
+  assert.equal("perso_key" in buildPayload({ ...base, event: "app_launch" }), false);
+  assert.equal("perso_key" in buildPayload({ ...base, event: "dub_success", persoKey: true }), false);
+  // An erase carries none of the Perso columns whatever it is handed.
+  const e = buildPayload({ ...base, event: "erase_success", engines: { stt_engine: "perso" }, credits: 5 });
+  assert.deepEqual(Object.keys(e).sort(), ["device", "event", "os", "version"]);
+});
+
+test("dubFacts reads a job's record and rounds its length to minutes", () => {
+  const f = dubFacts({ stt_engine: "whisper", separation: "perso", dub_mode: "local",
+                       perso_credits: 7, duration: 150.2, title: "my private video" });
+  assert.deepEqual(f.engines, { stt_engine: "whisper", separation: "perso", dub_mode: "local" });
+  assert.equal(f.credits, 7);
+  assert.equal(f.minutes, 3);
+  assert.equal("title" in f, false);
+  assert.deepEqual(dubFacts(null), {});
+  assert.equal(dubFacts({ stt_engine: "perso" }).minutes, undefined);
 });

@@ -303,6 +303,25 @@ def _raise_for_status(r: httpx.Response) -> None:
     r.raise_for_status()
 
 
+def note_credits(ws, pc, log, what: str) -> None:
+    """Log what THIS call cost -- the balance before minus the balance after --
+    and add it to the client's running total, which a finished job reports.
+
+    `ws` is describe_workspace() from before the call, or None. Never raises:
+    by the time this runs the work has succeeded and been billed, and a
+    surprise in the credits payload must not discard the paid result.
+    """
+    try:
+        if ws and ws.get("credits") is not None:
+            after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
+            if after is not None:
+                used = int(ws["credits"]) - int(after)
+                log(f"   Perso credits used: {used} ({after} left)")
+                pc.credits_used = getattr(pc, "credits_used", 0) + max(used, 0)
+    except Exception as e:
+        logger.debug("No credits line after %s (%s)", what, type(e).__name__)
+
+
 class PersoClient:
     def __init__(
         self,
@@ -333,6 +352,9 @@ class PersoClient:
         # Perso progress polling. An attribute (not a transcribe() kwarg) so
         # existing callers and test fakes keep their signature.
         self.cancel_check = None
+        # Credits this client has spent so far, added up by note_credits after
+        # each billed call. A finished job reports the total (usage counts).
+        self.credits_used = 0
         # mediaSeq per (path, space): a job that uses Perso for BOTH separation
         # and STT must not upload the same multi-hundred-MB video twice.
         self._media_seq_cache = {}

@@ -970,3 +970,48 @@ def test_an_exception_with_nothing_to_say_is_named_rather_than_blank():
     """"Perso separation failed ()" says less than nothing."""
     assert short_reason(ValueError()) == "ValueError"
     assert short_reason("") == "str"
+
+
+# ── note_credits: the line, the running total, and never a failure ─────────
+def test_note_credits_logs_the_difference_and_adds_it_up():
+    from app.perso_client import note_credits
+
+    class FakeClient:
+        def __init__(self):
+            self.balance = 100
+
+        def describe_workspace(self):
+            return {"seq": 1, "name": "WS", "credits": self.balance}
+
+    pc = FakeClient()
+    logs = []
+    before = pc.describe_workspace()
+    pc.balance = 94
+    note_credits(before, pc, logs.append, "Perso STT")
+    before = pc.describe_workspace()
+    pc.balance = 90
+    note_credits(before, pc, logs.append, "Perso separation")
+    assert logs == ["   Perso credits used: 6 (94 left)",
+                    "   Perso credits used: 4 (90 left)"]
+    assert pc.credits_used == 10
+
+
+def test_note_credits_survives_a_client_that_cannot_say():
+    # No balance before, no describe_workspace, a balance that is not a number:
+    # each costs the log line and nothing else. The work is already paid for.
+    from app.perso_client import note_credits
+
+    class Mute:
+        pass
+
+    class Odd:
+        def describe_workspace(self):
+            return {"credits": object()}
+
+    pc = Mute()
+    logs = []
+    note_credits(None, pc, logs.append, "Perso STT")
+    note_credits({"credits": 5}, pc, logs.append, "Perso STT")
+    note_credits({"credits": 5}, Odd(), logs.append, "Perso STT")
+    assert logs == []
+    assert not hasattr(pc, "credits_used")
