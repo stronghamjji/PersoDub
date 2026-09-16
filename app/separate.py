@@ -19,6 +19,7 @@ import subprocess
 from typing import Dict, Optional
 
 from app.config import SEP_MODEL_DIR, SEP_PYTHON
+from app.run_errors import describe_exit_failure, describe_start_failure
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "demucs_separate.py")
 
@@ -63,12 +64,10 @@ class SeparationEngine:
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=self.timeout,
             )
         except Exception as e:
-            raise RuntimeError("local separation failed to run (%s)" % str(e)[:120])
+            raise RuntimeError(describe_start_failure("local separation", e, self.timeout))
 
         if r.returncode != 0 or not os.path.exists(out_path):
-            raise RuntimeError(
-                "local separation exited with an error (%s)"
-                % (r.stderr.strip()[-200:] or "no output produced"))
+            raise RuntimeError(describe_exit_failure("local separation", r))
         try:
             with open(out_path, encoding="utf-8") as f:
                 result = json.load(f)

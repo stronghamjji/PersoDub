@@ -29,6 +29,7 @@ from app.perso_client import (
     short_reason,
 )
 from app.qwen_pipeline import cleanup_takes, run_qwen_dub
+from app.run_errors import advice_for
 from app.scripts.check_leakage import _validate_manifest_spans, measure_leakage
 from app.scripts.suppress_vocal_echo import suppress_vocal_echo
 from app.separate import SeparationEngine
@@ -435,10 +436,12 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
             sep_paths = SeparationEngine().separate(video_path, work_dir)
         except Exception as e:
             # This one runs on the user's own machine, so there is nobody to
-            # ask: the file is the thing to look at.
+            # ask -- but which thing to look at depends on what stopped it. A
+            # timeout and a full disk are not a broken file, and saying so
+            # sent people to check the one thing that was fine (2026-09-15).
             raise RuntimeError(
-                f"Voice separation failed on this computer. {CHECK_FILE} "
-                f"({str(e)[:160]})")
+                f"Voice separation failed on this computer. {advice_for(str(e), CHECK_FILE)} "
+                f"({str(e)[:400]})")
     return sep_paths["vocals"], sep_paths["background"], perso_client
 
 
@@ -512,7 +515,8 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log):
     except Exception as e:
         # Was re-raised bare, which put a library's own words on the failure
         # card with no hint of which part had stopped (user, 2026-09-11).
-        msg = f"Speech recognition failed on this computer. {CHECK_FILE} ({str(e)[:120]})"
+        msg = (f"Speech recognition failed on this computer. "
+               f"{advice_for(str(e), CHECK_FILE)} ({str(e)[:400]})")
         log(f"   Error: {msg}")
         raise RuntimeError(msg) from e
     # Local Whisper sets no speaker_id -- CAM++ can still label the cues it produced.

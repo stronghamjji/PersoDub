@@ -21,12 +21,16 @@ export const INSTALL_STEPS = new Set(STEP_IDS);
 
 export const ERROR_CODES = new Set([
   "path-too-long", "disk-full", "network", "permission", "engine-start",
-  "out-of-memory", "unsupported-format", "engine-crash", "step-failed",
+  "out-of-memory", "timeout", "unsupported-format", "engine-crash", "step-failed",
   // One per service and reason. "cloud-refused" is what 0.5.4 and earlier send
   // and stays on the list for as long as they are running -- dropping it would
   // turn every one of their refusals into "unknown".
   "cloud-refused", "perso-busy", "perso-credits", "perso-key", "perso-failed",
-  "gemini-busy", "gemini-quota", "unknown",
+  "gemini-busy", "gemini-quota",
+  // Four families that were all "unknown" until 0.6.1. Every one of them was
+  // a real, repeated failure nobody could see (2026-09-15).
+  "model-download", "engine-500", "perso-bad-request", "translate-parse",
+  "unknown",
 ]);
 
 /**
@@ -237,7 +241,15 @@ const ERROR_PATTERNS = [
   // message that already had a code can change, because every rule above this
   // one is tried first.
   [/ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection refused|connection reset|download failed|sha256 mismatch/i, "network"],
-  [/out of memory|ENOMEM|allocate/i,                 "out-of-memory"],
+  // A stage the machine could not finish in the time it was given. Its own
+  // word, because the answer is a faster machine or a shorter video, and
+  // lumping it in with a crash hid the commonest failure of all: twenty of
+  // the thirty-two reports in the four days after 0.6.0 were this, every one
+  // of them counted as "unknown" (2026-09-15).
+  [/timed out after|timed out|TimeoutExpired/i,      "timeout"],
+  // "not enough memory" is torch's own wording (DefaultCPUAllocator), which
+  // the /allocate/ rule below never matched -- it says "Allocator".
+  [/out of memory|not enough memory|ENOMEM|allocate/i, "out-of-memory"],
   [/unsupported|unrecognized codec|invalid data found/i, "unsupported-format"],
   [/did not become ready|exit \d+/i,                 "engine-crash"],
   // The cloud service saying no. These sentences are the app's own published
@@ -258,6 +270,25 @@ const ERROR_PATTERNS = [
   [/could not finish this job/i,      "perso-failed"],
   [/temporarily overloaded/i,         "gemini-busy"],
   [/quota is used up/i,               "gemini-quota"],
+
+  // Last of all, and deliberately so. Each of these is a family that arrived
+  // as "unknown" through the four days after 0.6.0; with "timeout" above they
+  // account for every unclassified report of 2026-09-11..15. They sit below
+  // the cloud rules because a translation that failed because Gemini's quota
+  // ran out is news about Gemini, not about our parser.
+  //
+  // Model files that never arrived: huggingface_hub says "cannot find the
+  // appropriate snapshot folder" and asks the reader to check their internet
+  // connection, which matched none of the network spellings above (5 reports).
+  [/huggingface|hf download|snapshot folder|LocalEntryNotFound/i, "model-download"],
+  // The voice engine answering 500 on this machine's own port. Pinned to the
+  // loopback address so a cloud service's 500 cannot be read as ours.
+  [/(server error '5\d\d|http 5\d\d)[\s\S]{0,120}(127\.0\.0\.1|localhost)/i, "engine-500"],
+  // Perso refusing the request itself, as opposed to being out of credit or
+  // overloaded -- both of which have their own words above.
+  [/perso[^\n]{0,80}client error '4\d\d/i, "perso-bad-request"],
+  // A 1.8B model asked for JSON and answering with something else.
+  [/translation failed|could not find a json array|line count mismatch/i, "translate-parse"],
 ];
 
 /** One published word for a whole error message. Never the message itself.

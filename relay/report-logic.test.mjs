@@ -10,16 +10,14 @@ import {
   issueBody,
   issueTitle,
   labelsFor,
-  logExpiry,
   logObjectKey,
-  logUrl,
+  logSummary,
+  logsLine,
   maskAgain,
   newId,
   rateDecision,
-  signLog,
   tallyLine,
   validateReport,
-  verifyLog,
   withLogsLine,
   withTally,
   scrubMessage,
@@ -187,9 +185,9 @@ test("the body carries the machine, the error and the fingerprint", () => {
   assert.ok(!body.includes("Full logs:"));
 });
 
-test("a body written with a log link says so", () => {
-  const body = issueBody(validateReport(GOOD).report, { logsUrl: "https://r/logs/x" });
-  assert.match(body, /Full logs: https:\/\/r\/logs\/x/);
+test("a body written with an archive says so", () => {
+  const body = issueBody(validateReport(GOOD).report, { logsRef: "a".repeat(32) });
+  assert.match(body, /Full logs: kept, id `a{32}`/);
 });
 
 test("a repeat is one line naming the machine and the version", () => {
@@ -197,9 +195,9 @@ test("a repeat is one line naming the machine and the version", () => {
 });
 
 test("the log line is appended once, however often the logs land", () => {
-  const once = withLogsLine("body", "https://r/logs/x");
-  assert.match(once, /Full logs: https:\/\/r\/logs\/x/);
-  assert.equal(withLogsLine(once, "https://r/logs/y"), once);
+  const once = withLogsLine("body", "a".repeat(32));
+  assert.match(once, /Full logs: kept, id `a{32}`/);
+  assert.equal(withLogsLine(once, "b".repeat(32)), once);
 });
 
 // ---- rate limits -------------------------------------------------------
@@ -238,32 +236,15 @@ test("a day key is the UTC date", () => {
   assert.equal(dayKey(Date.UTC(2026, 8, 9, 23, 30)), "2026-09-09");
 });
 
-test("a signed link verifies, and only that one", async () => {
-  const id = "b".repeat(32);
-  const exp = logExpiry(Date.now());
-  const sig = await signLog(id, exp, "secret");
-  assert.equal(await verifyLog(id, exp, sig, "secret"), true);
-  assert.equal(await verifyLog(id, exp, sig, "other secret"), false);
-  assert.equal(await verifyLog("c".repeat(32), exp, sig, "secret"), false);
-  assert.equal(await verifyLog(id, exp + 1, sig, "secret"), false);
-  assert.equal(await verifyLog(id, exp, "", "secret"), false);
+test("the log line names the archive and carries no link", () => {
+  const line = logsLine("a".repeat(32));
+  assert.equal(line, `Full logs: kept, id \`${"a".repeat(32)}\``);
+  assert.ok(!/https?:/.test(line));
 });
 
-test("an expired link stops working", async () => {
-  const id = "b".repeat(32);
-  const exp = Math.floor(Date.now() / 1000) - 1;
-  assert.equal(await verifyLog(id, exp, await signLog(id, exp, "secret"), "secret"), false);
-});
-
-test("a link that is thirty days old is still inside its life", async () => {
-  const now = Date.now();
-  const exp = logExpiry(now);
-  assert.equal(await verifyLog("b".repeat(32), exp, await signLog("b".repeat(32), exp, "s"), "s", now + 29 * 86400000), true);
-});
-
-test("the link points at the relay, never at the bucket", () => {
-  assert.equal(logUrl("https://relay.example/", "a".repeat(32), 123, "sig+/"),
-    `https://relay.example/logs/${"a".repeat(32)}?exp=123&sig=sig%2B%2F`);
+test("a body written with a log reference carries no link either", () => {
+  const body = issueBody(validateReport(GOOD).report, { logsRef: "a".repeat(32) });
+  assert.ok(!/https?:\/\//.test(body.split("\n").find((l) => l.startsWith("Full logs:"))));
 });
 
 // "A erase failed" was what an erase report said (2026-09-10). Three of the
@@ -382,4 +363,18 @@ test("the workspace project folder, named after the video, is masked on the way 
   const out = maskAgain("at ~\\AppData\\Local\\PersoDub\\app\\workspace\\2026-09-11\\Secret Show 29_ko\\input.mp4");
   assert.ok(!out.includes("Secret"), out);
   assert.ok(out.includes("2026-09-11\\*\\input.mp4"), out);
+});
+
+// The private dashboard lists a month of archives without opening any of
+// them, so what it shows has to be written down when the report arrives.
+test("an archive carries enough to be listed without being opened", () => {
+  const s = logSummary(validateReport(GOOD).report, 72);
+  assert.equal(s.issue, "72");
+  assert.equal(s.kind, "dub");
+  assert.equal(s.stage, "synthesize");
+  assert.equal(s.code, "engine-crash");
+  assert.equal(s.platform, "win-gpu");
+  assert.equal(s.version, "0.5.5");
+  // R2 metadata is strings only, and a number would arrive back as one anyway.
+  for (const v of Object.values(s)) assert.equal(typeof v, "string");
 });

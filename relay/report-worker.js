@@ -6,14 +6,11 @@ import {
   issueBody,
   issueTitle,
   labelsFor,
-  logExpiry,
   logObjectKey,
-  logUrl,
+  logSummary,
   newId,
   rateDecision,
-  signLog,
   validateReport,
-  verifyLog,
   withLogsLine,
   withTally,
 } from "./report-logic.js";
@@ -24,17 +21,17 @@ import {
 // account, and asking for one loses nine reports in ten. So the app posts here
 // and this posts to GitHub with a token the app never sees.
 //
-// Three ways in:
+// Two ways in, both of them inward:
 //   POST /report            a failure -> a new issue, or "+1" on the one that
 //                           already describes it (same fingerprint)
 //   POST /report/<id>/logs  the full logs (gzipped tar) for a report just made
-//   GET  /logs/<id>?exp&sig the same archive back, for whoever has the signed
-//                           link that was put in the issue
 //
 // What it never does: log an IP (only a salted daily hash of one, for the rate
 // limit), trust the report it was given (report-logic.js rebuilds it field by
-// field and masks it again), or serve a bucket object without a valid
-// signature. Deploy notes and the bindings it needs are in relay/README.md.
+// field and masks it again), or hand an archive back out. The issue it writes
+// is public, so it names the archive and nothing more; the logs themselves are
+// read from the private dashboard, which the operator opens with a password
+// (2026-09-16). Deploy notes and the bindings it needs are in relay/README.md.
 
 const GITHUB = "https://api.github.com";
 const UA = "persodub-report-relay";
@@ -177,9 +174,16 @@ async function handleReport(request, env, ctx) {
   // since the archive normally follows within seconds, but the one case that
   // matters is the machine whose network died between the two requests, and
   // for that machine the retry can be days later.
+  // The summary rides along because this is the only moment the facts are in
+  // hand: the archive that follows carries them onto the stored object, and
+  // the private dashboard reads a month of archives as a list without opening
+  // one of them (2026-09-16).
   await env.REPORTS.put(
     `id:${id}`,
-    JSON.stringify({ fingerprint: report.fingerprint, issue, commentId }),
+    JSON.stringify({
+      fingerprint: report.fingerprint, issue, commentId,
+      summary: logSummary(report, issue),
+    }),
     { expirationTtl: 7 * 24 * 60 * 60 },
   );
   return json({ id, issue, url, dedup: !!(known && known.issue) });
@@ -197,40 +201,24 @@ async function handleLogs(request, env, id) {
 
   const now = Date.now();
   const key = logObjectKey({ fingerprint: pending.fingerprint, id, now });
-  await env.LOGS.put(key, body, { httpMetadata: { contentType: "application/gzip" } });
+  await env.LOGS.put(key, body, {
+    httpMetadata: { contentType: "application/gzip" },
+    customMetadata: pending.summary || {},
+  });
   await env.REPORTS.put(`log:${id}`, key, { expirationTtl: 40 * 24 * 60 * 60 });
 
-  // The link is this Worker's, signed, and it expires with the object. A
-  // public bucket URL would be a permanent, unauthenticated copy of somebody's
-  // logs, which is exactly what the signature exists to prevent.
-  const exp = logExpiry(now);
-  const link = logUrl(new URL(request.url).origin, id, exp, await signLog(id, exp, env.LOG_SIGNING_KEY));
-
   // The issue was written before the archive arrived, so the line is added to
-  // whichever piece of writing this report produced.
+  // whichever piece of writing this report produced. It names the archive and
+  // stops there: the issue is public, and a link -- signed or not -- would let
+  // anyone reading it download a stranger's logs. The operator fetches them
+  // from the private dashboard instead, which is already behind a password.
   const path = pending.commentId ? `/issues/comments/${pending.commentId}` : `/issues/${pending.issue}`;
   const current = await gh(env, path);
   if (current.ok) {
     const existing = (await current.json()).body || "";
-    await gh(env, path, { method: "PATCH", body: JSON.stringify({ body: withLogsLine(existing, link) }) });
+    await gh(env, path, { method: "PATCH", body: JSON.stringify({ body: withLogsLine(existing, id) }) });
   }
-  return json({ ok: true, url: link });
-}
-
-async function serveLogs(request, env, id) {
-  const params = new URL(request.url).searchParams;
-  if (!(await verifyLog(id, params.get("exp"), params.get("sig"), env.LOG_SIGNING_KEY))) {
-    return json({ error: "bad link" }, 403);
-  }
-  const key = await env.REPORTS.get(`log:${id}`);
-  const object = key && env.LOGS && (await env.LOGS.get(key));
-  if (!object) return json({ error: "gone" }, 404);
-  return new Response(object.body, {
-    headers: {
-      "content-type": "application/gzip",
-      "content-disposition": `attachment; filename="${id}.tar.gz"`,
-    },
-  });
+  return json({ ok: true });
 }
 
 export default {
@@ -240,8 +228,8 @@ export default {
       if (request.method === "POST" && pathname === "/report") return await handleReport(request, env, ctx);
       const upload = /^\/report\/([0-9a-f]{32})\/logs$/.exec(pathname);
       if (request.method === "POST" && upload) return await handleLogs(request, env, upload[1]);
-      const download = /^\/logs\/([0-9a-f]{32})$/.exec(pathname);
-      if (request.method === "GET" && download) return await serveLogs(request, env, download[1]);
+      // No way out for an archive: the relay only takes logs in. Reading one
+      // back is the dashboard's job, on the private side of the password.
       return json({ error: "not found" }, 404);
     } catch (err) {
       // Never the message: an upstream error can quote the request, and the
