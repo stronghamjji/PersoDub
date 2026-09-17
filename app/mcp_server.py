@@ -24,6 +24,7 @@ from typing import List, Optional, Union
 
 import httpx
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import languages, media
 from app.dub_script import edit_line, export_srt, load_lines
@@ -61,6 +62,17 @@ def _api_get(path: str, **kw):
         raise _offline() from e
 
 
+class Refusal(ToolError, ValueError):
+    """A tool saying no, with the reason attached.
+
+    mcp >= 2.2 hands the agent "Error executing tool X" and nothing more for
+    any exception that is not a ToolError. The kit shipped 2.2.0 while the
+    dev venv still had 2.0.0, and eleven refused dubs in the 0.6.2 full test
+    reached the agent as an error with no reason (2026-09-16). Still a
+    ValueError, so nothing that caught one before changes.
+    """
+
+
 def _api_post(path: str, **kw):
     """POST one of the local app's routes. See _api_get."""
     try:
@@ -84,7 +96,7 @@ def _job(job_id: str) -> dict:
     """Ask the app server about a job."""
     r = _api_get("/api/dub/jobs/%s" % job_id, timeout=10.0)
     if r.status_code == 404:
-        raise ValueError("no such job: %s" % job_id)
+        raise Refusal("no such job: %s" % job_id)
     r.raise_for_status()
     return r.json()
 
@@ -99,7 +111,7 @@ def _work_dir(job: dict) -> str:
     """
     out = (job.get("result") or {}).get("out_path")
     if not out:
-        raise ValueError("this job has no result yet (status: %s)" % job.get("status"))
+        raise Refusal("this job has no result yet (status: %s)" % job.get("status"))
     return os.path.dirname(out)
 
 
@@ -128,7 +140,7 @@ def get_script(job_id: str) -> List[dict]:
         # endpoint mirrors them (read-only for now -- see change_speaker).
         r = _api_get("/api/dub/jobs/%s/script" % job_id, timeout=60.0)
         if r.status_code in (404, 503):
-            raise ValueError(r.json().get("detail", "no script for this job"))
+            raise Refusal(r.json().get("detail", "no script for this job"))
         r.raise_for_status()
         return r.json()["lines"]
     return load_lines(_work_dir(job), _lang(job))
@@ -157,7 +169,7 @@ def check_fit(job_id: str, line: Optional[int] = None) -> List[dict]:
     lines = load_lines(_work_dir(job), _lang(job))
     if line is not None:
         if not 1 <= line <= len(lines):
-            raise ValueError(
+            raise Refusal(
                 "there is no line %d -- this script runs from line 1 to %d" % (line, len(lines))
             )
         return [lines[line - 1]]
@@ -234,9 +246,9 @@ def remake_voices(job_id: str) -> dict:
     """
     r = _api_post("/api/dub/jobs/%s/voices/stale" % job_id, timeout=600.0)
     if r.status_code == 404:
-        raise ValueError("no such job: %s" % job_id)
+        raise Refusal("no such job: %s" % job_id)
     if r.status_code in (409, 422):
-        raise ValueError(r.json().get("detail", "this job's voices cannot be remade"))
+        raise Refusal(r.json().get("detail", "this job's voices cannot be remade"))
     r.raise_for_status()
     return r.json()
 
@@ -252,7 +264,7 @@ def remake_line_voice(job_id: str, line: int) -> dict:
     """
     r = _api_post("/api/dub/jobs/%s/script/%d/voice" % (job_id, line), timeout=600.0)
     if r.status_code in (404, 409, 422):
-        raise ValueError(r.json().get("detail", "cannot remake line %d" % line))
+        raise Refusal(r.json().get("detail", "cannot remake line %d" % line))
     r.raise_for_status()
     return r.json()
 
@@ -274,7 +286,7 @@ def change_speaker(job_id: str, line: int, confirm: bool = False) -> dict:
     r = _api_post("/api/dub/jobs/%s/perso/speaker" % job_id,
                   json={"line": line}, timeout=600.0)
     if r.status_code in (404, 409, 422):
-        raise ValueError(r.json().get("detail", "cannot change line %d's speaker" % line))
+        raise Refusal(r.json().get("detail", "cannot change line %d's speaker" % line))
     r.raise_for_status()
     return r.json()
 
@@ -298,14 +310,14 @@ def extract_subtitles(video_path: str, engine: str = "",
     confirm=true only after they clearly agree.
     """
     if engine not in ("local", "perso"):
-        raise ValueError('Ask the user which engine to use first: "local" '
+        raise Refusal('Ask the user which engine to use first: "local" '
                          '(free, this machine) or "perso" (paid, better quality).')
     if engine == "perso" and not confirm:
         r = _api_get("/api/subtitles/estimate",
                      params={"video_path": video_path, "engine": "perso"},
                      timeout=60.0)
         if r.status_code in (404, 422):
-            raise ValueError(r.json().get("detail", "cannot read that video"))
+            raise Refusal(r.json().get("detail", "cannot read that video"))
         r.raise_for_status()
         est = r.json()
         balance = est.get("credits_balance")
@@ -318,7 +330,7 @@ def extract_subtitles(video_path: str, engine: str = "",
                   json={"video_path": video_path, "engine": engine},
                   timeout=3600.0)
     if r.status_code in (404, 409, 422, 503):
-        raise ValueError(r.json().get("detail", "could not extract subtitles"))
+        raise Refusal(r.json().get("detail", "could not extract subtitles"))
     r.raise_for_status()
     return r.json()
 
@@ -352,33 +364,50 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     queue, and get_job_status follows one job.
     """
     if dub_mode not in ("local", "perso"):
-        raise ValueError('dub_mode must be "local" or "perso"')
+        raise Refusal('dub_mode must be "local" or "perso"')
     if translator not in ("", "gemma", "hunyuan", "gemini"):
-        raise ValueError('translator must be "gemma", "hunyuan", "gemini" or empty')
+        raise Refusal('translator must be "gemma", "hunyuan", "gemini" or empty')
     code = (target_language or "").strip()
     if languages.lookup(dub_mode, code) is None:
         known = [e["id"] for e in languages.languages_for(dub_mode)]
-        raise ValueError("target_language must be one of: %s" % " ".join(sorted(known)))
+        raise Refusal("target_language must be one of: %s" % " ".join(sorted(known)))
     path = os.path.expanduser(video_path)
     if not confirm:
+        # A "local" dub still goes through Perso for whichever stages the
+        # saved defaults send there. The agent called such a dub free and
+        # never named the balance (0.6.2 full test, 2026-09-16).
+        cloud_stages = []
+        if dub_mode == "local":
+            defaults = _api_get("/api/setup", timeout=10.0).json().get("defaults", {})
+            cloud_stages = [s for s in ("stt", "separation") if defaults.get(s) == "perso"]
         # The estimate route already measures the video and, for perso, the
         # balance. Dubbing costs ~1 credit per second (the route's own figure
         # is STT's 1-per-5s, so only seconds and balance are read from it).
         r = _api_get("/api/subtitles/estimate",
                      params={"video_path": video_path,
-                             "engine": "perso" if dub_mode == "perso" else "local"},
+                             "engine": "perso" if dub_mode == "perso" or cloud_stages else "local"},
                      timeout=60.0)
         if r.status_code in (404, 422):
-            raise ValueError(r.json().get("detail", "cannot read that video"))
+            raise Refusal(r.json().get("detail", "cannot read that video"))
         r.raise_for_status()
         est = r.json()
         seconds = est.get("seconds", 0)
+        balance = est.get("credits_balance")
+        balance_text = "" if balance is None else " (balance: %s)" % balance
         if dub_mode == "perso":
-            balance = est.get("credits_balance")
             message = ("Dubbing this video (%.0fs) on Perso will spend about "
                        "%d credits%s. Proceed?"
-                       % (seconds, math.ceil(seconds),
-                          "" if balance is None else " (balance: %s)" % balance))
+                       % (seconds, math.ceil(seconds), balance_text))
+        elif cloud_stages:
+            # Measured 2026-09-16: transcription 2 credits and separation 5
+            # credits for a 10-second clip.
+            credits = (math.ceil(seconds / 5.0) if "stt" in cloud_stages else 0) \
+                + (math.ceil(seconds / 2.0) if "separation" in cloud_stages else 0)
+            what = " and ".join({"stt": "transcription", "separation": "separation"}[s]
+                                for s in cloud_stages)
+            message = ("Dubbing this video (%.0fs) runs on this machine, but its "
+                       "%s goes through Perso: about %d credits%s. Proceed?"
+                       % (seconds, what, credits, balance_text))
         else:
             message = ("Dubbing this video (%.0fs) runs free on this machine "
                        "and takes a while; queued dubs run one at a time. "
@@ -386,7 +415,7 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
         return {"needs_confirmation": True, "message": message,
                 "seconds": seconds}
     if not os.path.isfile(path):
-        raise ValueError("No such video: %s" % video_path)
+        raise Refusal("No such video: %s" % video_path)
     fields = {"language": languages.lookup(dub_mode, code)["name"], "language_code": code}
     if dub_mode == "perso":
         fields["dub_mode"] = "perso"
@@ -402,7 +431,7 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
                       timeout=600.0)
     if r.status_code in (400, 404, 409, 422, 507):
         detail = r.json().get("detail", "could not start this dub")
-        raise ValueError(_dub_refusal_text(detail))
+        raise Refusal(_dub_refusal_text(detail))
     r.raise_for_status()
     return r.json()
 
@@ -461,7 +490,7 @@ def set_default(stage: str, choice: str) -> dict:
     """
     r = _api_post("/api/setup", json={stage: choice}, timeout=10.0)
     if r.status_code in (422, 503):
-        raise ValueError(r.json().get("detail", "could not change that setting"))
+        raise Refusal(r.json().get("detail", "could not change that setting"))
     r.raise_for_status()
     return r.json()
 
@@ -482,7 +511,7 @@ def download_model(model_id: str, confirm: bool = False) -> dict:
     # catalog reads. Assuming a bare list here crashed the first live call.
     rows = {m["id"]: m for m in r.json()["models"]}
     if model_id not in rows:
-        raise ValueError("No such model: %s (one of %s)" % (model_id, ", ".join(rows)))
+        raise Refusal("No such model: %s (one of %s)" % (model_id, ", ".join(rows)))
     row = rows[model_id]
     gb = round((row.get("bytes") or 0) / 1e9, 1)
     if row.get("state") == "ready":
@@ -494,7 +523,7 @@ def download_model(model_id: str, confirm: bool = False) -> dict:
                 "message": "%s is %.1f GB. Download it now?" % (row["name"], gb)}
     r = _api_post("/api/models/%s/download" % model_id, timeout=10.0)
     if r.status_code in (404, 409):
-        raise ValueError(r.json().get("detail", "could not start the download"))
+        raise Refusal(r.json().get("detail", "could not start the download"))
     r.raise_for_status()
     return {"model": row["name"], "state": "downloading", "gb": gb,
             "message": "Downloading %s (%.1f GB). Check get_setup for progress." % (row["name"], gb)}
@@ -516,7 +545,7 @@ def list_videos(folder: str) -> dict:
     """
     root = os.path.expanduser(folder)
     if not os.path.isdir(root):
-        raise ValueError("No such folder: %s" % folder)
+        raise Refusal("No such folder: %s" % folder)
     exts = (".mp4", ".mov", ".mkv", ".webm", ".avi")
     videos = []
     for entry in os.scandir(root):
@@ -584,7 +613,7 @@ def cut_clip(video_path: str, start: str, end: str) -> dict:
                   json={"video_path": video_path, "start": start, "end": end},
                   timeout=600.0)
     if r.status_code in (404, 422, 503):
-        raise ValueError(r.json().get("detail", "could not cut this video"))
+        raise Refusal(r.json().get("detail", "could not cut this video"))
     r.raise_for_status()
     return r.json()
 
@@ -605,7 +634,7 @@ def download_video(url: str) -> dict:
     r = _api_post("/api/downloads", json={"url": url}, timeout=30.0)
     if r.status_code in (404, 422):
         detail = r.json().get("detail", "could not fetch that link")
-        raise ValueError(detail if isinstance(detail, str)
+        raise Refusal(detail if isinstance(detail, str)
                          else detail.get("message") or str(detail))
     r.raise_for_status()
     did = r.json()["id"]
@@ -619,9 +648,9 @@ def download_video(url: str) -> dict:
             return {"path": info["path"], "title": info["title"],
                     "duration_sec": info["duration_sec"], "download_id": did}
         if info.get("status") == "failed":
-            raise ValueError(info.get("error") or "could not fetch that link")
+            raise Refusal(info.get("error") or "could not fetch that link")
         time.sleep(DOWNLOAD_POLL)
-    raise ValueError("this download is still %s after %d minutes -- it is carrying on, "
+    raise Refusal("this download is still %s after %d minutes -- it is carrying on, "
                      "ask again in a while" % (info.get("status") or "running", DOWNLOAD_WAIT // 60))
 
 
@@ -636,7 +665,7 @@ def _erase_area(path: str, area):
     """
     if isinstance(area, (list, tuple)):
         if len(area) != 4:
-            raise ValueError("an area given as numbers must be [ymin, ymax, xmin, xmax]")
+            raise Refusal("an area given as numbers must be [ymin, ymax, xmin, xmax]")
         return [int(v) for v in area], "the box you gave"
     word = (area or "auto").strip().lower()
     if word == "whole":
@@ -653,11 +682,11 @@ def _erase_area(path: str, area):
     if word in ("bottom", "top"):
         w, h = media.video_size(path)
         if not (w and h):
-            raise ValueError("could not read this video's size -- give the area as "
+            raise Refusal("could not read this video's size -- give the area as "
                              '[ymin, ymax, xmin, xmax], or use "whole"')
         band = [int(h * 0.75), h, 0, w] if word == "bottom" else [0, int(h * 0.25), 0, w]
         return band, "the %s quarter of the frame" % word
-    raise ValueError('area must be "auto", "bottom", "top", "whole", '
+    raise Refusal('area must be "auto", "bottom", "top", "whole", '
                      "or [ymin, ymax, xmin, xmax]")
 
 
@@ -666,11 +695,11 @@ def _check_eraser(r) -> None:
     a model, so there is no size to name -- the user installs it from the
     screen, and nothing here can do it for them."""
     if r.status_code == 409:
-        raise ValueError("The subtitle eraser is not installed on this computer. Ask "
+        raise Refusal("The subtitle eraser is not installed on this computer. Ask "
                          "the user to install it from the Erase subtitles screen.")
     if r.status_code in (400, 404, 422, 503, 507):
         detail = r.json().get("detail", "could not erase this video's subtitles")
-        raise ValueError(detail if isinstance(detail, str) else str(detail))
+        raise Refusal(detail if isinstance(detail, str) else str(detail))
     r.raise_for_status()
 
 
@@ -702,9 +731,9 @@ def erase_subtitles(video_path: str, area: Union[str, List[int]] = "auto",
     """
     path = os.path.expanduser(video_path)
     if not os.path.isfile(path):
-        raise ValueError("No such video: %s" % video_path)
+        raise Refusal("No such video: %s" % video_path)
     if (start is None) != (end is None):
-        raise ValueError("give both start and end, or neither")
+        raise Refusal("give both start and end, or neither")
     band, area_used = _erase_area(path, area)
     fields = {"area": band if band == "whole" else json.dumps(band)}
     if start is not None:
@@ -777,11 +806,11 @@ def cancel_dub(job_id: str) -> dict:
     job = _job(job_id)
     status = job.get("status")
     if status in ("done", "error", "cancelled"):
-        raise ValueError("nothing to cancel: this job is already %s" % status)
+        raise Refusal("nothing to cancel: this job is already %s" % status)
     r = _api_post("/api/dub/jobs/%s/cancel" % job_id, timeout=30.0)
     if r.status_code in (404, 409):
         detail = r.json().get("detail", "cannot cancel this job")
-        raise ValueError(detail if isinstance(detail, str) else str(detail))
+        raise Refusal(detail if isinstance(detail, str) else str(detail))
     r.raise_for_status()
     return r.json()
 
@@ -808,7 +837,7 @@ def burn_subtitles(video_path: str, srt_path: str = "", preset: str = "clean") -
                   timeout=1800.0)
     if r.status_code in (404, 422, 503):
         detail = r.json().get("detail", "could not subtitle this video")
-        raise ValueError(detail if isinstance(detail, str) else str(detail))
+        raise Refusal(detail if isinstance(detail, str) else str(detail))
     r.raise_for_status()
     return r.json()
 

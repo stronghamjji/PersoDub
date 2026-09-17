@@ -756,3 +756,38 @@ def test_list_videos_still_lists_the_folder_when_the_app_is_closed(monkeypatch, 
 
     monkeypatch.setattr(mcp_server.httpx, "get", closed)
     assert [v["name"] for v in mcp_server.list_videos(str(tmp_path))["videos"]] == ["clip.mp4"]
+
+
+# --- what the agent is told when a tool says no --------------------------
+
+def test_a_refusal_keeps_its_reason_for_the_agent():
+    # mcp >= 2.2 hands the agent "Error executing tool X" and nothing else for
+    # any exception that is not a ToolError: the kit shipped 2.2.0 while the
+    # dev venv had 2.0.0, and eleven refused dubs in the 0.6.2 full test came
+    # back as "등록 오류" with no reason (2026-09-16).
+    from mcp.server.mcpserver.exceptions import ToolError
+    with pytest.raises(ToolError, match="dub_mode"):
+        mcp_server.queue_dub("x.mp4", "en", dub_mode="cloud")
+
+
+def test_queue_dub_names_the_perso_credits_a_local_dub_will_spend(monkeypatch, tmp_path):
+    # "Local" dub, but the saved defaults send transcription through Perso:
+    # the agent told the user it was free (0.6.2 full test, F30) and never
+    # said the balance (F35).
+    video = _tmp_video(tmp_path)
+    asked = []
+
+    def fake_get(url, params=None, timeout=None):
+        asked.append((url, params))
+        if url.endswith("/api/setup"):
+            return _Response(200, {"defaults": {"stt": "perso", "separation": "local"}})
+        return _Response(200, {"seconds": 10.0, "credits_estimate": 2, "credits_balance": 500})
+
+    monkeypatch.setattr(mcp_server.httpx, "get", fake_get)
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: pytest.fail("posted"))
+    out = mcp_server.queue_dub(str(video), "en")
+    assert out["needs_confirmation"] is True
+    assert "free" not in out["message"]
+    assert "Perso" in out["message"] and "2 credits" in out["message"] and "500" in out["message"]
+    # The balance comes from the perso estimate, not the local one.
+    assert any(p and p.get("engine") == "perso" for _u, p in asked)
