@@ -262,3 +262,11 @@ def test_the_instructions_say_the_assistant_cannot_wait_or_notify():
     assert "cannot wait" in SYSTEM_PROMPT
     assert "Never promise" in SYSTEM_PROMPT
     assert "Up next" in SYSTEM_PROMPT
+
+
+def test_the_instructions_say_to_keep_the_balance_when_asking_about_credits():
+    # The tool's question names the credits and the balance; the Codex-driven
+    # assistant passed on the credits and dropped the balance (0.6.2 retest,
+    # F35, 2026-09-17). Both agents read this prompt.
+    from app.agents.claude import SYSTEM_PROMPT
+    assert "AND the balance" in SYSTEM_PROMPT
