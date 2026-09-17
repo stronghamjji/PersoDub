@@ -251,3 +251,11 @@ def test_the_two_clis_say_being_signed_out_in_quite_different_words():
     # An assistant this file has never heard of gets a sentence, not a crash.
     assert not base.is_signed_out("nobody", "401")
     assert base.signed_out_line("nobody") == "The assistant is not signed in."
+
+
+def test_the_instructions_say_to_keep_the_balance_when_asking_about_credits():
+    # The tool's question names the credits and the balance; the Codex-driven
+    # assistant passed on the credits and dropped the balance (0.6.2 retest,
+    # F35, 2026-09-17). Both agents read this prompt.
+    from app.agents.claude import SYSTEM_PROMPT
+    assert "AND the balance" in SYSTEM_PROMPT
