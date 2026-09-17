@@ -116,7 +116,10 @@ def get_script(job_id: str) -> List[dict]:
     Each line carries: line (its number), start/end (seconds), slot (the time this
     line has to be spoken in), source (the original-language line), text (the current
     translation), estimated (how long the translation takes to say), fits (true
-    when estimated lands inside the slot), speaker (who says it, or null when this
+    when the line can be spoken inside its slot -- judged by the voice made for
+    it once there is one, else by the estimate), over (how many seconds the
+    line runs past its slot, 0 when it does not: the screen's "+0.9s"; quote
+    this rather than working it out from estimated), speaker (who says it, or null when this
     job recorded no speakers), audio_sec (how long the voice made for it actually
     runs, or null when that file is gone), and voice_stale (true when that voice
     was made before the script was last written -- so a line whose words you
