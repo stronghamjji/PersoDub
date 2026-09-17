@@ -32,7 +32,40 @@ from app.agents.claude import SYSTEM_PROMPT, TOOL_LABELS, line_arg
 SIGNED_OUT = base.signed_out_line("codex")
 
 
-def translate(event: dict) -> List[dict]:
+# The conversation the app itself started, remembered beside the MCP config.
+# `codex exec resume --last` means "the thread touched last in this folder",
+# and Codex's auto-review runs in a thread of its own (a "guardian" subagent)
+# in that same folder: whenever a tool call was reviewed last, --last resumed
+# the REVIEWER -- a thread with none of our tools -- and the assistant said
+# there were no PersoDub tools for the rest of the session (2026-09-17).
+THREAD_FILE = "codex-thread"
+# It lands on a command line, so it is held to the shape thread ids have.
+_THREAD_ID = re.compile(r"^[0-9A-Za-z][0-9A-Za-z-]{7,63}$")
+# Where command() last pointed; translate() is handed one line at a time by
+# the runner and has no other way to know the folder.
+_thread_dir = None  # type: Optional[str]
+
+
+def _remember_thread(dir_path: Optional[str], thread_id) -> None:
+    if not dir_path or not isinstance(thread_id, str) or not _THREAD_ID.match(thread_id):
+        return
+    try:
+        with open(os.path.join(dir_path, THREAD_FILE), "w", encoding="utf-8") as f:
+            f.write(thread_id)
+    except OSError:
+        pass  # a thread that cannot be remembered costs one new conversation
+
+
+def _remembered_thread(dir_path: str) -> str:
+    try:
+        with open(os.path.join(dir_path, THREAD_FILE), encoding="utf-8") as f:
+            thread_id = f.read().strip()
+    except OSError:
+        return ""
+    return thread_id if _THREAD_ID.match(thread_id) else ""
+
+
+def translate(event: dict, remember_in: Optional[str] = None) -> List[dict]:
     """One line of Codex's JSONL -> zero or more of our events.
 
     Never raises on an unfamiliar line: a new event type from a CLI update
@@ -43,6 +76,7 @@ def translate(event: dict) -> List[dict]:
     kind = event.get("type")
 
     if kind == "thread.started":
+        _remember_thread(remember_in or _thread_dir, event.get("thread_id"))
         # Codex names the thread, never the model. The key is passed on anyway
         # so the panel starts saying so by itself the day the CLI reports it.
         return [{"kind": "start", "model": event.get("model")}]
@@ -244,6 +278,8 @@ def command(mcp_config: str, resume: bool, model: str = "") -> List[str]:
     """
     with open(mcp_config, encoding="utf-8") as f:
         server = json.load(f)["mcpServers"]["persodub"]
+    global _thread_dir
+    _thread_dir = os.path.dirname(os.path.abspath(mcp_config))
 
     settings = [
         # Headless Codex refuses every MCP tool call unless a reviewer is named:
@@ -288,16 +324,11 @@ def command(mcp_config: str, resume: bool, model: str = "") -> List[str]:
         "mcp_servers.persodub.env=%s" % _toml(server["env"]),
     ]
 
-    if resume:  # noqa: SIM108 -- the branch carries the reasoning below; a ternary would not
-        # --last is filtered by working directory, and ours is the app's own
-        # agent folder -- so this cannot pick up the user's own Codex session.
-        # Every turn asks to resume (the panel never sends the field, so the
-        # request default of True stands); with nothing to resume --last starts
-        # a new thread instead of failing, which is what makes the first turn
-        # after an install work.
-        args = ["exec", "resume", "--last", "--json"]
-    else:
-        args = ["exec", "--json"]
+    # By id, never --last: see THREAD_FILE. With nothing remembered -- the first
+    # turn after an install, or the first after this arrived -- a new thread is
+    # started rather than guessed at.
+    thread_id = _remembered_thread(_thread_dir) if resume else ""
+    args = ["exec", "resume", thread_id, "--json"] if thread_id else ["exec", "--json"]
     args += [
         # The agent folder is not a git checkout, and the run must not stop for
         # that. The user's own .rules execpolicy is deliberately left in place:
