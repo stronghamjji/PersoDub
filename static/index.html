@@ -502,6 +502,16 @@
   #screen-done { display: flex; flex-direction: column; padding: 0;
     background: var(--canvas); border-radius: var(--radius); overflow: hidden;
     border: 1px solid var(--border); box-sizing: border-box; }
+  /* With a finished job open the three panes are cards of their own and the
+     desk shows between them, like every other gap in the window: on one
+     shared ground the script ran straight into the timeline (user,
+     2026-09-17). The failed card still gets the whole panel. */
+  #screen-done:has(#doneLayout:not([hidden])) { background: transparent;
+    border-color: transparent; box-shadow: none; overflow: visible; }
+  .script-pane, .video-pane, .timeline { border: 1px solid var(--border); box-sizing: border-box; }
+  .video-tabs, .tl-head { border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0; }
+  html[data-theme="light"] .script-pane, html[data-theme="light"] .video-pane,
+  html[data-theme="light"] .timeline { box-shadow: 0 1px 2px rgba(20, 30, 60, 0.06); }
 
   html[data-theme="light"] .topbar, html[data-theme="light"] .rail,
   html[data-theme="light"] #screen-done, html[data-theme="light"] #screen-home,
