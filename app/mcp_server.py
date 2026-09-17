@@ -341,7 +341,8 @@ def extract_subtitles(video_path: str, engine: str = "",
 @mcp.tool()
 def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
               source_language: str = "", num_speakers: Optional[int] = None,
-              translator: str = "", confirm: bool = False) -> dict:
+              translator: str = "", confirm: bool = False,
+              stt: str = "", separation: str = "") -> dict:
     """Put ONE video into PersoDub's dubbing queue.
 
     target_language (and optional source_language, else auto-detected) are
@@ -363,6 +364,12 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     model is not downloaded, the error names the model and its size: tell the
     user exactly that, and offer the two ways out it lists.
 
+    stt and separation pick, FOR THIS DUB ONLY, where a local dub's
+    transcription and background separation run: "local" (free, this machine)
+    or "perso" (paid); empty keeps the app's default. Use these when the user
+    wants one dub done differently -- never set_default, which changes every
+    dub from then on.
+
     Returns {"job_id", "status"}; the home screen's Up next card shows the
     queue, and get_job_status follows one job.
     """
@@ -370,6 +377,9 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
         raise Refusal('dub_mode must be "local" or "perso"')
     if translator not in ("", "gemma", "hunyuan", "gemini"):
         raise Refusal('translator must be "gemma", "hunyuan", "gemini" or empty')
+    for name, value in (("stt", stt), ("separation", separation)):
+        if value not in ("", "local", "perso"):
+            raise Refusal('%s must be "local", "perso" or empty' % name)
     code = (target_language or "").strip()
     if languages.lookup(dub_mode, code) is None:
         known = [e["id"] for e in languages.languages_for(dub_mode)]
@@ -382,7 +392,10 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
         cloud_stages = []
         if dub_mode == "local":
             defaults = _api_get("/api/setup", timeout=10.0).json().get("defaults", {})
-            cloud_stages = [s for s in ("stt", "separation") if defaults.get(s) == "perso"]
+            # What this dub will really use: the engine named for it, else the default.
+            chosen = {"stt": stt or defaults.get("stt"),
+                      "separation": separation or defaults.get("separation")}
+            cloud_stages = [s for s in ("stt", "separation") if chosen[s] == "perso"]
         # The estimate route already measures the video and, for perso, the
         # balance. Dubbing costs ~1 credit per second (the route's own figure
         # is STT's 1-per-5s, so only seconds and balance are read from it).
@@ -428,6 +441,10 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
         fields["num_speakers"] = str(num_speakers)
     if translator and dub_mode == "local":
         fields["translate_engine"] = translator
+    if stt and dub_mode == "local":
+        fields["stt_engine"] = stt
+    if separation and dub_mode == "local":
+        fields["sep_engine"] = separation
     with open(path, "rb") as f:
         r = _api_post("/api/dub/start", data=fields,
                       files={"video": (os.path.basename(path), f, "video/mp4")},
@@ -482,15 +499,27 @@ def get_setup() -> dict:
 
 
 @mcp.tool()
-def set_default(stage: str, choice: str) -> dict:
+def set_default(stage: str, choice: str, confirm: bool = False) -> dict:
     """Change what one stage uses from now on -- for every dub, from the
-    screen or from here, no restart. stage is one of dub_mode (local |
+    screen or from here, no restart. NOT for one dub: queue_dub takes stt,
+    separation and translator for that. A choice that spends money (perso for
+    any stage, gemini for translation) answers needs_confirmation=true first:
+    put its message to the user and call again with confirm=true only after
+    they clearly agree -- the assistant once switched transcription to Perso
+    before asking, the user declined the dub, and the paid default stayed. stage is one of dub_mode (local |
     perso), separation (local | perso), stt (local | perso), translator
     (hunyuan | gemma | gemini), voice_quality (fast | high). Cloud choices
     need the matching key saved (see get_setup); a local model that is not
     downloaded is not a reason to refuse -- download_model handles that.
     Returns the defaults now in force.
     """
+    paid = choice == "perso" or (stage == "translator" and choice == "gemini")
+    if paid and not confirm:
+        return {"needs_confirmation": True, "message": (
+            "This makes %s the default %s for every dub from now on, and each of "
+            "them will spend %s. To do it for one dub only, queue that dub with "
+            "the engine named instead. Change the default?"
+            % (choice, stage, "Perso credits" if choice == "perso" else "Gemini API quota"))}
     r = _api_post("/api/setup", json={stage: choice}, timeout=10.0)
     if r.status_code in (422, 503):
         raise Refusal(r.json().get("detail", "could not change that setting"))

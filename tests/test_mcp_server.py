@@ -791,3 +791,58 @@ def test_queue_dub_names_the_perso_credits_a_local_dub_will_spend(monkeypatch, t
     assert "Perso" in out["message"] and "2 credits" in out["message"] and "500" in out["message"]
     # The balance comes from the perso estimate, not the local one.
     assert any(p and p.get("engine") == "perso" for _u, p in asked)
+
+
+# --- a paid choice is asked about before it becomes the default ---------------
+
+def test_set_default_asks_before_a_choice_that_spends_credits(monkeypatch):
+    # "음성 인식만 페르소로" -- the assistant switched STT_ENGINE to perso before
+    # asking anything. The user said no to the dub and the default stayed paid,
+    # so every later dub would have spent credits (Windows full test, F35).
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append((a, kw)) or _Response(200, {}))
+    for stage, choice in (("stt", "perso"), ("separation", "perso"), ("dub_mode", "perso"), ("translator", "gemini")):
+        out = mcp_server.set_default(stage, choice)
+        assert out["needs_confirmation"] is True and "every" in out["message"]
+    assert posted == []
+
+
+def test_set_default_changes_a_paid_choice_once_confirmed_and_a_free_one_at_once(monkeypatch):
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda url, json=None, timeout=None: posted.append(json) or _Response(200, {"defaults": {}}))
+    mcp_server.set_default("stt", "perso", confirm=True)
+    mcp_server.set_default("stt", "local")
+    mcp_server.set_default("translator", "gemma")
+    assert posted == [{"stt": "perso"}, {"stt": "local"}, {"translator": "gemma"}]
+
+
+def test_queue_dub_takes_the_engines_for_this_dub_only(monkeypatch, tmp_path):
+    # One dub through Perso transcription is a choice about that dub: it must
+    # not take changing the default for every dub to get it.
+    video = _tmp_video(tmp_path)
+    sent = {}
+
+    def fake_post(url, data=None, files=None, timeout=None, **kw):
+        sent.update(data or {})
+        return _Response(200, {"job_id": "j1", "status": "queued"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    mcp_server.queue_dub(str(video), "en", stt="perso", separation="local", confirm=True)
+    assert sent["stt_engine"] == "perso" and sent["sep_engine"] == "local"
+
+
+def test_queue_dub_prices_the_engines_named_for_this_dub(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+
+    def fake_get(url, params=None, timeout=None):
+        if url.endswith("/api/setup"):
+            return _Response(200, {"defaults": {"stt": "local", "separation": "local"}})
+        return _Response(200, {"seconds": 10.0, "credits_estimate": 2, "credits_balance": 500})
+
+    monkeypatch.setattr(mcp_server.httpx, "get", fake_get)
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: pytest.fail("posted"))
+    out = mcp_server.queue_dub(str(video), "en", stt="perso")
+    assert "2 credits" in out["message"] and "500" in out["message"] and "free" not in out["message"]
+    with pytest.raises(ValueError, match="stt"):
+        mcp_server.queue_dub(str(video), "en", stt="whisper")
