@@ -198,6 +198,12 @@ def test_the_cloud_account_behind_a_job_is_not_a_fact_about_the_failure():
         "   Perso workspace: *"
     assert mask_text("   Perso credits used: 6 (186815 left)") == \
         "   Perso credits used: 6 (*)"
+    # perso_client names the workspace by number alone, which the line above
+    # never matched: it went out in the app log (0.6.2 full test, 2026-09-17).
+    assert mask_text("Perso dubbing project 777 (workspace 123456)") == \
+        "Perso dubbing project 777 (workspace *)"
+    assert mask_text("Could not read credits for Perso workspace 123456 (HTTPError)") == \
+        "Could not read credits for Perso workspace * (HTTPError)"
 
 
 # --- GET /api/report/bundle ------------------------------------------------

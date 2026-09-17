@@ -152,6 +152,9 @@ const DOUBLED_SEP = /\\\\/g;
 // does, and in a public issue it ties that account's reports together
 // (user decision, 2026-09-15).
 const WORKSPACE_RE = /(Perso workspace: )[^\n]*?\(#\d+\)/g;
+// perso_client's own lines name the workspace by its number alone --
+// "project 12 (workspace 34)" -- which the line above never matched (2026-09-17).
+const WORKSPACE_NUMBER_RE = /\b(workspace )\d+/gi;
 // The kit's own paths are kept readable below, and one folder under them is
 // not the app's but the user's: workspace/<day>/<project>, and a project is
 // named after the video it was made from. The backend's masker knows this
@@ -165,7 +168,8 @@ const WORKSPACE_PROJECT = [
 ];
 
 export function maskText(text, { home = "", kit = "" } = {}) {
-  let out = String(text ?? "").replace(DOUBLED_SEP, "\\").replace(WORKSPACE_RE, "$1*");
+  let out = String(text ?? "").replace(DOUBLED_SEP, "\\").replace(WORKSPACE_RE, "$1*")
+    .replace(WORKSPACE_NUMBER_RE, "$1*");
   for (const re of WORKSPACE_PROJECT) out = out.replace(re, "$1*");
   out = out.replace(URL_PATTERN, (url) => {
     try {
@@ -253,6 +257,25 @@ export function normalizeLine(line) {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+/**
+ * The sentence a fingerprint is made of: the job log's own "Error:" line, up
+ * to the bracket where a helper's own words begin. Those words are the last
+ * 400 characters of what it printed (app/run_errors.py), often over several
+ * lines, so where they start moves with the length of the path inside them --
+ * the same broken file, sent twice, came out as two fingerprints (0.6.2 full
+ * test, 2026-09-17). They still go out in the message; they just do not decide
+ * which issue this is. A message with no "Error:" line falls back to its last
+ * line that announces a failure.
+ */
+export function failureLine(message) {
+  const lines = String(message ?? "").split(/\r?\n/).filter((l) => l.trim());
+  const failing = lines.filter((l) => /\b(error|failed|exception|traceback)\b/i.test(l));
+  const line = lines.find((l) => l.startsWith("Error:"))
+    || failing[failing.length - 1] || lines[lines.length - 1] || "";
+  const detail = line.indexOf(" (");
+  return detail > 0 ? line.slice(0, detail) : line;
 }
 
 /**
@@ -379,7 +402,7 @@ export function buildReport({
     platformKey: machine.platformKey || "",
     step: report.step || report.stage,
     code: report.code,
-    lastLine: report.message,
+    lastLine: failureLine(report.message),
   });
   return trimToSize(report, maxBytes);
 }

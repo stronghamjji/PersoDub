@@ -167,6 +167,21 @@ test("POSIX paths and line numbers drop out of a fingerprint too", () => {
   assert.equal(a, b);
 });
 
+// A helper's own words are cut to their last 400 characters, and where that
+// cut lands moves with the length of the path inside them. The same broken
+// file, sent twice, came out as two fingerprints (0.6.2 full test, 2026-09-17).
+test("the same failure is one fingerprint however its detail was cut", () => {
+  const sample = (cut) => buildReport({
+    ...SAMPLE, kind: "dub", code: "unknown",
+    message: "1/6 Separating background audio locally (Demucs)…\n"
+      + "Error: RuntimeError: Voice separation failed on this computer. Check the video file. "
+      + `(local separation exited with an error (${cut} input file ~/x/input.mp4.\n`
+      + "Error opening input files: Invalid data found when processing input\n"
+      + `__SEPARATE_ERROR__ Command '['ffmpeg', '-y', '-v', 'error', '-i', '~/x/input.mp4', ${cut === "g" ? "'-ac', '2', )" : "'-ar)"}`,
+  });
+  assert.equal(sample("ening").fingerprint, sample("g").fingerprint);
+});
+
 test("a different step is a different fingerprint", () => {
   const base = { platformKey: "mac", code: "network", lastLine: "download failed" };
   assert.notEqual(fingerprint({ ...base, step: "models" }), fingerprint({ ...base, step: "python" }));
@@ -373,6 +388,16 @@ test("a doubled-backslash Windows path is masked like a single one", () => {
 
 test("the Perso workspace name is masked in the message too", () => {
   assert.equal(maskText("   Perso workspace: mahop072 (#603412)"), "   Perso workspace: *");
+});
+
+// perso_client logs the workspace by number alone, and the rule above only
+// knew the job log's "name (#number)" line: the number went out in the app
+// log tail (0.6.2 full test, 2026-09-17).
+test("the Perso workspace number is masked wherever the app log names it", () => {
+  assert.equal(maskText("Perso dubbing project 777 (workspace 123456)"),
+    "Perso dubbing project 777 (workspace *)");
+  assert.equal(maskText("Could not read credits for Perso workspace 123456 (HTTPError)"),
+    "Could not read credits for Perso workspace * (HTTPError)");
 });
 
 // The kit's paths stay readable on purpose, but workspace/<day>/<project> is
