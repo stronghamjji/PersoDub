@@ -251,3 +251,14 @@ def test_the_two_clis_say_being_signed_out_in_quite_different_words():
     # An assistant this file has never heard of gets a sentence, not a crash.
     assert not base.is_signed_out("nobody", "401")
     assert base.signed_out_line("nobody") == "The assistant is not signed in."
+
+
+def test_the_instructions_say_the_assistant_cannot_wait_or_notify():
+    # The Codex-driven assistant promised to report when a queued job finished
+    # and to start the next dub by itself; it is gone the moment its answer
+    # ends, so the user waited for nothing (0.6.2 full test, F27/F32,
+    # 2026-09-16). Both agents read this prompt (app/agents/codex.py).
+    from app.agents.claude import SYSTEM_PROMPT
+    assert "cannot wait" in SYSTEM_PROMPT
+    assert "Never promise" in SYSTEM_PROMPT
+    assert "Up next" in SYSTEM_PROMPT
