@@ -35,6 +35,13 @@ SAFETY = 0.97
 # A rewrite has to be this much shorter aloud to replace what is there.
 MIN_GAIN_SEC = 0.05
 ROUNDS = 2
+# The same words, spoken again: the engine's length for one sentence varies a
+# great deal from take to take, and a shorter take costs no meaning at all.
+RETAKES = 2
+# A rewrite may not be asked to lose more than this share of the line. Past it
+# a small translator stops shortening and starts changing what is said
+# ("Though you're far away" -> "You're still with me", 2026-09-17).
+MAX_CUT = 0.4
 
 # (line index, source text, current translation, budget in units)
 ShortenItem = Tuple[int, str, str, int]
@@ -60,10 +67,13 @@ def lines_over(durs: Sequence[float], slots: Sequence[float],
 
 def measured_budget(units: int, dur: float, slot: float) -> Optional[int]:
     """How many units fit the slot at the rate THIS voice spoke this line, or
-    None when that is no shorter than the line already is."""
+    None when that is no shorter than the line already is -- or so much shorter
+    (MAX_CUT) that fitting it would mean saying something else."""
     if units <= 0 or dur <= 0 or slot <= 0:
         return None
     budget = int(units * (slot / dur) * SAFETY)
+    if budget < units * (1 - MAX_CUT):
+        return None
     return budget if 1 <= budget < units else None
 
 
@@ -88,6 +98,23 @@ def refit(texts: Sequence[str], sources: Sequence[str], durs: Sequence[float],
     cur_text = list(texts)
     cur_dur = list(durs)
     kept = {}  # type: Dict[int, Tuple[str, float]]
+
+    # First the same words again: no meaning is at stake, so every long line
+    # gets its retakes before any line is rewritten.
+    for i, _over in lines_over(cur_dur, slots):
+        for _take in range(RETAKES):
+            spoken = respeak(i, cur_text[i])
+            if not spoken:
+                break
+            new_dur, commit = spoken
+            if new_dur and new_dur <= cur_dur[i] - MIN_GAIN_SEC:
+                commit()
+                log("   Refit line %d: a new take of the same words, %.2fs -> %.2fs in a %.2fs slot"
+                    % (i + 1, cur_dur[i], new_dur, slots[i]))
+                cur_dur[i] = new_dur
+                kept[i] = (cur_text[i], new_dur)
+            if cur_dur[i] - slots[i] <= OVER_MIN_SEC:
+                break
 
     for round_no in range(1, rounds + 1):
         items = []  # type: List[ShortenItem]
