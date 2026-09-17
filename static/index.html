@@ -663,6 +663,10 @@
      at: a portrait video is only a few hundred pixels across, and a ten-second
      ruler squeezed into that has its labels dropped one by one. */
   .erase-trim, .erase-row { width: max(var(--erase-col, 100%), 520px); max-width: 100%; }
+  /* Finished, the row holds only where it was saved and Start dubbing, and it
+     is exactly as wide as the picture: at the ruler's 520px the button hung
+     60px past the right edge of a portrait video (user, 2026-09-17). */
+  .erase-row.erase-finished { width: var(--erase-col, 100%); }
   .erase-trim { flex: 0 0 auto; margin: 0; }
   .erase-error { color: var(--destructive); font-size: var(--font-label);
     padding: 0 22px 14px; }
