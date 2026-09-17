@@ -122,8 +122,10 @@ def test_dub_start_with_n_takes(monkeypatch):
     assert captured["n_takes"] == 6
 
 
-def test_dub_start_n_takes_defaults_to_none(monkeypatch):
-    # Omitting n_takes leaves it to run_dub's own QWEN_N_TAKES default
+def test_dub_start_n_takes_defaults_to_the_quality_the_screen_shows(monkeypatch):
+    # Omitting n_takes used to leave it to run_dub's own QWEN_N_TAKES (4)
+    # while Settings said "Fast": an agent's Fast dub made four takes per
+    # line (0.6.2 full test, F10, 2026-09-16). Unsaved means Fast, so one.
     captured = {}
 
     def fake_run_dub(**kw):
@@ -143,7 +145,7 @@ def test_dub_start_n_takes_defaults_to_none(monkeypatch):
         if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
             break
         time.sleep(0.02)
-    assert captured["n_takes"] is None
+    assert captured["n_takes"] == 1
 
 
 def test_dub_start_with_stt_engine(monkeypatch):
@@ -1132,7 +1134,8 @@ def test_dub_start_records_what_the_defaults_resolved_to_not_the_blank(monkeypat
     job = client.get(f"/api/dub/jobs/{jid}").json()
     assert job["stt_engine"] == "whisper"          # local Whisper, named
     assert job["translator"] == dub_api.dub_setup.default_for("translator")
-    assert job["quality"] == dub_api.QWEN_N_TAKES
+    # The quality in force, not the engine's own count (2026-09-17).
+    assert job["quality"] == dub_api.dub_setup.default_n_takes()
 
 
 def test_dub_start_names_the_local_engine_whisper_however_it_was_asked_for(monkeypatch):
