@@ -197,13 +197,37 @@ def test_the_assistant_is_told_what_it_is_for(tmp_path):
     assert all("\n" not in a for a in args)
 
 
-def test_resuming_continues_the_same_conversation(tmp_path):
-    """`--last` is filtered by working directory, and ours is the app's own
-    agent folder -- so this can never pick up the user's own Codex session."""
+def test_resuming_continues_the_conversation_the_app_started(tmp_path):
+    """By its own id, never `--last`. Codex's auto-review runs in a thread of
+    its own ("guardian") in the same folder, and whenever that one was touched
+    last, `--last` resumed IT: a thread with none of our tools, so the
+    assistant answered "there are no PersoDub tools" for the rest of the
+    session (0.6.2 retest, 2026-09-17)."""
+    from app.agents.codex import command
+
+    config = _mcp_config(tmp_path)
+    translate({"type": "thread.started", "thread_id": "01a0-main-thread"}, remember_in=str(tmp_path))
+    args = command(config, resume=True)
+    assert args[:4] == ["exec", "resume", "01a0-main-thread", "--json"]
+    assert "--last" not in args
+
+
+def test_with_no_thread_of_its_own_yet_a_resume_starts_a_new_one(tmp_path):
+    """The first turn after an install, or after this fix arrives: nothing was
+    remembered, and guessing with `--last` is the bug."""
     from app.agents.codex import command
 
     args = command(_mcp_config(tmp_path), resume=True)
-    assert args[:4] == ["exec", "resume", "--last", "--json"]
+    assert args[:2] == ["exec", "--json"]
+    assert "resume" not in args
+
+
+def test_a_thread_id_that_is_not_an_id_is_not_remembered(tmp_path):
+    """It lands on a command line, so it is held to the shape ids have."""
+    from app.agents.codex import command
+
+    translate({"type": "thread.started", "thread_id": "--last --full-auto"}, remember_in=str(tmp_path))
+    assert "resume" not in command(_mcp_config(tmp_path), resume=True)
 
 
 def test_no_model_is_ever_asked_for(tmp_path):
