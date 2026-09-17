@@ -135,3 +135,17 @@ test("downloadsLabel names the folders under Downloads, on either kind of slash"
   assert.equal(downloadsLabel("/elsewhere/clip.mp4"), "");
   assert.equal(downloadsLabel(""), "");
 });
+
+import { statusParts } from "./format.mjs";
+
+test("statusParts cuts a top-bar status into the pieces its chips are made of", () => {
+  // The finished screen's "Done · Fast mode · Whisper · Hunyuan 1.8B · Qwen3-TTS"
+  // read as one grey sentence; each part is a chip now (2026-09-17).
+  assert.deepEqual(statusParts("Done · Fast mode · Whisper"), ["Done", "Fast mode", "Whisper"]);
+  // One part is a plain label, not a chip: "Local dubbing", "Erase subtitles".
+  assert.deepEqual(statusParts("Local dubbing"), ["Local dubbing"]);
+  assert.deepEqual(statusParts(""), []);
+  assert.deepEqual(statusParts(undefined), []);
+  // A stray separator does not make an empty chip.
+  assert.deepEqual(statusParts("Working ·  · English"), ["Working", "English"]);
+});
