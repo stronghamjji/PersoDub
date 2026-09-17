@@ -20,11 +20,12 @@ import json
 import os
 from typing import List, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import perso_client, perso_materialize, state
+from app import config, perso_client, perso_materialize, state
 from app.api._shared import script_work_dir
 from app.dub_script import DUB_NAME, edit_line, line_wav_path, load_lines
 from app.perso_client import (
@@ -158,7 +159,20 @@ def _line_manifest(work_dir: str) -> dict:
         return json.load(f)
 
 
-def _remake_one_voice(work_dir: str, data: dict, line: int, text: str) -> None:
+def _voice_language(job: dict, data: dict) -> str:
+    """The language name the voice engine speaks, from the job's code.
+
+    The line manifest carries a name too, but for a Perso result made editable
+    it is Perso's name for the language ("English (US)"), and the engine knows
+    only "English": every remake on such a job was refused with "Unsupported
+    languages" (0.6.2 full test, 2026-09-16). The code's first half is the
+    engine's language whatever the region.
+    """
+    code = (job.get("language_code") or "").split("-")[0].lower()
+    return config.LANGUAGE_NAMES.get(code) or data.get("language") or "English"
+
+
+def _remake_one_voice(work_dir: str, data: dict, line: int, text: str, language: str) -> None:
     """Speak one line again, over its own old wav. The video is NOT rebuilt here.
 
     Rebuilding is the caller's call: one line at a time rebuilds after each one,
@@ -168,10 +182,16 @@ def _remake_one_voice(work_dir: str, data: dict, line: int, text: str) -> None:
     if not 1 <= line <= len(entries):
         raise HTTPException(status_code=422, detail=f"There is no line {line}.")
     try:
-        new_path = resynth_one_line(work_dir, entries[line - 1], text,
-                                    data.get("language") or "English")
+        new_path = resynth_one_line(work_dir, entries[line - 1], text, language)
     except FileNotFoundError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except httpx.HTTPError:
+        # The engine did not answer in time or answered with an error: on a
+        # machine that is also dubbing, that is the dub holding it. A 500 here
+        # read to the agent as "still waiting" (2026-09-16).
+        raise HTTPException(status_code=503, detail=(
+            "The voice engine is busy. Wait for the running dub to finish, "
+            "then try this line again."))
     if new_path is None:
         raise HTTPException(status_code=502, detail="Could not make the voice.")
 
@@ -190,7 +210,7 @@ def dub_job_line_voice(jid: str, line: int):
     if not 1 <= line <= len(lines):
         raise HTTPException(status_code=422, detail=f"There is no line {line}.")
 
-    _remake_one_voice(work_dir, data, line, lines[line - 1]["text"])
+    _remake_one_voice(work_dir, data, line, lines[line - 1]["text"], _voice_language(job, data))
     rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
                 (job.get("result") or {}).get("out_path"))
     return {"line": line, "ok": True}
@@ -221,8 +241,9 @@ def dub_job_stale_voices(jid: str):
     if not stale:
         return {"remade": [], "skipped": len(lines)}
 
+    language = _voice_language(job, data)
     for line in stale:
-        _remake_one_voice(work_dir, data, line["line"], line["text"])
+        _remake_one_voice(work_dir, data, line["line"], line["text"], language)
     # Once, at the end: the rebuild is the slow half, and laying down five new
     # lines five times over would spend it five times for the same video.
     rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
