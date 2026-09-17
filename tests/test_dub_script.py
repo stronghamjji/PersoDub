@@ -278,3 +278,21 @@ def test_exporting_into_a_folder_that_is_not_there_says_which_folder(tmp_path):
         export_srt(str(tmp_path), "sub/dir/script.srt")
     assert "sub/dir" in str(e.value)
     assert str(tmp_path) not in str(e.value)
+
+
+def test_load_lines_judges_fit_by_the_voice_once_there_is_one(tmp_path):
+    # Short words, long voice: the estimate from the characters says the line
+    # fits, the wav on disk runs 0.9s past its slot. The screen shows +0.9s
+    # from the wav; the agent read fits=true from the estimate and named the
+    # wrong lines (0.6.2 full test, F9, 2026-09-16). Same rule, same answer.
+    write(tmp_path / DUB_NAME, [(0.0, 2.0, "네"), (3.0, 5.0, "네"), (6.0, 8.0, "네")])
+    write_wav(tmp_path / "qwen_line_0.wav", seconds=2.9)
+    write_wav(tmp_path / "qwen_line_1.wav", seconds=2.02)
+
+    lines = load_lines(str(tmp_path), "ko")
+
+    assert lines[0]["fits"] is False and abs(lines[0]["over"] - 0.9) < 0.02
+    # A hair over is not over: the tolerance the screen uses.
+    assert lines[1]["fits"] is True and lines[1]["over"] == 0
+    # No voice yet: the estimate's verdict stands, and there is nothing to measure.
+    assert lines[2]["audio_sec"] is None and lines[2]["over"] == 0
