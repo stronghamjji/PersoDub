@@ -277,9 +277,21 @@ def _split_candidates(item):
     """One line's raw candidate item -> list of candidate strings (up to 3), tolerant of the
     model nesting a real list, or (fallback) returning a single numbered string
     ("1. a\\n2. b\\n3. c", "1) a", ...) or a single plain string."""
+    # An object is read, never spoken. Hunyuan answered one line of a Japanese
+    # dub with {"candidates": [...]}; str() of it went into translated.srt and
+    # the voice read the braces aloud (Windows full test, 2026-09-17). Its list
+    # is the candidates, its one string is one candidate, and anything that is
+    # neither text nor a list of text is no candidate at all -- the caller then
+    # keeps the line it had, which is a sentence.
+    if isinstance(item, dict):
+        lists = [v for v in item.values() if isinstance(v, list)]
+        strings = [v for v in item.values() if isinstance(v, str)]
+        item = lists[0] if lists else (strings[0] if strings else [])
     if isinstance(item, list):
-        return [str(c).strip() for c in item if str(c).strip()]
-    text = str(item).strip()
+        return [c.strip() for c in item if isinstance(c, str) and c.strip()]
+    if not isinstance(item, str):
+        return []
+    text = item.strip()
     parts = re.split(r"(?:^|\n)\s*[123][.\):]\s*", text)
     parts = [p.strip() for p in parts if p.strip()]
     return parts if parts else ([text] if text else [])

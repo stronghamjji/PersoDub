@@ -402,3 +402,20 @@ def test_translate_scene_two_pass():
     assert len(out2) == 2
     assert out2 == [long_ko, long_ko]  # draft returned as-is
     assert len(calls) == 1  # no shorten pass without durations
+
+
+# --- a line that came back as something other than text ----------------------
+
+def test_a_line_that_is_not_text_is_a_malformed_answer():
+    # str() of a dict went into the script and the voice read the braces aloud
+    # (Windows full test, 2026-09-17). Raising is what makes the caller ask again.
+    with pytest.raises(ValueError, match="not text"):
+        parse_json_array('[{"candidates": ["a", "b", "c"]}, "全部学生のせいじゃないのか？"]', 2)
+    with pytest.raises(ValueError, match="not text"):
+        parse_json_array('[["a", "b"], "c"]', 2)
+    with pytest.raises(ValueError, match="not text"):
+        parse_json_array('[7, "c"]', 2)
+
+
+def test_an_object_holding_one_string_is_that_string():
+    assert parse_json_array('[{"text": "안녕"}, "잘 지내?"]', 2) == ["안녕", "잘 지내?"]

@@ -306,3 +306,34 @@ def test_candidates_prompt_mixed_directions_each_line_gets_its_own_phrasing():
         ["long", "short"]
     )
     assert "이내" in prompt and "이상" in prompt
+
+
+# --- a line's candidates handed back as an object ----------------------------
+
+def test_an_object_holding_the_candidates_is_read_not_spoken():
+    # Hunyuan answered one line of a Japanese dub with an object instead of a
+    # list: {"candidates": ["...", "...", "..."]}. str() of that went into
+    # translated.srt and the voice read the braces and quotes aloud, 6.6s into
+    # a 4.8s slot (Windows full test, job f3fb54f1, 2026-09-17).
+    from app.text.length_fit import parse_candidates_array
+    raw = '[{"candidates": ["公平な目で見るよ", "ちょっと不公平だけどね", "判断は公平に行う"]}, ["全部学生のせいじゃないのか？"]]'
+    out = parse_candidates_array(raw, 2)
+    assert out[0] == ["公平な目で見るよ", "ちょっと不公平だけどね", "判断は公平に行う"]
+    assert out[1] == ["全部学生のせいじゃないのか？"]
+
+
+def test_an_object_with_one_string_is_one_candidate():
+    from app.text.length_fit import parse_candidates_array
+    assert parse_candidates_array('[{"text": "短い文"}]', 1) == [["短い文"]]
+
+
+def test_what_cannot_be_read_as_text_is_no_candidate_at_all():
+    # Never the repr of a structure: an empty list makes the caller keep the
+    # line it already had, which is a sentence a voice can say.
+    from app.text.length_fit import parse_candidates_array
+    out = parse_candidates_array('[{"candidates": {"a": 1}}, 7, null, [["nested"], {"x": "y"}, "ok"]]', 4)
+    assert out[0] == [] and out[1] == [] and out[2] == []
+    assert out[3] == ["ok"]
+    for line in out:
+        for cand in line:
+            assert "{" not in cand and "[" not in cand
