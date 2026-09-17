@@ -255,3 +255,28 @@ def test_device_label_is_absent_rather_than_wrong(monkeypatch):
         raise httpx.ConnectError("no route")
     monkeypatch.setattr(httpx, "get", boom)
     assert QwenTTSEngine(base_url="http://x").device_label() is None
+
+
+def test_clone_waits_as_long_as_synthesis_does(monkeypatch, tmp_path):
+    # Cloning a voice on a machine that is also dubbing took longer than the
+    # clone's own 120 seconds while /generate was allowed 300; one line's remake
+    # died on the shorter clock (0.6.2 full test, F18, 2026-09-16).
+    from app.engines import qwen_tts as mod
+    p = tmp_path / "ref.wav"
+    p.write_bytes(b"RIFFxxxx")
+    captured = {}
+
+    class _R:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"voice_id": "abc123"}
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        captured["timeout"] = timeout
+        return _R()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    QwenTTSEngine(base_url="http://x").clone(str(p), "hello there", mode="icl")
+    assert captured["timeout"] == mod.PERSODUB_TTS_TIMEOUT

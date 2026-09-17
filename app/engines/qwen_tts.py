@@ -107,7 +107,9 @@ class QwenTTSEngine(TTSEngine):
                 self.base_url + "/clone",
                 data=data,
                 files={"ref_audio": (os.path.basename(ref_audio_path), f, "audio/wav")},
-                timeout=120,
+                # The same clock as /generate: on a machine that is also
+                # dubbing, a clone outlived 120 seconds (2026-09-16).
+                timeout=PERSODUB_TTS_TIMEOUT,
             )
         r.raise_for_status()
         return r.json()["voice_id"]
