@@ -198,13 +198,15 @@
     --primary-ink: #1d4ed8;
     --accent: #e3edff;
     --secondary: #e3e6ee;
-    --canvas: #ffffff;
-    --desk: #eceef2;
+    /* Off-white, not #ffffff, and ink a step off black: a full screen of pure
+       white panels was hard on the eyes (user, 2026-09-17). */
+    --canvas: #f6f7f9;
+    --desk: #e3e6ec;
     --control-line: rgba(0, 0, 0, 0.20);
     --muted-foreground: #596072;
-    --foreground: #0d0f14;
-    --background: #ffffff;
-    --border: #c6ccd9;
+    --foreground: #1b1e26;
+    --background: #f6f7f9;
+    --border: #c3c9d6;
     --divider: #aeb4c4;
     --success: #11ad32;
     --success-ink: #2a8a4a;
@@ -222,11 +224,11 @@
     /* Light runs the other way from dark: the desk is the lightest grey and the
        title rows are darker than it. With the two a shade apart the rows read as
        the desk showing through (user, 2026-09-17). */
-    --head-bg: #d8dfed;
-    --head-line: #a9b2c6;
-    --well: #f1f3f8;
-    --well-line: #aeb3c2;
-    --hair: #e4e7ee;
+    --head-bg: #d2d9e7;
+    --head-line: #a5aec2;
+    --well: #eceff4;
+    --well-line: #aab0bf;
+    --hair: #dfe3ea;
     --chip-done-bg: rgba(17, 173, 50, 0.14);
     --chip-done-fg: #1d8a3c;
   }
@@ -935,7 +937,7 @@
   .pane-head .m { font-weight: 400; color: var(--foreground); background: var(--secondary);
     padding: 1px 8px; border-radius: 99px; font-size: var(--font-label); margin-left: 4px; }
   /* On light the chip's own grey IS the title row's: white keeps it a chip. */
-  html[data-theme="light"] .pane-head .m { background: #ffffff; box-shadow: inset 0 0 0 1px var(--border); }
+  html[data-theme="light"] .pane-head .m { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
     border-bottom: 1px solid var(--border); }
   #scriptBox { flex: 1; min-height: 0; overflow: auto; }
