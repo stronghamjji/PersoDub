@@ -58,3 +58,10 @@ export function errorText(e) {
   } catch { /* not JSON, use it as it is */ }
   return raw;
 }
+
+// The top bar's status, cut where it is joined: "Done · Fast mode · Whisper".
+// Two or more parts are drawn as chips (static/index.html setTopbar); a single
+// part stays the plain label it always was.
+export function statusParts(subtitle) {
+  return String(subtitle ?? "").split(" · ").map((s) => s.trim()).filter(Boolean);
+}
