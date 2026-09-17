@@ -272,6 +272,18 @@ def build_candidates_prompt(sources, currents, target_lang, budgets, directions)
     )
 
 
+def shorten_to_budgets(engine, items, target_lang):
+    # type: (object, List[tuple], str) -> dict
+    """Ask once for shorter wording of every (index, source, current, budget) in
+    `items`; answers {index: shorter text}. The budgets here are measured from
+    the voice that was made (app/refit.py), not estimated from the characters."""
+    prompt = build_shorten_prompt([src for _i, src, _cur, _b in items],
+                                  [cur for _i, _src, cur, _b in items],
+                                  target_lang, [b for _i, _src, _cur, b in items])
+    out = _ask_with_retry(engine._ask, prompt, len(items))
+    return {i: text for (i, _src, _cur, _b), text in zip(items, out)}
+
+
 def _split_candidates(item):
     # type: (object) -> List[str]
     """One line's raw candidate item -> list of candidate strings (up to 3), tolerant of the
