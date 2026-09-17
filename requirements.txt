@@ -6,7 +6,7 @@ google-auth
 python-multipart
 pytest
 yt-dlp
-mcp
+mcp==2.2.0
 
 # The model downloader (app/models.py) shells out to the `hf` CLI, and the
 # installer's ffmpeg step to static-ffmpeg. Both lived in the engine venvs
