@@ -496,7 +496,7 @@ def run_qwen_dub(
 
     video_duration, when known, scales the whisper-veto subprocess timeout in
     the nonverbal-whitelist / company-ambience gate for long videos (see
-    app.nonverbal.nonverbal_timeout).
+    app.timeouts.scaled_timeout).
     """
     log = log or (lambda m: None)
     speakers = speakers_in(ref_cues)

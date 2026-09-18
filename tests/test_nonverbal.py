@@ -307,32 +307,16 @@ def test_overlay_adjacent_segments_no_gap_overrun(tmp_path):
 
 
 # --- timeout scales with the video's length (long videos used to die on a
-# fixed 1800s wall regardless of how long the video actually was) ----------
-
-def test_nonverbal_timeout_keeps_fixed_value_for_short_video():
-    assert nv.nonverbal_timeout(31.0) == 1800
-
-
-def test_nonverbal_timeout_scales_for_long_video():
-    hour = 3600.0
-    expected = min(max(1800, hour * nv.NONVERBAL_TIMEOUT_PER_SEC), nv.NONVERBAL_TIMEOUT_CAP)
-    assert nv.nonverbal_timeout(hour) == expected
-    assert expected > 1800
-
-
-def test_nonverbal_timeout_capped_so_it_cannot_hang_a_day():
-    assert nv.nonverbal_timeout(999999.0) == nv.NONVERBAL_TIMEOUT_CAP
-
-
-def test_nonverbal_timeout_falls_back_to_default_when_duration_unknown():
-    assert nv.nonverbal_timeout(None) == 1800
-    assert nv.nonverbal_timeout(0) == 1800
-
+# fixed 1800s wall regardless of how long the video actually was). The
+# formula itself is tested once, shared, in tests/test_timeouts.py -- this is
+# just the wiring: the computed timeout must actually reach subprocess.run.
 
 def test_whisper_veto_passes_computed_timeout_to_subprocess_run(tmp_path, monkeypatch):
+    from app import timeouts
+
     vocals = _write_tone_wav(tmp_path / "vocals.wav", [(0.0, 0.5)], dur=1.0)
-    monkeypatch.setattr(nv, "NONVERBAL_TIMEOUT_PER_SEC", 10.0)
-    monkeypatch.setattr(nv, "NONVERBAL_TIMEOUT_CAP", 100000.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_CAP", 100000.0)
     captured = {}
 
     def fake_run(cmd, capture_output, text, encoding, errors, timeout):

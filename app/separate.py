@@ -20,38 +20,9 @@ from typing import Dict, Optional
 
 from app.config import SEP_MODEL_DIR, SEP_PYTHON
 from app.run_errors import describe_exit_failure, describe_start_failure
+from app.timeouts import scaled_timeout
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "demucs_separate.py")
-
-# Per-second-of-video timeout budget, env-overridable the way
-# app/diar_campplus_client.py's PERSODUB_DIAR_TIMEOUT already is. Measured
-# 2026-09-18 on an M4 Mac: separating a 31s clip took 10s (0.32x realtime). A
-# CPU-only Windows laptop can run roughly 10x slower than this Mac, i.e.
-# ~3.2x realtime worst case; doubled again for headroom (older/busier
-# machines, disk contention) gives ~6x realtime as the budget below.
-try:
-    SEP_TIMEOUT_PER_SEC = float(os.environ.get("PERSODUB_SEP_TIMEOUT_PER_SEC", "6"))
-except (TypeError, ValueError):
-    SEP_TIMEOUT_PER_SEC = 6.0
-# Upper cap so a genuinely stuck subprocess still gets killed instead of
-# hanging for a day.
-try:
-    SEP_TIMEOUT_CAP = float(os.environ.get("PERSODUB_SEP_TIMEOUT_CAP", "10800"))
-except (TypeError, ValueError):
-    SEP_TIMEOUT_CAP = 10800.0
-
-
-def separation_timeout(video_duration: Optional[float], default: float = 900) -> float:
-    """The separation subprocess ceiling for a video this long.
-
-    `default` (today's fixed value) when the duration is unknown, so a failed
-    ffprobe or an untouched caller behaves exactly as before. Otherwise the
-    length-scaled budget, but never below `default` (short videos are
-    unaffected) and never above SEP_TIMEOUT_CAP.
-    """
-    if not video_duration or video_duration <= 0:
-        return default
-    return min(max(default, video_duration * SEP_TIMEOUT_PER_SEC), SEP_TIMEOUT_CAP)
 
 
 class SeparationEngine:
@@ -61,9 +32,9 @@ class SeparationEngine:
                 timeout: int = 900, video_duration: Optional[float] = None):
         self.python_path = python_path or SEP_PYTHON
         self.model_dir = model_dir or SEP_MODEL_DIR
-        # video_duration, when known, scales the timeout up for long videos
-        # (see separation_timeout above); omitted, it's today's fixed `timeout`.
-        self.timeout = separation_timeout(video_duration, default=timeout)
+        # video_duration, when known, scales `timeout` up for long videos
+        # (see app.timeouts.scaled_timeout); omitted, it's today's fixed value.
+        self.timeout = scaled_timeout(video_duration, timeout)
 
     def separate(self, video_or_audio_path: str, out_dir: str) -> Dict[str, str]:
         """Run local Demucs separation on one video/audio file.

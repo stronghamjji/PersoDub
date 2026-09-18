@@ -79,7 +79,7 @@ def compute_mute_set(vocals_path: str,
     Fail-closed: candidates the veto rejects (or cannot verify -- whisper
     unavailable) stay inside the mute set. video_duration, when known, scales
     the default whisper veto's subprocess timeout for long videos (see
-    app.nonverbal.nonverbal_timeout) -- unused when a test injects its own `veto`.
+    app.timeouts.scaled_timeout) -- unused when a test injects its own `veto`.
     """
     log = log or (lambda m: None)
     candidates = extract_nonverbal_segments(vocals_path, speech_spans, dub_spans)

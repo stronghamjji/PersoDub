@@ -48,6 +48,7 @@ from app.audio.spans import pad_spans, subtract_spans
 from app.audio.wavio import read_span_48k, read_wav
 from app.config import NONVERBAL_WHISPER_MODEL, NONVERBAL_WHISPER_PYTHON
 from app.qwen_assemble import detect_speech_regions
+from app.timeouts import scaled_timeout
 
 SPEECH_PAD_SEC = 0.3   # original-speech cue spans padded this much per side
 DUB_PAD_SEC = 0.1      # placed dub-line spans padded this much per side
@@ -57,34 +58,9 @@ MIN_RMS_DBFS = -45.0   # a candidate must be at least this loud on the stem --
 # a -51dBFS sliver was whitelisted although it added nothing over safe mode)
 FADE_SEC = 0.07        # raised-cosine fade at each end of a copied segment
 MIN_CLIP_SEC = 1.0     # whisper temp clips are silence-padded to at least this
-
-# whisper_veto's subprocess timeout, env-overridable the way
-# app/diar_campplus_client.py's PERSODUB_DIAR_TIMEOUT already is. Same
-# reasoning as app/separate.py's SEP_TIMEOUT_PER_SEC: 0.32x realtime measured
-# on an M4 Mac, ~10x slower on a CPU-only Windows laptop (~3.2x realtime),
-# doubled again for headroom -> ~6x realtime. The candidate clips whisper_veto
-# transcribes come from the same source video, so its work scales with the
-# video's length too.
-try:
-    NONVERBAL_TIMEOUT_PER_SEC = float(os.environ.get("PERSODUB_NONVERBAL_TIMEOUT_PER_SEC", "6"))
-except (TypeError, ValueError):
-    NONVERBAL_TIMEOUT_PER_SEC = 6.0
-# Upper cap so a genuinely stuck subprocess still gets killed instead of
-# hanging for a day.
-try:
-    NONVERBAL_TIMEOUT_CAP = float(os.environ.get("PERSODUB_NONVERBAL_TIMEOUT_CAP", "10800"))
-except (TypeError, ValueError):
-    NONVERBAL_TIMEOUT_CAP = 10800.0
-
-
-def nonverbal_timeout(video_duration: Optional[float], default: float = 1800) -> float:
-    """The whisper-veto subprocess ceiling for a video this long -- `default`
-    (today's fixed value) when the duration is unknown, otherwise the
-    length-scaled budget, never below `default` and never above the cap."""
-    if not video_duration or video_duration <= 0:
-        return default
-    return min(max(default, video_duration * NONVERBAL_TIMEOUT_PER_SEC), NONVERBAL_TIMEOUT_CAP)
-
+# whisper_veto's subprocess timeout floor -- video_duration (see below), when
+# known, scales this up for long videos through app.timeouts.scaled_timeout.
+NONVERBAL_TIMEOUT = 1800
 
 Veto = Callable[[str, Sequence[Tuple[float, float]]], List[dict]]
 
@@ -206,7 +182,8 @@ def whisper_veto(vocals_path: str, candidates: Sequence[Tuple[float, float]],
     returns garbage, every candidate is rejected.
 
     video_duration, when known, scales the subprocess timeout up for long
-    videos (see nonverbal_timeout); omitted, it's today's fixed 1800s."""
+    videos (see app.timeouts.scaled_timeout); omitted, it's today's fixed
+    NONVERBAL_TIMEOUT (1800s)."""
     python_bin = python_bin or NONVERBAL_WHISPER_PYTHON
     model = model or NONVERBAL_WHISPER_MODEL
     with tempfile.TemporaryDirectory(prefix="nonverbal_") as td:
@@ -222,7 +199,7 @@ def whisper_veto(vocals_path: str, candidates: Sequence[Tuple[float, float]],
         try:
             r = subprocess.run([python_bin, "-c", _WHISPER_RUNNER, model, in_path, out_path],
                                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               timeout=nonverbal_timeout(video_duration))
+                               timeout=scaled_timeout(video_duration, NONVERBAL_TIMEOUT))
             if r.returncode != 0:
                 raise RuntimeError(r.stderr[-300:])
             texts = json.load(open(out_path))
@@ -290,8 +267,8 @@ def apply_nonverbal_whitelist(mix_path: str, vocals_path: str,
     timestamps, transcript and verdict.
 
     video_duration, when known, scales the default whisper veto's subprocess
-    timeout for long videos (see nonverbal_timeout) -- unused when a test
-    injects its own `veto`."""
+    timeout for long videos (see app.timeouts.scaled_timeout) -- unused when a
+    test injects its own `veto`."""
     log = log or (lambda m: None)
     candidates = extract_nonverbal_segments(vocals_path, speech_spans, dub_spans)
     kept: List[dict] = []

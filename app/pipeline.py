@@ -427,7 +427,7 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
     reuses it so the same video is not uploaded twice.
 
     video_duration, when known, scales the local Demucs subprocess timeout for
-    long videos (see app.separate.separation_timeout) -- unused on the Perso path.
+    long videos (see app.timeouts.scaled_timeout) -- unused on the Perso path.
     """
     if (sep_engine or "").lower() == "perso":
         _log_stage(log, "separate", "Separating background audio via Perso cloud…")
@@ -503,7 +503,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, 
     also turns CAM++ on unless the caller already picked a diarization engine.
 
     video_duration, when known, scales the subprocess timeout for long videos
-    (see app.stt_local.stt_timeout).
+    (see app.timeouts.scaled_timeout).
     """
     _log_stage(log, "transcribe", "Transcribing locally (Whisper, no container)…")
     detected = {"code": None}
@@ -540,7 +540,7 @@ def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_
     STT already produced, and a failure is a warning, not a job failure.
 
     video_duration, when known, scales the subprocess timeout for long videos
-    (see app.diar_campplus_client.diar_timeout).
+    (see app.timeouts.scaled_timeout).
     """
     if diar_engine != "campplus" or not src_cues:
         return
@@ -644,7 +644,7 @@ def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path
 
     video_duration, when known, scales the nonverbal-whitelist / company-
     ambience gate's whisper-veto subprocess timeout for long videos (see
-    app.nonverbal.nonverbal_timeout).
+    app.timeouts.scaled_timeout).
     """
     effective_n_takes = n_takes if n_takes is not None else QWEN_N_TAKES
     # Say which Voice-quality mode ran (user feedback 2026-08-06). <=1 is the

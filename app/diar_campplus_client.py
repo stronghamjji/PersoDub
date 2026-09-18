@@ -21,9 +21,10 @@ import os
 import subprocess
 import tempfile
 from collections import Counter
-from typing import List, Optional
+from typing import List
 
 from app.config import DIAR_PYTHON
+from app.timeouts import scaled_timeout
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DEFAULT_CAMPPLUS = "models/campplus/campplus.onnx"
@@ -60,36 +61,15 @@ CAMPPLUS_MODEL = resolve_campplus_model()
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "campplus_diarize.py")
 
-# Diarization subprocess timeout, env-overridable (PERSODUB_DIAR_TIMEOUT) --
+# Diarization subprocess timeout floor, env-overridable (PERSODUB_DIAR_TIMEOUT) --
 # Mac CPUs are slower than the server's. Garbage/unset falls back to 600.
+# video_duration (see diarize() below), when known, scales this up for long
+# videos through app.timeouts.scaled_timeout; this stays the floor for
+# short/unknown-length videos exactly as before that existed.
 try:
     PERSODUB_DIAR_TIMEOUT = float(os.environ.get("PERSODUB_DIAR_TIMEOUT", "600"))
 except (TypeError, ValueError):
     PERSODUB_DIAR_TIMEOUT = 600.0
-
-# Per-second-of-video timeout budget on top of the floor above, same
-# reasoning as app/separate.py's SEP_TIMEOUT_PER_SEC: 0.32x realtime measured
-# on an M4 Mac, ~10x slower on a CPU-only Windows laptop (~3.2x realtime),
-# doubled again for headroom -> ~6x realtime.
-try:
-    PERSODUB_DIAR_TIMEOUT_PER_SEC = float(os.environ.get("PERSODUB_DIAR_TIMEOUT_PER_SEC", "6"))
-except (TypeError, ValueError):
-    PERSODUB_DIAR_TIMEOUT_PER_SEC = 6.0
-# Upper cap so a genuinely stuck subprocess still gets killed instead of
-# hanging for a day.
-try:
-    PERSODUB_DIAR_TIMEOUT_CAP = float(os.environ.get("PERSODUB_DIAR_TIMEOUT_CAP", "10800"))
-except (TypeError, ValueError):
-    PERSODUB_DIAR_TIMEOUT_CAP = 10800.0
-
-
-def diar_timeout(video_duration: Optional[float], default: float = PERSODUB_DIAR_TIMEOUT) -> float:
-    """The diarization subprocess ceiling for a video this long -- `default`
-    (PERSODUB_DIAR_TIMEOUT) when the duration is unknown, otherwise the
-    length-scaled budget, never below `default` and never above the cap."""
-    if not video_duration or video_duration <= 0:
-        return default
-    return min(max(default, video_duration * PERSODUB_DIAR_TIMEOUT_PER_SEC), PERSODUB_DIAR_TIMEOUT_CAP)
 
 
 def relabel_by_size(cluster_labels: List[int]) -> List[str]:
@@ -115,7 +95,7 @@ def diarize(vocals_wav_path, cues, num_speakers=None, video_duration=None):
     cues            : list of dicts with 'start'/'end' seconds (from STT).
     num_speakers    : fixed k, or None to silhouette-estimate over k=2..4.
     video_duration  : the source video's length in seconds, if known -- scales
-                      the subprocess timeout for long videos (see diar_timeout).
+                      the subprocess timeout for long videos (see app.timeouts.scaled_timeout).
 
     Returns COPIES of cues, each with an added 'speaker' ('SPK0', 'SPK1', ...).
     Input cues are never mutated. CAM++ supplies NO VAD -- it only labels the
@@ -149,7 +129,7 @@ def diarize(vocals_wav_path, cues, num_speakers=None, video_duration=None):
             r = subprocess.run(
                 [py, SCRIPT_PATH, "--input", in_path, "--output", out_path],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=diar_timeout(video_duration),
+                timeout=scaled_timeout(video_duration, PERSODUB_DIAR_TIMEOUT),
             )
         except Exception as e:
             raise RuntimeError("local diarization failed to run (%s)" % str(e)[:120])

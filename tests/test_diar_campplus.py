@@ -344,35 +344,20 @@ def test_diar_timeout_garbage_env_falls_back_to_default(monkeypatch):
 
 
 # --- timeout scales with the video's length (long videos used to die on a
-# fixed 600s wall regardless of how long the video actually was) -----------
-
-def test_diar_timeout_keeps_fixed_value_for_short_video():
-    assert dcc.diar_timeout(31.0) == dcc.PERSODUB_DIAR_TIMEOUT
-
-
-def test_diar_timeout_scales_for_long_video():
-    ten_min = 600.0
-    expected = min(max(dcc.PERSODUB_DIAR_TIMEOUT, ten_min * dcc.PERSODUB_DIAR_TIMEOUT_PER_SEC),
-                   dcc.PERSODUB_DIAR_TIMEOUT_CAP)
-    assert dcc.diar_timeout(ten_min) == expected
-    assert expected > dcc.PERSODUB_DIAR_TIMEOUT
-
-
-def test_diar_timeout_capped_so_it_cannot_hang_a_day():
-    assert dcc.diar_timeout(999999.0) == dcc.PERSODUB_DIAR_TIMEOUT_CAP
-
-
-def test_diar_timeout_falls_back_to_default_when_duration_unknown():
-    assert dcc.diar_timeout(None) == dcc.PERSODUB_DIAR_TIMEOUT
-    assert dcc.diar_timeout(0) == dcc.PERSODUB_DIAR_TIMEOUT
-
+# fixed 600s wall regardless of how long the video actually was). The formula
+# itself is tested once, shared, in tests/test_timeouts.py -- this is just the
+# wiring: the computed timeout must actually reach subprocess.run, with
+# PERSODUB_DIAR_TIMEOUT still the floor (backward compatible).
 
 def test_diarize_passes_computed_timeout_to_subprocess_run(monkeypatch):
     import sys
+
+    from app import timeouts
+
     monkeypatch.setattr(dcc, "DIAR_PYTHON", sys.executable)
     monkeypatch.setattr(dcc, "SCRIPT_PATH", sys.executable)
-    monkeypatch.setattr(dcc, "PERSODUB_DIAR_TIMEOUT_PER_SEC", 10.0)
-    monkeypatch.setattr(dcc, "PERSODUB_DIAR_TIMEOUT_CAP", 100000.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_CAP", 100000.0)
 
     class _R:
         returncode = 0

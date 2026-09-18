@@ -310,44 +310,17 @@ def test_subprocess_run_does_not_override_env(monkeypatch, audio_file):
 
 
 # --- timeout scales with the video's length (long videos used to die on a
-# fixed 900s wall regardless of how long the video actually was) -----------
-
-def test_stt_timeout_keeps_fixed_value_for_short_video():
-    assert stt_local.stt_timeout(31.0) == 900
-
-
-def test_stt_timeout_scales_for_long_video():
-    ten_min = 600.0
-    expected = min(max(900, ten_min * stt_local.STT_TIMEOUT_PER_SEC), stt_local.STT_TIMEOUT_CAP)
-    assert stt_local.stt_timeout(ten_min) == expected
-    assert expected > 900
-
-
-def test_stt_timeout_capped_so_it_cannot_hang_a_day():
-    assert stt_local.stt_timeout(999999.0) == stt_local.STT_TIMEOUT_CAP
-
-
-def test_stt_timeout_falls_back_to_default_when_duration_unknown():
-    assert stt_local.stt_timeout(None) == 900
-    assert stt_local.stt_timeout(0) == 900
-
-
-def test_stt_timeout_per_sec_env_override_wins(monkeypatch):
-    monkeypatch.setenv("PERSODUB_STT_TIMEOUT_PER_SEC", "1")
-    import importlib
-    reloaded = importlib.reload(stt_local)
-    try:
-        assert reloaded.stt_timeout(600.0) == 900  # 600*1 < 900 floor, unchanged
-    finally:
-        monkeypatch.undo()
-        importlib.reload(stt_local)
-
+# fixed 900s wall regardless of how long the video actually was). The formula
+# itself is tested once, shared, in tests/test_timeouts.py -- this is just the
+# wiring: the computed timeout must actually reach subprocess.run.
 
 def test_transcribe_passes_computed_timeout_to_subprocess_run(monkeypatch, audio_file):
+    from app import timeouts
+
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
-    monkeypatch.setattr(stt_local, "STT_TIMEOUT_PER_SEC", 10.0)
-    monkeypatch.setattr(stt_local, "STT_TIMEOUT_CAP", 100000.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_CAP", 100000.0)
     captured = {}
 
     def fake_run(cmd, **kwargs):
