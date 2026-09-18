@@ -23,8 +23,31 @@ import { buildLogArchive } from "./src/reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./src/reportQueue.js";
 import { IS_WIN } from "./src/platform.js";
 
+// Two launches must never both start backends: the second would overwrite
+// pids.json with its own PIDs, and killStalePids on the NEXT boot (whichever
+// happens first) then reads and kills the OTHER instance's engines -- the
+// double-launch race that took down a running instance's uvicorns within 12 s
+// (Windows, 2026-09-18). The lock makes a second launch a no-op before it
+// touches pids.json, an engine, or a window; the first instance's window
+// comes to the front instead. Must run before anything else in the app.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
+let win = null; // the app's one window; a second launch focuses it instead of opening another
+
+// Fired on the FIRST instance when a second launch is attempted; bring the
+// existing window forward instead. Registered even before app.whenReady(), as
+// Electron docs ask -- but win does not exist until boot finishes, so a
+// second launch during that window is simply dropped (nothing to focus yet).
+app.on("second-instance", () => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+});
+
 // The boot's install context (kit, bundled payload, downloader), kept so the
 // pack IPC below can run a pack's steps from the same table later.
 let installCtx = null;
@@ -693,6 +716,10 @@ ipcMain.handle("shell:reveal", (_e, target) => {
 });
 
 app.whenReady().then(() => {
+  // A second launch already quit above; nothing here may run for it -- there
+  // is no guarantee 'ready' fires only for the instance that holds the lock.
+  if (!gotLock) return;
+
   // One greppable line naming the running version -- the e2e update test (and
   // any future bug report) reads it instead of guessing from filenames.
   shellLog(`PERSODUB_VERSION ${app.getVersion()}`);
@@ -741,7 +768,7 @@ app.whenReady().then(() => {
   if (!app.isPackaged && process.platform === "darwin" && app.dock) {
     try { app.dock.setIcon(join(HERE, "build", "icon.png")); } catch { /* cosmetic */ }
   }
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     icon: join(HERE, "build", "icon.png"),
     // What the frame is painted with before the first page arrives. The app is
     // dark (0.5.5), and Electron's default white flashed on every launch.
@@ -1025,6 +1052,10 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
+  // A second launch quits without ever starting an engine of its own; the
+  // pids.json here is the FIRST instance's, not a stale leftover, so this
+  // must not touch it -- that was the double-launch bug (2026-09-18).
+  if (!gotLock) return;
   if (engines) {
     engines.stopAll();
   } else {
