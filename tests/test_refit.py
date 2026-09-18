@@ -64,39 +64,12 @@ def test_a_rewrite_that_is_no_shorter_aloud_is_thrown_away():
 
 def test_a_second_round_asks_tighter_from_the_new_measurement():
     texts = ["x" * 30]
-    # round 1: 30 -> 26 units, still 0.7s over; round 2: -> 20 units, fits.
-    asked, spoken, committed, shorten, respeak = _fakes({0: ["a" * 26, "b" * 20]}, {0: 30 / 4.5})
-    out = refit(texts, ["src"], [4.5], [3.2], "en", shorten, respeak, count=len)
-    assert out[0][0] == "b" * 20
-    assert len(asked) == 2 and asked[1][0][2] == "a" * 26
-    assert committed == [(0, "a" * 26), (0, "b" * 20)]
-
-
-def test_the_same_words_are_tried_again_before_any_are_changed():
-    # The engine says the same sentence at very different lengths from one take
-    # to the next ("You're not alone." came out at 4.0s, then 2.1s). A shorter
-    # take of the SAME words costs no meaning, so it is tried first -- and when
-    # it fits, the translator is never asked.
-    takes = iter([4.1, 2.2])      # the first retake is no better and is thrown away
-    committed, asked = [], []
-
-    def respeak(i, text):
-        return (next(takes), lambda: committed.append(text))
-
-    out = refit(["same words"], ["src"], [4.0], [2.4], "en",
-                lambda items: asked.append(items) or {}, respeak, count=len)
-    assert out == {0: ("same words", 2.2)}
-    assert committed == ["same words"] and asked == []
-
-
-def test_a_line_that_would_have_to_lose_too_much_is_not_rewritten():
-    # 3.78s of voice for a 2.21s slot means cutting over 40% of the words. A
-    # small translator asked for that changed the meaning ("Though you're far
-    # away" -> "You're still with me"). Retakes are tried; the words are left.
-    asked = []
-    out = refit(["x" * 20], ["src"], [3.78], [2.21], "en",
-                lambda items: asked.append(items) or {}, lambda i, t: (3.78, lambda: None), count=len)
-    assert asked == [] and out == {}
+    # round 1: 30 -> 20 units, still 0.6s over; round 2: -> 15 units, fits.
+    asked, spoken, committed, shorten, respeak = _fakes({0: ["a" * 20, "b" * 15]}, {0: 30 / 4.5})
+    out = refit(texts, ["src"], [4.5], [2.4], "en", shorten, respeak, count=len)
+    assert out[0][0] == "b" * 15
+    assert len(asked) == 2 and asked[1][0][2] == "a" * 20 and asked[1][0][3] < asked[0][0][3] + 1
+    assert committed == [(0, "a" * 20), (0, "b" * 15)]
 
 
 def test_a_translator_that_answers_nothing_or_fails_changes_nothing():

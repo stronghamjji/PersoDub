@@ -41,7 +41,7 @@ def _line(tmp_path, i, text):
 
 def test_a_long_line_is_respoken_shorter_and_its_words_change(tmp_path):
     segments = [{"start": 0.0, "end": 2.0, "text": "x" * 15},      # 1.5s in 2.0s: fine
-                {"start": 3.0, "end": 5.0, "text": "y" * 30}]      # 3.0s in 2.0s: 1.0s over
+                {"start": 3.0, "end": 5.0, "text": "y" * 36}]      # 3.6s in 2.0s: 1.6s over
     paths = [_line(tmp_path, 0, segments[0]["text"]), _line(tmp_path, 1, segments[1]["text"])]
     engine = _Engine()
     asked = []
