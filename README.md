@@ -8,12 +8,19 @@ your computer.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
-[![Version](https://img.shields.io/github/v/release/stronghamjji/PersoDub?color=green)](https://github.com/stronghamjji/PersoDub/releases)
 [![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
 
 <p>
   <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-mac.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
   <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+</p>
+
+<!-- The buttons download a file whose name carries no version, so this badge is
+     where the version is: it reads the latest release itself, which is the one
+     those buttons resolve to. -->
+<p>
+  <a href="https://github.com/stronghamjji/PersoDub/releases"><img src="https://img.shields.io/github/v/release/stronghamjji/PersoDub?color=green&label=latest%20version" alt="Latest version" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases"><img src="https://img.shields.io/github/release-date/stronghamjji/PersoDub?color=lightgrey&label=released" alt="Release date" /></a>
 </p>
 
 **macOS** — The button downloads the `.dmg` straight away; open it and drag **PersoDub** into Applications.

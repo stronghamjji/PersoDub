@@ -54,4 +54,9 @@ jobs:
             desktop/dist/*.exe
             desktop/dist/*.blockmap
             desktop/dist/latest.yml
+          # This installer is here to be downloaded and tested within the hour,
+          # not kept: at 138MB each, the default 90 days filled the account's
+          # 0.5GB of included Actions storage twice over (2026-09-18). A release
+          # keeps its own copy, and release storage is not this budget.
+          retention-days: 2
           if-no-files-found: error
