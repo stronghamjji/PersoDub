@@ -181,6 +181,11 @@ def _remake_one_voice(work_dir: str, data: dict, line: int, text: str, language:
     entries = data.get("lines") or []
     if not 1 <= line <= len(entries):
         raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+    if not text.strip():
+        # A line left untranslated stays silent until someone writes it; asking
+        # the engine to speak nothing gives back noise, not silence.
+        raise HTTPException(status_code=422, detail=(
+            f"Line {line} has no words yet. Write its translation first."))
     try:
         new_path = resynth_one_line(work_dir, entries[line - 1], text, language)
     except FileNotFoundError as e:

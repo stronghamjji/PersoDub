@@ -1076,6 +1076,10 @@
   .sc-over { color: var(--destructive); font-weight: 600; }
   .sc-under { color: var(--muted-foreground); }
   .sc-fit { color: var(--success); font-weight: 600; }
+  /* The one verdict too long for the narrow tables' 40-44px slot: cut with an
+     ellipsis there (its title has the rest) rather than run into the buttons. */
+  .sc-untr { color: var(--destructive); font-weight: 600; display: inline-block;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 
   /* ---------------- The script table, narrow ---------------- */
   /* 706px is the row above at its floors, so a pane thinner than that would
@@ -4860,7 +4864,9 @@ function updateSubtitleNow() {
   // same trick made the first line reappear, which read as a bug (user,
   // 2026-09-01 evening).
   if (idx < 0 && doneVideo.paused && t <= subCueOf(lines[0], 0).start) idx = 0;
-  if (idx < 0) { subOverlay.hidden = true; return; }
+  // A line left untranslated has no words, and the burn draws nothing for it
+  // (app/subtitle_ass.py) -- nor does the screen, not even a box preset's box.
+  if (idx < 0 || !(lines[idx].text || "").trim()) { subOverlay.hidden = true; return; }
   subNowIdx = idx;
   const pic = syncSubOverlayBox();
   // The lines as measured, so the screen and the burn break them alike; the

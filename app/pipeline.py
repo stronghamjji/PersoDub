@@ -310,10 +310,26 @@ def _auto_translate_srt(
         log(f"   Length-fit translation failed ({str(e)[:60]}) — translating with the standard method")
         translated = translator.translate(texts, target_lang, source_lang, durations)
 
+    # Lines the length-fit format got no usable answer for are left UNTRANSLATED
+    # there rather than failing the job; the plain format is simpler to answer,
+    # so they get one more chance in it. What is still empty after that stays
+    # silent in the dub and is marked on the script.
+    missing = [i for i, t2 in enumerate(translated) if not t2.strip()]
+    if missing:
+        log(f"   Length-fit translation failed for {len(missing)} lines — translating them with the standard method")
+        redo = translator.translate(
+            [texts[i] for i in missing], target_lang, source_lang,
+            [durations[i] for i in missing],
+        )
+        for i, t2 in zip(missing, redo):
+            translated[i] = t2
+
     # Final check: re-translate any line whose characters aren't the target language, whatever stage produced it (up to 2 times)
     # (this also catches cases where compress/fill re-translation pulled in the wrong language)
+    # An untranslated line is not a wrong-language one: it has had its retries.
     for _ in range(2):
-        bad = [i for i, t2 in enumerate(translated) if not script_ok(t2, target_lang)]
+        bad = [i for i, t2 in enumerate(translated)
+               if t2.strip() and not script_ok(t2, target_lang)]
         if not bad:
             break
         log(f"   {len(bad)} lines not in the target language → re-translating")
@@ -324,9 +340,18 @@ def _auto_translate_srt(
         for i, t2 in zip(bad, redo):
             if script_ok(t2, target_lang):
                 translated[i] = t2
-    still_bad = [i for i, t2 in enumerate(translated) if not script_ok(t2, target_lang)]
+    still_bad = [i for i, t2 in enumerate(translated)
+                 if t2.strip() and not script_ok(t2, target_lang)]
     if still_bad:
         log(f"   Warning: {len(still_bad)} lines still not in the target language — output needs review")
+    untranslated = [i for i, t2 in enumerate(translated) if not t2.strip()]
+    if untranslated and len(untranslated) == len(translated):
+        # A dub of nothing but silence is not a finished job -- and without this
+        # it would reach the voice stage and fail there, blaming the TTS engine.
+        raise RuntimeError(f"no line could be translated (0 of {len(translated)})")
+    if untranslated:
+        log(f"   Warning: {len(untranslated)} lines could not be translated — left silent, "
+            f"marked \"Not translated\" in the script")
 
     # Keep the source script before the next line overwrites it in place -- past this
     # point the source is gone, and app/dub_script.py needs it to show a line's source

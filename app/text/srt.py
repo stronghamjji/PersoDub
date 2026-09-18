@@ -184,6 +184,10 @@ def borrow_time(cues: List[Cue], lang: str, max_group: int = 3) -> List[Cue]:
             # character's words in another's mouth
             if cur.get("speaker_id") != nxt.get("speaker_id"):
                 break
+            # never swallow a line left untranslated (empty) -- merged away, it
+            # would vanish from the script instead of being marked for a fix
+            if not nxt["text"].strip():
+                break
             slot = cur["end"] - cur["start"]
             gap = nxt["start"] - cur["end"]
             if gap > BORROW_SPILL_BUFFER:

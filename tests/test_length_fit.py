@@ -337,3 +337,57 @@ def test_what_cannot_be_read_as_text_is_no_candidate_at_all():
     for line in out:
         for cand in line:
             assert "{" not in cand and "[" not in cand
+
+
+class _OneBadLineEngine:
+    """Answers every chunk with the wrong count, so each line is asked alone;
+    the line "bad" never comes back readable (issue #88's answer cut off
+    mid-string), every other line gets three candidates."""
+    max_budget_retries = 0
+
+    def __init__(self):
+        self.prompts = []
+
+    def _ask(self, prompt):
+        self.prompts.append(prompt)
+        asked = [ln for ln in prompt.splitlines() if ln[:1].isdigit() and ". " in ln]
+        if len(asked) > 1:
+            return j([["x"]])
+        if asked[0].endswith(" bad"):
+            return '[["cut off mid-str'
+        if "candidate" not in prompt:
+            return j(["네 좋아요"])
+        return j([["네 좋아요", "좋아요", "네"]])
+
+
+@pytest.mark.parametrize("durations", [[2.0, 2.0, 2.0], None])
+def test_a_line_that_keeps_failing_is_left_untranslated_not_fatal(durations):
+    # Issue #82: one line that fails its last-resort single-line ask used to
+    # raise out of the loop and end a 969-line job. Now it is left empty
+    # (untranslated: silent, and marked on the script) and the rest go on --
+    # on both the candidates path (with slots) and the plain one (without).
+    from app.translate import UNTRANSLATED
+    eng = _OneBadLineEngine()
+    out = fit_translate(eng, ["good one", "bad", "good two"], "ko", "en", durations)
+    assert out[1] == UNTRANSLATED
+    assert out[0] and out[2]
+
+
+@pytest.mark.parametrize("durations", [[2.0] * 40, None])
+def test_a_translator_that_answers_nothing_is_given_up_on_early(durations):
+    # Every line failing is not a line's trouble but a broken translator. Going
+    # on would ask about all 40 lines a few times each before failing anyway.
+    from app.text.length_fit import GIVE_UP_AFTER
+    eng = _OneBadLineEngine()
+    with pytest.raises(RuntimeError, match="no usable answer for the first %d lines" % GIVE_UP_AFTER):
+        fit_translate(eng, ["bad"] * 40, "ko", "en", durations)
+    # Two chunks' worth of asks (a chunk: 3 tries, then 1 + 3 per line alone).
+    assert len(eng.prompts) == 2 * (3 + 6 * 3)
+
+
+def test_a_bad_opening_is_not_taken_for_a_broken_translator():
+    # The first chunk all fails, the second answers: that is lines failing,
+    # not the translator -- keep going.
+    eng = _OneBadLineEngine()
+    out = fit_translate(eng, ["bad"] * 6 + ["fine"] * 6 + ["bad"] * 6, "ko", "en", [2.0] * 18)
+    assert out[:6] == [""] * 6 and all(out[6:12]) and out[12:] == [""] * 6

@@ -221,6 +221,24 @@ test("a row is byte for byte the row the page drew before this file existed", as
     '    </div>\n    ');
 });
 
+test("a line the translator left untranslated says so where the length verdict goes", async (t) => {
+  // No words and no voice: the numbers would only say "0.0s / 1.0s", so the
+  // verdict stands alone, in red, for the user to write or hand to the agent.
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [
+    line(1),
+    line(2, { text: "", untranslated: true, estimated: 0, audio_sec: null, fits: false }),
+  ] }) } });
+  t.after(h.log.restore);
+
+  await h.api.renderScript("j1");
+  const html = h.$("scriptBox").innerHTML;
+
+  assert.match(html, /<span class="sc-len"><span class="sc-untr" title="Not translated">Not translated<\/span><\/span>/);
+  assert.equal(html.match(/sc-untr/g).length, 1);            // only line 2
+  assert.match(html, /<b>0\.9s<\/b> \/ 1\.0s · <\/span><span class="sc-fit">fits/);  // line 1 unchanged
+  assert.match(html, /data-line="2"><\/div>/);                  // its cell is empty, to type into
+});
+
 test("with no length known yet the strip is drawn to the last line's end", async (t) => {
   const h = harness({ duration: NaN,
                       responses: { [SCRIPT]: ok({ lines: [line(1), line(2)] }) } });

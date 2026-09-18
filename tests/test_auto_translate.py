@@ -410,6 +410,58 @@ def test_an_unexpected_gemini_failure_names_the_part_and_sends_them_to_google(
     assert str(e.value).endswith("Ask Google if it keeps happening.")
 
 
+class _CursedLineTranslator:
+    """A translator run for real: fit_translate drives its _ask, and translate()
+    is the engines' own chunked fallback. Every chunk comes back with no lines
+    at all (issue #82's "got 0, need N"), so each line is asked alone -- and a
+    source line with "cursed" in it never comes back readable in any format
+    (issue #88's answer cut off mid-string)."""
+    max_budget_retries = 0
+
+    def _ask(self, prompt):
+        asked = [ln for ln in prompt.splitlines() if ln[:1].isdigit() and ". " in ln]
+        if len(asked) > 1:
+            return "[]"
+        if "cursed" in asked[0]:
+            return '["cut off mid-str'
+        if "candidate" in prompt:
+            return j([["안녕하세요 반가워요", "안녕 반가워", "반가워요"]])
+        return j(["안녕하세요 반가워요"])
+
+    def translate(self, texts, target_lang, source_lang=None, durations=None, fuller=False):
+        from app.translate import _translate_with_fallback
+        return _translate_with_fallback(self, texts, target_lang, source_lang, durations, fuller)
+
+
+def test_a_line_that_cannot_be_translated_is_left_silent_and_marked_and_the_job_goes_on(tmp_path):
+    # Issue #82: one line out of 969 failed and the whole job died with it. Now
+    # that line is written with no words (the voice stage leaves it silent), the
+    # script marks it for the user or the agent, and every other line is kept.
+    from app.dub_script import load_lines
+    src = [
+        {"start": 0.0, "end": 2.0, "text": "Hello there."},
+        {"start": 3.0, "end": 5.0, "text": "A cursed line."},
+        {"start": 6.0, "end": 8.0, "text": "Nice to meet you."},
+    ]
+    logs = []
+
+    out = pipeline._auto_translate_srt(src, "ko", _CursedLineTranslator(), str(tmp_path),
+                                       source_lang="en", log=logs.append)
+
+    assert [c["text"] for c in read_cues(out)] == ["안녕하세요 반가워요", "", "안녕하세요 반가워요"]
+    lines = load_lines(str(tmp_path), "ko")
+    assert [l["untranslated"] for l in lines] == [False, True, False]
+    assert lines[1]["source"] == "A cursed line."
+    assert lines[1]["voice_stale"] is False     # nothing to remake until it has words
+    assert any("1 lines could not be translated" in m for m in logs)
+
+
+def test_a_dub_where_no_line_could_be_translated_fails_rather_than_going_silent(tmp_path):
+    src = [{"start": 0.0, "end": 2.0, "text": "cursed"}, {"start": 3.0, "end": 5.0, "text": "cursed too"}]
+    with pytest.raises(RuntimeError, match=r"no line could be translated \(0 of 2\)"):
+        pipeline._auto_translate_srt(src, "ko", _CursedLineTranslator(), str(tmp_path), source_lang="en")
+
+
 def test_a_local_translator_failing_points_at_settings_not_at_google(
         monkeypatch, tmp_path):
     # Nobody to ask about a model running on the user's own machine.

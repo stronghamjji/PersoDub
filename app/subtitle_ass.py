@@ -203,6 +203,10 @@ def build_ass(cues, preset_id, *, width, height, pos=None, size=None,
     events = []
     for n, c in enumerate(cues, start=1):
         text = (c.get("text") or "")
+        if not text.strip():
+            # A line left untranslated has no words; a box preset would still
+            # draw its empty rectangle over the video for the line's time.
+            continue
         lay = _layout_for(layout, n, text)
         # The page's lines, or one line the paths below may break themselves.
         lines = list(lay["lines"]) if lay else [text]

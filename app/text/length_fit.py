@@ -15,7 +15,7 @@ import json
 import re
 
 from app.text.srt import _SYL_PER_SEC, estimate_seconds
-from app.translate import _ask_with_retry, script_ok
+from app.translate import UNTRANSLATED, _ask_with_retry, _one_line_or_untranslated, script_ok
 
 # ±15% budget window (2026-07-30 calibration, replaces the old single MARGIN multiplier):
 # a line's estimated speech time must land inside [slot*WINDOW_LOW, slot*WINDOW_HIGH], or it
@@ -31,6 +31,21 @@ NO_BUDGET_SLOT_S = 1.0  # slots shorter than this get no budget (a breeding grou
 # (a single 40+ line batch silently mis-numbers its back half — measured), large enough
 # to keep the local flow of the dialogue.
 DRAFT_CHUNK = 6
+
+# A line the translator cannot answer is left UNTRANSLATED and the draft goes on
+# (app/translate.py). But a translator with no usable answer for ANY of the first
+# this-many lines is not stuck on a line, it is not working (a wrong model, one
+# that only rambles) -- and going on would ask about every line of the video, a
+# few times each, for hours before failing anyway. Two chunks, so one odd opening
+# (a run of music notes) is not taken for a broken translator.
+GIVE_UP_AFTER = 2 * DRAFT_CHUNK
+
+
+def _stop_if_nothing_works(out):
+    # type: (List[str]) -> None
+    if len(out) >= GIVE_UP_AFTER and not any(t.strip() for t in out):
+        raise RuntimeError("the translator gave no usable answer for the first %d lines" % len(out))
+
 
 # A few fixed, general style examples per target language. Showing the model what natural,
 # colloquial, actor-performable dubbing sounds like pulls a local LLM toward that register
@@ -424,7 +439,8 @@ def _draft_in_chunks(engine, texts, target_lang, source_lang, budgets):
     _draft_candidates_in_chunks for the length-fit path, which is what actually needs 3
     candidates). Each call sees the whole scene as read-only context (for flow) but only
     translates its chunk, so the JSON array stays short and aligned. Falls back to one line
-    at a time if a chunk's count keeps mismatching."""
+    at a time if a chunk's count keeps mismatching; a line that fails even alone is left
+    UNTRANSLATED (app/translate.py)."""
     out = []  # type: List[str]
     for a in range(0, len(texts), DRAFT_CHUNK):
         chunk, chunk_budgets = texts[a:a + DRAFT_CHUNK], budgets[a:a + DRAFT_CHUNK]
@@ -435,10 +451,10 @@ def _draft_in_chunks(engine, texts, target_lang, source_lang, budgets):
                 len(chunk)))
         except ValueError:
             for t, b in zip(chunk, chunk_budgets):
-                out.extend(_ask_with_retry(
+                out.append(_one_line_or_untranslated(
                     engine._ask,
-                    build_budget_prompt([t], target_lang, source_lang, [b], scene_context=texts),
-                    1))
+                    build_budget_prompt([t], target_lang, source_lang, [b], scene_context=texts)))
+        _stop_if_nothing_works(out)
     return out
 
 
@@ -448,7 +464,8 @@ def _draft_candidates_in_chunks(engine, texts, target_lang, source_lang, budgets
     candidates in the SAME call, picked immediately against its ±15% window (pick_candidate).
     This is what makes a paid translator's single, retry-free call (max_budget_retries=0)
     already get a best-of-3 choice instead of a single shot -- see fit_translate. Falls back
-    to one line at a time if a chunk's count keeps mismatching.
+    to one line at a time if a chunk's count keeps mismatching; a line that fails even alone
+    is left UNTRANSLATED (app/translate.py).
     """
     out = []  # type: List[str]
     for a in range(0, len(texts), DRAFT_CHUNK):
@@ -463,19 +480,25 @@ def _draft_candidates_in_chunks(engine, texts, target_lang, source_lang, budgets
         except ValueError:
             candidate_lists = []
             for t, b in zip(chunk, chunk_budgets):
-                candidate_lists.extend(_ask_candidates_with_retry(
-                    engine._ask,
-                    build_candidates_draft_prompt([t], target_lang, source_lang, [b], scene_context=texts),
-                    1))
+                # A line whose answer still cannot be read has no candidates, and
+                # becomes UNTRANSLATED below -- not the end of the whole job.
+                try:
+                    candidate_lists.extend(_ask_candidates_with_retry(
+                        engine._ask,
+                        build_candidates_draft_prompt([t], target_lang, source_lang, [b], scene_context=texts),
+                        1))
+                except ValueError:
+                    candidate_lists.append([])
         for idx, (cands, w) in enumerate(zip(candidate_lists, chunk_windows)):
             cands = [c for c in cands if script_ok(c, target_lang)] or cands
             if not cands:
-                out.append("")
+                out.append(UNTRANSLATED)
                 continue
             if w is not None:
                 out.append(pick_candidate(cands, target_lang, w, index=a + idx, log=log))
             else:
                 out.append(cands[0])
+        _stop_if_nothing_works(out)
     return out
 
 

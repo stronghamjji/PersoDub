@@ -133,9 +133,12 @@ def get_script(job_id: str) -> List[dict]:
     line runs past its slot, 0 when it does not: the screen's "+0.9s"; quote
     this rather than working it out from estimated), speaker (who says it, or null when this
     job recorded no speakers), audio_sec (how long the voice made for it actually
-    runs, or null when that file is gone), and voice_stale (true when that voice
+    runs, or null when that file is gone), voice_stale (true when that voice
     was made before the script was last written -- so a line whose words you
-    changed still sounds like the old ones until remake_line_voice runs).
+    changed still sounds like the old ones until remake_line_voice runs), and
+    untranslated (true when the translator could not translate this line: it
+    has no words and is silent in the dub; write it from source with
+    edit_script_line, then remake_line_voice).
     """
     job = _job(job_id)
     if job.get("dub_mode") == "perso":
