@@ -231,7 +231,28 @@
     --hair: #dfe3ea;
     --chip-done-bg: rgba(17, 173, 50, 0.14);
     --chip-done-fg: #1d8a3c;
+    /* The agent pane used to keep its dark colours in light mode -- a chat has
+       its own surface, and the one attempt at lighting it left text unreadable
+       because only the pane's background was changed and the composer field
+       kept its near-black. Both are set here now, and this pane runs the
+       opposite way from the rest: its title row is the WHITE one and the thread
+       below it is the darker surface the bubbles sit on (user, 2026-09-18,
+       having compared eight renders of the real screen). */
+    --agent-bg: #d2d9e7;
+    --agent-head-bg: #ffffff;
+    --agent-border: #c3c9d6;
+    --agent-fg: #1b1e26;
+    --agent-muted: #5a6173;
+    --agent-box: #e7ebf2;
+    --agent-field: #ffffff;
+    --agent-field-line: #c3c9d6;
   }
+  /* The subtitle toolbar and its menu float over the video, so they carry their
+     own dark glass rather than a token; in light mode that glass is white. */
+  html[data-theme="light"] .sub-toolbar, html[data-theme="light"] .sub-menu {
+    background: rgba(255, 255, 255, 0.96);
+  }
+  html[data-theme="light"] .sub-seg { background: var(--well); }
 
   * { box-sizing: border-box; }
   /* Plenty of the classes below set a `display`, which would otherwise beat
