@@ -82,7 +82,20 @@ def parse_json_array(raw: str, n: int) -> List[str]:
     arr = json.loads(s[start : end + 1])
     if len(arr) != n:
         raise ValueError(f"Translated line count mismatch: got {len(arr)}, need {n}")
-    return [str(x) for x in arr]
+    # A line is a string. str() of whatever else came back used to go straight
+    # into the script -- a dict's braces and quotes, read aloud by the voice
+    # (Windows full test, 2026-09-17). An object holding exactly one string is
+    # that string; anything else is a malformed answer, and raising here is what
+    # makes the caller ask again.
+    out = []
+    for x in arr:
+        if isinstance(x, dict):
+            strings = [v for v in x.values() if isinstance(v, str)]
+            x = strings[0] if len(strings) == 1 else x
+        if not isinstance(x, str):
+            raise ValueError(f"A translated line is not text: {str(x)[:80]}")
+        out.append(x)
+    return out
 
 
 _NON_LATIN = re.compile(r"[가-힣ぁ-んァ-ヶ一-鿕]")

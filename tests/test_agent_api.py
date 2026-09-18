@@ -197,8 +197,12 @@ def test_every_turn_asks_to_carry_on_the_conversation(monkeypatch, tmp_path):
     """The panel never sends `resume`, so the request default is what reaches
     the driver -- and that default is what makes a follow-up remember."""
     seen = _capture(monkeypatch, tmp_path)
+    # The thread the app started, remembered beside the MCP config. Resumed by
+    # its id and never --last, which could pick Codex's own auto-review thread
+    # (2026-09-17).
+    (tmp_path / "codex-thread").write_text("01a0-main-thread", encoding="utf-8")
     client.post("/api/agent/chat", json={"message": "또", "agent": "codex"})
-    assert seen["args"][:3] == ["exec", "resume", "--last"]
+    assert seen["args"][:3] == ["exec", "resume", "01a0-main-thread"]
 
 
 # --- which account each assistant is signed in with -------------------------

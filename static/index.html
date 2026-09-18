@@ -71,27 +71,27 @@
        is far too dark to read on it here, the way --primary-line is far too
        pale to read on it in the light sheet -- so the ink is its own name. */
     --primary-ink: #9EC1FF;
-    --accent: #1d2540;
-    --secondary: #26262b;
+    --accent: #1f3361;
+    --secondary: #383a45;
     /* The page behind the work area -- a shade off the panels, so cards and the
        top bar read as sitting on top of it. */
-    --canvas: #17171a;
+    --canvas: #202127;
     /* The desk the panels rest on: darker than a panel, so each one reads as
        its own card rather than one continuous wall (user, 2026-09-10). */
-    --desk: #0C0C0F;
+    --desk: #0f1014;
     /* One outline for everything a person can press: buttons, dropdowns,
        fields and the boxes that behave like one. A border that only some of
        them wore read as "these two are buttons and those are not" (user,
        2026-09-10). */
     --control-line: rgba(255, 255, 255, 0.18);
-    --muted-foreground: #9a9aa6;
-    --foreground: #ececf1;
-    --background: #1e1e22;
-    --border: #2c2c32;
+    --muted-foreground: #b6b9c6;
+    --foreground: #f3f4f8;
+    --background: #202127;
+    --border: #3d404b;
     /* The lines between the finished screen's three panes (video, script,
        timeline): heavier than --border, which was too faint to say where one
        pane ends and the next begins (user, 2026-09-02). */
-    --divider: #3a3a42;
+    --divider: #4a4d59;
     --success: #3fbf5f;
     /* "Ready" in words, which needs more contrast than the dots --success
        paints: on white the dot green reads at 3:1, under what small bold text
@@ -146,23 +146,33 @@
     /* The assistant is dark wherever it sits -- in both themes, unchanged by
        Appearance -- and these are its only colours. Lifted off black in 0.5.5
        so the column reads as a window of its own beside the work. */
-    --agent-bg: #26262b;
-    --agent-box: #34343a;
-    --agent-border: #34343a;
+    --agent-bg: #202127;
+    --agent-box: #383a45;
+    --agent-border: #3d404b;
     /* Its heading row, and the box the message is typed into: the field is
        sunk BELOW the panel and outlined above it, which is what says "type
        here" without a word of instruction. */
-    --agent-head-bg: #2c2c32;
+    --agent-head-bg: #2f313a;
     /* The band across the top of the work area. The Dub Agent's heading sits
        in it too, so a screen's own strip and the assistant's read as one row
        rather than two nearly-alike ones (user, 2026-09-09). Dark mode gives
        it the agent's own grey; in light mode it follows the page, since the
        assistant stays dark in both themes by design. */
-    --head-bg: #2c2c32;
+    --head-bg: #2f313a;
+    /* Panel contrast (2026-09-17). Three steps -- desk, panel, title row -- and
+       these four for what sits on a panel: the rule under a title row, the
+       well an upload box is, the hairline between timeline rows, and the one
+       chip that is good news. */
+    --head-line: #3d404b;
+    --well: #2c2e39;
+    --well-line: #5a5e6d;
+    --hair: #30323c;
+    --chip-done-bg: rgba(47, 174, 82, 0.18);
+    --chip-done-fg: #4fd07a;
     --agent-field: #1d1d21;
     --agent-field-line: #4a4a52;
     --agent-fg: #e4e4e7;
-    --agent-muted: #6b6b75;
+    --agent-muted: #9599a8;
     /* The user's own message: the app's blue, deepened until white words sit
        on it -- a translucent white wash was the same grey as the panel now. */
     --agent-me-bg: #1d3a75;
@@ -186,16 +196,18 @@
     --primary-line: #9EC1FF;
     --primary-foreground: #ffffff;
     --primary-ink: #1d4ed8;
-    --accent: #eef3ff;
-    --secondary: #ececf0;
-    --canvas: #fafafa;
-    --desk: #e6e6ea;
+    --accent: #e3edff;
+    --secondary: #e3e6ee;
+    /* Off-white, not #ffffff, and ink a step off black: a full screen of pure
+       white panels was hard on the eyes (user, 2026-09-17). */
+    --canvas: #f6f7f9;
+    --desk: #e3e6ec;
     --control-line: rgba(0, 0, 0, 0.20);
-    --muted-foreground: #737373;
-    --foreground: #0a0a0a;
-    --background: #ffffff;
-    --border: #e5e5e5;
-    --divider: #c4c4cb;
+    --muted-foreground: #596072;
+    --foreground: #1b1e26;
+    --background: #f6f7f9;
+    --border: #c3c9d6;
+    --divider: #aeb4c4;
     --success: #11ad32;
     --success-ink: #2a8a4a;
     --timeline-fit: #8B5CF6;
@@ -209,8 +221,38 @@
     --trim-track: #f1f1f4;
     --outline-button: #0a0a0a;
     --dropzone-line: var(--border);
-    --head-bg: #ececf0;
+    /* Light runs the other way from dark: the desk is the lightest grey and the
+       title rows are darker than it. With the two a shade apart the rows read as
+       the desk showing through (user, 2026-09-17). */
+    --head-bg: #d2d9e7;
+    --head-line: #a5aec2;
+    --well: #eceff4;
+    --well-line: #aab0bf;
+    --hair: #dfe3ea;
+    --chip-done-bg: rgba(17, 173, 50, 0.14);
+    --chip-done-fg: #1d8a3c;
+    /* The agent pane used to keep its dark colours in light mode -- a chat has
+       its own surface, and the one attempt at lighting it left text unreadable
+       because only the pane's background was changed and the composer field
+       kept its near-black. Both are set here now, and this pane runs the
+       opposite way from the rest: its title row is the WHITE one and the thread
+       below it is the darker surface the bubbles sit on (user, 2026-09-18,
+       having compared eight renders of the real screen). */
+    --agent-bg: #d2d9e7;
+    --agent-head-bg: #ffffff;
+    --agent-border: #c3c9d6;
+    --agent-fg: #1b1e26;
+    --agent-muted: #5a6173;
+    --agent-box: #e7ebf2;
+    --agent-field: #ffffff;
+    --agent-field-line: #c3c9d6;
   }
+  /* The subtitle toolbar and its menu float over the video, so they carry their
+     own dark glass rather than a token; in light mode that glass is white. */
+  html[data-theme="light"] .sub-toolbar, html[data-theme="light"] .sub-menu {
+    background: rgba(255, 255, 255, 0.96);
+  }
+  html[data-theme="light"] .sub-seg { background: var(--well); }
 
   * { box-sizing: border-box; }
   /* Plenty of the classes below set a `display`, which would otherwise beat
@@ -243,7 +285,7 @@
   /* ---------------- RAIL ---------------- */
 
   .rail {
-    flex: 0 0 60px;
+    flex: 0 0 60px; box-sizing: border-box; border: 1px solid var(--border);
     background: var(--background);
     border-radius: var(--radius); overflow: hidden;
     display: flex;
@@ -317,7 +359,7 @@
   .history-head {
     flex: 0 0 auto; box-sizing: border-box; height: 40px;
     display: flex; align-items: center; padding: 0 14px;
-    background: var(--head-bg); border-bottom: 1px solid var(--agent-border);
+    background: var(--head-bg); border-bottom: 1px solid var(--head-line);
     font-size: var(--font-title); font-weight: 700;
     color: var(--foreground);
   }
@@ -395,11 +437,14 @@
   /* The timeline has no fold of its own; this is its off-switch. */
   body.timeline-off #timeline, body.timeline-off #gripTimeline { display: none; }
 
-.topbar {
-    flex: 0 0 auto; height: 52px;
+/* On a panel of its own, like every pane under it: bare on the desk it read
+     as loose and apart from the rest, worst in light (user, 2026-09-17). */
+  .topbar {
+    flex: 0 0 auto; height: 48px; box-sizing: border-box;
     display: flex; align-items: center; gap: 12px;
-    padding: 0 8px;
-    background: transparent;
+    padding: 0 10px; margin-bottom: 8px;
+    background: var(--background);
+    border: 1px solid var(--border); border-radius: var(--radius);
   }
   /* Both top-bar arrows. A 32px round target with an 18px arrow inside it: the
      14px icon in a 18x14 box these were drawn at is under every platform's
@@ -408,8 +453,8 @@
   .topbar-back { border: none; background: none; cursor: pointer; font: inherit;
     width: 32px; height: 32px; flex: 0 0 auto; border-radius: 8px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
-    color: var(--foreground); }
-  .topbar-back:hover { background: var(--canvas); }
+    color: var(--foreground); background: var(--secondary); }
+  .topbar-back:hover { background: var(--border); }
   /* Clear of the window's own edge -- the topbar's 16px padding is the gap on
      the left, and the arrow on the right needs the same room to sit in. */
   #topbarForward { margin-right: 4px; }
@@ -420,8 +465,7 @@
      (user, 2026-09-10). This puts the capital-height band on the icons'
      middle, which is the line the eye actually reads; a title with a g or a y
      in it hangs below that, as it should. */
-  .topbar-titles { display: flex; align-items: baseline; gap: 10px; min-width: 0;
-    position: relative; top: 2px; }
+  .topbar-titles { display: flex; align-items: center; gap: 10px; min-width: 0; }
   /* The name is the user's to change: it reads as plain text until it is
      clicked, and the field it becomes is the same size in the same place so
      the bar does not move (user, 2026-09-10). */
@@ -433,7 +477,22 @@
   .topbar-rename { width: min(420px, 40vw); padding: 2px 6px; margin: -2px -6px;
     border: 1px solid var(--primary); border-radius: var(--radius-sm);
     background: var(--background); color: var(--foreground); font-family: inherit; }
-  .topbar-sub { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap; }
+  .topbar-sub { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 5px; }
+  /* A status of several parts ("Done · Fast mode · Whisper") is a row of chips
+     (setTopbar): as one grey sentence it left the bar looking empty. */
+  .status-chip { background: var(--secondary); color: var(--foreground);
+    padding: 2px 9px; border-radius: 99px; }
+  .status-chip.done { background: var(--chip-done-bg); color: var(--chip-done-fg); font-weight: 600; }
+  /* A chip does not shrink, so on a narrow window the whole row of them stayed
+     at full width and everything else paid for it: the project name was cut to
+     a single letter and Export slid on top of the last chip (Windows test at
+     the app's minimum width, 2026-09-18). Below this width only the first chip
+     stays -- that one is the state itself (Done, Erasing), and the engine names
+     beside it are also on the export screen and in Settings. */
+  @media (max-width: 1120px) {
+    .topbar-sub .status-chip:not(:first-child) { display: none; }
+  }
   .topbar-spacer { flex: 1; }
 
   /* The one job-wide message line (a credit warning, or why a dub failed).
@@ -471,7 +530,22 @@
      beside it, so it takes the same corner: square ones read as a slab
      dropped on the window (user, 2026-09-10). */
   #screen-done { display: flex; flex-direction: column; padding: 0;
-    background: var(--canvas); border-radius: var(--radius); overflow: hidden; }
+    background: var(--canvas); border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--border); box-sizing: border-box; }
+  /* With a finished job open the three panes are cards of their own and the
+     desk shows between them, like every other gap in the window: on one
+     shared ground the script ran straight into the timeline (user,
+     2026-09-17). The failed card still gets the whole panel. */
+  #screen-done:has(#doneLayout:not([hidden])) { background: transparent;
+    border-color: transparent; box-shadow: none; overflow: visible; }
+  .script-pane, .video-pane, .timeline { border: 1px solid var(--border); box-sizing: border-box; }
+  .video-tabs, .tl-head { border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0; }
+  html[data-theme="light"] .script-pane, html[data-theme="light"] .video-pane,
+  html[data-theme="light"] .timeline { box-shadow: 0 1px 2px rgba(20, 30, 60, 0.06); }
+
+  html[data-theme="light"] .topbar, html[data-theme="light"] .rail,
+  html[data-theme="light"] #screen-done, html[data-theme="light"] #screen-home,
+  html[data-theme="light"] #screen-erase { box-shadow: 0 1px 2px rgba(20, 30, 60, 0.06); }
 
   /* ---------------- Running: blurred original + progress card ---------------- */
   /* The two halves are one centred group: the source video on the left, out of
@@ -575,7 +649,8 @@
      the desk behind it, so its edges are seen, and every other pane on the
      window is a rounded card (user, 2026-09-10). */
   #screen-erase { display: flex; flex-direction: column; padding: 0;
-    background: var(--background); border-radius: var(--radius); overflow: hidden; }
+    background: var(--background); border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--border); box-sizing: border-box; }
   /* The same drop zone as the home screen's, at the same size and in the same
      place on the window -- both ways into the app then look alike, and one
      stretched to fill a 1440px window was a very large amount of nothing. */
@@ -618,6 +693,10 @@
      at: a portrait video is only a few hundred pixels across, and a ten-second
      ruler squeezed into that has its labels dropped one by one. */
   .erase-trim, .erase-row { width: max(var(--erase-col, 100%), 520px); max-width: 100%; }
+  /* Finished, the row holds only where it was saved and Start dubbing, and it
+     is exactly as wide as the picture: at the ruler's 520px the button hung
+     60px past the right edge of a portrait video (user, 2026-09-17). */
+  .erase-row.erase-finished { width: var(--erase-col, 100%); }
   .erase-trim { flex: 0 0 auto; margin: 0; }
   .erase-error { color: var(--destructive); font-size: var(--font-label);
     padding: 0 22px 14px; }
@@ -711,7 +790,11 @@
      top and scroll, where centring would cut its head off. The bottom padding is
      the upward bias -- dead centre reads as low. */
   #screen-done { padding: 0; }
-  #screen-home { display: flex; padding-bottom: max(22px, 8vh); }
+  /* The same frame as Erase subtitles: the two ways into the app look alike
+     (user, 2026-09-17). It used to sit bare on the desk. */
+  #screen-home { display: flex; padding-bottom: max(22px, 8vh);
+    background: var(--background); border-radius: var(--radius);
+    border: 1px solid var(--border); box-sizing: border-box; }
   #screen-home[hidden] { display: none; }
 
   .home { width: clamp(min(640px, 100%), 48vw, 880px); margin: auto;
@@ -719,7 +802,7 @@
   .home-title { margin: 0; font-size: clamp(17px, 1.1vw, 19px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
   .home-sub { margin: -10px 0 6px; font-size: var(--font-ui); color: var(--muted-foreground); }
 
-  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--control-line); border-radius: var(--radius-lg); background: var(--background); cursor: pointer;
+  .upload-zone { min-height: clamp(200px, 24vh, 300px); border: 1.5px dashed var(--well-line); border-radius: var(--radius-lg); background: var(--well); cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted-foreground); }
   .upload-zone.drag-over { border-color: var(--primary); background: var(--accent); }
   /* Grey like the edge around it: a big blue arrow said "drop a file" was the
@@ -732,14 +815,14 @@
      button, and "Choose File…" with the ellipsis is the platform's own wording
      for one (2026-08-28). */
   .upload-hint { font-size: var(--font-label); display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .upload-choose { font-size: var(--font-ui);
+  .upload-choose { font-size: var(--font-ui); background: var(--background);
     border-color: var(--outline-button); color: var(--outline-button); }
 
   /* A rule either side of the word, so "OR" reads as a divider, not a label. */
   .home-or { display: flex; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: var(--font-label); letter-spacing: 0.06em; }
   .home-or span { flex: 1; height: 1px; background: var(--border); }
 
-  .link-field { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); cursor: text; color: var(--muted-foreground); }
+  .link-field { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--well-line); border-radius: var(--radius); background: var(--well); cursor: text; color: var(--muted-foreground); }
   .link-field:focus-within { border-color: var(--primary); box-shadow: var(--focus-ring); }
   .link-field input { flex: 1; min-width: 0; border: none; background: none; padding: 0; font-family: inherit; font-size: var(--font-ui); color: var(--foreground); }
   .link-field input:focus { outline: none; }
@@ -894,8 +977,11 @@
   .pane-head { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     align-items: center; gap: 8px; padding: 0 16px; font-size: var(--font-title);
     font-weight: 700; color: var(--foreground);
-    background: var(--head-bg); border-bottom: 1px solid var(--agent-border); }
-  .pane-head .m { font-weight: 400; color: var(--muted-foreground); }
+    background: var(--head-bg); border-bottom: 1px solid var(--head-line); }
+  .pane-head .m { font-weight: 400; color: var(--foreground); background: var(--secondary);
+    padding: 1px 8px; border-radius: 99px; font-size: var(--font-label); margin-left: 4px; }
+  /* On light the chip's own grey IS the title row's: white keeps it a chip. */
+  html[data-theme="light"] .pane-head .m { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
   .script-pane .job-notice { flex: 0 0 auto; margin: 0; padding: 8px 14px;
     border-bottom: 1px solid var(--border); }
   #scriptBox { flex: 1; min-height: 0; overflow: auto; }
@@ -1129,7 +1215,7 @@
     flex: 0 0 clamp(200px, 36vh, 440px); }
   .done-main.stacked > .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
   .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
-    background: var(--head-bg); border-bottom: 1px solid var(--agent-border); }
+    background: var(--head-bg); border-bottom: 1px solid var(--head-line); }
   .vtab { flex: 1; border: none; background: none; cursor: pointer;
     font: inherit; font-size: var(--font-ui); color: var(--muted-foreground); }
   .vtab.active { color: var(--foreground); font-weight: 600;
@@ -1287,7 +1373,7 @@
     font-size: var(--font-label); font-variant-numeric: tabular-nums; }
   .tl-head { box-sizing: border-box; height: 40px;
     display: flex; align-items: center; gap: 14px; padding: 0 14px;
-    background: var(--head-bg); border-bottom: 1px solid var(--agent-border);
+    background: var(--head-bg); border-bottom: 1px solid var(--head-line);
     font-size: var(--font-label); color: var(--muted-foreground); }
   .tl-title { font-weight: 600; color: var(--foreground); font-size: var(--font-title); }
   .tl-clock { font-variant-numeric: tabular-nums; }
@@ -1314,11 +1400,16 @@
   .timeline.folded .tl-fold .icon { transform: rotate(180deg); }
 
   .tl-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 110px 1fr; }
+  /* After Premiere's: one ground for the names and the lanes, no tinted ruler,
+     and rows told apart by a hairline one step off the ground. Stronger rules
+     and a tinted names column were tried first and made it busier, not
+     clearer (user, 2026-09-17). */
   .tl-names { display: flex; flex-direction: column; font-size: var(--font-label);
-    color: var(--muted-foreground); border-right: 1px solid var(--border); }
+    color: var(--muted-foreground); border-right: 1px solid var(--hair); }
   /* Empty, and exactly as tall as the ruler the two lanes sit under. */
-  .tl-corner { height: 18px; }
-  .tl-name { height: 34px; display: flex; align-items: center; padding-left: 14px; }
+  .tl-corner { height: 18px; box-sizing: border-box; border-bottom: 1px solid var(--hair); }
+  .tl-name { height: 34px; box-sizing: border-box; border-bottom: 1px solid var(--hair);
+    display: flex; align-items: center; padding-left: 14px; }
   .tl-name.strong { font-weight: 600; color: var(--foreground); }
   /* The subtitle lane's own label row: the eye says whether the burned video
      gets subtitles at all (the Premiere/CapCut track toggle). */
@@ -1354,18 +1445,19 @@
      The scrollbar is always there, like Premiere's timeline panel, not only
      once a zoom makes it needed (user, 2026-09-02); it is the strip's bottom
      edge, so it keeps the 12px off the window that the lanes did. */
-  .tl-track { position: relative; overflow-x: scroll; overflow-y: hidden; margin: 0 14px 12px; }
+  .tl-track { position: relative; overflow-x: scroll; overflow-y: hidden; margin: 0; padding: 0 14px 12px; }
   /* The ruler and the lanes stack; the padding is the breath between the
      last lane and the scrollbar under it. */
   .tl-inner { position: relative; padding-bottom: 6px; }
 
   /* Also a way into the video: press anywhere on it to go to that moment. */
-  .tl-ruler { position: relative; height: 18px; cursor: pointer; }
+  .tl-ruler { position: relative; height: 18px; cursor: pointer;
+    box-sizing: border-box; border-bottom: 1px solid var(--hair); }
   .tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); }
   .tl-tick span { position: absolute; top: 2px; left: 4px; font-size: var(--font-label);
     color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 
-  .tl-lane { position: relative; height: 34px; }
+  .tl-lane { position: relative; height: 34px; box-sizing: border-box; border-bottom: 1px solid var(--hair); }
   /* One block = one line, in the time it occupies. The transparent border keeps
      every block the same size whether or not its kind draws one. */
   .tl-blk { position: absolute; top: 4px; height: 26px; box-sizing: border-box;
@@ -2775,7 +2867,7 @@ import { initRunningScreenUi, stoppedMark } from "/js/runningScreen.mjs";
 import { initScriptTableUi } from "/js/scriptTable.mjs";
 import { initTimelineUi, TL_LABEL_PX } from "/js/timeline.mjs";
 import { updateBannerView } from "/js/updateBanner.mjs";
-import { fmtClock, fmtClockTenths, formatBytes, escapeHtml, errorText } from "/js/format.mjs";
+import { fmtClock, fmtClockTenths, formatBytes, escapeHtml, errorText, statusParts } from "/js/format.mjs";
 
 const $ = (id) => document.getElementById(id);
 
@@ -3175,7 +3267,18 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   $("topbarTitle").title = state.jobId ? "Click to rename" : "";
   $("topbarTitle").hidden = false;
   $("topbarRename").hidden = true;
-  $("topbarSub").textContent = subtitle;
+  // Several parts are chips, and so is a finished job's lone "Done"; any other
+  // single part is the plain label it always was ("Local dubbing").
+  const parts = statusParts(subtitle);
+  const asChips = parts.length >= 2 || (done && parts.length === 1);
+  const sub = $("topbarSub");
+  sub.textContent = asChips ? "" : subtitle;
+  if (asChips) parts.forEach((part, i) => {
+    const chip = document.createElement("span");
+    chip.className = "status-chip" + (done && i === 0 ? " done" : "");
+    chip.textContent = part;
+    sub.appendChild(chip);
+  });
   $("topbarBack").hidden = !back;
   $("topbarHomeDiv").hidden = !back;
   $("cancelBtn").hidden = !running;

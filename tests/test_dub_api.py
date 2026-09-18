@@ -122,8 +122,10 @@ def test_dub_start_with_n_takes(monkeypatch):
     assert captured["n_takes"] == 6
 
 
-def test_dub_start_n_takes_defaults_to_none(monkeypatch):
-    # Omitting n_takes leaves it to run_dub's own QWEN_N_TAKES default
+def test_dub_start_n_takes_defaults_to_the_quality_the_screen_shows(monkeypatch):
+    # Omitting n_takes used to leave it to run_dub's own QWEN_N_TAKES (4)
+    # while Settings said "Fast": an agent's Fast dub made four takes per
+    # line (0.6.2 full test, F10, 2026-09-16). Unsaved means Fast, so one.
     captured = {}
 
     def fake_run_dub(**kw):
@@ -143,7 +145,7 @@ def test_dub_start_n_takes_defaults_to_none(monkeypatch):
         if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
             break
         time.sleep(0.02)
-    assert captured["n_takes"] is None
+    assert captured["n_takes"] == 1
 
 
 def test_dub_start_with_stt_engine(monkeypatch):
@@ -1132,7 +1134,8 @@ def test_dub_start_records_what_the_defaults_resolved_to_not_the_blank(monkeypat
     job = client.get(f"/api/dub/jobs/{jid}").json()
     assert job["stt_engine"] == "whisper"          # local Whisper, named
     assert job["translator"] == dub_api.dub_setup.default_for("translator")
-    assert job["quality"] == dub_api.QWEN_N_TAKES
+    # The quality in force, not the engine's own count (2026-09-17).
+    assert job["quality"] == dub_api.dub_setup.default_n_takes()
 
 
 def test_dub_start_names_the_local_engine_whisper_however_it_was_asked_for(monkeypatch):
@@ -1514,3 +1517,42 @@ def test_a_very_long_name_is_cut_and_a_missing_job_is_404(monkeypatch):
     client.post(f"/api/dub/jobs/{jid}/title", json={"title": "가" * 300})
     assert len(client.get(f"/api/dub/jobs/{jid}").json()["title"]) == 80
     assert client.post("/api/dub/jobs/nope/title", json={"title": "x"}).status_code == 404
+
+
+# --- remaking one voice on a Perso result, and on a busy machine -------------
+
+def test_one_line_voice_speaks_in_the_engines_own_language_name(monkeypatch, tmp_path):
+    # A Perso result made editable carries Perso's name for the language,
+    # "English (US)". The voice engine knows only "English" and refused the
+    # remake with "Unsupported languages" (0.6.2 full test, D5, 2026-09-16).
+    said = []
+    monkeypatch.setattr(script_api, "resynth_one_line", lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: None)
+    jid = _dubbed_job(tmp_path, ["one"], edits={1: "ONE"})
+    work = state.job_store.get(jid)["work_dir"]
+    state.job_store._update(jid, language_code="en-US", language="English (US)")
+    manifest = os.path.join(work, "lines.json")
+    with open(manifest, encoding="utf-8") as f:
+        data = json.load(f)
+    data["language"] = "English (US)"
+    with open(manifest, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    r = client.post(f"/api/dub/jobs/{jid}/script/1/voice")
+    assert r.status_code == 200
+    assert said[0][3] == "English"
+
+
+def test_one_line_voice_says_the_engine_was_busy_instead_of_crashing(monkeypatch, tmp_path):
+    # Another dub was running, the voice clone outlived its timeout, and the
+    # route answered 500 -- which the agent read as "still waiting" (F18).
+    import httpx
+
+    def slow(*a):
+        raise httpx.ReadTimeout("timed out")
+    monkeypatch.setattr(script_api, "resynth_one_line", slow)
+    jid = _dubbed_job(tmp_path, ["one"], edits={1: "ONE"})
+
+    r = client.post(f"/api/dub/jobs/{jid}/script/1/voice")
+    assert r.status_code == 503
+    assert "busy" in r.json()["detail"]

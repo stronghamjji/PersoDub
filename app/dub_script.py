@@ -22,6 +22,10 @@ from app.text.cues import match_cue_index
 from app.text.length_fit import in_window
 from app.text.srt import Cue, build_srt, estimate_seconds, parse_srt
 
+# A hair over the slot is not "too long" -- the assembly step lets a line spill
+# that much into the silence after it. The same figure as the screen's.
+OVER_TOLERANCE = 0.05
+
 ORIGINAL_NAME = "original.srt"
 DUB_NAME = "translated.srt"
 EDITED_NAME = "edited.srt"
@@ -121,6 +125,17 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
         # are paired the same way -- by midpoint, not by line number.
         s = match_cue_index(c, speakers) if speakers else None
         wav = line_wav_path(work_dir, n)
+        audio_sec = _audio_seconds(wav)
+        fits_estimate = in_window(estimated, slot)
+        # The screen's one rule for "too long" (ui/src/scriptTable.mjs
+        # lineOverBy): the voice on disk if there is one, else the estimate,
+        # measured against the slot and forgiven a hair. Until 2026-09-17 fits
+        # was the estimate's verdict even once a voice existed, so the agent
+        # and the screen named different lines (0.6.2 full test, F9).
+        over = 0.0
+        if audio_sec is not None or not fits_estimate:
+            over = round((audio_sec if audio_sec is not None else estimated) - slot, 2)
+            over = over if over > OVER_TOLERANCE else 0.0
         lines.append({
             "line": n,
             "start": round(c["start"], 2),
@@ -129,9 +144,10 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
             "source": originals[k]["text"] if k is not None else None,
             "text": c["text"],
             "estimated": estimated,
-            "fits": in_window(estimated, slot),
+            "fits": (over == 0.0) if audio_sec is not None else fits_estimate,
+            "over": over,
             "speaker": speakers[s]["speaker"] if s is not None else None,
-            "audio_sec": _audio_seconds(wav),
+            "audio_sec": audio_sec,
             "voice_stale": _voice_is_older_than(wav, path),
         })
     return lines

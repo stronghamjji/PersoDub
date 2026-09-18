@@ -1,14 +1,14 @@
 {
   "name": "persodub-desktop-shell",
   "private": true,
-  "version": "0.6.2",
+  "version": "0.6.3",
   "type": "module",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "test": "node --test src/*.test.mjs smoke/*.test.mjs",
     "dist": "node scripts/collect-payload.mjs && electron-builder --mac zip --arm64 --publish never",
-    "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never",
+    "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never && cp dist/PersoDub-*-arm64.dmg dist/PersoDub-mac.dmg",
     "dist:win": "node scripts/collect-payload.mjs && node scripts/patch-nsis-messages.mjs && electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {

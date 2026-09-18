@@ -50,12 +50,13 @@ def defaults() -> Dict[str, str]:
 
 
 def default_n_takes() -> Optional[int]:
-    """The best-of-N count the saved voice quality asks for, or None when
-    kit.env never chose one -- then the voice engine's own QWEN_N_TAKES
-    default applies, as it always has."""
-    key = STAGES["voice_quality"][0]
-    if not (current_value(key) or "").strip():
-        return None
+    """The best-of-N count the voice quality in force asks for.
+
+    Until 2026-09-17 an unsaved quality answered None and the engine's own
+    QWEN_N_TAKES (4) ran, while the Settings screen and /api/setup both said
+    "fast": a dub the agent started as Fast made four takes per line (0.6.2
+    full test, F10). The fallback is the quality the screen shows, so it is
+    the count that runs."""
     return N_TAKES[default_for("voice_quality")]
 
 

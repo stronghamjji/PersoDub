@@ -56,6 +56,15 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"  # no certificate: do not go looking for one
         run: npm run dist:win
 
+      # A second copy under a name that carries no version, because the README's
+      # download button has to name a file exactly: releases/latest/download only
+      # resolves a filename it is given, so a versioned name breaks the button on
+      # every release (it pointed at 0.6.2 after 0.6.3 went out). The versioned
+      # file is still uploaded -- the updater's latest.yml names that one.
+      - name: Copy the installer under a version-less name
+        shell: bash
+        run: cp desktop/dist/*-Setup-*.exe desktop/dist/PersoDub-Setup.exe
+
       - name: Attach the installer to the release
         env:
           GH_TOKEN: ${{ github.token }}

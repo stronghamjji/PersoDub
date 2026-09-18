@@ -69,6 +69,15 @@ def test_post_saves_a_default_and_the_next_read_sees_it(tmp_path, monkeypatch):
     assert dub_setup.default_n_takes() == 4
 
 
+def test_an_unsaved_quality_runs_as_the_fast_the_screen_shows(tmp_path, monkeypatch):
+    # /api/setup answered "fast" while the count in force was the engine's
+    # own 4: an agent's Fast dub made four takes per line (0.6.2 full test,
+    # F10, 2026-09-16). What the screen shows is what runs.
+    _kit(tmp_path, monkeypatch)
+    assert client.get("/api/setup").json()["defaults"]["voice_quality"] == "fast"
+    assert dub_setup.default_n_takes() == 1
+
+
 def test_post_refuses_a_choice_the_stage_does_not_offer(tmp_path, monkeypatch):
     kit = _kit(tmp_path, monkeypatch)
     r = client.post("/api/setup", json={"translator": "llama"})

@@ -208,6 +208,10 @@ export function initEraseScreenUi({ $, showScreen, setTopbar, checkFile,
     $("eraseLogDetails").hidden = view !== "failed";
     if (view === "failed") $("eraseLogBox").textContent = (job.logs || []).join("\n");
     $("eraseDubBtn").hidden = !done;
+    // The finished row is the picture's width, so the button ends where it does.
+    // Not "done": that name is the finished screen's layout class (flex: 1), and
+    // on this row it squeezed the row to nothing and dropped the button off the pane.
+    $("eraseRow").classList.toggle("erase-finished", !!done);
     $("eraseSaved").hidden = !done || !savedPath;
     $("eraseState").classList.toggle("bad", view === "failed");
     if (view === "working") {

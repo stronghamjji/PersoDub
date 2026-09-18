@@ -64,6 +64,10 @@ _EXTENSION = re.compile(r"^[A-Za-z0-9]{1,8}$")
 # identification by another road (user decision, 2026-09-15). Both go.
 _PERSO_WORKSPACE = re.compile(r"(Perso workspace:\s*).+?(\(#\d+\))")
 _PERSO_CREDITS = re.compile(r"(Perso credits used:\s*\d+\s*\()[^)]*(\))")
+# perso_client's own lines name the workspace by its number alone --
+# "project 12 (workspace 34)", "credits for Perso workspace 34" -- and the
+# pattern above only knows the job log's "name (#number)" (2026-09-17).
+_PERSO_WORKSPACE_NUMBER = re.compile(r"\b(workspace )\d+", re.IGNORECASE)
 
 REDACTED = "[REDACTED]"
 ELLIPSIS = "…"
@@ -133,6 +137,7 @@ def mask_text(text: str, home: str = "", kit: str = "") -> str:
         out = pattern.sub(lambda m: m.group(1) + "*", out)
     out = _PERSO_WORKSPACE.sub(lambda m: m.group(1) + "*", out)
     out = _PERSO_CREDITS.sub(lambda m: m.group(1) + "*" + m.group(2), out)
+    out = _PERSO_WORKSPACE_NUMBER.sub(lambda m: m.group(1) + "*", out)
     if home:
         for form in dict.fromkeys(_separator_forms(home)):
             out = re.sub(re.escape(form) + _UNDER_HOME,
