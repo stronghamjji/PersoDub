@@ -16,7 +16,7 @@ your computer.
   <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-0.6.2.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
-**macOS** — The button downloads the `.dmg` (0.6.2) straight away; open it and drag **PersoDub** into Applications.
+**macOS** — The button downloads the `.dmg` straight away; open it and drag **PersoDub** into Applications.
 It's signed and notarized, so it opens with a normal double-click.
 
 **Windows** — Download and run the `.exe`. It isn't code-signed yet, so
