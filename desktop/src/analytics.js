@@ -30,6 +30,9 @@ export const ERROR_CODES = new Set([
   // Four families that were all "unknown" until 0.6.1. Every one of them was
   // a real, repeated failure nobody could see (2026-09-15).
   "model-download", "engine-500", "perso-bad-request", "translate-parse",
+  // The app was closed while the job was still running (app/jobs.py marks it
+  // on restore). Its own word so it reads apart from a real crash (2026-09-18).
+  "interrupted",
   "unknown",
 ]);
 
