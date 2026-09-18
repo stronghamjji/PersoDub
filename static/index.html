@@ -2863,6 +2863,7 @@ import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
 import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "/js/eraseScreen.mjs";
 import { initProjectsUi, shownName } from "/js/projects.mjs";
+import { countedOnce } from "/js/reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "/js/runningScreen.mjs";
 import { initScriptTableUi } from "/js/scriptTable.mjs";
 import { initTimelineUi, TL_LABEL_PX } from "/js/timeline.mjs";
@@ -4164,7 +4165,16 @@ async function handleJobUpdate(job, { opened = false } = {}) {
   // Never the first line: a job log opens with the video's own name -- a
   // title, a link, a file name -- and on a job that died early that line was
   // inside the last six and went into twelve public issues (2026-09-15).
-  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(1).slice(-6).join("\n"), job.id);
+  // Once per job, and remembered across restarts. This runs every time a
+  // finished job is drawn -- opened from the list, walked back to, restored as
+  // the last screen at launch -- and each of those sent another report. The
+  // shell keeps its own guard for the session; this one survives a restart,
+  // which is the case that produced the empty second report: a job's log is
+  // not saved to disk, so after a restart there is nothing left to send and
+  // the relay files the blank as a failure of its own (2026-09-18).
+  if (!countedOnce(job.id)) {
+    window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(1).slice(-6).join("\n"), job.id);
+  }
 
   await renderDone(job);
 }

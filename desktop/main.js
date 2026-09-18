@@ -798,21 +798,48 @@ app.whenReady().then(() => {
   // reason -- it is a web page served over http -- so the status is checked
   // against the two that count and the detail is reduced to one published
   // word here. A cancel is not a failure and is deliberately not counted.
+  // A job is counted and reported once. The page calls this every time it
+  // draws a finished job -- opening it from the list, walking back to it, the
+  // last screen being restored at launch -- and nothing remembered that the
+  // job had already been sent. Nine pairs of duplicate issues came of it, and
+  // the second of each pair arrived empty: a job's log is deliberately not
+  // saved to disk (app/jobs.py SAVED_FIELDS), so after a restart the page has
+  // nothing to send, an empty message fingerprints differently from the real
+  // one, and the relay files it as a failure nobody had seen (2026-09-18).
+  const countedJobs = new Set();
   ipcMain.on("shell:count-dub", async (_e, msg) => {
     const status = msg && msg.status;
     if (status !== "done" && status !== "error") return;
     const detail = String((msg && msg.detail) || "");
-    const code = status === "error" ? classifyError(detail) : undefined;
     // Only the shell may name the job: the page is a web page, so its id is
     // checked against the shape a job id has before it is put in a URL.
     const jobId = /^[0-9a-f]{6,32}$/.test(String((msg && msg.job) || "")) ? msg.job : undefined;
+    if (jobId) {
+      if (countedJobs.has(jobId)) return;
+      countedJobs.add(jobId);
+    }
     // Which parts went through Perso, what it cost and how long the video
     // was -- off the job's own record, not the page's message.
-    const facts = dubFacts(await fetchJob(jobId));
-    countUsage(status === "done" ? "dub_success" : "dub_failure", bootedKitDir, code, undefined, facts);
+    const job = await fetchJob(jobId);
+    // A dub the app was killed under is not a failure of the dub. The engine
+    // marks it on restore (app/jobs.py: a job still "running" becomes an error
+    // reading "interrupted"), and the page's log tail is empty by then, so
+    // without this the report went out as "unknown" -- indistinguishable from
+    // a crash. It is still reported, under its own name, because an engine
+    // that keeps taking the app down with it looks exactly like this from here
+    // (user, 2026-09-18).
+    const code = status === "error"
+      ? (job && job.error === "interrupted" ? "interrupted" : classifyError(detail))
+      : undefined;
+    countUsage(status === "done" ? "dub_success" : "dub_failure", bootedKitDir, code, undefined, dubFacts(job));
     // Only a failure is worth a report.
     if (status === "error") {
-      sendReport({ kind: "dub", kitDir: bootedKitDir, code, message: detail, jobId });
+      // An interrupted job has no log left to send, and an empty body reads as
+      // "(no message)" in the issue. Say what happened instead.
+      const message = code === "interrupted"
+        ? "The app closed while this job was still running."
+        : detail;
+      sendReport({ kind: "dub", kitDir: bootedKitDir, code, message, jobId });
     }
   });
 
