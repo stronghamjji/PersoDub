@@ -417,7 +417,7 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
 
 
 def _stage_separate(video_path, work_dir, sep_engine, perso_client,
-                    cancel_check, on_notice, log):
+                    cancel_check, on_notice, log, video_duration=None):
     """Stage 1/6 -- voice/background separation.
 
     Local Demucs (default) or Perso cloud. Either way a failure fails the whole
@@ -425,6 +425,9 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
     fallback. Returns (vocals_path, background_path, perso_client); the client
     comes back because the Perso path may have created one, and the STT stage
     reuses it so the same video is not uploaded twice.
+
+    video_duration, when known, scales the local Demucs subprocess timeout for
+    long videos (see app.timeouts.scaled_timeout) -- unused on the Perso path.
     """
     if (sep_engine or "").lower() == "perso":
         _log_stage(log, "separate", "Separating background audio via Perso cloud…")
@@ -433,7 +436,7 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
     else:
         _log_stage(log, "separate", "Separating background audio locally (Demucs)…")
         try:
-            sep_paths = SeparationEngine().separate(video_path, work_dir)
+            sep_paths = SeparationEngine(video_duration=video_duration).separate(video_path, work_dir)
         except Exception as e:
             # This one runs on the user's own machine, so there is nobody to
             # ask -- but which thing to look at depends on what stopped it. A
@@ -492,12 +495,15 @@ def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, l
         raise RuntimeError(msg) from e
 
 
-def _stage_transcribe_local(video_path, source_language_code, diar_engine, log):
+def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, video_duration=None):
     """Stage 2/6 -- local Whisper transcription (no container at all).
 
     Returns (src_cues, detected_source_language_code, diar_engine): Whisper
     auto-detects the source language, and it sets no speaker_id, so this path
     also turns CAM++ on unless the caller already picked a diarization engine.
+
+    video_duration, when known, scales the subprocess timeout for long videos
+    (see app.timeouts.scaled_timeout).
     """
     _log_stage(log, "transcribe", "Transcribing locally (Whisper, no container)…")
     detected = {"code": None}
@@ -509,6 +515,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log):
         src_cues = transcribe_local(
             video_path, language=source_language_code, log=log,
             on_language=lambda c: detected.__setitem__("code", c),
+            video_duration=video_duration,
         )
     except JobCancelled:
         raise  # a user cancel is not a failure of this stage
@@ -523,7 +530,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log):
     return src_cues, detected["code"], diar_engine or "campplus"
 
 
-def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log):
+def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=None):
     """Stage 2/6 -- local CAM++ diarization (opt-in). Relabels src_cues in place.
 
     pyannote-era labels could collapse everyone to a single speaker; CAM++
@@ -531,12 +538,15 @@ def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log):
     Demucs vocals track (diarize() resamples internally, so no separate 16k
     extraction step is needed). It has NO VAD -- it only labels the cue spans
     STT already produced, and a failure is a warning, not a job failure.
+
+    video_duration, when known, scales the subprocess timeout for long videos
+    (see app.timeouts.scaled_timeout).
     """
     if diar_engine != "campplus" or not src_cues:
         return
     try:
         _log_stage(log, "transcribe", "Diarizing locally with CAM++ (campplus)…")
-        labeled = diarize(vocals_path, src_cues, num_speakers=num_speakers)
+        labeled = diarize(vocals_path, src_cues, num_speakers=num_speakers, video_duration=video_duration)
         for cue, lab in zip(src_cues, labeled):
             spk = lab.get("speaker")
             if spk:
@@ -627,10 +637,14 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
 
 
 def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path,
-                      language, n_takes, qwen_engine, on_notice, log):
+                      language, n_takes, qwen_engine, on_notice, log, video_duration=None):
     """Stage 4/6 -- cloning & synthesis (Qwen3-TTS, the app's only TTS engine).
 
     Returns the path of the full-length dubbed audio.
+
+    video_duration, when known, scales the nonverbal-whitelist / company-
+    ambience gate's whisper-veto subprocess timeout for long videos (see
+    app.timeouts.scaled_timeout).
     """
     effective_n_takes = n_takes if n_takes is not None else QWEN_N_TAKES
     # Say which Voice-quality mode ran (user feedback 2026-08-06). <=1 is the
@@ -649,7 +663,7 @@ def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path
     return run_qwen_dub(engine, segments, ref_cues, work_dir,
                         vocals_path=vocals_path, background_path=background_path,
                         language=language, n_takes=effective_n_takes, log=log,
-                        on_notice=on_notice)
+                        on_notice=on_notice, video_duration=video_duration)
 
 
 def _stage_finish(video_path, audio_wav, out_path, work_dir, log):
@@ -738,8 +752,22 @@ def run_dub(
     os.makedirs(work_dir, exist_ok=True)
 
     _check_cancel(cancel_check, log)
+
+    # Measured once, up front, so the heavy local stages below (separation,
+    # transcription, diarization, the nonverbal gate) can scale their
+    # subprocess timeouts to the video instead of a fixed wall that ignores
+    # length -- long videos used to die on it (issue: 21 occurrences). A
+    # failed probe (corrupt file, ffprobe missing, ...) must never fail the
+    # dub over a timeout number, so it falls back to None: every stage below
+    # then uses today's fixed default, same as before this change.
+    try:
+        video_duration = _video_duration(video_path)
+    except Exception:
+        video_duration = None
+
     vocals_path, background_path, perso_client = _stage_separate(
-        video_path, work_dir, sep_engine, perso_client, cancel_check, on_notice, log)
+        video_path, work_dir, sep_engine, perso_client, cancel_check, on_notice, log,
+        video_duration=video_duration)
 
     _check_cancel(cancel_check, log)
 
@@ -753,10 +781,10 @@ def run_dub(
             video_path, perso_client, cancel_check, on_notice, log)
     if perso_cues is None:
         src_cues, detected_code, diar_engine = _stage_transcribe_local(
-            video_path, source_language_code, diar_engine, log)
+            video_path, source_language_code, diar_engine, log, video_duration=video_duration)
     else:
         src_cues = perso_cues
-    _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log)
+    _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=video_duration)
     source_cues = _pick_source_cues(source_srt_path, perso_cues, src_cues)
 
     _check_cancel(cancel_check, log)
@@ -774,7 +802,7 @@ def run_dub(
     _check_cancel(cancel_check, log)
     audio_wav = _stage_synthesize(
         segments, ref_cues, work_dir, vocals_path, background_path,
-        language, n_takes, qwen_engine, on_notice, log)
+        language, n_takes, qwen_engine, on_notice, log, video_duration=video_duration)
 
     _check_cancel(cancel_check, log)
 

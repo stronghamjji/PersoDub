@@ -11,11 +11,17 @@ from app.jobs import JobCancelled
 
 
 class _FakeSeparationEngine:
+    def __init__(self, *a, **k):
+        pass
+
     def separate(self, video_path, out_dir):
         return {"vocals": "/local/vocals.wav", "background": "/local/background.wav"}
 
 
 class _FailingSeparationEngine:
+    def __init__(self, *a, **k):
+        pass
+
     def separate(self, video_path, out_dir):
         raise RuntimeError("local separation interpreter not found")
 
@@ -39,7 +45,7 @@ class _FakeQwenEngine:
 def _stub_qwen_io(monkeypatch):
     """Neutralize the pieces that would otherwise hit ffmpeg/the sidecar for real."""
     def _fake_run_qwen_dub(engine, segments, ref_cues, work_dir, vocals_path, background_path,
-                           language=None, n_takes=1, log=None, on_notice=None):
+                           language=None, n_takes=1, log=None, on_notice=None, video_duration=None):
         engine.clone("/fake/ref.wav", "hello there friend")
         for i, s in enumerate(segments):
             engine.synthesize(type("Req", (), {"text": s["text"], "seed": 1000 * i})())
@@ -53,7 +59,7 @@ def _stub_qwen_io(monkeypatch):
     monkeypatch.setattr(pipeline, "transcribe_local",
                         lambda audio_path, language=None, **k: [
                             {"start": 0.0, "end": 2.0, "text": "hello there friend"}])
-    monkeypatch.setattr(pipeline, "diarize", lambda vocals_path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda vocals_path, cues, num_speakers=None, video_duration=None: cues)
 
 
 def _fake_mux(video, audio, out, dur):
@@ -130,7 +136,7 @@ def test_run_dub_passes_local_separation_paths_to_run_qwen_dub(monkeypatch, tmp_
     captured = {}
 
     def fake_run_qwen_dub(engine, segments, ref_cues, work_dir, vocals_path, background_path,
-                          language=None, n_takes=1, log=None, on_notice=None):
+                          language=None, n_takes=1, log=None, on_notice=None, video_duration=None):
         captured["vocals_path"] = vocals_path
         captured["background_path"] = background_path
         p = os.path.join(work_dir, "qwen_dub_48k.wav")
@@ -142,7 +148,7 @@ def test_run_dub_passes_local_separation_paths_to_run_qwen_dub(monkeypatch, tmp_
     monkeypatch.setattr(pipeline, "SeparationEngine", _FakeSeparationEngine)
     monkeypatch.setattr(pipeline, "transcribe_local",
                         lambda audio_path, language=None, **k: [{"start": 0.0, "end": 2.0, "text": "hi"}])
-    monkeypatch.setattr(pipeline, "diarize", lambda vocals_path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda vocals_path, cues, num_speakers=None, video_duration=None: cues)
     monkeypatch.setattr(pipeline, "_video_duration", lambda path: 2.0)
     monkeypatch.setattr(pipeline, "_mux", _fake_mux)
     monkeypatch.setattr(pipeline, "ensure_video_length", lambda *a, **k: None)
@@ -188,7 +194,7 @@ def test_n_takes_reaches_run_qwen_dub(monkeypatch, tmp_path):
     captured = {}
 
     def fake_run_qwen_dub(engine, segments, ref_cues, work_dir, vocals_path, background_path,
-                          language=None, n_takes=1, log=None, on_notice=None):
+                          language=None, n_takes=1, log=None, on_notice=None, video_duration=None):
         captured["n_takes"] = n_takes
         p = os.path.join(work_dir, "qwen_dub_48k.wav")
         with open(p, "wb") as f:
@@ -199,7 +205,7 @@ def test_n_takes_reaches_run_qwen_dub(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline, "SeparationEngine", _FakeSeparationEngine)
     monkeypatch.setattr(pipeline, "transcribe_local",
                         lambda audio_path, language=None, **k: [{"start": 0.0, "end": 2.0, "text": "hi"}])
-    monkeypatch.setattr(pipeline, "diarize", lambda vocals_path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda vocals_path, cues, num_speakers=None, video_duration=None: cues)
     monkeypatch.setattr(pipeline, "_video_duration", lambda path: 2.0)
     monkeypatch.setattr(pipeline, "_mux", _fake_mux)
     monkeypatch.setattr(pipeline, "ensure_video_length", lambda *a, **k: None)

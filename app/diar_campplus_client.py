@@ -24,6 +24,7 @@ from collections import Counter
 from typing import List
 
 from app.config import DIAR_PYTHON
+from app.timeouts import scaled_timeout
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DEFAULT_CAMPPLUS = "models/campplus/campplus.onnx"
@@ -60,8 +61,11 @@ CAMPPLUS_MODEL = resolve_campplus_model()
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "campplus_diarize.py")
 
-# Diarization subprocess timeout, env-overridable (PERSODUB_DIAR_TIMEOUT) --
+# Diarization subprocess timeout floor, env-overridable (PERSODUB_DIAR_TIMEOUT) --
 # Mac CPUs are slower than the server's. Garbage/unset falls back to 600.
+# video_duration (see diarize() below), when known, scales this up for long
+# videos through app.timeouts.scaled_timeout; this stays the floor for
+# short/unknown-length videos exactly as before that existed.
 try:
     PERSODUB_DIAR_TIMEOUT = float(os.environ.get("PERSODUB_DIAR_TIMEOUT", "600"))
 except (TypeError, ValueError):
@@ -84,12 +88,14 @@ def relabel_by_size(cluster_labels: List[int]) -> List[str]:
     return ["SPK%d" % rank[c] for c in cluster_labels]
 
 
-def diarize(vocals_wav_path, cues, num_speakers=None):
+def diarize(vocals_wav_path, cues, num_speakers=None, video_duration=None):
     """Label each cue with a neutral speaker id using CAM++ embeddings.
 
     vocals_wav_path : the full Demucs vocals wav (any sample rate; resampled to 16k).
     cues            : list of dicts with 'start'/'end' seconds (from STT).
     num_speakers    : fixed k, or None to silhouette-estimate over k=2..4.
+    video_duration  : the source video's length in seconds, if known -- scales
+                      the subprocess timeout for long videos (see app.timeouts.scaled_timeout).
 
     Returns COPIES of cues, each with an added 'speaker' ('SPK0', 'SPK1', ...).
     Input cues are never mutated. CAM++ supplies NO VAD -- it only labels the
@@ -122,7 +128,8 @@ def diarize(vocals_wav_path, cues, num_speakers=None):
         try:
             r = subprocess.run(
                 [py, SCRIPT_PATH, "--input", in_path, "--output", out_path],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=PERSODUB_DIAR_TIMEOUT,
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=scaled_timeout(video_duration, PERSODUB_DIAR_TIMEOUT),
             )
         except Exception as e:
             raise RuntimeError("local diarization failed to run (%s)" % str(e)[:120])

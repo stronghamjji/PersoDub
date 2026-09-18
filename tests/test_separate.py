@@ -165,3 +165,40 @@ def test_separate_returns_paths_on_success(monkeypatch, tmp_path):
     assert captured_input["input"] == "/fake/video.mp4"
     assert captured_input["out_dir"] == str(tmp_path)
     assert captured_input["model_dir"] == "/fake/model_dir"
+
+
+# --- timeout scales with the video's length (long videos used to die on a
+# fixed 900s wall regardless of how long the video actually was). The formula
+# itself is tested once, shared, in tests/test_timeouts.py -- this is just the
+# wiring: SeparationEngine's computed timeout must actually reach subprocess.run.
+
+def test_separation_engine_keeps_default_timeout_without_video_duration():
+    # Existing callers that never pass video_duration must see no change.
+    assert sep.SeparationEngine().timeout == 900
+
+
+def test_separate_passes_computed_timeout_to_subprocess_run(monkeypatch, tmp_path):
+    import sys
+
+    from app import timeouts
+
+    class _R:
+        returncode = 0
+        stderr = ""
+
+    captured = {}
+
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
+        captured["timeout"] = timeout
+        _write_output(str(tmp_path), {
+            "ok": True, "vocals": "v.wav", "background": "b.wav",
+        })
+        return _R()
+
+    monkeypatch.setattr(sep.subprocess, "run", fake_run)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_CAP", 100000.0)
+    engine = sep.SeparationEngine(python_path=sys.executable, video_duration=600.0)  # 10 min
+    engine.separate("/fake/video.mp4", str(tmp_path))
+
+    assert captured["timeout"] == 6000.0

@@ -20,6 +20,7 @@ from typing import Dict, Optional
 
 from app.config import SEP_MODEL_DIR, SEP_PYTHON
 from app.run_errors import describe_exit_failure, describe_start_failure
+from app.timeouts import scaled_timeout
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "demucs_separate.py")
 
@@ -28,10 +29,12 @@ class SeparationEngine:
     """Local Demucs separation socket: separate(path, out_dir) -> {"vocals", "background"}."""
 
     def __init__(self, python_path: Optional[str] = None, model_dir: Optional[str] = None,
-                timeout: int = 900):
+                timeout: int = 900, video_duration: Optional[float] = None):
         self.python_path = python_path or SEP_PYTHON
         self.model_dir = model_dir or SEP_MODEL_DIR
-        self.timeout = timeout
+        # video_duration, when known, scales `timeout` up for long videos
+        # (see app.timeouts.scaled_timeout); omitted, it's today's fixed value.
+        self.timeout = scaled_timeout(video_duration, timeout)
 
     def separate(self, video_or_audio_path: str, out_dir: str) -> Dict[str, str]:
         """Run local Demucs separation on one video/audio file.

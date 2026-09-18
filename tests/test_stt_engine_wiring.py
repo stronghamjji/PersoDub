@@ -17,12 +17,15 @@ from app.perso_client import PersoCreditExhaustedError, PersoInvalidKeyError, Pe
 
 
 class _FakeSeparationEngine:
+    def __init__(self, *a, **k):
+        pass
+
     def separate(self, video_path, out_dir):
         return {"vocals": "/local/vocals.wav", "background": "/local/background.wav"}
 
 
 def _fake_run_qwen_dub(engine, segments, ref_cues, work_dir, vocals_path, background_path,
-                       language=None, n_takes=1, log=None, on_notice=None):
+                       language=None, n_takes=1, log=None, on_notice=None, video_duration=None):
     p = os.path.join(work_dir, "qwen_dub_48k.wav")
     with open(p, "wb") as f:
         f.write(b"MIXED")
@@ -67,7 +70,7 @@ def test_stt_engine_default_uses_local_whisper_directly(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pipeline, "transcribe_local", fake_transcribe_local)
 
-    def _fake_diarize(vocals_path, cues, num_speakers=None):
+    def _fake_diarize(vocals_path, cues, num_speakers=None, video_duration=None):
         captured["diarize_called"] = True
         captured["vocals_path"] = vocals_path
         return [dict(c, speaker="SPK0") for c in cues]
@@ -101,7 +104,7 @@ def test_stt_engine_local_is_same_as_default(monkeypatch, tmp_path):
         return [{"start": 0.0, "end": 2.0, "text": "hi there"}]
 
     monkeypatch.setattr(pipeline, "transcribe_local", fake_transcribe_local)
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 
     video, out, srt = _write_inputs(tmp_path)
     result = pipeline.run_dub(
@@ -211,7 +214,7 @@ def test_stt_engine_perso_failure_fails_the_job(monkeypatch, tmp_path):
         return [{"start": 0.0, "end": 2.0, "text": "hi there"}]
 
     monkeypatch.setattr(pipeline, "transcribe_local", fake_transcribe_local)
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 
     class _BrokenPerso:
         def transcribe(self, video_path, space_seq=None):
@@ -242,7 +245,7 @@ def test_stt_engine_perso_credit_exhausted_fails_with_recharge_notice(monkeypatc
         return [{"start": 0.0, "end": 2.0, "text": "hi there"}]
 
     monkeypatch.setattr(pipeline, "transcribe_local", fake_transcribe_local)
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 
     class _BrokePerso:
         def transcribe(self, video_path, space_seq=None):
@@ -271,7 +274,7 @@ def test_pipeline_hands_cancel_check_to_the_perso_client(monkeypatch, tmp_path):
     # of polling) -- the pipeline passes its cancel_check via the client's
     # cancel_check attribute (see PersoClient._wait_completed).
     _stub_common(monkeypatch)
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
     seen = {}
 
     class _CapturingPerso:
@@ -318,7 +321,7 @@ def test_stt_engine_perso_credits_log_never_kills_a_paid_job(monkeypatch, tmp_pa
     # billed. Perso returning credits as strings (or any surprise shape) must
     # degrade to a missing log line, never a failed job (review HIGH-5).
     _stub_common(monkeypatch)
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 
     class _StringCreditsPerso:
         def __init__(self):
@@ -347,7 +350,7 @@ def test_stt_engine_perso_invalid_key_fails_with_settings_notice(monkeypatch, tm
     # turns into a "check your key" popup whose button opens Settings (no link:
     # the fix is inside the app, not on a web page).
     _stub_common(monkeypatch)
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 
     class _BadKeyPerso:
         def transcribe(self, video_path, space_seq=None):
@@ -372,7 +375,7 @@ def test_stt_engine_perso_5xx_fails_with_try_later_notice(monkeypatch, tmp_path)
     # 5xx from Perso -> their outage, not the user's fault. The job fails with a
     # "try again later" notice (no link -- nothing for the user to fix).
     _stub_common(monkeypatch)
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 
     class _DownPerso:
         def transcribe(self, video_path, space_seq=None):
@@ -410,7 +413,7 @@ def test_local_stt_is_never_told_to_decode_in_the_target_language(monkeypatch, t
 
     monkeypatch.setattr(pipeline, "transcribe_local", fake_transcribe_local)
     monkeypatch.setattr(pipeline, "diarize",
-                        lambda vocals_path, cues, num_speakers=None: cues)
+                        lambda vocals_path, cues, num_speakers=None, video_duration=None: cues)
 
     video, out, srt = _write_inputs(tmp_path)
     pipeline.run_dub(

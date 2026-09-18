@@ -67,7 +67,8 @@ def compute_mute_set(vocals_path: str,
                      speech_spans: Sequence[Sequence[float]],
                      dub_spans: Sequence[Sequence[float]],
                      veto: Optional[Veto] = None,
-                     log: Optional[Callable[[str], None]] = None):
+                     log: Optional[Callable[[str], None]] = None,
+                     video_duration: Optional[float] = None):
     """The company-mode MUTE set + the whisper verdicts backing it.
 
     Returns (mute_regions, verdicts): mute_regions = merged [start, end) spans
@@ -76,13 +77,18 @@ def compute_mute_set(vocals_path: str,
     stay at 0dB inside otherwise-energetic territory, and feed the manifest.
 
     Fail-closed: candidates the veto rejects (or cannot verify -- whisper
-    unavailable) stay inside the mute set.
+    unavailable) stay inside the mute set. video_duration, when known, scales
+    the default whisper veto's subprocess timeout for long videos (see
+    app.timeouts.scaled_timeout) -- unused when a test injects its own `veto`.
     """
     log = log or (lambda m: None)
     candidates = extract_nonverbal_segments(vocals_path, speech_spans, dub_spans)
     verdicts: List[dict] = []
     if candidates:
-        verdicts = (veto or whisper_veto)(vocals_path, candidates)
+        if veto is None:
+            verdicts = whisper_veto(vocals_path, candidates, video_duration=video_duration)
+        else:
+            verdicts = veto(vocals_path, candidates)
         for v in verdicts:
             log("   company gate %6.2f-%6.2fs %-7s %r"
                 % (v["start"], v["end"], "KEEP" if v["keep"] else "MUTE", v.get("text", "")))
@@ -201,7 +207,8 @@ def apply_company_ambience(mix_path: str, vocals_path: str,
                            out_path: Optional[str] = None,
                            veto: Optional[Veto] = None,
                            manifest_path: Optional[str] = None,
-                           log: Optional[Callable[[str], None]] = None) -> dict:
+                           log: Optional[Callable[[str], None]] = None,
+                           video_duration: Optional[float] = None) -> dict:
     """Full company-mode pass over a finished safe-mode mix (in place by
     default): compute the mute set, build the speech-erased ambience layer and
     sum it into the mix (32-bit accumulate + the same peak guard as
@@ -214,7 +221,7 @@ def apply_company_ambience(mix_path: str, vocals_path: str,
     """
     log = log or (lambda m: None)
     mute_regions, verdicts = compute_mute_set(vocals_path, speech_spans, dub_spans,
-                                              veto=veto, log=log)
+                                              veto=veto, log=log, video_duration=video_duration)
     layer = build_ambience_layer(vocals_path, mute_regions)
 
     data, sr, width, ch = read_wav(mix_path)
