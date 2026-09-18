@@ -463,6 +463,15 @@
   .status-chip { background: var(--secondary); color: var(--foreground);
     padding: 2px 9px; border-radius: 99px; }
   .status-chip.done { background: var(--chip-done-bg); color: var(--chip-done-fg); font-weight: 600; }
+  /* A chip does not shrink, so on a narrow window the whole row of them stayed
+     at full width and everything else paid for it: the project name was cut to
+     a single letter and Export slid on top of the last chip (Windows test at
+     the app's minimum width, 2026-09-18). Below this width only the first chip
+     stays -- that one is the state itself (Done, Erasing), and the engine names
+     beside it are also on the export screen and in Settings. */
+  @media (max-width: 1120px) {
+    .topbar-sub .status-chip:not(:first-child) { display: none; }
+  }
   .topbar-spacer { flex: 1; }
 
   /* The one job-wide message line (a credit warning, or why a dub failed).

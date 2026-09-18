@@ -12,8 +12,8 @@ your computer.
 [![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
 
 <p>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-0.6.2-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-0.6.2.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-mac.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
 **macOS** — The button downloads the `.dmg` straight away; open it and drag **PersoDub** into Applications.
