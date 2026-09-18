@@ -58,6 +58,34 @@ MIN_RMS_DBFS = -45.0   # a candidate must be at least this loud on the stem --
 FADE_SEC = 0.07        # raised-cosine fade at each end of a copied segment
 MIN_CLIP_SEC = 1.0     # whisper temp clips are silence-padded to at least this
 
+# whisper_veto's subprocess timeout, env-overridable the way
+# app/diar_campplus_client.py's PERSODUB_DIAR_TIMEOUT already is. Same
+# reasoning as app/separate.py's SEP_TIMEOUT_PER_SEC: 0.32x realtime measured
+# on an M4 Mac, ~10x slower on a CPU-only Windows laptop (~3.2x realtime),
+# doubled again for headroom -> ~6x realtime. The candidate clips whisper_veto
+# transcribes come from the same source video, so its work scales with the
+# video's length too.
+try:
+    NONVERBAL_TIMEOUT_PER_SEC = float(os.environ.get("PERSODUB_NONVERBAL_TIMEOUT_PER_SEC", "6"))
+except (TypeError, ValueError):
+    NONVERBAL_TIMEOUT_PER_SEC = 6.0
+# Upper cap so a genuinely stuck subprocess still gets killed instead of
+# hanging for a day.
+try:
+    NONVERBAL_TIMEOUT_CAP = float(os.environ.get("PERSODUB_NONVERBAL_TIMEOUT_CAP", "10800"))
+except (TypeError, ValueError):
+    NONVERBAL_TIMEOUT_CAP = 10800.0
+
+
+def nonverbal_timeout(video_duration: Optional[float], default: float = 1800) -> float:
+    """The whisper-veto subprocess ceiling for a video this long -- `default`
+    (today's fixed value) when the duration is unknown, otherwise the
+    length-scaled budget, never below `default` and never above the cap."""
+    if not video_duration or video_duration <= 0:
+        return default
+    return min(max(default, video_duration * NONVERBAL_TIMEOUT_PER_SEC), NONVERBAL_TIMEOUT_CAP)
+
+
 Veto = Callable[[str, Sequence[Tuple[float, float]]], List[dict]]
 
 
@@ -171,10 +199,14 @@ def _cut_clip(vocals_path: str, start: float, end: float, out_path: str) -> None
 
 
 def whisper_veto(vocals_path: str, candidates: Sequence[Tuple[float, float]],
-                 python_bin: Optional[str] = None, model: Optional[str] = None) -> List[dict]:
+                 python_bin: Optional[str] = None, model: Optional[str] = None,
+                 video_duration: Optional[float] = None) -> List[dict]:
     """Transcribe every candidate span in ONE whisper subprocess and decide
     KEEP/REJECT per classify_transcript. Fail-closed: if whisper cannot run or
-    returns garbage, every candidate is rejected."""
+    returns garbage, every candidate is rejected.
+
+    video_duration, when known, scales the subprocess timeout up for long
+    videos (see nonverbal_timeout); omitted, it's today's fixed 1800s."""
     python_bin = python_bin or NONVERBAL_WHISPER_PYTHON
     model = model or NONVERBAL_WHISPER_MODEL
     with tempfile.TemporaryDirectory(prefix="nonverbal_") as td:
@@ -189,7 +221,8 @@ def whisper_veto(vocals_path: str, candidates: Sequence[Tuple[float, float]],
             json.dump(clips, f)
         try:
             r = subprocess.run([python_bin, "-c", _WHISPER_RUNNER, model, in_path, out_path],
-                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=nonverbal_timeout(video_duration))
             if r.returncode != 0:
                 raise RuntimeError(r.stderr[-300:])
             texts = json.load(open(out_path))
@@ -248,18 +281,26 @@ def apply_nonverbal_whitelist(mix_path: str, vocals_path: str,
                               out_path: Optional[str] = None,
                               veto: Optional[Veto] = None,
                               manifest_path: Optional[str] = None,
-                              log: Optional[Callable[[str], None]] = None) -> dict:
+                              log: Optional[Callable[[str], None]] = None,
+                              video_duration: Optional[float] = None) -> dict:
     """Full whitelist pass over a finished safe-mode mix (in place by default):
     discover candidates, run the veto (whisper by default, injectable for
     tests), overlay only the kept segments. Returns (and optionally writes)
     the manifest: {"kept": [...], "rejected": [...]} with per-candidate
-    timestamps, transcript and verdict."""
+    timestamps, transcript and verdict.
+
+    video_duration, when known, scales the default whisper veto's subprocess
+    timeout for long videos (see nonverbal_timeout) -- unused when a test
+    injects its own `veto`."""
     log = log or (lambda m: None)
     candidates = extract_nonverbal_segments(vocals_path, speech_spans, dub_spans)
     kept: List[dict] = []
     rejected: List[dict] = []
     if candidates:
-        verdicts = (veto or whisper_veto)(vocals_path, candidates)
+        if veto is None:
+            verdicts = whisper_veto(vocals_path, candidates, video_duration=video_duration)
+        else:
+            verdicts = veto(vocals_path, candidates)
         for v in verdicts:
             (kept if v["keep"] else rejected).append(v)
             log("   nonverbal %6.2f-%6.2fs %-7s %r"

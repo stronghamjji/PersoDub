@@ -322,15 +322,19 @@ def _stub_run_dub_until_translation(monkeypatch):
     local Whisper, CAM++). The translator under test raises there, so nothing
     after translation needs stubbing."""
     class _FakeSep:
+        def __init__(self, *a, **k):
+            pass
+
         def separate(self, video_path, out_dir):
             return {"vocals": "/local/vocals.wav", "background": "/local/background.wav"}
 
     monkeypatch.setattr(pipeline, "SeparationEngine", _FakeSep)
     monkeypatch.setattr(
         pipeline, "transcribe_local",
-        lambda video, language=None, log=None, on_language=None: [{"start": 0.0, "end": 2.0, "text": "hi"}],
+        lambda video, language=None, log=None, on_language=None, video_duration=None:
+            [{"start": 0.0, "end": 2.0, "text": "hi"}],
     )
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 
 
 class _QuotaExhaustedTranslator(FakeTranslator):

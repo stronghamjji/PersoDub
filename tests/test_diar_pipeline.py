@@ -6,6 +6,9 @@ from app.text.cues import cue_speaker
 
 
 class _FakeSeparationEngine:
+    def __init__(self, *a, **k):
+        pass
+
     def separate(self, video_path, out_dir):
         return {"vocals": "/local/vocals.wav", "background": "/local/background.wav"}
 
@@ -35,7 +38,7 @@ def test_campplus_labels_written_into_src_cues(monkeypatch, tmp_path):
         {"start": 9.0, "end": 11.0, "text": "line two"},
     ])
 
-    def _fake_diarize(vocals_path, cues, num_speakers=None):
+    def _fake_diarize(vocals_path, cues, num_speakers=None, video_duration=None):
         captured["num_speakers"] = num_speakers
         captured["vocals_path"] = vocals_path
         labels = ["SPK0", "SPK1"]
@@ -47,7 +50,7 @@ def test_campplus_labels_written_into_src_cues(monkeypatch, tmp_path):
     # Qwen path builds its per-speaker voice references from), to prove the CAM++
     # labels are the ones cue_speaker() sees (not left unlabeled).
     def fake_run_qwen_dub(engine, segments, ref_cues, work_dir, vocals_path, background_path,
-                          language=None, n_takes=1, log=None, on_notice=None):
+                          language=None, n_takes=1, log=None, on_notice=None, video_duration=None):
         captured["ref_labels"] = [cue_speaker(c) for c in ref_cues]
         p = os.path.join(work_dir, "qwen_dub_48k.wav")
         with open(p, "wb") as f:
@@ -103,11 +106,11 @@ def test_source_srt_keeps_diarization_labels(monkeypatch, tmp_path):
 
     labels = ["SPK0", "SPK1"]
     monkeypatch.setattr(pipeline, "diarize",
-                        lambda vocals_path, cues, num_speakers=None:
+                        lambda vocals_path, cues, num_speakers=None, video_duration=None:
                         [dict(c, speaker=labels[i]) for i, c in enumerate(cues)])
 
     def fake_run_qwen_dub(engine, segments, ref_cues, work_dir, vocals_path, background_path,
-                          language=None, n_takes=1, log=None, on_notice=None):
+                          language=None, n_takes=1, log=None, on_notice=None, video_duration=None):
         captured["ref_labels"] = [cue_speaker(c) for c in ref_cues]
         p = os.path.join(work_dir, "qwen_dub_48k.wav")
         with open(p, "wb") as f:

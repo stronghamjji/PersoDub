@@ -165,3 +165,75 @@ def test_separate_returns_paths_on_success(monkeypatch, tmp_path):
     assert captured_input["input"] == "/fake/video.mp4"
     assert captured_input["out_dir"] == str(tmp_path)
     assert captured_input["model_dir"] == "/fake/model_dir"
+
+
+# --- timeout scales with the video's length (long videos used to die on a
+# fixed 900s wall regardless of how long the video actually was) -----------
+
+def test_separation_timeout_keeps_fixed_value_for_short_video():
+    # 31s video: 31 * SEP_TIMEOUT_PER_SEC is well under the 900s floor.
+    assert sep.separation_timeout(31.0) == 900
+
+
+def test_separation_timeout_scales_for_long_video():
+    hours3 = 3 * 3600.0
+    expected = min(max(900, hours3 * sep.SEP_TIMEOUT_PER_SEC), sep.SEP_TIMEOUT_CAP)
+    assert sep.separation_timeout(hours3) == expected
+    assert expected > 900  # actually bigger than today's fixed value
+
+
+def test_separation_timeout_capped_so_it_cannot_hang_a_day():
+    assert sep.separation_timeout(999999.0) == sep.SEP_TIMEOUT_CAP
+
+
+def test_separation_timeout_falls_back_to_default_when_duration_unknown():
+    assert sep.separation_timeout(None) == 900
+    assert sep.separation_timeout(0) == 900
+
+
+def test_separation_engine_uses_scaled_timeout(monkeypatch):
+    monkeypatch.setattr(sep, "SEP_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(sep, "SEP_TIMEOUT_CAP", 100000.0)
+    engine = sep.SeparationEngine(video_duration=600.0)  # 10 min
+    assert engine.timeout == 6000.0
+
+
+def test_separation_engine_keeps_default_timeout_without_video_duration():
+    # Existing callers that never pass video_duration must see no change.
+    assert sep.SeparationEngine().timeout == 900
+
+
+def test_separation_engine_cap_env_override_wins(monkeypatch):
+    monkeypatch.setenv("PERSODUB_SEP_TIMEOUT_CAP", "1200")
+    import importlib
+    reloaded = importlib.reload(sep)
+    try:
+        assert reloaded.separation_timeout(999999.0) == 1200.0
+    finally:
+        monkeypatch.undo()
+        importlib.reload(sep)
+
+
+def test_separate_passes_computed_timeout_to_subprocess_run(monkeypatch, tmp_path):
+    import sys
+
+    class _R:
+        returncode = 0
+        stderr = ""
+
+    captured = {}
+
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
+        captured["timeout"] = timeout
+        _write_output(str(tmp_path), {
+            "ok": True, "vocals": "v.wav", "background": "b.wav",
+        })
+        return _R()
+
+    monkeypatch.setattr(sep.subprocess, "run", fake_run)
+    monkeypatch.setattr(sep, "SEP_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(sep, "SEP_TIMEOUT_CAP", 100000.0)
+    engine = sep.SeparationEngine(python_path=sys.executable, video_duration=600.0)
+    engine.separate("/fake/video.mp4", str(tmp_path))
+
+    assert captured["timeout"] == 6000.0
