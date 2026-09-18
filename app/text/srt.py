@@ -86,12 +86,6 @@ def _count_syllables(text: str, lang: str) -> int:
     return n
 
 
-def count_units(text: str, lang: str) -> int:
-    """The units a length budget is counted in (see _count_syllables): the public
-    name, for callers that measure a spoken line against its words (app/refit.py)."""
-    return _count_syllables(text, lang)
-
-
 def estimate_seconds(text: str, lang: str) -> float:
     """Estimate how many seconds this text takes to speak at a natural pace (syllable-based)."""
     sps = _SYL_PER_SEC.get(lang.lower(), 5.0)

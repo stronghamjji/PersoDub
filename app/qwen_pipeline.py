@@ -483,7 +483,6 @@ def run_qwen_dub(
     vocals_path: str, background_path: str,
     language: str = "Korean", n_takes: int = 1, log: Optional[Callable[[str], None]] = None,
     voice_mode: Optional[str] = None, on_notice: Optional[Callable[[dict], None]] = None,
-    shorten: Optional[Callable] = None, source_texts: Optional[List[str]] = None,
 ) -> str:
     """Full Qwen3-TTS dub-audio path. Returns the path to the assembled 48kHz wav
     (background + our synthesized lines, each gained to match the original line's
@@ -526,14 +525,6 @@ def run_qwen_dub(
             "No voice lines could be synthesized (0/%d) - is the TTS engine "
             "running? See the raw log for per-line errors." % len(segments)
         )
-
-    # The voice is on disk, so how long each line REALLY runs is known for the
-    # first time: the ones past their cue are rewritten shorter and spoken again
-    # before anything is placed (app/refit.py). Only when the caller can ask for
-    # shorter wording -- a user's own subtitles are spoken as written.
-    if shorten is not None:
-        refit_long_lines(engine, segments, seg_speakers, voice_ids, language, line_paths,
-                         shorten, source_texts, log=log)
 
     # Per-line loudness matching (always on -- restores the original's emotional
     # dynamics: a scream stays loud, a whisper stays quiet). segments carry the
@@ -630,53 +621,6 @@ def run_qwen_dub(
         place_lines(background_path, line_paths, starts, out_wav, gains=gains,
                    vocals_path=vocals_path, speech_regions=speech_regions, log=log)
     return out_wav
-
-
-def refit_long_lines(engine, segments, seg_speakers, voice_ids, language, line_paths,
-                     shorten, source_texts, log=None, count=None):
-    # type: (...) -> dict
-    """Rewrite and respeak the lines whose voice ran past their cue (app/refit.py),
-    in place: a kept rewrite replaces the line's wav AND its words in `segments`,
-    so the script, the subtitles and the voice keep saying the same thing.
-
-    The slot is the cue itself -- when the original speaker's mouth is moving --
-    not the wider span the assembly may let a line spill into. A candidate is
-    spoken to a file beside the line's own and only moved over it once it is
-    known to be shorter; whatever is not kept is removed. Returns
-    {index: (new text, new seconds)}.
-    """
-    from app.refit import refit
-
-    log = log or (lambda m: None)
-    slots = [float(seg["end"]) - float(seg["start"]) for seg in segments]
-    durs = line_play_durations(line_paths)
-    leftovers = []
-
-    def respeak(i, text):
-        path = line_paths[i]
-        if path is None:
-            return None
-        candidate = path + ".refit.wav"
-        leftovers.append(candidate)
-        spk = seg_speakers[i] if i < len(seg_speakers) else DEFAULT_SPEAKER
-        # Its own seed range: a refit candidate must not collide with the
-        # first pass's 1000*i + take seeds.
-        seed = 500000 + 1000 * i + len(leftovers)
-        if _synth_one(engine, {"text": text}, voice_ids.get(spk), language, seed,
-                      candidate, log, "refit line %d" % (i + 1)) is None:
-            return None
-        return line_play_durations([candidate])[0], lambda: os.replace(candidate, path)
-
-    try:
-        changed = refit([seg.get("text", "") for seg in segments], list(source_texts or []),
-                        durs, slots, language, shorten, respeak, log=log, count=count)
-    finally:
-        for candidate in leftovers:
-            if os.path.exists(candidate):
-                os.remove(candidate)
-    for i, (text, _dur) in changed.items():
-        segments[i]["text"] = text
-    return changed
 
 
 def resynth_one_line(work_dir, entry, text, language):

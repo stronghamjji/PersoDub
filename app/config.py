@@ -239,9 +239,6 @@ PERSODUB_LEAKAGE_GATE = os.environ.get("PERSODUB_LEAKAGE_GATE", "on").strip().lo
 # words are copied back into the mix at ORIGINAL volume (a copy of approved
 # pieces -- no ducking involved). 0 = plain safe mode, nothing copied.
 QWEN_KEEP_NONVERBAL = _env_int("QWEN_KEEP_NONVERBAL", 1)
-# After the voice is made, lines that ran past their cue are rewritten shorter
-# and spoken again (app/refit.py). PERSODUB_REFIT=0 turns it off.
-REFIT_AFTER_VOICE = os.environ.get("PERSODUB_REFIT", "1").strip() != "0"
 # Interpreter for the whisper veto subprocess -- openai-whisper is not in the
 # app's own venv (same pattern as QWEN_SCORER_PYTHON/SEP_PYTHON). CPU is fine:
 # the veto only transcribes sub-second candidate clips. Default = the server

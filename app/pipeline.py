@@ -41,7 +41,7 @@ from app.separate import SeparationEngine
 from app.stages import STAGES, pre_stage_marker, stage_marker  # noqa: F401
 from app.stt_local import transcribe_local
 from app.text.cues import cue_speaker, match_cue_index
-from app.text.length_fit import fit_translate, shorten_to_budgets
+from app.text.length_fit import fit_translate
 from app.text.srt import (
     borrow_time,
     build_srt,
@@ -626,27 +626,8 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
     return segments, auto_translated
 
 
-def _refit_hooks(auto_translated, translator, segments, source_cues, language):
-    """What the voice stage needs to rewrite a line that ran long, or {} when
-    it must not: the user's own subtitles are spoken as written, and a paid
-    translator (max_budget_retries 0 -- Gemini, Vertex) is not called again
-    behind the user's back. The source text for each line is found by time, the
-    way every other pairing in this app is (app.text.cues.match_cue_index)."""
-    if not (config.REFIT_AFTER_VOICE and auto_translated and translator is not None):
-        return {}
-    if getattr(translator, "max_budget_retries", 0) <= 0:
-        return {}
-    sources = []
-    for seg in segments:
-        k = match_cue_index(seg, source_cues) if source_cues else None
-        sources.append(source_cues[k]["text"] if k is not None else "")
-    return {"shorten": lambda items: shorten_to_budgets(translator, items, language),
-            "source_texts": sources}
-
-
 def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path,
-                      language, n_takes, qwen_engine, on_notice, log,
-                      shorten=None, source_texts=None):
+                      language, n_takes, qwen_engine, on_notice, log):
     """Stage 4/6 -- cloning & synthesis (Qwen3-TTS, the app's only TTS engine).
 
     Returns the path of the full-length dubbed audio.
@@ -665,13 +646,10 @@ def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path
     if device:
         log(f"   synthesis device: {device}")
 
-    # Named only when there is one: a run that cannot refit calls the voice
-    # path exactly as it always has.
-    refit = {"shorten": shorten, "source_texts": source_texts} if shorten is not None else {}
     return run_qwen_dub(engine, segments, ref_cues, work_dir,
                         vocals_path=vocals_path, background_path=background_path,
                         language=language, n_takes=effective_n_takes, log=log,
-                        on_notice=on_notice, **refit)
+                        on_notice=on_notice)
 
 
 def _stage_finish(video_path, audio_wav, out_path, work_dir, log):
@@ -794,20 +772,9 @@ def run_dub(
     ref_cues = source_cues or src_cues
 
     _check_cancel(cancel_check, log)
-    # A line whose voice runs past its cue is rewritten shorter and spoken again
-    # (app/refit.py) -- by the translator that wrote it, which is why this is
-    # only offered for the app's own translation.
-    hooks = _refit_hooks(auto_translated,
-                         (translator or get_translator(translate_engine)) if auto_translated else None,
-                         segments, source_cues, language)
-    before = [seg.get("text", "") for seg in segments]
     audio_wav = _stage_synthesize(
         segments, ref_cues, work_dir, vocals_path, background_path,
-        language, n_takes, qwen_engine, on_notice, log, **hooks)
-    if [seg.get("text", "") for seg in segments] != before:
-        # The script and the subtitles say what the voice now says.
-        with open(os.path.join(work_dir, "translated.srt"), "w", encoding="utf-8") as f:
-            f.write(build_srt(segments))
+        language, n_takes, qwen_engine, on_notice, log)
 
     _check_cancel(cancel_check, log)
 
