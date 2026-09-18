@@ -221,9 +221,10 @@ test("a row is byte for byte the row the page drew before this file existed", as
     '    </div>\n    ');
 });
 
-test("a line the translator left untranslated says so where the length verdict goes", async (t) => {
-  // No words and no voice: the numbers would only say "0.0s / 1.0s", so the
-  // verdict stands alone, in red, for the user to write or hand to the agent.
+test("a line the translator left untranslated says so in its own empty cell, and rests its buttons", async (t) => {
+  // No words and no voice. The wide translation cell says what is missing
+  // (the stylesheet draws data-empty in red while the cell is empty); the
+  // length cell is left blank; play and remake are off until it is written.
   const h = harness({ responses: { [SCRIPT]: ok({ lines: [
     line(1),
     line(2, { text: "", untranslated: true, estimated: 0, audio_sec: null, fits: false }),
@@ -232,11 +233,16 @@ test("a line the translator left untranslated says so where the length verdict g
 
   await h.api.renderScript("j1");
   const html = h.$("scriptBox").innerHTML;
+  const row2 = html.slice(html.indexOf('data-start="2"'));
 
-  assert.match(html, /<span class="sc-len"><span class="sc-untr" title="Not translated">Not translated<\/span><\/span>/);
-  assert.equal(html.match(/sc-untr/g).length, 1);            // only line 2
-  assert.match(html, /<b>0\.9s<\/b> \/ 1\.0s · <\/span><span class="sc-fit">fits/);  // line 1 unchanged
-  assert.match(html, /data-line="2"><\/div>/);                  // its cell is empty, to type into
+  // Still editable, still empty -- the mark is not in the words.
+  assert.match(row2, /class="sc-dst" contenteditable="plaintext-only" spellcheck="false"\s+data-line="2" data-empty="Not translated"><\/div>/);
+  assert.match(row2, /<span class="sc-len"><\/span>/);
+  assert.match(row2, /class="sc-listen sc-off" data-play="2" type="button" disabled\s+title="Write the translation first"/);
+  assert.match(row2, /class="sc-wave sc-off" data-voice="2"\s+type="button" disabled title="Write the translation first"/);
+  // Line 1 is untouched by any of it.
+  assert.equal(html.match(/data-empty|sc-off/g).length, 3);
+  assert.match(html, /<b>0\.9s<\/b> \/ 1\.0s · <\/span><span class="sc-fit">fits/);
 });
 
 test("with no length known yet the strip is drawn to the last line's end", async (t) => {
@@ -284,6 +290,31 @@ async function withCell(t, { responses = {}, text = "Hello 1" } = {}) {
   await h.api.renderScript("j1");
   return { h, cell };
 }
+
+test("writing an untranslated line in saves it, and the redrawn row is an ordinary one", async (t) => {
+  // The cell stays editable: typed words are saved like any edit, and the
+  // table drawn again from the server has no mark and live buttons.
+  let untranslated = true;
+  const h = harness({ responses: {
+    [SCRIPT]: () => ok({ lines: [untranslated
+      ? line(2, { text: "", untranslated: true, estimated: 0, audio_sec: null, fits: false })
+      : line(2, { text: "Hi there", edited: true, voice_stale: true, audio_sec: null })] }),
+    "/api/dub/jobs/j1/script/2": () => { untranslated = false; return ok({}); },
+  } });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+
+  const cell = makeCell(2, "");
+  h.$("scriptBox").qs[".sc-dst[contenteditable]"] = [cell];
+  await h.api.renderScript("j1");                     // wire the cell
+  cell.textContent = "Hi there";
+  await cell.fire("blur");
+
+  assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/script/2 {"text":"Hi there"}'));
+  const html = h.$("scriptBox").innerHTML;
+  assert.doesNotMatch(html, /data-empty|sc-off|disabled/);
+  assert.match(html, /class="sc-wave stale"/);          // now waiting for its first voice
+});
 
 test("committing an edited cell saves that line's new words", async (t) => {
   const { h, cell } = await withCell(t, {

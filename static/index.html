@@ -1076,10 +1076,6 @@
   .sc-over { color: var(--destructive); font-weight: 600; }
   .sc-under { color: var(--muted-foreground); }
   .sc-fit { color: var(--success); font-weight: 600; }
-  /* The one verdict too long for the narrow tables' 40-44px slot: cut with an
-     ellipsis there (its title has the rest) rather than run into the buttons. */
-  .sc-untr { color: var(--destructive); font-weight: 600; display: inline-block;
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 
   /* ---------------- The script table, narrow ---------------- */
   /* 706px is the row above at its floors, so a pane thinner than that would
@@ -1181,6 +1177,12 @@
   .sc-wave.fresh svg { stroke: currentColor; }
   .sc-wave:disabled { cursor: progress; }
   .sc-wave:disabled svg { animation: spin 1s linear infinite; }
+  /* A line left untranslated (ui/src/scriptTable.mjs): nothing to play and no
+     words to speak, so both buttons rest -- faded, not turning -- until it is
+     written. */
+  .sc-listen.sc-off, .sc-wave.sc-off { opacity: 0.35; cursor: not-allowed; }
+  .sc-listen.sc-off:hover { border-color: var(--primary-line); }
+  .sc-wave.sc-off svg { animation: none; }
 
 
   /* The script cell is the point of the table: a line you can only read is half
@@ -1188,6 +1190,13 @@
   .sc-dst[contenteditable] { outline: none; border-radius: 4px; padding: 2px 4px;
     margin: -2px -4px; cursor: text; }
   .sc-dst[contenteditable]:hover { background: var(--trim-track); }
+  /* The words' own cell says a line was left untranslated, in the red the
+     table uses for what needs fixing, where the translation belongs. Drawn by
+     the stylesheet rather than written in, so it is never saved as the words;
+     gone as soon as the cell is typed in, and while it has the caret. */
+  .sc-dst[data-empty] { min-height: 1.4em; }
+  .sc-dst[data-empty]:empty:not(:focus)::before { content: attr(data-empty);
+    color: var(--destructive); font-weight: 600; }
   .sc-dst[contenteditable]:focus { background: var(--background);
     box-shadow: 0 0 0 2px var(--primary); }
   /* An icon button beside the edited words, not an underlined "revert" under
