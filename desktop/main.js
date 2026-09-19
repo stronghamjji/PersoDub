@@ -915,6 +915,7 @@ app.whenReady().then(() => {
       let lastPct = 0;
       try {
         await runInstall(steps, {
+          stop: () => packCancelled,
           onProgress: (p) => {
             if (p.state === "start" || p.state === "done" || p.state === "error") shellLog(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail.slice(0, 300) : ""}`);
             if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
