@@ -397,7 +397,17 @@ def synth_lines(
     resolved_usable = usable_slots if usable_slots is not None else [
         max(0.01, s.get("end", 0) - s.get("start", 0)) for s in segments
     ]
-    units = group_merge_units(segments, seg_speakers, resolved_usable)
+    # A line with no words -- one the translator left untranslated
+    # (app/translate.py UNTRANSLATED) -- is never sent to the engine, so its path
+    # stays None: assembly already skips a None line, the same as a failed synth,
+    # and the slot stays silent. Given no speaker, it neither joins a merge unit
+    # nor lets the line after it join across it; its own unit is then dropped.
+    silent = {i for i, s in enumerate(segments) if not s.get("text", "").strip()}
+    merge_speakers = [None if i in silent else spk for i, spk in enumerate(seg_speakers)]
+    units = [u for u in group_merge_units(segments, merge_speakers, resolved_usable)
+             if u[0] not in silent]
+    if silent:
+        log("   %d line(s) have no words - left silent" % len(silent))
 
     if n_takes <= 1:
         paths: List[Optional[str]] = [None] * len(segments)
@@ -421,7 +431,9 @@ def synth_lines(
                     paths[i] = _synth_one(engine, segments[i], voice_id, language, 1000 * i, p, log, "line %d" % i)
         return paths
 
-    take_paths: List[Optional[List[Optional[str]]]] = [None] * len(segments)
+    # An empty row, not None, for a line no unit covers (a silent one): the
+    # winner loop below reads every row.
+    take_paths: List[List[Optional[str]]] = [[] for _ in segments]
     for unit in units:
         if len(unit) == 1:
             i = unit[0]

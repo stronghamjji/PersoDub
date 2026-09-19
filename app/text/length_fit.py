@@ -15,7 +15,7 @@ import json
 import re
 
 from app.text.srt import _SYL_PER_SEC, estimate_seconds
-from app.translate import _ask_with_retry, script_ok
+from app.translate import UNTRANSLATED, _ask_with_retry, _one_line_or_untranslated, script_ok
 
 # ±15% budget window (2026-07-30 calibration, replaces the old single MARGIN multiplier):
 # a line's estimated speech time must land inside [slot*WINDOW_LOW, slot*WINDOW_HIGH], or it
@@ -31,6 +31,76 @@ NO_BUDGET_SLOT_S = 1.0  # slots shorter than this get no budget (a breeding grou
 # (a single 40+ line batch silently mis-numbers its back half — measured), large enough
 # to keep the local flow of the dialogue.
 DRAFT_CHUNK = 6
+
+# A line the translator cannot answer is left UNTRANSLATED and the draft goes on
+# (app/translate.py). But a translator with no usable answer for ANY of the first
+# this-many lines is not stuck on a line, it is not working (a wrong model, one
+# that only rambles) -- and going on would ask about every line of the video, a
+# few times each, for hours before failing anyway. Two chunks, so one odd opening
+# (a run of music notes) is not taken for a broken translator.
+GIVE_UP_AFTER = 2 * DRAFT_CHUNK
+
+
+def _stop_if_nothing_works(out):
+    # type: (List[str]) -> None
+    if len(out) >= GIVE_UP_AFTER and not any(t.strip() for t in out):
+        raise RuntimeError("the translator gave no usable answer for the first %d lines" % len(out))
+
+
+# The scene shown beside each request, for flow and tone: the lines around the
+# ones being translated, not the whole job. The whole job went into every
+# request, and a long video's prompt ran past the model's window (the bundled
+# Ollama runs with -c 4096, prompt and answer together) -- the prompt was cut,
+# instructions and all (#82 was 969 lines, #88 over 110).
+#
+# The window must hold, for a full DRAFT_CHUNK request: the answer (num_predict
+# 2048, app/translate.py), the instructions with the six lines and their
+# budgets, and this context. Measured on the local models (prompt_eval_count,
+# 2026-09-18): the instructions with six 45-character Korean lines come to
+# 770-810 tokens on gemma3:12b, qwen2.5:7b and hy-mt2:1.8b; six very long lines
+# (100 CJK characters each) add about 350 more, so ~1150 at worst. That leaves
+# ~900 tokens, and the context gets 2000 bytes of it: counted in UTF-8 bytes
+# because bytes cost tokens alike across scripts -- 0.23-0.26 tokens a byte for
+# Korean and Japanese on the hungriest tokenizer here (hy-mt2), 0.26-0.29 for
+# English -- so 2000 bytes is at most ~600 tokens with the "- " prefixes, and a
+# worst-case request stays near 3800 of the 4096. Ten lines each side is about
+# half a minute of dialogue either way; with short lines the line count binds,
+# with long or CJK lines the byte count does. Both, because either alone lets
+# one side run over: a few very long lines, or very many short ones.
+CONTEXT_LINES = 10
+CONTEXT_BYTES = 2000
+
+
+def _line_bytes(text):
+    # type: (str) -> int
+    return len(text.encode("utf-8")) + 3  # the "- " before it and the newline after
+
+
+def _scene_window(texts, a, b):
+    # type: (List[str], int, int) -> Optional[List[str]]
+    """The source lines around texts[a:b] (those lines included), grown outward
+    one line a side at a time, nearest first, until CONTEXT_LINES a side or
+    CONTEXT_BYTES in all. A short job fits whole and gets exactly the context it
+    always did. None when the lines being asked for alone are over the bytes --
+    they are in the request itself, so the model still has them."""
+    size = sum(_line_bytes(t) for t in texts[a:b])
+    if size > CONTEXT_BYTES:
+        return None
+    lo, hi = a, b
+    first, last = max(0, a - CONTEXT_LINES), min(len(texts), b + CONTEXT_LINES)
+    grew = True
+    while grew:
+        grew = False
+        if lo > first and size + _line_bytes(texts[lo - 1]) <= CONTEXT_BYTES:
+            lo -= 1
+            size += _line_bytes(texts[lo])
+            grew = True
+        if hi < last and size + _line_bytes(texts[hi]) <= CONTEXT_BYTES:
+            size += _line_bytes(texts[hi])
+            hi += 1
+            grew = True
+    return texts[lo:hi]
+
 
 # A few fixed, general style examples per target language. Showing the model what natural,
 # colloquial, actor-performable dubbing sounds like pulls a local LLM toward that register
@@ -124,7 +194,7 @@ def build_budget_prompt(texts, target_lang, source_lang, budgets, scene_context=
     # type: (List[str], str, Optional[str], List[int], Optional[List[str]]) -> str
     """First-pass translation prompt: style examples + a per-line character budget.
 
-    scene_context (all source lines of the scene) is shown read-only so the model keeps the
+    scene_context (the source lines around them, see _scene_window) is shown read-only so the model keeps the
     flow and tone; only `texts` are translated. Passing a small chunk as `texts` (not the whole
     scene) keeps the output array short enough to stay aligned.
     """
@@ -137,7 +207,7 @@ def build_budget_prompt(texts, target_lang, source_lang, budgets, scene_context=
     src = "from %s " % source_lang if source_lang else ""
     ctx = ""
     if scene_context:
-        ctx = ("The full scene, for context only (do NOT translate these — just read them for flow and tone):\n%s\n\n"
+        ctx = ("The scene around the lines to translate, for context only (do NOT translate these — just read them for flow and tone):\n%s\n\n"
                % "\n".join("- %s" % c for c in scene_context))
     header = ("You are a professional dubbing translator. Translate the %d subtitle lines below %sinto natural colloquial %s.\n\n"
               % (len(texts), src, target_lang))
@@ -152,7 +222,10 @@ def build_budget_prompt(texts, target_lang, source_lang, budgets, scene_context=
     )
     tail = ("Output only a JSON array containing exactly %d strings in order. No other text.\n\n%s"
             % (len(texts), "\n".join(lines)))
-    return header + _primer_block(target_lang) + ctx + rules + _BANS + tail
+    # The context goes first. It is the one part that can be long, and if a prompt
+    # ever runs past the model's window it is cut from the front: what is lost is
+    # then some context, never the instructions or the JSON the answer must be.
+    return ctx + header + _primer_block(target_lang) + rules + _BANS + tail
 
 
 def build_shorten_prompt(sources, currents, target_lang, budgets):
@@ -382,7 +455,7 @@ def build_candidates_draft_prompt(texts, target_lang, source_lang, budgets, scen
     get the same treatment for free (no extra cost -- still one call) and can still retry
     further with build_candidates_prompt if the pick is still out of window.
 
-    scene_context (all source lines of the scene) is shown read-only so the model keeps the
+    scene_context (the source lines around them, see _scene_window) is shown read-only so the model keeps the
     flow and tone; only `texts` are translated. Passing a small chunk as `texts` (not the whole
     scene) keeps the output array short enough to stay aligned.
     """
@@ -395,7 +468,7 @@ def build_candidates_draft_prompt(texts, target_lang, source_lang, budgets, scen
     src = "from %s " % source_lang if source_lang else ""
     ctx = ""
     if scene_context:
-        ctx = ("The full scene, for context only (do NOT translate these — just read them for flow and tone):\n%s\n\n"
+        ctx = ("The scene around the lines to translate, for context only (do NOT translate these — just read them for flow and tone):\n%s\n\n"
                % "\n".join("- %s" % c for c in scene_context))
     header = ("You are a professional dubbing translator. For EACH of the %d subtitle lines below %sgive "
               "exactly 3 DIFFERENT candidate translations, numbered 1/2/3, into natural colloquial %s.\n\n"
@@ -413,7 +486,8 @@ def build_candidates_draft_prompt(texts, target_lang, source_lang, budgets, scen
     tail = ("Output only a JSON array of %d items, one per line in order. Each item is itself a JSON array of "
             "your 3 candidate strings (no numbering inside the string). No other text.\n\n%s"
             % (len(texts), "\n".join(lines)))
-    return (header + _primer_block(target_lang) + ctx + rules
+    # Context first, for the reason given in build_budget_prompt.
+    return (ctx + header + _primer_block(target_lang) + rules
             + _compression_examples_block(target_lang) + _BANS + tail)
 
 
@@ -424,21 +498,24 @@ def _draft_in_chunks(engine, texts, target_lang, source_lang, budgets):
     _draft_candidates_in_chunks for the length-fit path, which is what actually needs 3
     candidates). Each call sees the whole scene as read-only context (for flow) but only
     translates its chunk, so the JSON array stays short and aligned. Falls back to one line
-    at a time if a chunk's count keeps mismatching."""
+    at a time if a chunk's count keeps mismatching; a line that fails even alone is left
+    UNTRANSLATED (app/translate.py)."""
     out = []  # type: List[str]
     for a in range(0, len(texts), DRAFT_CHUNK):
         chunk, chunk_budgets = texts[a:a + DRAFT_CHUNK], budgets[a:a + DRAFT_CHUNK]
         try:
             out.extend(_ask_with_retry(
                 engine._ask,
-                build_budget_prompt(chunk, target_lang, source_lang, chunk_budgets, scene_context=texts),
+                build_budget_prompt(chunk, target_lang, source_lang, chunk_budgets,
+                                    scene_context=_scene_window(texts, a, a + len(chunk))),
                 len(chunk)))
         except ValueError:
-            for t, b in zip(chunk, chunk_budgets):
-                out.extend(_ask_with_retry(
+            for k, (t, b) in enumerate(zip(chunk, chunk_budgets)):
+                out.append(_one_line_or_untranslated(
                     engine._ask,
-                    build_budget_prompt([t], target_lang, source_lang, [b], scene_context=texts),
-                    1))
+                    build_budget_prompt([t], target_lang, source_lang, [b],
+                                        scene_context=_scene_window(texts, a + k, a + k + 1))))
+        _stop_if_nothing_works(out)
     return out
 
 
@@ -448,7 +525,8 @@ def _draft_candidates_in_chunks(engine, texts, target_lang, source_lang, budgets
     candidates in the SAME call, picked immediately against its ±15% window (pick_candidate).
     This is what makes a paid translator's single, retry-free call (max_budget_retries=0)
     already get a best-of-3 choice instead of a single shot -- see fit_translate. Falls back
-    to one line at a time if a chunk's count keeps mismatching.
+    to one line at a time if a chunk's count keeps mismatching; a line that fails even alone
+    is left UNTRANSLATED (app/translate.py).
     """
     out = []  # type: List[str]
     for a in range(0, len(texts), DRAFT_CHUNK):
@@ -458,24 +536,32 @@ def _draft_candidates_in_chunks(engine, texts, target_lang, source_lang, budgets
         try:
             candidate_lists = _ask_candidates_with_retry(
                 engine._ask,
-                build_candidates_draft_prompt(chunk, target_lang, source_lang, chunk_budgets, scene_context=texts),
+                build_candidates_draft_prompt(chunk, target_lang, source_lang, chunk_budgets,
+                                              scene_context=_scene_window(texts, a, a + len(chunk))),
                 len(chunk))
         except ValueError:
             candidate_lists = []
-            for t, b in zip(chunk, chunk_budgets):
-                candidate_lists.extend(_ask_candidates_with_retry(
-                    engine._ask,
-                    build_candidates_draft_prompt([t], target_lang, source_lang, [b], scene_context=texts),
-                    1))
+            for k, (t, b) in enumerate(zip(chunk, chunk_budgets)):
+                # A line whose answer still cannot be read has no candidates, and
+                # becomes UNTRANSLATED below -- not the end of the whole job.
+                try:
+                    candidate_lists.extend(_ask_candidates_with_retry(
+                        engine._ask,
+                        build_candidates_draft_prompt([t], target_lang, source_lang, [b],
+                                                      scene_context=_scene_window(texts, a + k, a + k + 1)),
+                        1))
+                except ValueError:
+                    candidate_lists.append([])
         for idx, (cands, w) in enumerate(zip(candidate_lists, chunk_windows)):
             cands = [c for c in cands if script_ok(c, target_lang)] or cands
             if not cands:
-                out.append("")
+                out.append(UNTRANSLATED)
                 continue
             if w is not None:
                 out.append(pick_candidate(cands, target_lang, w, index=a + idx, log=log))
             else:
                 out.append(cands[0])
+        _stop_if_nothing_works(out)
     return out
 
 
@@ -548,18 +634,26 @@ def fit_translate(
             "long" if estimate_seconds(best[i], target_lang) > windows[i] * WINDOW_HIGH else "short"
             for i in out
         ]
-        try:
-            candidate_lists = _ask_candidates_with_retry(
-                engine._ask,
-                build_candidates_prompt([texts[i] for i in out],
-                                        [best[i] for i in out],
-                                        target_lang,
-                                        [budgets[i] for i in out],
-                                        directions),
-                len(out))
-        except ValueError:
+        # DRAFT_CHUNK lines per request, like the draft: every out-of-window line of a
+        # long video in one prompt ran past the model's window, and its answer past
+        # num_predict, so a long video never got this pass at all.
+        pairs = []
+        for c in range(0, len(out), DRAFT_CHUNK):
+            part = out[c:c + DRAFT_CHUNK]
+            try:
+                pairs.extend(zip(part, _ask_candidates_with_retry(
+                    engine._ask,
+                    build_candidates_prompt([texts[i] for i in part],
+                                            [best[i] for i in part],
+                                            target_lang,
+                                            [budgets[i] for i in part],
+                                            directions[c:c + DRAFT_CHUNK]),
+                    len(part))))
+            except ValueError:
+                continue  # this chunk keeps its current lines; the others still get theirs
+        if not pairs:
             break  # if format failures keep recurring, stop and keep the current result
-        for i, cands in zip(out, candidate_lists):
+        for i, cands in pairs:
             cands = [c for c in cands if script_ok(c, target_lang)]
             if not cands:
                 continue  # nothing usable came back for this line -- keep the current best

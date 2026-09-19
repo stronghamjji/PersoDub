@@ -419,3 +419,171 @@ def test_a_line_that_is_not_text_is_a_malformed_answer():
 
 def test_an_object_holding_one_string_is_that_string():
     assert parse_json_array('[{"text": "안녕"}, "잘 지내?"]', 2) == ["안녕", "잘 지내?"]
+
+
+# --- one line that cannot be translated does not end the job -----------------
+
+def _numbered(prompt):
+    """The lines a prompt asks for, as their text (the "N. ..." lines)."""
+    return [ln.split(" ", 1)[1].split(") ", 1)[-1]
+            for ln in prompt.splitlines() if ln[:1].isdigit() and ". " in ln]
+
+
+def test_a_line_that_keeps_failing_is_left_untranslated_and_the_rest_are_translated(monkeypatch):
+    # Issue #82: after the batch and its per-line fallback, one line still would
+    # not come back as text -- and the whole 969-line job died with it.
+    asked = []
+
+    def fake_ask(p):
+        asked.append(p)
+        lines = _numbered(p)
+        if len(lines) > 1:
+            return '["merged into one"]'          # the batch always breaks the count
+        if lines == ["bad"]:
+            return '["cut off mid-str'            # issue #88's truncated answer
+        return json.dumps(["번역 " + lines[0]], ensure_ascii=False)
+
+    t = OllamaTranslator()
+    monkeypatch.setattr(t, "_ask", fake_ask)
+    out = t.translate(["a", "bad", "c"], "Korean", durations=[1.0, 1.0, 1.0])
+
+    assert out == ["번역 a", translate.UNTRANSLATED, "번역 c"]
+    assert translate.UNTRANSLATED == ""
+    # 3 batch tries, then 1 + 3 + 1 single-line asks: the bad line had its retries.
+    assert len(asked) == 3 + 5
+
+
+def test_an_unreachable_translator_still_fails_the_job(monkeypatch):
+    # Only a bad ANSWER is forgiven. A translator that cannot be reached would
+    # leave every line empty, and a silent video is not a finished dub.
+    def fake_ask(p):
+        raise translate.requests.exceptions.ConnectionError("refused")
+
+    t = OllamaTranslator()
+    monkeypatch.setattr(t, "_ask", fake_ask)
+    with pytest.raises(translate.requests.exceptions.ConnectionError):
+        t.translate(["a", "b"], "Korean")
+
+
+def test_the_plain_translate_is_asked_in_chunks(monkeypatch):
+    # The pipeline's fallback hands translate() every line of the video. One
+    # prompt holding 969 lines asks for an answer longer than the model writes.
+    from app.text.length_fit import DRAFT_CHUNK
+    sizes = []
+
+    def fake_ask(p):
+        lines = _numbered(p)
+        sizes.append(len(lines))
+        return json.dumps(["번역 " + x for x in lines], ensure_ascii=False)
+
+    t = OllamaTranslator()
+    monkeypatch.setattr(t, "_ask", fake_ask)
+    texts = ["line%d" % i for i in range(2 * DRAFT_CHUNK + 1)]
+    out = t.translate(texts, "Korean", durations=[1.0 + i for i in range(len(texts))])
+
+    assert sizes == [DRAFT_CHUNK, DRAFT_CHUNK, 1]
+    assert out == ["번역 " + x for x in texts]
+
+
+# --- the Ollama request itself ------------------------------------------------
+
+class _OllamaResp:
+    def __init__(self, status, text="", content="안녕"):
+        self.status_code = status
+        self.text = text
+        self._content = content
+
+    def json(self):
+        return {"message": {"content": self._content}}
+
+
+def _ollama_posts(monkeypatch, answers):
+    """Make requests.post answer from `answers` in order (a response, or an
+    exception to raise), and record the calls and the waits between them."""
+    log = {"calls": 0, "sleeps": [], "bodies": []}
+
+    def fake_post(url, json=None, timeout=None):
+        log["calls"] += 1
+        log["bodies"].append(json)
+        a = answers.pop(0)
+        if isinstance(a, Exception):
+            raise a
+        return a
+
+    monkeypatch.setattr(translate.requests, "post", fake_post)
+    monkeypatch.setattr(translate.time, "sleep", lambda s: log["sleeps"].append(s))
+    return log
+
+
+def test_ollama_ask_retries_a_server_error_then_succeeds(monkeypatch):
+    # A 5xx from a local server is the model runner dying and being reloaded.
+    log = _ollama_posts(monkeypatch, [
+        _OllamaResp(500, '{"error":"llama runner process has terminated"}'),
+        _OllamaResp(200),
+    ])
+    assert OllamaTranslator(url="http://127.0.0.1:1")._ask("hi") == "안녕"
+    assert log["calls"] == 2
+    assert log["sleeps"] == [translate.OLLAMA_BACKOFF_S]
+
+
+def test_ollama_ask_retries_a_refused_connection_and_a_timeout(monkeypatch):
+    # Refused while the desktop restarts the pack; a timeout while it is busy.
+    log = _ollama_posts(monkeypatch, [
+        translate.requests.exceptions.ConnectionError("refused"),
+        translate.requests.exceptions.Timeout("slow"),
+        _OllamaResp(200),
+    ])
+    assert OllamaTranslator(url="http://127.0.0.1:1")._ask("hi") == "안녕"
+    assert log["calls"] == 3
+    assert log["sleeps"] == [translate.OLLAMA_BACKOFF_S, 2 * translate.OLLAMA_BACKOFF_S]
+
+
+def test_ollama_ask_gives_up_after_its_tries_with_ollamas_reason_in_the_message(monkeypatch):
+    body = '{"error":"llama runner process has terminated: exit status 2"}'
+    log = _ollama_posts(monkeypatch, [_OllamaResp(500, body)] * translate.OLLAMA_TRIES)
+    with pytest.raises(translate.requests.exceptions.HTTPError) as ei:
+        OllamaTranslator(url="http://127.0.0.1:1")._ask("hi")
+    assert log["calls"] == translate.OLLAMA_TRIES == 3
+    msg = str(ei.value)
+    assert "HTTP 500" in msg and "llama runner process has terminated" in msg
+    assert "127.0.0.1" not in msg   # the reason, not the address
+
+
+def test_ollama_ask_does_not_retry_a_client_error(monkeypatch):
+    # A 4xx is our own request (a model that is not installed) -- it would
+    # fail the same way again.
+    log = _ollama_posts(monkeypatch, [_OllamaResp(404, '{"error":"model \'gemma3:12b\' not found"}')])
+    with pytest.raises(translate.requests.exceptions.HTTPError, match="not found"):
+        OllamaTranslator(url="http://127.0.0.1:1")._ask("hi")
+    assert log["calls"] == 1
+
+
+def test_ollama_error_reason_does_not_carry_the_home_folder(monkeypatch):
+    import os
+    home = os.path.expanduser("~")
+    body = '{"error":"open %s/.ollama/models/blobs/sha256-abc: no such file"}' % home
+    _ollama_posts(monkeypatch, [_OllamaResp(404, body)])
+    with pytest.raises(translate.requests.exceptions.HTTPError) as ei:
+        OllamaTranslator(url="http://127.0.0.1:1")._ask("hi")
+    assert home not in str(ei.value)
+    assert "no such file" in str(ei.value)
+
+
+def test_ollama_answer_cap_grows_with_the_lines_asked_for(monkeypatch):
+    # A fixed 2048 cut a long answer off mid-string (issue #88). The cap follows
+    # the numbered lines -- a full chunk keeps the old 2048 -- and the scene
+    # context listed for flow ("- ...") does not count.
+    from app.text.length_fit import DRAFT_CHUNK, build_candidates_draft_prompt
+    log = _ollama_posts(monkeypatch, [_OllamaResp(200) for _ in range(5)])
+    t = OllamaTranslator(url="http://127.0.0.1:1")
+    scene = ["scene line %d." % i for i in range(300)]
+    t._ask(build_dub_prompt(["a"], "Korean", None, [1.0]))
+    t._ask(build_dub_prompt(["x"] * DRAFT_CHUNK, "Korean", None, [1.0] * DRAFT_CHUNK))
+    t._ask(build_candidates_draft_prompt(["x"] * DRAFT_CHUNK, "Korean", None, [10] * DRAFT_CHUNK,
+                                         scene_context=scene))
+    t._ask(build_dub_prompt(["x"] * 100, "Korean", None, None))
+    t._ask("hi")
+    caps = [b["options"]["num_predict"] for b in log["bodies"]]
+    assert caps == [1024, 2048, 2048, 8192, 2048]
+    # No JSON mode: Ollama's forces an object at the top, and every prompt asks for an array.
+    assert all("format" not in b for b in log["bodies"])

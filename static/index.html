@@ -1177,6 +1177,12 @@
   .sc-wave.fresh svg { stroke: currentColor; }
   .sc-wave:disabled { cursor: progress; }
   .sc-wave:disabled svg { animation: spin 1s linear infinite; }
+  /* A line left untranslated (ui/src/scriptTable.mjs): nothing to play and no
+     words to speak, so both buttons rest -- faded, not turning -- until it is
+     written. */
+  .sc-listen.sc-off, .sc-wave.sc-off { opacity: 0.35; cursor: not-allowed; }
+  .sc-listen.sc-off:hover { border-color: var(--primary-line); }
+  .sc-wave.sc-off svg { animation: none; }
 
 
   /* The script cell is the point of the table: a line you can only read is half
@@ -1184,6 +1190,13 @@
   .sc-dst[contenteditable] { outline: none; border-radius: 4px; padding: 2px 4px;
     margin: -2px -4px; cursor: text; }
   .sc-dst[contenteditable]:hover { background: var(--trim-track); }
+  /* The words' own cell says a line was left untranslated, in the red the
+     table uses for what needs fixing, where the translation belongs. Drawn by
+     the stylesheet rather than written in, so it is never saved as the words;
+     gone as soon as the cell is typed in, and while it has the caret. */
+  .sc-dst[data-empty] { min-height: 1.4em; }
+  .sc-dst[data-empty]:empty:not(:focus)::before { content: attr(data-empty);
+    color: var(--destructive); font-weight: 600; }
   .sc-dst[contenteditable]:focus { background: var(--background);
     box-shadow: 0 0 0 2px var(--primary); }
   /* An icon button beside the edited words, not an underlined "revert" under
@@ -4870,7 +4883,9 @@ function updateSubtitleNow() {
   // same trick made the first line reappear, which read as a bug (user,
   // 2026-09-01 evening).
   if (idx < 0 && doneVideo.paused && t <= subCueOf(lines[0], 0).start) idx = 0;
-  if (idx < 0) { subOverlay.hidden = true; return; }
+  // A line left untranslated has no words, and the burn draws nothing for it
+  // (app/subtitle_ass.py) -- nor does the screen, not even a box preset's box.
+  if (idx < 0 || !(lines[idx].text || "").trim()) { subOverlay.hidden = true; return; }
   subNowIdx = idx;
   const pic = syncSubOverlayBox();
   // The lines as measured, so the screen and the burn break them alike; the

@@ -7,6 +7,7 @@ GeminiTranslator uses a consumer AI Studio API key (GEMINI_API_KEY), never shown
 screen. VertexTranslator uses a service-account (OAuth) instead -- see its docstring.
 """
 import json
+import os
 import re
 import threading
 import time
@@ -128,18 +129,45 @@ def _ask_with_retry(ask, prompt: str, n: int, tries: int = 3) -> List[str]:
     raise last_err
 
 
-def _translate_with_fallback(engine, texts, target_lang, source_lang, durations, fuller):
-    """If batch translation ultimately fails to respect the line count, translate one line at a time (guarantees line count)."""
+# What a line the translator never answered in a usable form is left holding.
+# Empty on purpose: an empty line is not spoken (app/qwen_pipeline.py synth_lines
+# leaves it silent), and the script marks it "Not translated" (app/dub_script.py
+# load_lines) so it can be written by hand or by the agent. One such line used
+# to fail the whole job -- issue #82 lost a 969-line dub to it.
+UNTRANSLATED = ""
+
+
+def _one_line_or_untranslated(ask, prompt: str) -> str:
+    """The last-resort single-line ask. A line that still cannot be read after
+    its retries is UNTRANSLATED rather than the end of the job. Only a bad
+    answer is forgiven: a translator that cannot be reached at all still raises,
+    because it would fail every other line the same way."""
     try:
-        prompt = build_dub_prompt(texts, target_lang, source_lang, durations, fuller)
-        return _ask_with_retry(engine._ask, prompt, len(texts))
+        return _ask_with_retry(ask, prompt, 1)[0]
     except ValueError:
-        out = []
-        for i, t in enumerate(texts):
-            d = [durations[i]] if durations else None
-            prompt = build_dub_prompt([t], target_lang, source_lang, d, fuller)
-            out.append(_ask_with_retry(engine._ask, prompt, 1)[0])
-        return out
+        return UNTRANSLATED
+
+
+def _translate_with_fallback(engine, texts, target_lang, source_lang, durations, fuller):
+    """Translate DRAFT_CHUNK lines per request, the same size the length-fit path
+    uses: one prompt holding a whole video's lines asks for an answer longer
+    than the model will write, and it comes back cut off. A chunk that keeps
+    breaking the line count is asked again one line at a time (guarantees the
+    count); a line that fails even then is left UNTRANSLATED."""
+    from app.text.length_fit import DRAFT_CHUNK  # length_fit imports this module
+    out = []
+    for a in range(0, len(texts), DRAFT_CHUNK):
+        chunk = texts[a:a + DRAFT_CHUNK]
+        chunk_durations = durations[a:a + DRAFT_CHUNK] if durations else None
+        try:
+            prompt = build_dub_prompt(chunk, target_lang, source_lang, chunk_durations, fuller)
+            out.extend(_ask_with_retry(engine._ask, prompt, len(chunk)))
+        except ValueError:
+            for i, t in enumerate(chunk):
+                d = [chunk_durations[i]] if chunk_durations else None
+                prompt = build_dub_prompt([t], target_lang, source_lang, d, fuller)
+                out.append(_one_line_or_untranslated(engine._ask, prompt))
+    return out
 
 
 class TranslationEngine:
@@ -314,6 +342,47 @@ class VertexTranslator(GeminiTranslator):
         raise last_err
 
 
+# How many attempts one Ollama request gets, and the wait before each retry
+# (5s, then 10s). The failures worth retrying are a local server's passing ones:
+# refused while the desktop restarts the pack, a timeout, a 5xx when the model
+# runner died (out of memory) and is being reloaded -- a reload of a 7-12B model
+# takes about 10s on this hardware, so 15s of waiting covers one. A 4xx is our
+# own request and would fail the same way again, so it is not retried.
+OLLAMA_TRIES = 3
+OLLAMA_BACKOFF_S = 5
+
+# num_predict (the answer's token cap) from how many lines a request asks for --
+# every prompt lists them as "N. ..." at the start of a line; the scene context
+# and the style examples are "- ..." and do not count. 256 tokens a line is room
+# for three candidates of a long line (a 20s Korean line is ~90 syllables, about
+# as many tokens) with the JSON around them, and a full DRAFT_CHUNK of 6 lines
+# comes out at 2048 -- the fixed cap every request had before, which chunks have
+# been fitting inside. Floor 1024 so a one-line ask still has room for a
+# preamble; ceiling 8192 because an answer longer than that is not one a local
+# model finishes cleanly, and the per-line fallback is the better road for it.
+# A prompt with no numbered lines keeps the old 2048.
+_ASKED_LINE = re.compile(r"^\d+\. ", re.MULTILINE)
+
+
+def _num_predict(prompt: str) -> int:
+    n = len(_ASKED_LINE.findall(prompt))
+    if not n:
+        return 2048
+    return max(1024, min(8192, 512 + 256 * n))
+
+
+def _ollama_error(r) -> requests.exceptions.HTTPError:
+    """An HTTP error that carries Ollama's own reason ("model not found", "llama
+    runner process has terminated") -- raise_for_status names only the URL, and
+    the reason was being thrown away. A reason can name a file under the home
+    folder, so it is masked the way a failure report is before it is cut short."""
+    from app.report_mask import mask_text
+    status = getattr(r, "status_code", 0)
+    body = mask_text((getattr(r, "text", "") or "")[:2000], home=os.path.expanduser("~"))
+    return requests.exceptions.HTTPError(
+        "Ollama answered HTTP %s: %s" % (status, " ".join(body.split())[:200]), response=r)
+
+
 class OllamaTranslator(TranslationEngine):
     """Local LLM (Ollama) translator — runs on this server (internal) without internet or a key.
 
@@ -342,16 +411,35 @@ class OllamaTranslator(TranslationEngine):
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
-            # num_predict: upper bound on output length (safety) — stops the model even if it runs away
+            # num_predict: upper bound on output length (safety) — stops the model even if it runs away;
+            # sized to the request (see _num_predict), a fixed 2048 cut long answers off mid-string (#88).
             # top_k/top_p are pinned, not left to the host: the server's gemma-dub carries no sampling
             # parameters (so it ran on Ollama's defaults), while the public gemma3:12b bakes in
             # top_k 64 / top_p 0.95. That looser sampling showed up as off-target languages and lines
             # missing the ±15% length window. Translation wants the conservative end either way.
-            "options": {"temperature": 0.3, "top_k": 40, "top_p": 0.9, "num_predict": 2048},
+            # No "format": "json": Ollama's JSON mode forces an object at the top, and every prompt
+            # here asks for an array -- gemma3:12b answered {"line one": "line two"} under it (2026-09-18).
+            "options": {"temperature": 0.3, "top_k": 40, "top_p": 0.9,
+                        "num_predict": _num_predict(prompt)},
         }
-        r = requests.post(f"{self.url}/api/chat", json=body, timeout=300)
-        r.raise_for_status()
-        return r.json()["message"]["content"]
+        # Same retry shape as GeminiTranslator._ask -- see OLLAMA_TRIES for what is retried.
+        last_err = None
+        for attempt in range(OLLAMA_TRIES):
+            if attempt:
+                time.sleep(OLLAMA_BACKOFF_S * attempt)
+            try:
+                r = requests.post(f"{self.url}/api/chat", json=body, timeout=300)
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                last_err = e
+                continue
+            status = getattr(r, "status_code", 200)
+            if status >= 400:
+                last_err = _ollama_error(r)
+                if status < 500:
+                    break
+                continue
+            return r.json()["message"]["content"]
+        raise last_err
 
     def translate(
         self,

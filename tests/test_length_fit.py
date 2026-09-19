@@ -337,3 +337,160 @@ def test_what_cannot_be_read_as_text_is_no_candidate_at_all():
     for line in out:
         for cand in line:
             assert "{" not in cand and "[" not in cand
+
+
+class _OneBadLineEngine:
+    """Answers every chunk with the wrong count, so each line is asked alone;
+    the line "bad" never comes back readable (issue #88's answer cut off
+    mid-string), every other line gets three candidates."""
+    max_budget_retries = 0
+
+    def __init__(self):
+        self.prompts = []
+
+    def _ask(self, prompt):
+        self.prompts.append(prompt)
+        asked = [ln for ln in prompt.splitlines() if ln[:1].isdigit() and ". " in ln]
+        if len(asked) > 1:
+            return j([["x"]])
+        if asked[0].endswith(" bad"):
+            return '[["cut off mid-str'
+        if "candidate" not in prompt:
+            return j(["네 좋아요"])
+        return j([["네 좋아요", "좋아요", "네"]])
+
+
+@pytest.mark.parametrize("durations", [[2.0, 2.0, 2.0], None])
+def test_a_line_that_keeps_failing_is_left_untranslated_not_fatal(durations):
+    # Issue #82: one line that fails its last-resort single-line ask used to
+    # raise out of the loop and end a 969-line job. Now it is left empty
+    # (untranslated: silent, and marked on the script) and the rest go on --
+    # on both the candidates path (with slots) and the plain one (without).
+    from app.translate import UNTRANSLATED
+    eng = _OneBadLineEngine()
+    out = fit_translate(eng, ["good one", "bad", "good two"], "ko", "en", durations)
+    assert out[1] == UNTRANSLATED
+    assert out[0] and out[2]
+
+
+@pytest.mark.parametrize("durations", [[2.0] * 40, None])
+def test_a_translator_that_answers_nothing_is_given_up_on_early(durations):
+    # Every line failing is not a line's trouble but a broken translator. Going
+    # on would ask about all 40 lines a few times each before failing anyway.
+    from app.text.length_fit import GIVE_UP_AFTER
+    eng = _OneBadLineEngine()
+    with pytest.raises(RuntimeError, match="no usable answer for the first %d lines" % GIVE_UP_AFTER):
+        fit_translate(eng, ["bad"] * 40, "ko", "en", durations)
+    # Two chunks' worth of asks (a chunk: 3 tries, then 1 + 3 per line alone).
+    assert len(eng.prompts) == 2 * (3 + 6 * 3)
+
+
+def test_a_bad_opening_is_not_taken_for_a_broken_translator():
+    # The first chunk all fails, the second answers: that is lines failing,
+    # not the translator -- keep going.
+    eng = _OneBadLineEngine()
+    out = fit_translate(eng, ["bad"] * 6 + ["fine"] * 6 + ["bad"] * 6, "ko", "en", [2.0] * 18)
+    assert out[:6] == [""] * 6 and all(out[6:12]) and out[12:] == [""] * 6
+
+
+# --- the scene beside each request is the lines around it, not the whole job ----
+# The whole job went into every request; on a long video the prompt ran past the
+# model's 4096-token window (the bundled Ollama's -c 4096) and was cut (#82, #88).
+
+_CTX_HEAD = "for context only (do NOT translate these — just read them for flow and tone):\n"
+
+
+def _context_of(prompt):
+    """The context lines a prompt carries, or [] when it has none."""
+    if _CTX_HEAD not in prompt:
+        return []
+    block = prompt.split(_CTX_HEAD, 1)[1].split("\n\n", 1)[0]
+    return [ln[2:] for ln in block.splitlines()]
+
+
+class _RecordingEngine:
+    """Answers every request well, and keeps every prompt it was sent."""
+
+    def __init__(self, max_budget_retries=0, fit=True):
+        self.max_budget_retries = max_budget_retries
+        self.fit = fit
+        self.prompts = []
+
+    def _ask(self, prompt):
+        self.prompts.append(prompt)
+        n = len([ln for ln in prompt.splitlines() if ln[:1].isdigit() and ". " in ln])
+        # A line that fits an 8s Korean slot, or one far too short for it.
+        text = "그러니까 내가 말했잖아, 이건 혼자서는 절대 안 된다고" if self.fit else "네"
+        if "candidate" in prompt:
+            return j([[text, text, text]] * n)
+        return j([text] * n)
+
+
+# One long CJK line, the costliest per byte: 40 characters, ~120 bytes.
+_JA = "だから言ったでしょう、この問題は絶対に一人で解決できるものじゃないって。本当に。"
+
+
+@pytest.mark.parametrize("durations,retries", [([8.0] * 969, 0), (None, 0), ([8.0] * 969, 1)])
+def test_a_long_job_keeps_every_request_inside_the_models_window(durations, retries):
+    from app.text.length_fit import CONTEXT_BYTES, CONTEXT_LINES, DRAFT_CHUNK
+    texts = ["%d %s" % (i, _JA) for i in range(969)]
+    eng = _RecordingEngine(max_budget_retries=retries, fit=retries == 0)
+    fit_translate(eng, texts, "ko", "ja", durations)
+
+    assert len(eng.prompts) >= 969 // DRAFT_CHUNK
+    for p in eng.prompts:
+        ctx = _context_of(p)
+        assert sum(len(c.encode("utf-8")) + 3 for c in ctx) <= CONTEXT_BYTES
+        assert len(ctx) <= DRAFT_CHUNK + 2 * CONTEXT_LINES
+        # 7500 bytes is ~1950 tokens at the hungriest rate measured here (0.26 a
+        # byte, hy-mt2 on Japanese); with the 2048-token answer, under 4096.
+        # (The largest real one measured 1380-1649 tokens on three local models.)
+        assert len(p.encode("utf-8")) <= 7500
+    # And a chunk deep in the job sees its own neighbours on both sides.
+    draft = [p for p in eng.prompts
+             if "You are a professional dubbing translator" in p and ") 600 " + _JA in p][0]
+    ctx = _context_of(draft)
+    assert "599 " + _JA in ctx and "606 " + _JA in ctx
+    assert "0 " + _JA not in ctx
+
+
+def test_a_short_job_still_sees_the_whole_scene():
+    texts = ["line %d, a short one." % i for i in range(9)]
+    eng = _RecordingEngine()
+    fit_translate(eng, texts, "ko", "en", [8.0] * 9)
+    for p in eng.prompts:
+        assert _context_of(p) == texts
+
+
+def test_one_huge_line_is_asked_without_a_context_block():
+    # The lines asked for are in the request itself; when they alone are over
+    # the context's bytes there is no room to repeat them.
+    eng = _RecordingEngine()
+    fit_translate(eng, ["あ" * 900, "short"], "ko", "ja", [8.0, 8.0])
+    assert _context_of(eng.prompts[0]) == []
+
+
+def test_the_instructions_and_the_json_rule_always_come_after_the_context():
+    # If a prompt ever runs past the window it is cut from the front: that must
+    # cost context, never the instructions or the answer's format.
+    texts = ["%d %s" % (i, _JA) for i in range(60)]
+    eng = _RecordingEngine(max_budget_retries=1, fit=False)
+    fit_translate(eng, texts, "ko", "ja", [8.0] * 60)
+    fit_translate(eng, texts, "ko", "ja", None)
+    for p in eng.prompts:
+        assert "Output only a JSON array" in p
+        assert "You are a professional dubbing translator" in p or "don't fit their time slot" in p
+        if _context_of(p):
+            assert p.index(_CTX_HEAD) < p.index("Output only a JSON array")
+            assert p.index(_CTX_HEAD) < p.find("You are a professional dubbing translator")
+
+
+def test_the_length_retry_is_asked_in_chunks_too():
+    # Every out-of-window line of a long video went into one retry request.
+    from app.text.length_fit import DRAFT_CHUNK
+    texts = ["%d %s" % (i, _JA) for i in range(20)]
+    eng = _RecordingEngine(max_budget_retries=1, fit=False)
+    fit_translate(eng, texts, "ko", "ja", [8.0] * 20)
+    retries = [p for p in eng.prompts if "don't fit their time slot" in p]
+    assert [len([ln for ln in p.splitlines() if ln[:1].isdigit() and ". " in ln]) for p in retries] \
+        == [DRAFT_CHUNK, DRAFT_CHUNK, DRAFT_CHUNK, 20 - 3 * DRAFT_CHUNK]

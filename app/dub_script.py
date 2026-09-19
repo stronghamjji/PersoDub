@@ -107,12 +107,15 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
     voice_stale compares file times, and the script file is rewritten whole on
     every edit -- so it says "made before the last edit of anything", and only
     means "this line's voice is out of date" for a line whose words changed.
+    A line left untranslated and written in since, with no voice yet, is stale too.
     """
     path = script_path(work_dir)
     if not os.path.exists(path):
         raise FileNotFoundError("this job has no script: %s" % path)
 
     cues = _read_cues(path)
+    # What the dub read, line for line (edit_line never changes the count).
+    dubbed = _read_cues(os.path.join(work_dir, DUB_NAME))
     originals = _read_cues(os.path.join(work_dir, ORIGINAL_NAME))
     speakers = _read_speakers(work_dir)
 
@@ -148,7 +151,20 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
             "over": over,
             "speaker": speakers[s]["speaker"] if s is not None else None,
             "audio_sec": audio_sec,
-            "voice_stale": _voice_is_older_than(wav, path),
+            # A line written in after being left untranslated has never had a
+            # voice: that one IS waiting for its voice, and without this the
+            # remake of "the lines whose words changed" (app/api/script.py)
+            # passed it by. Only that line -- a job whose wavs were never kept
+            # still shows nothing waiting.
+            "voice_stale": _voice_is_older_than(wav, path)
+                           or (n <= len(dubbed) and not dubbed[n - 1]["text"].strip()
+                               and bool(c["text"].strip()) and not os.path.exists(wav)),
+            # The translator gave this line nothing (app/translate.py
+            # UNTRANSLATED): no words and so no voice. The screen marks it
+            # "Not translated". Read off the words rather than kept in a file
+            # of its own, so writing the line in clears it and nothing can go
+            # stale.
+            "untranslated": not c["text"].strip(),
         })
     return lines
 
