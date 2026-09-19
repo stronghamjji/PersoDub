@@ -448,8 +448,29 @@ test("models step downloads only Demucs and ignores the optional models", async 
   await step.run(() => {});
   assert.equal(hfCalls.length, 1, "only Demucs is downloaded");
   assert.ok(hfCalls[0].join(" ").includes("HTDemucs"), hfCalls[0].join(" "));
-  assert.equal(hfCalls[0][0], venvBin(join(ctx.kitDir, "app_venv"), "hf"), "hf runs from app_venv");
+  // python -m huggingface_hub.cli.hf, not the hf.exe shim (issue #48: an
+  // unsigned launcher pip creates on install can get "spawn UNKNOWN" from
+  // Smart App Control or an antivirus on Windows).
+  assert.equal(hfCalls[0][0], venvBin(join(ctx.kitDir, "app_venv"), "python"), "hf runs via app_venv's python");
+  assert.deepEqual(hfCalls[0].slice(1, 4), ["-m", "huggingface_hub.cli.hf", "download"]);
   assert.equal(await step.isDone(), true);
+});
+
+test("models step never regresses to running the hf executable directly", async () => {
+  // A future edit could accidentally restore `venvBin(k("app_venv"), "hf")`
+  // as argv[0] -- that is exactly the unsigned-launcher path issue #48 moved
+  // away from, so guard it on its own.
+  const ctx = freshCtx();
+  const hfCalls = [];
+  ctx.run = async (argv) => {
+    hfCalls.push(argv);
+    const dir = argv[argv.indexOf("--local-dir") + 1];
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "955717e8.safetensors"), "");
+  };
+  await byId(ctx).models.run(() => {});
+  const hfExePath = venvBin(join(ctx.kitDir, "app_venv"), "hf");
+  assert.ok(!hfCalls.some((argv) => argv[0] === hfExePath), "must not spawn the hf launcher executable");
 });
 
 test("the boot markers carry only the always-installed model; the optional ones stay exported", () => {

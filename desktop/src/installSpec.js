@@ -700,12 +700,17 @@ export function buildSteps(ctx) {
       bytes: 0.1 * GB,
       isDone: () => MODELS.every(modelDone),
       run: async (report) => {
-        const hf = venvBin(k("app_venv"), "hf");
+        // `python -m huggingface_hub.cli.hf`, not the hf.exe shim: the same
+        // reason the pip step above runs `venvPy -m pip` instead of pip.exe --
+        // an unsigned launcher a venv creates on install can get "spawn UNKNOWN"
+        // from Smart App Control or an antivirus that trusts the interpreter but
+        // not a fresh .exe (issue #48, nine failures on one Windows machine).
+        const venvPy = venvBin(k("app_venv"), "python");
         for (const m of MODELS) {
           if (modelDone(m)) continue;
           report(null, `Downloading ${m.name}`);
           mkdirSync(k(...m.dir), { recursive: true });
-          await ctx.run([hf, "download", ...m.args, "--revision", m.revision, "--local-dir", k(...m.dir)], {
+          await ctx.run([venvPy, "-m", "huggingface_hub.cli.hf", "download", ...m.args, "--revision", m.revision, "--local-dir", k(...m.dir)], {
             onLine: (l) => report(null, l.slice(0, 120)),
           });
         }
