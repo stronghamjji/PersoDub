@@ -11,7 +11,7 @@ import logging
 
 import pytest
 
-from app import jobs, logging_setup, state
+from app import jobs, logging_setup, room, state
 
 
 @pytest.fixture(autouse=True)
@@ -56,6 +56,17 @@ def isolate_workspace(tmp_path, monkeypatch):
     ws = tmp_path / "workspace"
     ws.mkdir()
     monkeypatch.setattr(state, "WORKSPACE", str(ws))
+
+
+@pytest.fixture(autouse=True)
+def plenty_of_memory(monkeypatch):
+    """Every test runs on a 24 GB computer unless it says otherwise.
+
+    app/room.py refuses a local dub under 7 GB and warns under 12, and a CI
+    runner's own memory (7 GB on macOS) would otherwise decide whether a test
+    about something else is refused or warned. Tests about memory set theirs.
+    """
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: 24 * room.GB)
 
 
 @pytest.fixture

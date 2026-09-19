@@ -253,7 +253,7 @@ def remake_voices(job_id: str) -> dict:
     r = _api_post("/api/dub/jobs/%s/voices/stale" % job_id, timeout=600.0)
     if r.status_code == 404:
         raise Refusal("no such job: %s" % job_id)
-    if r.status_code in (409, 422):
+    if r.status_code in (409, 422, 507):
         raise Refusal(r.json().get("detail", "this job's voices cannot be remade"))
     r.raise_for_status()
     return r.json()
@@ -269,7 +269,7 @@ def remake_line_voice(job_id: str, line: int) -> dict:
     of rewrites.
     """
     r = _api_post("/api/dub/jobs/%s/script/%d/voice" % (job_id, line), timeout=600.0)
-    if r.status_code in (404, 409, 422):
+    if r.status_code in (404, 409, 422, 507):
         raise Refusal(r.json().get("detail", "cannot remake line %d" % line))
     r.raise_for_status()
     return r.json()

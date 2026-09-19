@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
+import { totalmem } from "node:os";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
-import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
+import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, notEnoughMemory, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, torchVariantFor, PACKS, PACK_DIRS } from "./src/installSpec.js";
@@ -924,6 +925,10 @@ app.whenReady().then(() => {
     const steps = packSteps(buildSteps(installCtx), id);
     const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(installCtx.kitDir));
     if (noRoom) return { ok: false, reason: noRoom };
+    // The engine pack is what dubs on this computer: gigabytes spent on one
+    // that cannot run it help nobody.
+    const noMemory = id === "engine" ? notEnoughMemory(totalmem()) : null;
+    if (noMemory) return { ok: false, reason: noMemory };
     packCancelled = false;
     packInFlight = id;
     const marker = packInstallingMarker(installCtx.kitDir, id);

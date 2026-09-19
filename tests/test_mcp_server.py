@@ -467,6 +467,28 @@ def test_queue_dub_keeps_a_plain_string_refusal_as_is(monkeypatch, tmp_path):
         mcp_server.queue_dub(str(video), "en", confirm=True)
 
 
+def test_queue_dub_relays_what_this_computer_cannot_do(monkeypatch, tmp_path):
+    # app/room.py's refusals: too little memory (422), too little room (507).
+    video = _tmp_video(tmp_path)
+    for status, detail in ((422, "This computer needs 8 GB of memory to dub."),
+                           (507, "Not enough space. Needs 8.2 GB, 1.1 GB free.")):
+        monkeypatch.setattr(mcp_server.httpx, "post",
+                            lambda *a, _r=_Response(status, {"detail": detail}), **kw: _r)
+        with pytest.raises(ValueError) as e:
+            mcp_server.queue_dub(str(video), "en", confirm=True)
+        assert str(e.value) == detail
+
+
+def test_remaking_voices_relays_a_full_disk(monkeypatch):
+    detail = "Not enough space. Needs 3.0 GB, 0.5 GB free."
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda *a, **kw: _Response(507, {"detail": detail}))
+    with pytest.raises(ValueError, match="Not enough space"):
+        mcp_server.remake_line_voice("j1", 1)
+    with pytest.raises(ValueError, match="Not enough space"):
+        mcp_server.remake_voices("j1")
+
+
 # ---- setup tools (2026-09-04): the agent can see, change and complete the setup
 
 def test_get_setup_reports_stages_models_and_keys(monkeypatch):

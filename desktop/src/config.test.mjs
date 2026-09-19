@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt, KIT_DEEPEST_RELATIVE, WINDOWS_PATH_LIMIT } from "./config.js";
+import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, notEnoughMemory, freeSpaceAt, KIT_DEEPEST_RELATIVE, WINDOWS_PATH_LIMIT } from "./config.js";
 
 const GB = 1024 ** 3;
 
@@ -96,6 +96,14 @@ test("an install with less room than it needs is stopped before the first byte",
 
 test("an install that fits passes the preflight", () => {
   assert.equal(notEnoughSpace(19 * GB, 25 * GB), null);
+});
+
+test("the engine pack is refused on a computer under 7 GB of memory, never on an unknown one", () => {
+  assert.equal(notEnoughMemory(6 * GB), "This computer needs 8 GB of memory to dub.");
+  assert.equal(notEnoughMemory(7.8 * GB), null);  // an "8 GB" computer
+  assert.equal(notEnoughMemory(24 * GB), null);
+  assert.equal(notEnoughMemory(0), null);
+  assert.equal(notEnoughMemory(undefined), null);
 });
 
 test("free space is only counted against what is still missing", () => {

@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from app import config, perso_client, perso_materialize, state
 from app.api._shared import script_work_dir
+from app.api.dub import check_space
 from app.dub_script import DUB_NAME, edit_line, line_wav_path, load_lines
 from app.perso_client import (
     PersoCreditExhaustedError,
@@ -214,6 +215,8 @@ def dub_job_line_voice(jid: str, line: int):
     lines = load_lines(work_dir, job.get("language_code") or "en")
     if not 1 <= line <= len(lines):
         raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+    # The rebuild writes the dub again; the same floor a new dub starts with.
+    check_space(work_dir)
 
     _remake_one_voice(work_dir, data, line, lines[line - 1]["text"], _voice_language(job, data))
     rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
@@ -245,6 +248,7 @@ def dub_job_stale_voices(jid: str):
     ]
     if not stale:
         return {"remade": [], "skipped": len(lines)}
+    check_space(work_dir)
 
     language = _voice_language(job, data)
     for line in stale:
