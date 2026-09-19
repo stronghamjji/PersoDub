@@ -7,7 +7,7 @@ import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, fr
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, torchVariantFor, PACKS, PACK_DIRS } from "./src/installSpec.js";
-import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED } from "./src/installer.js";
+import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED, missingVcRuntime, vcRuntimeFailure, VC_RUNTIME_MISSING, VC_RUNTIME_URL } from "./src/installer.js";
 import { revealAllowed } from "./src/revealPolicy.js";
 import { cancelCurrent } from "./src/exec.js";
 import { readRuntime } from "./src/runtimeFile.js";
@@ -895,10 +895,32 @@ app.whenReady().then(() => {
   // then starts the pack's process -- so dubbing goes on without a restart.
   let packCancelled = false;
   let packInFlight = null;   // one pack at a time: two at once shared one progress and one Cancel
+  // No Visual C++ runtime (installer.js missingVcRuntime): the page's pack
+  // error is plain text, so the Download button rides on a box of its own,
+  // the way the update's lock warning asks. Not awaited: the page shows the
+  // same sentence at once.
+  const offerVcRuntime = () => {
+    if (!win.isDestroyed()) {
+      dialog.showMessageBox(win, {
+        type: "warning", title: "PersoDub", message: VC_RUNTIME_MISSING,
+        buttons: ["Download", "Not now"], defaultId: 0, cancelId: 1,
+      }).then(({ response }) => { if (response === 0) openExternally(VC_RUNTIME_URL); }).catch(() => {});
+    }
+    return { ok: false, reason: VC_RUNTIME_MISSING };
+  };
   ipcMain.handle("shell:install-pack", async (_e, id) => {
     if (!PACKS.some((p) => p.id === id)) return { ok: false, reason: `Unknown pack: ${id}` };
     if (!installCtx) return { ok: false, reason: "This build carries no bundled files to install from." };
     if (packInFlight) return { ok: false, reason: `${packInFlight} is still installing. Wait for it to finish.` };
+    // Before a byte, and again on every press, so installing the runtime and
+    // pressing Download and Start once more goes straight on.
+    if (id === "engine") {
+      const missing = missingVcRuntime();
+      if (missing.length) {
+        shellLog(`PERSODUB_PACK engine: Visual C++ runtime missing (${missing.join(", ")})`);
+        return offerVcRuntime();
+      }
+    }
     const steps = packSteps(buildSteps(installCtx), id);
     const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(installCtx.kitDir));
     if (noRoom) return { ok: false, reason: noRoom };
@@ -930,6 +952,7 @@ app.whenReady().then(() => {
       } catch (err) {
         const full = String((err && err.message) || err);
         shellLog(`PERSODUB_PACK install ${id} failed: ${full}`);
+        if (!packCancelled && vcRuntimeFailure(full)) return offerVcRuntime();
         return { ok: false, reason: packCancelled ? "Cancelled." : downloadInterrupted(full) ? DOWNLOAD_INTERRUPTED : lastReason(full) };
       }
       if (engines && engines.startPack) {

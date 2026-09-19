@@ -104,3 +104,37 @@ test("a download that broke mid-way is reported as interrupted, other failures k
   assert.equal(downloadInterrupted(""), false);
   assert.match(DOWNLOAD_INTERRUPTED, /Download and Start/);
 });
+
+import { missingVcRuntime, vcRuntimeFailure, VC_RUNTIME_MISSING, VC_RUNTIME_URL } from "./installer.js";
+
+test("the Visual C++ runtime check names the missing files on Windows only, and never blocks when it cannot look", () => {
+  const env = { SystemRoot: "C:\\Windows" };
+  const sys32 = "C:\\Windows\\System32";
+  const all = [sys32, ...["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"].map((f) => `${sys32}\\${f}`)];
+  const has = (paths) => (p) => paths.includes(p);
+  assert.deepEqual(missingVcRuntime({ platform: "win32", env, exists: has(all) }), []);
+  assert.deepEqual(missingVcRuntime({ platform: "win32", env, exists: has([sys32, `${sys32}\\vcruntime140.dll`]) }),
+    ["msvcp140.dll", "vcruntime140_1.dll"]);
+  assert.equal(missingVcRuntime({ platform: "win32", env: { windir: "C:\\Windows" }, exists: has([sys32]) }).length, 3);
+  // No Windows folder to look in is not a verdict.
+  assert.deepEqual(missingVcRuntime({ platform: "win32", env: {}, exists: () => false }), []);
+  assert.deepEqual(missingVcRuntime({ platform: "win32", env, exists: () => false }), []);
+  const looked = [];
+  for (const platform of ["darwin", "linux"]) {
+    assert.deepEqual(missingVcRuntime({ platform, env, exists: (p) => { looked.push(p); return false; } }), []);
+  }
+  assert.deepEqual(looked, [], "Mac and Linux never look");
+});
+
+test("a pack that died for want of the Visual C++ runtime says so, other failures do not", () => {
+  const i101 = "Microsoft Visual C++ Redistributable is not installed, this may lead to the DLL load failure.\n"
+    + "OSError: [WinError 126] The specified module could not be found. Error loading \"C:\\PersoDub\\engines_venv\\Lib\\site-packages\\torch\\lib\\c10.dll\" or one of its dependencies.";
+  const i103 = "ImportError: DLL load failed while importing _multiarray_umath: A dynamic link library (DLL) initialization routine failed.";
+  assert.equal(vcRuntimeFailure(i101), true);
+  assert.equal(vcRuntimeFailure(i103), true);
+  assert.equal(vcRuntimeFailure("requests.exceptions.ConnectionError: Max retries exceeded with url: /x"), false);
+  assert.equal(vcRuntimeFailure("sha256 mismatch for https://example.com/a.zip: got 00ff"), false);
+  assert.equal(vcRuntimeFailure(""), false);
+  assert.equal(VC_RUNTIME_MISSING, "Windows needs Microsoft Visual C++ to run the AI engine. Install it, then try again.");
+  assert.equal(VC_RUNTIME_URL, "https://aka.ms/vc14/vc_redist.x64.exe");
+});

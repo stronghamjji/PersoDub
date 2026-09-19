@@ -47,6 +47,35 @@ export function downloadInterrupted(message) {
   return NETWORK_MARKS.test(String(message || ""));
 }
 
+// Windows without Microsoft's Visual C++ runtime (issues #45, #47, #101,
+// #103): torch's first import died with "[WinError 126] ... c10.dll", numpy's
+// with "DLL load failed while importing _multiarray_umath". The app ships none
+// of Microsoft's files; it says what to install and links to it. The x64
+// permalink is the one Microsoft Learn lists as the latest supported
+// (learn.microsoft.com/cpp/windows/latest-supported-vc-redist, 2026-09-19).
+import { existsSync } from "node:fs";
+import { win32 } from "node:path";
+export const VC_RUNTIME_URL = "https://aka.ms/vc14/vc_redist.x64.exe";
+export const VC_RUNTIME_MISSING = "Windows needs Microsoft Visual C++ to run the AI engine. Install it, then try again.";
+const VC_RUNTIME_MARKS = /Visual C\+\+ Redistributable|WinError 126|WinError 1114|c10\.dll|DLL load failed/;
+export function vcRuntimeFailure(message) {
+  return VC_RUNTIME_MARKS.test(String(message || ""));
+}
+// The check before the engine pack: the three files the x64 Redistributable
+// puts in System32, the ones c10.dll links against. Looking for the files
+// rather than loading them with the kit's Python: no process to start or time
+// out, and a PC that has the runtime always has them there. The app is x64
+// only, so System32 is the 64-bit folder (WOW64 redirects 32-bit processes
+// alone). Returns the missing names, and none on Mac and Linux or when the
+// Windows folder cannot be found: a check that cannot run never blocks.
+const VC_RUNTIME_DLLS = ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"];
+export function missingVcRuntime({ platform = process.platform, env = process.env, exists = existsSync } = {}) {
+  if (platform !== "win32") return [];
+  const root = env.SystemRoot || env.windir;
+  if (!root || !exists(win32.join(root, "System32"))) return [];
+  return VC_RUNTIME_DLLS.filter((f) => !exists(win32.join(root, "System32", f)));
+}
+
 export function packPercent(steps, doneIds, currentId, currentPct) {
   const total = steps.reduce((n, s) => n + (s.bytes || 0), 0);
   if (!total) return null;
