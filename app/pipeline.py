@@ -13,7 +13,7 @@ import tempfile
 import uuid
 from typing import Callable, List, NoReturn, Optional
 
-from app import config, media
+from app import config, media, room
 from app.config import QWEN_N_TAKES
 from app.diar_campplus_client import diarize
 from app.engines.qwen_tts import QwenTTSEngine
@@ -89,6 +89,18 @@ def _check_cancel(cancel_check: Optional[Callable[[], bool]], log: Callable[[str
     if cancel_check is not None and cancel_check():
         log("Cancelled by user request")
         raise JobCancelled("cancelled by user")
+
+
+def _check_room(work_dir: str, video_path: str, video_duration: Optional[float]) -> None:
+    """Room checkpoint, called before each stage beside _check_cancel.
+
+    Stops the job with the numbers (app/room.py) when the rest of it will not
+    fit on the disk, rather than halfway through writing a stage's files. A
+    link's video is only known here, once it is downloaded.
+    """
+    short = room.short_of_room(work_dir, video_path, video_duration)
+    if short:
+        raise RuntimeError(short)
 
 
 # The provider failures every stage reports the same way: one short sentence in
@@ -790,11 +802,13 @@ def run_dub(
     except Exception:
         video_duration = None
 
+    _check_room(work_dir, video_path, video_duration)
     vocals_path, background_path, perso_client = _stage_separate(
         video_path, work_dir, sep_engine, perso_client, cancel_check, on_notice, log,
         video_duration=video_duration)
 
     _check_cancel(cancel_check, log)
+    _check_room(work_dir, video_path, video_duration)
 
     # Transcription: Perso cloud STT if the user picked it, else local
     # Whisper. Whisper auto-detects the source language; capture it so the
@@ -813,6 +827,7 @@ def run_dub(
     source_cues = _pick_source_cues(source_srt_path, perso_cues, src_cues)
 
     _check_cancel(cancel_check, log)
+    _check_room(work_dir, video_path, video_duration)
 
     # Translated subtitles (provided or auto-translated)
     segments, auto_translated = _stage_translate(
@@ -825,17 +840,20 @@ def run_dub(
     ref_cues = source_cues or src_cues
 
     _check_cancel(cancel_check, log)
+    _check_room(work_dir, video_path, video_duration)
     audio_wav = _stage_synthesize(
         segments, ref_cues, work_dir, vocals_path, background_path,
         language, n_takes, qwen_engine, on_notice, log, video_duration=video_duration)
 
     _check_cancel(cancel_check, log)
+    _check_room(work_dir, video_path, video_duration)
 
     # The check stage: catch original speech bleeding through the dub.
     audio_wav = leakage_gate(audio_wav, vocals_path,
                              os.path.join(work_dir, "nonverbal_manifest.json"),
                              work_dir, log)
 
+    _check_room(work_dir, video_path, video_duration)
     _stage_finish(video_path, audio_wav, out_path, work_dir, log)
     log("Done!")
     return {

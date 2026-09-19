@@ -1586,3 +1586,20 @@ def test_one_line_voice_says_the_engine_was_busy_instead_of_crashing(monkeypatch
     r = client.post(f"/api/dub/jobs/{jid}/script/1/voice")
     assert r.status_code == 503
     assert "busy" in r.json()["detail"]
+
+
+def test_remaking_voices_on_a_full_disk_is_a_507_before_any_voice_is_made(monkeypatch, tmp_path):
+    # The rebuild writes the whole dub again: the same 3 GB floor a new dub
+    # starts with, said with both numbers, before the voice engine is asked.
+    from app import models
+    said = []
+    monkeypatch.setattr(script_api, "resynth_one_line", lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: None)
+    monkeypatch.setattr(models, "free_bytes_at", lambda path: int(0.5 * 1024 ** 3))
+    jid = _dubbed_job(tmp_path, ["one", "two"], edits={1: "ONE"}, stale=(1,))
+
+    for url in (f"/api/dub/jobs/{jid}/script/1/voice", f"/api/dub/jobs/{jid}/voices/stale"):
+        r = client.post(url)
+        assert r.status_code == 507, url
+        assert r.json()["detail"] == "Not enough space. Needs 3.0 GB, 0.5 GB free."
+    assert said == []

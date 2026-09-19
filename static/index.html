@@ -4087,7 +4087,7 @@ function showIfOutOfSpace(e) {
   // over this app's life, so both are matched: an out-of-space error that fell
   // through to the plain red line would tell the user to check a disk they
   // cannot see from here.
-  if (!/disk space|저장 공간/i.test(text)) return false;
+  if (!/disk space|not enough space|저장 공간/i.test(text)) return false;
   $("spaceMessage").textContent = text;
   $("spaceOverlay").classList.add("open");
   return true;

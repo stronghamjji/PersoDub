@@ -269,3 +269,72 @@ def test_perso_dubbing_accepts_persos_languages_and_local_does_not(monkeypatch, 
         r = _start({"language_code": code, "dub_mode": "perso"})
         assert r.status_code == 200, (code, r.text)
     assert _start({"language_code": "hi"}).status_code == 422
+
+
+# ── can this computer finish it (app/room.py) ──────────────────────────────
+
+def _ready_for_a_local_dub(monkeypatch, kit):
+    _put_whisper(kit)
+    _put_tts(kit)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
+
+
+def test_a_video_too_big_for_the_disk_is_a_507_with_both_numbers(monkeypatch, _kit):
+    from app import media
+    _ready_for_a_local_dub(monkeypatch, _kit)
+    # Over the 3 GB floor, short of what an hour of video needs (5.8 GB).
+    monkeypatch.setattr(models, "free_bytes_at", lambda path: int(3.5 * 1024 ** 3))
+    monkeypatch.setattr(media, "video_duration", lambda path: 3600.0)
+    r = _start()
+    assert r.status_code == 507
+    assert r.json()["detail"] == "Not enough space. Needs 5.8 GB, 3.5 GB free."
+    # Refused before a job existed, so its folder goes too.
+    assert [f for _, _, files in os.walk(state.WORKSPACE) for f in files] == []
+
+
+def test_a_disk_under_the_floor_is_a_507_with_the_floor(monkeypatch, _kit):
+    _ready_for_a_local_dub(monkeypatch, _kit)
+    monkeypatch.setattr(models, "free_bytes_at", lambda path: int(1.1 * 1024 ** 3))
+    r = _start()
+    assert r.status_code == 507
+    assert r.json()["detail"] == "Not enough space. Needs 3.0 GB, 1.1 GB free."
+
+
+def test_a_computer_under_7_gb_of_memory_cannot_dub_locally(monkeypatch, _kit):
+    from app import room
+    _ready_for_a_local_dub(monkeypatch, _kit)
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: 6 * room.GB)
+    r = _start()
+    assert r.status_code == 422
+    assert r.json()["detail"] == "This computer needs 8 GB of memory to dub."
+
+
+def test_memory_never_refuses_or_warns_a_cloud_dub(monkeypatch, _kit):
+    from app import room
+    monkeypatch.setattr(dub_api, "_run_cloud_dub", lambda *a, **kw: None)
+    monkeypatch.setattr(perso_client, "PersoClient", lambda: type("C", (), {
+        "dubbing_spaces": lambda self: [{"seq": 1}], "space_seq": 1})())
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: 4 * room.GB)
+    r = _start({"dub_mode": "perso"})
+    assert r.status_code == 200, r.json()
+    assert "warning" not in r.json()
+
+
+def test_memory_under_12_gb_starts_the_dub_with_a_warning(monkeypatch, _kit):
+    from app import room
+    _ready_for_a_local_dub(monkeypatch, _kit)
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: 10 * room.GB)
+    r = _start()
+    assert r.status_code == 200
+    assert r.json()["warning"] == "This may be slow on this computer."
+    assert "This may be slow on this computer." in state.job_store.get(r.json()["job_id"])["logs"]
+
+
+def test_plenty_of_memory_or_none_read_starts_without_a_warning(monkeypatch, _kit):
+    from app import room
+    _ready_for_a_local_dub(monkeypatch, _kit)
+    for total in (24 * room.GB, None):
+        monkeypatch.setattr(room, "total_ram_bytes", lambda: total)
+        r = _start()
+        assert r.status_code == 200
+        assert "warning" not in r.json()
