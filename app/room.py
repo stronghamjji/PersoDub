@@ -46,10 +46,15 @@ def space_message(need, free):
 
 
 def _folder_bytes(folder):
+    # Subfolders too: a stage keeps some of its files in one (the per-line
+    # voices), and leaving them out would count them as still to come.
     total = 0
-    for entry in os.scandir(folder):
-        if entry.is_file():
-            total += entry.stat().st_size
+    for root, _dirs, files in os.walk(folder):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass  # gone between the listing and the look
     return total
 
 

@@ -133,3 +133,12 @@ def test_a_dub_stops_between_stages_when_the_disk_fills_up(monkeypatch, tmp_path
     assert str(e.value) == "Not enough space. Needs 1.1 GB, 0.5 GB free."
     # What the job store shows under the red bar is the sentence itself.
     assert error_text_for_ui(e.value) == str(e.value)
+
+
+def test_folder_bytes_counts_subfolders(tmp_path):
+    # The per-line voices live in a subfolder; missing them would count work
+    # already done as still to come and stop a dub that fits.
+    (tmp_path / "input.mp4").write_bytes(b"x" * 100)
+    (tmp_path / "lines").mkdir()
+    (tmp_path / "lines" / "0001.wav").write_bytes(b"x" * 50)
+    assert room._folder_bytes(str(tmp_path)) == 150
