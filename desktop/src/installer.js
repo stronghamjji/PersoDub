@@ -1,6 +1,20 @@
 // Step runner: skips steps whose isDone() is already true (resume), streams
 // progress events, and verifies each step actually produced its artifacts.
-export async function runInstall(steps, { onProgress = () => {} } = {}) {
+// A network error that passes on its own (Hugging Face resetting a download,
+// GitHub's file host answering 503 "Backend is unhealthy", issues #89 #92)
+// gets the step tried again after these waits; anything else fails at once.
+// stop() is true once the person cancelled: the killed process's last lines
+// can read like a network error, and a cancel must not come back as a retry.
+const RETRY_DELAYS_MS = [5000, 20000];
+const SERVER_BUSY = /\b50[0-4] Server Error|HTTP Error 50[0-4]|download failed 50[0-4]\b/;
+export function worthRetrying(message) {
+  return downloadInterrupted(message) || SERVER_BUSY.test(String(message || ""));
+}
+
+export async function runInstall(steps, {
+  onProgress = () => {}, stop = () => false, retryDelaysMs = RETRY_DELAYS_MS,
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+} = {}) {
   for (const step of steps) {
     // bytes rides along on every event -- the screen adds it up as steps
     // finish, to show how much of the total it has received.
@@ -9,19 +23,31 @@ export async function runInstall(steps, { onProgress = () => {} } = {}) {
       continue;
     }
     onProgress({ stepId: step.id, title: step.title, state: "start", bytes: step.bytes });
-    try {
-      await step.run((pct, detail) => {
-        onProgress({ stepId: step.id, title: step.title, state: "progress", pct, detail, bytes: step.bytes });
-      });
-      // verify:false is for steps whose work is housekeeping, not an
-      // artifact: cleanup deletes leftovers, and a file Windows will not
-      // release must leave the kit tidy-ish, never fail an install.
-      if (step.verify !== false && !(await step.isDone())) {
-        throw new Error(`step "${step.id}" ran but did not complete its artifacts`);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await step.run((pct, detail) => {
+          onProgress({ stepId: step.id, title: step.title, state: "progress", pct, detail, bytes: step.bytes });
+        });
+        // verify:false is for steps whose work is housekeeping, not an
+        // artifact: cleanup deletes leftovers, and a file Windows will not
+        // release must leave the kit tidy-ish, never fail an install.
+        if (step.verify !== false && !(await step.isDone())) {
+          throw new Error(`step "${step.id}" ran but did not complete its artifacts`);
+        }
+        break;
+      } catch (err) {
+        const detail = String((err && err.message) || err);
+        const retry = attempt <= retryDelaysMs.length && worthRetrying(detail) && !stop();
+        if (retry) {
+          onProgress({ stepId: step.id, title: step.title, state: "progress", pct: null, detail: `Connection problem, retrying (${attempt + 1}/${retryDelaysMs.length + 1})`, bytes: step.bytes });
+          await sleep(retryDelaysMs[attempt - 1]);
+        }
+        // A cancel during the wait ends it here too, not with one more try.
+        if (!retry || stop()) {
+          onProgress({ stepId: step.id, title: step.title, state: "error", detail, bytes: step.bytes });
+          throw err;
+        }
       }
-    } catch (err) {
-      onProgress({ stepId: step.id, title: step.title, state: "error", detail: String((err && err.message) || err), bytes: step.bytes });
-      throw err;
     }
     onProgress({ stepId: step.id, title: step.title, state: "done", bytes: step.bytes });
   }

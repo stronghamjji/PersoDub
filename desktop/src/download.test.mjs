@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { getFreePort } from "./freePort.js";
 import { download, fileSha256 } from "./download.js";
+import { worthRetrying } from "./installer.js";
 
 const BODY = Buffer.from("hello-persodub");
 const SHA = createHash("sha256").update(BODY).digest("hex");
@@ -48,6 +49,15 @@ test("sha mismatch rejects and removes file", async () => {
   const dest = join(mkdtempSync(join(tmpdir(), "oddl-")), "f.bin");
   await assert.rejects(download(url, dest, { sha256: "0".repeat(64) }), /sha256/i);
   assert.ok(!existsSync(dest));
+  srv.close();
+});
+
+test("a server error's message is one the installer tries again", async () => {
+  const port = await getFreePort();
+  const srv = createServer((req, res) => { res.writeHead(503); res.end("Backend is unhealthy"); });
+  await new Promise((r) => srv.listen(port, "127.0.0.1", r));
+  const dest = join(mkdtempSync(join(tmpdir(), "oddl-")), "f.bin");
+  await assert.rejects(download(`http://127.0.0.1:${port}/f`, dest), (err) => worthRetrying(err.message));
   srv.close();
 });
 

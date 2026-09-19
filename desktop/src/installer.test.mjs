@@ -104,3 +104,80 @@ test("a download that broke mid-way is reported as interrupted, other failures k
   assert.equal(downloadInterrupted(""), false);
   assert.match(DOWNLOAD_INTERRUPTED, /Download and Start/);
 });
+
+// Issues #92 (503 "Backend is unhealthy" from GitHub's file host) and #89
+// (IncompleteRead mid-download): a passing network error gets the step tried
+// again; the waits are injected so these tests do not wait.
+function flaky(errors, log) {
+  let calls = 0;
+  let ran = false;
+  return {
+    id: "ffmpeg",
+    title: "ffmpeg",
+    isDone: () => ran,
+    run: async () => {
+      calls++;
+      log.push(calls);
+      if (calls <= errors.length) throw new Error(errors[calls - 1]);
+      ran = true;
+    },
+  };
+}
+const noWait = { sleep: async () => {}, retryDelaysMs: [5, 20] };
+
+test("a 503 twice then success runs the step three times and reports the retries", async () => {
+  const log = [];
+  const events = [];
+  const busy = "requests.exceptions.HTTPError: 503 Server Error: Backend is unhealthy for url: https://media.githubusercontent.com/x";
+  await runInstall([flaky([busy, "download failed 503: https://x"], log)], { ...noWait, onProgress: (e) => events.push(e) });
+  assert.deepEqual(log, [1, 2, 3]);
+  assert.deepEqual(events.filter((e) => /retrying/.test(e.detail || "")).map((e) => e.detail),
+    ["Connection problem, retrying (2/3)", "Connection problem, retrying (3/3)"]);
+  assert.ok(!events.some((e) => e.state === "error"));
+  assert.equal(events.at(-1).state, "done");
+});
+
+test("IncompleteRead three times gives up after three tries with the last error", async () => {
+  const log = [];
+  const events = [];
+  const cut = (n) => `urllib3.exceptions.ProtocolError: ('Connection broken: IncompleteRead(${n} bytes read)')`;
+  await assert.rejects(
+    runInstall([flaky([cut(1), cut(2), cut(3)], log)], { ...noWait, onProgress: (e) => events.push(e) }),
+    (err) => err.message === cut(3),
+  );
+  assert.deepEqual(log, [1, 2, 3]);
+  assert.deepEqual(events.filter((e) => e.state === "error").map((e) => e.detail), [cut(3)]);
+});
+
+test("a failure that is not the network is not tried again", async () => {
+  for (const message of ["sha256 mismatch for https://x: got abc", "download failed 404: https://x", "File \"x.py\", line 503, in main\nValueError: bad"]) {
+    const log = [];
+    await assert.rejects(runInstall([flaky([message], log)], noWait));
+    assert.deepEqual(log, [1], message);
+  }
+});
+
+test("a step that ran but left no artifacts is not tried again", async () => {
+  const log = [];
+  await assert.rejects(runInstall([step("a", { completes: false }, log)], noWait), /did not complete/);
+  assert.deepEqual(log, ["run:a"]);
+});
+
+test("a cancelled install is not tried again, even when the killed process read like a network error", async () => {
+  const log = [];
+  await assert.rejects(
+    runInstall([flaky(["requests.exceptions.ConnectionError: aborted"], log)], { ...noWait, stop: () => true }),
+    /ConnectionError/,
+  );
+  assert.deepEqual(log, [1]);
+});
+
+test("a cancel during the wait ends the install without another try", async () => {
+  const log = [];
+  let cancelled = false;
+  await assert.rejects(
+    runInstall([flaky(["ECONNRESET"], log)], { retryDelaysMs: [5, 20], sleep: async () => { cancelled = true; }, stop: () => cancelled }),
+    /ECONNRESET/,
+  );
+  assert.deepEqual(log, [1]);
+});
