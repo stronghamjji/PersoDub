@@ -298,17 +298,20 @@ def _auto_translate_srt(
     cues = [dict(c) for c in source_cues]
     texts = [c["text"] for c in cues]
     durations = [round(c["end"] - c["start"], 2) for c in cues]
+    # A translator that cannot follow a length rule is given none: no slots,
+    # so no budgets and no re-asks (app/translate.py length_rules).
+    slots = durations if getattr(translator, "length_rules", True) else None
 
     # Translate with an explicit per-line character budget, re-requesting only
     # out-of-window lines (too long or too short) for a closer rewrite.
     try:
         translated = fit_translate(
-            translator, texts, target_lang, source_lang, durations, log=log
+            translator, texts, target_lang, source_lang, slots, log=log
         )
     except ValueError as e:
         # If formatting keeps failing, fall back to the standard method (built-in line-count guarantee)
         log(f"   Length-fit translation failed ({str(e)[:60]}) — translating with the standard method")
-        translated = translator.translate(texts, target_lang, source_lang, durations)
+        translated = translator.translate(texts, target_lang, source_lang, slots)
 
     # Lines the length-fit format got no usable answer for are left UNTRANSLATED
     # there rather than failing the job; the plain format is simpler to answer,
@@ -319,7 +322,7 @@ def _auto_translate_srt(
         log(f"   Length-fit translation failed for {len(missing)} lines — translating them with the standard method")
         redo = translator.translate(
             [texts[i] for i in missing], target_lang, source_lang,
-            [durations[i] for i in missing],
+            [slots[i] for i in missing] if slots else None,
         )
         for i, t2 in zip(missing, redo):
             translated[i] = t2
@@ -335,7 +338,7 @@ def _auto_translate_srt(
         log(f"   {len(bad)} lines not in the target language → re-translating")
         redo = translator.translate(
             [texts[i] for i in bad], target_lang, source_lang,
-            [durations[i] for i in bad],
+            [slots[i] for i in bad] if slots else None,
         )
         for i, t2 in zip(bad, redo):
             if script_ok(t2, target_lang):
