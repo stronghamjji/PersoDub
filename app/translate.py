@@ -178,6 +178,10 @@ class TranslationEngine:
     # may spend re-asking a line (see app/text/length_fit.py MAX_RETRY). Default 3, for local/free
     # engines -- paid Google engines override this to 0 (cost/429-driven, see GeminiTranslator).
     max_budget_retries: int = 3
+    # Whether this engine is told how long each line may be at all (character
+    # budgets, the re-asks, the seconds a line must fit). False for a model that
+    # cannot follow such a rule -- see OllamaTranslator.
+    length_rules: bool = True
 
     def translate(
         self,
@@ -401,6 +405,11 @@ class OllamaTranslator(TranslationEngine):
         # (or restarted) the pack and written its port to runtime.json.
         self.url = (url or runtime.url("ollama")).rstrip("/")
         self.model = model
+        # Hunyuan MT is a translation-only model: asked to fit a line into N
+        # characters, it gave the request back as the line ("반드시 10자 이내"
+        # spoken in 30 of 152 lines, 2026-09-19). It gets no length rules; a
+        # line that runs long is the Dub Agent's to trim (owner, 2026-08-20).
+        self.length_rules = model != OLLAMA_HUNYUAN_MODEL
 
     def _ask(self, prompt: str) -> str:
         if "qwen3" in self.model:

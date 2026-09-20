@@ -480,3 +480,31 @@ def test_a_local_translator_failing_points_at_settings_not_at_google(
     assert str(e.value).startswith("Translation failed (Gemma:")
     assert "Google" not in str(e.value)
     assert "pick another translator in Settings" in str(e.value)
+
+
+def test_a_translator_without_length_rules_is_told_no_length_and_never_re_asked(tmp_path):
+    # Hunyuan read "반드시 10자 이내" back as the line (2026-09-19). A translator
+    # with length_rules False gets one plain draft: no budgets, no seconds, and
+    # no re-ask even for a line far longer than its slot.
+    src = [
+        {"start": 0.0, "end": 1.0, "text": "So how many of you, in the last week,"},
+        {"start": 2.0, "end": 4.0, "text": "used any AI tool to code?"},
+    ]
+    eng = FakeTranslator(ask_responses=[
+        j(["지난주에 여러분 중에 몇 분이나 이렇게 오래 말하는 줄이 있을까요", "인공지능 도구로 코딩해 봤어?"]),
+    ])
+    eng.length_rules = False
+    out = pipeline._auto_translate_srt(src, "ko", eng, str(tmp_path), source_lang="en")
+
+    assert len(eng.prompts) == 1
+    assert "반드시" not in eng.prompts[0] and "must fit" not in eng.prompts[0]
+    assert "(no length limit)" in eng.prompts[0]
+    assert [c["text"] for c in read_cues(out)][0].startswith("지난주에")
+
+
+def test_only_the_hunyuan_model_goes_without_length_rules():
+    from app.config import OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL
+    from app.translate import OllamaTranslator
+
+    assert OllamaTranslator(url="http://x", model=OLLAMA_HUNYUAN_MODEL).length_rules is False
+    assert OllamaTranslator(url="http://x", model=OLLAMA_GEMMA_MODEL).length_rules is True
