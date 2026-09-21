@@ -1,10 +1,11 @@
 # PersoDub
 
-**PersoDub - 100% Locally on Your Desktop: Dub Videos in Your Own Voice**
+**Open-source AI video dubbing. PersoDub is the ElevenLabs, HeyGen and Rask AI alternative that runs on your own computer.**
 
-PersoDub re-voices a video into another language in the speaker's own cloned voice,
-entirely on your desktop. No cloud, no account, no uploads: your footage never leaves
-your computer.
+Drop in a video, clone the speaker's voice, dub it into another language, and post it to
+YouTube Shorts, TikTok or Instagram Reels. By default PersoDub does the whole job on your
+desktop: separating the voice from the music, transcribing, translating, cloning the voice
+and mixing it back.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
