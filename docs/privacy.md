@@ -51,8 +51,8 @@ system, a random install ID, and on a failure one short code off a fixed list. A
 install also names which of its ten steps it stopped at, again off a fixed list. From
 0.6.2 a dub also says which of its parts went through Perso — transcription, separation,
 or the whole dub — each as one of two words, how many Perso credits that one job used,
-and the video's length in whole minutes; and a launch says whether a Perso key is set,
-as yes or no. Never your video, audio, subtitles, filenames, paths, error text, key,
+and the video's length in seconds (0.6.2 and 0.6.3 sent whole minutes); and a launch
+says whether a Perso key is set, as yes or no. Never your video, audio, subtitles, filenames, paths, error text, key,
 workspace or balance; no IP address is stored.
 
 A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
