@@ -337,3 +337,11 @@ def test_what_cannot_be_read_as_text_is_no_candidate_at_all():
     for line in out:
         for cand in line:
             assert "{" not in cand and "[" not in cand
+
+
+def test_a_malformed_candidates_answer_is_described_by_its_length_never_quoted():
+    secret = "그러니까 내가 말했잖아, 이건 비밀이라고"
+    with pytest.raises(ValueError) as e:
+        parse_candidates_array(secret, 1)
+    assert secret[:6] not in str(e.value)
+    assert "response length %d" % len(secret) in str(e.value)

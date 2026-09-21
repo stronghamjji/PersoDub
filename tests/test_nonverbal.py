@@ -304,3 +304,24 @@ def test_overlay_adjacent_segments_no_gap_overrun(tmp_path):
     assert _rms_span_48k(out, 0.6, 0.8) > 1000
     assert _rms_span_48k(out, 1.0, 1.2) > 1000
     assert _rms_span_48k(out, 1.45, 1.95) == 0    # nothing past the segments
+
+
+def test_whitelist_log_says_how_much_was_heard_never_what(tmp_path):
+    """The job log is sent with a failure report. A REJECT is a span Whisper
+    read as speech, so its text is the video's dialogue."""
+    vocals = _write_tone_wav(tmp_path / "vocals.wav", [(1.0, 1.5), (2.0, 2.5)], dur=4.0)
+    mix = _write_silent_48k_stereo(tmp_path / "mix.wav", 4.0)
+
+    def veto(vocals_path, cands):
+        return [{"start": a, "end": b,
+                 "text": "하하" if a < 1.8 else "my password is hunter2",
+                 "keep": a < 1.8} for a, b in cands]
+
+    logs = []
+    manifest = nv.apply_nonverbal_whitelist(mix, vocals, [], [], veto=veto, log=logs.append)
+
+    joined = "\n".join(logs)
+    assert "hunter2" not in joined and "하하" not in joined
+    assert "REJECT  text_len=22" in joined and "KEEP    text_len=2" in joined
+    # the manifest on disk still holds the transcript: the leakage gate needs it
+    assert manifest["rejected"][0]["text"] == "my password is hunter2"

@@ -419,3 +419,18 @@ def test_a_line_that_is_not_text_is_a_malformed_answer():
 
 def test_an_object_holding_one_string_is_that_string():
     assert parse_json_array('[{"text": "안녕"}, "잘 지내?"]', 2) == ["안녕", "잘 지내?"]
+
+
+def test_a_malformed_answer_is_described_by_its_length_never_quoted():
+    """The answer is the video's dialogue in translation. The sentence goes into
+    the job log and, on a failure, into a public issue (issues #86, #88, #102)."""
+    secret = "Pero esos elementos sintéticos que estamos añadiendo"
+    with pytest.raises(ValueError) as no_array:
+        translate.parse_json_array(secret, 1)
+    assert secret[:10] not in str(no_array.value)
+    assert "response length %d" % len(secret) in str(no_array.value)
+
+    with pytest.raises(ValueError) as not_text:
+        translate.parse_json_array(json.dumps([{"a": secret, "b": secret}]), 1)
+    assert secret[:10] not in str(not_text.value)
+    assert "dict" in str(not_text.value)

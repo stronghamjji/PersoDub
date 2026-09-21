@@ -222,6 +222,18 @@ def test_restore_skips_a_broken_job_json(tmp_path):
     store.restore(str(tmp_path))  # must not raise
 
 
+def test_a_skipped_job_folder_is_logged_by_its_day_never_its_name(tmp_path, caplog):
+    # The folder is named after the video's file, and persodub.log is sent with
+    # a failure report, which docs/privacy.md says carries no filename.
+    work = tmp_path / "2026-09-21" / "my wedding video_ko"
+    work.mkdir(parents=True)
+    (work / "job.json").write_text("{ not json", encoding="utf-8")
+    with caplog.at_level("WARNING"):
+        JobStore(log_dir=str(tmp_path)).restore(str(tmp_path))
+    assert "wedding" not in caplog.text
+    assert "Skipping a job folder under 2026-09-21" in caplog.text
+
+
 def test_restore_finds_old_folders_that_have_no_job_json(tmp_path):
     # Every folder made before job.json existed. They still hold a dubbed.mp4,
     # so rebuild just enough of a record for the Projects list to reopen them.

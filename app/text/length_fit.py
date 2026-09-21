@@ -307,7 +307,8 @@ def parse_candidates_array(raw, n):
     s = re.sub(r"^```[a-zA-Z]*", "", s).strip().strip("`").strip()
     start, end = s.find("["), s.rfind("]")
     if start == -1 or end == -1:
-        raise ValueError("Could not find a JSON array in the candidates response: %s" % raw[:200])
+        # Length only, for the reason given in app/translate.py parse_json_array.
+        raise ValueError("Could not find a JSON array in the candidates response (response length %d)" % len(raw))
     arr = json.loads(s[start:end + 1])
     # One line asked for, the three candidates handed back bare: the model
     # answered with the inner list rather than a list holding it. At n == 1

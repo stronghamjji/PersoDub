@@ -282,11 +282,12 @@ class JobStore:
                 jid = rec["id"]
             except Exception as e:
                 # One unreadable file must not cost the user every other job.
-                # The job folder's name only, never the path: persodub.log is
-                # meant to be small enough to attach to a bug report, and a
-                # full path would put the user's whole folder tree in it. (The
-                # file itself is always job.json, which names nothing.)
-                logger.warning("Skipping %s (%s)", os.path.basename(os.path.dirname(path)),
+                # The day it sits under, never its own folder: that folder is
+                # named after the video's file, and persodub.log is sent with a
+                # failure report, which docs/privacy.md says carries no
+                # filename. The day is a date and names nothing.
+                logger.warning("Skipping a job folder under %s (%s)",
+                               os.path.basename(os.path.dirname(os.path.dirname(path))),
                                type(e).__name__)
                 continue
             if rec.get("status") in ("running", "cancelling"):
@@ -337,10 +338,11 @@ class JobStore:
                     result={"out_path": out},
                 )
             except Exception as e:
-                # Same promise as above, and the same rule about the path:
-                # one odd folder is skipped, not fatal, and only its own name
-                # goes in the log.
-                logger.warning("Skipping %s (%s)", os.path.basename(work), type(e).__name__)
+                # Same promise as above, and the same rule about the name:
+                # one odd folder is skipped, not fatal, and only the day it
+                # sits under goes in the log.
+                logger.warning("Skipping a job folder under %s (%s)",
+                               os.path.basename(os.path.dirname(work)), type(e).__name__)
                 continue
             with self._lock:
                 self._jobs.setdefault(jid, job)
