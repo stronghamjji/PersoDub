@@ -71,7 +71,18 @@ export async function runInstall(steps, {
 // only needs to know that pressing Download and Start resumes it. Anything
 // else keeps the tool's own last line (main.js lastReason).
 export const DOWNLOAD_INTERRUPTED = "The download was interrupted. Click Download and Start to pick up where it left off.";
-const NETWORK_MARKS = /IncompleteRead|ChunkedEncodingError|Connection broken|ConnectionResetError|ConnectionError|ReadTimeout|timed out|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|getaddrinfo|Network is unreachable|RemoteDisconnected|ProtocolError|Max retries exceeded/;
+// The last two rows are no network at all, which each downloader says in its own
+// words and none of the rows above: the hf CLI ("LocalEntryNotFoundError ...
+// Please check your internet connection"), this app's own fetch ("fetch
+// failed"), and urllib under Whisper ("urlopen error", then the resolver's
+// sentence for the platform). Wi-Fi off on Windows showed the hf traceback on
+// the Settings screen and retried nothing (2026-09-21).
+const NETWORK_MARKS = new RegExp([
+  "IncompleteRead|ChunkedEncodingError|Connection broken|ConnectionResetError|ConnectionError|ReadTimeout|timed out",
+  "ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|getaddrinfo|Network is unreachable|RemoteDisconnected|ProtocolError|Max retries exceeded",
+  "LocalEntryNotFoundError|check your internet connection|fetch failed|urlopen error",
+  "NameResolutionError|nodename nor servname|Name or service not known|Temporary failure in name resolution",
+].join("|"));
 export function downloadInterrupted(message) {
   return NETWORK_MARKS.test(String(message || ""));
 }

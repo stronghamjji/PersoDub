@@ -215,3 +215,34 @@ test("a pack that died for want of the Visual C++ runtime says so, other failure
   assert.equal(VC_RUNTIME_MISSING, "Windows needs Microsoft Visual C++ to run the AI engine. Install it, then try again.");
   assert.equal(VC_RUNTIME_URL, "https://aka.ms/vc14/vc_redist.x64.exe");
 });
+
+test("no network at all is a network error too, in each downloader's own words", async () => {
+  // Wi-Fi off, then Resume, on Windows (2026-09-21): the hf CLI's sentence held
+  // none of the words this looked for, so the step failed in half a second,
+  // nothing was retried and the traceback's first line went on the screen.
+  const hfOffline = "huggingface_hub.errors.LocalEntryNotFoundError: An error happened while trying to locate "
+    + "the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on "
+    + "the local disk. Please check your internet connection and try again.";
+  const { worthRetrying } = await import("./installer.js");
+  for (const said of [
+    hfOffline,
+    "fetch failed",                                                   // this app's own download()
+    "URLError: <urlopen error [Errno 8] nodename nor servname provided, or not known>",  // Whisper, macOS
+    "URLError: <urlopen error [Errno -3] Temporary failure in name resolution>",         // Whisper, Linux
+  ]) {
+    assert.equal(downloadInterrupted(said), true, said.slice(0, 40));
+    assert.equal(worthRetrying(said), true, said.slice(0, 40));
+  }
+  // and the step really is tried again, then shown as the plain sentence
+  const log = [];
+  let calls = 0;
+  const flaky = { id: "models", title: "models", isDone: () => calls >= 3,
+    run: async () => { calls += 1; log.push(calls); if (calls < 3) throw new Error(hfOffline); } };
+  const seen = [];
+  await runInstall([flaky], { retryDelaysMs: [0, 0], sleep: async () => {}, onProgress: (p) => seen.push(p.detail || "") });
+  assert.deepEqual(log, [1, 2, 3]);
+  assert.ok(seen.includes("Connection problem, retrying (2/3)"));
+  // what is NOT the network stays a plain failure
+  assert.equal(worthRetrying("sha256 mismatch for https://example.com/a.zip: got 00ff"), false);
+  assert.equal(worthRetrying("download failed 404: https://example.com/a.zip"), false);
+});
