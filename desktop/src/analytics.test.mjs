@@ -581,10 +581,10 @@ test("dubFacts reads a job's record and gives its length in seconds", () => {
   assert.equal(dubFacts({ stt_engine: "perso" }).seconds, undefined);
 });
 
-test("a video under a minute keeps its length instead of rounding to nothing", () => {
-  // The whole reason this is seconds. Rounded to minutes a forty-second video
-  // reported 0, and two thirds of everything 0.6.2 and 0.6.3 sent reads 0.
-  assert.equal(dubFacts({ duration: 40 }).seconds, 40);
+test("a video under thirty seconds keeps its length instead of rounding to nothing", () => {
+  // The whole reason this is seconds. Rounded to minutes anything under thirty
+  // seconds reported 0, and two thirds of everything 0.6.2 and 0.6.3 sent reads 0.
+  assert.equal(dubFacts({ duration: 20 }).seconds, 20);
   assert.equal(dubFacts({ duration: 7.4 }).seconds, 7);
   // A video that really is a blink still says so, and 0 is a count.
   assert.equal(dubFacts({ duration: 0 }).seconds, 0);

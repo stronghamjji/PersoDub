@@ -112,8 +112,9 @@ export function buildPayload({ event, os, version, device, errorCode, step,
  * fetch gives nothing, and buildPayload then sends nothing for it.
  *
  * Seconds, not minutes. 0.6.2 and 0.6.3 sent whole minutes and two thirds of
- * what they sent read 0, because most of the videos people put in are under a
- * minute -- the length was there and the rounding threw it away.
+ * what they sent read 0, because most of the videos people put in are under
+ * thirty seconds and a rounded minute is 0 for all of them -- the length was
+ * there and the rounding threw it away.
  */
 export function dubFacts(job) {
   if (!job || typeof job !== "object") return {};
