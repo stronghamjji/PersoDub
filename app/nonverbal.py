@@ -262,8 +262,11 @@ def apply_nonverbal_whitelist(mix_path: str, vocals_path: str,
         verdicts = (veto or whisper_veto)(vocals_path, candidates)
         for v in verdicts:
             (kept if v["keep"] else rejected).append(v)
-            log("   nonverbal %6.2f-%6.2fs %-7s %r"
-                % (v["start"], v["end"], "KEEP" if v["keep"] else "REJECT", v.get("text", "")))
+            # How much was heard, never what: a REJECT is a span Whisper read as
+            # speech, so its text is the video's dialogue, and this log is sent
+            # with a failure report (desktop/src/report.js).
+            log("   nonverbal %6.2f-%6.2fs %-7s text_len=%d"
+                % (v["start"], v["end"], "KEEP" if v["keep"] else "REJECT", len(v.get("text", ""))))
         if any(v.get("error") for v in verdicts):
             # dropping is the fail-closed CORRECT behavior, but it must be
             # loud: with a broken whisper setup the whitelist silently does
