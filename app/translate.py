@@ -79,7 +79,10 @@ def parse_json_array(raw: str, n: int) -> List[str]:
     s = re.sub(r"^```[a-zA-Z]*", "", s).strip().strip("`").strip()
     start, end = s.find("["), s.rfind("]")
     if start == -1 or end == -1:
-        raise ValueError(f"Could not find a JSON array in the translation response: {raw[:200]}")
+        # The answer's length, never the answer: it is the video's dialogue in
+        # translation, and this sentence goes into the job log and, on a
+        # failure, into a public issue's Error box (issues #86, #88, #102).
+        raise ValueError(f"Could not find a JSON array in the translation response (response length {len(raw)})")
     arr = json.loads(s[start : end + 1])
     if len(arr) != n:
         raise ValueError(f"Translated line count mismatch: got {len(arr)}, need {n}")
@@ -94,7 +97,7 @@ def parse_json_array(raw: str, n: int) -> List[str]:
             strings = [v for v in x.values() if isinstance(v, str)]
             x = strings[0] if len(strings) == 1 else x
         if not isinstance(x, str):
-            raise ValueError(f"A translated line is not text: {str(x)[:80]}")
+            raise ValueError(f"A translated line is not text (it is a {type(x).__name__})")
         out.append(x)
     return out
 

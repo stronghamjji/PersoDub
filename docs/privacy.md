@@ -51,8 +51,8 @@ system, a random install ID, and on a failure one short code off a fixed list. A
 install also names which of its ten steps it stopped at, again off a fixed list. From
 0.6.2 a dub also says which of its parts went through Perso — transcription, separation,
 or the whole dub — each as one of two words, how many Perso credits that one job used,
-and the video's length in whole minutes; and a launch says whether a Perso key is set,
-as yes or no. Never your video, audio, subtitles, filenames, paths, error text, key,
+and the video's length in seconds (0.6.2 and 0.6.3 sent whole minutes); and a launch
+says whether a Perso key is set, as yes or no. Never your video, audio, subtitles, filenames, paths, error text, key,
 workspace or balance; no IP address is stored.
 
 A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
@@ -78,7 +78,10 @@ name of the file both go, and so does yours; anything shaped like an API key bec
 installation folder, whose paths are kept readable minus your name, because which model
 or which folder a step died in is the answer we are looking for. Your `kit.env` — the
 file your API keys live in — is never read by the reporting code at all, and no video,
-audio, subtitle, project name or filename is ever included. The relay that posts the
+audio, subtitle, project name or filename is ever included. The logs themselves never
+record what was said: a transcribed or a translated line is written down by its length,
+not its words, and a Perso job by the credits it used, never your balance (from 0.6.4;
+earlier versions could quote a translation in an error sentence). The relay that posts the
 issue does not store your IP address, and applies the same rules a second time.
 
 Turn it off in **Settings → Privacy** or with `PERSODUB_NO_REPORTS=1` in the kit's

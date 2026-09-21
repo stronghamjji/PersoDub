@@ -494,3 +494,11 @@ def test_the_length_retry_is_asked_in_chunks_too():
     retries = [p for p in eng.prompts if "don't fit their time slot" in p]
     assert [len([ln for ln in p.splitlines() if ln[:1].isdigit() and ". " in ln]) for p in retries] \
         == [DRAFT_CHUNK, DRAFT_CHUNK, DRAFT_CHUNK, 20 - 3 * DRAFT_CHUNK]
+
+
+def test_a_malformed_candidates_answer_is_described_by_its_length_never_quoted():
+    secret = "그러니까 내가 말했잖아, 이건 비밀이라고"
+    with pytest.raises(ValueError) as e:
+        parse_candidates_array(secret, 1)
+    assert secret[:6] not in str(e.value)
+    assert "response length %d" % len(secret) in str(e.value)

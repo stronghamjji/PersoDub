@@ -90,8 +90,9 @@ def compute_mute_set(vocals_path: str,
         else:
             verdicts = veto(vocals_path, candidates)
         for v in verdicts:
-            log("   company gate %6.2f-%6.2fs %-7s %r"
-                % (v["start"], v["end"], "KEEP" if v["keep"] else "MUTE", v.get("text", "")))
+            # text_len, not the text: see apply_nonverbal_whitelist in app/nonverbal.py.
+            log("   company gate %6.2f-%6.2fs %-7s text_len=%d"
+                % (v["start"], v["end"], "KEEP" if v["keep"] else "MUTE", len(v.get("text", ""))))
         if any(v.get("error") for v in verdicts):
             log("   ERROR: whisper veto unavailable -- all %d energetic candidate(s) "
                 "muted fail-closed; check NONVERBAL_WHISPER_PYTHON" % len(candidates))

@@ -316,7 +316,9 @@ def note_credits(ws, pc, log, what: str) -> None:
             after = (getattr(pc, "describe_workspace", lambda: None)() or {}).get("credits")
             if after is not None:
                 used = int(ws["credits"]) - int(after)
-                log(f"   Perso credits used: {used} ({after} left)")
+                # What this job used, not what is left: the log travels with a
+                # failure report, and docs/privacy.md says the balance never does.
+                log(f"   Perso credits used: {used}")
                 pc.credits_used = getattr(pc, "credits_used", 0) + max(used, 0)
     except Exception as e:
         logger.debug("No credits line after %s (%s)", what, type(e).__name__)

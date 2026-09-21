@@ -587,3 +587,18 @@ def test_ollama_answer_cap_grows_with_the_lines_asked_for(monkeypatch):
     assert caps == [1024, 2048, 2048, 8192, 2048]
     # No JSON mode: Ollama's forces an object at the top, and every prompt asks for an array.
     assert all("format" not in b for b in log["bodies"])
+
+
+def test_a_malformed_answer_is_described_by_its_length_never_quoted():
+    """The answer is the video's dialogue in translation. The sentence goes into
+    the job log and, on a failure, into a public issue (issues #86, #88, #102)."""
+    secret = "Pero esos elementos sintéticos que estamos añadiendo"
+    with pytest.raises(ValueError) as no_array:
+        translate.parse_json_array(secret, 1)
+    assert secret[:10] not in str(no_array.value)
+    assert "response length %d" % len(secret) in str(no_array.value)
+
+    with pytest.raises(ValueError) as not_text:
+        translate.parse_json_array(json.dumps([{"a": secret, "b": secret}]), 1)
+    assert secret[:10] not in str(not_text.value)
+    assert "dict" in str(not_text.value)

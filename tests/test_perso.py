@@ -991,8 +991,10 @@ def test_note_credits_logs_the_difference_and_adds_it_up():
     before = pc.describe_workspace()
     pc.balance = 90
     note_credits(before, pc, logs.append, "Perso separation")
-    assert logs == ["   Perso credits used: 6 (94 left)",
-                    "   Perso credits used: 4 (90 left)"]
+    # What the job used, never the balance: this log travels with a failure
+    # report, and docs/privacy.md promises the balance does not.
+    assert logs == ["   Perso credits used: 6", "   Perso credits used: 4"]
+    assert not any("94" in line or "90" in line or "left" in line for line in logs)
     assert pc.credits_used == 10
 
 

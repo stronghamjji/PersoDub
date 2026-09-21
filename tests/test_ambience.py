@@ -248,3 +248,11 @@ def test_leakage_manifest_cap_accepts_company_mode_marker():
     # per-span cap still enforced even in company mode
     bad = [{"start": 0.0, "end": 4.0, "text": "hahaha"}]
     assert _validate_manifest_spans(bad, 20.0, mode="company") is not None
+
+
+def test_mute_set_log_says_how_much_was_heard_never_what(scene):
+    logs = []
+    cg.compute_mute_set(scene, SPEECH_SPANS, DUB_SPANS, veto=_veto_keep_laugh, log=logs.append)
+    joined = "\n".join(logs)
+    assert logs and "hahaha" not in joined
+    assert "text_len=6" in joined
