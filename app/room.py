@@ -9,6 +9,7 @@ place, so the two cannot disagree about what a job needs.
 A reading the computer will not give (a disk or a memory size) is never a
 reason to refuse: every check below lets the job go when it cannot tell.
 """
+import contextlib
 import os
 import sys
 
@@ -51,10 +52,8 @@ def _folder_bytes(folder):
     total = 0
     for root, _dirs, files in os.walk(folder):
         for name in files:
-            try:
+            with contextlib.suppress(OSError):  # gone between the listing and the look
                 total += os.path.getsize(os.path.join(root, name))
-            except OSError:
-                pass  # gone between the listing and the look
     return total
 
 
