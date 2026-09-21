@@ -529,19 +529,19 @@ test("a translation that came back as something other than JSON is named", () =>
 });
 
 
-// ---- the Perso columns (0.6.2): two words, two counts, one yes/no ----
+// ---- the Perso columns (0.6.2; length in seconds from 0.6.4) ----
 
 test("a dub names which parts went through Perso, in two words only", () => {
   const p = buildPayload({
     event: "dub_success", os: "mac", version: "0.6.2", device: "a".repeat(32),
     engines: { stt_engine: "perso", separation: "demucs", dub_mode: "local" },
-    credits: 12, minutes: 3,
+    credits: 12, seconds: 150,
   });
   assert.equal(p.stt, "perso");
   assert.equal(p.separation, "local");   // never "demucs": the engine's name stays home
   assert.equal(p.mode, "local");
   assert.equal(p.credits, 12);
-  assert.equal(p.minutes, 3);
+  assert.equal(p.seconds, 150);
 });
 
 test("a dub the shell could not look up says nothing, not local", () => {
@@ -555,8 +555,8 @@ test("a count that is not a whole non-negative number is left out", () => {
   const base = { event: "dub_success", os: "mac", version: "0.6.2", device: "a".repeat(32) };
   assert.equal("credits" in buildPayload({ ...base, credits: -1 }), false);
   assert.equal("credits" in buildPayload({ ...base, credits: 1.5 }), false);
-  assert.equal("minutes" in buildPayload({ ...base, minutes: "3" }), false);
-  assert.equal(buildPayload({ ...base, minutes: 0 }).minutes, 0);
+  assert.equal("seconds" in buildPayload({ ...base, seconds: "150" }), false);
+  assert.equal(buildPayload({ ...base, seconds: 0 }).seconds, 0);
 });
 
 test("a launch says whether a Perso key is set, as yes or no, and nothing else does", () => {
@@ -570,13 +570,22 @@ test("a launch says whether a Perso key is set, as yes or no, and nothing else d
   assert.deepEqual(Object.keys(e).sort(), ["device", "event", "os", "version"]);
 });
 
-test("dubFacts reads a job's record and rounds its length to minutes", () => {
+test("dubFacts reads a job's record and gives its length in seconds", () => {
   const f = dubFacts({ stt_engine: "whisper", separation: "perso", dub_mode: "local",
                        perso_credits: 7, duration: 150.2, title: "my private video" });
   assert.deepEqual(f.engines, { stt_engine: "whisper", separation: "perso", dub_mode: "local" });
   assert.equal(f.credits, 7);
-  assert.equal(f.minutes, 3);
+  assert.equal(f.seconds, 150);
   assert.equal("title" in f, false);
   assert.deepEqual(dubFacts(null), {});
-  assert.equal(dubFacts({ stt_engine: "perso" }).minutes, undefined);
+  assert.equal(dubFacts({ stt_engine: "perso" }).seconds, undefined);
+});
+
+test("a video under thirty seconds keeps its length instead of rounding to nothing", () => {
+  // The whole reason this is seconds. Rounded to minutes anything under thirty
+  // seconds reported 0, and two thirds of everything 0.6.2 and 0.6.3 sent reads 0.
+  assert.equal(dubFacts({ duration: 20 }).seconds, 20);
+  assert.equal(dubFacts({ duration: 7.4 }).seconds, 7);
+  // A video that really is a blink still says so, and 0 is a count.
+  assert.equal(dubFacts({ duration: 0 }).seconds, 0);
 });

@@ -74,7 +74,7 @@ const isCount = (n) => Number.isInteger(n) && n >= 0;
 
 /** The whole message. A field not named here cannot leave. */
 export function buildPayload({ event, os, version, device, errorCode, step,
-                               engines, credits, minutes, persoKey }) {
+                               engines, credits, seconds, persoKey }) {
   const payload = { event, os, version, device };
   if (FAILURE_EVENTS.has(event)) {
     payload.error_code = ERROR_CODES.has(errorCode) ? errorCode : "unknown";
@@ -86,10 +86,10 @@ export function buildPayload({ event, os, version, device, errorCode, step,
     payload.step = INSTALL_STEPS.has(step) ? step : "unknown";
   }
   // Which parts of a dub went through Perso, what that one job cost, and how
-  // long the video was (0.6.2) -- read off the job's record (dubFacts), so a
-  // dub the shell could not look up says nothing rather than "local". Two
-  // words for the stages and two whole numbers: no engine name, no balance,
-  // no title.
+  // long the video was in seconds (0.6.4; 0.6.2 and 0.6.3 sent minutes) -- read
+  // off the job's record (dubFacts), so a dub the shell could not look up says
+  // nothing rather than "local". Two words for the stages and two whole
+  // numbers: no engine name, no balance, no title.
   if (DUB_EVENTS.has(event)) {
     if (engines) {
       payload.stt = persoOrLocal(engines.stt_engine);
@@ -97,7 +97,7 @@ export function buildPayload({ event, os, version, device, errorCode, step,
       payload.mode = persoOrLocal(engines.dub_mode);
     }
     if (isCount(credits)) payload.credits = credits;
-    if (isCount(minutes)) payload.minutes = minutes;
+    if (isCount(seconds)) payload.seconds = seconds;
   }
   // Whether a Perso key is set when the app starts -- yes or no, never the key.
   if (event === "app_launch" && typeof persoKey === "boolean") {
@@ -108,8 +108,13 @@ export function buildPayload({ event, os, version, device, errorCode, step,
 
 /**
  * What a job's own record tells the count: its engine fields, the Perso
- * credits it spent and its length in whole minutes. A record the shell could
- * not fetch gives nothing, and buildPayload then sends nothing for it.
+ * credits it spent and its length in seconds. A record the shell could not
+ * fetch gives nothing, and buildPayload then sends nothing for it.
+ *
+ * Seconds, not minutes. 0.6.2 and 0.6.3 sent whole minutes and two thirds of
+ * what they sent read 0, because most of the videos people put in are under
+ * thirty seconds and a rounded minute is 0 for all of them -- the length was
+ * there and the rounding threw it away.
  */
 export function dubFacts(job) {
   if (!job || typeof job !== "object") return {};
@@ -117,7 +122,7 @@ export function dubFacts(job) {
   return {
     engines: { stt_engine, separation, dub_mode },
     credits: job.perso_credits,
-    minutes: Number.isFinite(job.duration) ? Math.round(job.duration / 60) : undefined,
+    seconds: Number.isFinite(job.duration) ? Math.round(job.duration) : undefined,
   };
 }
 
@@ -192,7 +197,7 @@ export function saveState(file, { device, lastDay = null }) {
  */
 export async function countEvent(event, {
   mode, stateFile, url, os, version, errorCode, step,
-  engines, credits, minutes, persoKey,
+  engines, credits, seconds, persoKey,
   today = new Date().toISOString().slice(0, 10),
   timeoutMs, fetchImpl, log = console.log,
 }) {
@@ -204,7 +209,7 @@ export async function countEvent(event, {
   if (!shouldReport({ event, lastDay: state.lastDay, today })) return false;
 
   const payload = buildPayload({ event, os, version, device: state.device, errorCode, step,
-                                 engines, credits, minutes, persoKey });
+                                 engines, credits, seconds, persoKey });
 
   if (mode === "debug") {
     log(`[persodub-analytics] would send: ${JSON.stringify(payload)}`);
