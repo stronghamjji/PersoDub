@@ -28,7 +28,7 @@ then **Run anyway**. [Details](INSTALL.md#windows).
 
 ## What is PersoDub?
 
-**Dub a video into another language in the original speaker's own voice — entirely on your desktop.**
+**Dub a video into another language in the original speaker's own voice, on your own computer.**
 
 PersoDub is a desktop app that takes one video file and returns a dubbed version of it.
 It separates speech from background audio, transcribes it, works out who spoke when,
@@ -115,15 +115,15 @@ https://github.com/user-attachments/assets/fac60bb8-a18b-47ec-a9c8-c1a4509fa4fb
 </tr>
 </table>
 
-Listen for pacing: PersoDub's lines land inside their original time slots without
-speeding the audio up — the difference explained in [Why PersoDub](#why-persodub).
+Listen for pacing: PersoDub never speeds the audio up to make a line fit. The difference
+is explained in [Why PersoDub](#why-persodub).
 The source files live in [docs/demo](docs/demo).
 
 ---
 
 ## Why PersoDub
 
-- **Your footage stays yours.** Processing is 100% local by default — no account, no
+- **Your footage stays yours.** Processing runs locally by default: no account, no
   API key, no uploads. Cloud engines are opt-in only. See
   [Data and privacy](#data-and-privacy).
 - **No time-stretching.** Most dubbing tools speed the audio up when a translation runs
@@ -179,7 +179,7 @@ runtime, and models download — roughly 2–9 GB more depending on what you cho
 2. Drop your video on the drop zone, click **Choose a file**, or paste a video link —
    MP4 or MOV, up to 2 GB.
 3. The **New project** dialog opens. Trim the part you want dubbed, pick the original
-   and target languages (10 are supported — see
+   and target languages (10 on your computer, 77 with Perso's cloud; see
    [Supported languages](#supported-languages)), and open **Advanced options** if you
    want to change an engine.
 4. Click **Start dubbing**. The running screen ticks off the four stages, and counts
@@ -208,8 +208,20 @@ A screen-by-screen walkthrough, with screenshots of every option, is in
 
 ## Supported languages
 
-English · Korean · Chinese · Japanese · French · German · Italian · Portuguese ·
-Russian · Spanish
+**On your computer (10):** English · Korean · Chinese · Japanese · French · German ·
+Italian · Portuguese · Russian · Spanish
+
+**With Perso's cloud (77):** Afrikaans · Arabic · Armenian · Assamese · Azerbaijani ·
+Belarusian · Bengali · Bosnian · Bulgarian · Catalan · Cebuano · Chichewa · Chinese ·
+Croatian · Czech · Danish · Dutch · English (UK) · English (US) · Estonian · Filipino ·
+Finnish · French · Galician · Georgian · German · Greek · Gujarati · Hausa · Hebrew ·
+Hindi · Hungarian · Icelandic · Indonesian · Irish · Italian · Japanese · Javanese ·
+Kannada · Kazakh · Korean · Kyrgyz · Latvian · Lingala · Lithuanian · Luxembourgish ·
+Macedonian · Malay · Malayalam · Marathi · Nepali · Norwegian · Pashto · Persian ·
+Polish · Portuguese (Brazil) · Portuguese (Portugal) · Punjabi · Romanian · Russian ·
+Serbian · Sindhi · Slovak · Slovenian · Somali · Spanish (Mexico) · Spanish (Spain) ·
+Swahili · Swedish · Tamil · Telugu · Thai · Turkish · Ukrainian · Urdu · Vietnamese ·
+Welsh
 
 ## Configuration
 
@@ -236,7 +248,7 @@ Keys are stored on your machine and take effect from your next dub — no restar
 audio, subtitle or file name goes anywhere.
 
 What does leave is a handful of usage counts and, when something fails, a record
-of what went wrong. Both are turned off in **Settings → Privacy**.
+of what went wrong. Both can be turned off in **Settings → Privacy**.
 
 Cloud engines are not the default. Turn one on and your video goes to Perso for
 transcription, or the text to be translated goes to Google.
