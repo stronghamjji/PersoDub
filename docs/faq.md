@@ -47,8 +47,10 @@ Perso key, which uploads the video for transcription. See
 [Data and privacy](privacy.md).
 
 **Can I use PersoDub commercially?**
-Yes. It is Apache-2.0. You remain responsible for holding the rights to the material you
-dub, and for the terms of any optional cloud service you enable.
+Yes. It is AGPL-3.0: commercial use is allowed, and if you distribute a changed PersoDub
+or run one as a network service, the changed source must be shared under the same
+license. You remain responsible for holding the rights to the material you dub, and for
+the terms of any optional cloud service you enable.
 
 **Why are Intel Macs not supported?**
 The Mac build targets Apple Silicon, whose built-in acceleration the pipeline relies on;

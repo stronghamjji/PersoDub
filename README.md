@@ -1,65 +1,77 @@
-# PersoDub
+<p align="center">
+  <img src="docs/images/icon.png" width="96" alt="PersoDub" />
+</p>
 
-**Open-source AI video dubbing. PersoDub is the ElevenLabs, HeyGen and Rask AI alternative that runs on your own computer.**
+<h1 align="center">PersoDub</h1>
 
-Drop in a video, clone the speaker's voice, dub it into another language, and post it to
-YouTube Shorts, TikTok or Instagram Reels. By default PersoDub does the whole job on your
-desktop: separating the voice from the music, transcribing, translating, cloning the voice
-and mixing it back.
+<p align="center"><strong>Open-source AI video dubbing. PersoDub is the ElevenLabs, HeyGen and Rask AI alternative that runs on your own computer.</strong></p>
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#requirements)
-[![Version](https://img.shields.io/github/v/release/stronghamjji/PersoDub?color=green)](https://github.com/stronghamjji/PersoDub/releases)
-[![Privacy](https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg)](#data-and-privacy)
+<p align="center">
+  <a href="#get-started">Download</a> ·
+  <a href="#hear-the-difference">Hear the difference</a> ·
+  <a href="docs/usage.md">How to use it</a> ·
+  <a href="docs/faq.md">FAQ</a> ·
+  <a href="https://github.com/stronghamjji/PersoDub/issues">Report a problem</a>
+</p>
 
-<p>
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License" /></a>
+  <a href="docs/requirements.md"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases"><img src="https://img.shields.io/github/v/release/stronghamjji/PersoDub?color=green" alt="Version" /></a>
+  <a href="docs/privacy.md"><img src="https://img.shields.io/badge/privacy-your%20footage%20stays%20local-brightgreen.svg" alt="Privacy" /></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-mac.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
   <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
-**macOS** — The button downloads the `.dmg` straight away; open it and drag **PersoDub** into Applications.
-It's signed and notarized, so it opens with a normal double-click.
+<p align="center">
+  <img src="docs/images/finished-screen.png" width="100%"
+       alt="A finished job, English into Spanish: the script line by line on the left, each line with its original and its translation and how well the dubbed line fits its slot; the player on the right showing the dubbed video with its translated subtitle; and a timeline underneath." />
+</p>
 
-**Windows** — Download and run the `.exe`. It isn't code-signed yet, so
-SmartScreen shows "Windows protected your PC" the first time — click **More info**,
-then **Run anyway**. [Details](INSTALL.md#windows).
+<p align="center">Drop in a video. Clone the voice. Dub it. Post it to Shorts, TikTok or Reels.</p>
 
 ---
 
-## What is PersoDub?
+## What it does
 
-**Dub a video into another language in the original speaker's own voice, on your own computer.**
+<table>
+<tr>
+<td width="33%" valign="top">
 
-PersoDub is a desktop app that takes one video file and returns a dubbed version of it.
-It separates speech from background audio, transcribes it, works out who spoke when,
-translates each line, clones each speaker's voice, and mixes the result back over the
-original soundtrack. With the default settings, every one of those steps runs locally.
+<img src="docs/images/finished-screen.png" alt="A finished dub: the script beside the player" />
 
-> **Every line is yours.** Edit any translation by hand — or ask the **Dub Agent**.
-> Say *"retranslate line 4 so it fits"* and it retranslates just that line and remakes
-> its voice. The agent is Claude Code or Codex running on your own computer; your video
-> is never sent anywhere for it.
+### Dub
 
-<p align="center">
-  <img src="docs/images/finished-screen.png" width="100%"
-       alt="A finished job, English into Spanish: the script as a table on the left, each line with its original and its translation side by side and how much over or under its slot the dubbed line runs, two of them marked as fitting exactly; the player on the right showing the dubbed video with its translated subtitle; and a timeline underneath with a lane for the translation, a lane for the original and a lane for the subtitles.">
-</p>
+One video in, one dubbed video out, in each speaker's own voice. 10 languages on your computer, 77 with Perso's cloud.
 
-> **Subtitles burned into the picture?** The second tool on the left rail takes them
-> out. Draw a box over the writing, or let the app find it, then press **Erase**: it
-> repaints those frames and hands the clean video straight to a dub. It runs on your
-> computer like everything else, and it is slow, minutes for every minute of video,
-> so the screen says what it will cost before you start.
+</td>
+<td width="33%" valign="top">
 
-> **PersoDub is under active development.** It is usable today.
-> macOS on Apple Silicon and Windows are supported; Linux is planned.
-> Interfaces and defaults may change. Please report problems through
-> [Issues](https://github.com/stronghamjji/PersoDub/issues).
+<img src="docs/images/agent-screen.png" alt="The Dub Agent asked to make line 9 fit its slot" />
+
+### Fix every line
+
+Edit a line by hand, or tell the **Dub Agent** "make line 9 fit". Only that line is remade.
+
+</td>
+<td width="33%" valign="top">
+
+<img src="docs/images/erase-screen.png" alt="The erase screen: a box drawn over the burned-in subtitle, ready to erase" />
+
+### Erase burned-in subtitles
+
+Box the subtitles, press **Erase**, and dub the clean video.
+
+</td>
+</tr>
+</table>
 
 ## Hear the difference
 
-The same clip, dubbed English → Korean by each tool with the speaker's own voice
-cloned.
+Same clip, English → Korean, each tool cloning the speaker's voice.
 
 <table>
 <tr>
@@ -115,270 +127,72 @@ https://github.com/user-attachments/assets/fac60bb8-a18b-47ec-a9c8-c1a4509fa4fb
 </tr>
 </table>
 
-Listen for pacing: PersoDub never speeds the audio up to make a line fit. The difference
-is explained in [Why PersoDub](#why-persodub).
-The source files live in [docs/demo](docs/demo).
+Listen for pacing: PersoDub never speeds the audio up. The source files live in [docs/demo](docs/demo).
 
----
+## Get started
+
+1. Download for [macOS](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-mac.dmg) or [Windows](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup.exe).
+2. Drop in a video, or paste a link.
+3. Pick a language and press **Start dubbing**.
+
+First setup is under 1 GB. The AI engine downloads on your first dub (2–9 GB).
+
+<details>
+<summary>Install notes</summary>
+
+**macOS** — Open the `.dmg` and drag **PersoDub** into Applications. It is signed and notarized, so it opens with a normal double-click, and it checks for updates on launch.
+
+**Windows** — Run the `.exe`. It installs for your user account only. It is not code-signed yet, so SmartScreen shows "Windows protected your PC" the first time: click **More info**, then **Run anyway**. [Details](INSTALL.md#windows).
+
+A screen-by-screen walkthrough is in [docs/usage.md](docs/usage.md).
+
+</details>
+
+### Install with your AI assistant
+
+Paste this into Claude Code, Codex or any coding agent.
+
+```text
+Install PersoDub on this computer and check that it works.
+Repository: https://github.com/stronghamjji/PersoDub
+
+1. Check my OS, CPU, memory, free disk and GPU. PersoDub needs an Apple Silicon Mac
+   or 64-bit Windows 10/11, 16 GB of memory and 30 GB of free disk.
+   If this computer falls short, say so and stop.
+2. Install the latest release for my OS:
+   https://github.com/stronghamjji/PersoDub/releases/latest
+   On Windows, SmartScreen warns (not code-signed yet): More info, then Run anyway.
+3. Open PersoDub and wait for the first setup (under 1 GB).
+4. Ask me if I want more accurate transcription with a free Perso key. If yes, open
+   https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=install_prompt
+   then open PersoDub's Settings so I can paste the key in myself. Never ask to see it.
+5. Dub one video under a minute with me. Tell me the download size (2-9 GB) first.
+6. Report the version, where projects are saved, and how to reopen the app.
+Finish the setup, not just a plan. Tell me any step you could not do.
+```
 
 ## Why PersoDub
 
-- **Your footage stays yours.** Processing runs locally by default: no account, no
-  API key, no uploads. Cloud engines are opt-in only. See
-  [Data and privacy](#data-and-privacy).
-- **No time-stretching.** Most dubbing tools speed the audio up when a translation runs
-  longer than the original line — that's why dubs often sound rushed. PersoDub never
-  resamples the dubbed audio; the constraint is enforced in code, not convention.
-  Details in [Where PersoDub fits](docs/comparison.md).
-- **Voice cloning, not narration.** Each speaker's timbre is cloned from the source
-  audio, so the dub sounds like that person speaking another language, not a generic
-  synthetic narrator.
-- **Everything else is preserved.** Music and effects stay untouched; only speech is
-  replaced. Translated subtitles (`.srt`) are exported alongside the dubbed video.
+- **Your footage stays yours.** Local by default: no account, no API key, no uploads.
+- **No time-stretching.** Other tools speed the audio up. PersoDub never does.
+- **Voice cloning, not narration.** Each speaker still sounds like themselves.
+- **Everything else is kept.** Music and effects stay. The translated `.srt` comes with the video.
 
-## Requirements
+## Details
 
 | | |
 |---|---|
-| **Hardware** | Apple Silicon Mac (M1 or newer), or a 64-bit PC. Intel Macs are not supported. |
-| **OS** | macOS 11 (Big Sur) or later, or Windows 10 (21H2) / Windows 11. Linux is [planned](docs/roadmap.md). |
-| **Graphics (Windows)** | An NVIDIA GPU is strongly recommended — AMD and Intel graphics are not accelerated. Everything works without one, just slower; see [Speed without a GPU](docs/faq.md#speed-without-a-gpu). |
-| **Memory** | 16 GB or more recommended (24 GB for the Gemma translator). PersoDub won't start a dub on a computer with less than 8 GB. |
-| **Disk** | 30 GB free on macOS, 35 GB on Windows. The first setup is under 1 GB; the AI engine, translation runtime, and models download when you first dub — roughly 2–9 GB more depending on what you choose. Erasing subtitles needs a pack of its own, downloaded the first time you use it: 3.9 GB on macOS, 4.4 GB on Windows without an NVIDIA GPU and 8.5 GB with one. |
-| **Network** | Required for the first-run download. Afterwards PersoDub runs offline unless you enable a cloud engine. |
+| **Requirements** | Apple Silicon Mac or 64-bit Windows · 16 GB memory · 30 GB disk. [Full table](docs/requirements.md) |
+| **Languages** | 10 on your computer, 77 with Perso's cloud. [Full list](docs/languages.md) |
+| **Better quality** | A free Perso key for transcription, a Gemini key for translation. [Configuration](docs/configuration.md) |
+| **Privacy** | By default your video never leaves this computer. [What is sent](docs/privacy.md) |
+| **How it works** | Demucs, Whisper, CAM++, a local LLM, Qwen3-TTS. [Pipeline](docs/development.md) · [Comparison](docs/comparison.md) · [Roadmap](docs/roadmap.md) |
+| **Build from source** | [INSTALL.md](INSTALL.md) · [Development](docs/development.md) · [Contributing and security](docs/contributing.md) |
 
-## Installation
+## License and responsible use
 
-Both platforms install the same way: **go to the
-[latest release](https://github.com/stronghamjji/PersoDub/releases/latest)** and
-download the file for your computer.
+[AGPL-3.0](LICENSE). Use it, change it, sell it; if you distribute a changed version or run one as a service, the changed source is shared under the same license. Releases up to 0.6.5 were published under Apache 2.0 and stay that way.
 
-| Your computer | File to download |
-|---|---|
-| Mac with Apple Silicon (M1 or newer) | `PersoDub-<version>-arm64.dmg` |
-| Windows 10 (21H2+) / 11, 64-bit | `PersoDub-Setup-<version>.exe` |
+Clone only voices you have the right to use. [Responsible use](docs/responsible-use.md) · [Acknowledgments](docs/acknowledgments.md) · [NOTICE](NOTICE)
 
-**macOS** — Open the `.dmg` and drag **PersoDub** into Applications. It's signed and
-notarized, so it opens with a normal double-click, and it checks for updates on launch.
-Building from source: [INSTALL.md](INSTALL.md#macos--install-from-source-for-developers).
-
-**Windows** — Run `PersoDub-Setup-<version>.exe`. It installs for your user
-account only (no admin rights needed). The build isn't code-signed yet, so SmartScreen
-shows "Windows protected your PC" the first time — click **More info**, then
-**Run anyway**.
-
-The first setup is under 1 GB; when you start your first dub, the AI engine, translation
-runtime, and models download — roughly 2–9 GB more depending on what you choose (see
-[Requirements](#requirements)). [docs/usage.md](docs/usage.md#first-launch) shows what that screen looks like.
-
-## Usage
-
-1. Launch **PersoDub**. On first run it downloads its models (see
-   [Requirements](#requirements)); after that it opens on its first screen, which asks
-   one thing: which video?
-2. Drop your video on the drop zone, click **Choose a file**, or paste a video link —
-   MP4 or MOV, up to 2 GB.
-3. The **New project** dialog opens. Trim the part you want dubbed, pick the original
-   and target languages (10 on your computer, 77 with Perso's cloud; see
-   [Supported languages](#supported-languages)), and open **Advanced options** if you
-   want to change an engine.
-4. Click **Start dubbing**. The running screen ticks off the four stages, and counts
-   the lines as it voices them.
-5. When it finishes, the job opens on the finished screen: the script line by line
-   beside the player, a timeline underneath, and **Export** in the top bar for the
-   dubbed video and the translated `.srt`.
-
-Each line has a play button to hear it alone and a waveform button to remake its voice
-after you edit the words; **Original** and **Dubbed** swap which file the player shows,
-and the **Dub Agent** panel on the right can fix lines for you (see
-[What is PersoDub?](#what-is-persodub)). Past jobs are under **Projects**, the folder
-icon on the left.
-
-Engine choices (transcription, translation, quality) live under the **Advanced
-options** toggle, collapsed by default — see [Configuration](#configuration) for what
-each default is and how to switch a step to a cloud engine.
-
-**Erasing subtitles** has a screen of its own, the second icon on the left rail. Drop a
-video or paste a link, check the box the app draws over the writing and drag it if it
-missed, then press **Erase**. When it finishes, **Export** saves the clean video and
-**Start dubbing** hands it to a new project.
-
-A screen-by-screen walkthrough, with screenshots of every option, is in
-**[docs/usage.md](docs/usage.md)**.
-
-## Supported languages
-
-**On your computer (10):** English · Korean · Chinese · Japanese · French · German ·
-Italian · Portuguese · Russian · Spanish
-
-**With Perso's cloud (77):** Afrikaans · Arabic · Armenian · Assamese · Azerbaijani ·
-Belarusian · Bengali · Bosnian · Bulgarian · Catalan · Cebuano · Chichewa · Chinese ·
-Croatian · Czech · Danish · Dutch · English (UK) · English (US) · Estonian · Filipino ·
-Finnish · French · Galician · Georgian · German · Greek · Gujarati · Hausa · Hebrew ·
-Hindi · Hungarian · Icelandic · Indonesian · Irish · Italian · Japanese · Javanese ·
-Kannada · Kazakh · Korean · Kyrgyz · Latvian · Lingala · Lithuanian · Luxembourgish ·
-Macedonian · Malay · Malayalam · Marathi · Nepali · Norwegian · Pashto · Persian ·
-Polish · Portuguese (Brazil) · Portuguese (Portugal) · Punjabi · Romanian · Russian ·
-Serbian · Sindhi · Slovak · Slovenian · Somali · Spanish (Mexico) · Spanish (Spain) ·
-Swahili · Swedish · Tamil · Telugu · Thai · Turkish · Ukrainian · Urdu · Vietnamese ·
-Welsh
-
-## Configuration
-
-PersoDub works with no configuration: by default, transcription and speaker-labeling
-run on local Whisper + CAM++, and translation runs on local Hunyuan via Ollama.
-
-Want better quality? Add an API key in the app's **Settings** screen
-([screenshot](docs/usage.md#settings)) to switch that one step to a cloud engine:
-
-| Add this key | Improves | Get it from |
-|---|---|---|
-| **Perso API key** | Transcription and speaker-labeling accuracy | [Perso Dubbing](https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=readme) — includes a free allowance |
-| **Google Gemini key** | Translation quality | [Google AI Studio](https://aistudio.google.com/app/apikey) |
-
-Keys are stored on your machine and take effect from your next dub — no restart needed.
-
-> **Note:** PersoDub is an independent open-source project. It integrates with Perso and
-> Google Gemini as optional third-party services and is not affiliated with or endorsed
-> by either.
-
-## Data and privacy
-
-**Your video never leaves this computer.** With the default settings, no video,
-audio, subtitle or file name goes anywhere.
-
-What does leave is a handful of usage counts and, when something fails, a record
-of what went wrong. Both can be turned off in **Settings → Privacy**.
-
-Cloud engines are not the default. Turn one on and your video goes to Perso for
-transcription, or the text to be translated goes to Google.
-
-Exactly what is sent, and how to turn all of it off, is in
-**[docs/privacy.md](docs/privacy.md)**.
-
-### The Dub Agent and your files
-
-The Dub Agent is an assistant **already installed on your computer** — Claude Code or
-Codex — that PersoDub asks to edit the script. PersoDub has no assistant of its own,
-and your video is never sent anywhere for this. How much each one can see is different:
-
-- **Claude Code** can only use PersoDub's script tools. It cannot read your files or
-  run shell commands. **The safer choice.**
-- **Codex** can also **read any file you can read** on this computer, and whatever it
-  reads goes to OpenAI as part of the chat (including your own `AGENTS.md`, if you keep
-  one). It cannot change your files or use the network. If that matters to you, use
-  Claude Code.
-
-The conversation continues from one job to the next, kept by the assistant's own tool
-on your machine — closing PersoDub doesn't end it. Either one answers on your account
-with that vendor and is billed there.
-
-## Responsible use
-
-PersoDub clones the voices of real people. Please use it accordingly.
-
-- Only clone a voice that is yours, or one you have explicit permission to use.
-- Disclose AI-dubbed audio as synthetic wherever you publish it.
-- Do not use PersoDub to impersonate anyone, or to misrepresent what a person said.
-- You are responsible for holding the rights to your source material and for complying
-  with the laws and regulations that apply where you are.
-
-Dubbing from a pasted link fetches the video locally via yt-dlp — see
-[docs/privacy.md](docs/privacy.md#dubbing-from-a-link) for how that works and your
-responsibilities there.
-
-## How it works
-
-```mermaid
-flowchart LR
-    A["Video"] --> B["Source separation<br/>(Demucs)"]
-    B --> C["Transcription<br/>(faster-whisper)"]
-    C --> D["Speaker diarization<br/>(CAM++)"]
-    D --> E["Translation<br/>(Hunyuan via Ollama)"]
-    E --> F["Speech synthesis<br/>(Qwen3-TTS)"]
-    F --> G["Mix &amp; mux<br/>(FFmpeg)"]
-    G --> H["Finished video<br/>(.mp4 + .srt)"]
-```
-
-The app itself is a thin orchestrator. Each heavy stage runs as an isolated
-subprocess with its own Python environment, so a failure in one stage cannot take
-down the others. Architecture details are in [docs/development.md](docs/development.md).
-
-## Learn more
-
-- [Where PersoDub fits](docs/comparison.md) — how it compares to other open-source dubbing tools
-- [Known limitations & roadmap](docs/roadmap.md)
-- [Troubleshooting & FAQ](docs/faq.md)
-- [Data and privacy, in detail](docs/privacy.md)
-
-## Development
-
-Setup, architecture, and how to run the test suite are documented in
-**[docs/development.md](docs/development.md)**.
-
-The backend targets Python 3.11 and is not yet compatible with 3.13 or later.
-
-## Contributing
-
-Issues and pull requests are welcome. Please open an issue describing the problem or
-proposal before starting substantial work, so effort is not duplicated.
-
-You do not have to write a bug report by hand. When an install or a dub fails, the app
-reports it by itself: the machine, the step it stopped at, the error and the logs, with
-your home folder, your API keys and your links taken out first. The same failure from
-many machines becomes one issue with a count on it, not many. Exactly what is sent, and
-how to turn it off, is in **[docs/privacy.md](docs/privacy.md)**. With it turned off,
-the bug report form on the Issues page asks for the same facts and you choose what to
-paste.
-
-## Security
-
-Please do not report security issues in public issues. Use GitHub's
-[private vulnerability reporting](https://github.com/stronghamjji/PersoDub/security/advisories/new)
-so the problem can be addressed before disclosure.
-
-PersoDub stores your API keys in a file on your machine. Treat that file, and any log or
-screenshot you share, the way you would treat the keys themselves.
-
-## License
-
-Apache License 2.0 — see [LICENSE](LICENSE).
-
-[NOTICE](NOTICE) lists the third-party components and their licenses. This repository
-redistributes the CAM++ speaker model and a small amount of ported Demucs source
-(MIT, © Meta Platforms, Inc. and affiliates). Everything else is fetched from its own
-upstream source during installation.
-
-## Acknowledgments
-
-PersoDub stands on these open-source projects.
-
-| Project | Role |
-|---|---|
-| [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) | Voice-cloning speech synthesis |
-| [Demucs](https://github.com/adefossez/demucs) | Source separation — splits speech from background audio |
-| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | Speech recognition |
-| [CAM++ (3D-Speaker)](https://github.com/modelscope/3D-Speaker) | Speaker diarization |
-| [Ollama](https://github.com/ollama/ollama) + [Hunyuan](https://github.com/Tencent-Hunyuan) | Local translation model and runtime |
-| [FFmpeg](https://github.com/FFmpeg/FFmpeg) | Video and audio processing |
-| [video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover) | Erasing subtitles burned into the picture |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Fetching a video from a pasted link |
-| [Electron](https://github.com/electron/electron) | Desktop application framework |
-
-## Official source
-
-The only official source for PersoDub is
-[github.com/stronghamjji/PersoDub](https://github.com/stronghamjji/PersoDub). Downloads
-appear only on [this repository's Releases page](https://github.com/stronghamjji/PersoDub/releases).
-Copies of this project hosted under any other account are not maintained by us — please
-do not run software you obtained from them.
-
----
-
-<div align="center">
-
-Ever winced at a dub crammed into its slot at 1.3× speed? That is the problem this exists to fix.
-
-⭐ **Star the repo** so the next person looking for a way out finds it.
-
-</div>
+This repository, [github.com/stronghamjji/PersoDub](https://github.com/stronghamjji/PersoDub), is the only official source. Downloads appear only on its [Releases page](https://github.com/stronghamjji/PersoDub/releases).

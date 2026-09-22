@@ -6,7 +6,7 @@ description = "Voice-cloned video dubbing that runs locally"
 # (desktop/src/installSpec.js PYTHON_URL). Upper bound: six modules import
 # audioop, removed in Python 3.13.
 requires-python = ">=3.11,<3.13"
-license = { text = "Apache-2.0" }
+license = { text = "AGPL-3.0-or-later" }
 
 # Lets a plain `pytest` find the `app` package (otherwise only
 # `python -m pytest` from the repo root works).

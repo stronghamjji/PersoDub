@@ -21,5 +21,6 @@ within ±15% of its subtitle slot, and the assembly stage's watchdog flags any d
 from 1.000× playback speed in the job log — the rule is enforced in code, not by
 convention.
 
-**On licensing:** PersoDub is Apache-2.0, so it can be used inside a commercial or
-closed-source product without the copyleft obligations that GPL-3.0 and AGPL-3.0 carry.
+**On licensing:** PersoDub is AGPL-3.0, like VoiceStudio. Commercial use is fine; a
+changed version that is distributed or run as a service shares its source under the same
+license. Releases up to 0.6.5 were Apache-2.0 and stay that way.
