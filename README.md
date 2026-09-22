@@ -92,7 +92,7 @@ https://github.com/user-attachments/assets/09f6dbd8-70f1-487f-bf8d-2d9fa5cb6433
 </td>
 <td width="33%">
 
-https://github.com/stronghamjji/PersoDub/raw/main/docs/demo/other-tools.mp4
+<a href="docs/demo/other-tools.mp4"><img src="docs/images/other-tools.png" alt="The four other tools, one after another: click to play" /></a>
 
 </td>
 </tr>
