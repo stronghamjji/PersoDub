@@ -11,6 +11,16 @@ CUES = [{"start": 0.0, "end": 2.5, "text": "안녕하세요"},
         {"start": 3.0, "end": 5.0, "text": "두 번째 줄"}]
 
 
+def test_a_line_with_no_words_draws_nothing():
+    # A line the translator left untranslated has no words. It gets no event
+    # at all -- a box preset drew its empty rectangle over the video for it.
+    cues = [{"start": 0.0, "end": 1.0, "text": "Hi"}, {"start": 1.0, "end": 2.0, "text": ""}]
+    for preset in PRESETS:
+        ass = build_ass(cues, preset, width=1280, height=720, box_width=60)
+        assert "0:00:01.00,0:00:02.00" not in ass, preset
+        assert "0:00:00.00,0:00:01.00" in ass, preset
+
+
 def test_the_presets_are_all_there():
     # The plugin's ten, plus our own two solid-box ones (user, 2026-09-01:
     # nothing had a fully opaque white or black ground).

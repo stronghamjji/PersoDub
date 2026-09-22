@@ -30,6 +30,9 @@ export const ERROR_CODES = new Set([
   // Four families that were all "unknown" until 0.6.1. Every one of them was
   // a real, repeated failure nobody could see (2026-09-15).
   "model-download", "engine-500", "perso-bad-request", "translate-parse",
+  // The app was closed while the job was still running (app/jobs.py marks it
+  // on restore). Its own word so it reads apart from a real crash (2026-09-18).
+  "interrupted",
   "unknown",
 ]);
 
@@ -234,7 +237,7 @@ export async function countEvent(event, {
 // the rest away. A message nobody has taught this table about becomes
 // "unknown", which is the safe answer, not a reason to send the text instead.
 const ERROR_PATTERNS = [
-  [/ENOSPC|no space left/i,                          "disk-full"],
+  [/ENOSPC|no space left|not enough space/i,         "disk-full"],
   [/EACCES|EPERM|permission denied/i,                "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
   // Both spellings of a connection that went away: node and curl print the

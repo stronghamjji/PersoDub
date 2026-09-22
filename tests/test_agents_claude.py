@@ -121,7 +121,7 @@ def test_the_command_fences_the_assistant_in():
     # would come along and hand the assistant tools this app never offered.
     assert "--strict-mcp-config" in args
     allowed = args[args.index("--allowedTools") + 1]
-    assert allowed.count("mcp__persodub__") == 14
+    assert allowed.count("mcp__persodub__") == 21
     assert "mcp__persodub__cancel_dub" in allowed
     assert "mcp__persodub__burn_subtitles" in allowed
     denied = args[args.index("--disallowedTools") + 1]
@@ -184,7 +184,7 @@ def test_a_job_is_refused_when_the_disk_is_nearly_full(monkeypatch):
         m.check_space("/tmp")
     except HTTPException as e:
         assert e.status_code == 507
-        assert "Projects list" in e.detail  # says what to do about it
+        assert e.detail == "Not enough space. Needs 3.0 GB, 0.1 GB free."
     else:
         raise AssertionError("a nearly full disk should have been refused")
 

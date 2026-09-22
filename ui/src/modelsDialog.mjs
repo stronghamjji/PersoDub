@@ -50,7 +50,10 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       // A detail that only restates the title ("Downloading the translation
       // runtime: Downloading the translation runtime", 2026-09-08) shows once.
       packBusy.title = p.title || "";
-      packBusy.line = p.state === "progress" && p.detail && p.detail !== p.title ? `${p.title}: ${p.detail}` : (p.title || "");
+      // A retry notice stands alone: with the step title in front of it, the
+      // Settings row's 34 characters ended before the word "retrying" (W22).
+      packBusy.retry = p.state === "progress" && /^Connection problem/.test(p.detail || "");
+      packBusy.line = packBusy.retry ? p.detail : p.state === "progress" && p.detail && p.detail !== p.title ? `${p.title}: ${p.detail}` : (p.title || "");
       // The shell sends the pack's overall percent on every event.
       if (p.pct != null) packBusy.pct = p.pct;
       repaint();
@@ -276,7 +279,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       if (m.role === "pack") {
         // The desktop app installs and removes packs; a plain browser can only look.
         if (packBusy && packBusy.id === m.id) {
-          status.textContent = st.text + (packBusy.line ? ` · ${packBusy.line}` : "");
+          status.textContent = packBusy.retry ? packBusy.line : st.text + (packBusy.line ? ` · ${packBusy.line}` : "");
           btn.textContent = "Cancel"; btn.onclick = () => cancelPack(m.id);
         } else if (packFailed && packFailed.id === m.id) {
           status.textContent = `Stopped: ${packFailed.reason}`;

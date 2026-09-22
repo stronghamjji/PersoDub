@@ -1072,6 +1072,36 @@ def test_stale_voices_refuses_a_job_that_is_still_running(tmp_path):
     assert r.status_code == 409
 
 
+def test_stale_voices_speaks_a_line_written_in_after_it_was_left_untranslated(monkeypatch, tmp_path):
+    # The translator left line 2 empty, so the dub made no voice for it. Once
+    # someone writes it, it is waiting for a voice like any rewritten line --
+    # there is no wav to be older than the script, and the sweep passed it by.
+    said, built = [], []
+    monkeypatch.setattr(script_api, "resynth_one_line",
+                        lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: built.append(a))
+    jid = _dubbed_job(tmp_path, ["one", "", "three"], edits={2: "TWO"})
+    os.remove(tmp_path / "dubbed" / "qwen_line_1.wav")
+
+    r = client.post(f"/api/dub/jobs/{jid}/voices/stale")
+    assert r.json() == {"remade": [2], "skipped": 2}
+    assert [a[2] for a in said] == ["TWO"]
+
+
+def test_one_line_voice_refuses_a_line_with_no_words(monkeypatch, tmp_path):
+    # An untranslated line stays silent until it is written; the engine asked
+    # to speak nothing gives back noise, not silence.
+    said = []
+    monkeypatch.setattr(script_api, "resynth_one_line", lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: None)
+    jid = _dubbed_job(tmp_path, ["one", ""])
+
+    r = client.post(f"/api/dub/jobs/{jid}/script/2/voice")
+    assert r.status_code == 422
+    assert "no words" in r.json()["detail"]
+    assert said == []
+
+
 def test_one_line_voice_still_speaks_that_line_and_rebuilds(monkeypatch, tmp_path):
     # The sweep above and this share a helper now -- one line still goes
     # through, words and all.
@@ -1556,3 +1586,20 @@ def test_one_line_voice_says_the_engine_was_busy_instead_of_crashing(monkeypatch
     r = client.post(f"/api/dub/jobs/{jid}/script/1/voice")
     assert r.status_code == 503
     assert "busy" in r.json()["detail"]
+
+
+def test_remaking_voices_on_a_full_disk_is_a_507_before_any_voice_is_made(monkeypatch, tmp_path):
+    # The rebuild writes the whole dub again: the same 3 GB floor a new dub
+    # starts with, said with both numbers, before the voice engine is asked.
+    from app import models
+    said = []
+    monkeypatch.setattr(script_api, "resynth_one_line", lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: None)
+    monkeypatch.setattr(models, "free_bytes_at", lambda path: int(0.5 * 1024 ** 3))
+    jid = _dubbed_job(tmp_path, ["one", "two"], edits={1: "ONE"}, stale=(1,))
+
+    for url in (f"/api/dub/jobs/{jid}/script/1/voice", f"/api/dub/jobs/{jid}/voices/stale"):
+        r = client.post(url)
+        assert r.status_code == 507, url
+        assert r.json()["detail"] == "Not enough space. Needs 3.0 GB, 0.5 GB free."
+    assert said == []

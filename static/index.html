@@ -960,7 +960,12 @@
      query off the window's -- with the agent column open a 1440px window leaves
      the work area 830px, and the window's width would say "wide" about a box
      that is not. */
-  .done-main.stacked { flex-direction: column-reverse; }
+  /* column with the video ordered first, not column-reverse: a reversed column
+     starts at the bottom, so when its panes were taller than the box (a short
+     window: 200 of video + 120 of table in 273) the overflow went out of the
+     TOP and the video pane lay over the top bar (user, 2026-09-21). */
+  .done-main.stacked { flex-direction: column; }
+  .done-main.stacked > .video-pane { order: -1; }
   /* A container, so the table below can pick its own width off THIS pane rather
      than off the window: the grip between the panes changes it with the window
      standing still. */
@@ -1177,6 +1182,12 @@
   .sc-wave.fresh svg { stroke: currentColor; }
   .sc-wave:disabled { cursor: progress; }
   .sc-wave:disabled svg { animation: spin 1s linear infinite; }
+  /* A line left untranslated (ui/src/scriptTable.mjs): nothing to play and no
+     words to speak, so both buttons rest -- faded, not turning -- until it is
+     written. */
+  .sc-listen.sc-off, .sc-wave.sc-off { opacity: 0.35; cursor: not-allowed; }
+  .sc-listen.sc-off:hover { border-color: var(--primary-line); }
+  .sc-wave.sc-off svg { animation: none; }
 
 
   /* The script cell is the point of the table: a line you can only read is half
@@ -1184,6 +1195,13 @@
   .sc-dst[contenteditable] { outline: none; border-radius: 4px; padding: 2px 4px;
     margin: -2px -4px; cursor: text; }
   .sc-dst[contenteditable]:hover { background: var(--trim-track); }
+  /* The words' own cell says a line was left untranslated, in the red the
+     table uses for what needs fixing, where the translation belongs. Drawn by
+     the stylesheet rather than written in, so it is never saved as the words;
+     gone as soon as the cell is typed in, and while it has the caret. */
+  .sc-dst[data-empty] { min-height: 1.4em; }
+  .sc-dst[data-empty]:empty:not(:focus)::before { content: attr(data-empty);
+    color: var(--destructive); font-weight: 600; }
   .sc-dst[contenteditable]:focus { background: var(--background);
     box-shadow: 0 0 0 2px var(--primary); }
   /* An icon button beside the edited words, not an underlined "revert" under
@@ -1211,9 +1229,13 @@
      shared -- the old rule, kept for the narrow window. A portrait clip is
      drawn to the pane's height, so it gets more of it: 46vh leaves a 13-inch
      window (800px tall) about 200px of table. */
-  .done-main.stacked > .video-pane { width: auto; min-width: 0;
-    flex: 0 0 clamp(200px, 36vh, 440px); }
-  .done-main.stacked > .video-pane.portrait { flex-basis: clamp(200px, 46vh, 600px); }
+  /* Never more than the box less the table's own 120px floor and the 8px gap:
+     in a short window the video gives way, down to 120px, before anything
+     spills out of the box. */
+  .done-main.stacked > .video-pane { width: auto; min-width: 0; min-height: 120px;
+    flex: 0 0 min(clamp(200px, 36vh, 440px), calc(100% - 128px)); }
+  .done-main.stacked > .video-pane.portrait {
+    flex-basis: min(clamp(200px, 46vh, 600px), calc(100% - 128px)); }
   .video-tabs { flex: 0 0 auto; box-sizing: border-box; height: 40px; display: flex;
     background: var(--head-bg); border-bottom: 1px solid var(--head-line); }
   .vtab { flex: 1; border: none; background: none; cursor: pointer;
@@ -2863,6 +2885,7 @@ import { initSettingsUi } from "/js/settingsDialog.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
 import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "/js/eraseScreen.mjs";
 import { initProjectsUi, shownName } from "/js/projects.mjs";
+import { countedOnce } from "/js/reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "/js/runningScreen.mjs";
 import { initScriptTableUi } from "/js/scriptTable.mjs";
 import { initTimelineUi, TL_LABEL_PX } from "/js/timeline.mjs";
@@ -4073,7 +4096,7 @@ function showIfOutOfSpace(e) {
   // over this app's life, so both are matched: an out-of-space error that fell
   // through to the plain red line would tell the user to check a disk they
   // cannot see from here.
-  if (!/disk space|저장 공간/i.test(text)) return false;
+  if (!/disk space|not enough space|저장 공간/i.test(text)) return false;
   $("spaceMessage").textContent = text;
   $("spaceOverlay").classList.add("open");
   return true;
@@ -4164,7 +4187,16 @@ async function handleJobUpdate(job, { opened = false } = {}) {
   // Never the first line: a job log opens with the video's own name -- a
   // title, a link, a file name -- and on a job that died early that line was
   // inside the last six and went into twelve public issues (2026-09-15).
-  window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(1).slice(-6).join("\n"), job.id);
+  // Once per job, and remembered across restarts. This runs every time a
+  // finished job is drawn -- opened from the list, walked back to, restored as
+  // the last screen at launch -- and each of those sent another report. The
+  // shell keeps its own guard for the session; this one survives a restart,
+  // which is the case that produced the empty second report: a job's log is
+  // not saved to disk, so after a restart there is nothing left to send and
+  // the relay files the blank as a failure of its own (2026-09-18).
+  if (!countedOnce(job.id)) {
+    window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(1).slice(-6).join("\n"), job.id);
+  }
 
   await renderDone(job);
 }
@@ -4860,7 +4892,9 @@ function updateSubtitleNow() {
   // same trick made the first line reappear, which read as a bug (user,
   // 2026-09-01 evening).
   if (idx < 0 && doneVideo.paused && t <= subCueOf(lines[0], 0).start) idx = 0;
-  if (idx < 0) { subOverlay.hidden = true; return; }
+  // A line left untranslated has no words, and the burn draws nothing for it
+  // (app/subtitle_ass.py) -- nor does the screen, not even a box preset's box.
+  if (idx < 0 || !(lines[idx].text || "").trim()) { subOverlay.hidden = true; return; }
   subNowIdx = idx;
   const pic = syncSubOverlayBox();
   // The lines as measured, so the screen and the burn break them alike; the

@@ -18,6 +18,7 @@ import tempfile
 from typing import Callable, List, Optional
 
 from app.run_errors import describe_exit_failure, describe_start_failure
+from app.timeouts import scaled_timeout
 
 # Dedicated venv with faster-whisper installed (see app/docs/INTEGRATION_SPEC.md
 # for how it was set up). Override with STT_PYTHON for a different interpreter
@@ -34,6 +35,7 @@ def transcribe_local(
     timeout: int = 900,
     log: Optional[Callable[[str], None]] = None,
     on_language: Optional[Callable[[str], None]] = None,
+    video_duration: Optional[float] = None,
 ) -> List[dict]:
     """Transcribe audio_path with local Whisper. Returns a list of cues in the
     same shape the pipeline expects everywhere else: [{"start": float,
@@ -55,6 +57,10 @@ def transcribe_local(
     if not os.path.exists(SCRIPT_PATH):
         raise RuntimeError("local STT script missing: %s" % SCRIPT_PATH)
 
+    # video_duration, when known, scales `timeout` up for long videos (see
+    # app.timeouts.scaled_timeout); omitted, it's today's fixed value.
+    effective_timeout = scaled_timeout(video_duration, timeout)
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         out_path = os.path.join(tmp_dir, "whisper_output.json")
         cmd = [STT_PYTHON, SCRIPT_PATH, "--audio", audio_path, "--output", out_path]
@@ -64,9 +70,10 @@ def transcribe_local(
             cmd += ["--word-timestamps"]
 
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=effective_timeout)
         except Exception as e:
-            raise RuntimeError(describe_start_failure("local STT", e, timeout)) from e
+            raise RuntimeError(describe_start_failure("local STT", e, effective_timeout)) from e
 
         if r.returncode != 0 or not os.path.exists(out_path):
             raise RuntimeError(describe_exit_failure("local STT", r))

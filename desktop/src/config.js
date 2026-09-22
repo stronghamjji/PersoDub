@@ -77,6 +77,17 @@ export function notEnoughSpace(neededBytes, freeBytes) {
     + `Free up about ${gb(neededBytes - freeBytes)} GB and start again.`;
 }
 
+/** A sentence to show the user, or null when this computer has the memory to dub.
+ *
+ * Total memory (os.totalmem), never free: os.freemem read 0.09 GB on a healthy
+ * 24 GB Mac in the middle of a dub. 7 GB, not 8, because an "8 GB" computer
+ * reports a little under 8. The same rule app/room.py applies to a dub.
+ */
+export function notEnoughMemory(totalBytes) {
+  if (!totalBytes || totalBytes >= 7 * GB) return null;
+  return "This computer needs 8 GB of memory to dub.";
+}
+
 /** Bytes free on the volume the kit will live on, or null if unreadable.
  *
  * Walks up to the nearest folder that exists: on a first install the kit

@@ -322,15 +322,19 @@ def _stub_run_dub_until_translation(monkeypatch):
     local Whisper, CAM++). The translator under test raises there, so nothing
     after translation needs stubbing."""
     class _FakeSep:
+        def __init__(self, *a, **k):
+            pass
+
         def separate(self, video_path, out_dir):
             return {"vocals": "/local/vocals.wav", "background": "/local/background.wav"}
 
     monkeypatch.setattr(pipeline, "SeparationEngine", _FakeSep)
     monkeypatch.setattr(
         pipeline, "transcribe_local",
-        lambda video, language=None, log=None, on_language=None: [{"start": 0.0, "end": 2.0, "text": "hi"}],
+        lambda video, language=None, log=None, on_language=None, video_duration=None:
+            [{"start": 0.0, "end": 2.0, "text": "hi"}],
     )
-    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None: cues)
+    monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 
 
 class _QuotaExhaustedTranslator(FakeTranslator):
@@ -410,6 +414,58 @@ def test_an_unexpected_gemini_failure_names_the_part_and_sends_them_to_google(
     assert str(e.value).endswith("Ask Google if it keeps happening.")
 
 
+class _CursedLineTranslator:
+    """A translator run for real: fit_translate drives its _ask, and translate()
+    is the engines' own chunked fallback. Every chunk comes back with no lines
+    at all (issue #82's "got 0, need N"), so each line is asked alone -- and a
+    source line with "cursed" in it never comes back readable in any format
+    (issue #88's answer cut off mid-string)."""
+    max_budget_retries = 0
+
+    def _ask(self, prompt):
+        asked = [ln for ln in prompt.splitlines() if ln[:1].isdigit() and ". " in ln]
+        if len(asked) > 1:
+            return "[]"
+        if "cursed" in asked[0]:
+            return '["cut off mid-str'
+        if "candidate" in prompt:
+            return j([["안녕하세요 반가워요", "안녕 반가워", "반가워요"]])
+        return j(["안녕하세요 반가워요"])
+
+    def translate(self, texts, target_lang, source_lang=None, durations=None, fuller=False):
+        from app.translate import _translate_with_fallback
+        return _translate_with_fallback(self, texts, target_lang, source_lang, durations, fuller)
+
+
+def test_a_line_that_cannot_be_translated_is_left_silent_and_marked_and_the_job_goes_on(tmp_path):
+    # Issue #82: one line out of 969 failed and the whole job died with it. Now
+    # that line is written with no words (the voice stage leaves it silent), the
+    # script marks it for the user or the agent, and every other line is kept.
+    from app.dub_script import load_lines
+    src = [
+        {"start": 0.0, "end": 2.0, "text": "Hello there."},
+        {"start": 3.0, "end": 5.0, "text": "A cursed line."},
+        {"start": 6.0, "end": 8.0, "text": "Nice to meet you."},
+    ]
+    logs = []
+
+    out = pipeline._auto_translate_srt(src, "ko", _CursedLineTranslator(), str(tmp_path),
+                                       source_lang="en", log=logs.append)
+
+    assert [c["text"] for c in read_cues(out)] == ["안녕하세요 반가워요", "", "안녕하세요 반가워요"]
+    lines = load_lines(str(tmp_path), "ko")
+    assert [l["untranslated"] for l in lines] == [False, True, False]
+    assert lines[1]["source"] == "A cursed line."
+    assert lines[1]["voice_stale"] is False     # nothing to remake until it has words
+    assert any("1 lines could not be translated" in m for m in logs)
+
+
+def test_a_dub_where_no_line_could_be_translated_fails_rather_than_going_silent(tmp_path):
+    src = [{"start": 0.0, "end": 2.0, "text": "cursed"}, {"start": 3.0, "end": 5.0, "text": "cursed too"}]
+    with pytest.raises(RuntimeError, match=r"no line could be translated \(0 of 2\)"):
+        pipeline._auto_translate_srt(src, "ko", _CursedLineTranslator(), str(tmp_path), source_lang="en")
+
+
 def test_a_local_translator_failing_points_at_settings_not_at_google(
         monkeypatch, tmp_path):
     # Nobody to ask about a model running on the user's own machine.
@@ -424,3 +480,31 @@ def test_a_local_translator_failing_points_at_settings_not_at_google(
     assert str(e.value).startswith("Translation failed (Gemma:")
     assert "Google" not in str(e.value)
     assert "pick another translator in Settings" in str(e.value)
+
+
+def test_a_translator_without_length_rules_is_told_no_length_and_never_re_asked(tmp_path):
+    # Hunyuan read "반드시 10자 이내" back as the line (2026-09-19). A translator
+    # with length_rules False gets one plain draft: no budgets, no seconds, and
+    # no re-ask even for a line far longer than its slot.
+    src = [
+        {"start": 0.0, "end": 1.0, "text": "So how many of you, in the last week,"},
+        {"start": 2.0, "end": 4.0, "text": "used any AI tool to code?"},
+    ]
+    eng = FakeTranslator(ask_responses=[
+        j(["지난주에 여러분 중에 몇 분이나 이렇게 오래 말하는 줄이 있을까요", "인공지능 도구로 코딩해 봤어?"]),
+    ])
+    eng.length_rules = False
+    out = pipeline._auto_translate_srt(src, "ko", eng, str(tmp_path), source_lang="en")
+
+    assert len(eng.prompts) == 1
+    assert "반드시" not in eng.prompts[0] and "must fit" not in eng.prompts[0]
+    assert "(no length limit)" in eng.prompts[0]
+    assert [c["text"] for c in read_cues(out)][0].startswith("지난주에")
+
+
+def test_only_the_hunyuan_model_goes_without_length_rules():
+    from app.config import OLLAMA_GEMMA_MODEL, OLLAMA_HUNYUAN_MODEL
+    from app.translate import OllamaTranslator
+
+    assert OllamaTranslator(url="http://x", model=OLLAMA_HUNYUAN_MODEL).length_rules is False
+    assert OllamaTranslator(url="http://x", model=OLLAMA_GEMMA_MODEL).length_rules is True

@@ -104,3 +104,145 @@ test("a download that broke mid-way is reported as interrupted, other failures k
   assert.equal(downloadInterrupted(""), false);
   assert.match(DOWNLOAD_INTERRUPTED, /Download and Start/);
 });
+
+// Issues #92 (503 "Backend is unhealthy" from GitHub's file host) and #89
+// (IncompleteRead mid-download): a passing network error gets the step tried
+// again; the waits are injected so these tests do not wait.
+function flaky(errors, log) {
+  let calls = 0;
+  let ran = false;
+  return {
+    id: "ffmpeg",
+    title: "ffmpeg",
+    isDone: () => ran,
+    run: async () => {
+      calls++;
+      log.push(calls);
+      if (calls <= errors.length) throw new Error(errors[calls - 1]);
+      ran = true;
+    },
+  };
+}
+const noWait = { sleep: async () => {}, retryDelaysMs: [5, 20] };
+
+test("a 503 twice then success runs the step three times and reports the retries", async () => {
+  const log = [];
+  const events = [];
+  const busy = "requests.exceptions.HTTPError: 503 Server Error: Backend is unhealthy for url: https://media.githubusercontent.com/x";
+  await runInstall([flaky([busy, "download failed 503: https://x"], log)], { ...noWait, onProgress: (e) => events.push(e) });
+  assert.deepEqual(log, [1, 2, 3]);
+  assert.deepEqual(events.filter((e) => /retrying/.test(e.detail || "")).map((e) => e.detail),
+    ["Connection problem, retrying (2/3)", "Connection problem, retrying (3/3)"]);
+  assert.ok(!events.some((e) => e.state === "error"));
+  assert.equal(events.at(-1).state, "done");
+});
+
+test("IncompleteRead three times gives up after three tries with the last error", async () => {
+  const log = [];
+  const events = [];
+  const cut = (n) => `urllib3.exceptions.ProtocolError: ('Connection broken: IncompleteRead(${n} bytes read)')`;
+  await assert.rejects(
+    runInstall([flaky([cut(1), cut(2), cut(3)], log)], { ...noWait, onProgress: (e) => events.push(e) }),
+    (err) => err.message === cut(3),
+  );
+  assert.deepEqual(log, [1, 2, 3]);
+  assert.deepEqual(events.filter((e) => e.state === "error").map((e) => e.detail), [cut(3)]);
+});
+
+test("a failure that is not the network is not tried again", async () => {
+  for (const message of ["sha256 mismatch for https://x: got abc", "download failed 404: https://x", "File \"x.py\", line 503, in main\nValueError: bad"]) {
+    const log = [];
+    await assert.rejects(runInstall([flaky([message], log)], noWait));
+    assert.deepEqual(log, [1], message);
+  }
+});
+
+test("a step that ran but left no artifacts is not tried again", async () => {
+  const log = [];
+  await assert.rejects(runInstall([step("a", { completes: false }, log)], noWait), /did not complete/);
+  assert.deepEqual(log, ["run:a"]);
+});
+
+test("a cancelled install is not tried again, even when the killed process read like a network error", async () => {
+  const log = [];
+  await assert.rejects(
+    runInstall([flaky(["requests.exceptions.ConnectionError: aborted"], log)], { ...noWait, stop: () => true }),
+    /ConnectionError/,
+  );
+  assert.deepEqual(log, [1]);
+});
+
+test("a cancel during the wait ends the install without another try", async () => {
+  const log = [];
+  let cancelled = false;
+  await assert.rejects(
+    runInstall([flaky(["ECONNRESET"], log)], { retryDelaysMs: [5, 20], sleep: async () => { cancelled = true; }, stop: () => cancelled }),
+    /ECONNRESET/,
+  );
+  assert.deepEqual(log, [1]);
+});
+
+import { missingVcRuntime, vcRuntimeFailure, VC_RUNTIME_MISSING, VC_RUNTIME_URL } from "./installer.js";
+
+test("the Visual C++ runtime check names the missing files on Windows only, and never blocks when it cannot look", () => {
+  const env = { SystemRoot: "C:\\Windows" };
+  const sys32 = "C:\\Windows\\System32";
+  const all = [sys32, ...["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"].map((f) => `${sys32}\\${f}`)];
+  const has = (paths) => (p) => paths.includes(p);
+  assert.deepEqual(missingVcRuntime({ platform: "win32", env, exists: has(all) }), []);
+  assert.deepEqual(missingVcRuntime({ platform: "win32", env, exists: has([sys32, `${sys32}\\vcruntime140.dll`]) }),
+    ["msvcp140.dll", "vcruntime140_1.dll"]);
+  assert.equal(missingVcRuntime({ platform: "win32", env: { windir: "C:\\Windows" }, exists: has([sys32]) }).length, 3);
+  // No Windows folder to look in is not a verdict.
+  assert.deepEqual(missingVcRuntime({ platform: "win32", env: {}, exists: () => false }), []);
+  assert.deepEqual(missingVcRuntime({ platform: "win32", env, exists: () => false }), []);
+  const looked = [];
+  for (const platform of ["darwin", "linux"]) {
+    assert.deepEqual(missingVcRuntime({ platform, env, exists: (p) => { looked.push(p); return false; } }), []);
+  }
+  assert.deepEqual(looked, [], "Mac and Linux never look");
+});
+
+test("a pack that died for want of the Visual C++ runtime says so, other failures do not", () => {
+  const i101 = "Microsoft Visual C++ Redistributable is not installed, this may lead to the DLL load failure.\n"
+    + "OSError: [WinError 126] The specified module could not be found. Error loading \"C:\\PersoDub\\engines_venv\\Lib\\site-packages\\torch\\lib\\c10.dll\" or one of its dependencies.";
+  const i103 = "ImportError: DLL load failed while importing _multiarray_umath: A dynamic link library (DLL) initialization routine failed.";
+  assert.equal(vcRuntimeFailure(i101), true);
+  assert.equal(vcRuntimeFailure(i103), true);
+  assert.equal(vcRuntimeFailure("requests.exceptions.ConnectionError: Max retries exceeded with url: /x"), false);
+  assert.equal(vcRuntimeFailure("sha256 mismatch for https://example.com/a.zip: got 00ff"), false);
+  assert.equal(vcRuntimeFailure(""), false);
+  assert.equal(VC_RUNTIME_MISSING, "Windows needs Microsoft Visual C++ to run the AI engine. Install it, then try again.");
+  assert.equal(VC_RUNTIME_URL, "https://aka.ms/vc14/vc_redist.x64.exe");
+});
+
+test("no network at all is a network error too, in each downloader's own words", async () => {
+  // Wi-Fi off, then Resume, on Windows (2026-09-21): the hf CLI's sentence held
+  // none of the words this looked for, so the step failed in half a second,
+  // nothing was retried and the traceback's first line went on the screen.
+  const hfOffline = "huggingface_hub.errors.LocalEntryNotFoundError: An error happened while trying to locate "
+    + "the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on "
+    + "the local disk. Please check your internet connection and try again.";
+  const { worthRetrying } = await import("./installer.js");
+  for (const said of [
+    hfOffline,
+    "fetch failed",                                                   // this app's own download()
+    "URLError: <urlopen error [Errno 8] nodename nor servname provided, or not known>",  // Whisper, macOS
+    "URLError: <urlopen error [Errno -3] Temporary failure in name resolution>",         // Whisper, Linux
+  ]) {
+    assert.equal(downloadInterrupted(said), true, said.slice(0, 40));
+    assert.equal(worthRetrying(said), true, said.slice(0, 40));
+  }
+  // and the step really is tried again, then shown as the plain sentence
+  const log = [];
+  let calls = 0;
+  const flaky = { id: "models", title: "models", isDone: () => calls >= 3,
+    run: async () => { calls += 1; log.push(calls); if (calls < 3) throw new Error(hfOffline); } };
+  const seen = [];
+  await runInstall([flaky], { retryDelaysMs: [0, 0], sleep: async () => {}, onProgress: (p) => seen.push(p.detail || "") });
+  assert.deepEqual(log, [1, 2, 3]);
+  assert.ok(seen.includes("Connection problem, retrying (2/3)"));
+  // what is NOT the network stays a plain failure
+  assert.equal(worthRetrying("sha256 mismatch for https://example.com/a.zip: got 00ff"), false);
+  assert.equal(worthRetrying("download failed 404: https://example.com/a.zip"), false);
+});

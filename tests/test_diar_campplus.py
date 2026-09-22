@@ -341,3 +341,37 @@ def test_diar_timeout_garbage_env_falls_back_to_default(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(dcc)
+
+
+# --- timeout scales with the video's length (long videos used to die on a
+# fixed 600s wall regardless of how long the video actually was). The formula
+# itself is tested once, shared, in tests/test_timeouts.py -- this is just the
+# wiring: the computed timeout must actually reach subprocess.run, with
+# PERSODUB_DIAR_TIMEOUT still the floor (backward compatible).
+
+def test_diarize_passes_computed_timeout_to_subprocess_run(monkeypatch):
+    import sys
+
+    from app import timeouts
+
+    monkeypatch.setattr(dcc, "DIAR_PYTHON", sys.executable)
+    monkeypatch.setattr(dcc, "SCRIPT_PATH", sys.executable)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_CAP", 100000.0)
+
+    class _R:
+        returncode = 0
+        stderr = ""
+
+    captured = {}
+
+    def fake_run(cmd, capture_output, text, timeout, **_kw):
+        captured["timeout"] = timeout
+        _write_worker_output(cmd[cmd.index("--output") + 1],
+                             {"ok": True, "speakers": ["SPK0", "SPK1", "SPK0"]})
+        return _R()
+
+    monkeypatch.setattr(dcc.subprocess, "run", fake_run)
+    dcc.diarize("/fake/vocals.wav", CUES, video_duration=600.0)  # 10 min
+
+    assert captured["timeout"] == 6000.0

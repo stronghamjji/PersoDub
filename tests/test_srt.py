@@ -109,6 +109,27 @@ def test_borrow_time_merges_overflowing_cue_with_next():
     assert "Okay." in out[0]["text"]
 
 
+def test_borrow_time_never_swallows_an_untranslated_line():
+    # The translator left the next line empty. Merged into the line before it,
+    # it would vanish from the script instead of being marked for a fix.
+    long_text = "This is a very long sentence that cannot possibly fit here"
+    need = estimate_seconds(long_text, "en")
+    cues = [
+        {"start": 0.0, "end": need / 3, "text": long_text},
+        {"start": need / 3, "end": need * 2, "text": ""},
+    ]
+    assert borrow_time(cues, "en") == cues
+
+
+def test_an_untranslated_line_survives_the_srt_round_trip():
+    # An empty line is written as a block with no text, and read back as one.
+    cues = [{"start": 0.0, "end": 1.0, "text": "a"}, {"start": 1.0, "end": 2.0, "text": ""},
+            {"start": 2.0, "end": 3.0, "text": "c"}]
+    assert [c["text"] for c in parse_srt(build_srt(cues))] == ["a", "", "c"]
+    cues[2]["text"] = ""   # the last line too, where the file ends
+    assert [c["text"] for c in parse_srt(build_srt(cues))] == ["a", "", ""]
+
+
 def test_borrow_time_leaves_fitting_cues_alone():
     cues = [
         {"start": 0.0, "end": 3.0, "text": "Hi."},

@@ -1,13 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
 import { join, dirname, basename } from "node:path";
+import { totalmem } from "node:os";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { parseEnvFile, KIT_ENV, migrateKitEnv } from "./src/kitEnv.js";
 import { fileURLToPath } from "node:url";
-import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt } from "./src/config.js";
+import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, notEnoughMemory, freeSpaceAt } from "./src/config.js";
 import { checkKit, readKitVersion } from "./src/engineCheck.js";
 import { killStalePids, startEngines } from "./src/orchestrator.js";
 import { buildSteps, bytesStillNeeded, baseSteps, packSteps, packInstalled, packInstallingMarker, syncEraserKitEnv, torchVariantFor, PACKS, PACK_DIRS } from "./src/installSpec.js";
-import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED } from "./src/installer.js";
+import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTERRUPTED, missingVcRuntime, vcRuntimeFailure, VC_RUNTIME_MISSING, VC_RUNTIME_URL } from "./src/installer.js";
 import { revealAllowed } from "./src/revealPolicy.js";
 import { cancelCurrent } from "./src/exec.js";
 import { readRuntime } from "./src/runtimeFile.js";
@@ -23,8 +24,31 @@ import { buildLogArchive } from "./src/reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./src/reportQueue.js";
 import { IS_WIN } from "./src/platform.js";
 
+// Two launches must never both start backends: the second would overwrite
+// pids.json with its own PIDs, and killStalePids on the NEXT boot (whichever
+// happens first) then reads and kills the OTHER instance's engines -- the
+// double-launch race that took down a running instance's uvicorns within 12 s
+// (Windows, 2026-09-18). The lock makes a second launch a no-op before it
+// touches pids.json, an engine, or a window; the first instance's window
+// comes to the front instead. Must run before anything else in the app.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
+let win = null; // the app's one window; a second launch focuses it instead of opening another
+
+// Fired on the FIRST instance when a second launch is attempted; bring the
+// existing window forward instead. Registered even before app.whenReady(), as
+// Electron docs ask -- but win does not exist until boot finishes, so a
+// second launch during that window is simply dropped (nothing to focus yet).
+app.on("second-instance", () => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+});
+
 // The boot's install context (kit, bundled payload, downloader), kept so the
 // pack IPC below can run a pack's steps from the same table later.
 let installCtx = null;
@@ -693,6 +717,10 @@ ipcMain.handle("shell:reveal", (_e, target) => {
 });
 
 app.whenReady().then(() => {
+  // A second launch already quit above; nothing here may run for it -- there
+  // is no guarantee 'ready' fires only for the instance that holds the lock.
+  if (!gotLock) return;
+
   // One greppable line naming the running version -- the e2e update test (and
   // any future bug report) reads it instead of guessing from filenames.
   shellLog(`PERSODUB_VERSION ${app.getVersion()}`);
@@ -741,7 +769,7 @@ app.whenReady().then(() => {
   if (!app.isPackaged && process.platform === "darwin" && app.dock) {
     try { app.dock.setIcon(join(HERE, "build", "icon.png")); } catch { /* cosmetic */ }
   }
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     icon: join(HERE, "build", "icon.png"),
     // What the frame is painted with before the first page arrives. The app is
     // dark (0.5.5), and Electron's default white flashed on every launch.
@@ -798,21 +826,48 @@ app.whenReady().then(() => {
   // reason -- it is a web page served over http -- so the status is checked
   // against the two that count and the detail is reduced to one published
   // word here. A cancel is not a failure and is deliberately not counted.
+  // A job is counted and reported once. The page calls this every time it
+  // draws a finished job -- opening it from the list, walking back to it, the
+  // last screen being restored at launch -- and nothing remembered that the
+  // job had already been sent. Nine pairs of duplicate issues came of it, and
+  // the second of each pair arrived empty: a job's log is deliberately not
+  // saved to disk (app/jobs.py SAVED_FIELDS), so after a restart the page has
+  // nothing to send, an empty message fingerprints differently from the real
+  // one, and the relay files it as a failure nobody had seen (2026-09-18).
+  const countedJobs = new Set();
   ipcMain.on("shell:count-dub", async (_e, msg) => {
     const status = msg && msg.status;
     if (status !== "done" && status !== "error") return;
     const detail = String((msg && msg.detail) || "");
-    const code = status === "error" ? classifyError(detail) : undefined;
     // Only the shell may name the job: the page is a web page, so its id is
     // checked against the shape a job id has before it is put in a URL.
     const jobId = /^[0-9a-f]{6,32}$/.test(String((msg && msg.job) || "")) ? msg.job : undefined;
+    if (jobId) {
+      if (countedJobs.has(jobId)) return;
+      countedJobs.add(jobId);
+    }
     // Which parts went through Perso, what it cost and how long the video
     // was -- off the job's own record, not the page's message.
-    const facts = dubFacts(await fetchJob(jobId));
-    countUsage(status === "done" ? "dub_success" : "dub_failure", bootedKitDir, code, undefined, facts);
+    const job = await fetchJob(jobId);
+    // A dub the app was killed under is not a failure of the dub. The engine
+    // marks it on restore (app/jobs.py: a job still "running" becomes an error
+    // reading "interrupted"), and the page's log tail is empty by then, so
+    // without this the report went out as "unknown" -- indistinguishable from
+    // a crash. It is still reported, under its own name, because an engine
+    // that keeps taking the app down with it looks exactly like this from here
+    // (user, 2026-09-18).
+    const code = status === "error"
+      ? (job && job.error === "interrupted" ? "interrupted" : classifyError(detail))
+      : undefined;
+    countUsage(status === "done" ? "dub_success" : "dub_failure", bootedKitDir, code, undefined, dubFacts(job));
     // Only a failure is worth a report.
     if (status === "error") {
-      sendReport({ kind: "dub", kitDir: bootedKitDir, code, message: detail, jobId });
+      // An interrupted job has no log left to send, and an empty body reads as
+      // "(no message)" in the issue. Say what happened instead.
+      const message = code === "interrupted"
+        ? "The app closed while this job was still running."
+        : detail;
+      sendReport({ kind: "dub", kitDir: bootedKitDir, code, message, jobId });
     }
   });
 
@@ -841,13 +896,39 @@ app.whenReady().then(() => {
   // then starts the pack's process -- so dubbing goes on without a restart.
   let packCancelled = false;
   let packInFlight = null;   // one pack at a time: two at once shared one progress and one Cancel
+  // No Visual C++ runtime (installer.js missingVcRuntime): the page's pack
+  // error is plain text, so the Download button rides on a box of its own,
+  // the way the update's lock warning asks. Not awaited: the page shows the
+  // same sentence at once.
+  const offerVcRuntime = () => {
+    if (!win.isDestroyed()) {
+      dialog.showMessageBox(win, {
+        type: "warning", title: "PersoDub", message: VC_RUNTIME_MISSING,
+        buttons: ["Download", "Not now"], defaultId: 0, cancelId: 1,
+      }).then(({ response }) => { if (response === 0) openExternally(VC_RUNTIME_URL); }).catch(() => {});
+    }
+    return { ok: false, reason: VC_RUNTIME_MISSING };
+  };
   ipcMain.handle("shell:install-pack", async (_e, id) => {
     if (!PACKS.some((p) => p.id === id)) return { ok: false, reason: `Unknown pack: ${id}` };
     if (!installCtx) return { ok: false, reason: "This build carries no bundled files to install from." };
     if (packInFlight) return { ok: false, reason: `${packInFlight} is still installing. Wait for it to finish.` };
+    // Before a byte, and again on every press, so installing the runtime and
+    // pressing Download and Start once more goes straight on.
+    if (id === "engine") {
+      const missing = missingVcRuntime();
+      if (missing.length) {
+        shellLog(`PERSODUB_PACK engine: Visual C++ runtime missing (${missing.join(", ")})`);
+        return offerVcRuntime();
+      }
+    }
     const steps = packSteps(buildSteps(installCtx), id);
     const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(installCtx.kitDir));
     if (noRoom) return { ok: false, reason: noRoom };
+    // The engine pack is what dubs on this computer: gigabytes spent on one
+    // that cannot run it help nobody.
+    const noMemory = id === "engine" ? notEnoughMemory(totalmem()) : null;
+    if (noMemory) return { ok: false, reason: noMemory };
     packCancelled = false;
     packInFlight = id;
     const marker = packInstallingMarker(installCtx.kitDir, id);
@@ -861,6 +942,7 @@ app.whenReady().then(() => {
       let lastPct = 0;
       try {
         await runInstall(steps, {
+          stop: () => packCancelled,
           onProgress: (p) => {
             if (p.state === "start" || p.state === "done" || p.state === "error") shellLog(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail.slice(0, 300) : ""}`);
             if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
@@ -876,6 +958,7 @@ app.whenReady().then(() => {
       } catch (err) {
         const full = String((err && err.message) || err);
         shellLog(`PERSODUB_PACK install ${id} failed: ${full}`);
+        if (!packCancelled && vcRuntimeFailure(full)) return offerVcRuntime();
         return { ok: false, reason: packCancelled ? "Cancelled." : downloadInterrupted(full) ? DOWNLOAD_INTERRUPTED : lastReason(full) };
       }
       if (engines && engines.startPack) {
@@ -998,6 +1081,10 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
+  // A second launch quits without ever starting an engine of its own; the
+  // pids.json here is the FIRST instance's, not a stale leftover, so this
+  // must not touch it -- that was the double-launch bug (2026-09-18).
+  if (!gotLock) return;
   if (engines) {
     engines.stopAll();
   } else {

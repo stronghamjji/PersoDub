@@ -397,7 +397,17 @@ def synth_lines(
     resolved_usable = usable_slots if usable_slots is not None else [
         max(0.01, s.get("end", 0) - s.get("start", 0)) for s in segments
     ]
-    units = group_merge_units(segments, seg_speakers, resolved_usable)
+    # A line with no words -- one the translator left untranslated
+    # (app/translate.py UNTRANSLATED) -- is never sent to the engine, so its path
+    # stays None: assembly already skips a None line, the same as a failed synth,
+    # and the slot stays silent. Given no speaker, it neither joins a merge unit
+    # nor lets the line after it join across it; its own unit is then dropped.
+    silent = {i for i, s in enumerate(segments) if not s.get("text", "").strip()}
+    merge_speakers = [None if i in silent else spk for i, spk in enumerate(seg_speakers)]
+    units = [u for u in group_merge_units(segments, merge_speakers, resolved_usable)
+             if u[0] not in silent]
+    if silent:
+        log("   %d line(s) have no words - left silent" % len(silent))
 
     if n_takes <= 1:
         paths: List[Optional[str]] = [None] * len(segments)
@@ -421,7 +431,9 @@ def synth_lines(
                     paths[i] = _synth_one(engine, segments[i], voice_id, language, 1000 * i, p, log, "line %d" % i)
         return paths
 
-    take_paths: List[Optional[List[Optional[str]]]] = [None] * len(segments)
+    # An empty row, not None, for a line no unit covers (a silent one): the
+    # winner loop below reads every row.
+    take_paths: List[List[Optional[str]]] = [[] for _ in segments]
     for unit in units:
         if len(unit) == 1:
             i = unit[0]
@@ -483,6 +495,7 @@ def run_qwen_dub(
     vocals_path: str, background_path: str,
     language: str = "Korean", n_takes: int = 1, log: Optional[Callable[[str], None]] = None,
     voice_mode: Optional[str] = None, on_notice: Optional[Callable[[dict], None]] = None,
+    video_duration: Optional[float] = None,
 ) -> str:
     """Full Qwen3-TTS dub-audio path. Returns the path to the assembled 48kHz wav
     (background + our synthesized lines, each gained to match the original line's
@@ -492,6 +505,10 @@ def run_qwen_dub(
     vocals_path / background_path (local Demucs -- app/separate.py) are required:
     the caller (app/pipeline.py) always separates locally first and fails the job
     before reaching here if that fails, so this function never talks to a container.
+
+    video_duration, when known, scales the whisper-veto subprocess timeout in
+    the nonverbal-whitelist / company-ambience gate for long videos (see
+    app.timeouts.scaled_timeout).
     """
     log = log or (lambda m: None)
     speakers = speakers_in(ref_cues)
@@ -598,7 +615,7 @@ def run_qwen_dub(
             speech_spans = [(c["start"], c["end"]) for c in ref_cues]
             apply_nonverbal_whitelist(out_wav, vocals_path, speech_spans, _placed_dub_spans(),
                                       manifest_path=os.path.join(work_dir, "nonverbal_manifest.json"),
-                                      log=log)
+                                      log=log, video_duration=video_duration)
     elif QWEN_GATE_MODE == "company":
         # Company-style: safe assembly (vocals never reach place_lines), then
         # the speech-erased original-vocals ambience layer on top (see
@@ -611,7 +628,7 @@ def run_qwen_dub(
         apply_company_ambience(out_wav, vocals_path, speech_spans,
                                _placed_dub_spans(trimmed=True),
                                manifest_path=os.path.join(work_dir, "gate_exclusion_manifest.json"),
-                               log=log)
+                               log=log, video_duration=video_duration)
     else:
         # Opt-in "preserve": original speech spans (source-language cue
         # times) gate the original vocals to silence, preserving laughter/

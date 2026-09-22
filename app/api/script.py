@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from app import config, perso_client, perso_materialize, state
 from app.api._shared import script_work_dir
+from app.api.dub import check_space
 from app.dub_script import DUB_NAME, edit_line, line_wav_path, load_lines
 from app.perso_client import (
     PersoCreditExhaustedError,
@@ -181,6 +182,11 @@ def _remake_one_voice(work_dir: str, data: dict, line: int, text: str, language:
     entries = data.get("lines") or []
     if not 1 <= line <= len(entries):
         raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+    if not text.strip():
+        # A line left untranslated stays silent until someone writes it; asking
+        # the engine to speak nothing gives back noise, not silence.
+        raise HTTPException(status_code=422, detail=(
+            f"Line {line} has no words yet. Write its translation first."))
     try:
         new_path = resynth_one_line(work_dir, entries[line - 1], text, language)
     except FileNotFoundError as e:
@@ -209,6 +215,8 @@ def dub_job_line_voice(jid: str, line: int):
     lines = load_lines(work_dir, job.get("language_code") or "en")
     if not 1 <= line <= len(lines):
         raise HTTPException(status_code=422, detail=f"There is no line {line}.")
+    # The rebuild writes the dub again; the same floor a new dub starts with.
+    check_space(work_dir)
 
     _remake_one_voice(work_dir, data, line, lines[line - 1]["text"], _voice_language(job, data))
     rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
@@ -240,6 +248,7 @@ def dub_job_stale_voices(jid: str):
     ]
     if not stale:
         return {"remade": [], "skipped": len(lines)}
+    check_space(work_dir)
 
     language = _voice_language(job, data)
     for line in stale:

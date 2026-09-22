@@ -307,3 +307,34 @@ def test_subprocess_run_does_not_override_env(monkeypatch, audio_file):
     stt_local.transcribe_local(audio_file)
 
     assert "env" not in captured_kwargs
+
+
+# --- timeout scales with the video's length (long videos used to die on a
+# fixed 900s wall regardless of how long the video actually was). The formula
+# itself is tested once, shared, in tests/test_timeouts.py -- this is just the
+# wiring: the computed timeout must actually reach subprocess.run.
+
+def test_transcribe_passes_computed_timeout_to_subprocess_run(monkeypatch, audio_file):
+    from app import timeouts
+
+    monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
+    monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_CAP", 100000.0)
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["timeout"] = kwargs.get("timeout")
+        out_path = cmd[cmd.index("--output") + 1]
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(_ok_result(), f)
+
+        class _R:
+            returncode = 0
+            stderr = ""
+        return _R()
+
+    monkeypatch.setattr(stt_local.subprocess, "run", fake_run)
+    stt_local.transcribe_local(audio_file, video_duration=600.0)  # 10 min
+
+    assert captured["timeout"] == 6000.0

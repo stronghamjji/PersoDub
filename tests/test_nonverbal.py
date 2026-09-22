@@ -306,6 +306,36 @@ def test_overlay_adjacent_segments_no_gap_overrun(tmp_path):
     assert _rms_span_48k(out, 1.45, 1.95) == 0    # nothing past the segments
 
 
+# --- timeout scales with the video's length (long videos used to die on a
+# fixed 1800s wall regardless of how long the video actually was). The
+# formula itself is tested once, shared, in tests/test_timeouts.py -- this is
+# just the wiring: the computed timeout must actually reach subprocess.run.
+
+def test_whisper_veto_passes_computed_timeout_to_subprocess_run(tmp_path, monkeypatch):
+    from app import timeouts
+
+    vocals = _write_tone_wav(tmp_path / "vocals.wav", [(0.0, 0.5)], dur=1.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_PER_SEC", 10.0)
+    monkeypatch.setattr(timeouts, "PERSODUB_TIMEOUT_CAP", 100000.0)
+    captured = {}
+
+    def fake_run(cmd, capture_output, text, encoding, errors, timeout):
+        captured["timeout"] = timeout
+        out_path = cmd[cmd.index(nv._WHISPER_RUNNER) + 3]
+        with open(out_path, "w") as f:
+            json.dump([""], f)
+
+        class _R:
+            returncode = 0
+            stderr = ""
+        return _R()
+
+    monkeypatch.setattr(nv.subprocess, "run", fake_run)
+    nv.whisper_veto(vocals, [(0.0, 0.5)], video_duration=600.0)  # 10 min
+
+    assert captured["timeout"] == 6000.0
+
+
 def test_whitelist_log_says_how_much_was_heard_never_what(tmp_path):
     """The job log is sent with a failure report. A REJECT is a span Whisper
     read as speech, so its text is the video's dialogue."""

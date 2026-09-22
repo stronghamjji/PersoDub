@@ -113,7 +113,20 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // The verdict is the answer; the two numbers behind it are the working.
     // A narrow table drops the working (the stylesheet hides .sc-num) and keeps
     // the answer, so the row still says whether the line fits.
-    const lengthCell = `<span class="sc-num"><b>${lineLength(l).toFixed(1)}s</b> / ${l.slot.toFixed(1)}s · </span>${verdict}`;
+    // A line the translator gave nothing (app/dub_script.py load_lines sets
+    // `untranslated`) has no words and no voice, so no length either: the cell
+    // stays empty and the words' own cell says what is missing -- in red, in
+    // the wide column where the translation belongs, via data-empty (the
+    // stylesheet shows it only while the cell is empty and not being typed in,
+    // so it never becomes part of the words). Play and remake rest until the
+    // line is written: there is nothing to hear, and a remake of nothing was
+    // refused (user decision 2026-09-18).
+    const untr = !!l.untranslated;
+    const lengthCell = untr ? ""
+      : `<span class="sc-num"><b>${lineLength(l).toFixed(1)}s</b> / ${l.slot.toFixed(1)}s · </span>${verdict}`;
+    const off = untr ? " sc-off" : "";
+    const offAttr = untr ? " disabled" : "";
+    const WRITE_FIRST = "Write the translation first";
     // Filled means "the words changed and the voice has not caught up". Both
     // halves are needed: `edited` is per line, and `voice_stale` (a file older
     // than the script) is what says the remake has not happened since.
@@ -135,12 +148,12 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     <div class="sc-time"><span class="sc-t-a">${escapeHtml(fmtClockTenths(l.start))}</span><span
       class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
     <div class="sc-src">${escapeHtml(l.source || "—")}</div>
-    <button class="sc-listen" data-play="${l.line}" type="button"
-      title="Play this line in the video">${PLAY_ICON}</button>
+    <button class="sc-listen${off}" data-play="${l.line}" type="button"${offAttr}
+      title="${untr ? WRITE_FIRST : "Play this line in the video"}">${PLAY_ICON}</button>
     <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-      data-line="${l.line}">${escapeHtml(l.text)}</div>
-    <div class="sc-tools"><span class="sc-len">${lengthCell}</span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}" data-voice="${l.line}"
-        type="button" title="${stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
+      data-line="${l.line}"${untr ? ' data-empty="Not translated"' : ""}>${escapeHtml(l.text)}</div>
+    <div class="sc-tools"><span class="sc-len">${lengthCell}</span>${undo}<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}${off}" data-voice="${l.line}"
+        type="button"${offAttr} title="${untr ? WRITE_FIRST : stale ? "The words changed - make the voice again" : fresh ? "Voice made - press to make it again" : "Make this line's voice again"}">${fresh && !stale ? CHECK_ICON : REMAKE_ICON}</button></div>
   </div>`;
   }
 

@@ -366,6 +366,8 @@ import { classifyError, ERROR_CODES } from "./analytics.js";
 
 test("a full disk is recognised", () => {
   assert.equal(classifyError("ENOSPC: no space left on device, write '/Users/x/kit/model.pth'"), "disk-full");
+  // A dub the app stopped between stages (app/room.py): the user's disk, not a bug.
+  assert.equal(classifyError("Not enough space. Needs 8.2 GB, 1.1 GB free."), "disk-full");
 });
 
 test("a dropped download is recognised", () => {

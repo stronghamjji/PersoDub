@@ -35,6 +35,9 @@ export const ERROR_CODES = [
   "gemini-busy", "gemini-quota",
   // Four families that were all "unknown" until 0.6.1.
   "model-download", "engine-500", "perso-bad-request", "translate-parse",
+  // The app was closed while the job was still running, its own word so it
+  // reads apart from a real crash (2026-09-18).
+  "interrupted",
   "unknown",
 ];
 export const PLATFORM_KEYS = ["mac", "win-gpu", "win-cpu"];

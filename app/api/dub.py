@@ -45,7 +45,7 @@ import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from app import dub_launch, engines_status, erase_launch, languages, media, runtime, state
+from app import dub_launch, engines_status, erase_launch, languages, media, room, runtime, state
 from app import models as model_store
 from app import setup as dub_setup
 from app.api import downloads as downloads_api
@@ -78,10 +78,8 @@ _run_cloud_dub = dub_launch.run_cloud_dub
 # Room on disk
 # ---------------------------------------------------------------------------
 
-# A dub keeps its per-line voices now (app/pipeline.py), which is what makes
-# redoing a single line possible -- and what makes a job need room. Measured on
-# a real job 2026-08-21: the intermediates were about 61% of the folder.
-FREE_SPACE_FLOOR = 3 * 1024 ** 3  # 3 GB
+# What a job needs, and the 3 GB floor below, are app/room.py's: the pipeline
+# asks the same question again before each stage.
 
 
 def free_bytes(path: str) -> Optional[int]:
@@ -103,14 +101,9 @@ def check_space(path: str) -> None:
     preflight follows.
     """
     free = free_bytes(path)
-    if free is None or free >= FREE_SPACE_FLOOR:
+    if free is None or free >= room.FLOOR:
         return
-    raise HTTPException(
-        status_code=507,
-        detail=("Not enough disk space (%.1f GB left). "
-                "Delete an old job from the Projects list to free space."
-                % (free / 1024 ** 3)),
-    )
+    raise HTTPException(status_code=507, detail=room.space_message(room.FLOOR, free))
 
 
 # ---------------------------------------------------------------------------
@@ -766,7 +759,14 @@ def dub_start(
         stt_engine = sep_engine = translate_engine = None
     if not _valid_language_code(language_code, dub_mode):
         raise HTTPException(422, f"Unknown language_code: {language_code}")
+    # Memory is asked of a dub made on this computer only (app/room.py): a
+    # cloud dub runs on Perso's side, so it is never refused or warned here.
+    ram = None if dub_mode == "perso" else room.total_ram_bytes()
+    refusal = room.ram_refusal(ram)
+    if refusal:
+        raise HTTPException(422, refusal)
     effective_translate_engine = "" if dub_mode == "perso" else (translate_engine or dub_setup.default_for("translator")).lower()
+    warning = room.ram_warning(ram, effective_translate_engine)
     translate_missing_id = None
     need_ollama = effective_translate_engine in ("gemma", "hunyuan")
     if need_ollama and not _pack_ready("ollama-runtime"):
@@ -872,6 +872,20 @@ def dub_start(
                 # _job_dir always makes a fresh folder, so it is ours to drop.
                 shutil.rmtree(work, ignore_errors=True)
                 raise HTTPException(400, str(e))
+        # The video is here now, so its size and length are known: judge the
+        # whole job by them, not just the floor. A link is judged the same way
+        # once it is downloaded, before the first stage (app/pipeline.py). A
+        # cloud dub is not judged: its stems and per-line takes are made on
+        # Perso's side, and the floor above already covers the dub it writes.
+        if dub_mode != "perso":
+            try:
+                seconds = media.video_duration(video_path)
+            except Exception:
+                seconds = None
+            short = room.short_of_room(work, video_path, seconds, floor=room.FLOOR)
+            if short:
+                shutil.rmtree(work, ignore_errors=True)
+                raise HTTPException(507, short)
 
     # Named, not passed along: the work builder finds a job's subtitles by
     # looking in its folder, which is what lets "Try again" and the boot
@@ -955,9 +969,12 @@ def dub_start(
         _target,
         parallel=(dub_mode == "perso"),
     )
+    if warning:
+        state.job_store.append_log(jid, warning)
     # "running", or "queued" when another dub holds the air -- the screen's
     # toast says which.
-    return {"job_id": jid, "status": state.job_store.get(jid)["status"]}
+    return {"job_id": jid, "status": state.job_store.get(jid)["status"],
+            **({"warning": warning} if warning else {})}
 
 
 # ---------------------------------------------------------------------------

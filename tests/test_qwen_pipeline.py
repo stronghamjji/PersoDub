@@ -742,3 +742,87 @@ def test_run_qwen_dub_fails_when_no_line_synthesizes(monkeypatch, tmp_path):
     segments = [_cue(0.0, 1.0, "a", "A"), _cue(1.0, 2.0, "b", "A")]
     with pytest.raises(RuntimeError, match="synthesized"):
         qp.run_qwen_dub(None, segments, segments, str(tmp_path), "/v.wav", "/b.wav")
+
+
+# --- a line left untranslated stays silent ------------------------------------
+# The translator leaves a line it could not translate empty (app/translate.py
+# UNTRANSLATED). The user decided such a line keeps no voice -- not the source
+# language read out, not whatever the engine makes of nothing.
+
+def _wav_bytes(seconds, rate=24000, amp=6000):
+    """A real mono 16-bit wav: a 220Hz tone, or silence at amp=0."""
+    import io
+    import math
+    import struct
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"".join(struct.pack("<h", int(amp * math.sin(2 * math.pi * 220 * i / rate)))
+                               for i in range(int(rate * seconds))))
+    return buf.getvalue()
+
+
+class _WavEngine(_FakeEngine):
+    """_FakeEngine that answers with real audio, so the real assembly can run."""
+    def synthesize(self, req):
+        self.synth_calls.append(req)
+        class _Res:
+            audio_bytes = _wav_bytes(0.8)
+        return _Res()
+
+
+def test_an_untranslated_line_is_not_synthesized_and_the_dub_still_assembles(monkeypatch, tmp_path):
+    import json
+    import wave
+    (tmp_path / "vocals.wav").write_bytes(_wav_bytes(7.0, amp=3000))
+    (tmp_path / "background.wav").write_bytes(_wav_bytes(7.0, amp=0))
+    monkeypatch.setattr(qp, "cut_vocals_span_local", lambda vocals_path, spans: b"REF" * 500)
+    monkeypatch.setattr(qp, "apply_nonverbal_whitelist", lambda *a, **k: {})
+    ref_cues = [_cue(0.0, 6.0, "hello this is speaker A talking a lot right now", "A")]
+    segments = [{"start": 0.5, "end": 2.0, "text": "first"},
+                {"start": 2.5, "end": 4.0, "text": ""},
+                {"start": 4.5, "end": 6.0, "text": "third"}]
+    engine = _WavEngine()
+    logs = []
+
+    out = qp.run_qwen_dub(engine, segments, ref_cues, str(tmp_path),
+                          vocals_path=str(tmp_path / "vocals.wav"),
+                          background_path=str(tmp_path / "background.wav"),
+                          language="Korean", log=logs.append)
+
+    assert [c.text for c in engine.synth_calls] == ["first", "third"]
+    assert not (tmp_path / "qwen_line_1.wav").exists()
+    # The real assembly ran over the gap: the full-length mix is there.
+    with wave.open(out, "rb") as w:
+        assert abs(w.getnframes() / w.getframerate() - 7.0) < 0.05
+    # The silent line keeps its place in the manifest, so writing it in later
+    # and remaking that one voice lands it at the right moment.
+    manifest = json.loads((tmp_path / "lines.json").read_text(encoding="utf-8"))
+    assert [e["text"] for e in manifest["lines"]] == ["first", "", "third"]
+    assert manifest["lines"][1]["start"] == 2.5
+    assert any("1 line(s) have no words - left silent" in m for m in logs)
+
+
+def test_an_untranslated_line_is_skipped_when_several_takes_are_made(tmp_path):
+    engine = _KAwareEngine()
+    paths = qp.synth_lines(engine, [{"text": "a"}, {"text": " "}, {"text": "b"}],
+                           ["A", "A", "A"], {"A": "vidA"}, "Korean", str(tmp_path),
+                           n_takes=2, speaker_ref_paths=None)
+    assert paths[1] is None and paths[0] and paths[2]
+    assert sorted(c.seed for c in engine.synth_calls) == [0, 1, 2000, 2001]
+
+
+def test_ultra_short_lines_do_not_merge_across_an_untranslated_one(tmp_path):
+    # Line 2 is ultra-short and would join the line before it. That line is
+    # empty, so it stays alone -- it does not reach back past the gap to line 0.
+    engine = _FakeEngine()
+    segments = [{"start": 0.0, "end": 1.0, "text": "zero"},
+                {"start": 1.0, "end": 1.3, "text": ""},
+                {"start": 1.3, "end": 1.6, "text": "two"}]
+    paths = qp.synth_lines(engine, segments, ["A", "A", "A"], {"A": "vidA"}, "Korean",
+                           str(tmp_path), usable_slots=[1.0, 0.3, 0.3])
+    assert [c.text for c in engine.synth_calls] == ["zero", "two"]
+    assert paths[1] is None and paths[0] and paths[2]
