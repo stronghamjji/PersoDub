@@ -71,63 +71,34 @@ Box the subtitles, press **Erase**, and dub the clean video.
 
 ## Hear the difference
 
-Same clip, English → Korean, each tool cloning the speaker's voice.
+Same clip, English → Korean, each tool cloning the speaker's voice. The third video plays VideoLingo, KrillinAI, Voice-Pro and VoiceStudio one after another, each named at the top.
 
 <table>
 <tr>
-<td width="50%">
-
-### Original (English)
-
----
+<td width="33%" align="center"><b>Original (English)</b></td>
+<td width="33%" align="center"><b>PersoDub (Ours)</b></td>
+<td width="33%" align="center"><b>Other tools</b></td>
+</tr>
+<tr>
+<td width="33%">
 
 https://github.com/user-attachments/assets/39589651-83fe-4673-91b4-fa078f0e523e
 
 </td>
-<td width="50%">
-
-### PersoDub (Ours)
-
----
+<td width="33%">
 
 https://github.com/user-attachments/assets/09f6dbd8-70f1-487f-bf8d-2d9fa5cb6433
 
 </td>
-</tr>
-</table>
+<td width="33%">
 
-<table>
-<tr>
-<td width="25%" align="center"><b><a href="https://github.com/Huanshere/VideoLingo">VideoLingo</a></b></td>
-<td width="25%" align="center"><b><a href="https://github.com/krillinai/KrillinAI">KrillinAI</a></b></td>
-<td width="25%" align="center"><b><a href="https://github.com/abus-aikorea/voice-pro">Voice-Pro</a></b></td>
-<td width="25%" align="center"><b><a href="https://github.com/debpalash/VoiceStudio">VoiceStudio</a></b></td>
-</tr>
-<tr>
-<td width="25%">
-
-https://github.com/user-attachments/assets/1045c7f6-eb6e-4df5-aee9-16cd231e5d53
-
-</td>
-<td width="25%">
-
-https://github.com/user-attachments/assets/7cd0456a-0f0f-4be9-88d8-5ab5dece2f5a
-
-</td>
-<td width="25%">
-
-https://github.com/user-attachments/assets/1d84b466-57b4-43ea-8760-35eae9a198d3
-
-</td>
-<td width="25%">
-
-https://github.com/user-attachments/assets/fac60bb8-a18b-47ec-a9c8-c1a4509fa4fb
+https://github.com/stronghamjji/PersoDub/raw/main/docs/demo/other-tools.mp4
 
 </td>
 </tr>
 </table>
 
-Listen for pacing: PersoDub never speeds the audio up. The source files live in [docs/demo](docs/demo).
+Listen for pacing: PersoDub never speeds the audio up. The source files live in [docs/demo](docs/demo): [VideoLingo](https://github.com/Huanshere/VideoLingo), [KrillinAI](https://github.com/krillinai/KrillinAI), [Voice-Pro](https://github.com/abus-aikorea/voice-pro), [VoiceStudio](https://github.com/debpalash/VoiceStudio).
 
 ## Get started
 
