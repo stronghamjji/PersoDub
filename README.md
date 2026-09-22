@@ -50,7 +50,7 @@ One video in, one dubbed video out, in each speaker's own voice. 10 languages on
 </td>
 <td width="33%" valign="top">
 
-<img src="docs/images/dub-agent.png" alt="The Dub Agent asked to make line 9 fit its slot" />
+<img src="docs/images/dub-agent-answer.png" alt="The Dub Agent, asked which line runs over its slot, answers: line 9, by 0.18 seconds" />
 
 ### Fix every line
 
