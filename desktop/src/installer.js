@@ -70,7 +70,7 @@ export async function runInstall(steps, {
 // 2026-09-08) surfaced as a Python exception with byte counts; the person
 // only needs to know that pressing Download and Start resumes it. Anything
 // else keeps the tool's own last line (main.js lastReason).
-export const DOWNLOAD_INTERRUPTED = "The download was interrupted. Click Download and Start to pick up where it left off.";
+export const DOWNLOAD_INTERRUPTED = "The download was interrupted. Click Resume or Download and Start to pick up where it left off.";
 // The last two rows are no network at all, which each downloader says in its own
 // words and none of the rows above: the hf CLI ("LocalEntryNotFoundError ...
 // Please check your internet connection"), this app's own fetch ("fetch

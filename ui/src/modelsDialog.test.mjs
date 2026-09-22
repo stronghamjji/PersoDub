@@ -421,6 +421,27 @@ test("while a pack installs the dialog shows its progress line, and Cancel stops
   await settle(); await settle();
 });
 
+test("a retry notice is shown on its own, so the Settings row does not cut it off", async (t) => {
+  let finish;
+  const shell = fakeShell({ install: () => new Promise((r) => { finish = r; }) });
+  const h = harness({ rows: [ENGINE], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const p = h.api.downloadModel("engine");
+  await settle();
+  shell.progress({ pack: "engine", stepId: "models", title: "Downloading sound-separation model (~80 MB)", state: "progress", pct: 63, detail: "Connection problem, retrying (2/3)" });
+  // The Settings row keeps 34 characters: the step title in front of the
+  // notice hid the word "retrying" behind an ellipsis (W22, 2026-09-22).
+  const row = h.$("modelsList").children[0];
+  assert.equal(row.children[2].textContent, "Connection problem, retrying (2/3)");
+  assert.equal(row.children[3].textContent, "Cancel");
+  // The next ordinary progress line puts the title back.
+  shell.progress({ pack: "engine", stepId: "models", title: "Downloading sound-separation model (~80 MB)", state: "progress", pct: 70, detail: "12 MB / 80 MB" });
+  assert.equal(h.$("modelsList").children[0].children[2].textContent, "Downloading AI engine… 70% · Downloading sound-separation model (~80 MB): 12 MB / 80 MB");
+  finish({ ok: true });
+  await p; await settle();
+});
+
 test("a pack the desktop app could not install stops the dub and says why, with the button back", async (t) => {
   const shell = fakeShell({ install: async () => ({ ok: false, reason: "Not enough space: needs 2.0 GB." }) });
   const h = harness({ rows: [ENGINE, WHISPER], shell });
