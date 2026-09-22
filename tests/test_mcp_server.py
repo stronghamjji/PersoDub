@@ -415,6 +415,10 @@ def test_the_stdio_server_actually_serves_every_tool():
     from app.agents.claude import TOOL_LABELS
     missing = set(TOOL_LABELS) - served
     assert not missing, "promised to the assistant but never served: %s" % sorted(missing)
+    # The other way round is the 0.6.5 bug: the table is the allow list, so a
+    # served tool it lacks makes Claude ask a permission nobody can grant.
+    unallowed = served - set(TOOL_LABELS)
+    assert not unallowed, "served but never allowed: %s" % sorted(unallowed)
 
 
 def test_burn_subtitles_posts_the_preset_and_needs_no_confirmation(monkeypatch):

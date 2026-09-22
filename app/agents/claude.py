@@ -16,7 +16,10 @@ from typing import List, Optional
 from app.agents import base
 
 # What each handle is called on screen. The agent reaches our script tools
-# through MCP, which prefixes them with the server name.
+# through MCP, which prefixes them with the server name. This table is also
+# the --allowedTools list: a tool the server offers but this table lacks is
+# one Claude asks permission for, and headless there is nobody to answer
+# (list_jobs and six others sat unreachable from 2026-09-04 to 0.6.5).
 TOOL_LABELS = {
     "get_script": "Reading the script",
     "edit_script_line": "Rewriting a line",
@@ -32,6 +35,13 @@ TOOL_LABELS = {
     "queue_dub": "Queueing a dub",
     "cancel_dub": "Cancelling a dub",
     "burn_subtitles": "Subtitling a video",
+    "list_jobs": "Checking what is running",
+    "get_setup": "Reading the setup",
+    "set_default": "Changing a default",
+    "download_model": "Downloading a model",
+    "download_video": "Downloading a video",
+    "erase_subtitles": "Erasing subtitles",
+    "save_erased": "Saving the erased video",
 }
 
 MCP_PREFIX = "mcp__persodub__"
