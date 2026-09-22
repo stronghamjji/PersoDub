@@ -92,7 +92,7 @@ https://github.com/user-attachments/assets/09f6dbd8-70f1-487f-bf8d-2d9fa5cb6433
 </td>
 <td width="33%">
 
-<a href="docs/demo/other-tools.mp4"><img src="docs/images/other-tools.png" alt="The four other tools, one after another: click to play" /></a>
+https://github.com/user-attachments/assets/40b889d5-7976-4f43-8775-529f199f483d
 
 </td>
 </tr>
