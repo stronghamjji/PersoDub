@@ -26,6 +26,7 @@ Three stages, each fail-closed:
 Same stdlib-only audio policy as app/qwen_assemble.py (wave/audioop/struct).
 """
 import audioop
+import functools
 import json
 import math
 import os
@@ -274,10 +275,8 @@ def apply_nonverbal_whitelist(mix_path: str, vocals_path: str,
     kept: List[dict] = []
     rejected: List[dict] = []
     if candidates:
-        if veto is None:
-            verdicts = whisper_veto(vocals_path, candidates, video_duration=video_duration)
-        else:
-            verdicts = veto(vocals_path, candidates)
+        veto = veto or functools.partial(whisper_veto, video_duration=video_duration)
+        verdicts = veto(vocals_path, candidates)
         for v in verdicts:
             (kept if v["keep"] else rejected).append(v)
             # How much was heard, never what: a REJECT is a span Whisper read as

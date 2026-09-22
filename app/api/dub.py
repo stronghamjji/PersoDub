@@ -762,8 +762,9 @@ def dub_start(
     # Memory is asked of a dub made on this computer only (app/room.py): a
     # cloud dub runs on Perso's side, so it is never refused or warned here.
     ram = None if dub_mode == "perso" else room.total_ram_bytes()
-    if room.ram_refusal(ram):
-        raise HTTPException(422, room.ram_refusal(ram))
+    refusal = room.ram_refusal(ram)
+    if refusal:
+        raise HTTPException(422, refusal)
     effective_translate_engine = "" if dub_mode == "perso" else (translate_engine or dub_setup.default_for("translator")).lower()
     warning = room.ram_warning(ram, effective_translate_engine)
     translate_missing_id = None
@@ -873,15 +874,18 @@ def dub_start(
                 raise HTTPException(400, str(e))
         # The video is here now, so its size and length are known: judge the
         # whole job by them, not just the floor. A link is judged the same way
-        # once it is downloaded, before the first stage (app/pipeline.py).
-        try:
-            seconds = media.video_duration(video_path)
-        except Exception:
-            seconds = None
-        short = room.short_of_room(work, video_path, seconds, floor=room.FLOOR)
-        if short:
-            shutil.rmtree(work, ignore_errors=True)
-            raise HTTPException(507, short)
+        # once it is downloaded, before the first stage (app/pipeline.py). A
+        # cloud dub is not judged: its stems and per-line takes are made on
+        # Perso's side, and the floor above already covers the dub it writes.
+        if dub_mode != "perso":
+            try:
+                seconds = media.video_duration(video_path)
+            except Exception:
+                seconds = None
+            short = room.short_of_room(work, video_path, seconds, floor=room.FLOOR)
+            if short:
+                shutil.rmtree(work, ignore_errors=True)
+                raise HTTPException(507, short)
 
     # Named, not passed along: the work builder finds a job's subtitles by
     # looking in its folder, which is what lets "Try again" and the boot

@@ -206,6 +206,20 @@ def test_a_cloud_dub_needs_no_packs(monkeypatch, _kit):
     assert r.status_code == 200, r.json()
 
 
+def test_a_cloud_dub_is_not_judged_by_the_local_pipeline_s_disk_need(monkeypatch, _kit):
+    # The 2x-video-plus-per-minute need is the local pipeline's (stems, per-line
+    # takes); a cloud dub only writes the returned video, which the floor covers.
+    from app import room
+    def boom(*a, **kw):
+        raise AssertionError("a cloud dub is not judged by dub_need")
+    monkeypatch.setattr(room, "short_of_room", boom)
+    monkeypatch.setattr(dub_api, "_run_cloud_dub", lambda *a, **kw: None)
+    monkeypatch.setattr(perso_client, "PersoClient", lambda: type("C", (), {
+        "dubbing_spaces": lambda self: [{"seq": 1}], "space_seq": 1})())
+    r = _start({"dub_mode": "perso"})
+    assert r.status_code == 200, r.json()
+
+
 def test_a_local_translator_without_its_runtime_pack_asks_for_the_pack_and_the_model(monkeypatch, _kit):
     # Before: the reachability probe ran first and answered 422 "not running",
     # which no dialog can fix. Without the pack there is nothing to probe.

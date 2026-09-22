@@ -31,6 +31,7 @@ than check_leakage's 3s per-span cap are split at quiet energy dips
 Same stdlib-only audio policy as app/qwen_assemble.py (wave/audioop/struct).
 """
 import audioop
+import functools
 import json
 import math
 import wave
@@ -85,10 +86,8 @@ def compute_mute_set(vocals_path: str,
     candidates = extract_nonverbal_segments(vocals_path, speech_spans, dub_spans)
     verdicts: List[dict] = []
     if candidates:
-        if veto is None:
-            verdicts = whisper_veto(vocals_path, candidates, video_duration=video_duration)
-        else:
-            verdicts = veto(vocals_path, candidates)
+        veto = veto or functools.partial(whisper_veto, video_duration=video_duration)
+        verdicts = veto(vocals_path, candidates)
         for v in verdicts:
             # text_len, not the text: see apply_nonverbal_whitelist in app/nonverbal.py.
             log("   company gate %6.2f-%6.2fs %-7s text_len=%d"

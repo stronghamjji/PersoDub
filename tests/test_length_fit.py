@@ -64,6 +64,18 @@ def test_only_out_of_window_lines_retried():
     assert "Where's Dent?" not in eng.prompts[1]
 
 
+def test_an_untranslated_line_is_not_retried_as_too_short(monkeypatch):
+    # A line the draft left UNTRANSLATED ("") is 0 s long, so it looked "too
+    # short" and was re-asked in every candidate round with nothing to lengthen.
+    from app.text import length_fit
+    monkeypatch.setattr(length_fit, "_draft_candidates_in_chunks",
+                        lambda *a, **kw: ["", "다섯 명이 죽게 뒀어"])
+    eng = FakeEngine([])   # any retry round would pop from an empty list and fail
+    out = fit_translate(eng, ["You let five people die.", "Where's Dent?"], "ko", "en", [1.5, 2.0])
+    assert out == ["", "다섯 명이 죽게 뒀어"]
+    assert eng.prompts == []
+
+
 def test_too_short_line_retried_to_fill():
     # unifies what used to be pipeline.py's separate FILL_RATIO pass: a too-short line goes
     # through the same window re-ask, asking to fill the slot instead of shortening it.

@@ -618,8 +618,10 @@ def fit_translate(
         best = _draft_candidates_in_chunks(engine, texts, target_lang, source_lang, budgets, windows, log)
 
     def _out_of_window():
+        # An UNTRANSLATED line is not a short one: it has had its retries, and
+        # asking to lengthen nothing is a wasted round. The pipeline re-asks it.
         return [i for i in range(len(best))
-                if windows[i] is not None
+                if windows[i] is not None and best[i]
                 and not in_window(estimate_seconds(best[i], target_lang), windows[i])]
 
     # Second pass on: pick only out-of-window lines (too long OR too short) and ask each for

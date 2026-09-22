@@ -9,11 +9,14 @@ place, so the two cannot disagree about what a job needs.
 A reading the computer will not give (a disk or a memory size) is never a
 reason to refuse: every check below lets the job go when it cannot tell.
 """
-import contextlib
 import os
 import sys
 
 from app import models as model_store
+
+# Subfolders too: a stage keeps some of its files in one (the per-line voices),
+# and leaving them out would count them as still to come.
+_folder_bytes = model_store._dir_bytes
 
 GB = 1024 ** 3
 
@@ -44,17 +47,6 @@ def dub_need(video_bytes, seconds):
 
 def space_message(need, free):
     return "Not enough space. Needs %.1f GB, %.1f GB free." % (need / GB, free / GB)
-
-
-def _folder_bytes(folder):
-    # Subfolders too: a stage keeps some of its files in one (the per-line
-    # voices), and leaving them out would count them as still to come.
-    total = 0
-    for root, _dirs, files in os.walk(folder):
-        for name in files:
-            with contextlib.suppress(OSError):  # gone between the listing and the look
-                total += os.path.getsize(os.path.join(root, name))
-    return total
 
 
 def short_of_room(work_dir, video_path, seconds, floor=0):
