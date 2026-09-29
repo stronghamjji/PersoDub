@@ -49,10 +49,9 @@ def test_running_out_of_allowance_says_to_wait_or_pick_another():
 def test_anything_else_is_one_line_with_the_rest_kept_behind_it():
     said = "warming up\nloading config\nTypeError: cannot read property of undefined"
     out = base.explain_exit(3, said)
-    # One line, and it is the CLI's last word rather than its first.
-    assert "TypeError" in out["message"]
-    assert "warming up" not in out["message"]
-    assert out["message"].endswith("Please try again.")
+    # A plain sentence; the program's own words only behind Details.
+    assert out["message"] == "The assistant stopped partway. Please try again."
+    assert "TypeError" not in out["message"]
     # The whole thing is still there for anyone who wants it.
     assert out["detail"] == said
     # Never the exit code: a number is the CLI's business, not the user's.
@@ -61,7 +60,7 @@ def test_anything_else_is_one_line_with_the_rest_kept_behind_it():
 
 def test_a_failure_with_nothing_said_still_reads_as_a_sentence():
     out = base.explain_exit(1, "")
-    assert out["message"] == "The assistant did not finish its answer. Please try again."
+    assert out["message"] == "The assistant stopped partway. Please try again."
     assert out["detail"] == ""
 
 

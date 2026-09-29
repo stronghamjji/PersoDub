@@ -94,7 +94,7 @@ export function downloadInterrupted(message) {
 // permalink is the one Microsoft Learn lists as the latest supported
 // (learn.microsoft.com/cpp/windows/latest-supported-vc-redist, 2026-09-19).
 export const VC_RUNTIME_URL = "https://aka.ms/vc14/vc_redist.x64.exe";
-export const VC_RUNTIME_MISSING = "Windows needs Microsoft Visual C++ to run the AI engine. Install it, then try again.";
+export const VC_RUNTIME_MISSING = "Windows needs Microsoft Visual C++ to run Python + PyTorch. Install it, then try again.";
 const VC_RUNTIME_MARKS = /Visual C\+\+ Redistributable|WinError 126|WinError 1114|c10\.dll|DLL load failed/;
 export function vcRuntimeFailure(message) {
   return VC_RUNTIME_MARKS.test(String(message || ""));

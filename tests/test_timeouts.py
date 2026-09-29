@@ -66,7 +66,7 @@ def test_garbage_env_falls_back_to_defaults(monkeypatch):
     reloaded = importlib.reload(timeouts)
     try:
         assert reloaded.PERSODUB_TIMEOUT_PER_SEC == 6.0
-        assert reloaded.PERSODUB_TIMEOUT_CAP == 10800.0
+        assert reloaded.PERSODUB_TIMEOUT_CAP == 43200.0
     finally:
         monkeypatch.undo()
         importlib.reload(timeouts)

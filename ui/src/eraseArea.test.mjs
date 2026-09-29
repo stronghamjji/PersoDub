@@ -152,8 +152,8 @@ test("only the app's own pack_missing offers the download", () => {
 });
 
 test("the pack line says this computer's own size, in the app's own unit", () => {
-  assert.equal(packNeededLine(3900000000), "Erase tool needed · 3.6 GB, once");
-  assert.equal(packNeededLine(8500000000), "Erase tool needed · 7.9 GB, once");
+  assert.equal(packNeededLine(4400000000), "Erase tool needed · 4.4 GB, once");
+  assert.equal(packNeededLine(9300000000), "Erase tool needed · 9.3 GB, once");
   // A catalog that has not been read yet must still make a sentence.
   assert.equal(packNeededLine(0), "Erase tool needed · 0.0 GB, once");
 });

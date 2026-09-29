@@ -122,6 +122,11 @@ def test_rejects_cross_origin_writes(tmp_path, monkeypatch):
     r = client.post("/api/settings", json={"gemini_api_key": "goodkey"},
                     headers={"Origin": "http://127.0.0.1"})
     assert r.status_code == 200
+    # Another program on this computer, on a port of its own, is not us.
+    r = client.post("/api/settings", json={"gemini_api_key": "otherport"},
+                    headers={"Origin": "http://127.0.0.1:5173"})
+    assert r.status_code == 403
+    assert "otherport" not in (kit / "kit.env").read_text(encoding="utf-8")
 
 
 def test_get_without_kit_dir_says_unavailable(monkeypatch):

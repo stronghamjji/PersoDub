@@ -216,6 +216,29 @@ test("venv-app runs venv + pip installs and marks done", async () => {
   assert.equal(await step.isDone(), true);
 });
 
+test("venv-app falls back to no progress bar when an old pip refuses raw (issue #111)", async () => {
+  const argvs = [];
+  const ctx = freshCtx({ run: async (argv) => {
+    const line = argv.join(" ");
+    argvs.push(line);
+    if (line.includes("--progress-bar raw")) {
+      throw new Error("option --progress-bar: invalid choice: 'raw' (choose from 'on', 'off')");
+    }
+  } });
+  const step = byId(ctx).venvApp ?? byId(ctx)["venv-app"];
+  await step.run(() => {});
+  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir --progress-bar off --retries 10")));
+  assert.equal(await step.isDone(), true);
+});
+
+test("venv-app does not hide any other pip failure behind the fallback", async () => {
+  const ctx = freshCtx({ run: async (argv) => {
+    if (argv.join(" ").includes("--progress-bar")) throw new Error("No matching distribution found for torch");
+  } });
+  const step = byId(ctx).venvApp ?? byId(ctx)["venv-app"];
+  await assert.rejects(step.run(() => {}), /No matching distribution/);
+});
+
 // The 0.4.0 update added `mcp` to requirements.txt and no updated machine ever
 // installed it: the venv steps skipped on a bare .ok marker while the payload
 // step had just replaced the requirements files, and the script assistant's
@@ -548,7 +571,7 @@ test("kit-env step writes template with kit paths", async () => {
     // python3, finds no openai-whisper, and fail-closes every candidate.
     "NONVERBAL_WHISPER_PYTHON",
     // Stage-5/6 dark-launch mode + Mac-CPU-calibrated worker timeouts.
-    "PERSODUB_LEAKAGE_GATE", "PERSODUB_SCORER_ASR_TIMEOUT", "PERSODUB_TTS_TIMEOUT", "PERSODUB_DIAR_TIMEOUT",
+    "PERSODUB_LEAKAGE_GATE", "PERSODUB_SCORER_ASR_TIMEOUT", "PERSODUB_DIAR_TIMEOUT",
     // Which torch build this machine's venv-engines installed; app/models.py's
     // platform_key() reads it back to size GPU-only packs correctly.
     "PERSODUB_TORCH_VARIANT",
@@ -582,7 +605,7 @@ test("kit-env step appends missing managed keys to a legacy kit.env, preserving 
   assert.ok(env.includes("PERSODUB_KIT_DIR=/old/kit"), "existing line must survive");
   assert.ok(env.includes("GEMINI_API_KEY=sk-legacy-key"), "user API key must survive");
   for (const key of ["PERSODUB_LEAKAGE_GATE=measure", "PERSODUB_SCORER_ASR_TIMEOUT=60",
-                      "PERSODUB_TTS_TIMEOUT=900", "PERSODUB_DIAR_TIMEOUT=1800",
+                      "PERSODUB_DIAR_TIMEOUT=1800",
                       // A kit.env without the key predates the CPU wheel: its venv has
                       // the build there was (CUDA on Windows, MPS on Mac), whatever this
                       // machine's GPU -- see LEGACY_TORCH_VARIANT in installSpec.js.
@@ -629,7 +652,6 @@ test("writeKitEnv includes the leakage-gate and worker-timeout additions", () =>
   const s = writeKitEnv({ kitDir: "/K" });
   assert.ok(s.includes("PERSODUB_LEAKAGE_GATE=measure"));
   assert.ok(s.includes("PERSODUB_SCORER_ASR_TIMEOUT=60"));
-  assert.ok(s.includes("PERSODUB_TTS_TIMEOUT=900"));
   assert.ok(s.includes("PERSODUB_DIAR_TIMEOUT=1800"));
 });
 

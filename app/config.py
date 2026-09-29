@@ -75,7 +75,10 @@ VERTEX_MODEL = os.environ.get("VERTEX_MODEL", "gemini-2.5-flash")
 # asks for a 1.1 GB download at most, never the 7.6 GB Gemma.
 # Gemma 3 stays a choice for anyone who downloads it (on the 44-line Joker A/B it was
 # the most natural Korean; Hunyuan is more literal and lines can run short).
-TRANSLATE_ENGINE_DEFAULT = "hunyuan"
+# ChatGPT by default (user, 2026-09-23): a free ChatGPT account translates
+# with nothing to download. The local models stay as choices in Advanced
+# options for anyone offline or unwilling to sign in.
+TRANSLATE_ENGINE_DEFAULT = "chatgpt"
 TRANSLATE_ENGINE = os.environ.get("TRANSLATE_ENGINE", TRANSLATE_ENGINE_DEFAULT)
 
 # Ollama (local LLM) translation settings (internal only).

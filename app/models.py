@@ -82,6 +82,15 @@ def _pack_bytes(entry):
     return b.get(platform_key(), 0) if isinstance(b, dict) else b
 
 
+def _hf_download_whole(base: str, markers) -> bool:
+    """Every marker has bytes in it and no piece is still being fetched."""
+    if any(os.path.getsize(p) == 0 for p in markers):
+        return False
+    pieces = os.path.join(base, ".cache", "huggingface", "download")
+    return all(not any(f.endswith(".incomplete") for f in files)
+               for _root, _dirs, files in os.walk(pieces))
+
+
 def model_state(entry, kit: str) -> str:
     """"ready" | "paused" | "not_downloaded" for one catalog entry."""
     base = os.path.join(kit, *entry["dir"].split("/"))
@@ -105,7 +114,12 @@ def model_state(entry, kit: str) -> str:
         return "paused" if os.path.isdir(base) else "not_downloaded"
     markers = [os.path.join(base, *m.split("/")) for m in entry["markers"]]
     if markers and all(os.path.exists(p) for p in markers):
-        return "ready"
+        # A cancelled download can leave the marker behind empty, with the
+        # rest still in .incomplete pieces: that read as ready and the dub then
+        # failed on it (Mac full test, 2026-09-25). Only a whole download is.
+        if entry["source"].get("kind") != "hf" or _hf_download_whole(base, markers):
+            return "ready"
+        return "paused"
     if entry["source"].get("kind") == "ollama":
         # No "paused" from disk for Ollama models: partial blobs live in a
         # store shared across models and cannot be attributed to one of them.
@@ -223,7 +237,7 @@ def request_download(entry) -> str:
     if entry["source"].get("kind") == "ollama" and not _runtime.url("ollama"):
         # Only the runtime can pull into its store, and it is not running:
         # say so up front instead of queueing a pull that fails on an empty URL.
-        raise ValueError("Install the Translation runtime first, then download this model.")
+        raise ValueError("Install Ollama first, then download this model.")
     with _lock:
         state = (_downloads.get(entry["id"]) or {}).get("state")
         if state in ("queued", "downloading"):
@@ -261,9 +275,17 @@ def remove_model(entry):
             # Only the runtime can take a model out of its shared blob store,
             # and it is not running. Say so: a silent "removed" that removed
             # nothing is worse than a refusal.
-            raise ValueError("Install the Translation runtime first, then remove this model.")
-        _requests.delete(f"{ollama_url}/api/delete",
-                         json={"model": entry["source"]["tag"]}, timeout=60)
+            raise ValueError("Install Ollama first, then remove this model.")
+        # A model pulled under one name and renamed (Hunyuan: pulled from
+        # hf.co/..., then given its tag with our template) is held by both
+        # names; deleting only the tag freed nothing, 1.1 GB stayed on disk
+        # (Windows, 2026-09-25). Its layers go when the last name does.
+        names = [entry["source"]["tag"]]
+        pull = entry["source"].get("pull")
+        if pull and pull not in names:
+            names.append(pull)
+        for name in names:
+            _requests.delete(f"{ollama_url}/api/delete", json={"model": name}, timeout=60)
     else:
         _shutil.rmtree(os.path.join(kit, *entry["dir"].split("/")), ignore_errors=True)
 

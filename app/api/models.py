@@ -94,7 +94,7 @@ def model_download(mid: str):
     free = model_store.free_bytes_at(model_store.kit_dir())
     if free is not None and free < entry["bytes"] * 1.1:
         raise HTTPException(409, "Not enough space: needs %.1f GB, %.1f GB free"
-                                 % (entry["bytes"] / 1024**3, free / 1024**3))
+                                 % (entry["bytes"] / 1e9, free / 1e9))   # decimal, like the list
     try:
         started = model_store.request_download(entry)
     except ValueError as e:

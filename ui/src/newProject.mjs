@@ -150,17 +150,34 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       if (!r.ok) return;
       d = (await r.json()).defaults || {};
     } catch { return; }
+    putChoices({ dubMode: d.dub_mode, sep: d.separation, stt: d.stt,
+                 translator: d.translator, quality: d.voice_quality });
+  }
+
+  // The five choices under Advanced options, read and put back as one. A value
+  // the dropdown does not offer is left alone.
+  function putChoices(c) {
     const pick = (id, value) => {
       const sel = $(id);
       if (sel && value && sel.querySelector(`option[value="${value}"]`)) sel.value = value;
     };
-    pick("dubModeSelect", d.dub_mode);
+    pick("dubModeSelect", c.dubMode);
     refillTargetLanguages();
-    pick("sepSelect", d.separation);
-    pick("sttSelect", d.stt);
-    pick("translateSelect", d.translator);
-    pick("qualitySelect", d.voice_quality);
+    pick("sepSelect", c.sep);
+    pick("sttSelect", c.stt);
+    pick("translateSelect", c.translator);
+    pick("qualitySelect", c.quality);
   }
+  function takeChoices() {
+    return { dubMode: $("dubModeSelect").value, sep: $("sepSelect").value,
+             stt: $("sttSelect").value, translator: $("translateSelect").value,
+             quality: $("qualitySelect").value };
+  }
+  // What the dialog was set to when it sent its video to the erase screen. The
+  // way back reopens the dialog, and reopening starts the dropdowns on the
+  // saved defaults: Whisper, chosen a moment ago, came back as Perso API, and
+  // the dub that followed spent credits nobody chose to spend (2026-09-29).
+  let choicesBeforeErase = null;
 
   // The play button's purple-while-playing state is driven by the video, whose
   // listeners outlive the box; kept here so re-drawing swaps them rather than
@@ -170,10 +187,31 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   // would come to answer it differently. What is this dialog's own goes in
   // here -- the player it scrubs, the badge it writes the position into, and
   // where the chosen part is kept.
+  // The length under the picture, and the one warning that rides with it:
+  // over 30 minutes is not refused, but said plainly, with the way out
+  // (trim into parts). The length itself takes hours on a slow machine.
+  const LONG_VIDEO_SECONDS = 30 * 60;
+  function paintLength(seconds) {
+    $("projectDur").textContent = fmtClock(seconds);
+    $("projectLongHint").hidden = !(Number.isFinite(seconds) && seconds > LONG_VIDEO_SECONDS);
+  }
+  function clearLength(text = "") {
+    $("projectDur").textContent = text;
+    $("projectLongHint").hidden = true;
+  }
+
   const trimBar = initTrimBar({
     $, getVideo: () => $("projectVideo"), getClock: () => $("projectDur"),
     playRange, cancelRange, labelPx,
-    onChange: (trim) => { if (state.newProject) state.newProject.trim = trim; },
+    onChange: (trim) => {
+      if (state.newProject) state.newProject.trim = trim;
+      // The note speaks of what will be dubbed: a cut under 30 minutes of a
+      // longer video needs no warning (user, 2026-09-24).
+      const v = $("projectVideo");
+      const full = Number.isFinite(v.duration) ? v.duration : 0;
+      const kept = trim && trim.end != null && trim.start != null ? trim.end - trim.start : full;
+      $("projectLongHint").hidden = !(kept > LONG_VIDEO_SECONDS);
+    },
   });
 
 
@@ -242,7 +280,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     $("projectThumb").style.backgroundImage = "";
     v.src = downloadVideoUrl(d.id);
     v.addEventListener("loadedmetadata", () => {
-      $("projectDur").textContent = fmtClock(v.duration);
+      paintLength(v.duration);
       // With the handles where they were, when this dialog is being put back.
       trimBar.render(v.duration, state.newProject && state.newProject.trim);
     }, { once: true });
@@ -349,9 +387,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
         if (files) {
           // The first video stands for the batch. No trim: a cut made on this
           // one would mean nothing to the others.
-          $("projectDur").textContent = `${files.length} videos`;
+          clearLength(`${files.length} videos`);
         } else {
-          $("projectDur").textContent = fmtClock(v.duration);
+          paintLength(v.duration);
           trimBar.render(v.duration);
           // Its length is known now, so the copy can be filed with one.
           holdFile(file, v.duration);
@@ -368,7 +406,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       // the moment its download finishes.
       playHeldVideo({ id: source.downloadId });
     }
-    $("projectDur").textContent = source.probe ? fmtClock(source.probe.duration_sec) : "";
+    if (source.probe) paintLength(source.probe.duration_sec); else clearLength();
     $("projectError").textContent = "";
     $("projectSaved").textContent = "";
     $("projectShowWrap").hidden = true;
@@ -377,7 +415,12 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     // (the Dub Agent may have changed them a moment ago), then the key-gated
     // options are greyed out. Not on a Settings save: that path must leave a
     // choice the user is in the middle of making alone.
+    // Only for the dialog the erase screen puts back (`fromErase`). A link
+    // opened later carries a held video too, and must start on the defaults.
+    const kept = source.fromErase ? choicesBeforeErase : null;
+    choicesBeforeErase = null;
     loadSavedDefaults().then(() => {
+      if (kept) putChoices(kept);
       // Setting a select's value fires no change event, so the hints under the
       // dropdowns and the cloud-mode greying must be repainted by hand.
       updateEngineHints();
@@ -457,6 +500,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     const np = state.newProject || {};
     if (!np.downloadId) return;
     const v = $("projectVideo");
+    choicesBeforeErase = takeChoices();
     onErase({
       downloadId: np.downloadId,
       title: np.probe ? np.probe.title : (np.file ? np.file.name : ""),

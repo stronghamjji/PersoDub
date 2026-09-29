@@ -20,6 +20,7 @@ mode ("timbre" | "icl", default QWEN_VOICE_MODE env, else "timbre"):
 """
 import hashlib
 import io
+import math
 import os
 import tempfile
 import threading
@@ -27,6 +28,7 @@ import threading
 import numpy as np
 import soundfile as sf
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 app = FastAPI(title="qwen3-tts-sidecar")
@@ -64,6 +66,17 @@ def _resolve_mode(mode):
 # Guards the late load below: without it two concurrent /generate requests
 # arriving right after the download finishes would both build a QwenSynth.
 _LOAD_LOCK = threading.Lock()
+# One model, one piece of work at a time -- and the work runs off the event
+# loop (run_in_threadpool), so /health still answers while a line is being
+# made. It used to run on the loop itself: a line the app had stopped waiting
+# for kept the loop busy, the app's "are you there?" probe got no answer, and
+# a live engine was taken for a dead one (review 2026-09-23).
+_WORK_LOCK = threading.Lock()
+
+
+def _locked(fn, *args, **kwargs):
+    with _WORK_LOCK:
+        return fn(*args, **kwargs)
 
 
 def _weights_path():
@@ -120,7 +133,8 @@ async def clone(ref_audio: UploadFile = File(...), ref_text: str = Form(None),
             f.write(data)
             tmp = f.name
         try:
-            _PROMPTS[voice_id] = _synth().clone(tmp, ref_text, mode=resolved_mode)
+            _PROMPTS[voice_id] = await run_in_threadpool(
+                _locked, lambda: _synth().clone(tmp, ref_text, mode=resolved_mode))
         finally:
             os.unlink(tmp)
     return {"voice_id": voice_id}
@@ -138,6 +152,7 @@ async def generate(
     temperature: float = Form(DEFAULT_TEMPERATURE),
     top_p: float = Form(DEFAULT_TOP_P),
     repetition_penalty: float = Form(DEFAULT_REP_PENALTY),
+    max_seconds: float = Form(None),
 ):
     # Resolve the voice-clone prompt: cached voice_id first, else inline ref.
     if voice_id and voice_id in _PROMPTS:
@@ -151,23 +166,47 @@ async def generate(
             f.write(data)
             tmp = f.name
         try:
-            prompt = _synth().clone(tmp, ref_text, mode=resolved_mode)
+            prompt = await run_in_threadpool(
+                _locked, lambda: _synth().clone(tmp, ref_text, mode=resolved_mode))
         finally:
             os.unlink(tmp)
     else:
         raise HTTPException(400, "provide a known voice_id or ref_audio + ref_text")
 
-    wav, sr = _synth().generate(
+    wav, sr = await run_in_threadpool(_locked, lambda: _synth().generate(
         text=text, language=language, prompt=prompt, seed=seed,
         temperature=temperature, top_p=top_p, repetition_penalty=repetition_penalty,
-    )
+        max_new_tokens=tokens_for_seconds(max_seconds),
+    ))
     wav = np.asarray(wav, dtype=np.float32)
     dur = len(wav) / float(sr)
     headers = {"x-audio-duration": "%.3f" % dur}
+    cap_tokens = tokens_for_seconds(max_seconds)
+    if cap_tokens and round(dur * FRAMES_PER_SECOND) >= cap_tokens - 1:
+        # The model was stopped by the cap, not by the end of the sentence:
+        # the app treats this as a line that could not be made.
+        headers["x-audio-cut"] = "1"
     if seed is not None:
         headers["x-seed"] = str(seed)
     return Response(content=_to_wav_bytes(wav, sr),
                     media_type="audio/wav", headers=headers)
+
+
+# The speech tokenizer makes 12.5 codec frames per second of audio
+# (speech_tokenizer/config.json "_frame_rate"), so a cap in seconds is a cap
+# in tokens. Without one the model runs to its own default of thousands of
+# tokens -- minutes of speech for a five-second line, which is what a runaway
+# made on a Mac for 15 minutes (2026-09-23). A cut is read by frames, not by
+# a margin in seconds, so a decoder that trims a frame does not hide it.
+FRAMES_PER_SECOND = 12.5
+MIN_TOKENS = 8
+
+
+def tokens_for_seconds(max_seconds):
+    """The token cap for a cap in seconds; None keeps the model's default."""
+    if not max_seconds or max_seconds <= 0 or max_seconds != max_seconds:   # none, or NaN
+        return None
+    return max(MIN_TOKENS, int(math.ceil(max_seconds * FRAMES_PER_SECOND)))
 
 
 class QwenSynth:
@@ -196,13 +235,14 @@ class QwenSynth:
         )
 
     def generate(self, text, language, prompt, seed,
-                 temperature, top_p, repetition_penalty):
+                 temperature, top_p, repetition_penalty, max_new_tokens=None):
         if seed is not None:
             self._torch.manual_seed(seed)
+        extra = {"max_new_tokens": max_new_tokens} if max_new_tokens else {}
         wavs, sr = self.model.generate_voice_clone(
             text=text, language=language, voice_clone_prompt=prompt,
             temperature=temperature, top_p=top_p,
-            repetition_penalty=repetition_penalty,
+            repetition_penalty=repetition_penalty, **extra,
         )
         return wavs[0], sr
 

@@ -88,7 +88,7 @@ function words(node) {
 
 /** A page, a fetch log, and the globals the strip reads. */
 function harness({ agents = [], stored = {}, screen = "done", jobId = "job-1",
-                   chat = null, breakPicker = false } = {}) {
+                   chat = null, breakPicker = false, models = [] } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) {
@@ -162,6 +162,7 @@ function harness({ agents = [], stored = {}, screen = "done", jobId = "job-1",
       if (!chat) throw new Error("no chat scripted");
       return chat;
     }
+    if (url === "/api/models") return { ok: true, json: async () => ({ models }) };
     return { ok: true, json: async () => ({}) };
   };
 
@@ -459,6 +460,37 @@ test("picking a model writes the choice down, and a saved one is read back", asy
     await flush();
     assert.equal(back.$("assistantModelLabel").textContent, "Codex · gpt");
   } finally { back.log.restore(); }
+});
+
+test("a signed-in Codex lists its models by their own names, version and all", async () => {
+  const codex = { ...CODEX, logged_in: true, login_command: "",
+                  models: ["gpt-6-luna", "gpt-5.6-terra", "gpt-5.5"] };
+  const h = harness({ agents: [CLAUDE, codex] });
+  try {
+    await flush();
+    const menu = h.$("assistantMenu");
+    await h.$("assistantModelBtn").fire("click");
+    await flush();
+    await menu.children[2].fire("click", { stopPropagation() {} });   // into Codex
+    // Each row its model, not "Codex" four times (Mac tester, 2026-09-28).
+    assert.deepEqual(menu.children.slice(1).map((r) => words(r.children[0])),
+      ["gpt-6-luna", "gpt-5.6-terra", "gpt-5.5"]);
+  } finally { h.log.restore(); }
+});
+
+test("the sign-in sentence goes away once Codex is signed in", async () => {
+  const codex = { ...CODEX, login_command: "", models: [] };
+  const h = harness({ agents: [CLAUDE, codex],
+    stored: { "persodub.assistantChoice": '{"agent":"codex","model":"","name":"Codex"}' } });
+  try {
+    await flush();
+    const said = () => h.$("assistantLog").children.map((d) => d.textContent || d.dataset.raw || "");
+    assert.ok(said().some((t) => /Press Sign in above/.test(t)));
+    codex.logged_in = true;                         // signed in through the window
+    await h.$("assistantModelBtn").fire("click");   // any fresh look at who is signed in
+    await flush();
+    assert.ok(!said().some((t) => /Press Sign in above/.test(t)));
+  } finally { h.log.restore(); }
 });
 
 // -- a turn ---------------------------------------------------------------
@@ -842,5 +874,89 @@ test("with no assistant ready the strip says so once and sends nothing", async (
     assert.deepEqual(said, ["Install Claude Code or Codex."]);
     assert.equal(h.$("assistantInput").placeholder, "Install Claude Code or Codex");
     assert.equal(h.$("assistantModelLabel").textContent, "Model");
+  } finally { h.log.restore(); }
+});
+
+test("a turn that cancelled or queued a job tells the page to re-read its jobs", async () => {
+  const chat = stream([
+    { kind: "progress", label: "Cancelling a dub", tool: "cancel_dub" },
+    { kind: "progress", done: true },
+    { kind: "done", text: "Cancelled." },
+  ]);
+  const h = harness({ agents: [CLAUDE], chat });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "Cancel the queued one";
+    await input.fire("keydown", { key: "Enter", isComposing: false, keyCode: 13,
+                                  preventDefault() {} });
+    await flush(60);
+    // Once when the cancel came back, once when the turn was over.
+    assert.deepEqual(h.log.emitted, ["persodub:jobs-changed", "persodub:jobs-changed"]);
+  } finally { h.log.restore(); }
+});
+
+
+test("a download offer puts a Download button up, and only pressing it downloads", async () => {
+  // Codex once started 7.6 GB before asking (2026-09-25): the agent can now
+  // only offer, and the person's press is the one thing that downloads.
+  const chat = stream([
+    { kind: "progress", label: "Offering a download", tool: "download_model", model: "gemma" },
+    { kind: "progress", done: true },
+    { kind: "text", text: "A Download button for Gemma 3 (7.6 GB) is in the chat." },
+    { kind: "done" },
+  ]);
+  const models_ = [{ id: "gemma", name: "Gemma 3", bytes: 7.6e9, state: "not_downloaded" }];
+  const h = harness({ agents: [CLAUDE], chat, models: models_ });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "기본 번역을 Gemma로 바꿔줘";
+    await input.fire("keydown", { key: "Enter", isComposing: false, keyCode: 13, preventDefault() {} });
+    await flush(80);
+    const card = h.$("assistantLog").children.find((c) => c.className === "offer-card");
+    assert.ok(card, "no Download card");
+    assert.equal(card.children[0].textContent, "Download Gemma 3?");
+    assert.equal(card.children[1].textContent, "7.6 GB · on this computer");
+    const posts = () => h.log.calls.filter((c) => c.method === "POST" && c.url.startsWith("/api/models/"));
+    assert.equal(posts().length, 0);                 // nothing before the press
+    const [yes] = card.children[2].children;
+    await yes.fire("click");
+    await flush(20);
+    assert.deepEqual(posts().map((c) => c.url), ["/api/models/gemma/download"]);
+    assert.ok(h.log.emitted.includes("persodub:models-changed"));
+    assert.equal(yes.disabled, true);
+    // It follows the download to the end rather than saying Downloading for ever.
+    models_[0].state = "downloading";
+    await h.log.timers.pop()();
+    await flush(20);
+    assert.equal(card.children[1].textContent, "Downloading · 7.6 GB");
+    models_[0].state = "ready";
+    await h.log.timers.pop()();
+    await flush(20);
+    assert.equal(card.children[1].textContent, "Downloaded · 7.6 GB");
+  } finally { h.log.restore(); }
+});
+
+test("Not now on a download offer downloads nothing", async () => {
+  const chat = stream([
+    { kind: "progress", label: "Offering a download", tool: "download_model", model: "hunyuan" },
+    { kind: "progress", done: true },
+    { kind: "done", text: "Button shown." },
+  ]);
+  const h = harness({ agents: [CLAUDE], chat,
+                      models: [{ id: "hunyuan", name: "Hunyuan", bytes: 1.1e9, state: "not_downloaded" }] });
+  try {
+    await flush();
+    const input = h.$("assistantInput");
+    input.value = "훈위안 받아줘";
+    await input.fire("keydown", { key: "Enter", isComposing: false, keyCode: 13, preventDefault() {} });
+    await flush(80);
+    const card = h.$("assistantLog").children.find((c) => c.className === "offer-card");
+    const [, no] = card.children[2].children;
+    await no.fire("click");
+    await flush(10);
+    assert.equal(h.log.calls.filter((c) => c.method === "POST" && c.url.startsWith("/api/models/")).length, 0);
+    assert.equal(card.children[1].textContent, "Not downloaded.");
   } finally { h.log.restore(); }
 });

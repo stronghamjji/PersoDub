@@ -6,9 +6,12 @@ dubbing, each line is requested to have a spoken length similar to the original
 GeminiTranslator uses a consumer AI Studio API key (GEMINI_API_KEY), never shown on
 screen. VertexTranslator uses a service-account (OAuth) instead -- see its docstring.
 """
+import hashlib
 import json
 import os
 import re
+import subprocess
+import tempfile
 import threading
 import time
 from typing import List, Optional
@@ -66,7 +69,9 @@ def build_dub_prompt(
         + length_rule
         + "Keep the original tone (informal stays informal, formal stays formal), preserve the emotion and mood, "
         "and translate into natural colloquial dubbing lines an actor can perform. No stiff literary or translationese style.\n"
-        "Do not merge or split lines.\n"
+        + register_rule(target_lang)
+        + "Do not merge or split lines.\n"
+        "These lines are spoken aloud: no dashes (— – --), parentheses or brackets. Use commas and periods only.\n"
         f"Output only a JSON array containing exactly {len(texts)} strings in order. No other text.\n\n"
         + "\n".join(lines)
     )
@@ -105,6 +110,21 @@ def parse_json_array(raw: str, n: int) -> List[str]:
 _NON_LATIN = re.compile(r"[가-힣ぁ-んァ-ヶ一-鿕]")
 _HANGUL_CHAR = re.compile(r"[가-힣]")
 _LATIN_CHAR = re.compile(r"[a-zA-ZÀ-ɏ]")  # includes extended Latin (đ, é, etc.)
+# An all-capitals short word Korean itself writes in Latin letters: AI, PM,
+# UI UX, GPT-4.0, 오픈AI. ChatGPT keeps them, and treating them as English
+# re-asked every such line twice and warned "needs review" on a good script
+# (5-minute runs, 2026-09-24).
+_ACRONYM = re.compile(r"(?<![A-Za-z])[A-Z]{1,6}[0-9]*(?:[.\-][A-Z0-9]+)*(?![a-z])")
+
+
+def register_rule(target_lang: str) -> str:
+    """One speech level for a whole Korean script. English has none to keep,
+    so "keep the original tone" let each line pick its own and a video came
+    out half 해요체, half 반말 (user chose 해요체, 2026-09-25)."""
+    if target_lang.lower() in ("ko", "korean"):
+        return ("Korean speech level: write EVERY line in polite 해요체 (sentences end in -요), "
+                "the same for the whole video, even when the original is casual.\n")
+    return ""
 
 
 def script_ok(text: str, lang: str) -> bool:
@@ -113,7 +133,7 @@ def script_ok(text: str, lang: str) -> bool:
     if lang in ("ko", "korean"):
         # Dubbing lines must be pure Hangul for the TTS to read — mixed-in Latin letters are invalid
         # (blocks real cases like "덴 đâu?", "dent 자리에")
-        return bool(_HANGUL_CHAR.search(text)) and not _LATIN_CHAR.search(text)
+        return bool(_HANGUL_CHAR.search(text)) and not _LATIN_CHAR.search(_ACRONYM.sub("", text))
     if lang in ("ja", "japanese", "zh", "chinese"):
         return bool(_NON_LATIN.search(text))
     # Latin-script languages: invalid if Hangul, kana, or Han characters are mixed in
@@ -121,6 +141,8 @@ def script_ok(text: str, lang: str) -> bool:
 
 
 def _ask_with_retry(ask, prompt: str, n: int, tries: int = 3) -> List[str]:
+    """(tries: an engine whose every ask is a message off an account's allowance
+    says so with `format_tries`; see _translate_with_fallback.)"""
     """If the LLM doesn't respect the line count, re-ask with a correction appended (up to `tries` times)."""
     last_err = None
     for attempt in range(tries):
@@ -140,13 +162,13 @@ def _ask_with_retry(ask, prompt: str, n: int, tries: int = 3) -> List[str]:
 UNTRANSLATED = ""
 
 
-def _one_line_or_untranslated(ask, prompt: str) -> str:
+def _one_line_or_untranslated(ask, prompt: str, tries: int = 3) -> str:
     """The last-resort single-line ask. A line that still cannot be read after
     its retries is UNTRANSLATED rather than the end of the job. Only a bad
     answer is forgiven: a translator that cannot be reached at all still raises,
     because it would fail every other line the same way."""
     try:
-        return _ask_with_retry(ask, prompt, 1)[0]
+        return _ask_with_retry(ask, prompt, 1, tries)[0]
     except ValueError:
         return UNTRANSLATED
 
@@ -158,18 +180,19 @@ def _translate_with_fallback(engine, texts, target_lang, source_lang, durations,
     breaking the line count is asked again one line at a time (guarantees the
     count); a line that fails even then is left UNTRANSLATED."""
     from app.text.length_fit import DRAFT_CHUNK  # length_fit imports this module
+    tries = getattr(engine, "format_tries", 3)
     out = []
     for a in range(0, len(texts), DRAFT_CHUNK):
         chunk = texts[a:a + DRAFT_CHUNK]
         chunk_durations = durations[a:a + DRAFT_CHUNK] if durations else None
         try:
             prompt = build_dub_prompt(chunk, target_lang, source_lang, chunk_durations, fuller)
-            out.extend(_ask_with_retry(engine._ask, prompt, len(chunk)))
+            out.extend(_ask_with_retry(engine._ask, prompt, len(chunk), tries))
         except ValueError:
             for i, t in enumerate(chunk):
                 d = [chunk_durations[i]] if chunk_durations else None
                 prompt = build_dub_prompt([t], target_lang, source_lang, d, fuller)
-                out.append(_one_line_or_untranslated(engine._ask, prompt))
+                out.append(_one_line_or_untranslated(engine._ask, prompt, tries))
     return out
 
 
@@ -181,6 +204,11 @@ class TranslationEngine:
     # may spend re-asking a line (see app/text/length_fit.py MAX_RETRY). Default 3, for local/free
     # engines -- paid Google engines override this to 0 (cost/429-driven, see GeminiTranslator).
     max_budget_retries: int = 3
+    # Whether a line with the wrong letters in it (Latin inside Korean, say) is
+    # asked again. True for the local models, which do slip into another
+    # language; ChatGPT's own choices stand -- a product name it keeps in
+    # English is its call, not a mistake to re-ask (user, 2026-09-25).
+    recheck_script: bool = True
     # Whether this engine is told how long each line may be at all (character
     # budgets, the re-asks, the seconds a line must fit). False for a model that
     # cannot follow such a rule -- see OllamaTranslator.
@@ -272,6 +300,162 @@ class GeminiTranslator(TranslationEngine):
             except requests.exceptions.Timeout as e:
                 last_err = e
         raise last_err
+
+    def translate(self, texts, target_lang, source_lang=None, durations=None, fuller=False):
+        if not texts:
+            return []
+        return _translate_with_fallback(self, texts, target_lang, source_lang, durations, fuller)
+
+
+# Codex features switched off for a translation run (`codex features list`).
+CHATGPT_NO_TOOLS = ("shell_tool", "unified_exec", "browser_use", "computer_use",
+                    "in_app_browser", "apps", "plugins", "multi_agent", "goals", "hooks",
+                    "image_generation", "view_image")
+
+# What ChatGPT's own free plan chats with (its default since 2026-08-06), by
+# the name the sign-in program lists it under.
+CHATGPT_DEFAULT_MODEL = "gpt-5.6-luna"
+
+
+class ChatGptNotSignedInError(RuntimeError):
+    """The ChatGPT sign-in is missing or expired. The pipeline turns it into
+    the notice that sends the user to Settings."""
+
+
+class ChatGptLimitError(RuntimeError):
+    """The ChatGPT account's usage allowance is used up for now."""
+
+
+class ChatGptTranslator(TranslationEngine):
+    """Translate with the user's own ChatGPT account -- free plan included.
+
+    OpenAI opens exactly one door for another program to use a ChatGPT
+    account: the "Sign in with ChatGPT" flow of its Codex program. That program
+    is the wire here and nothing more: the app pipes the same dubbing prompt
+    the other translators get, in one message per chunk, and reads the last
+    reply back out of a file. No chat window, nothing typed by the user, and
+    the sign-in itself stays in Codex's own files on this machine.
+
+    Not a ChatGPT product feature, so no ChatGPT branding in the wording that
+    reaches OpenAI: the prompt is the app's own. The binary is found the way
+    the Dub Agent finds it (app/agents/base.py find_cli), so a user who signed
+    in for the agent is signed in for this too.
+    """
+    id = "chatgpt"
+    display_name = "ChatGPT"
+    # One extra round at most: every re-ask is a message off the account's
+    # allowance, and a free plan's is small.
+    max_budget_retries = 1
+    recheck_script = False
+    # One more ask when an answer cannot be read, not two: a bad chunk used to
+    # cost up to 21 messages of a free plan (review 2026-09-23).
+    format_tries = 2
+
+    def __init__(self, binary: Optional[str] = None, model: Optional[str] = None,
+                 timeout: float = 300.0):
+        from app.agents import base as agent_base
+
+        self.binary = binary if binary is not None else agent_base.find_cli("codex")
+        # The model ChatGPT itself answers a free account with -- never the
+        # one the user's own Codex setup names (a coding model, and on this
+        # Mac the top-tier one; user, 2026-09-23). PERSODUB_CHATGPT_MODEL in
+        # kit.env is the one way to pick another.
+        wanted = os.environ.get("PERSODUB_CHATGPT_MODEL", "")
+        if not re.match(r"^[A-Za-z0-9._:-]{1,64}$", wanted):
+            wanted = CHATGPT_DEFAULT_MODEL
+        self.model = model if model is not None else wanted
+        self.timeout = timeout
+        # Where each answer is kept for this job (set by the pipeline). A job
+        # that stops at the usage limit and is resumed asks the same questions
+        # again; the ones already answered come from here instead of from the
+        # user's ChatGPT allowance.
+        self.answers_dir: Optional[str] = None
+
+    def _command(self, workdir: str, out_path: str) -> List[str]:
+        cmd = [self.binary, "exec",
+               # A translation is not a session to keep, not a repo to read,
+               # and gets no tools: the sandbox and the two switches say so.
+               "--ephemeral", "--skip-git-repo-check", "--ignore-user-config",
+               "--sandbox", "read-only", "-C", workdir, "--color", "never",
+               "-c", "tools.web_search=false", "-c", "skills.include_instructions=false",
+               # A translation is a plain answer: the lightest thinking, the
+               # fewest of the account's messages spent on it.
+               "-c", 'model_reasoning_effort="low"',
+               "-o", out_path]
+        # No tools at all: a read-only sandbox still lets the shell READ, and
+        # a line of dialogue that says "run ls ~" is text to translate, not an
+        # instruction (review 2026-09-23; checked: with these off, that line
+        # came back translated and nothing ran).
+        for feature in CHATGPT_NO_TOOLS:
+            cmd += ["--disable", feature]
+        if self.model:
+            cmd += ["-m", self.model]
+        return cmd + ["-"]   # the prompt comes on stdin
+
+    def _ask(self, prompt: str) -> str:
+        if not self.answers_dir:
+            return self._ask_chatgpt(prompt)
+        key = hashlib.sha256(f"{self.model}\n{prompt}".encode()).hexdigest()[:32]
+        path = os.path.join(self.answers_dir, key + ".txt")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+        reply = self._ask_chatgpt(prompt)
+        os.makedirs(self.answers_dir, exist_ok=True)
+        with open(path + ".part", "w", encoding="utf-8") as f:
+            f.write(reply)
+        os.replace(path + ".part", path)
+        return reply
+
+    def _ask_chatgpt(self, prompt: str) -> str:
+        if not self.binary:
+            raise ChatGptNotSignedInError("The ChatGPT sign-in program is not installed on this computer")
+        from app.agents import base as agent_base
+
+        with tempfile.TemporaryDirectory(prefix="persodub-chatgpt-", ignore_cleanup_errors=True) as workdir:
+            out_path = os.path.join(workdir, "reply.txt")
+            proc = subprocess.Popen(self._command(workdir, out_path), stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                    encoding="utf-8", errors="replace", env=agent_base.chatgpt_env())
+            try:
+                stdout, stderr = proc.communicate(prompt, timeout=self.timeout)
+            except subprocess.TimeoutExpired as e:
+                # The whole process tree: on Windows an npm .cmd shim leaves
+                # node holding the pipes when only cmd.exe is killed.
+                agent_base._end(proc)
+                raise RuntimeError(f"ChatGPT did not answer within {int(self.timeout)}s") from e
+            r = subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
+            if os.path.exists(out_path):
+                with open(out_path, encoding="utf-8") as f:
+                    reply = f.read()
+                if reply.strip():
+                    return reply
+            # The last message is also printed on stdout; a reply file that
+            # did not arrive (an odd temp path) is not a failed translation.
+            if r.returncode == 0 and "[" in (r.stdout or ""):
+                return r.stdout
+            self._explain(r.returncode, r.stderr or "")
+            raise RuntimeError("ChatGPT sent no reply")
+
+    @staticmethod
+    def _explain(code: int, said: str) -> None:
+        # The Dub Agent's own reading of the same CLI's complaints
+        # (app/agents/base.py): "not logged in", a 401, "run codex login" on
+        # one side; "usage limit", 429, "quota exceeded" on the other.
+        from app.agents import base as agent_base
+
+        # Only the CLI's own error lines are read: its output also echoes the
+        # prompt, and the video's words ("you've hit your usage limit") must
+        # neither read as an account state nor reach the log or a failure
+        # report (review 2026-09-23).
+        errors = "\n".join(ln for ln in said.splitlines() if re.match(r"\s*error\b", ln, re.I))
+        if agent_base._says(agent_base._NOT_LOGGED_IN, errors):
+            raise ChatGptNotSignedInError("ChatGPT is not signed in")
+        if agent_base._says(agent_base._RATE_LIMITED, errors):
+            raise ChatGptLimitError("ChatGPT usage limit reached")
+        if code != 0:
+            last = errors.strip().splitlines()[-1][:160] if errors.strip() else "exit %d" % code
+            raise RuntimeError(f"ChatGPT translation failed ({last})")
 
     def translate(self, texts, target_lang, source_lang=None, durations=None, fuller=False):
         if not texts:
@@ -475,6 +659,7 @@ class OllamaTranslator(TranslationEngine):
 # class back.
 TRANSLATORS = {
     "gemini": lambda: GeminiTranslator(),
+    "chatgpt": lambda: ChatGptTranslator(),
     "vertex": lambda: VertexTranslator(),
     "qwen": lambda: OllamaTranslator(model=OLLAMA_QWEN_MODEL),
     "gemma": lambda: OllamaTranslator(model=OLLAMA_GEMMA_MODEL),
@@ -506,6 +691,7 @@ def build_draft_prompt(texts, target_lang, source_lang, speakers=None):
         "and who is speaking to whom.\n"
         "Rules:\n"
         "- Preserve meaning, emotion, and register (informal stays informal).\n"
+        + register_rule(target_lang) +
         "- Write lines a voice actor can perform naturally, no stiff/literary translationese.\n"
         "- Keep names and recurring terms consistent across lines.\n"
         "- Do NOT worry about length yet; prioritize correct, natural meaning.\n"

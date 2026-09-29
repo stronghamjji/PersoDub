@@ -212,7 +212,7 @@ test("a pack that died for want of the Visual C++ runtime says so, other failure
   assert.equal(vcRuntimeFailure("requests.exceptions.ConnectionError: Max retries exceeded with url: /x"), false);
   assert.equal(vcRuntimeFailure("sha256 mismatch for https://example.com/a.zip: got 00ff"), false);
   assert.equal(vcRuntimeFailure(""), false);
-  assert.equal(VC_RUNTIME_MISSING, "Windows needs Microsoft Visual C++ to run the AI engine. Install it, then try again.");
+  assert.equal(VC_RUNTIME_MISSING, "Windows needs Microsoft Visual C++ to run Python + PyTorch. Install it, then try again.");
   assert.equal(VC_RUNTIME_URL, "https://aka.ms/vc14/vc_redist.x64.exe");
 });
 

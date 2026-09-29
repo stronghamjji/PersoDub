@@ -72,6 +72,17 @@ const CREDIT_MODALS = {
     message: "The Gemini key's free quota is used up. Upgrade its plan, or try again after the daily reset.",
     button: "Upgrade",
   },
+  chatgpt_signed_out: {
+    title: "Sign in with ChatGPT",
+    message: "ChatGPT is not signed in. Sign in with ChatGPT in Settings, then Resume.",
+    button: "Open Settings",
+    action: "settings",
+  },
+  chatgpt_limit: {
+    title: "ChatGPT usage limit",
+    message: "ChatGPT usage limit reached for now. Wait for it to reset, then Resume. Or Start over with another translator.",
+    button: null,
+  },
   gemini_unavailable: {
     title: "Google server busy",
     message: "Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again.",
@@ -291,6 +302,9 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     $("doneNotice").hidden = true;
   }
 
+  // A resumed job keeps its id: its popups may be shown again.
+  function forgetPopups(jobId) { shownFor.delete(jobId); }
+
   return { paintRunning, paintNotices, showCreditModal, hideCreditModal,
-           showNoticeError, paintCancel, reset };
+           showNoticeError, paintCancel, reset, forgetPopups };
 }

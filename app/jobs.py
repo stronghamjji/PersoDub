@@ -58,6 +58,9 @@ SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lan
                 # video was -- lifted off the result for the usage count the
                 # shell sends the moment a job is done (desktop/main.js).
                 "perso_credits", "duration",
+                # A redub: Resume must stay voices-only, never replay the
+                # original's (possibly paid) transcription.
+                "voices_only",
                 # What the boot re-arm needs to rebuild a queued job's work:
                 # the speaker count, and (for a link job still waiting to
                 # download) the link itself.
@@ -161,6 +164,17 @@ class JobStore:
         with self._lock:
             self._jobs[jid] = self._blank(jid)
         return jid
+
+    def claim(self, jid: str, allowed, **kw) -> bool:
+        """Set `kw` on the job only if its status is one of `allowed`, in one
+        step under the lock -- two quick Resume clicks must not both start
+        the same job in the same folder (review 2026-09-23)."""
+        with self._lock:
+            j = self._jobs.get(jid)
+            if j is None or j.get("status") not in allowed:
+                return False
+            j.update(kw)
+            return True
 
     def update(self, jid: str, **kw):
         with self._lock:

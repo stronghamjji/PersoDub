@@ -22,11 +22,15 @@ try:
 except (TypeError, ValueError):
     PERSODUB_TIMEOUT_PER_SEC = 6.0
 # Upper cap so a genuinely stuck subprocess still gets killed instead of
-# hanging for a day.
+# hanging for a day. Twelve hours: the length rule above already says how
+# long a video may take, and at 6x realtime this is a two-hour video, well
+# past the 30 minutes the app recommends (user, 2026-09-23). It used to be
+# three hours, which a 30-minute video reached and a longer one was simply
+# cut off at.
 try:
-    PERSODUB_TIMEOUT_CAP = float(os.environ.get("PERSODUB_TIMEOUT_CAP", "10800"))
+    PERSODUB_TIMEOUT_CAP = float(os.environ.get("PERSODUB_TIMEOUT_CAP", "43200"))
 except (TypeError, ValueError):
-    PERSODUB_TIMEOUT_CAP = 10800.0
+    PERSODUB_TIMEOUT_CAP = 43200.0
 
 
 def scaled_timeout(video_duration: Optional[float], floor: float) -> float:

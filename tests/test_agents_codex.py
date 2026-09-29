@@ -123,7 +123,7 @@ def test_turn_completed_ends_the_turn():
 def test_a_failed_turn_is_an_error():
     out = ev('{"type":"turn.failed","error":{"message":"rate limit reached"}}')
     assert out[0]["kind"] == "error"
-    assert "rate limit" in out[0]["message"]
+    assert out[0]["message"] == "Usage limit reached. Wait a while or pick another assistant."
 
 
 def test_lines_we_do_not_recognise_are_ignored():
@@ -167,6 +167,9 @@ def test_the_command_lets_a_tool_call_through_without_anyone_to_ask(tmp_path):
     # dropped on the grounds that the policy alone should cover it.
     assert 'approvals_reviewer="auto_review"' in joined
     assert 'approval_policy="on-request"' in joined
+    # Our own tools are approved outright, so a turn is not a queue of reviews
+    # (Windows full test 2026-09-25: 15-80 s each, turns cut at 180 s).
+    assert 'mcp_servers.persodub.default_tools_approval_mode="approve"' in joined
     # The floor the shell runs at. An escalation the reviewer approves gets
     # workspace-write on the working directory, so this is not the ceiling.
     assert 'sandbox_mode="read-only"' in joined
@@ -332,19 +335,62 @@ def test_the_turn_that_died_signed_out_says_what_to_do_and_keeps_the_rest():
                     "detail": raw, "signed_out": True}]
 
 
-def test_a_turn_that_failed_for_any_other_reason_is_passed_through():
-    """Only 401 is translated: everything else is the CLI's own account of
-    what happened, which is better than anything this file could invent."""
+def test_a_turn_that_failed_for_any_other_reason_is_one_plain_sentence():
+    """The screen shows a sentence; the CLI's own words go to the log (user,
+    2026-09-28: a URL, a cf-ray and a request id were not for the reader)."""
     out = ev('{"type":"turn.failed","error":{"message":"model overloaded"}}')
-    assert out == [{"kind": "error", "message": "model overloaded"}]
+    assert out == [{"kind": "error", "message": "The assistant stopped partway. Please try again.",
+                    "detail": "model overloaded"}]
 
+
+def test_a_model_the_account_cannot_use_is_said_plainly_and_dropped_from_the_list(monkeypatch, tmp_path):
+    from app.agents import codex
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    codex.forget_models()
+    out = ev('{"type":"turn.failed","error":{"message":"unexpected status 404 Not Found: The model '
+             '`gpt-5.5` does not exist or you do not have access to it., url: https://chatgpt.com/x"}}')
+    assert out[0]["message"] == "This model isn't available on your plan. Pick another one."
+    assert out[0]["models_changed"] is True
+    assert "gpt-5.5" in codex._checked["no"]
+    codex.forget_models()
+
+
+def test_codex_offers_only_the_models_the_account_answered_with(monkeypatch, tmp_path):
+    """The list Codex gives carries no plan: each model is tried once, and
+    only the ones that answer are offered (Mac tester, 2026-09-28)."""
+    from app.agents import codex
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    codex.forget_models()
+    tried = []
+    monkeypatch.setattr(codex.base, "find_cli", lambda name: "/usr/bin/codex")
+    monkeypatch.setattr(codex, "_listed", lambda binary: ["gpt-6-luna", "gpt-5.5", "gpt-5.6-luna"])
+    monkeypatch.setattr(codex, "_answers", lambda binary, m: tried.append(m) or m != "gpt-5.5")
+
+    class Now:   # the background check, run on the spot
+        def __init__(self, target, args=(), **k): self.run = lambda: target(*args)
+        def start(self): self.run()
+    monkeypatch.setattr(codex.threading, "Thread", Now)
+
+    assert codex.models() == ["gpt-6-luna", "gpt-5.6-luna"]
+    assert codex.models() == ["gpt-6-luna", "gpt-5.6-luna"]
+    assert tried == ["gpt-6-luna", "gpt-5.5", "gpt-5.6-luna"], "each model is tried once"
+    # A later refusal still takes one off.
+    codex.refused("gpt-6-luna")
+    assert codex.models() == ["gpt-5.6-luna"]
+    # Kept beside the sign-in: the next launch does not ask again.
+    codex._loaded["done"] = False
+    for k in codex._checked:
+        codex._checked[k] = []
+    assert codex.models() == ["gpt-5.6-luna"]
+    assert len(tried) == 3
+    codex.forget_models()
 
 def test_a_connection_complaint_with_nothing_in_it_still_says_something():
     """The one branch of _transport_error with no recorded line behind it: a
     chip with a blank label would be a tick beside nothing at all."""
     out = ev('{"type":"error"}')
     assert out[0]["kind"] == "progress"
-    assert out[0]["label"] == "The assistant lost its connection."
+    assert out[0]["label"] == "Reconnecting…"
     assert ev('{"type":"error","message":""}')[0]["label"] == out[0]["label"]
 
 
@@ -353,7 +399,8 @@ def test_a_transport_error_wrapped_as_an_item_is_shown_once():
             '"Falling back from WebSockets to HTTPS transport."}}')
     out = ev(line % "item.completed")
     assert out[0]["kind"] == "progress"
-    assert "Falling back" in out[0]["label"]
+    # Every connection complaint reads the same, so they fold into one step.
+    assert out[0]["label"] == "Reconnecting…"
     # item.started for the same item would say it twice.
     assert ev(line % "item.started") == []
 
@@ -402,3 +449,31 @@ def test_an_error_that_ends_the_turn_is_the_last_word(monkeypatch):
     out = list(base.run("/bin/sh", ["-c", "echo {}; exit 3"],
                         lambda e: next(events, [])))
     assert [e["kind"] for e in out] == ["error"]
+
+
+def test_a_download_offer_names_its_model_for_the_button():
+    out = ev('{"type":"item.started","item":{"id":"item_1","type":"mcp_tool_call",'
+             '"server":"persodub","tool":"download_model","arguments":{"model_id":"hunyuan"},'
+             '"result":null,"error":null,"status":"in_progress"}}')
+    assert out[0]["tool"] == "download_model" and out[0]["model"] == "hunyuan"
+
+
+def test_models_that_cannot_be_judged_are_not_asked_on_every_look(monkeypatch, tmp_path):
+    # Offline or at the usage limit the answer is "cannot tell", and every look
+    # at the list started another round of real requests (review, 2026-09-29).
+    from app.agents import codex as c
+    monkeypatch.setattr(c.base, "chatgpt_env", lambda: {"CODEX_HOME": str(tmp_path)})
+    monkeypatch.setattr(c.base, "find_cli", lambda name: "/bin/codex")
+    monkeypatch.setattr(c, "_listed", lambda binary: ["m1"])
+    asked = []
+    monkeypatch.setattr(c, "_answers", lambda binary, model: asked.append(model))
+    c.forget_models()
+
+    for _ in range(5):
+        c.models()
+        for t in list(c.threading.enumerate()):
+            if t.name == "codex-models":
+                t.join(5)
+
+    assert asked == ["m1"]
+    c.forget_models()

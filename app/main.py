@@ -24,7 +24,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app import config, state
+from app import codex_fetch, config, state
 from app.api import agent as agent_api
 from app.api import clips as clips_api
 from app.api import downloads as downloads_api
@@ -75,6 +75,7 @@ async def lifespan(_app):
         log.error("Bad setting, using the default instead -- %s", problem)
     state.job_store.restore(state.WORKSPACE)
     dub_api.rearm_queued_jobs()
+    codex_fetch.prefetch()
     log.info("Ready -- %d job(s) restored", len(state.job_store.all()))
     yield
 
@@ -119,11 +120,20 @@ async def unhandled_exception(request, exc):
 # Browsers always attach Origin to cross-origin POSTs, so rejecting foreign
 # Origins closes that; requests without Origin (our Electron UI same-origin
 # GETs, curl, tests) are untouched.
+def _same_origin(o, url) -> bool:
+    def port(p, scheme):
+        return p or (443 if scheme == "https" else 80)
+    return (o.hostname in ("127.0.0.1", "localhost")
+            and port(o.port, o.scheme) == port(url.port, url.scheme))
+
+
 @app.middleware("http")
 async def reject_cross_origin_writes(request, call_next):
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         origin = request.headers.get("origin")
-        if origin and urlparse(origin).hostname not in ("127.0.0.1", "localhost"):
+        # The port too: another program on this computer serves pages from
+        # 127.0.0.1 on a port of its own, and those are not ours either.
+        if origin and not _same_origin(urlparse(origin), request.url):
             return Response("Cross-origin requests are not allowed", status_code=403)
     return await call_next(request)
 

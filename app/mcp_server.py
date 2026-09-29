@@ -133,9 +133,9 @@ def get_script(job_id: str) -> List[dict]:
     line runs past its slot, 0 when it does not: the screen's "+0.9s"; quote
     this rather than working it out from estimated), speaker (who says it, or null when this
     job recorded no speakers), audio_sec (how long the voice made for it actually
-    runs, or null when that file is gone), voice_stale (true when that voice
-    was made before the script was last written -- so a line whose words you
-    changed still sounds like the old ones until remake_line_voice runs), and
+    runs, or null when that file is gone), voice_stale (true when the line's
+    words changed and its voice has not been made from them yet -- so it
+    still sounds like the old ones until remake_line_voice runs), and
     untranslated (true when the translator could not translate this line: it
     has no words and is silent in the dub; write it from source with
     edit_script_line, then remake_line_voice).
@@ -276,6 +276,28 @@ def remake_line_voice(job_id: str, line: int) -> dict:
 
 
 @mcp.tool()
+def retranslate_lines(job_id: str, lines: Optional[List[int]] = None) -> dict:
+    """Translate the given lines again WITH CHATGPT, then remake their voices.
+
+    Use this when the user asks for lines to be translated again by ChatGPT
+    (or "translated again" without naming a translator). `lines` is a list of
+    line numbers; leave it out for every line. It runs the dub's own
+    translation step -- ChatGPT, fitted to each line's time slot -- writes the
+    new words, speaks every changed line again and rebuilds the video in place.
+
+    Returns {"changed": [{"line", "was", "text"}]}: show the user each line's
+    old and new words. Nothing is left to press afterwards. To rewrite a line
+    in your own words instead, use edit_script_line.
+    """
+    r = _api_post("/api/dub/jobs/%s/retranslate" % job_id,
+                  json={"lines": lines}, timeout=1800.0)
+    if r.status_code in (404, 409, 422, 429, 502, 507):
+        raise Refusal(r.json().get("detail", "these lines cannot be translated again"))
+    r.raise_for_status()
+    return r.json()
+
+
+@mcp.tool()
 def change_speaker(job_id: str, line: int, confirm: bool = False) -> dict:
     """Give ONE line of a Perso dub a NEW speaker (a fresh voice), on Perso's side.
 
@@ -283,6 +305,11 @@ def change_speaker(job_id: str, line: int, confirm: bool = False) -> dict:
     it does nothing but return the confirmation question: relay that message to
     the user, and call again with confirm=true only after they clearly agree.
     """
+    # Which kind of dub first: a local one got asked about Perso credits for a
+    # change that cannot happen there (Windows, 2026-09-26).
+    if _job(job_id).get("dub_mode") != "perso":
+        raise Refusal("Changing a line's speaker works on Perso dubs only. "
+                      "This job was dubbed on this computer.")
     if not confirm:
         return {
             "needs_confirmation": True,
@@ -362,8 +389,9 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     with confirm=true -- never ask five separate questions.
 
     translator picks the translation engine for a local dub when the user
-    names one -- "hunyuan" or "gemma" (on this machine) or "gemini" (Google's
-    API); empty keeps the app's default, Hunyuan. If starting fails because a
+    names one -- "chatgpt" (the user's own ChatGPT account, the default),
+    "hunyuan" or "gemma" (on this machine) or "gemini" (Google's API); empty
+    keeps the app's default, ChatGPT. If starting fails because a
     model is not downloaded, the error names the model and its size: tell the
     user exactly that, and offer the two ways out it lists.
 
@@ -378,8 +406,8 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     """
     if dub_mode not in ("local", "perso"):
         raise Refusal('dub_mode must be "local" or "perso"')
-    if translator not in ("", "gemma", "hunyuan", "gemini"):
-        raise Refusal('translator must be "gemma", "hunyuan", "gemini" or empty')
+    if translator not in ("", "chatgpt", "gemma", "hunyuan", "gemini"):
+        raise Refusal('translator must be "chatgpt", "gemma", "hunyuan", "gemini" or empty')
     for name, value in (("stt", stt), ("separation", separation)):
         if value not in ("", "local", "perso"):
             raise Refusal('%s must be "local", "perso" or empty' % name)
@@ -511,7 +539,7 @@ def set_default(stage: str, choice: str, confirm: bool = False) -> dict:
     they clearly agree -- the assistant once switched transcription to Perso
     before asking, the user declined the dub, and the paid default stayed. stage is one of dub_mode (local |
     perso), separation (local | perso), stt (local | perso), translator
-    (hunyuan | gemma | gemini), voice_quality (fast | high). Cloud choices
+    (chatgpt | hunyuan | gemma | gemini), voice_quality (fast | high). Cloud choices
     need the matching key saved (see get_setup); a local model that is not
     downloaded is not a reason to refuse -- download_model handles that.
     Returns the defaults now in force.
@@ -531,14 +559,13 @@ def set_default(stage: str, choice: str, confirm: bool = False) -> dict:
 
 
 @mcp.tool()
-def download_model(model_id: str, confirm: bool = False) -> dict:
-    """Download one optional model onto this computer (ids and sizes come
-    from get_setup: whisper, qwen3-tts, gemma, hunyuan). Gigabytes, so the
-    first call answers with the size and needs_confirmation=true -- put that
-    to the user, and call again with confirm=true once they agree. Starts the
-    download in the background and returns at once; get_setup shows the
-    progress, and a dub that needs the model can be queued as soon as it
-    reads ready.
+def download_model(model_id: str) -> dict:
+    """Offer one optional model for download (ids and sizes come from
+    get_setup: whisper, qwen3-tts, gemma, hunyuan). This never downloads
+    anything: it puts a Download button with the size in the chat, and the
+    download starts only when the user presses it. Tell them that, with the
+    size -- never say a download has started. get_setup shows it once they
+    have pressed the button.
     """
     r = _api_get("/api/models", timeout=10.0)
     r.raise_for_status()
@@ -553,15 +580,14 @@ def download_model(model_id: str, confirm: bool = False) -> dict:
         return {"model": row["name"], "state": "ready", "message": "%s is already downloaded." % row["name"]}
     if row.get("state") == "downloading":
         return {"model": row["name"], "state": "downloading", "progress": row.get("progress")}
-    if not confirm:
-        return {"needs_confirmation": True, "model": row["name"], "gb": gb,
-                "message": "%s is %.1f GB. Download it now?" % (row["name"], gb)}
-    r = _api_post("/api/models/%s/download" % model_id, timeout=10.0)
-    if r.status_code in (404, 409):
-        raise Refusal(r.json().get("detail", "could not start the download"))
-    r.raise_for_status()
-    return {"model": row["name"], "state": "downloading", "gb": gb,
-            "message": "Downloading %s (%.1f GB). Check get_setup for progress." % (row["name"], gb)}
+    # Only a person's press starts gigabytes: the old confirm=true could be
+    # sent by the agent itself, and Codex did, 7.6 GB before asking (Windows
+    # full test, 2026-09-25). The page shows the button when this call returns.
+    return {"model": row["name"], "id": model_id, "gb": gb, "state": row.get("state"),
+            "button_shown": True,
+            "message": ("A Download button for %s (%.1f GB) is now in the chat. Nothing is "
+                        "downloading yet: it starts only when the user presses it."
+                        % (row["name"], gb))}
 
 
 @mcp.tool()

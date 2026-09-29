@@ -18,13 +18,20 @@ STAGES = {
     "dub_mode": ("DUB_MODE", ("local", "perso"), "local"),
     "separation": ("SEP_ENGINE", ("local", "perso"), "local"),
     "stt": ("STT_ENGINE", ("local", "perso"), None),
-    "translator": ("TRANSLATE_ENGINE", ("hunyuan", "gemma", "gemini"), None),
+    "translator": ("TRANSLATE_ENGINE", ("chatgpt", "hunyuan", "gemma", "gemini"), None),
     "voice_quality": ("VOICE_QUALITY", ("fast", "high"), "fast"),
 }
 
 # What the voice engine's best-of-N count is for each quality word (the same
 # mapping ui/src/dubApi.mjs uses for the screen's Fast / High quality).
 N_TAKES = {"fast": 1, "high": 4}
+
+
+def _hunyuan_installed() -> bool:
+    from app import models as model_store
+    entry = model_store.find("hunyuan")
+    kit = model_store.kit_dir()
+    return bool(entry and kit) and model_store.model_state(entry, kit) == "ready"
 
 
 def _fallback(stage: str) -> str:
@@ -34,7 +41,11 @@ def _fallback(stage: str) -> str:
         # only translates "local" into the "" its callers read.
         return "perso" if current_value("PERSO_API_KEY") else "local"
     if stage == "translator":
-        return config.TRANSLATE_ENGINE_DEFAULT
+        # ChatGPT for a new install; a machine that already has the local
+        # Hunyuan model keeps translating locally after the update, so no
+        # script starts going to OpenAI without anyone choosing it
+        # (user, 2026-09-24).
+        return "hunyuan" if _hunyuan_installed() else config.TRANSLATE_ENGINE_DEFAULT
     return STAGES[stage][2]
 
 

@@ -16,6 +16,7 @@ from app.dub_script import (
     edit_line,
     export_srt,
     load_lines,
+    note_voice_text,
     script_path,
 )
 from app.text.srt import build_srt
@@ -64,19 +65,54 @@ def test_load_lines_reports_speaker_and_audio_length(tmp_path):
 
 
 def test_load_lines_reports_a_voice_older_than_the_script(tmp_path):
-    # After a line is rewritten, the voice on disk is still saying the old words.
-    # The files themselves say so: the script was written after the wav was.
+    # Two lines rewritten, one remade before the remake kept a record of its
+    # words: the files themselves say which voice caught up -- the script was
+    # written after the first wav and before the second.
     write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "정말")])
+    write(tmp_path / EDITED_NAME, [(0.0, 1.7, "누구"), (2.9, 5.7, "진짜")])
     write_wav(tmp_path / "qwen_line_0.wav", seconds=1.0)
     write_wav(tmp_path / "qwen_line_1.wav", seconds=1.0)
     os.utime(tmp_path / "qwen_line_0.wav", (1000, 1000))     # made long ago
-    os.utime(tmp_path / DUB_NAME, (2000, 2000))              # script rewritten since
+    os.utime(tmp_path / EDITED_NAME, (2000, 2000))           # script rewritten since
     os.utime(tmp_path / "qwen_line_1.wav", (3000, 3000))     # remade after that
 
     lines = load_lines(str(tmp_path), "ko")
 
     assert lines[0]["voice_stale"] is True
     assert lines[1]["voice_stale"] is False
+
+
+def test_a_line_the_dub_itself_spoke_is_never_stale(tmp_path):
+    # Its words are translated.srt's own, however the file times fall: the
+    # script file is rewritten whole on every edit of any line.
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "정말")])
+    write(tmp_path / EDITED_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "진짜")])
+    write_wav(tmp_path / "qwen_line_0.wav", seconds=1.0)
+    os.utime(tmp_path / "qwen_line_0.wav", (1000, 1000))
+    os.utime(tmp_path / EDITED_NAME, (2000, 2000))
+
+    assert load_lines(str(tmp_path), "ko")[0]["voice_stale"] is False
+
+
+def test_a_remade_voice_stays_fresh_when_another_line_is_rewritten(tmp_path):
+    # Translate all lines again (every voice remade), then one line again: the
+    # script file is rewritten whole, but the remake recorded the words each
+    # voice was made from, so only the line whose words changed is stale.
+    # (Windows six-bundle test, 2026-09-29: 19 fresh voices went red.)
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "정말")])
+    write(tmp_path / EDITED_NAME, [(0.0, 1.7, "누구"), (2.9, 5.7, "진짜")])
+    write_wav(tmp_path / "qwen_line_0.wav", seconds=1.0)
+    write_wav(tmp_path / "qwen_line_1.wav", seconds=1.0)
+    note_voice_text(str(tmp_path), 1, "누구")
+    note_voice_text(str(tmp_path), 2, "정말로")          # made from older words
+    os.utime(tmp_path / "qwen_line_0.wav", (1000, 1000))
+    os.utime(tmp_path / "qwen_line_1.wav", (1000, 1000))
+    os.utime(tmp_path / EDITED_NAME, (2000, 2000))       # rewritten after both
+
+    lines = load_lines(str(tmp_path), "ko")
+
+    assert lines[0]["voice_stale"] is False
+    assert lines[1]["voice_stale"] is True
 
 
 def test_load_lines_without_a_voice_file_is_never_stale(tmp_path):
@@ -296,3 +332,17 @@ def test_load_lines_judges_fit_by_the_voice_once_there_is_one(tmp_path):
     assert lines[1]["fits"] is True and lines[1]["over"] == 0
     # No voice yet: the estimate's verdict stands, and there is nothing to measure.
     assert lines[2]["audio_sec"] is None and lines[2]["over"] == 0
+
+
+def test_a_line_put_back_after_its_voice_was_remade_is_stale(tmp_path):
+    # Edited, remade, then reverted: the words are the dub's own again and the
+    # voice still says the edit (review, 2026-09-29).
+    write(tmp_path / DUB_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "정말")])
+    write(tmp_path / EDITED_NAME, [(0.0, 1.7, "누가"), (2.9, 5.7, "정말")])
+    write_wav(tmp_path / "qwen_line_0.wav", seconds=1.0)
+    note_voice_text(str(tmp_path), 1, "누구")
+
+    lines = load_lines(str(tmp_path), "ko")
+
+    assert lines[0]["voice_stale"] is True
+    assert lines[1]["voice_stale"] is False

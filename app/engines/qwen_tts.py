@@ -12,17 +12,59 @@ import httpx
 from app import runtime
 from app.config import QWEN_VOICE_MODE
 from app.engines.base import (
+    SynthesisCut,
     SynthesisRequest,
     SynthesisResult,
+    SynthesisTimeout,
     TTSEngine,
 )
 
-# /generate timeout, env-overridable (PERSODUB_TTS_TIMEOUT) -- Mac CPUs are
-# slower than the server's. Garbage/unset falls back to 300.
+# Two ceilings per line, both from the slot the line goes into (the time its
+# speaker's mouth moves). One line of 5.5s ran away for 15 minutes on a Mac
+# (2026-09-23): the model's own cap is 4096 tokens = 5.5 MINUTES of speech,
+# and the app waited a flat PERSODUB_TTS_TIMEOUT (900s in kit.env) per line,
+# then the next line waited behind it. Measured on an M4: a normal line takes
+# 4-9s, the slowest seen 70s; on an RTX 3080, 8s.
+#
+# Speech cap: slot x 3 + 2s -- a normal line is 1.0-1.5x its slot, so only a
+# runaway reaches it. Waiting cap: slot x 10 + 60s -- twice the slowest normal
+# line, with room for a CPU-only machine. PERSODUB_TTS_WAIT_SCALE (kit.env)
+# stretches the waiting cap for a slow machine; nothing stretches the speech
+# cap, since more speech than that is never right.
+TTS_CAP_FACTOR = 3.0
+TTS_CAP_EXTRA = 2.0
+TTS_CAP_UNKNOWN = 30.0      # a line whose slot is not known
+TTS_WAIT_FACTOR = 10.0
+TTS_WAIT_EXTRA = 60.0
+TTS_WAIT_UNKNOWN = 120.0
+# A Windows PC without an NVIDIA GPU makes voices on the CPU, which nobody has
+# measured yet; it waits five times as long rather than fail a slow line.
+_DEFAULT_WAIT_SCALE = "5" if os.environ.get("PERSODUB_TORCH_VARIANT", "").lower() == "cpu" else "1"
 try:
-    PERSODUB_TTS_TIMEOUT = float(os.environ.get("PERSODUB_TTS_TIMEOUT", "300"))
+    PERSODUB_TTS_WAIT_SCALE = max(0.1, float(os.environ.get("PERSODUB_TTS_WAIT_SCALE", _DEFAULT_WAIT_SCALE)))
 except (TypeError, ValueError):
-    PERSODUB_TTS_TIMEOUT = 300.0
+    PERSODUB_TTS_WAIT_SCALE = float(_DEFAULT_WAIT_SCALE)
+# Registering a voice includes, the first time, loading the 4 GB model: one
+# took over two minutes (2026-09-16). It gets its own, longer wait.
+CLONE_WAIT_SECONDS = 600.0
+
+
+# Never below this: a line squeezed into a sliver of a slot (0.01s after
+# borrowing) is still a whole sentence, and must not read as a runaway.
+TTS_CAP_FLOOR = 8.0
+
+
+def speech_cap_seconds(slot: Optional[float]) -> float:
+    """The most speech one line may be: past this the model has run away."""
+    if not slot or slot <= 0 or slot != slot:     # unknown, or NaN
+        return TTS_CAP_UNKNOWN
+    return round(max(slot * TTS_CAP_FACTOR + TTS_CAP_EXTRA, TTS_CAP_FLOOR), 2)
+
+
+def wait_seconds(slot: Optional[float]) -> float:
+    """How long to wait for one line's answer before giving up on it."""
+    base = TTS_WAIT_UNKNOWN if not slot or slot <= 0 else slot * TTS_WAIT_FACTOR + TTS_WAIT_EXTRA
+    return round(base * PERSODUB_TTS_WAIT_SCALE, 2)
 
 
 class QwenTTSEngine(TTSEngine):
@@ -82,6 +124,9 @@ class QwenTTSEngine(TTSEngine):
         form["mode"] = req.mode or QWEN_VOICE_MODE
         if req.seed is not None:
             form["seed"] = str(req.seed)
+        # The speech cap travels with the request; the sidecar turns it into
+        # a token count (desktop/vendor/sidecar/server.py).
+        form["max_seconds"] = "%.2f" % speech_cap_seconds(req.duration)
         return form
 
     def clone(self, ref_audio_path: str, ref_text: str = None, mode: str = None) -> str:
@@ -109,7 +154,7 @@ class QwenTTSEngine(TTSEngine):
                 files={"ref_audio": (os.path.basename(ref_audio_path), f, "audio/wav")},
                 # The same clock as /generate: on a machine that is also
                 # dubbing, a clone outlived 120 seconds (2026-09-16).
-                timeout=PERSODUB_TTS_TIMEOUT,
+                timeout=CLONE_WAIT_SECONDS * PERSODUB_TTS_WAIT_SCALE,
             )
         r.raise_for_status()
         return r.json()["voice_id"]
@@ -134,15 +179,22 @@ class QwenTTSEngine(TTSEngine):
             ref_file = open(req.ref_audio, "rb")
             files = {"ref_audio": (os.path.basename(req.ref_audio),
                                    ref_file, "audio/wav")}
+        wait = req.wait or wait_seconds(req.duration)
         try:
             r = httpx.post(self.base_url + "/generate",
-                           data=form, files=files, timeout=PERSODUB_TTS_TIMEOUT)
+                           data=form, files=files, timeout=wait)
+        except httpx.TimeoutException as e:
+            raise SynthesisTimeout(wait) from e
         finally:
             if ref_file is not None:
                 ref_file.close()
         r.raise_for_status()
         dur = r.headers.get("x-audio-duration")
         seed = r.headers.get("x-seed")
+        if r.headers.get("x-audio-cut") == "1":
+            # Reached the speech cap: the sentence never ended. Not audio to
+            # keep -- it stops mid-word -- so the line is reported, not saved.
+            raise SynthesisCut(float(dur) if dur else speech_cap_seconds(req.duration), req.duration)
         return SynthesisResult(
             audio_bytes=r.content,
             engine_id=self.id,

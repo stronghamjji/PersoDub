@@ -1,7 +1,8 @@
 // The Settings sheet: what opens behind the topbar's gear. It reads
-// GET /api/settings into its fields and saves edits back the moment a field
-// is left -- there is no Save button (2026-08-28), a desktop app's settings
-// take effect as they are changed. It also owns the Perso workspace picker
+// GET /api/settings into its fields and saves them back when Save is pressed
+// (Mac tester, 2026-09-28: saving the moment a field was left gave nobody a
+// way to tell whether it had saved). Cancel, the X, Escape and the backdrop
+// leave without saving; the next open reads the saved values again. It also owns the Perso workspace picker
 // (including the preview of a key that has only been pasted), the
 // Show-in-Finder button, the Appearance picker, the usage-counts switch and
 // the Acknowledgements fold.
@@ -31,6 +32,8 @@
  *        without waiting on any of it.
  * @returns the operations the rest of the page calls.
  */
+import { setupText, watchSetup } from "./chatgptSetup.mjs";
+
 export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
   // The saved workspace id at modal-open time, so Save can post only an actual
   // change (posting the unchanged value would rewrite kit.env for nothing).
@@ -161,6 +164,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
 
   // What was saved when the modal opened, so Save only posts actual edits.
   let keysInitial = { gem: "", per: "" };
+  let togglesInitial = { analytics: true, reports: true };
 
   // Everything the sheet shows about the saved setup, in one pass:
   // GET /api/settings fills the key fields, the workspace picker, the
@@ -188,6 +192,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
       }
       $("analyticsToggle").checked = !st.analytics_off;
       $("reportsToggle").checked = !st.reports_off;
+      togglesInitial = { analytics: !st.analytics_off, reports: !st.reports_off };
     } catch {
       $("persoKeyInput").placeholder = $("geminiKeyInput").placeholder = "Unavailable";
     }
@@ -207,22 +212,144 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
     else delete root.dataset.theme;
     try { localStorage.setItem(THEME_KEY, theme); } catch { /* private window */ }
   }
-  $("themeSelect").addEventListener("change", () => applyTheme($("themeSelect").value));
 
   // Opening the sheet: the saved values first, then the models catalog
   // (not awaited -- the sheet opens without waiting on it), then the sheet.
+  // ChatGPT sign-in. The state comes from GET /api/agent/status?login=1
+  // (the same answer the Dub Agent strip reads for Codex, whose sign-in IS
+  // the ChatGPT sign-in); the button starts it with POST /api/agent/login
+  // and this polls until the answer changes. Wording never names the CLI.
+  // One chain of checks at a time, whichever started it: a check waits for
+  // the one before it (no overlapping callbacks), and reopening Settings in
+  // the middle of a sign-in leaves that sign-in's waiting alone.
+  let chatgptWaiting = false;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function chatgptState() {
+    try {
+      const r = await fetch("/api/agent/status?login=1");
+      if (!r.ok) return null;
+      return ((await r.json()).agents || []).find((x) => x.id === "chatgpt") || null;
+    } catch { return null; }
+  }
+  function paintChatgpt(a, { busy = false, prep = false, note = "" } = {}) {
+    const el = $("chatgptState");
+    const btn = $("chatgptSignInBtn");
+    el.classList.toggle("danger", !!note);
+    if (note) { el.textContent = note; btn.disabled = false; return; }
+    if (a && !a.installed) {
+      el.textContent = "Not available on this computer";
+      btn.disabled = true;
+      return;
+    }
+    btn.disabled = busy || prep;
+    // The first Sign In may fetch OpenAI's sign-in program before any browser.
+    if (prep) { el.textContent = "Opening sign-in…"; return; }
+    if (busy) { el.textContent = "Finish signing in in your browser…"; return; }
+    if (!a || a.logged_in == null) { el.textContent = "Checking…"; return; }
+    if (a.logged_in) { el.textContent = "Signed in"; btn.textContent = "Switch account"; return; }
+    btn.textContent = "Sign in with ChatGPT";
+    el.textContent = "Not signed in";
+  }
+  // The server answers "not known yet" until its check finishes, so ask a
+  // few times before settling (review 2026-09-23: the row sat blank).
+  async function loadChatgpt() {
+    if (chatgptWaiting) return;
+    for (let i = 0; i < 6; i++) {
+      const a = await chatgptState();
+      paintChatgpt(a);
+      if (a && a.logged_in != null) return;
+      await sleep(1000);
+    }
+  }
+  $("chatgptSignInBtn").addEventListener("click", async () => {
+    if (chatgptWaiting) return;
+    chatgptWaiting = true;
+    paintChatgpt(null, { prep: true });
+    // A computer without the sign-in program fetches it first: say so, and how far.
+    const stopWatching = watchSetup((p) => {
+      if (p.stage) $("chatgptState").textContent = setupText(p);
+    });
+    try {
+      const r = await fetch("/api/agent/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "chatgpt" }),
+      }).finally(stopWatching);
+      if (!r.ok) {
+        const detail = (await r.json().catch(() => ({}))).detail;
+        throw new Error(typeof detail === "string" ? detail : "Could not start signing in.");
+      }
+      paintChatgpt(null, { busy: true });
+      // The sign-in lands in the browser; the program's own status says when.
+      // Every 3 s for three minutes, one check after the other.
+      for (let i = 0; i < 60; i++) {
+        await sleep(3000);
+        const a = await chatgptState();
+        if (a && a.logged_in === true) { paintChatgpt(a); return; }
+      }
+      paintChatgpt(null, { note: "Sign-in didn't finish. Try again." });
+    } catch (e) {
+      paintChatgpt(null, { note: e.message });
+    } finally {
+      chatgptWaiting = false;
+    }
+  });
+
   async function openSettings() {
+    loadChatgpt(); // async on purpose -- the sheet opens without waiting on a child process
     $("themeSelect").value = savedTheme();
     await loadSavedSetup();
     refreshModelCatalog();
+    paintChanges();
     $("settingsOverlay").classList.add("open");
   }
-  // Closing saves too: a key typed and then Escape (or the X) never left the
-  // field, so its change event never fired.
+  // Leaving without Save keeps nothing: the fields are read again on open.
   function closeSettings() {
     $("settingsOverlay").classList.remove("open");
-    saveSettingsEdits();
   }
+
+  // What Save would write, counted for the line beside it; Save rests at zero.
+  function changeCount() {
+    const spaceSel = $("persoSpaceSelect");
+    const keyChanged = $("persoKeyInput").value.trim() !== keysInitial.per;
+    return [
+      $("geminiKeyInput").value.trim() !== keysInitial.gem,
+      keyChanged,
+      // A new key brings its own workspace: one change, not two.
+      !keyChanged && !spaceSel.disabled && spaceSel.value !== persoSpaceInitial,
+      $("themeSelect").value !== savedTheme(),
+      $("analyticsToggle").checked !== togglesInitial.analytics,
+      $("reportsToggle").checked !== togglesInitial.reports,
+    ].filter(Boolean).length;
+  }
+  function paintChanges() {
+    const n = changeCount();
+    $("settingsChanges").textContent = n ? `${n} change${n === 1 ? "" : "s"}` : "";
+    $("settingsSaveBtn").disabled = !n;
+  }
+  for (const id of ["geminiKeyInput", "persoKeyInput"]) $(id).addEventListener("input", paintChanges);
+  for (const id of ["persoSpaceSelect", "themeSelect", "analyticsToggle", "reportsToggle"]) {
+    $(id).addEventListener("change", paintChanges);
+  }
+
+  async function saveSettings() {
+    $("settingsSaveBtn").disabled = true;
+    let ok = await saveSettingsEdits();
+    if ($("themeSelect").value !== savedTheme()) applyTheme($("themeSelect").value);
+    if ($("analyticsToggle").checked !== togglesInitial.analytics) {
+      if (await setUsageCounts($("analyticsToggle").checked)) togglesInitial.analytics = $("analyticsToggle").checked;
+      else ok = false;
+    }
+    if ($("reportsToggle").checked !== togglesInitial.reports) {
+      if (await setFailureReports($("reportsToggle").checked)) togglesInitial.reports = $("reportsToggle").checked;
+      else ok = false;
+    }
+    if (ok) { closeSettings(); return; }
+    // Beside the button that was pressed, where the eye already is.
+    paintChanges();
+    $("settingsChanges").textContent = "Could not save. Is the engine running?";
+  }
+  $("settingsSaveBtn").addEventListener("click", saveSettings);
+  $("settingsCancelBtn").addEventListener("click", closeSettings);
 
   // "0.0.0" is what the engine answers when it is not running inside a packaged
   // build (the real number comes from the desktop shell), and a made-up version in
@@ -237,9 +364,8 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
     if (e.key === "Escape" && $("settingsOverlay").classList.contains("open")) closeSettings();
   });
 
-  // Saves on the spot -- when a key field is left or a workspace is picked, and
-  // again when the dialog closes. There is no Save button (2026-08-28): a
-  // desktop app's settings take effect as they are changed.
+  // The keys and the workspace, for Save. True when they are saved (or had
+  // nothing to save).
   async function saveSettingsEdits() {
     // Only actual edits go on the wire -- posting unchanged values would rewrite
     // kit.env for nothing (keysInitial/persoSpaceInitial hold what was already
@@ -280,22 +406,17 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
         if (gemChanged) keysInitial.gem = gem;
         if (perChanged) { keysInitial.per = per; persoSpaceInitial = persoSpaceToPost; }
         else if (spaceChanged) persoSpaceInitial = space;
-        $("settingsSaveError").style.display = "none";
         // No restart prompt: the server reads these three values out of kit.env
         // when a dub starts, so what was just saved is what the next dub uses.
       } catch {
-        $("settingsSaveError").style.display = "";
+        return false;
       }
     }
     // A key save may have just changed which engines are usable -- re-check so
     // the form doesn't keep a possibly-disabled engine silently selected.
     onSaved();
+    return true;
   }
-  // "change" fires when a field is left with a different value -- not on every
-  // keystroke, so a key is posted once, whole.
-  $("persoKeyInput").addEventListener("change", saveSettingsEdits);
-  $("geminiKeyInput").addEventListener("change", saveSettingsEdits);
-  $("persoSpaceSelect").addEventListener("change", saveSettingsEdits);
 
   $("showKeysToggle").addEventListener("click", () => {
     const show = $("persoKeyInput").type === "password";
@@ -315,7 +436,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
       if (!r.ok) throw new Error();
       $("storageHint").textContent = "";
     } catch {
-      $("storageHint").textContent = "Could not open the folder. Is the engine running?";
+      $("storageHint").textContent = "Could not open the folder.";
     }
   });
 
@@ -352,26 +473,8 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog }) {
     } catch { return false; }
   }
 
-  $("reportsToggle").addEventListener("change", async () => {
-    const on = $("reportsToggle").checked;
-    if (await setFailureReports(on)) {
-      $("reportsHint").textContent = "Keys and folder names are removed first.";
-      return;
-    }
-    $("reportsToggle").checked = !on;
-    $("reportsHint").textContent = "Could not save that. Is the engine running?";
-  });
-
-  $("analyticsToggle").addEventListener("change", async () => {
-    const on = $("analyticsToggle").checked;
-    if (await setUsageCounts(on)) return;
-    // Nothing was saved, so the switch must not sit there claiming otherwise.
-    $("analyticsToggle").checked = !on;
-    $("analyticsHint").textContent = "Could not save that. Is the engine running?";
-  });
-
   // used by the page: openSettings. closeSettings and loadSavedSetup are
   // reached from the tests only -- the page's ways out of the sheet are the
   // sheet's own X, its backdrop and Escape, all wired above.
-  return { openSettings, closeSettings, loadSavedSetup };
+  return { openSettings, closeSettings, loadSavedSetup, saveSettings };
 }

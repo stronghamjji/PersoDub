@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import tempfile
 import uuid
 from typing import Callable, List, NoReturn, Optional
@@ -16,6 +17,7 @@ from typing import Callable, List, NoReturn, Optional
 from app import config, media, room
 from app.config import QWEN_N_TAKES
 from app.diar_campplus_client import diarize
+from app.engines.base import VoiceEngineDown
 from app.engines.qwen_tts import QwenTTSEngine
 from app.jobs import JobCancelled
 from app.perso_client import (
@@ -49,6 +51,8 @@ from app.text.srt import (
     split_cues_into_sentences,
 )
 from app.translate import (
+    ChatGptLimitError,
+    ChatGptNotSignedInError,
     GeminiQuotaExhaustedError,
     GeminiUnavailableError,
     TranslationEngine,
@@ -161,6 +165,24 @@ _NOTICE_ERRORS = {
         None,
         ASK_GOOGLE,
     ),
+    ChatGptNotSignedInError: (
+        "chatgpt_signed_out",
+        "ChatGPT is not signed in. Sign in with ChatGPT in Settings, then Resume.",
+        None,
+        "",
+    ),
+    VoiceEngineDown: (
+        "voice_engine_down",
+        "The voice engine stopped responding. Quit and reopen PersoDub, then Resume.",
+        None,
+        "",
+    ),
+    ChatGptLimitError: (
+        "chatgpt_limit",
+        "ChatGPT usage limit reached for now. Wait for it to reset, then Resume. Or Start over with another translator.",
+        None,
+        "",
+    ),
 }
 
 # Which of them each stage catches. Kept separate from the table so a Perso
@@ -171,7 +193,8 @@ _PERSO_NOTICE_ERRORS = (
     PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError,
     PersoProjectFailedError,
 )
-_GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError)
+_GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError,
+                         ChatGptNotSignedInError, ChatGptLimitError)
 
 
 def raise_notice(e, log, on_notice) -> NoReturn:
@@ -289,6 +312,30 @@ def leakage_gate(mix_wav, vocals_path, manifest_path, work_dir, log):
         return mix_wav
 
 
+def _record_provided_script(srt_path: str, source_cues: Optional[list], work_dir: str) -> None:
+    """The three files the finished screen's script is read from, for a dub
+    that was handed its translation instead of making one: voices remade
+    from a script (app/api/dub.py dub_job_redub) and a dub started with a
+    subtitle file. The automatic path writes them at the end of translation;
+    this path skipped that, and the finished screen said "No script was
+    recorded for this job" (user, 2026-09-23). Nothing here overwrites a
+    file that is already there."""
+    dst = os.path.join(work_dir, "translated.srt")
+    if os.path.abspath(srt_path) != os.path.abspath(dst) and not os.path.exists(dst):
+        shutil.copyfile(srt_path, dst)
+    if not source_cues:
+        return
+    original = os.path.join(work_dir, "original.srt")
+    if not os.path.exists(original):
+        with open(original, "w", encoding="utf-8") as f:
+            f.write(build_srt([dict(c) for c in source_cues]))
+    speakers = os.path.join(work_dir, "speakers.json")
+    if not os.path.exists(speakers):
+        with open(speakers, "w", encoding="utf-8") as f:
+            json.dump([{"start": c["start"], "end": c["end"], "speaker": cue_speaker(c)}
+                       for c in source_cues], f)
+
+
 def _auto_translate_srt(
     source_cues: list,
     target_lang: str,
@@ -342,7 +389,14 @@ def _auto_translate_srt(
     # Final check: re-translate any line whose characters aren't the target language, whatever stage produced it (up to 2 times)
     # (this also catches cases where compress/fill re-translation pulled in the wrong language)
     # An untranslated line is not a wrong-language one: it has had its retries.
-    for _ in range(2):
+    # A translator whose own wording stands (ChatGPT) is not asked again: the
+    # lines are counted for the log and kept as written (user, 2026-09-25).
+    if not getattr(translator, "recheck_script", True):
+        kept_as_written = [i for i, t2 in enumerate(translated)
+                           if t2.strip() and not script_ok(t2, target_lang)]
+        if kept_as_written:
+            log(f"   {len(kept_as_written)} lines keep words in another script, as the translator wrote them")
+    for _ in range(2 if getattr(translator, "recheck_script", True) else 0):
         bad = [i for i, t2 in enumerate(translated)
                if t2.strip() and not script_ok(t2, target_lang)]
         if not bad:
@@ -357,7 +411,7 @@ def _auto_translate_srt(
                 translated[i] = t2
     still_bad = [i for i, t2 in enumerate(translated)
                  if t2.strip() and not script_ok(t2, target_lang)]
-    if still_bad:
+    if still_bad and getattr(translator, "recheck_script", True):
         log(f"   Warning: {len(still_bad)} lines still not in the target language — output needs review")
     untranslated = [i for i, t2 in enumerate(translated) if not t2.strip()]
     if untranslated and len(untranslated) == len(translated):
@@ -389,8 +443,10 @@ def _auto_translate_srt(
     # Sentences that don't fit even at 1.5x borrow time by merging with the next sentence
     cues = borrow_time(cues, target_lang)
     out_srt = os.path.join(work_dir, "translated.srt")
-    with open(out_srt, "w", encoding="utf-8") as f:
+    # Whole or not at all (Resume trusts this file): written aside, then moved.
+    with open(out_srt + ".part", "w", encoding="utf-8") as f:
         f.write(build_srt(cues))
+    os.replace(out_srt + ".part", out_srt)
     return out_srt
 
 
@@ -623,7 +679,7 @@ def _pick_source_cues(source_srt_path, perso_cues, src_cues):
 
 
 def _stage_translate(srt_path, source_cues, language, translate_engine, translator,
-                     work_dir, on_notice, log):
+                     work_dir, on_notice, log, cancel_check=None):
     """Stage 3/6 -- translated subtitles, provided or auto-translated.
 
     Returns (segments, auto_translated): the dialogue lines the dub speaks, and
@@ -634,6 +690,18 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
     auto_translated = False
     if srt_path is None:
         tr = translator or get_translator(translate_engine)
+        if hasattr(tr, "answers_dir"):   # ChatGPT: a Resume re-reads what was already answered
+            tr.answers_dir = os.path.join(work_dir, "chatgpt_answers")
+        # Cancel between asks, not only after the stage: a cancel during a
+        # long translation kept asking ChatGPT for 2.5 minutes (8 more
+        # requests off the user's allowance, Windows 2026-09-25). Every
+        # translator sends each request through its _ask.
+        if cancel_check is not None and hasattr(tr, "_ask"):
+            ask = tr._ask
+            def _ask_unless_cancelled(prompt, _ask=ask):
+                _check_cancel(cancel_check, log)
+                return _ask(prompt)
+            tr._ask = _ask_unless_cancelled
         # Name the engine (and model) that translated -- a Gemini run and a
         # local Gemma run were indistinguishable in the log (user feedback
         # 2026-08-06). getattr: test fakes may carry neither attribute.
@@ -667,6 +735,7 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
         auto_translated = True
     else:
         _log_stage(log, "translate", "Using the provided translated subtitles")
+        _record_provided_script(srt_path, source_cues, work_dir)
 
     with open(srt_path, encoding="utf-8-sig") as f:
         segments = parse_srt(f.read())
@@ -677,7 +746,8 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
 
 
 def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path,
-                      language, n_takes, qwen_engine, on_notice, log, video_duration=None):
+                      language, n_takes, qwen_engine, on_notice, log, video_duration=None,
+                      reuse_lines=False, cancel_check=None):
     """Stage 4/6 -- cloning & synthesis (Qwen3-TTS, the app's only TTS engine).
 
     Returns the path of the full-length dubbed audio.
@@ -700,10 +770,17 @@ def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path
     if device:
         log(f"   synthesis device: {device}")
 
-    return run_qwen_dub(engine, segments, ref_cues, work_dir,
-                        vocals_path=vocals_path, background_path=background_path,
-                        language=language, n_takes=effective_n_takes, log=log,
-                        on_notice=on_notice, video_duration=video_duration)
+    try:
+        return run_qwen_dub(engine, segments, ref_cues, work_dir,
+                            vocals_path=vocals_path, background_path=background_path,
+                            language=language, n_takes=effective_n_takes, log=log,
+                            on_notice=on_notice, video_duration=video_duration,
+                            **({"reuse_lines": True} if reuse_lines else {}),
+                            **({"cancel_check": cancel_check} if cancel_check else {}))
+    except VoiceEngineDown as e:
+        # The one voice failure that is not one line's: nothing more will be
+        # made this run, so the job stops here and the screen says why.
+        raise_notice(e, log, on_notice)
 
 
 def _stage_finish(video_path, audio_wav, out_path, work_dir, log):
@@ -726,6 +803,59 @@ def _stage_finish(video_path, audio_wav, out_path, work_dir, log):
     # per-job delete button. cleanup_intermediates() is still here and is what
     # that warning tells the user to reach for.
     log("   keeping the per-line audio so single lines can be redone")
+
+
+# What a finished stage leaves behind for "Resume" (user, 2026-09-23): a
+# dub that stopped half way picks up from the first stage without a result,
+# instead of starting over. A cloud (Perso) stage's result is a file here
+# too, so resuming never asks Perso -- or spends its credits -- twice.
+# Translation and voices already leave files (translated.srt, qwen_line_N.wav);
+# these two record the earlier stages.
+SEPARATED_NAME = "separated.json"
+TRANSCRIPT_NAME = "transcript.json"
+
+
+def _usable_file(path: Optional[str]) -> bool:
+    return bool(path) and os.path.isfile(path) and os.path.getsize(path) > 44
+
+
+def _save_json(work_dir: str, name: str, data) -> None:
+    tmp = os.path.join(work_dir, name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, default=str)
+    os.replace(tmp, os.path.join(work_dir, name))
+
+
+def _load_json(work_dir: str, name: str):
+    try:
+        with open(os.path.join(work_dir, name), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _saved_separation(work_dir: str):
+    """The two files by name, inside this folder only: a record that points
+    anywhere else is not trusted (review 2026-09-23), and a moved workspace
+    still resumes."""
+    d = _load_json(work_dir, SEPARATED_NAME)
+    if not isinstance(d, dict):
+        return None
+    paths = []
+    for key in ("vocals", "background"):
+        name = os.path.basename(str(d.get(key) or ""))
+        path = os.path.join(work_dir, name)
+        if not name or not _usable_file(path):
+            return None
+        paths.append(path)
+    return paths[0], paths[1]
+
+
+def _saved_transcript(work_dir: str):
+    d = _load_json(work_dir, TRANSCRIPT_NAME)
+    if isinstance(d, dict) and isinstance(d.get("cues"), list) and d["cues"]:
+        return d
+    return None
 
 
 def run_dub(
@@ -753,8 +883,12 @@ def run_dub(
     log: Optional[Callable[[str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     on_notice: Optional[Callable[[dict], None]] = None,
+    resume: bool = False,
 ) -> dict:
     """Dub a single video and save it to out_path.
+
+    resume: pick up in this folder from the first stage that left no result
+    (see SEPARATED_NAME above) -- the Resume button on a stopped job.
 
     If srt_path is given, use those translated subtitles as is.
     If not, transcribe -> translate with the engine the job names -> dub.
@@ -806,9 +940,16 @@ def run_dub(
         video_duration = None
 
     _check_room(work_dir, video_path, video_duration)
-    vocals_path, background_path, perso_client = _stage_separate(
-        video_path, work_dir, sep_engine, perso_client, cancel_check, on_notice, log,
-        video_duration=video_duration)
+    saved_sep = _saved_separation(work_dir) if resume else None
+    if saved_sep:
+        _log_stage(log, "separate", "Separated audio from the earlier run, reused")
+        vocals_path, background_path = saved_sep
+    else:
+        vocals_path, background_path, perso_client = _stage_separate(
+            video_path, work_dir, sep_engine, perso_client, cancel_check, on_notice, log,
+            video_duration=video_duration)
+        _save_json(work_dir, SEPARATED_NAME, {"vocals": os.path.basename(vocals_path),
+                                              "background": os.path.basename(background_path)})
 
     _check_cancel(cancel_check, log)
     _check_room(work_dir, video_path, video_duration)
@@ -816,26 +957,48 @@ def run_dub(
     # Transcription: Perso cloud STT if the user picked it, else local
     # Whisper. Whisper auto-detects the source language; capture it so the
     # result can surface it. Perso STT reports no language, so this stays None.
-    detected_code = None
-    perso_cues = None
-    if stt_engine == "perso":
-        perso_cues, perso_client = _stage_transcribe_perso(
-            video_path, perso_client, cancel_check, on_notice, log)
-    if perso_cues is None:
-        src_cues, detected_code, diar_engine = _stage_transcribe_local(
-            video_path, source_language_code, diar_engine, log, video_duration=video_duration)
+    # Each reuse holds only while everything before it was reused too: a stage
+    # made again can change the lines, and a later stage's files from the
+    # earlier run would then belong to different lines (review 2026-09-23).
+    saved_tx = _saved_transcript(work_dir) if resume and saved_sep else None
+    if saved_tx:
+        _log_stage(log, "transcribe",
+                   "Transcript from the earlier run, reused (%d lines)" % len(saved_tx["cues"]))
+        src_cues = saved_tx["cues"]
+        perso_cues = src_cues if saved_tx.get("perso") else None
+        detected_code = saved_tx.get("detected")
     else:
-        src_cues = perso_cues
-    _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=video_duration)
+        detected_code = None
+        perso_cues = None
+        if stt_engine == "perso":
+            perso_cues, perso_client = _stage_transcribe_perso(
+                video_path, perso_client, cancel_check, on_notice, log)
+        if perso_cues is None:
+            src_cues, detected_code, diar_engine = _stage_transcribe_local(
+                video_path, source_language_code, diar_engine, log, video_duration=video_duration)
+        else:
+            src_cues = perso_cues
+        _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=video_duration)
+        _save_json(work_dir, TRANSCRIPT_NAME,
+                   {"cues": src_cues, "perso": perso_cues is not None, "detected": detected_code})
     source_cues = _pick_source_cues(source_srt_path, perso_cues, src_cues)
 
     _check_cancel(cancel_check, log)
     _check_room(work_dir, video_path, video_duration)
 
     # Translated subtitles (provided or auto-translated)
-    segments, auto_translated = _stage_translate(
-        srt_path, source_cues, language, translate_engine, translator,
-        work_dir, on_notice, log)
+    kept_translation = os.path.join(work_dir, "translated.srt")
+    translation_reused = bool(resume and saved_tx and srt_path is None and _usable_file(kept_translation))
+    if translation_reused:
+        _log_stage(log, "translate", "Translation from the earlier run, reused")
+        with open(kept_translation, encoding="utf-8-sig") as f:
+            segments = parse_srt(f.read())
+        log(f"   {len(segments)} dialogue lines prepared")
+        auto_translated = True
+    else:
+        segments, auto_translated = _stage_translate(
+            srt_path, source_cues, language, translate_engine, translator,
+            work_dir, on_notice, log, cancel_check=cancel_check)
 
     # Preserve emotion & speaker -- the reference lines the Qwen path builds its
     # per-speaker voice samples from. (If source subtitles exist, their timing is
@@ -846,7 +1009,8 @@ def run_dub(
     _check_room(work_dir, video_path, video_duration)
     audio_wav = _stage_synthesize(
         segments, ref_cues, work_dir, vocals_path, background_path,
-        language, n_takes, qwen_engine, on_notice, log, video_duration=video_duration)
+        language, n_takes, qwen_engine, on_notice, log, video_duration=video_duration,
+        reuse_lines=bool(resume and (translation_reused or srt_path)), cancel_check=cancel_check)
 
     _check_cancel(cancel_check, log)
     _check_room(work_dir, video_path, video_duration)

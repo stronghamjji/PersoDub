@@ -94,6 +94,15 @@ export const PACK_RUNTIME_KEY = { engine: "tts_url", "ollama-runtime": "ollama_u
 // through <kit>/runtime.json (runtimeFile.js), which the backend reads at use
 // time (app/runtime.py) -- never through the backend's environment, which is
 // fixed at its launch. Returns the children it started (for stopPack).
+// Whether a pack's process is still up. A process the system killed (out of
+// memory, a crash) ends with a signal, not an exit code: exitCode stays null
+// and signalCode says which. Counting only exitCode read a killed voice
+// engine as alive, so Start dubbing "restarted" it without starting anything
+// and the dub stayed refused (2026-09-29).
+export function packAlive(children) {
+  return (children || []).some((c) => c && c.exitCode == null && c.signalCode == null && !c.killed);
+}
+
 export async function startPackProcesses(cfg, packId, { logDir, env, children, record, healthTimeoutMs }) {
   if (packId === "ollama-runtime") {
     // Local translation runs through an Ollama server owned by this app:
@@ -225,8 +234,7 @@ export async function startEngines(cfg, { logDir, appVersion, preferredBackendPo
       // Started already and still announced: nothing to do. A pack whose
       // start failed earlier left no address behind, so it is tried again.
       const key = PACK_RUNTIME_KEY[id];
-      const alive = (packChildren.get(id) || []).some((c) => c && c.exitCode == null && !c.killed);
-      if (alive && (!key || readRuntime(cfg.kitDir)[key])) return;
+      if (packAlive(packChildren.get(id)) && (!key || readRuntime(cfg.kitDir)[key])) return;
       // Not running (never started, or it died after announcing itself): its
       // stale address goes first, so nothing reads it while the new one comes up.
       for (const c of packChildren.get(id) || []) {

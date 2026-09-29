@@ -20,7 +20,7 @@ def _fake_run_dub(**kw):
 def _mk(kit, *rel):
     p = os.path.join(kit, *rel)
     os.makedirs(os.path.dirname(p), exist_ok=True)
-    open(p, "wb").close()
+    open(p, "wb").write(b"w")
 
 
 def _put_tts(kit):
@@ -180,8 +180,8 @@ def test_a_fresh_install_is_asked_for_the_engine_pack_before_the_models(monkeypa
     # The pack's size is per platform (2 GB on Mac, 9 GB for the CUDA build on
     # Windows): the catalog's figure for this one, as the screen would show.
     engine_bytes = models._pack_bytes(next(e for e in models.load_catalog() if e["id"] == "engine"))
-    assert missing[0] == {"id": "engine", "kind": "pack", "name": "AI engine", "bytes": engine_bytes,
-                          "hint": "Runs local dubbing on this computer: sound separation, transcription and the voice."}
+    assert missing[0] == {"id": "engine", "kind": "pack", "name": "Python + PyTorch", "bytes": engine_bytes,
+                          "hint": "Separates the sound, transcribes and makes the voices on this computer."}
     assert all(m["hint"] for m in missing), "every item says what it is for"
     assert [m["id"] for m in missing[1:]] == ["qwen3-tts", "whisper"]
     assert all(m["kind"] == "model" for m in missing[1:])
@@ -352,3 +352,12 @@ def test_plenty_of_memory_or_none_read_starts_without_a_warning(monkeypatch, _ki
         r = _start()
         assert r.status_code == 200
         assert "warning" not in r.json()
+
+
+def test_the_engine_says_only_what_it_will_do_for_this_dub():
+    """Separation and transcription on Perso: the engine is still the voice,
+    and says so (Mac tester, 2026-09-28: "what is this for?")."""
+    from app.api.dub import engine_hint
+    assert engine_hint(False, False) == "Makes the voices on this computer."
+    assert engine_hint(True, False) == "Separates the sound and makes the voices on this computer."
+    assert engine_hint(False, True) == "Transcribes and makes the voices on this computer."

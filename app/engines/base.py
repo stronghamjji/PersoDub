@@ -21,6 +21,7 @@ class SynthesisRequest:
     guidance_scale: float = 2.0
     speed: float = 1.0
     seed: Optional[int] = None
+    wait: Optional[float] = None      # seconds to wait for the answer; None = from the slot
 
 
 @dataclass
@@ -30,6 +31,33 @@ class SynthesisResult:
     engine_id: str = ""
     duration: Optional[float] = None  # Length (seconds) of the generated audio
     seed: Optional[int] = None
+
+
+class SynthesisCut(RuntimeError):
+    """The engine hit the line's speech-length cap: the model ran away instead
+    of finishing the sentence. The audio is not usable (it stops mid-word)."""
+
+    def __init__(self, cut_at: float, slot: Optional[float] = None):
+        super().__init__("ran away, cut at %.1fs" % cut_at)
+        self.cut_at = cut_at
+        self.slot = slot
+
+
+class SynthesisTimeout(RuntimeError):
+    """No answer inside the line's waiting time."""
+
+    def __init__(self, waited: float):
+        super().__init__("no answer in %.0fs" % waited)
+        self.waited = waited
+
+
+class VoiceEngineDown(RuntimeError):
+    """The voice engine stopped answering altogether (its health probe fails
+    after a line timed out). Nothing more can be made this run."""
+
+    def __init__(self, after: str = ""):
+        super().__init__("The voice engine stopped responding" + (" after %s" % after if after else ""))
+        self.after = after
 
 
 class TTSEngine:

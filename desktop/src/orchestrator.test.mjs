@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { startEngines, killStalePids, applyBinDir, sidecarArgv } from "./orchestrator.js";
+import { startEngines, killStalePids, applyBinDir, sidecarArgv, packAlive } from "./orchestrator.js";
 import { readRuntime } from "./runtimeFile.js";
 import { DEFAULTS } from "./config.js";
 import { PATH_SEP, venvBin } from "./platform.js";
@@ -165,15 +165,11 @@ test("the sidecar's address is announced in the kit's runtime.json, and the hand
 });
 
 
-test("startPack starts a pack again when its process died after announcing itself", async () => {
-  // Override mode never starts real packs, so this pins the rule through a
-  // fake child list: a dead child (exitCode set) means start, an alive one means skip.
-  const cfg = fakeCfg();
-  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
-  const engines = await startEngines(cfg, { logDir });
-  // The handle's startPack is a no-op in override mode; the liveness rule it
-  // uses is what the desktop relies on, so assert its inputs through readRuntime.
-  assert.equal(typeof engines.startPack, "function");
-  engines.stopAll();
-  await waitGone(engines.pids);
+test("startPack's liveness rule: a process that exited or was killed by a signal counts as dead", () => {
+  assert.equal(packAlive([{ exitCode: null, signalCode: null, killed: false }]), true);
+  assert.equal(packAlive([{ exitCode: 1, signalCode: null, killed: false }]), false, "exited");
+  assert.equal(packAlive([{ exitCode: null, signalCode: "SIGKILL", killed: false }]), false, "killed by the system");
+  assert.equal(packAlive([{ exitCode: null, signalCode: null, killed: true }]), false, "stopped by us");
+  assert.equal(packAlive([]), false);
+  assert.equal(packAlive(undefined), false, "never started");
 });

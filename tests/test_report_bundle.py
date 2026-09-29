@@ -268,3 +268,20 @@ def test_the_bundle_never_reads_kit_env(tmp_path, monkeypatch):
     (kit / "kit.env").write_text("PERSO_API_KEY=sk-realsecretvalue0000\n", encoding="utf-8")
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
     assert "sk-realsecret" not in client.get("/api/report/bundle").text
+
+
+def test_a_windows_path_logged_as_a_python_list_is_masked():
+    # ffmpeg's command logged as a list doubles every backslash; the account
+    # name and the project folder both survived (Windows full test 2026-09-25).
+    home = "C:\\Users\\EST-INFRA"
+    kit = home + "\\AppData\\Local\\PersoDub"
+    line = ("Command '['ffmpeg', '-y', '-v', 'error', '-i', "
+            "'C:\\\\Users\\\\EST-INFRA\\\\AppData\\\\Local\\\\PersoDub\\\\app\\\\workspace"
+            "\\\\2026-09-25\\\\broken-test_ko\\\\input.mp4', '-ac', '2']' returned 1")
+    out = mask_text(line, home=home, kit=kit)
+    assert "EST-INFRA" not in out
+    assert "broken-test_ko" not in out
+    assert "input.mp4" in out          # which file it was is the diagnosis
+    # And a doubled path that is not under the kit collapses like any other.
+    other = mask_text("open 'C:\\\\Users\\\\EST-INFRA\\\\Videos\\\\client cut.mov' failed", home=home, kit=kit)
+    assert "EST-INFRA" not in other and "Videos" not in other
