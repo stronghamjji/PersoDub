@@ -605,6 +605,7 @@ const ENGINE_LABELS = {
   qwen: { label: "Qwen", api: false },
   hunyuan: { label: "Hunyuan 1.8B", api: false },
   gemini: { label: "Gemini", api: true },
+  chatgpt: { label: "ChatGPT", api: false },
   vertex: { label: "Vertex", api: true },
   qwen3: { label: "Qwen3-TTS", api: false },
 };

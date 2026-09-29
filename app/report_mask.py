@@ -26,6 +26,8 @@ _KEYS = (
 # guards on either side are the path characters: a run touching a slash, a
 # backslash or a dot is part of a filename or a directory, and redacting those
 # used to swallow whole model folders and leave a report nobody could read.
+_JWT = re.compile(r"\beyJ[\w-]+\.[\w-]+\.[\w-]+")
+_EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")
 _LONG_TOKEN = re.compile(r"(?<![A-Za-z0-9_\-/\\.])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_\-/\\.])")
 
 _URL = re.compile(r"\bhttps?://[^\s\"'<>)\]}]+", re.IGNORECASE)
@@ -37,7 +39,7 @@ _URL = re.compile(r"\bhttps?://[^\s\"'<>)\]}]+", re.IGNORECASE)
 # Two passes, because a project name may have spaces in it and a path stops at
 # whitespace: the first takes the whole segment up to the next separator, the
 # second the plain case where the path ends at the project itself.
-_WS_HEAD = r"(workspace[\\/]\d{4}-\d{2}-\d{2}[\\/])"
+_WS_HEAD = r"(workspace(?:\\\\|[\\/])\d{4}-\d{2}-\d{2}(?:\\\\|[\\/]))"
 _WORKSPACE_PROJECT = (
     re.compile(_WS_HEAD + r"[^\\/\n]+?(?=[\\/])"),
     re.compile(_WS_HEAD + r"[^\\/\s\"']+"),
@@ -46,7 +48,7 @@ _URL_HOST = re.compile(r"^(https?://)([^/?#]+)", re.IGNORECASE)
 
 # What follows a home directory, up to the first space: the folders and the
 # file name, all of which belong to the user rather than to the failure.
-_UNDER_HOME = r"((?:[\\/][^\\/\s\"']+)*)"
+_UNDER_HOME = r"((?:[\\/]{1,2}[^\\/\s\"']+)*)"
 # A file name with spaces in it survives that, because a path stops at
 # whitespace -- and it has to, or "could not open /Users/x/kit because the disk
 # is full" would swallow the sentence. What gives such a name away is that it
@@ -85,9 +87,12 @@ def _host_only(match: "re.Match") -> str:
 
 
 def _separator_forms(path: str):
-    """The same path written the three ways a log can spell it. Windows
-    libraries disagree with each other about the separator inside one process."""
-    return [path, path.replace("\\", "/"), path.replace("/", "\\")]
+    """The same path written the four ways a log can spell it. Windows
+    libraries disagree with each other about the separator inside one process,
+    and a command logged as a Python list doubles every backslash (Windows
+    full test 2026-09-25: the account name survived in a failure report)."""
+    win = path.replace("/", "\\")
+    return [path, path.replace("\\", "/"), win, win.replace("\\", "\\\\")]
 
 
 def _collapse_under_home(rest: str) -> str:
@@ -148,6 +153,10 @@ def mask_text(text: str, home: str = "", kit: str = "") -> str:
             out)
     for pattern in _KEYS:
         out = pattern.sub(REDACTED, out)
+    # A sign-in token (header.payload.signature) and an e-mail address: the
+    # ChatGPT sign-in program can print either (review 2026-09-23).
+    out = _JWT.sub(REDACTED, out)
+    out = _EMAIL.sub(REDACTED, out)
     return _LONG_TOKEN.sub(REDACTED, out)
 
 

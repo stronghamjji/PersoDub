@@ -95,6 +95,8 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   // Kept here rather than asked of the server, because the table is redrawn
   // after every remake and the green tick has to survive the redraw.
   const freshLines = new Set();
+  // The lines ticked for Translate again, on the job on screen.
+  const picked = new Set();
 
   function scriptRow(l, speakers) {
     const n = speakers.get(l.speaker);
@@ -127,10 +129,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const off = untr ? " sc-off" : "";
     const offAttr = untr ? " disabled" : "";
     const WRITE_FIRST = "Write the translation first";
-    // Filled means "the words changed and the voice has not caught up". Both
-    // halves are needed: `edited` is per line, and `voice_stale` (a file older
-    // than the script) is what says the remake has not happened since.
-    const stale = l.edited && l.voice_stale;
+    // Filled means "the voice does not say these words". The app decides that
+    // per line now (app/dub_script.py), so it is taken as said: a line edited,
+    // remade and put back is NOT edited, and its voice still says the edit.
+    const stale = l.voice_stale;
     const fresh = freshLines.has(`${scriptJobId}:${l.line}`);
     // Every line below the first of a template is HTML the browser receives, so
     // its indentation is output, not layout: it is deliberately NOT stepped in
@@ -142,8 +144,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const undo = l.edited
       ? `<button class="sc-undo" data-undo="${l.line}" type="button"
          title="Revert to the original translation" aria-label="Revert to the original translation">${UNDO_ICON}</button>` : "<span></span>";
-    return `<div class="sc-row" data-start="${l.start}" data-end="${l.end}">
-    <div class="sc-n">${l.line}</div>
+    const tick = picked.has(l.line);
+    return `<div class="sc-row${tick ? " sc-picked" : ""}" data-start="${l.start}" data-end="${l.end}">
+    <label class="sc-n"><input class="sc-pick" type="checkbox" data-pick="${l.line}"${tick ? " checked" : ""}
+      aria-label="Choose line ${l.line}"><span>${l.line}</span></label>
     <div>${chip}</div>
     <div class="sc-time"><span class="sc-t-a">${escapeHtml(fmtClockTenths(l.start))}</span><span
       class="sc-t-b"> – ${escapeHtml(fmtClockTenths(l.end))}</span></div>
@@ -172,10 +176,15 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   async function renderScript(jobId) {
     const box = $("scriptBox");
     if (!box) return;
+    if (scriptJobId !== jobId) picked.clear();
     scriptJobId = jobId;
     const data = await fetch(`/api/dub/jobs/${jobId}/script`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
+    // Another job was opened while this one's script was on its way: a slow
+    // answer (a Perso job's took seconds) emptied the table and the timeline
+    // of the job on screen (Windows, 2026-09-29).
+    if (scriptJobId !== jobId) return;
     // Beside the pane's name: how much script there is. Empty when there is
     // none, so the label reads as "Script" alone.
     const count = $("scriptCount");
@@ -196,7 +205,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // the column it had inline rather than stepping in with this file.
     box.innerHTML = `
     <div class="sc-row head">
-      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div class="sc-h-src">${escapeHtml(sourceName)}</div>
+      <label class="sc-h-n"><input class="sc-pick" type="checkbox" data-pick="all" aria-label="Choose every line">#</label><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div class="sc-h-src">${escapeHtml(sourceName)}</div>
       <div class="sc-h-dst">${escapeHtml(targetName)}</div>
       <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>
     </div>
@@ -208,6 +217,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const total = Number.isFinite(duration) ? duration : 0;
     renderTimeline(data.lines, total || data.lines[data.lines.length - 1].end);
     paintPlayhead();
+    wirePicks(box, data.lines.length, !data.readonly);
 
     if (data.readonly) {
       // A Perso dub starts as a read-only mirror of the server's script. The
@@ -290,6 +300,93 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     });
   }
 
+  // Translate again (user, 2026-09-28). The boxes pick lines; the button's
+  // menu sends the picked ones, or every line, through ChatGPT once more, and
+  // the server speaks each changed line again before it answers.
+  let lineCount = 0;
+  function paintPicks() {
+    const n = picked.size;
+    $("scriptPickCount").textContent = n ? `${n} selected` : "";
+    const one = $("retranslateMenu").querySelector('[data-retr="picked"]');
+    one.textContent = `Selected lines (${n})`;
+    one.disabled = !n;
+    $("retranslateMenu").querySelector('[data-retr="all"]').textContent = `All lines (${lineCount})`;
+    const all = $("scriptBox").querySelector('[data-pick="all"]');
+    if (all) all.checked = n > 0 && n === lineCount;
+  }
+  function wirePicks(box, count, editable) {
+    lineCount = count;
+    $("retranslateWrap").hidden = !editable;
+    box.querySelectorAll(".sc-pick").forEach((b) => { b.hidden = !editable; });
+    if (!editable) { picked.clear(); $("scriptPickCount").textContent = ""; return; }
+    box.querySelectorAll(".sc-pick").forEach((b) => b.addEventListener("change", () => {
+      if (b.dataset.pick === "all") {
+        picked.clear();
+        box.querySelectorAll(".sc-pick[data-pick]").forEach((o) => {
+          if (o.dataset.pick === "all") return;
+          o.checked = b.checked;
+          o.closest(".sc-row").classList.toggle("sc-picked", b.checked);
+          if (b.checked) picked.add(+o.dataset.pick);
+        });
+      } else {
+        if (b.checked) picked.add(+b.dataset.pick); else picked.delete(+b.dataset.pick);
+        b.closest(".sc-row").classList.toggle("sc-picked", b.checked);
+      }
+      paintPicks();
+    }));
+    paintPicks();
+  }
+  function openMenu(open) {
+    $("retranslateMenu").hidden = !open;
+    $("retranslateBtn").setAttribute("aria-expanded", String(open));
+  }
+  $("retranslateBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    openMenu($("retranslateMenu").hidden);
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest || !e.target.closest("#retranslateWrap")) openMenu(false);
+  });
+  $("retranslateMenu").querySelectorAll("[data-retr]").forEach((item) => {
+    item.addEventListener("click", () => {
+      openMenu(false);
+      retranslate(scriptJobId, item.dataset.retr === "all" ? null : [...picked].sort((a, b) => a - b));
+    });
+  });
+  async function retranslate(jobId, lines) {
+    if (!jobId) return;
+    const btn = $("retranslateBtn");
+    btn.disabled = true;
+    scriptSaving(`Translating ${lines ? lines.length : "all"} line${lines && lines.length === 1 ? "" : "s"} with ChatGPT, then making the voices…`);
+    try {
+      const r = await fetch(`/api/dub/jobs/${jobId}/retranslate`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines }),
+      });
+      const data = await r.json().catch(() => ({}));
+      // Not signed in to ChatGPT: the same sign-in window as a first dub,
+      // and this translation goes on once it lands.
+      if (r.status === 422 && /Sign in to ChatGPT/.test(data.detail || "") && typeof window !== "undefined") {
+        scriptSaving("");
+        window.dispatchEvent(new CustomEvent("persodub:chatgpt-signin", { detail: () => retranslate(jobId, lines) }));
+        return;
+      }
+      if (!r.ok) throw new Error(data.detail || "Could not translate those lines again.");
+      const changed = data.changed || [];
+      changed.forEach((c) => freshLines.add(`${jobId}:${c.line}`));
+      picked.clear();
+      scriptSaving(changed.length
+        ? `${changed.length} line${changed.length === 1 ? "" : "s"} translated again`
+        : "ChatGPT gave the same words. Nothing changed.");
+      await refreshAfterVoices(jobId);
+      setTimeout(() => scriptSaving(""), 4000);
+    } catch (e) {
+      scriptSaving(errorText(e));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function scriptSaving(text) {
     const el = $("scriptSaving");
     if (el) el.textContent = text || "";
@@ -366,6 +463,9 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     $("scriptBox").innerHTML = "";
     scriptSaving("");
     scriptJobId = null;
+    picked.clear();
+    $("scriptPickCount").textContent = "";
+    $("retranslateWrap").hidden = true;
   }
 
   // How many lines are still wearing the filled "the words changed" mark. The
@@ -375,6 +475,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     return $("scriptBox").querySelectorAll(".sc-wave.stale").length;
   }
 
-  return { renderScript, refreshAfterVoices, setSaving: scriptSaving, reset,
+  // retranslate: reached from the menu above; returned for the tests.
+  return { renderScript, refreshAfterVoices, setSaving: scriptSaving, reset, retranslate,
            getJobId: () => scriptJobId, countStale };
 }

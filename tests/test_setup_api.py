@@ -26,13 +26,13 @@ def _kit(tmp_path, monkeypatch, text="PERSODUB_KIT_DIR=/x\n# PERSO_API_KEY=\n"):
     return kit
 
 
-def test_get_reports_hunyuan_and_local_as_the_untouched_defaults(tmp_path, monkeypatch):
+def test_get_reports_chatgpt_and_local_as_the_untouched_defaults(tmp_path, monkeypatch):
     _kit(tmp_path, monkeypatch)
     r = client.get("/api/setup")
     assert r.status_code == 200
     d = r.json()["defaults"]
     assert d == {"dub_mode": "local", "separation": "local", "stt": "local",
-                 "translator": "hunyuan", "voice_quality": "fast"}
+                 "translator": "chatgpt", "voice_quality": "fast"}
     assert r.json()["keys"] == {"perso": False, "gemini": False}
     assert "translator" in r.json()["choices"]
 
@@ -109,3 +109,13 @@ def test_a_saved_perso_stt_still_needs_the_key(tmp_path, monkeypatch):
     r = client.post("/api/dub/start", files={"video": ("v.mp4", b"vid", "video/mp4")},
                     data={"language": "Korean", "language_code": "ko"})
     assert r.status_code == 422 and "Perso" in r.json()["detail"]
+
+
+def test_an_install_that_has_hunyuan_keeps_it_as_the_default(tmp_path, monkeypatch):
+    """Updating must not quietly start sending scripts to OpenAI (2026-09-24)."""
+    from app import setup as setup_mod
+    _kit(tmp_path, monkeypatch)
+    monkeypatch.setattr(setup_mod, "_hunyuan_installed", lambda: True)
+    assert client.get("/api/setup").json()["defaults"]["translator"] == "hunyuan"
+    monkeypatch.setattr(setup_mod, "_hunyuan_installed", lambda: False)
+    assert client.get("/api/setup").json()["defaults"]["translator"] == "chatgpt"

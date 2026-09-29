@@ -230,11 +230,6 @@ const KIT_ENV_MANAGED_ADDITIONS = [
     line: "PERSODUB_SCORER_ASR_TIMEOUT=60",
   },
   {
-    key: "PERSODUB_TTS_TIMEOUT",
-    comment: "# Mac-CPU-calibrated TTS request timeout (backend default: 300s).",
-    line: "PERSODUB_TTS_TIMEOUT=900",
-  },
-  {
     key: "PERSODUB_DIAR_TIMEOUT",
     comment: "# Mac-CPU-calibrated diarization timeout (backend default: 600s).",
     line: "PERSODUB_DIAR_TIMEOUT=1800",
@@ -253,6 +248,10 @@ const KIT_ENV_MANAGED_ADDITIONS = [
 // The torch build this kit's engines venv has, or should get: what its
 // kit.env records if it has one (an installed kit keeps its build -- see the
 // managed addition above), else the hardware guess for a fresh install.
+// What a pip too old for "--progress-bar raw" says (issue #111):
+// "option --progress-bar: invalid choice: 'raw' (choose from 'on', 'off')".
+export const RAW_BAR_REFUSED = /invalid choice: '?raw'?/i;
+
 // Turns pip's "--progress-bar raw" lines ("Progress <got> of <total>", one
 // file at a time) into a percent of `budget` bytes, keeping the last ordinary
 // line as the detail. Files finish when their total changes; the percent
@@ -322,8 +321,6 @@ export function writeKitEnv({ kitDir, torchVariant = torchVariantFor(kitDir) }) 
     "PERSODUB_LEAKAGE_GATE=measure",
     // Mac-CPU-calibrated take-scorer ASR timeout (backend default: 15s).
     "PERSODUB_SCORER_ASR_TIMEOUT=60",
-    // Mac-CPU-calibrated TTS request timeout (backend default: 300s).
-    "PERSODUB_TTS_TIMEOUT=900",
     // Mac-CPU-calibrated diarization timeout (backend default: 600s).
     "PERSODUB_DIAR_TIMEOUT=1800",
     // Which torch build venv-engines installed (cpu/cu128/mps) -- read by
@@ -497,9 +494,19 @@ export function buildSteps(ctx) {
         // `venvPy -m pip`, not the bin/pip shim: the shim carries an absolute
         // shebang, so it is the one file in a venv that a moved or repaired
         // environment can no longer run.
-        await ctx.run([venvPy, "-m", "pip", "install", "--no-cache-dir", "--progress-bar", "raw",
-                       "--retries", "10", "--timeout", "60", ...args],
-                      { onLine: (l) => report(...progress(l)) });
+        const pipArgs = (bar) => [venvPy, "-m", "pip", "install", "--no-cache-dir", "--progress-bar", bar,
+                                   "--retries", "10", "--timeout", "60", ...args];
+        try {
+          await ctx.run(pipArgs("raw"), { onLine: (l) => report(...progress(l)) });
+        } catch (e) {
+          // "raw" arrived in pip 24.1. When the upgrade above could not reach
+          // the index, the venv keeps the Python's own older pip, which
+          // refuses the flag outright (issue #111). The same install without
+          // it only loses the byte count.
+          if (!RAW_BAR_REFUSED.test(String(e && e.message))) throw e;
+          report(null, "pip is older than expected; installing without the progress count");
+          await ctx.run(pipArgs("off"), { onLine: (l) => report(null, l.slice(0, 120)) });
+        }
       }
       if (proveItWorks) await proveItWorks(venvPy, report);
       markOk(id, pipFingerprint(pipInstalls));

@@ -70,7 +70,23 @@ def test_remake_line_voice_asks_for_that_one_line(posted):
 
 # --- change_speaker: the Perso-dub tool with the pay-gate -------------------
 
-def test_change_speaker_asks_before_spending(monkeypatch):
+@pytest.fixture
+def a_perso_job(monkeypatch):
+    """change_speaker reads the job first; these tests are about a Perso dub."""
+    monkeypatch.setattr(mcp_server.httpx, "get",
+                        lambda url, **kw: _Response(200, {"id": "job7", "dub_mode": "perso"}))
+
+
+def test_change_speaker_on_a_local_dub_says_so_before_any_credit_question(monkeypatch):
+    monkeypatch.setattr(mcp_server.httpx, "get",
+                        lambda url, **kw: _Response(200, {"id": "job7", "dub_mode": "local"}))
+    posted = []
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda *a, **kw: posted.append(a))
+    with pytest.raises(ValueError, match="Perso dubs only"):
+        mcp_server.change_speaker("job7", 3)
+    assert posted == []
+
+def test_change_speaker_asks_before_spending(monkeypatch, a_perso_job):
     # Without confirm=True nothing may be posted -- the agent must relay the
     # question and only proceed once the user agrees (money rule A).
     posted = []
@@ -81,7 +97,7 @@ def test_change_speaker_asks_before_spending(monkeypatch):
     assert posted == []
 
 
-def test_change_speaker_posts_once_confirmed(monkeypatch):
+def test_change_speaker_posts_once_confirmed(monkeypatch, a_perso_job):
     calls = []
 
     def fake_post(url, json=None, timeout=None):
@@ -96,7 +112,7 @@ def test_change_speaker_posts_once_confirmed(monkeypatch):
     assert body == {"line": 3}
 
 
-def test_change_speaker_relays_a_refusal(monkeypatch):
+def test_change_speaker_relays_a_refusal(monkeypatch, a_perso_job):
     def fake_post(url, json=None, timeout=None):
         return _Response(409, {"detail": "Only Perso dubs have server-side speakers."})
 
@@ -575,19 +591,21 @@ def test_set_default_posts_one_stage_and_relays_a_refusal(monkeypatch):
         mcp_server.set_default("translator", "nope")
 
 
-def test_download_model_asks_first_then_starts(monkeypatch):
-    # The real answer shape of GET /api/models: {"models": [...]} (a bare list in
-    # this test hid a crash on the first live call, 2026-09-04).
+def test_download_model_never_downloads_it_only_offers_the_button(monkeypatch):
+    # Codex once sent confirm=true itself and started 7.6 GB before asking
+    # (Windows full test, 2026-09-25). Now only the user's press on the chat's
+    # button starts a download: this tool posts nothing, whatever it is given.
     rows = {"models": [{"id": "gemma", "name": "Gemma 3", "bytes": 7600000000, "state": "not_downloaded"}]}
     monkeypatch.setattr(mcp_server.httpx, "get",
                         lambda url, params=None, timeout=None: _Response(200, rows))
     posted = []
-    monkeypatch.setattr(mcp_server.httpx, "post",
-                        lambda url, **kw: (posted.append(url), _Response(202, {"state": "downloading"}))[1])
-    ask = mcp_server.download_model("gemma")
-    assert ask["needs_confirmation"] is True and ask["gb"] == 7.6 and posted == []
-    go = mcp_server.download_model("gemma", confirm=True)
-    assert go["state"] == "downloading" and posted[0].endswith("/api/models/gemma/download")
+    monkeypatch.setattr(mcp_server.httpx, "post", lambda url, **kw: posted.append(url))
+    out = mcp_server.download_model("gemma")
+    assert out["button_shown"] is True and out["gb"] == 7.6 and out["id"] == "gemma"
+    assert "only when the user presses" in out["message"]
+    assert posted == []
+    import inspect
+    assert "confirm" not in inspect.signature(mcp_server.download_model).parameters
 
 
 def test_download_model_says_when_it_is_already_there_or_unknown(monkeypatch):

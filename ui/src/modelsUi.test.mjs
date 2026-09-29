@@ -27,41 +27,36 @@ test("modelStatusLine covers the four states with the mockup's words", () => {
   assert.deepEqual(modelStatusLine({ state: "paused", error: "network died" }),
     { cls: "model-busy", text: "Paused: network died", button: "resume" });
   assert.deepEqual(
-    modelStatusLine({ state: "not_downloaded", bytes: 7.6 * 1024 ** 3 }),
+    modelStatusLine({ state: "not_downloaded", bytes: 7.6e9 }),
     { cls: "", text: "7.6 GB", button: "download" });
 });
 
-test("dubStartDialog: several models get the total, one gets its name", () => {
-  const many = dubStartDialog({ missing: [
-    { id: "qwen3-tts", name: "Qwen3-TTS", bytes: 4.3 * 1024 ** 3 },
-    { id: "whisper", name: "Whisper", bytes: 2.9 * 1024 ** 3 },
-  ], total_bytes: 7.2 * 1024 ** 3 });
-  assert.equal(many.title, "Download 7.2 GB of AI models to start dubbing?");
-  assert.deepEqual(many.ids, ["qwen3-tts", "whisper"]);
+test("dubStartDialog says only the size and what it is for", () => {
+  const voice = dubStartDialog({ missing: [
+    { id: "engine", kind: "pack", name: "Python + PyTorch", bytes: 2.0e9 },
+  ] });
+  assert.equal(voice.title, "Download 2.0 GB to start dubbing?");
+  assert.equal(voice.line, "One-time download for making voices on this computer.");
+  assert.equal(voice.perso, true, "the voice parts point to Perso dubbing");
 
-  const one = dubStartDialog({ missing: [{ id: "gemma", name: "Gemma 3", bytes: 7.6 * 1024 ** 3 }] });
-  assert.equal(one.title, "Download Gemma 3 (7.6 GB) to start dubbing?");
+  const stt = dubStartDialog({ missing: [{ id: "whisper", kind: "model", name: "Whisper", bytes: 2.9e9 }] });
+  assert.equal(stt.line, "One-time download for transcribing on this computer.");
+  assert.equal(stt.perso, false);
+
+  const tr = dubStartDialog({ missing: [{ id: "gemma", name: "Gemma 3", bytes: 7.6e9 }] });
+  assert.equal(tr.title, "Download 7.6 GB to start dubbing?");
+  assert.equal(tr.line, "One-time download for translating on this computer.");
 });
 
 test("dubStartDialog splits packs from models and keeps the 409's order", () => {
   const d = dubStartDialog({ missing: [
-    { id: "engine", kind: "pack", name: "AI engine", bytes: 2.0 * 1024 ** 3 },
-    { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9 * 1024 ** 3 },
+    { id: "engine", kind: "pack", name: "Python + PyTorch", bytes: 2.0e9 },
+    { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9e9 },
   ] });
   assert.deepEqual(d.packs, ["engine"]);
   assert.deepEqual(d.models, ["whisper"]);
   assert.deepEqual(d.ids, ["engine", "whisper"]);
   assert.equal(d.title, "Download 4.9 GB to start dubbing?");
-  assert.match(d.line, /AI engine/);
-  const one = dubStartDialog({ missing: [{ id: "engine", kind: "pack", name: "AI engine", bytes: 2.0 * 1024 ** 3 }] });
-  assert.equal(one.title, "Download AI engine (2.0 GB) to start dubbing?");
-  // Models-only 409s (every 0.5.2 kit) keep their wording.
-  const old = dubStartDialog({ missing: [
-    { id: "qwen3-tts", kind: "model", name: "Qwen3-TTS", bytes: 4.3 * 1024 ** 3 },
-    { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9 * 1024 ** 3 },
-  ] });
-  assert.deepEqual(old.packs, []);
-  assert.equal(old.title, "Download 7.2 GB of AI models to start dubbing?");
 });
 
 test("neededPackIds names the pack behind each dropdown choice", () => {

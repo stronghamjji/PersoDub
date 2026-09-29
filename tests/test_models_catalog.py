@@ -53,8 +53,8 @@ def _entry(cat, mid):
 def test_hf_model_ready_when_all_markers_exist(tmp_path):
     cat = models_module.load_catalog()
     kit = str(tmp_path)
-    _mk(kit, "models", "qwen3-tts", "model.safetensors")
-    _mk(kit, "models", "qwen3-tts", "speech_tokenizer", "model.safetensors")
+    _mk(kit, "models", "qwen3-tts", "model.safetensors", content=b"w")
+    _mk(kit, "models", "qwen3-tts", "speech_tokenizer", "model.safetensors", content=b"w")
     assert models_module.model_state(_entry(cat, "qwen3-tts"), kit) == "ready"
 
 
@@ -65,6 +65,22 @@ def test_hf_model_paused_when_dir_exists_without_all_markers(tmp_path):
     kit = str(tmp_path)
     _mk(kit, "models", "qwen3-tts", "config.json")
     assert models_module.model_state(_entry(cat, "qwen3-tts"), kit) == "paused"
+
+
+def test_hf_model_with_an_empty_marker_or_pieces_left_is_paused(tmp_path):
+    # A cancelled download left model.bin at 0 bytes and the state said ready;
+    # the dub then failed on it (Mac full test C3, 2026-09-25).
+    cat = models_module.load_catalog()
+    kit = str(tmp_path)
+    _mk(kit, "models", "whisper", "faster-whisper-large-v3", "model.bin")
+    assert models_module.model_state(_entry(cat, "whisper"), kit) == "paused"
+    _mk(kit, "models", "whisper", "faster-whisper-large-v3", "model.bin", content=b"x" * 10)
+    _mk(kit, "models", "whisper", "faster-whisper-large-v3", ".cache", "huggingface", "download",
+        "model.bin.abc.incomplete", content=b"x")
+    assert models_module.model_state(_entry(cat, "whisper"), kit) == "paused"
+    os.remove(os.path.join(kit, "models", "whisper", "faster-whisper-large-v3", ".cache",
+                           "huggingface", "download", "model.bin.abc.incomplete"))
+    assert models_module.model_state(_entry(cat, "whisper"), kit) == "ready"
 
 
 def test_hf_model_not_downloaded_when_dir_missing(tmp_path):
@@ -94,7 +110,7 @@ def test_ollama_model_not_downloaded_without_manifest(tmp_path):
 def test_api_models_lists_optional_models_with_states(monkeypatch, tmp_path):
     kit = str(tmp_path)
     monkeypatch.setenv("PERSODUB_KIT_DIR", kit)
-    _mk(kit, "models", "whisper", "faster-whisper-large-v3", "model.bin")
+    _mk(kit, "models", "whisper", "faster-whisper-large-v3", "model.bin", content=b"w")
     r = client.get("/api/models")
     assert r.status_code == 200
     rows = r.json()["models"]
@@ -140,7 +156,7 @@ def _put_engine_pack(kit):
 
 def test_catalog_lists_the_packs_without_a_source():
     by_id = {m["id"]: m for m in models_module.load_catalog()}
-    assert by_id["engine"]["role"] == "pack" and by_id["engine"]["name"] == "AI engine"
+    assert by_id["engine"]["role"] == "pack" and by_id["engine"]["name"] == "Python + PyTorch"
     assert by_id["ollama-runtime"]["role"] == "pack"
     assert by_id["subtitle-eraser"]["role"] == "pack"
     for pack in ("engine", "ollama-runtime", "subtitle-eraser"):
@@ -199,7 +215,7 @@ def test_api_models_shows_the_packs_with_this_platforms_size(monkeypatch, tmp_pa
     assert rows["engine"]["bytes"] == 2000000000
     assert rows["engine"]["state"] == "ready"
     assert rows["ollama-runtime"]["state"] == "not_downloaded"
-    assert rows["subtitle-eraser"]["bytes"] == 3900000000
+    assert rows["subtitle-eraser"]["bytes"] == 4400000000   # measured on disk, 2026-09-25
     assert rows["subtitle-eraser"]["hint"] == "Erases burned-in subtitles."
 
 
@@ -221,7 +237,7 @@ def test_removing_an_ollama_model_without_its_runtime_is_refused_with_a_sentence
     monkeypatch.setattr(models_module, "dub_in_progress", lambda: False)
     r = client.delete("/api/models/hunyuan")
     assert r.status_code == 409
-    assert r.json()["detail"] == "Install the Translation runtime first, then remove this model."
+    assert r.json()["detail"] == "Install Ollama first, then remove this model."
     assert os.path.exists(os.path.join(kit, "models", "ollama", "manifests"))
 
 
@@ -245,7 +261,7 @@ def test_an_ollama_model_asked_for_without_its_runtime_is_refused_with_a_sentenc
     monkeypatch.setattr(models_module, "free_bytes_at", lambda path: 10**12)
     r = client.post("/api/models/hunyuan/download")
     assert r.status_code == 409
-    assert r.json()["detail"] == "Install the Translation runtime first, then download this model."
+    assert r.json()["detail"] == "Install Ollama first, then download this model."
 
 
 def test_every_downloadable_row_says_what_it_is_for():
@@ -254,7 +270,7 @@ def test_every_downloadable_row_says_what_it_is_for():
             continue
         assert m.get("hint"), m["id"]
     rows = {m["id"]: m for m in models_module.status_rows()}
-    assert rows["engine"]["hint"].startswith("Runs local dubbing")
+    assert rows["engine"]["hint"].endswith("the voices on this computer.")
 
 
 def test_a_pack_the_desktop_app_is_installing_reads_as_downloading(tmp_path):
@@ -266,3 +282,17 @@ def test_a_pack_the_desktop_app_is_installing_reads_as_downloading(tmp_path):
     assert models_module.model_state(engine, kit) == "paused"
     _mk(kit, ".install", "engine.installing")
     assert models_module.model_state(engine, kit) == "downloading"
+
+
+def test_removing_a_renamed_ollama_model_deletes_both_its_names(monkeypatch):
+    # Hunyuan is pulled as hf.co/... and renamed hy-mt2:1.8b; deleting only the
+    # tag left the 1.1 GB file behind (Windows, 2026-09-25).
+    deleted = []
+    monkeypatch.setattr(models_module._runtime, "url", lambda name: "http://ollama")
+    monkeypatch.setattr(models_module._requests, "delete",
+                        lambda url, json=None, timeout=None: deleted.append(json["model"]))
+    models_module.remove_model(models_module.find("hunyuan"))
+    assert deleted == ["hy-mt2:1.8b", "hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M"]
+    deleted.clear()
+    models_module.remove_model(models_module.find("gemma"))
+    assert deleted == ["gemma3:12b"]      # pulled under its own tag: one name

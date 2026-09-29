@@ -326,7 +326,9 @@ def test_merged_unit_joins_texts_with_one_space_and_keeps_empty_members(tmp_path
     engine = _RecordingEngine()
     qp._synth_merged_unit(engine, [{"text": "hello"}, {}], ["A", "A"], {"A": "vidA"}, "Korean",
                           str(tmp_path), [0, 1], 0, _out_paths(tmp_path, 2), lambda m: None)
-    assert engine.requests[0].text == "hello "        # missing text -> empty member
+    # The missing member joins as "" -- and the text the engine reads is
+    # tidied for speech (app/text/speech.py), so the trailing space is gone.
+    assert engine.requests[0].text == "hello"
     assert captured["member_texts"] == ["hello", ""]
 
 

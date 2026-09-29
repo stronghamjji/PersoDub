@@ -11,7 +11,7 @@ import logging
 
 import pytest
 
-from app import jobs, logging_setup, room, state
+from app import codex_fetch, jobs, logging_setup, room, state
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +45,12 @@ def isolate_job_logs(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_codex_prefetch(monkeypatch):
+    """A test that enters the lifespan must not fetch 130 MB from npm."""
+    monkeypatch.setattr(codex_fetch, "prefetch", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def isolate_workspace(tmp_path, monkeypatch):
     """Point the upload workspace at a per-test temp directory.
 
@@ -56,6 +62,16 @@ def isolate_workspace(tmp_path, monkeypatch):
     ws = tmp_path / "workspace"
     ws.mkdir()
     monkeypatch.setattr(state, "WORKSPACE", str(ws))
+
+
+@pytest.fixture(autouse=True)
+def chatgpt_signed_in(monkeypatch):
+    """ChatGPT is the default translator (2026-09-23), and a dub start asks
+    the sign-in program whether it is signed in. No test may run that program
+    on the machine it happens to be on: the answer is "yes" unless a test
+    says otherwise. tests/test_chatgpt_translator.py keeps the real check."""
+    from app import engines_status
+    monkeypatch.setattr(engines_status, "chatgpt_available", lambda: True)
 
 
 @pytest.fixture(autouse=True)

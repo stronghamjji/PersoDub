@@ -449,3 +449,19 @@ test("a single line longer than the budget is cut but still leads with itself", 
   assert.equal(out.length, 50);
   assert.ok(out.startsWith("Error: "), out);
 });
+
+test("masking hides a sign-in token and an e-mail address (review 2026-09-23)", () => {
+  const out = maskText("auth eyJhbGciOiJ.eyJzdWIiOiIx.c2lnbmF0dXJl for someone@example.co.kr failed");
+  assert.ok(!out.includes("eyJ") && !out.includes("@example") && out.includes("failed"));
+});
+
+test("a Windows path logged as a Python list is masked", () => {
+  // Doubled backslashes: the account name and project folder survived (2026-09-25).
+  const home = "C:\\Users\\EST-INFRA";
+  const kit = home + "\\AppData\\Local\\PersoDub";
+  const line = "Command '['ffmpeg', '-i', 'C:\\\\Users\\\\EST-INFRA\\\\AppData\\\\Local\\\\PersoDub\\\\app\\\\workspace\\\\2026-09-25\\\\broken-test_ko\\\\input.mp4', '-ac', '2']'";
+  const out = maskText(line, { home, kit });
+  assert.ok(!out.includes("EST-INFRA"), out);
+  assert.ok(!out.includes("broken-test_ko"), out);
+  assert.ok(out.includes("input.mp4"), out);
+});

@@ -179,6 +179,16 @@ test("openNewProject on a link sets state.newProject and opens the overlay", asy
   assert.equal(h.$("trimBox").innerHTML, "");
 });
 
+test("a link over 30 minutes shows the long-video note; a short one hides it", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  h.api.openNewProject({ probe: { url: "https://x/y", title: "Long", duration_sec: 1900 } });
+  assert.equal(h.$("projectDur").textContent, "00:31:40");
+  assert.equal(h.$("projectLongHint").hidden, false);
+  h.api.openNewProject({ probe: { url: "https://x/z", title: "Short", duration_sec: 90 } });
+  assert.equal(h.$("projectLongHint").hidden, true);
+});
+
 test("openNewProject on one file plays it from memory and clears the last error", (t) => {
   const h = harness();
   t.after(h.log.restore);
@@ -533,6 +543,34 @@ test("and the part the handles kept goes with it", async (t) => {
 
   assert.deepEqual(h.log.erased,
     [{ downloadId: "d1", title: "A talk", duration_sec: 30, trim: { start: 2, end: 12 } }]);
+});
+
+test("the choices made before Erase subtitles are still there on the way back", async (t) => {
+  // Reopening starts the dropdowns on the saved defaults: Whisper, chosen a
+  // moment ago, came back as Perso API and the dub spent credits (2026-09-29).
+  const h = await readyDialog({ "/api/setup": () => ok({ defaults: {
+    stt: "perso", translator: "hunyuan", voice_quality: "fast" } }) });
+  t.after(h.log.restore);
+  fillAdvanced(h.$);
+  h.$("sttSelect").value = "local";
+  h.$("translateSelect").value = "gemma";
+  h.$("qualitySelect").value = "high";
+
+  await h.$("eraseBtn").fire("click");
+  h.api.openNewProject({ downloadId: "d1", title: "A talk", duration_sec: 30, fromErase: true });
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(h.$("sttSelect").value, "local");
+  assert.equal(h.$("translateSelect").value, "gemma");
+  assert.equal(h.$("qualitySelect").value, "high");
+
+  // Any other way in starts on the saved defaults again, a held video too:
+  // leaving the erase screen for home must not carry the choices to the next video.
+  h.$("sttSelect").value = "local";
+  await h.$("eraseBtn").fire("click");
+  h.api.openNewProject({ downloadId: "d2", title: "Another" });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(h.$("sttSelect").value, "perso");
 });
 
 // -- the saved defaults ----------------------------------------------------

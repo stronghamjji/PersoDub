@@ -226,21 +226,26 @@ test("emptying the key field empties the picker instead of leaving the old key's
   assert.equal(sel.disabled, true);
 });
 
-test("an edited key posts the change with the workspace chosen for it, then tells the page", async (t) => {
+test("an edited key is posted with the workspace chosen for it when Save is pressed, then the page is told", async (t) => {
   const preview = { spaces: [{ seq: 3, name: "Team", tier: "Pro", credits: 9 }] };
   const h = harness({
     responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES),
                  "/api/perso/spaces/preview": ok(preview) },
   });
   t.after(h.state.restore);
-  await h.api.loadSavedSetup();
+  await h.api.openSettings();
   await settle();
 
   h.$("persoKeyInput").value = "another-key-for-this-test";
   await h.$("persoKeyInput").fire("blur");   // previews, so the picker holds seq 3
   await settle();
   h.$("geminiKeyInput").value = "new-gem";
-  await h.$("persoKeyInput").fire("change");
+  await h.$("geminiKeyInput").fire("input");
+  assert.equal(h.state.bodies.some((b) => b.url === "/api/settings"), false, "nothing saves before Save");
+  assert.equal(h.$("settingsChanges").textContent, "2 changes");
+  assert.equal(h.$("settingsSaveBtn").disabled, false);
+
+  await h.$("settingsSaveBtn").fire("click");
 
   const post = h.state.bodies.find((b) => b.url === "/api/settings");
   assert.deepEqual(post.body, {
@@ -248,47 +253,49 @@ test("an edited key posts the change with the workspace chosen for it, then tell
     perso_api_key: "another-key-for-this-test",
     perso_space_seq: "3",
   });
-  assert.equal(h.$("settingsSaveError").style.display, "none");
   assert.equal(h.state.saved, 1);   // onSaved: the page re-checks its engines
+  assert.equal(h.$("settingsOverlay").classList.has("open"), false);
 });
 
-test("nothing edited posts nothing, but the page is still told", async (t) => {
+test("with nothing changed Save rests and nothing is posted", async (t) => {
   const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
   t.after(h.state.restore);
-  await h.api.loadSavedSetup();
+  await h.api.openSettings();
   await settle();
-  h.state.calls.length = 0;
 
-  await h.$("geminiKeyInput").fire("change");
-
-  assert.deepEqual(h.state.calls, []);
-  assert.equal(h.state.saved, 1);
+  assert.equal(h.$("settingsSaveBtn").disabled, true);
+  assert.equal(h.$("settingsChanges").textContent, "");
+  assert.equal(h.state.bodies.length, 0);
 });
 
-test("a save the engine refuses shows the alert", async (t) => {
+test("a save the engine refuses keeps the sheet open and says so beside Save", async (t) => {
   const h = harness({
     responses: { "/api/settings": () => ({ ok: false, status: 500, json: async () => ({}) }) },
   });
   t.after(h.state.restore);
+  h.$("settingsOverlay").classList.add("open");
 
   h.$("geminiKeyInput").value = "new-gem";
-  await h.$("geminiKeyInput").fire("change");
+  await h.api.saveSettings();
 
-  assert.equal(h.$("settingsSaveError").style.display, "");
+  assert.equal(h.$("settingsOverlay").classList.has("open"), true);
+  assert.equal(h.$("settingsChanges").textContent, "Could not save. Is the engine running?");
 });
 
-test("closing the sheet hides it and saves what was still in the fields", async (t) => {
+test("Cancel and closing leave without saving", async (t) => {
   const h = harness();
   t.after(h.state.restore);
 
-  h.$("geminiKeyInput").value = "typed-then-escaped";
+  h.$("geminiKeyInput").value = "typed-then-cancelled";
+  h.$("settingsOverlay").classList.add("open");
+  await h.$("settingsCancelBtn").fire("click");
+  await settle();
+  assert.equal(h.$("settingsOverlay").classList.has("open"), false);
+
   h.$("settingsOverlay").classList.add("open");
   h.api.closeSettings();
   await settle();
-
-  assert.equal(h.$("settingsOverlay").classList.has("open"), false);
-  const post = h.state.bodies.find((b) => b.url === "/api/settings");
-  assert.equal(post.body.gemini_api_key, "typed-then-escaped");
+  assert.equal(h.state.bodies.some((b) => b.url === "/api/settings"), false);
 });
 
 test("Escape closes the sheet only while it is open", async (t) => {
@@ -343,73 +350,29 @@ test("a folder that will not open says so under the button", async (t) => {
   await h.$("revealOutputBtn").fire("click");
 
   assert.equal(h.$("storageHint").textContent,
-    "Could not open the folder. Is the engine running?");
+    "Could not open the folder.");
 });
 
-test("the usage-counts switch posts the new setting", async (t) => {
-  const h = harness();
+test("the two switches and the theme are saved with Save, each as its own setting", async (t) => {
+  const h = harness({ responses: { "/api/settings": ok({ analytics_off: false, reports_off: false }) } });
   t.after(h.state.restore);
+  await h.api.openSettings();
 
   h.$("analyticsToggle").checked = false;
   await h.$("analyticsToggle").fire("change");
-
-  assert.deepEqual(h.state.bodies, [{ url: "/api/settings", body: { analytics_off: true } }]);
-  assert.equal(h.$("analyticsToggle").checked, false);
-  assert.equal(h.$("analyticsHint").textContent, "");
-});
-
-test("the failure-reports switch posts its own setting, apart from the counts", async (t) => {
-  const h = harness();
-  t.after(h.state.restore);
-
   h.$("reportsToggle").checked = false;
   await h.$("reportsToggle").fire("change");
-
-  // Its own key: someone who leaves the counts on can still turn reports off.
-  assert.deepEqual(h.state.bodies, [{ url: "/api/settings", body: { reports_off: true } }]);
-  assert.equal(h.$("reportsToggle").checked, false);
-  assert.equal(h.$("reportsHint").textContent, "Keys and folder names are removed first.");
-});
-
-test("a failure-reports save that fails flips the switch back and says so", async (t) => {
-  const h = harness({
-    responses: { "/api/settings": { ok: false, status: 500, json: async () => ({}) } },
-  });
-  t.after(h.state.restore);
-
-  h.$("reportsToggle").checked = false;
-  await h.$("reportsToggle").fire("change");
-
-  assert.equal(h.$("reportsToggle").checked, true);
-  assert.equal(h.$("reportsHint").textContent, "Could not save that. Is the engine running?");
-});
-
-test("a usage-counts save that fails flips the switch back", async (t) => {
-  const h = harness({
-    responses: { "/api/settings": { ok: false, status: 500, json: async () => ({}) } },
-  });
-  t.after(h.state.restore);
-
-  h.$("analyticsToggle").checked = true;
-  await h.$("analyticsToggle").fire("change");
-
-  assert.equal(h.$("analyticsToggle").checked, false);
-  assert.equal(h.$("analyticsHint").textContent, "Could not save that. Is the engine running?");
-});
-
-test("picking a theme paints <html> and remembers the choice", async (t) => {
-  const h = harness();
-  t.after(h.state.restore);
-
   h.$("themeSelect").value = "light";
   await h.$("themeSelect").fire("change");
+  assert.equal(globalThis.document.documentElement.dataset.theme, undefined, "the theme waits for Save");
+  assert.equal(h.$("settingsChanges").textContent, "3 changes");
+
+  await h.$("settingsSaveBtn").fire("click");
+
+  assert.deepEqual(h.state.bodies.map((b) => b.body),
+    [{ analytics_off: true }, { reports_off: true }]);
   assert.equal(globalThis.document.documentElement.dataset.theme, "light");
   assert.equal(h.state.stored.get("persodub.theme"), "light");
-
-  h.$("themeSelect").value = "dark";
-  await h.$("themeSelect").fire("change");
-  assert.equal(globalThis.document.documentElement.dataset.theme, undefined);
-  assert.equal(h.state.stored.get("persodub.theme"), "dark");
 });
 
 test("Settings opens showing the theme that is saved", async (t) => {

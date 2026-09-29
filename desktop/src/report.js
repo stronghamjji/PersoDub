@@ -82,6 +82,8 @@ const KEY_PATTERNS = [
 // guards on either side are the path characters: a run touching a slash, a
 // backslash or a dot is part of a filename or a directory, and redacting those
 // used to swallow whole model folders and leave a report nobody could read.
+const JWT = /\beyJ[\w-]+\.[\w-]+\.[\w-]+/g;
+const EMAIL = /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g;
 const LONG_TOKEN = /(?<![A-Za-z0-9_\-/\\.])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_\-/\\.])/g;
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s"'<>)\]}]+/gi;
@@ -92,8 +94,11 @@ function escapeRegExp(s) {
 
 // The same path written the three ways a log can spell it. Windows libraries
 // disagree with each other about the separator inside one process.
+// A command logged as a Python list doubles every backslash, so that is a
+// fourth spelling (Windows full test 2026-09-25).
 function separatorForms(p) {
-  return [p, p.replace(/\\/g, "/"), p.replace(/\//g, "\\")];
+  const win = p.replace(/\//g, "\\");
+  return [p, p.replace(/\\/g, "/"), win, win.replace(/\\/g, "\\\\")];
 }
 
 function startsWithCI(text, prefix) {
@@ -161,7 +166,7 @@ const WORKSPACE_NUMBER_RE = /\b(workspace )\d+/gi;
 // (app/report_mask.py); this one did not, and the error message the page
 // hands over never passes the backend. Two passes, the same as there: a name
 // with spaces runs to the next separator, a bare one to the next space.
-const WS_HEAD = "(workspace[\\\\/]\\d{4}-\\d{2}-\\d{2}[\\\\/])";
+const WS_HEAD = "(workspace(?:\\\\\\\\|[\\\\/])\\d{4}-\\d{2}-\\d{2}(?:\\\\\\\\|[\\\\/]))";
 const WORKSPACE_PROJECT = [
   new RegExp(WS_HEAD + "[^\\\\/\\n]+?(?=[\\\\/])", "g"),
   new RegExp(WS_HEAD + "[^\\\\/\\s\"']+", "g"),
@@ -192,13 +197,15 @@ export function maskText(text, { home = "", kit = "" } = {}) {
   }
   if (home) {
     for (const form of new Set(separatorForms(home))) {
-      const re = new RegExp(`${escapeRegExp(form)}((?:[\\\\/][^\\\\/\\s"']+)*)`, "gi");
+      const re = new RegExp(`${escapeRegExp(form)}((?:[\\\\/]{1,2}[^\\\\/\\s"']+)*)`, "gi");
       out = out.replace(re, (_match, rest) => collapseUnderHome(rest));
     }
     out = out.replace(SPACED_FILENAME, (_m, head, tail) =>
       `${head}${head[1]}*${tail.slice(tail.lastIndexOf("."))}`);
   }
   for (const p of KEY_PATTERNS) out = out.replace(p, "[REDACTED]");
+  // A sign-in token and an e-mail address (review 2026-09-23).
+  out = out.replace(JWT, "[REDACTED]").replace(EMAIL, "[REDACTED]");
   return out.replace(LONG_TOKEN, "[REDACTED]");
 }
 

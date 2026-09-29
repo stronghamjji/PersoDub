@@ -20,13 +20,14 @@ import { gb, modelStatusLine, dubStartDialog, overallProgress, allReady } from "
  * @param {(id: string) => any} deps.$          the page's getElementById helper
  * @param {() => void} deps.onStartDubbing      resubmit the dub once every model is ready
  * @param {() => void} deps.onOpenSettings      open the Settings sheet
+ * @param {() => void} deps.onUsePerso          set Dubbing to Perso API, the way round the download
  * @param {(rows: object[]) => void} deps.onRowsChanged  repaint the page's own
  *        model-dependent chrome (the dropdown hints and the topbar chip)
  * @returns the operations the page calls, and the one the tests do -- grouped
  *        and labelled in the returned object, so pruning this surface later
  *        does not have to guess which member has a caller off the page.
  */
-export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged, shell = null, keepPolling = () => false }) {
+export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = () => {}, onRowsChanged, shell = null, keepPolling = () => false }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
   // ui/src/settingsDialog.mjs. A missing id is a broken page, and a crash on
@@ -176,6 +177,13 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
   async function refreshModels() {
     await fetchModels();
     repaint();
+    // A download this page did not start (the Dub Agent asked for it) was
+    // painted once and then held that percent: Windows showed 18% long after
+    // the model was ready (2026-09-25). Whoever started it, keep it moving.
+    // And while Settings is open: a model the agent downloaded while the sheet
+    // was up (1.1 GB in under a second when the file was already on disk)
+    // never showed as Ready until it was reopened (Windows, 2026-09-26).
+    if (anyDownloading() || keepPolling()) startPolling();
     return modelRows;
   }
 
@@ -315,28 +323,13 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false };
     $("mnTitle").textContent = d.title;
     $("mnLine").textContent = d.line;
-    // The list: a first-time user never opens Settings, so this is where they
-    // learn what an "AI engine" is and that the Perso API is the other road.
-    const list = $("mnItems");
-    list.replaceChildren();
-    for (const it of d.items) {
-      const li = document.createElement("li");
-      const name = document.createElement("b");
-      name.textContent = `${it.name} · ${it.size}`;
-      li.append(name);
-      if (it.hint) {
-        const hint = document.createElement("span");
-        hint.textContent = it.hint;
-        li.append(hint);
-      }
-      list.append(li);
-    }
-    list.hidden = !d.items.length;
-    $("mnAlt").hidden = false;
+    // The way round it, said and offered: Perso dubbing makes the voices
+    // itself, so nothing here has to download (user, 2026-09-28).
+    $("mnAlt").hidden = !d.perso;
     $("mnError").textContent = "";
     $("mnProgress").hidden = true;
     $("mnDownload").hidden = false;
-    $("mnSettings").hidden = false;
+    $("mnSettings").hidden = !d.perso;
     $("mnHide").hidden = true;
     $("modelsNeededOverlay").classList.add("open");
   }
@@ -346,17 +339,12 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     // painted row (rowsToPaint), the engine's own row has none.
     const pct = overallProgress(rowsToPaint(), pendingDub.ids);
     $("mnBar").style.width = pct + "%";
-    $("mnItems").hidden = true;   // the list said what; the bar now says how far
     $("mnAlt").hidden = true;
-    if (packBusy) {
-      // The percent lives in the title, where the eye lands; the line below
-      // says what step the installer is on (2026-09-08: only the bar moved).
-      $("mnTitle").textContent = packBusy.pct != null ? `Installing ${packBusy.name} · ${packBusy.pct}%` : `Installing ${packBusy.name}`;
-      $("mnLine").textContent = packBusy.line || "Starting…";
-      return;
-    }
-    $("mnTitle").textContent = "Downloading AI models";
-    $("mnLine").textContent = `${pct}%. Dubbing starts when they finish.`;
+    // One number, where the eye lands. Which file or step it is on is left
+    // out: nobody downloading asked (user, 2026-09-28).
+    $("mnTitle").textContent = `Downloading ${pct}%`;
+    $("mnLine").textContent = "";
+    if (packBusy) return;
     // A model whose download stopped: paused with its pieces on disk, or --
     // an Ollama pull that failed before it began -- not_downloaded with the
     // engine's reason attached. Either way the dialog says so instead of
@@ -386,7 +374,6 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
     $("mnSettings").hidden = true;
     $("mnHide").hidden = false;
     $("mnProgress").hidden = false;
-    $("mnItems").hidden = true;   // the list said what; the bar now says how far
     $("mnAlt").hidden = true;
     (async () => {
       // Packs first, one after another (the desktop app installs one at a
@@ -409,7 +396,11 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onRowsChanged,
       startPolling();
     })();
   });
-  $("mnSettings").addEventListener("click", () => onOpenSettings());
+  $("mnSettings").addEventListener("click", () => {
+    pendingDub = null;
+    $("modelsNeededOverlay").classList.remove("open");
+    onUsePerso();
+  });
   // Hidden, the download shows as the top-bar chip instead -- the page draws
   // that chip only while this dialog is closed, so it needs a repaint now.
   $("mnHide").addEventListener("click", () => { $("modelsNeededOverlay").classList.remove("open"); repaint(); });

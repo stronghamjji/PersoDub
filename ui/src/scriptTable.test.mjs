@@ -32,6 +32,9 @@ function makeEl(id) {
       contains(c) { return this.owner.classes.has(c); },
     },
     querySelectorAll(sel) { return this.qs[sel] || []; },
+    // One element per selector, made the first time it is asked for: the
+    // Translate again menu's two items and the header's tick box.
+    querySelector(sel) { return ((this.q1 ||= {})[sel] ||= bindClassList(makeEl(sel))); },
     setAttribute(k, v) { this.attrs[k] = v; },
     getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
     removeAttribute(k) { delete this.attrs[k]; },
@@ -157,7 +160,9 @@ test("a row carries the line number, who said it, both languages and whether it 
   assert.match(html, /class="spk-chip" title="Speaker 2"/);
   assert.doesNotMatch(html, /SPEAKER_0/);
   // Number, time, source and the editable translation.
-  assert.match(html, /<div class="sc-n">1<\/div>/);
+  // The number sits behind the tick box Translate again picks lines with.
+  assert.match(html, /<label class="sc-n"><input class="sc-pick" type="checkbox" data-pick="1"/);
+  assert.match(html, /<span>1<\/span><\/label>/);
   assert.match(html, /00:00:01\.0<\/span><span\s+class="sc-t-b"> – 00:00:02\.0/);
   assert.match(html, /class="sc-src">안녕하세요</);
   assert.match(html, /class="sc-dst" contenteditable="plaintext-only"[\s\S]*?data-line="1">Hello 1</);
@@ -179,7 +184,8 @@ test("a row carries the line number, who said it, both languages and whether it 
 // meant to change.
 const ONE_ROW =
   '<div class="sc-row" data-start="1" data-end="2.5">\n' +
-  '    <div class="sc-n">7</div>\n' +
+  '    <label class="sc-n"><input class="sc-pick" type="checkbox" data-pick="7"\n' +
+  '      aria-label="Choose line 7"><span>7</span></label>\n' +
   '    <div><span class="spk-chip" title="Speaker 1" aria-label="Speaker 1"><b>A</b></span></div>\n' +
   '    <div class="sc-time"><span class="sc-t-a">00:00:01.0</span><span\n' +
   '      class="sc-t-b"> – 00:00:02.5</span></div>\n' +
@@ -215,7 +221,7 @@ test("a row is byte for byte the row the page drew before this file existed", as
   // And the header above it, indentation included.
   assert.equal(html.slice(0, html.indexOf('<div class="sc-row" data-start')),
     '\n    <div class="sc-row head">\n' +
-    '      <div class="sc-h-n">#</div><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div class="sc-h-src">Korean</div>\n' +
+    '      <label class="sc-h-n"><input class="sc-pick" type="checkbox" data-pick="all" aria-label="Choose every line">#</label><div class="sc-h-spk">Who</div><div class="sc-h-t">Time</div><div class="sc-h-src">Korean</div>\n' +
     '      <div class="sc-h-dst">English</div>\n' +
     '      <div class="sc-tools"><span>Length</span><span></span><span class="sc-h-voice">Voice</span></div>\n' +
     '    </div>\n    ');
@@ -266,6 +272,28 @@ test("a job with no script says so, and a Perso dub says why", async (t) => {
   await p.api.renderScript("j1");
   assert.match(p.$("scriptBox").innerHTML,
     /Perso dubbing arrives as a finished video, so this job has no script\./);
+});
+
+test("an answer that arrives after another job was opened changes nothing on screen", async (t) => {
+  // A Perso job's script took seconds to answer; by then a local job was open,
+  // and the late answer emptied its table and timeline (Windows, 2026-09-29).
+  let letSlowAnswer;
+  const slow = new Promise((r) => { letSlowAnswer = r; });
+  const h = harness({ responses: {
+    "/api/dub/jobs/slow/script": () => slow.then(() => ok({ lines: [] })),
+    "/api/dub/jobs/open/script": ok({ lines: [line(1), line(2)] }),
+  } });
+  t.after(h.log.restore);
+
+  const first = h.api.renderScript("slow");
+  await h.api.renderScript("open");
+  const shown = h.$("scriptBox").innerHTML;
+  letSlowAnswer();
+  await first;
+
+  assert.equal(h.$("scriptBox").innerHTML, shown);
+  assert.equal(h.log.timeline.length, 1, "the strip was drawn once, for the open job");
+  assert.equal(h.api.getJobId(), "open");
 });
 
 // -- the fit rule, which the timeline shares ----------------------------------
@@ -569,4 +597,37 @@ test("a read-only Perso script cannot be typed into until its bar is pressed", a
   assert.ok(h.log.calls.includes("POST /api/dub/jobs/j1/perso/materialize"));
   assert.equal(h.log.calls.filter((c) => c === `GET ${SCRIPT}`).length, 2,
     "and the table is drawn again from the script it just fetched");
+});
+
+
+test("Translate again sends the chosen lines through ChatGPT and says how many changed", async (t) => {
+  const h = harness({ responses: {
+    [SCRIPT]: ok({ lines: [line(1), line(2), line(3)] }),
+    "/api/dub/jobs/j1/retranslate": ok({ changed: [{ line: 2, was: "Hello 2", text: "Hi 2" }] }),
+  } });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+  // Shown for a script that can be edited, beside the pane's name.
+  assert.equal(h.$("retranslateWrap").hidden, false);
+
+  await h.api.retranslate("j1", [2, 3]);
+  assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":[2,3]}'));
+  assert.equal(h.$("scriptSaving").textContent, "1 line translated again");
+  assert.equal(h.log.reloads, 1, "the voices were remade, so the player fetches the video again");
+
+  // null is every line.
+  await h.api.retranslate("j1", null);
+  assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":null}'));
+});
+
+test("a Translate again the server refuses says why", async (t) => {
+  const h = harness({ responses: {
+    [SCRIPT]: ok({ lines: [line(1)] }),
+    "/api/dub/jobs/j1/retranslate": bad("Could not translate those lines again."),
+  } });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+  await h.api.retranslate("j1", [1]);
+  assert.equal(h.$("scriptSaving").textContent, "Could not translate those lines again.");
+  assert.equal(h.$("retranslateBtn").disabled, false);
 });

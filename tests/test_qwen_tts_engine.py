@@ -181,30 +181,23 @@ def test_synthesize_with_voice_id_sends_no_files(monkeypatch):
 # env-overridable (PERSODUB_TTS_TIMEOUT) so a Mac install isn't stuck with a
 # server-tuned budget ---
 
-def test_generate_timeout_honours_env_override(monkeypatch):
+def test_wait_scale_env_stretches_the_waiting_time(monkeypatch):
+    """A slow machine may wait longer per line (PERSODUB_TTS_WAIT_SCALE);
+    garbage keeps the default. The speech cap is never scaled."""
     import importlib
 
     from app.engines import qwen_tts as qt
 
-    monkeypatch.setenv("PERSODUB_TTS_TIMEOUT", "42")
+    monkeypatch.setenv("PERSODUB_TTS_WAIT_SCALE", "2")
     importlib.reload(qt)
     try:
-        assert qt.PERSODUB_TTS_TIMEOUT == 42.0
+        assert qt.PERSODUB_TTS_WAIT_SCALE == 2.0
+        assert qt.wait_seconds(5.5) == (5.5 * 10 + 60) * 2
+        assert qt.speech_cap_seconds(5.5) == 5.5 * 3 + 2
     finally:
-        monkeypatch.undo()
+        monkeypatch.setenv("PERSODUB_TTS_WAIT_SCALE", "banana")
         importlib.reload(qt)
-
-
-def test_generate_timeout_garbage_env_falls_back_to_default(monkeypatch):
-    import importlib
-
-    from app.engines import qwen_tts as qt
-
-    monkeypatch.setenv("PERSODUB_TTS_TIMEOUT", "banana")
-    importlib.reload(qt)
-    try:
-        assert qt.PERSODUB_TTS_TIMEOUT == 300.0
-    finally:
+        assert qt.PERSODUB_TTS_WAIT_SCALE == 1.0
         monkeypatch.undo()
         importlib.reload(qt)
 
@@ -257,7 +250,7 @@ def test_device_label_is_absent_rather_than_wrong(monkeypatch):
     assert QwenTTSEngine(base_url="http://x").device_label() is None
 
 
-def test_clone_waits_as_long_as_synthesis_does(monkeypatch, tmp_path):
+def test_clone_has_its_own_longer_wait(monkeypatch, tmp_path):
     # Cloning a voice on a machine that is also dubbing took longer than the
     # clone's own 120 seconds while /generate was allowed 300; one line's remake
     # died on the shorter clock (0.6.2 full test, F18, 2026-09-16).
@@ -279,4 +272,5 @@ def test_clone_waits_as_long_as_synthesis_does(monkeypatch, tmp_path):
 
     monkeypatch.setattr(httpx, "post", fake_post)
     QwenTTSEngine(base_url="http://x").clone(str(p), "hello there", mode="icl")
-    assert captured["timeout"] == mod.PERSODUB_TTS_TIMEOUT
+    # The first clone also loads the 4 GB model: it waits longer than a line.
+    assert captured["timeout"] == mod.CLONE_WAIT_SECONDS * mod.PERSODUB_TTS_WAIT_SCALE

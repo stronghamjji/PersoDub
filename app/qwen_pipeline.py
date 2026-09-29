@@ -22,15 +22,19 @@ import json
 import os
 import random
 import re
+import dataclasses
 import shutil
+import statistics
+import time
 import wave
 from typing import Callable, Dict, List, Optional
 
 from app import media
+from app.jobs import JobCancelled
 from app.audio.ambience import apply_company_ambience
 from app.audio.merge import group_merge_units, split_unit_audio
 from app.config import QWEN_GATE_MODE, QWEN_KEEP_NONVERBAL, QWEN_VOICE_MODE
-from app.engines.base import SynthesisRequest
+from app.engines.base import SynthesisCut, SynthesisRequest, SynthesisTimeout, VoiceEngineDown
 from app.nonverbal import apply_nonverbal_whitelist
 from app.perso_client import _safe_name
 from app.qwen_assemble import (
@@ -49,6 +53,7 @@ from app.text.cues import (
     match_cue_index,
     ref_text_from_spans,
 )
+from app.text.speech import speech_text
 
 REF_MIN_DUR = 4.0
 REF_MAX_DUR = 7.0
@@ -217,24 +222,119 @@ def register_speaker_voices(engine, refs: Dict[str, dict], work_dir: str,
     return voice_ids
 
 
+# A line that took longer than this is worth a line in the log even though
+# it came out fine: it is the kind of thing that turns into a hang next time.
+SLOW_LINE_SECONDS = 30.0
+
+
+def _slot_words(slot: Optional[float]) -> str:
+    return "slot %.1fs" % slot if slot else "slot unknown"
+
+
+def _engine_alive(engine, tries: int = 3) -> bool:
+    """Whether the voice engine still answers at all: up to three 5s probes a
+    few seconds apart, so a moment of load is not taken for a crash. An
+    engine without a probe is taken to be alive: it is the fakes in tests."""
+    probe = getattr(engine, "is_available", None)
+    if probe is None:
+        return True
+    for attempt in range(tries):
+        if probe():
+            return True
+        if attempt + 1 < tries:
+            time.sleep(ENGINE_PROBE_PAUSE)
+    return False
+
+
+ENGINE_PROBE_PAUSE = 3.0
+
+
+def _note(stats: Optional[list], label: str, took: float, ok: bool) -> None:
+    if stats is not None:
+        stats.append((label, took, ok))
+
+
 def _synth_one(engine, seg: dict, voice_id: Optional[str], language: str, seed: int,
-               out_path: str, log: Callable[[str], None], err_label: str) -> Optional[str]:
-    """One engine.synthesize() call, written to out_path. None (+ logged warning) on failure."""
-    req = SynthesisRequest(text=seg.get("text", ""), language=language, voice_id=voice_id, seed=seed)
-    try:
-        res = engine.synthesize(req)
-    except Exception as e:
-        log("   %s: Qwen synth failed (%s) - skipping" % (err_label, str(e)[:80]))
-        return None
-    with open(out_path, "wb") as f:
+               out_path: str, log: Callable[[str], None], err_label: str,
+               slot: Optional[float] = None, stats: Optional[list] = None) -> Optional[str]:
+    """One engine.synthesize() call, written to out_path. None (+ logged line)
+    when the line could not be made; the job goes on without it.
+
+    `slot` is the seconds the line has on screen: it sets the line's speech
+    cap and waiting time (app/engines/qwen_tts.py). Three ways to fail, each
+    said plainly in the job log with its numbers (user, 2026-09-23):
+      ran away  -- the engine hit the speech cap; the audio is not kept
+      no answer -- waited the line's time; one more try if the engine still
+                   answers a probe, and VoiceEngineDown if it does not, which
+                   stops the job at once instead of waiting on every line
+      failed    -- anything else the engine said
+    """
+    text = speech_text(seg.get("text", ""))
+    req = SynthesisRequest(text=text, language=language, voice_id=voice_id, seed=seed, duration=slot)
+    started = time.monotonic()
+    res = None
+    for attempt in (1, 2):
+        try:
+            res = engine.synthesize(req)
+            break
+        except SynthesisCut as e:
+            log("   %s: ran away, cut at %.1fs (%s), skipped" % (err_label, e.cut_at, _slot_words(slot)))
+            _note(stats, err_label, time.monotonic() - started, False)
+            return None
+        except SynthesisTimeout as e:
+            if not _engine_alive(engine):
+                raise VoiceEngineDown(err_label) from e
+            if attempt == 1:
+                log("   %s: no answer in %.0fs, retrying" % (err_label, e.waited))
+                # Not the identical request again: the same seed makes about the
+                # same tokens, and it waits behind the one abandoned. A new
+                # seed, and twice the time (review 2026-09-23).
+                req = dataclasses.replace(req, seed=(seed or 0) + 7919, wait=2 * e.waited)
+                continue
+            log("   %s: no answer in %.0fs again, skipped" % (err_label, e.waited))
+            _note(stats, err_label, time.monotonic() - started, False)
+            return None
+        except Exception as e:
+            # A crashed engine answers every later line with a connection
+            # error: without this the job ran on, skipping them all, and
+            # finished with most of its dialogue missing (review 2026-09-23).
+            if not _engine_alive(engine):
+                raise VoiceEngineDown(err_label) from e
+            log("   %s: Qwen synth failed (%s) - skipping" % (err_label, str(e)[:80]))
+            _note(stats, err_label, time.monotonic() - started, False)
+            return None
+    took = time.monotonic() - started
+    # Whole or not at all: Resume reuses any line file it finds, so a write
+    # the app was closed in the middle of must not leave one behind.
+    tmp = out_path + ".part"
+    with open(tmp, "wb") as f:
         f.write(res.audio_bytes)
+    os.replace(tmp, out_path)
+    if took > SLOW_LINE_SECONDS:
+        audio = "audio %.1fs" % res.duration if res.duration else "audio ?"
+        log("   %s: made in %.0fs (%s, %s)" % (err_label, took, audio, _slot_words(slot)))
+    _note(stats, err_label, took, True)
     return out_path
+
+
+def _log_synth_summary(log: Callable[[str], None], stats: list, paths: List[Optional[str]],
+                       silent: int) -> None:
+    """One line at the end of the voice stage: how many lines were made, how
+    many skipped, and how long they took -- the numbers a hang shows up in."""
+    made = sum(1 for p in paths if p is not None)
+    skipped = len(paths) - made - silent
+    tail = ""
+    if stats:
+        tooks = [t for _, t, _ in stats]
+        slowest = max(stats, key=lambda x: x[1])
+        tail = ", median %.1fs/line, slowest %.0fs (%s)" % (statistics.median(tooks), slowest[1], slowest[0])
+    log("   voices done: %d lines, %d made, %d skipped%s" % (len(paths), made, skipped, tail))
 
 
 def _synth_merged_unit(
     engine, segments: List[dict], seg_speakers: List[str], voice_ids: Dict[str, str],
     language: str, work_dir: str, unit: List[int], seed: int, out_paths: List[str],
-    log: Callable[[str], None],
+    log: Callable[[str], None], slot: Optional[float] = None, stats: Optional[list] = None,
 ) -> bool:
     """One TTS call for a merge unit's combined text, then split the result back
     into out_paths[j] (same order as `unit`) at the energy valley between
@@ -247,7 +347,8 @@ def _synth_merged_unit(
     merged_text = " ".join(segments[i].get("text", "") for i in unit)
     tmp_path = os.path.join(work_dir, "qwen_unit_%d_seed%d.wav" % (i0, seed))
     unit_wav = _synth_one(engine, {"text": merged_text}, voice_id, language, seed, tmp_path,
-                          log, "merged unit @line %d (+%d follower(s))" % (i0, len(unit) - 1))
+                          log, "merged unit @line %d (+%d follower(s))" % (i0, len(unit) - 1),
+                          slot=slot, stats=stats)
     if unit_wav is None:
         return False
     member_texts = [segments[i].get("text", "") for i in unit]
@@ -354,7 +455,8 @@ def synth_lines(
     engine, segments: List[dict], seg_speakers: List[str], voice_ids: Dict[str, str],
     language: str, work_dir: str, n_takes: int = 1, log: Optional[Callable[[str], None]] = None,
     usable_slots: Optional[List[float]] = None, speaker_ref_paths: Optional[Dict[str, str]] = None,
-    on_notice: Optional[Callable[[dict], None]] = None,
+    on_notice: Optional[Callable[[dict], None]] = None, reuse_lines: bool = False,
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> List[Optional[str]]:
     """Synthesize each translated line with its speaker's cloned voice.
 
@@ -408,19 +510,44 @@ def synth_lines(
              if u[0] not in silent]
     if silent:
         log("   %d line(s) have no words - left silent" % len(silent))
+    stats: list = []   # (label, seconds, ok) per engine call, for the closing summary
+
+    def stop_if_cancelled():
+        # Between lines, not only between stages: Cancel pressed during the
+        # voices used to wait for every remaining line (2026-09-23).
+        if cancel_check is not None and cancel_check():
+            # The same line the stage-to-stage check writes (pipeline._check_cancel):
+            # without it a cancel in the voices left no trace in the log.
+            log("Cancelled by user request")
+            raise JobCancelled("cancelled by user")
+
+    def kept(path_list):
+        # Resume: a line whose voice the earlier run finished is not made
+        # again. A cut or failed line never wrote a file, so it is retried.
+        return reuse_lines and all(os.path.isfile(q) and os.path.getsize(q) > 44 for q in path_list)
 
     if n_takes <= 1:
         paths: List[Optional[str]] = [None] * len(segments)
+        reused = 0
         for unit in units:
+            stop_if_cancelled()
+            unit_paths = [os.path.join(work_dir, "qwen_line_%d.wav" % i) for i in unit]
+            if kept(unit_paths):
+                for i, q in zip(unit, unit_paths):
+                    paths[i] = q
+                reused += len(unit)
+                continue
             if len(unit) == 1:
                 i = unit[0]
                 voice_id = voice_ids.get(seg_speakers[i]) if i < len(seg_speakers) else None
                 p = os.path.join(work_dir, "qwen_line_%d.wav" % i)
-                paths[i] = _synth_one(engine, segments[i], voice_id, language, 1000 * i, p, log, "line %d" % i)
+                paths[i] = _synth_one(engine, segments[i], voice_id, language, 1000 * i, p, log, "line %d" % i,
+                                      slot=resolved_usable[i], stats=stats)
                 continue
             out_paths = [os.path.join(work_dir, "qwen_line_%d.wav" % i) for i in unit]
             merged_ok = _synth_merged_unit(engine, segments, seg_speakers, voice_ids, language,
-                                           work_dir, unit, 1000 * unit[0], out_paths, log)
+                                           work_dir, unit, 1000 * unit[0], out_paths, log,
+                                           slot=sum(resolved_usable[i] for i in unit), stats=stats)
             if merged_ok:
                 for i, p in zip(unit, out_paths):
                     paths[i] = p
@@ -428,28 +555,43 @@ def synth_lines(
                 for i in unit:
                     voice_id = voice_ids.get(seg_speakers[i]) if i < len(seg_speakers) else None
                     p = os.path.join(work_dir, "qwen_line_%d.wav" % i)
-                    paths[i] = _synth_one(engine, segments[i], voice_id, language, 1000 * i, p, log, "line %d" % i)
+                    paths[i] = _synth_one(engine, segments[i], voice_id, language, 1000 * i, p, log, "line %d" % i,
+                                      slot=resolved_usable[i], stats=stats)
+        if reused:
+            log("   %d line(s) kept from the earlier run" % reused)
+        _log_synth_summary(log, stats, paths, len(silent))
         return paths
 
     # An empty row, not None, for a line no unit covers (a silent one): the
     # winner loop below reads every row.
     take_paths: List[List[Optional[str]]] = [[] for _ in segments]
+    reused = 0   # takes, for High quality: each take is its own file
     for unit in units:
+        stop_if_cancelled()
         if len(unit) == 1:
             i = unit[0]
             voice_id = voice_ids.get(seg_speakers[i]) if i < len(seg_speakers) else None
             row = []
             for k in range(n_takes):
                 p = os.path.join(work_dir, "qwen_line_%d_t%d.wav" % (i, k))
+                if kept([p]):
+                    row.append(p); reused += 1
+                    continue
                 row.append(_synth_one(engine, segments[i], voice_id, language, 1000 * i + k, p, log,
-                                      "line %d take %d" % (i, k)))
+                                      "line %d take %d" % (i, k), slot=resolved_usable[i], stats=stats))
             take_paths[i] = row
             continue
         rows: Dict[int, List[Optional[str]]] = {i: [] for i in unit}
         for k in range(n_takes):
             out_paths = [os.path.join(work_dir, "qwen_line_%d_t%d.wav" % (i, k)) for i in unit]
+            if kept(out_paths):
+                for i, p in zip(unit, out_paths):
+                    rows[i].append(p)
+                reused += len(unit)
+                continue
             merged_ok = _synth_merged_unit(engine, segments, seg_speakers, voice_ids, language,
-                                           work_dir, unit, 1000 * unit[0] + k, out_paths, log)
+                                           work_dir, unit, 1000 * unit[0] + k, out_paths, log,
+                                           slot=sum(resolved_usable[i] for i in unit), stats=stats)
             if merged_ok:
                 for i, p in zip(unit, out_paths):
                     rows[i].append(p)
@@ -458,9 +600,12 @@ def synth_lines(
                     voice_id = voice_ids.get(seg_speakers[i]) if i < len(seg_speakers) else None
                     p = os.path.join(work_dir, "qwen_line_%d_t%d.wav" % (i, k))
                     rows[i].append(_synth_one(engine, segments[i], voice_id, language, 1000 * i + k, p, log,
-                                              "line %d take %d (merge fallback)" % (i, k)))
+                                              "line %d take %d (merge fallback)" % (i, k),
+                                              slot=resolved_usable[i], stats=stats))
         for i in unit:
             take_paths[i] = rows[i]
+    if reused:
+        log("   %d take(s) kept from the earlier run" % reused)
 
     winners = _score_and_select(take_paths, segments, seg_speakers, resolved_usable,
                                 speaker_ref_paths, language, work_dir, log)
@@ -487,6 +632,7 @@ def synth_lines(
         else:
             final_path = None
         final_paths.append(final_path)
+    _log_synth_summary(log, stats, final_paths, len(silent))
     return final_paths
 
 
@@ -495,7 +641,8 @@ def run_qwen_dub(
     vocals_path: str, background_path: str,
     language: str = "Korean", n_takes: int = 1, log: Optional[Callable[[str], None]] = None,
     voice_mode: Optional[str] = None, on_notice: Optional[Callable[[dict], None]] = None,
-    video_duration: Optional[float] = None,
+    video_duration: Optional[float] = None, reuse_lines: bool = False,
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> str:
     """Full Qwen3-TTS dub-audio path. Returns the path to the assembled 48kHz wav
     (background + our synthesized lines, each gained to match the original line's
@@ -532,7 +679,8 @@ def run_qwen_dub(
     line_paths = synth_lines(engine, segments, seg_speakers, voice_ids, language, work_dir,
                              n_takes=n_takes, log=log,
                              usable_slots=usable_slots, speaker_ref_paths=speaker_ref_paths,
-                             on_notice=on_notice)
+                             on_notice=on_notice, reuse_lines=reuse_lines,
+                             cancel_check=cancel_check)
     n_ok = sum(1 for p in line_paths if p is not None)
     log("   %d/%d lines synthesized" % (n_ok, len(segments)))
     if segments and n_ok == 0:
@@ -668,8 +816,9 @@ def resynth_one_line(work_dir, entry, text, language):
     # per-line seed the first pass uses gave the same voice back for the same
     # words (user decision 2026-08-28).
     seed = random.randrange(1, 2**31)
+    slot = max(0.0, float(entry.get("end", 0) or 0) - float(entry.get("start", 0) or 0)) or None
     return _synth_one(engine, {"text": text}, voice_id, language, seed,
-                      out_path, lambda m: None, "line %d" % i)
+                      out_path, lambda m: None, "line %d" % i, slot=slot)
 
 
 def rebuild_dub(work_dir, data, video_path, out_path):

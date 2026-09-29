@@ -25,7 +25,7 @@ def test_each_remake_rolls_a_new_seed(monkeypatch, tmp_path):
 
     monkeypatch.setattr("app.engines.base.get_engine", lambda name: FakeEngine())
 
-    def fake_synth(engine, seg, voice_id, language, seed, out_path, log, label):
+    def fake_synth(engine, seg, voice_id, language, seed, out_path, log, label, **_later):
         seeds.append(seed)
         return out_path
 

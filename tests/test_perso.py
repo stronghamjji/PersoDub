@@ -857,6 +857,39 @@ def test_download_target_scans_for_the_link_and_saves(monkeypatch, tmp_path):
     assert out.read_bytes() == b"BG-BYTES"
 
 
+def test_download_media_asks_again_when_the_connection_drops(monkeypatch, tmp_path):
+    # The paid-for result was lost to one dropped connection (Windows,
+    # 2026-09-29): the storage link is asked for again before giving up.
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append(url)
+        if len(calls) < 3:
+            raise httpx.RemoteProtocolError("peer closed connection without sending complete message body")
+        r = _FakeHttpxResponse({})
+        r.content = b"DUB-BYTES"
+        return r
+
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    out = tmp_path / "dub.mp4"
+    client.download_media("https://media.example.com/dub.mp4", str(out))
+    assert out.read_bytes() == b"DUB-BYTES"
+    assert len(calls) == 3
+
+
+def test_download_media_gives_up_after_three_dropped_connections(monkeypatch, tmp_path):
+    def fake_get(url, params=None, headers=None, timeout=None):
+        raise httpx.RemoteProtocolError("peer closed connection")
+
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    with pytest.raises(httpx.RemoteProtocolError):
+        client.download_media("https://media.example.com/dub.mp4", str(tmp_path / "dub.mp4"))
+
+
 def test_dub_video_sends_the_region_tag_when_the_language_has_one(monkeypatch, tmp_path):
     # Perso tells English (UK) from English (US) by languageTag, not by code
     # (app/languages.py); a plain code carries no tag at all.
@@ -970,6 +1003,34 @@ def test_an_exception_with_nothing_to_say_is_named_rather_than_blank():
     """"Perso separation failed ()" says less than nothing."""
     assert short_reason(ValueError()) == "ValueError"
     assert short_reason("") == "str"
+
+
+
+def _refusal(status, body):
+    req = httpx.Request("POST", "https://api.perso.ai/file/api/upload/video")
+    if isinstance(body, str):
+        return httpx.Response(status, text=body, request=req)
+    return httpx.Response(status, json=body, request=req)
+
+
+def test_a_perso_refusal_carries_persos_own_reason():
+    """Seven 400s reached the issue tracker saying only "Bad Request"
+    (2026-09-28). Perso's answer says why; it must reach the log and screen."""
+    r = _refusal(400, {"code": "VIDEO_TOO_LONG", "message": "Video exceeds the plan limit"})
+    with pytest.raises(httpx.HTTPStatusError) as e:
+        perso_client_module._raise_for_status(r)
+    said = short_reason(e.value)
+    assert said == "Client error '400 Bad Request': Perso said Video exceeds the plan limit / VIDEO_TOO_LONG"
+    assert "://" not in str(e.value)
+
+
+def test_a_refusal_in_plain_text_or_with_nothing_to_say():
+    with pytest.raises(httpx.HTTPStatusError) as e:
+        perso_client_module._raise_for_status(_refusal(400, "unsupported file see https://perso.ai/help"))
+    assert str(e.value).endswith("Perso said unsupported file see")
+    with pytest.raises(httpx.HTTPStatusError) as e:
+        perso_client_module._raise_for_status(_refusal(400, ""))
+    assert "Perso said" not in str(e.value)
 
 
 # ── note_credits: the line, the running total, and never a failure ─────────

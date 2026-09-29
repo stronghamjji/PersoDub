@@ -9,7 +9,7 @@ A walkthrough of the app, screen by screen. To install it, see the
 ## First launch
 
 The first time PersoDub opens it sets itself up. The base install is under 1 GB,
-and the heavy parts arrive later: the AI engine, the translation runtime and the
+and the heavy parts arrive later: Python + PyTorch, Ollama (only for a local translator) and the
 models download the first time you start a dub, and the subtitle eraser downloads
 the first time you use it. The window lists the steps and ticks them off; closing
 the app partway through does not lose the work, setup resumes where it stopped.
@@ -180,7 +180,7 @@ The gear at the foot of the rail. Six sections:
 
 **Appearance** switches between the dark app and the older light one.
 
-**Models** lists the packs: the AI engine, the translation models, the subtitle
+**Models** lists the packs: Python + PyTorch, the translation models, the subtitle
 eraser. Each row says how big it is and whether it is installed, and can be
 downloaded or removed from here.
 

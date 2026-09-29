@@ -25,7 +25,8 @@ class _FakeSeparationEngine:
 
 
 def _fake_run_qwen_dub(engine, segments, ref_cues, work_dir, vocals_path, background_path,
-                       language=None, n_takes=1, log=None, on_notice=None, video_duration=None):
+                       language=None, n_takes=1, log=None, on_notice=None, video_duration=None,
+                       **_later):   # cancel_check, reuse_lines -- added after this fake
     p = os.path.join(work_dir, "qwen_dub_48k.wav")
     with open(p, "wb") as f:
         f.write(b"MIXED")

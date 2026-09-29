@@ -135,6 +135,10 @@ def _as_the_pipeline_reads_it(kw, work):
     # Never set by any caller here; they are the sidecar seams tests inject.
     for key in ("diar_engine", "qwen_engine", "perso_client", "translator"):
         out.pop(key, None)
+    # Added after these recordings (2026-09-23) and set only by the Resume
+    # button, which none of the four paths here is.
+    if out.get("resume") is False:
+        out.pop("resume")
     return out
 
 

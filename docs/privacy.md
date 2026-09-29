@@ -2,8 +2,10 @@
 
 [← Back to README](../README.md)
 
-**With the default engines, nothing leaves your machine.** Separation, transcription,
-diarization, translation and speech synthesis all run locally.
+**With the default engines, only the transcript text leaves your machine, and only
+for translation.** Separation, transcription, diarization and speech synthesis run
+locally; translation goes through your own ChatGPT account unless you pick a local
+translator in Advanced options, in which case nothing leaves at all.
 
 Enabling an optional cloud engine changes that, so it is worth being precise:
 
@@ -11,8 +13,9 @@ Enabling an optional cloud engine changes that, so it is worth being precise:
 |---|---|---|
 | **Perso API key** | **The video file itself** is uploaded for transcription. Perso also becomes the default transcription engine for subsequent jobs. | Perso |
 | **Google Gemini key** | **The transcript text only** — not the video, not the audio. | Google |
+| **ChatGPT sign-in** (the default translator) | **The transcript text**, with the translation instructions, sent through your own ChatGPT account, under that account's own data settings. The program that carries it (OpenAI's Codex) runs in a folder of PersoDub's own with every tool switched off, so it reads nothing else on your computer and none of your own Codex settings go along; OpenAI's program may send its own usage statistics. The sign-in is OpenAI's own flow and stays on your computer; PersoDub never sees the password or token. | OpenAI |
 
-Clearing the key in **Settings** returns PersoDub to fully local processing.
+Clearing the key in **Settings** stops that engine. Picking a local translator (Hunyuan or Gemma) in **Advanced options** keeps translation on your computer too.
 
 When a Perso key is configured, requests to Perso carry a header identifying the
 application name, version, and operating system family so the vendor can attribute API
@@ -35,6 +38,8 @@ machine, and that CLI talks to its own vendor on your own account.
 |---|---|---|
 | **Claude Code** | PersoDub's own script tools only. Reading files and running shell commands are denied, and your own MCP servers are left out. | Anthropic |
 | **Codex** | Runs **read-only by default**, and its shell cannot reach the network. An escalation its own reviewer model approves may write to PersoDub's own agent folder (and the system temp folder) - not to the rest of your files. It can still **read any file on this computer that you can read**. If you keep standing instructions for Codex in your own `AGENTS.md` file, those are read into every turn here too. | OpenAI |
+
+**ChatGPT** can also be picked as the Dub Agent: it is the same OpenAI program, signed in with PersoDub's own ChatGPT sign-in, answering with ChatGPT's own model.
 
 In both cases the script of the job on screen is part of the conversation. With Codex,
 so is anything else it chooses to read. Your video is never uploaded for this.

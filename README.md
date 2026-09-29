@@ -106,7 +106,7 @@ Listen for pacing: PersoDub never speeds the audio up. The source files live in 
 2. Drop in a video, or paste a link.
 3. Pick a language and press **Start dubbing**.
 
-First setup is under 1 GB. The AI engine downloads on your first dub (2–9 GB).
+First setup is under 1 GB. Python + PyTorch and the models download on your first dub: about 9 GB on a Mac, 16 GB on a Windows PC with an NVIDIA GPU, 9 GB without one.
 
 <details>
 <summary>Install notes</summary>
@@ -137,7 +137,8 @@ Repository: https://github.com/stronghamjji/PersoDub
 4. Ask me if I want more accurate transcription with a free Perso key. If yes, open
    https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=install_prompt
    then open PersoDub's Settings so I can paste the key in myself. Never ask to see it.
-5. Dub one video under a minute with me. Tell me the download size (2-9 GB) first.
+5. Dub one video under a minute with me. Tell me the download size (9-16 GB) first.
+   If I pick ChatGPT for translation, I sign in myself. A free account is enough.
 6. Report the version, where projects are saved, and how to reopen the app.
 Finish the setup, not just a plan. Tell me any step you could not do.
 ```
@@ -155,9 +156,10 @@ Finish the setup, not just a plan. Tell me any step you could not do.
 |---|---|
 | **Requirements** | Apple Silicon Mac or 64-bit Windows · 16 GB memory · 30 GB disk. [Full table](docs/requirements.md) |
 | **Languages** | 10 on your computer, 77 with Perso's cloud. [Full list](docs/languages.md) |
-| **Better quality** | A free Perso key for transcription, a Gemini key for translation. [Configuration](docs/configuration.md) |
+| **Translation** | A local model, or ChatGPT for free. No subscription. [Configuration](docs/configuration.md) |
+| **Better quality** | A free Perso key: better transcription, less to download. [Configuration](docs/configuration.md) |
 | **Privacy** | By default your video never leaves this computer. [What is sent](docs/privacy.md) |
-| **How it works** | Demucs, Whisper, CAM++, a local LLM, Qwen3-TTS. [Pipeline](docs/development.md) · [Comparison](docs/comparison.md) · [Roadmap](docs/roadmap.md) |
+| **How it works** | Demucs, Whisper, CAM++, a local LLM or ChatGPT, Qwen3-TTS. [Pipeline](docs/development.md) · [Comparison](docs/comparison.md) · [Roadmap](docs/roadmap.md) |
 | **Build from source** | [INSTALL.md](INSTALL.md) · [Development](docs/development.md) · [Contributing and security](docs/contributing.md) |
 
 ## License and responsible use

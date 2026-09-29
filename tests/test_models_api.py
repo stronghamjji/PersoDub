@@ -43,7 +43,7 @@ def _install_fake_downloader(monkeypatch, gate=None, fail=None):
         for m in entry["markers"]:
             p = os.path.join(kit, *entry["dir"].split("/"), *m.split("/"))
             os.makedirs(os.path.dirname(p), exist_ok=True)
-            open(p, "wb").close()
+            open(p, "wb").write(b"w")
     monkeypatch.setattr(models_module, "_run_download", fake)
 
 
@@ -119,7 +119,7 @@ def test_remove_deletes_and_refuses_while_dubbing(monkeypatch, tmp_path):
     kit = os.environ["PERSODUB_KIT_DIR"]
     p = os.path.join(kit, "models", "whisper", "faster-whisper-large-v3", "model.bin")
     os.makedirs(os.path.dirname(p), exist_ok=True)
-    open(p, "wb").close()
+    open(p, "wb").write(b"w")
     # A running dub must block removal.
     monkeypatch.setattr(models_module, "dub_in_progress", lambda: True)
     assert client.delete("/api/models/whisper").status_code == 409

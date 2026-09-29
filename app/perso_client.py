@@ -255,7 +255,7 @@ def short_reason(e) -> str:
     """
     text = " ".join(str(e or "").split())
     text = _URL_IN_TEXT.sub("", text).strip(" .,:;")
-    return text[:80] if text else type(e).__name__
+    return text[:160] if text else type(e).__name__
 
 
 def perso_failure(res):
@@ -300,7 +300,35 @@ def _raise_for_status(r: httpx.Response) -> None:
         raise PersoInvalidKeyError(f"Perso rejected the API key (HTTP {r.status_code})")
     if r.status_code >= 500:
         raise PersoUnavailableError(f"Perso server error (HTTP {r.status_code})")
+    if r.status_code >= 400:
+        # httpx's own text says only "400 Bad Request", and seven refusals
+        # reached the issue tracker with nothing to go on (2026-09-28). Perso's
+        # answer says why, so it rides along -- without the address.
+        said = _perso_said(r)
+        if said:
+            raise httpx.HTTPStatusError(
+                f"Client error '{r.status_code} {r.reason_phrase}': Perso said {said}",
+                request=r.request, response=r)
     r.raise_for_status()
+
+
+# Where Perso has been seen to put its reason. Read in this order, all kept.
+_REASON_FIELDS = ("message", "detail", "error", "errorMessage") + _CODE_FIELDS
+
+
+def _perso_said(r: httpx.Response) -> str:
+    """Perso's reason for a refusal, one short line, or "" when it gave none."""
+    try:
+        body = r.json()
+    except ValueError:
+        body = r.text
+    if isinstance(body, dict):
+        parts = [str(body[k]) for k in _REASON_FIELDS if body.get(k) not in (None, "")]
+        text = " / ".join(parts)
+    else:
+        text = str(body or "")
+    text = _URL_IN_TEXT.sub("", " ".join(text.split())).strip(" .,:;")
+    return text[:160]
 
 
 def note_credits(ws, pc, log, what: str) -> None:
@@ -554,15 +582,10 @@ class PersoClient:
         )
         _raise_for_status(r)
         link = r.json()["result"]["videoFile"]["videoDownloadLink"]
-        url = link if link.startswith("http") else MEDIA_HOST + link
-        # Identity only, no API key: a storage link, not the Perso API.
-        r = httpx.get(url, headers={"User-Agent": USER_AGENT,
-                                    "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
-        _raise_for_status(r)
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-        with open(out_path, "wb") as f:
-            f.write(r.content)
-        return out_path
+        # A storage link, fetched like every other one: identity only, no API
+        # key, and asked for again when the connection drops.
+        return self.download_media(link, out_path)
 
     def get_project_script(self, project_seq: int, space_seq: Optional[int] = None) -> dict:
         """A dubbing project's script: {"sentences": [...], "speakers": [...]}.
@@ -614,8 +637,20 @@ class PersoClient:
         """Fetch one storage file (a sentence's audio, a subtitle) to disk.
         Identity headers only -- storage links never see the API key."""
         full = url if url.startswith("http") else MEDIA_HOST + url
-        r = httpx.get(full, headers={"User-Agent": USER_AGENT,
-                                     "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
+        # The file is the paid-for result; a connection dropped mid-body
+        # (httpx RemoteProtocolError, Windows 2026-09-29) threw it away with
+        # the credits already spent. Storage links are safe to ask for again,
+        # so a dropped connection is asked again, twice, before giving up.
+        for attempt in range(3):
+            try:
+                r = httpx.get(full, headers={"User-Agent": USER_AGENT,
+                                             "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
+                break
+            except httpx.TransportError as e:
+                if attempt == 2:
+                    raise
+                logger.warning("Perso download dropped (%s); trying again", type(e).__name__)
+                time.sleep(2 * (attempt + 1))
         _raise_for_status(r)
         with open(out_path, "wb") as f:
             f.write(r.content)

@@ -28,12 +28,29 @@ logger = logging.getLogger("persodub.agents.base")
 # PATH in Terminal and missing here. Look where these installers actually put
 # things before giving up.
 EXTRA_PATHS = [
+    # First: where both CLIs' own installers put a self-contained binary. The
+    # Homebrew/npm entries below are Node shims ("#!/usr/bin/env node") that
+    # die at once when node is not on this app's PATH -- and it is not -- so
+    # a stale shim there hid a working binary here (Mac, 2026-09-23).
+    os.path.expanduser("~/.local/bin"),
+    # Codex's standalone installer (0.156, 2026-09-23): a junction under
+    # Programs on Windows, and the release folder it points at on both.
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "OpenAI", "Codex", "bin"),
+    os.path.expanduser("~/.codex/packages/standalone/current/bin"),
     "/opt/homebrew/bin",
     "/usr/local/bin",
-    os.path.expanduser("~/.local/bin"),
     os.path.expanduser("~/.bun/bin"),
     os.path.expanduser("~/.npm-global/bin"),
+    # Last: the copy PersoDub fetched for ChatGPT sign-in (app/codex_fetch.py)
+    # on a computer that had no Codex of its own.
+    os.path.join(os.environ.get("PERSODUB_KIT_DIR") or os.path.join(os.path.expanduser("~"), ".persodub"),
+                 "codex", "bin"),
 ]
+
+# What the file may be called on this platform. Windows names it codex.exe
+# (the standalone installer) or codex.cmd (npm); shutil.which knows that from
+# PATHEXT, the EXTRA_PATHS walk has to be told.
+_SUFFIXES = ("", ".exe", ".cmd") if os.name == "nt" else ("",)
 
 TIMEOUT_SECONDS = float(os.environ.get("PERSODUB_AGENT_TIMEOUT", "180"))
 
@@ -47,10 +64,29 @@ def find_cli(name: str) -> Optional[str]:
     if found:
         return found
     for d in EXTRA_PATHS:
-        candidate = os.path.join(d, name)
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
+        if not d:
+            continue
+        for suffix in _SUFFIXES:
+            candidate = os.path.join(d, name + suffix)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
     return None
+
+
+def chatgpt_env() -> dict:
+    """The environment every ChatGPT run gets: the same OpenAI program as
+    Codex, but with a home of its own inside PersoDub's folder.
+
+    The user's own ~/.codex carries their personal AGENTS.md, which the CLI
+    reads into every request whatever flag it is given -- a translation used
+    to send the user's private standing instructions to OpenAI with every
+    chunk, and let them change the translation's tone (review 2026-09-23).
+    A home of its own holds only the app's sign-in: "Sign in with ChatGPT"
+    in Settings, separate from the Codex the user runs in a terminal."""
+    kit = os.environ.get("PERSODUB_KIT_DIR") or os.path.join(os.path.expanduser("~"), ".persodub")
+    home = os.path.join(kit, "chatgpt")
+    os.makedirs(home, exist_ok=True)
+    return {**os.environ, "CODEX_HOME": home}
 
 
 def write_mcp_config(dir_path: str, api_url: str) -> str:
@@ -143,12 +179,15 @@ def explain_exit(code: int, output: str, agent_name: str = "The assistant",
                  login_command: str = "") -> dict:
     """One error event for a turn that ended badly.
 
-    `message` is a sentence and a next step; `detail` is the CLI's own last
-    words, which the panel keeps behind a "자세히" fold rather than in the user's
-    face. Nothing here is a stack trace and nothing is an exit code.
+    `message` is a sentence and a next step, the only thing the panel shows;
+    `detail` is the CLI's own last words, written to the app's log. Nothing
+    here is a stack trace and nothing is an exit code.
     """
     text = (output or "").strip()
     tail = _SECRETISH.sub(r"\1-…", text[-1200:])
+    # The screen shows the sentence only (user, 2026-09-28); the program's own
+    # words are kept here, in the app's log, for whoever looks into it.
+    logger.warning("%s stopped (exit %s): %s", agent_name, code, tail[-600:])
 
     if code in _KILLED:
         return {"kind": "error", "detail": tail,
@@ -163,14 +202,12 @@ def explain_exit(code: int, output: str, agent_name: str = "The assistant",
         return {"kind": "error", "detail": tail,
                 "message": "Usage limit reached. Wait a while or pick another assistant."}
 
-    # Nothing we know. One line of what it said, and the rest behind the fold --
-    # a summary the user can read out to somebody who can help.
-    first = next((ln.strip() for ln in reversed(text.splitlines()) if ln.strip()), "")
-    if len(first) > 160:
-        first = first[:157] + "…"
-    said = (" (%s)" % first) if first else ""
+    # Nothing we know. A sentence the user can act on; what the program said
+    # stays behind the Details fold. Its last line used to ride in the
+    # sentence too, and on Windows that was "rmcp::transport::worker: worker
+    # quit with fatal: Transport channel closed" (user chose, 2026-09-26).
     return {"kind": "error", "detail": tail,
-            "message": "The assistant did not finish its answer%s. Please try again." % said}
+            "message": "The assistant stopped partway. Please try again."}
 
 
 # --- Which account a CLI is signed in with ----------------------------------
@@ -180,11 +217,11 @@ def explain_exit(code: int, output: str, agent_name: str = "The assistant",
 LOGIN_TIMEOUT = 8.0
 
 
-def _run_quiet(cmd: List[str]) -> tuple:
+def _run_quiet(cmd: List[str], env: Optional[dict] = None) -> tuple:
     """(returncode, stdout, stderr) for a short read-only command, or None."""
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           stdin=subprocess.DEVNULL, timeout=LOGIN_TIMEOUT)
+                           stdin=subprocess.DEVNULL, timeout=LOGIN_TIMEOUT, env=env)
     except (OSError, subprocess.SubprocessError):
         return None
     return r.returncode, r.stdout or "", r.stderr or ""
@@ -204,7 +241,8 @@ _SIGNED_OUT = {
 # What to say instead. Each names the one command that fixes it, because
 # "sign in" on its own leaves the reader looking for a button that is not there.
 SIGNED_OUT_LINE = {
-    "codex": "Codex is not signed in. Run codex login in Terminal.",
+    # Codex signs in through the app's own window now (one ChatGPT sign-in).
+    "codex": "Codex is not signed in. Press Sign in above.",
     "claude": "Claude is not signed in. Run claude in Terminal, then /login.",
 }
 
@@ -220,7 +258,7 @@ def signed_out_line(kind: str) -> str:
     return SIGNED_OUT_LINE.get(kind, "The assistant is not signed in.")
 
 
-def login_state(kind: str, binary: str) -> dict:
+def login_state(kind: str, binary: str, env: Optional[dict] = None) -> dict:
     """Is this CLI signed in, and with what kind of account?
 
     `logged_in` is None when we cannot tell -- a CLI with no such command, one
@@ -234,7 +272,7 @@ def login_state(kind: str, binary: str) -> dict:
     if kind == "codex":
         # `codex login status` prints "Logged in using ChatGPT" (on stderr, as
         # measured 2026-08-26) and exits 0; a signed-out CLI says so and exits 1.
-        got = _run_quiet([binary, "login", "status"])
+        got = _run_quiet([binary, "login", "status"], env=env)
         if got is None:
             return unknown
         _code, out, err = got
@@ -371,7 +409,7 @@ RETRY_DELAY = 1.5
 def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         cwd: Optional[str] = None, agent_name: str = "The assistant",
         login_command: str = "",
-        input_text: Optional[str] = None) -> Iterator[dict]:
+        input_text: Optional[str] = None, env: Optional[dict] = None) -> Iterator[dict]:
     """Spawn one turn and yield our events as they arrive.
 
     `input_text` is the prompt, piped to the CLI's stdin (see the drivers'
@@ -394,7 +432,7 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         for event in _run_once(binary, args, translate, cwd=cwd,
                                agent_name=agent_name,
                                login_command=login_command,
-                               input_text=input_text):
+                               input_text=input_text, env=env):
             if (attempt == 0 and not yielded
                     and event.get("kind") == "error"
                     and _STALE_LOCK in (event.get("detail") or "")):
@@ -410,7 +448,7 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
 def _run_once(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
               cwd: Optional[str] = None, agent_name: str = "The assistant",
               login_command: str = "",
-              input_text: Optional[str] = None) -> Iterator[dict]:
+              input_text: Optional[str] = None, env: Optional[dict] = None) -> Iterator[dict]:
     """One spawn of the CLI -- run() above decides whether it gets another."""
     try:
         proc = subprocess.Popen(
@@ -421,7 +459,7 @@ def _run_once(binary: str, args: List[str], translate: Callable[[dict], List[dic
             # closed outright -- a CLI that reads an open stdin would sit there
             # waiting on whatever terminal started the app.
             stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
-            cwd=cwd, text=True, encoding="utf-8", bufsize=1,
+            cwd=cwd, text=True, encoding="utf-8", bufsize=1, env=env,
         )
     except OSError as e:
         yield {"kind": "error", "message": "Could not run the assistant: %s" % e}

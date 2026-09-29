@@ -25,16 +25,20 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import config, perso_client, perso_materialize, state
+from app.engines.base import SynthesisTimeout, VoiceEngineDown
+from app import config, dub_launch, engines_status, perso_client, perso_materialize, state
 from app.api._shared import script_work_dir
 from app.api.dub import check_space
-from app.dub_script import DUB_NAME, edit_line, line_wav_path, load_lines
+from app.dub_script import DUB_NAME, edit_line, line_wav_path, load_lines, note_voice_text
 from app.perso_client import (
     PersoCreditExhaustedError,
     PersoInvalidKeyError,
     PersoUnavailableError,
+    short_reason,
 )
 from app.qwen_pipeline import rebuild_dub, resynth_one_line
+from app.retranslate import retranslate_lines
+from app.translate import ChatGptLimitError, ChatGptNotSignedInError, get_translator
 from app.text.srt import parse_srt
 
 router = APIRouter()
@@ -191,7 +195,7 @@ def _remake_one_voice(work_dir: str, data: dict, line: int, text: str, language:
         new_path = resynth_one_line(work_dir, entries[line - 1], text, language)
     except FileNotFoundError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    except httpx.HTTPError:
+    except (httpx.HTTPError, VoiceEngineDown, SynthesisTimeout):
         # The engine did not answer in time or answered with an error: on a
         # machine that is also dubbing, that is the dub holding it. A 500 here
         # read to the agent as "still waiting" (2026-09-16).
@@ -200,6 +204,7 @@ def _remake_one_voice(work_dir: str, data: dict, line: int, text: str, language:
             "then try this line again."))
     if new_path is None:
         raise HTTPException(status_code=502, detail="Could not make the voice.")
+    note_voice_text(work_dir, line, text)
 
 
 @router.post("/api/dub/jobs/{jid}/script/{line}/voice")
@@ -234,7 +239,7 @@ def dub_job_stale_voices(jid: str):
     new folder, no status change, and a line nobody rewrote keeps its voice.
 
     Which lines those are is decided the same way the screen decides it
-    (static/index.html: `l.edited && l.voice_stale`), so one press does the set
+    (ui/src/scriptTable.mjs: `l.voice_stale`), so one press does the set
     of lines the buttons were offering and not a line more.
     """
     job, work_dir = script_work_dir(jid)
@@ -244,7 +249,7 @@ def dub_job_stale_voices(jid: str):
     lines = load_lines(work_dir, job.get("language_code") or "en")
     stale = [
         line for line, original in zip(lines, _dubbed_texts(work_dir))
-        if original is not None and original != line["text"] and line["voice_stale"]
+        if original is not None and line["voice_stale"]
     ]
     if not stale:
         return {"remade": [], "skipped": len(lines)}
@@ -259,6 +264,57 @@ def dub_job_stale_voices(jid: str):
                 (job.get("result") or {}).get("out_path"))
     return {"remade": [line["line"] for line in stale],
             "skipped": len(lines) - len(stale)}
+
+
+class RetranslateRequest(BaseModel):
+    # Line numbers, or None for every line.
+    lines: Optional[List[int]] = None
+
+
+@router.post("/api/dub/jobs/{jid}/retranslate")
+def dub_job_retranslate(jid: str, body: RetranslateRequest):
+    """Translate the chosen lines again with ChatGPT, then speak each changed
+    line again and rebuild the dub once (user, 2026-09-28).
+
+    The page's Translate again button and the assistant's retranslate_lines
+    tool both land here, so the two do exactly the same work.
+    """
+    job, work_dir = script_work_dir(jid)
+    if job.get("status") in ("running", "cancelling"):
+        raise HTTPException(status_code=409, detail="This job is still running.")
+    if body.lines is not None and not body.lines:
+        raise HTTPException(status_code=422, detail="Choose at least one line.")
+    if not engines_status.chatgpt_available():
+        raise HTTPException(status_code=422, detail="Sign in to ChatGPT first.")
+    data = _line_manifest(work_dir)
+    check_space(work_dir)
+    # Before a word is rewritten: with the voice engine down the script came
+    # back all new and the video stayed all old (review, 2026-09-29).
+    from app.api.dub import _require_voice_engine_running
+    _require_voice_engine_running()
+    code = job.get("language_code") or "en"
+    language = job.get("language") or dub_launch.language_name(code)
+    try:
+        changed = retranslate_lines(work_dir, body.lines, code, language,
+                                    get_translator("chatgpt"))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="No script was recorded for this job.")
+    except ChatGptNotSignedInError:
+        raise HTTPException(status_code=422, detail="Sign in to ChatGPT first.")
+    except ChatGptLimitError:
+        raise HTTPException(status_code=429, detail="ChatGPT usage limit reached for now. Try again after it resets.")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=(
+            f"ChatGPT could not translate these lines ({short_reason(e)}). Try again."))
+    if changed:
+        voice_language = _voice_language(job, data)
+        for c in changed:
+            _remake_one_voice(work_dir, data, c["line"], c["text"], voice_language)
+        rebuild_dub(work_dir, data, os.path.join(work_dir, "input.mp4"),
+                    (job.get("result") or {}).get("out_path"))
+    return {"changed": changed}
 
 
 @router.post("/api/dub/jobs/{jid}/script/{line}/revert")

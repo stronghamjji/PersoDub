@@ -276,8 +276,22 @@ def _pack_ready(pack_id: str) -> bool:
     return bool(entry) and model_store.model_state(entry, kit) == "ready"
 
 
+def engine_hint(separation_local: bool, stt_local: bool) -> str:
+    """What the AI engine will do for THIS dub. The catalog's line named all
+    three jobs, and a user who had moved separation and transcription to Perso
+    asked what it was for (Mac tester, 2026-09-28): it is still the voice."""
+    if separation_local and stt_local:
+        return "Separates the sound, transcribes and makes the voices on this computer."
+    if separation_local:
+        return "Separates the sound and makes the voices on this computer."
+    if stt_local:
+        return "Transcribes and makes the voices on this computer."
+    return "Makes the voices on this computer."
+
+
 def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = True, *,
-                    need_engine: bool = False, need_ollama: bool = False):
+                    need_engine: bool = False, need_ollama: bool = False,
+                    separation_local: bool = True):
     """Catalog entries this job still needs: the packs first (the desktop app
     installs those, kind "pack"), then the models in catalog order (kind
     "model", downloaded by this process).
@@ -302,8 +316,10 @@ def _missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = T
     for m in model_store.load_catalog():
         if m["role"] == "pack":
             if m["id"] in wanted_packs and model_store.model_state(m, kit) != "ready":
+                hint = (engine_hint(separation_local, need_whisper) if m["id"] == "engine"
+                        else m.get("hint", ""))
                 packs.append({"id": m["id"], "kind": "pack", "name": m["name"],
-                              "bytes": model_store._pack_bytes(m), "hint": m.get("hint", "")})
+                              "bytes": model_store._pack_bytes(m), "hint": hint})
             continue
         if m["id"] in wanted and model_store.model_state(m, kit) != "ready":
             models.append({"id": m["id"], "kind": "model", "name": m["name"], "bytes": m["bytes"],
@@ -349,7 +365,7 @@ def launch_job(work, fields, log_line, target, parallel=False):
     return jid
 
 
-def _work_for(job, jid, *, voices_only=False):
+def _work_for(job, jid, *, voices_only=False, resume=False):
     """This job's work (app/dub_launch.py), wired to this module's seams.
 
     run_dub, the download, the trim and the cloud path are read off THIS module
@@ -363,6 +379,7 @@ def _work_for(job, jid, *, voices_only=False):
         cancel_check=lambda: state.job_store.is_cancel_requested(jid),
         on_notice=lambda n: state.job_store.append_notice(jid, n),
         voices_only=voices_only,
+        resume=resume,
         run_dub=run_dub,
         run_cloud_dub=_run_cloud_dub,
         fetch_source=fetch_source,
@@ -457,14 +474,15 @@ def dub_job_redub(jid: str):
     # Only the voices are made again -- no STT, no translation -- but a voice
     # model (or the engine pack) removed since must resurface as the dialog,
     # not a crash.
-    missing = _missing_models(False, None, need_engine=job.get("dub_mode") != "perso")
+    missing = _missing_models(False, None, need_engine=job.get("dub_mode") != "perso",
+                              separation_local=False)
     if missing:
         _raise_models_needed(missing)
     if job.get("dub_mode") != "perso":
         _require_voice_engine_running()
 
     fields = {"language_code": language_code, "project": project,
-              "day": _today(), "from_link": False, "work_dir": work,
+              "day": _today(), "from_link": False, "work_dir": work, "voices_only": True,
               # The remake is the same video in the same two languages.
               "source_lang": job.get("source_lang"),
               # ...and made with the same engines, so its finished
@@ -492,6 +510,42 @@ def dub_job_redub(jid: str):
     # assistant, not the user, is the one who pressed go.
     state.job_store.update(jid, remade_as=new_jid)
     return {"job_id": new_jid}
+
+
+# A stopped job that can pick up where it left off: failed, cancelled, or cut
+# off by the app closing ("interrupted" is an error with that word).
+RESUMABLE = ("error", "cancelled")
+
+
+@router.post("/api/dub/jobs/{jid}/resume")
+def dub_job_resume(jid: str):
+    """Carry on a stopped dub in its own folder, from the first stage that left
+    no result behind (app/pipeline.py run_dub resume=True). Separation, the
+    transcript, the translation and every finished voice line are kept, so a
+    Perso stage is never paid for twice (user, 2026-09-23). Same job, same
+    folder, same settings; a cloud (Perso) dub has nothing local to resume
+    and is sent to Try again instead."""
+    job = state.job_store.get(jid)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {jid}")
+    if job.get("status") not in RESUMABLE:
+        raise HTTPException(status_code=409, detail="Only a stopped job can be resumed.")
+    if kind_of(job) != "dub":
+        raise HTTPException(409, "This job erased subtitles, so there is no dub to resume.")
+    if job.get("dub_mode") == "perso":
+        raise HTTPException(409, "A Perso cloud dub cannot be resumed here. Use Start over.")
+    work_dir = work_dir_of(job)
+    if not os.path.exists(os.path.join(work_dir, "input.mp4")):
+        raise HTTPException(status_code=409, detail="This job's video is no longer on disk.")
+    check_space(state.WORKSPACE)
+    if not state.job_store.claim(jid, RESUMABLE, status="queued", error=None,
+                                 cancel_requested=False, notices=[]):
+        raise HTTPException(status_code=409, detail="This job is already running again.")
+    state.job_store.append_log(jid, "Resuming from where it stopped…")
+    record = {**job, "work_dir": work_dir}
+    state.job_store.start(jid, lambda log: _work_for(
+        record, jid, resume=True, voices_only=bool(job.get("voices_only")))(log))
+    return {"job_id": jid}
 
 
 @router.post("/api/dub/jobs/{jid}/retry")
@@ -570,7 +624,8 @@ def dub_job_retry(jid: str):
     else:
         translate_missing_id = dub_launch.translate_model_missing(engines.get("translator"))
     missing = _missing_models(engines.get("stt_engine") != "perso", translate_missing_id,
-                              need_engine=local, need_ollama=need_ollama)
+                              need_engine=local, need_ollama=need_ollama,
+                              separation_local=engines.get("separation") != "perso")
     if missing:
         _raise_models_needed(missing)
     if local:
@@ -790,6 +845,10 @@ def dub_start(
         # Same rule "Try again" applies, asked with the status already in hand
         # so a start still probes Ollama exactly once.
         translate_missing_id = dub_launch.translate_model_missing("hunyuan", status)
+    if effective_translate_engine == "chatgpt" and srt is None and not engines_status.chatgpt_available():
+        raise HTTPException(
+            422, "ChatGPT translation needs a ChatGPT sign-in. Open Settings and press Sign in with ChatGPT first."
+        )
     if effective_translate_engine == "gemini" and not engines_status.gemini_available():
         raise HTTPException(
             422, "Gemini translation needs an API key. Open Settings and save your Gemini API key first."
@@ -836,7 +895,8 @@ def dub_start(
         # The voice is always made locally in a local dub: the engine pack is
         # needed whatever the STT and separation choices.
         missing = _missing_models(need_whisper, translate_missing_id,
-                                  need_engine=True, need_ollama=need_ollama)
+                                  need_engine=True, need_ollama=need_ollama,
+                                  separation_local=sep_engine != "perso")
         if missing:
             _raise_models_needed(missing)
         _require_voice_engine_running()

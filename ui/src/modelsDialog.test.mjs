@@ -60,6 +60,7 @@ function harness({ rows = [], shell = null } = {}) {
     $,
     onStartDubbing: () => { state.started += 1; },
     onOpenSettings: () => { state.settings += 1; },
+    onUsePerso: () => { state.usePerso = (state.usePerso || 0) + 1; },
     onRowsChanged: (r) => { state.painted.push(r); },
     shell,
     keepPolling: () => state.keepPolling === true,
@@ -78,10 +79,10 @@ function fakeShell({ install = async () => ({ ok: true }) } = {}) {
   return shell;
 }
 
-const ENGINE = { id: "engine", role: "pack", name: "AI engine", bytes: 2e9, state: "not_downloaded" };
+const ENGINE = { id: "engine", role: "pack", name: "Python + PyTorch", bytes: 2e9, state: "not_downloaded" };
 const WHISPER = { id: "whisper", role: "stt", name: "Whisper", bytes: 2.9e9, state: "not_downloaded" };
 const PACK_409 = { missing: [
-  { id: "engine", kind: "pack", name: "AI engine", bytes: 2e9 },
+  { id: "engine", kind: "pack", name: "Python + PyTorch", bytes: 2e9 },
   { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9e9 },
 ] };
 
@@ -89,15 +90,15 @@ const PACK_409 = { missing: [
 const settle = () => new Promise((r) => setImmediate(r));
 
 const DETAIL_TWO = {
-  missing: [{ id: "whisper", name: "Whisper", bytes: 1.5 * 1024 ** 3 },
-            { id: "qwen3-tts", name: "Qwen3 TTS", bytes: 2.5 * 1024 ** 3 }],
-  total_bytes: 4 * 1024 ** 3,
+  missing: [{ id: "whisper", name: "Whisper", bytes: 1.5e9 },
+            { id: "qwen3-tts", name: "Qwen3 TTS", bytes: 2.5e9 }],
+  total_bytes: 4e9,
 };
 const ready = (id, name, bytes) => ({ id, name, bytes, state: "ready", progress: 100 });
 const downloading = (id, name, bytes, progress) => ({ id, name, bytes, state: "downloading", progress });
 
 test("refreshModels stores the rows and hands them to the page's repaint", async (t) => {
-  const h = harness({ rows: [ready("whisper", "Whisper", 1024 ** 3)] });
+  const h = harness({ rows: [ready("whisper", "Whisper", 1e9)] });
   t.after(h.state.restore);
 
   const rows = await h.api.refreshModels();
@@ -111,7 +112,7 @@ test("refreshModels stores the rows and hands them to the page's repaint", async
 });
 
 test("a failed /api/models keeps the rows it already had", async (t) => {
-  const h = harness({ rows: [ready("whisper", "Whisper", 1024 ** 3)] });
+  const h = harness({ rows: [ready("whisper", "Whisper", 1e9)] });
   t.after(h.state.restore);
   await h.api.refreshModels();
 
@@ -127,8 +128,8 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
 
   h.api.showModelsDialog(DETAIL_TWO);
 
-  assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB of AI models to start dubbing?");
-  assert.equal(h.$("mnLine").textContent, "They are saved on this computer and only download once.");
+  assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB to start dubbing?");
+  assert.equal(h.$("mnLine").textContent, "One-time download for making voices on this computer.");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnProgress").hidden, true);
   assert.equal(h.$("mnDownload").hidden, false);
@@ -136,17 +137,8 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
   assert.equal(h.$("modelsNeededOverlay").classList.contains("open"), true);
 });
 
-test("one missing model is named in the title instead of totalled", (t) => {
-  const h = harness();
-  t.after(h.state.restore);
-
-  h.api.showModelsDialog({ missing: [{ id: "hunyuan", name: "Hunyuan", bytes: 1.1 * 1024 ** 3 }] });
-
-  assert.equal(h.$("mnTitle").textContent, "Download Hunyuan (1.1 GB) to start dubbing?");
-});
-
 test("Download and Start fetches only what is missing and swaps the buttons", async (t) => {
-  const h = harness({ rows: [ready("whisper", "Whisper", 1.5 * 1024 ** 3)] });
+  const h = harness({ rows: [ready("whisper", "Whisper", 1.5e9)] });
   t.after(h.state.restore);
   await h.api.refreshModels();
   h.state.calls.length = 0;
@@ -164,8 +156,8 @@ test("Download and Start fetches only what is missing and swaps the buttons", as
 });
 
 test("the dialog polls every 2s while the download runs, then stops", async (t) => {
-  const h = harness({ rows: [downloading("whisper", "Whisper", 1.5 * 1024 ** 3, 40),
-                             downloading("qwen3-tts", "Qwen3 TTS", 2.5 * 1024 ** 3, 0)] });
+  const h = harness({ rows: [downloading("whisper", "Whisper", 1.5e9, 40),
+                             downloading("qwen3-tts", "Qwen3 TTS", 2.5e9, 0)] });
   t.after(h.state.restore);
   h.api.showModelsDialog(DETAIL_TWO);
 
@@ -173,16 +165,16 @@ test("the dialog polls every 2s while the download runs, then stops", async (t) 
   await settle();
 
   assert.deepEqual(h.state.timers.map((x) => x.ms), [2000]);
-  assert.equal(h.$("mnTitle").textContent, "Downloading AI models");
-  // 40% of 1.5GB out of 4GB = 15%, byte-weighted.
-  assert.equal(h.$("mnLine").textContent, "15%. Dubbing starts when they finish.");
+  // 40% of 1.5GB out of 4GB = 15%, byte-weighted: one number, nothing else.
+  assert.equal(h.$("mnTitle").textContent, "Downloading 15%");
+  assert.equal(h.$("mnLine").textContent, "");
   assert.equal(h.$("mnBar").style.width, "15%");
 
   // The next tick finds them both on disk: no further timer, and no dub yet
   // started before that moment.
   assert.equal(h.state.started, 0);
-  h.state.rows = [ready("whisper", "Whisper", 1.5 * 1024 ** 3),
-                  ready("qwen3-tts", "Qwen3 TTS", 2.5 * 1024 ** 3)];
+  h.state.rows = [ready("whisper", "Whisper", 1.5e9),
+                  ready("qwen3-tts", "Qwen3 TTS", 2.5e9)];
   await h.state.timers.pop().fn();
   await settle();
 
@@ -191,8 +183,8 @@ test("the dialog polls every 2s while the download runs, then stops", async (t) 
 });
 
 test("the dub restarts exactly once when every pending model is ready", async (t) => {
-  const h = harness({ rows: [ready("whisper", "Whisper", 1.5 * 1024 ** 3),
-                             ready("qwen3-tts", "Qwen3 TTS", 2.5 * 1024 ** 3)] });
+  const h = harness({ rows: [ready("whisper", "Whisper", 1.5e9),
+                             ready("qwen3-tts", "Qwen3 TTS", 2.5e9)] });
   t.after(h.state.restore);
   h.api.showModelsDialog(DETAIL_TWO);
   h.$("mnDownload").click();
@@ -208,8 +200,8 @@ test("the dub restarts exactly once when every pending model is ready", async (t
 });
 
 test("a stalled model says so in the dialog without cancelling the dub", async (t) => {
-  const h = harness({ rows: [downloading("whisper", "Whisper", 1.5 * 1024 ** 3, 50),
-                             { id: "qwen3-tts", name: "Qwen3 TTS", bytes: 2.5 * 1024 ** 3,
+  const h = harness({ rows: [downloading("whisper", "Whisper", 1.5e9, 50),
+                             { id: "qwen3-tts", name: "Qwen3 TTS", bytes: 2.5e9,
                                state: "paused", error: "no space" }] });
   t.after(h.state.restore);
   h.api.showModelsDialog(DETAIL_TWO);
@@ -223,8 +215,8 @@ test("a stalled model says so in the dialog without cancelling the dub", async (
 });
 
 test("Cancel stops the downloads that are running and closes the dialog", async (t) => {
-  const h = harness({ rows: [downloading("whisper", "Whisper", 1.5 * 1024 ** 3, 20),
-                             { id: "qwen3-tts", name: "Qwen3 TTS", bytes: 2.5 * 1024 ** 3,
+  const h = harness({ rows: [downloading("whisper", "Whisper", 1.5e9, 20),
+                             { id: "qwen3-tts", name: "Qwen3 TTS", bytes: 2.5e9,
                                state: "paused" }] });
   t.after(h.state.restore);
   h.api.showModelsDialog(DETAIL_TWO);
@@ -240,8 +232,8 @@ test("Cancel stops the downloads that are running and closes the dialog", async 
                    ["POST /api/models/whisper/cancel"]);
   assert.equal(h.$("modelsNeededOverlay").classList.contains("open"), false);
   // With the dub gone, a later refresh must not start it.
-  h.state.rows = [ready("whisper", "Whisper", 1.5 * 1024 ** 3),
-                  ready("qwen3-tts", "Qwen3 TTS", 2.5 * 1024 ** 3)];
+  h.state.rows = [ready("whisper", "Whisper", 1.5e9),
+                  ready("qwen3-tts", "Qwen3 TTS", 2.5e9)];
   await h.api.refreshModels();
   assert.equal(h.state.started, 0);
 });
@@ -277,19 +269,23 @@ test("Hide leaves the dub pending, and the topbar chip brings the dialog back", 
   assert.equal(h.state.settings, 1);
 });
 
-test("Open Settings from the dialog hands off to the page", (t) => {
+test("Use Perso API closes the dialog and hands the switch to the page", (t) => {
   const h = harness();
   t.after(h.state.restore);
+  h.api.showModelsDialog({ missing: [{ id: "engine", kind: "pack", name: "Python + PyTorch", bytes: 2e9 }] });
+  assert.equal(h.$("mnSettings").hidden, false);
+  assert.equal(h.$("mnAlt").hidden, false);
   h.$("mnSettings").click();
-  assert.equal(h.state.settings, 1);
+  assert.equal(h.state.usePerso, 1);
+  assert.equal(h.$("modelsNeededOverlay").classList.contains("open"), false);
 });
 
 test("the Settings catalog lists a row per model with the right button", async (t) => {
   const h = harness({ rows: [
-    ready("whisper", "Whisper", 1.5 * 1024 ** 3),
-    downloading("qwen3-tts", "Qwen3 TTS", 2.5 * 1024 ** 3, 30),
-    { id: "hunyuan", name: "Hunyuan", bytes: 1.1 * 1024 ** 3, state: "paused" },
-    { id: "gemma", name: "Gemma", bytes: 3 * 1024 ** 3, state: "not_downloaded" },
+    ready("whisper", "Whisper", 1.5e9),
+    downloading("qwen3-tts", "Qwen3 TTS", 2.5e9, 30),
+    { id: "hunyuan", name: "Hunyuan", bytes: 1.1e9, state: "paused" },
+    { id: "gemma", name: "Gemma", bytes: 3e9, state: "not_downloaded" },
   ] });
   t.after(h.state.restore);
 
@@ -309,8 +305,8 @@ test("the Settings catalog lists a row per model with the right button", async (
 });
 
 test("a quiet catalog counts what is on disk and stays folded", async (t) => {
-  const h = harness({ rows: [ready("whisper", "Whisper", 1.5 * 1024 ** 3),
-                             { id: "gemma", name: "Gemma", bytes: 3 * 1024 ** 3, state: "not_downloaded" }] });
+  const h = harness({ rows: [ready("whisper", "Whisper", 1.5e9),
+                             { id: "gemma", name: "Gemma", bytes: 3e9, state: "not_downloaded" }] });
   t.after(h.state.restore);
 
   await h.api.refreshModels();
@@ -320,7 +316,7 @@ test("a quiet catalog counts what is on disk and stays folded", async (t) => {
 });
 
 test("a catalog row's button calls the endpoint it is labelled with", async (t) => {
-  const h = harness({ rows: [ready("whisper", "Whisper", 1024 ** 3)] });
+  const h = harness({ rows: [ready("whisper", "Whisper", 1e9)] });
   t.after(h.state.restore);
   await h.api.refreshModels();
   h.state.calls.length = 0;
@@ -332,7 +328,7 @@ test("a catalog row's button calls the endpoint it is labelled with", async (t) 
 });
 
 test("a refused Remove shows the engine's own sentence", async (t) => {
-  const h = harness({ rows: [ready("whisper", "Whisper", 1024 ** 3)] });
+  const h = harness({ rows: [ready("whisper", "Whisper", 1e9)] });
   t.after(h.state.restore);
   const pass = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
@@ -358,7 +354,7 @@ test("Remove with the engine gone says to check the engine", async (t) => {
 });
 
 test("downloadModel and cancelModel hit their endpoints and start the poll", async (t) => {
-  const h = harness({ rows: [downloading("whisper", "Whisper", 1024 ** 3, 5)] });
+  const h = harness({ rows: [downloading("whisper", "Whisper", 1e9, 5)] });
   t.after(h.state.restore);
 
   await h.api.downloadModel("whisper");
@@ -386,7 +382,7 @@ test("Download and Start installs the packs through the desktop app first, then 
   t.after(h.state.restore);
   await h.api.refreshModels();
   h.api.showModelsDialog(PACK_409);
-  assert.equal(h.$("mnTitle").textContent, "Download 4.6 GB to start dubbing?");   // 4.9e9 bytes
+  assert.equal(h.$("mnTitle").textContent, "Download 4.9 GB to start dubbing?");   // 4.9e9 bytes
   h.$("mnDownload").click();
   await settle(); await settle(); await settle();
   assert.deepEqual(shell.asked, ["install engine"]);
@@ -405,16 +401,11 @@ test("while a pack installs the dialog shows its progress line, and Cancel stops
   h.api.showModelsDialog({ missing: [PACK_409.missing[0]] });
   h.$("mnDownload").click();
   await settle();
-  assert.equal(h.$("mnTitle").textContent, "Installing AI engine");
-  shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing AI engines", state: "progress", detail: "torch 40%", pct: 40 });
-  assert.equal(h.$("mnLine").textContent, "Installing AI engines: torch 40%");
+  shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing Python + PyTorchs", state: "progress", detail: "torch 40%", pct: 40 });
   assert.equal(h.$("mnBar").style.width, "40%", "the bar follows the pack's percent, not the engine's row");
-  assert.equal(h.$("mnTitle").textContent, "Installing AI engine · 40%", "the title says how far, not only the bar");
-  // A detail that only restates the title is not repeated after a colon
-  // ("Downloading the translation runtime: Downloading the translation runtime", 2026-09-08).
-  shell.progress({ pack: "engine", stepId: "ollama-runtime", title: "Downloading the translation runtime", state: "progress", detail: "Downloading the translation runtime", pct: 60 });
-  assert.equal(h.$("mnLine").textContent, "Downloading the translation runtime");
-  assert.equal(h.$("mnTitle").textContent, "Installing AI engine · 60%");
+  // Only the percent: which file or step it is on is not shown (user, 2026-09-28).
+  assert.equal(h.$("mnTitle").textContent, "Downloading 40%");
+  assert.equal(h.$("mnLine").textContent, "");
   h.$("mnCancel").click();
   assert.deepEqual(shell.asked, ["install engine", "cancel engine"]);
   finish({ ok: false, reason: "Cancelled." });
@@ -437,7 +428,7 @@ test("a retry notice is shown on its own, so the Settings row does not cut it of
   assert.equal(row.children[3].textContent, "Cancel");
   // The next ordinary progress line puts the title back.
   shell.progress({ pack: "engine", stepId: "models", title: "Downloading sound-separation model (~80 MB)", state: "progress", pct: 70, detail: "12 MB / 80 MB" });
-  assert.equal(h.$("modelsList").children[0].children[2].textContent, "Downloading AI engine… 70% · Downloading sound-separation model (~80 MB): 12 MB / 80 MB");
+  assert.equal(h.$("modelsList").children[0].children[2].textContent, "Downloading Python + PyTorch… 70% · Downloading sound-separation model (~80 MB): 12 MB / 80 MB");
   finish({ ok: true });
   await p; await settle();
 });
@@ -450,7 +441,7 @@ test("a pack the desktop app could not install stops the dub and says why, with 
   h.api.showModelsDialog(PACK_409);
   h.$("mnDownload").click();
   await settle(); await settle(); await settle();
-  assert.equal(h.$("mnError").textContent, "AI engine: Not enough space: needs 2.0 GB.");
+  assert.equal(h.$("mnError").textContent, "Python + PyTorch: Not enough space: needs 2.0 GB.");
   assert.equal(h.$("mnDownload").hidden, false);
   assert.ok(!h.state.calls.some((c) => c.startsWith("POST")), "no model download was started");
 });
@@ -462,13 +453,13 @@ test("without the desktop app a pack cannot be installed from the page, and the 
   h.api.showModelsDialog(PACK_409);
   h.$("mnDownload").click();
   await settle(); await settle();
-  assert.equal(h.$("mnError").textContent, "AI engine: Installed by the desktop app.");
+  assert.equal(h.$("mnError").textContent, "Python + PyTorch: Installed by the desktop app.");
   assert.ok(!h.state.calls.some((c) => c.startsWith("POST")));
 });
 
 test("the Settings catalog's pack rows ask the desktop app to install or remove, and are read-only without it", async (t) => {
   const shell = fakeShell();
-  const h = harness({ rows: [ENGINE, { ...ENGINE, id: "ollama-runtime", name: "Translation runtime", state: "ready" }], shell });
+  const h = harness({ rows: [ENGINE, { ...ENGINE, id: "ollama-runtime", name: "Ollama", state: "ready" }], shell });
   t.after(h.state.restore);
   await h.api.refreshModels();
   const [engineRow, runtimeRow] = h.$("modelsList").children;
@@ -517,9 +508,9 @@ test("a download the engine refuses shows its sentence instead of starting nothi
   const h = harness({ rows: [{ id: "hunyuan", role: "translate", name: "Hunyuan", bytes: 1.1e9, state: "not_downloaded" }] });
   t.after(h.state.restore);
   await h.api.refreshModels();
-  h.state.responses = { "/api/models/hunyuan/download": { ok: false, json: async () => ({ detail: "Install the Translation runtime first, then download this model." }) } };
+  h.state.responses = { "/api/models/hunyuan/download": { ok: false, json: async () => ({ detail: "Install Ollama first, then download this model." }) } };
   await h.api.downloadModel("hunyuan");
-  assert.equal(h.$("modelsError").textContent, "Hunyuan: Install the Translation runtime first, then download this model.");
+  assert.equal(h.$("modelsError").textContent, "Hunyuan: Install Ollama first, then download this model.");
 });
 
 test("a catalog row says what the thing is for, under its name", async (t) => {
@@ -543,7 +534,7 @@ test("a pack being installed reads as downloading in the rows the page paints, a
   await settle();
   let painted = h.state.painted.at(-1).find((r) => r.id === "engine");
   assert.equal(painted.state, "downloading");
-  shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing AI engines", state: "progress", pct: 42, detail: "torch" });
+  shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing Python + PyTorchs", state: "progress", pct: 42, detail: "torch" });
   painted = h.state.painted.at(-1).find((r) => r.id === "engine");
   assert.equal(painted.progress, 42);
   finish({ ok: false, reason: "Health check timed out" });
@@ -576,7 +567,7 @@ test("a watcher outside the dialog is told the progress, and the reason a pack f
   // sentence takes the title alone.
   assert.deepEqual(seen[0],
     { id: "engine", title: "Downloading", line: "Downloading: half way", pct: 50 });
-  assert.deepEqual(seen.at(-1), { id: "engine", error: "AI engine: No room on the disk." });
+  assert.deepEqual(seen.at(-1), { id: "engine", error: "Python + PyTorch: No room on the disk." });
 });
 
 test("a watcher outside the dialog hears when the pack is finally there", async (t) => {
@@ -612,24 +603,20 @@ test("downloadAll stops at a pack that failed and downloads no model", async (t)
   assert.ok(!h.state.calls.some((c) => c.startsWith("POST")));
 });
 
-test("the dub dialog lists what it will download, by name, size and purpose, and names the API as the other road", async (t) => {
+test("the dub dialog names no files, only the size, what it is for and the way round it", async (t) => {
   const h = harness({ rows: [ENGINE, WHISPER] });
   t.after(h.state.restore);
   await h.api.refreshModels();
   h.api.showModelsDialog({ missing: [
-    { id: "engine", kind: "pack", name: "AI engine", bytes: 2e9, hint: "Runs local dubbing on this computer." },
-    { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9e9, hint: "Turns the speech into text." },
+    { id: "engine", kind: "pack", name: "Python + PyTorch", bytes: 2e9 },
+    { id: "whisper", kind: "model", name: "Whisper", bytes: 2.9e9 },
   ] });
-  const items = h.$("mnItems").children;
-  assert.equal(items.length, 2);
-  assert.equal(items[0].children[0].textContent, "AI engine · 1.9 GB");
-  assert.equal(items[0].children[1].textContent, "Runs local dubbing on this computer.");
-  assert.equal(h.$("mnItems").hidden, false);
+  assert.equal(h.$("mnTitle").textContent, "Download 4.9 GB to start dubbing?");
   assert.equal(h.$("mnAlt").hidden, false);
-  // Once the download runs the list gives way to the bar.
-  h.$("mnDownload").click();
-  await settle();
-  assert.equal(h.$("mnItems").hidden, true);
+  // A translator's model has nothing to do with Perso dubbing: no way round offered.
+  h.api.showModelsDialog({ missing: [{ id: "hunyuan", name: "Hunyuan", bytes: 1.1e9 }] });
+  assert.equal(h.$("mnAlt").hidden, true);
+  assert.equal(h.$("mnSettings").hidden, true);
 });
 
 
@@ -653,7 +640,7 @@ test("the poll keeps running while the page says so, and a paint that throws doe
 test("a second pack pressed while one installs waits: the first keeps its place, the other button is locked, the notice clears when the first finishes", async (t) => {
   let finish;
   const shell = fakeShell({ install: () => new Promise((r) => { finish = r; }) });
-  const RUNTIME = { id: "ollama-runtime", role: "pack", name: "Translation runtime", bytes: 4.6e8, state: "not_downloaded" };
+  const RUNTIME = { id: "ollama-runtime", role: "pack", name: "Ollama", bytes: 4.6e8, state: "not_downloaded" };
   const h = harness({ rows: [ENGINE, RUNTIME], shell });
   t.after(h.state.restore);
   await h.api.refreshModels();
@@ -661,7 +648,7 @@ test("a second pack pressed while one installs waits: the first keeps its place,
   await settle();
   assert.equal(await h.api.installPack("ollama-runtime"), false);
   assert.deepEqual(shell.asked, ["install engine"], "the desktop app was not asked twice");
-  assert.equal(h.$("modelsError").textContent, "AI engine is still installing. Wait for it to finish.");
+  assert.equal(h.$("modelsError").textContent, "Python + PyTorch is still installing. Wait for it to finish.");
   const painted = h.state.painted.at(-1).find((r) => r.id === "engine");
   assert.equal(painted.state, "downloading", "the first keeps its busy state");
   const runtimeBtn = h.$("modelsList").children[1].children[3];
@@ -669,4 +656,43 @@ test("a second pack pressed while one installs waits: the first keeps its place,
   finish({ ok: true });
   await first; await settle();
   assert.equal(h.$("modelsError").textContent, "", "the notice is gone once the first is done");
+});
+
+test("a download started elsewhere is followed until it is ready", async (t) => {
+  // The Dub Agent started it: this page only sees it on a refresh, and used to
+  // keep that first percent on screen (Windows, 2026-09-25).
+  const h = harness({ rows: [downloading("gemma", "Gemma 3", 7.6e9, 18)] });
+  t.after(h.state.restore);
+
+  await h.api.refreshModels();
+  await settle();
+  assert.deepEqual(h.state.timers.map((x) => x.ms), [2000]);
+
+  h.state.rows = [ready("gemma", "Gemma 3", 7.6e9)];
+  await h.state.timers.pop().fn();
+  await settle();
+  assert.equal(h.api.modelRow("gemma").state, "ready");
+  assert.deepEqual(h.state.timers, []);
+});
+
+test("an open Settings sheet keeps reading the list, so a model finished elsewhere shows as ready", async (t) => {
+  // Nothing was downloading when the sheet opened; the agent's download then
+  // finished in under a second and the sheet kept saying Download (2026-09-26).
+  const h = harness({ rows: [{ id: "hunyuan", name: "Hunyuan", bytes: 1.1e9, state: "not_downloaded" }] });
+  t.after(h.state.restore);
+  h.state.keepPolling = true;
+
+  await h.api.refreshModels();
+  await settle();
+  assert.deepEqual(h.state.timers.map((x) => x.ms), [2000]);
+
+  h.state.rows = [ready("hunyuan", "Hunyuan", 1.1e9)];
+  await h.state.timers.pop().fn();
+  await settle();
+  assert.equal(h.api.modelRow("hunyuan").state, "ready");
+  // Still open, so it keeps going; closing it is what ends the poll.
+  assert.deepEqual(h.state.timers.map((x) => x.ms), [2000]);
+  h.state.keepPolling = false;
+  await h.state.timers.pop().fn();
+  assert.deepEqual(h.state.timers, []);
 });

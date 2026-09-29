@@ -121,7 +121,7 @@ def test_the_command_fences_the_assistant_in():
     # would come along and hand the assistant tools this app never offered.
     assert "--strict-mcp-config" in args
     allowed = args[args.index("--allowedTools") + 1]
-    assert allowed.count("mcp__persodub__") == 21
+    assert allowed.count("mcp__persodub__") == 22
     assert "mcp__persodub__cancel_dub" in allowed
     assert "mcp__persodub__burn_subtitles" in allowed
     denied = args[args.index("--disallowedTools") + 1]
@@ -270,3 +270,11 @@ def test_the_instructions_say_to_keep_the_balance_when_asking_about_credits():
     # F35, 2026-09-17). Both agents read this prompt.
     from app.agents.claude import SYSTEM_PROMPT
     assert "AND the balance" in SYSTEM_PROMPT
+
+
+def test_a_download_offer_names_its_model_for_the_button():
+    from app.agents.claude import translate
+    ev = {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "mcp__persodub__download_model", "input": {"model_id": "gemma"}}]}}
+    step = translate(ev)[0]
+    assert step["tool"] == "download_model" and step["model"] == "gemma"

@@ -291,8 +291,20 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 12px 0;
+    padding: 0 0 12px;
     gap: 6px;
+  }
+  /* As tall as .topbar, so the logo sits level with "PersoDub"; a short bar
+     (not a full line: the rail stays one piece) sits where the top bar's
+     bottom edge runs (user, 2026-09-24). */
+  .rail-head {
+    align-self: stretch; flex: 0 0 auto; height: 47px; margin-bottom: 4px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .rail-head::after {
+    content: ""; position: absolute; bottom: 0; left: 50%;
+    width: 28px; height: 1px; transform: translateX(-50%); background: var(--border);
   }
 
   .rail-item {
@@ -1021,9 +1033,9 @@
      (user, 2026-09-11). 200 is the tools cell measured: 10 + 22 + 8 + 100 + 8
      + 22 + 8 + 22. */
   .sc-row { display: grid;
-    grid-template-columns: 28px 34px 168px minmax(200px, 1fr) 22px minmax(240px, 1.2fr) 170px;
+    grid-template-columns: 50px 34px 168px minmax(200px, 1fr) 22px minmax(240px, 1.2fr) 170px;
     gap: 12px; align-items: center; padding: 8px 14px; font-size: var(--font-ui);
-    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 706px; }
+    line-height: 1.45; border-bottom: 1px solid var(--border); min-width: 728px; }
   /* The translation cell is editable, and its click target hangs 4px to the
      left of the words (padding 2px 4px against margin -2px -4px), so its
      heading has to hang with it or the two are 4px apart. */
@@ -1038,6 +1050,22 @@
   /* The line the video is on right now, so the eye can follow the script. */
   .sc-row.sc-now { background: color-mix(in srgb, var(--primary) 14%, transparent); }
   .sc-n { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  /* Translate again: a tick box before each line's number, the count and the
+     button at the right of the pane's name, and the menu under the button. */
+  .sc-n, .sc-h-n { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .sc-pick { margin: 0; width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
+  .sc-row.sc-picked { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+  .sc-pick-n { margin-left: auto; font-size: var(--font-label); font-weight: 400; color: var(--muted-foreground); }
+  .retr { position: relative; }
+  .sc-pick-n:empty + .retr { margin-left: auto; }
+  .retr-menu { position: absolute; right: 0; top: 36px; z-index: 5; min-width: 200px; padding: 6px;
+    background: var(--popover, var(--background)); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(0,0,0,.35); display: flex; flex-direction: column; }
+  .retr-cap { padding: 6px 10px 4px; font-size: var(--font-label); font-weight: 400; color: var(--muted-foreground); }
+  .retr-menu button { text-align: left; padding: 8px 10px; border: none; border-radius: 6px; background: none;
+    color: var(--foreground); font: inherit; font-size: var(--font-ui); font-weight: 500; cursor: pointer; }
+  .retr-menu button:hover:not(:disabled), .retr-menu button:focus-visible { background: color-mix(in srgb, var(--primary) 22%, transparent); }
+  .retr-menu button:disabled { color: var(--muted-foreground); cursor: default; }
   .sc-time { color: var(--primary); font-size: var(--font-label); font-variant-numeric: tabular-nums;
     white-space: nowrap; }
   .sc-src { color: var(--muted-foreground); min-width: 0; overflow-wrap: anywhere;
@@ -1087,10 +1115,14 @@
      grow a sideways scrollbar. Under that width the row keeps its number and
      speaker (user decision 2026-08-27) and drops only the end of the slot --
      the start is what finds a line, and the length beside the words says the
-     rest. The breakpoint stays at 787, where it was set when the speaker
-     column was 100px wide, so the row tightens a little before it has to. */
-  @container scriptpane (max-width: 787px) {
-    .sc-row { grid-template-columns: 28px 34px 90px minmax(120px, 1fr) 22px minmax(160px, 1.2fr) 108px;
+     rest.
+     Each breakpoint below is the width its row stops fitting at, measured in
+     the browser rather than added up: 975, 668 and 590. They stood at 787,
+     640 and 568 from before the number column grew a checkbox, and between
+     788 and 972 the wide row was wider than its pane -- the buttons, stuck to
+     the right edge, covered up to 150px of the translation (2026-09-29). */
+  @container scriptpane (max-width: 975px) {
+    .sc-row { grid-template-columns: 50px 34px 90px minmax(120px, 1fr) 22px minmax(160px, 1.2fr) 108px;
       gap: 10px; padding-left: 12px; padding-right: 12px; min-width: 0; }
     /* .sc-row.head sets its own padding and outranks the rule above, so it has
        to be told too -- 14 against 12 put every heading 2px right of its
@@ -1109,8 +1141,8 @@
      about 560px. The clock used to be dropped here; a speaker column of 34px
      instead of 100px pays for it, so every column simply draws closer and the
      one thing a line is found by -- when it starts -- stays on screen. */
-  @container scriptpane (max-width: 640px) {
-    .sc-row { grid-template-columns: 28px 34px 74px minmax(100px, 1fr) 22px minmax(130px, 1.2fr) 108px;
+  @container scriptpane (max-width: 668px) {
+    .sc-row { grid-template-columns: 50px 34px 74px minmax(100px, 1fr) 22px minmax(130px, 1.2fr) 108px;
       gap: 8px; }
   }
 
@@ -1125,8 +1157,8 @@
      checked here is the line as it will be spoken; the original is still on the
      timeline's own lane and under the play button. Six tracks now, and the
      cells fall into them in order, so only the heading needs re-placing. */
-  @container scriptpane (max-width: 568px) {
-    .sc-row { grid-template-columns: 28px 30px 66px 22px minmax(120px, 1fr) 100px;
+  @container scriptpane (max-width: 590px) {
+    .sc-row { grid-template-columns: 48px 30px 66px 22px minmax(120px, 1fr) 100px;
       gap: 6px; padding-left: 10px; padding-right: 10px; }
     .sc-row.head { padding-left: 10px; padding-right: 10px; }
     .sc-src, .sc-h-src { display: none; }
@@ -1568,7 +1600,11 @@
      pane, with a small grab pill in the middle so the drag is discoverable
      (user, 2026-09-01). Stacked, the two panes are sized by the window instead
      and there is nothing here to drag. */
-  #gripPanes { left: -6px; top: 0; }
+  /* Inside the pane's own left edge, not in the gutter beyond it: the pane
+     clips its overflow for its rounded corners (2026-09-10), which cut the
+     outside handle off and left the video impossible to resize (Mac and
+     Windows full test, 2026-09-25). */
+  #gripPanes { left: 0; top: 0; }
   #gripPanes::before { content: ""; position: absolute; top: 50%; left: 1px;
     width: 4px; height: 44px; margin-top: -22px; border-radius: 2px;
     background: var(--border); }
@@ -1608,7 +1644,7 @@
   .done-fail .job-notice { margin: 0; text-align: center; }
   /* As wide as its words: stretched across the whole column it read as the
      screen's main action rather than the way out of a dead end. */
-  #doneRetry { align-self: center; }
+  #doneFailActions { align-self: center; display: flex; gap: 8px; }
   #doneRetryError { text-align: center; }
   .done-fail .raw-log { margin: 0; }
 
@@ -1650,6 +1686,15 @@
      own title and the line under it. */
   .modal-head + .modal-body { padding-top: 8px; }
   .modal-head h2 { margin: 0; }
+  /* Settings' Cancel and Save stay in reach while the body scrolls, the way
+     the title does at the top. */
+  .modal-foot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end;
+    gap: 8px; padding: 12px 20px 16px; background: var(--background); }
+  .modal-foot #settingsChanges { margin-right: auto; }
+  /* Only the body scrolls, between the title and the buttons, so the buttons
+     never sit on top of the last setting. */
+  #settingsOverlay .modal { display: flex; flex-direction: column; overflow: hidden; }
+  #settingsOverlay .modal-body { flex: 1; min-height: 0; overflow-y: auto; }
   .modal-close { background: none; border: none; cursor: pointer; color: var(--muted-foreground); padding: 4px; border-radius: var(--radius-sm); }
   .modal-close:hover { background: var(--secondary); }
   /* The app's own size, not the browser's. Nothing set one here, so every
@@ -1692,10 +1737,6 @@
   .model-btn { padding: 0 12px; }
   /* What the dub will download, by name: the one place a first-time user
      learns what each thing is before it costs gigabytes. */
-  .mn-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
-  .mn-items li { display: grid; gap: 2px; font-size: var(--font-ui); }
-  .mn-items li b { font-weight: 600; }
-  .mn-items li span { color: var(--muted-foreground); font-size: var(--font-label); }
   .mn-progress { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin: 14px 0 6px; }
   .mn-progress > div { height: 100%; width: 0%; background: var(--primary); transition: width .3s; }
   .mn-buttons { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 16px; }
@@ -1709,6 +1750,9 @@
   /* Above the settings sheet: What's new can be opened FROM Settings, and a
      sibling overlay later in the DOM would otherwise paint over it. */
   #whatsNewOverlay { z-index: 30; }
+  #chatgptSignInOverlay { z-index: 30; }
+  .cs-spin { display: inline-block; width: 11px; height: 11px; margin-right: 6px; vertical-align: -1px;
+    border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
   #dubModeHint, #sepHint, #sttHint, #translateHint, #voiceHint { white-space: pre-line; }
   .wn-list { margin: 0; padding-left: 18px; }
   .wn-list li { font-size: var(--font-ui); line-height: 1.6; margin: 4px 0; }
@@ -1837,7 +1881,6 @@
   .advanced-btn.open, .advanced-btn.open .chev { border-color: var(--primary); color: var(--primary); }
   /* A sentence, not a field: it belongs under the whole grid rather than in a
      column beside one. The grid's own gap already spaces it. */
-  #advancedKeysLink { grid-column: 1 / -1; margin-top: 0; }
   /* The two that end here sit left, the one that goes on to a dub sits right,
      where the eye leaves the row. All three are the app's one button box. */
   .project-actions { display: flex; align-items: center; gap: 8px; }
@@ -1855,9 +1898,21 @@
          and it is the way to the project itself (user, 2026-09-09). The window
          has no address bar, so the link leaves for the user's own browser --
          desktop/main.js hands every http(s) window.open to the OS. -->
-    <button class="rail-item brand" id="brandBtn" type="button"
-            title="PersoDub on GitHub" aria-label="PersoDub on GitHub">
-      <img class="rail-logo" src="/logo.png" alt="">
+    <!-- The logo sits in a head exactly as tall as the top bar beside it, and
+         the head's bottom line runs level with the top bar's (user,
+         2026-09-24): the logo and "PersoDub" read as one row. -->
+    <div class="rail-head">
+      <button class="rail-item brand" id="brandBtn" type="button"
+              title="PersoDub on GitHub" aria-label="PersoDub on GitHub">
+        <img class="rail-logo" src="/logo.png" alt="">
+      </button>
+    </div>
+    <!-- Below the logo, a line, then the places: Home, Dubbing, Erase
+         (user, 2026-09-24). Home is its own tile even though it opens the
+         same first screen Dubbing does -- the user asked for it by name, and
+         with it here the top bar's button became a plain Back. -->
+    <button class="rail-item" id="homeBtn" title="Home" type="button" aria-label="Home">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.8V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9.8"/><path d="M10 20v-5.5h4V20"/></svg>
     </button>
     <!-- The tools stand together at the top, dubbing first: it is what the app
          is for, and a rail that led with Projects made the way home a guess
@@ -1942,8 +1997,8 @@
            it leaves the job for the screen every job starts on (user,
            2026-09-02). Same step the rail's Dubbing icon takes. -->
       <button class="topbar-back" id="topbarBack" type="button"
-              aria-label="Home" title="Home" hidden>
-        <svg class="icon" viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.8V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9.8"/><path d="M10 20v-5.5h4V20"/></svg>
+              aria-label="Back" title="Back" hidden>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
       </button>
       <!-- The same hairline the pane buttons stand behind at the other end of
            the bar: a way out of this screen and the name of it are two
@@ -2193,7 +2248,21 @@
                    timeline its heading row: three named boxes with a 6px gap
                    between them (layout G, user 2026-09-08). #scriptCount is
                    filled by scriptTable.mjs with how many lines there are. -->
-              <div class="pane-head">Script <span class="m" id="scriptCount"></span></div>
+              <div class="pane-head">Script <span class="m" id="scriptCount"></span>
+                <!-- Translate again (user, 2026-09-28): the lines ticked in the
+                     table, or all of them, through ChatGPT once more.
+                     scriptTable.mjs shows it for a script that can be edited. -->
+                <span class="sc-pick-n" id="scriptPickCount"></span>
+                <div class="retr" id="retranslateWrap" hidden>
+                  <button class="btn btn-primary btn-sm" id="retranslateBtn" type="button"
+                    aria-haspopup="menu" aria-expanded="false">Translate again <span aria-hidden="true">&#9662;</span></button>
+                  <div class="retr-menu" id="retranslateMenu" role="menu" hidden>
+                    <div class="retr-cap">Translate with ChatGPT</div>
+                    <button type="button" role="menuitem" data-retr="picked"></button>
+                    <button type="button" role="menuitem" data-retr="all"></button>
+                  </div>
+                </div>
+              </div>
               <!-- The same notice line the running screen carries, on the
                    screen that replaced it. Hidden unless there is one, and
                    moved into the failure block when the job failed. -->
@@ -2281,7 +2350,14 @@
             <!-- The same video, back in the New project dialog: a job that
                  failed is nearly always retried with one option changed, and
                  hunting the file down again was the whole cost of that. -->
-            <button class="btn btn-primary" id="doneRetry" type="button">Try again</button>
+            <!-- Resume carries on in the same folder from the first stage with
+                 no result (POST /api/dub/jobs/{id}/resume); Start over is the
+                 old Try again, a new job from the top. A cloud dub has only
+                 Start over. -->
+            <div class="done-fail-actions" id="doneFailActions">
+              <button class="btn btn-primary" id="doneResume" type="button">Resume</button>
+              <button class="btn btn-secondary" id="doneRetry" type="button">Start over</button>
+            </div>
             <!-- Only if the retry itself cannot start (the folder was deleted
                  since). Kept apart from the reason above, which it must not
                  write over. -->
@@ -2358,6 +2434,9 @@
     </button></div>
     <div class="modal-body">
       <div class="project-thumb" id="projectThumb"><video id="projectVideo" muted playsinline></video><span class="project-dur" id="projectDur"></span><button class="project-replace" id="projectReplace" type="button">Replace</button></div>
+      <!-- Over 30 minutes: not refused, but said plainly (user, 2026-09-23).
+           ui/src/newProject.mjs shows it the moment the length is known. -->
+      <div class="job-notice" id="projectLongHint" hidden>Over 30 minutes. Dubbing takes much longer and depends on your computer. Trimming into parts is recommended.</div>
       <!-- A pasted link is fetched into the app the moment this dialog opens.
            This row is how far along that is; it goes when the video itself can
            be played. -->
@@ -2374,11 +2453,10 @@
         <div class="field"><label for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected>On this device</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint"></div></div>
         <div class="field"><label for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sepHint"></div></div>
         <div class="field"><label for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sttHint"></div><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
-        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="hunyuan" selected>Hunyuan (1.8B)</option><option value="gemma">Gemma 3 (12B)</option><option value="gemini">Gemini API</option></select><div class="settings-hint" id="translateHint"></div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
+        <div class="field"><label for="translateSelect">Translation</label><select id="translateSelect"><option value="chatgpt" selected>ChatGPT</option><option value="hunyuan">Hunyuan (1.8B)</option><option value="gemma">Gemma 3 (12B)</option><option value="gemini">Gemini API</option></select><div class="settings-hint" id="translateHint"></div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
         <div class="field"><label for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint" id="voiceHint"></div><div class="settings-hint model-line" id="voiceModelHint" hidden></div></div>
         <div class="field"><label for="qualitySelect">Voice quality</label><select id="qualitySelect"><option value="fast" selected>Fast</option><option value="high">High quality</option></select><div class="settings-hint" id="qualityHint"></div></div>
         <div class="field"><label for="numSpeakers">Number of speakers</label><input type="number" id="numSpeakers" min="1" placeholder="Auto-detect"><div class="settings-hint">Set 1 for a single-speaker video.</div></div>
-        <button type="button" class="keys-link" id="advancedKeysLink">Perso and Gemini need an API key. Add it in Settings</button>
       </div>
       <!-- Start's own error line: the first screen's #formError sits behind the
            dimmed overlay, where a failed start would never be read. -->
@@ -2436,23 +2514,61 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="chatgptSignInOverlay">
+  <div class="modal" style="max-width: 360px">
+    <div class="modal-body">
+      <h2 id="csTitle" style="margin: 0 0 8px">Sign in to ChatGPT</h2>
+      <p class="settings-hint" id="csLine" style="margin: 0">ChatGPT translates your video.</p>
+      <!-- The first Sign In fetches the sign-in program: what it is doing, and
+           how far, so the wait does not read as a hang (2026-09-28). -->
+      <div class="mn-progress" id="csBar" hidden><div></div></div>
+      <div class="mn-buttons" id="csButtons">
+        <button class="btn btn-outline" id="csCancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="csSignIn" type="button">Sign In</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- A keyed engine picked with no key saved: the key, right here. -->
+<div class="modal-overlay" id="keyOverlay">
+  <div class="modal" style="max-width: 360px">
+    <div class="modal-body">
+      <h2 id="keyTitle" style="margin: 0 0 12px">Perso API key</h2>
+      <div id="keyField">
+        <input type="password" id="keyInput" placeholder="Paste your key" spellcheck="false" autocomplete="off">
+        <a class="settings-link" id="keyLink" href="https://developers.perso.ai/api-keys" target="_blank" rel="noopener">Get a key</a>
+      </div>
+      <!-- A Perso key's workspaces, looked up the moment it is pasted: one is
+           picked by itself, several are chosen here (user, 2026-09-28). -->
+      <div id="keySpaceRow" style="margin-top: 12px" hidden>
+        <label for="keySpace" class="settings-hint" style="display:block; margin-bottom: 4px">Workspace</label>
+        <select id="keySpace"></select>
+      </div>
+      <div class="form-error" id="keyError"></div>
+      <div class="mn-buttons">
+        <button class="btn btn-outline" id="keyCancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="keySave" type="button" disabled>Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modelsNeededOverlay">
   <div class="modal" style="max-width: 430px">
     <div class="modal-body">
       <h2 id="mnTitle" style="margin: 0 0 8px"></h2>
       <p class="settings-hint" id="mnLine" style="margin: 0"></p>
-      <ul class="mn-items" id="mnItems" hidden></ul>
-      <p class="settings-hint" id="mnAlt" style="margin: 10px 0 0" hidden>Or use the Perso API with your key: Open Settings.</p>
+      <p class="settings-hint" id="mnAlt" style="margin: 4px 0 0" hidden>To skip it, set Dubbing to Perso API.</p>
       <div class="mn-progress" id="mnProgress" hidden><div id="mnBar"></div></div>
       <div class="form-error" id="mnError"></div>
       <div class="mn-buttons">
-        <!-- Open Settings is a way out, not a second answer: as a third button
-             of the same weight the eye had to choose between three, and the one
-             that matters is Download and Start. -->
-        <button class="settings-link" id="mnSettings" type="button">Open Settings</button>
+        <!-- The way round the download, as a link: a third button of the same
+             weight made the eye choose between three. -->
+        <button class="settings-link" id="mnSettings" type="button">Use Perso API</button>
         <button class="btn btn-outline" id="mnCancel" type="button">Cancel</button>
         <button class="btn btn-outline" id="mnHide" type="button" hidden>Hide</button>
-        <button class="btn btn-primary" id="mnDownload" type="button">Download and Start</button>
+        <button class="btn btn-primary" id="mnDownload" type="button">Download</button>
       </div>
     </div>
   </div>
@@ -2524,10 +2640,17 @@
           <label for="geminiKeyInput">Google (Gemini) key</label>
           <input type="password" id="geminiKeyInput" placeholder="Not set" spellcheck="false">
         </div>
-        <!-- Keys save the moment a field is left (see saveSettingsEdits in
-             ui/src/settingsDialog.mjs); there is no Save button and no
-             restart. The engines read these values out of kit.env when a dub
-             starts. -->
+        <!-- The ChatGPT translator signs in with the user's own ChatGPT account
+             (free plan included) through OpenAI's own sign-in flow; no key is
+             typed here. ui/src/settingsDialog.mjs paints the state and starts
+             the sign-in (POST /api/agent/login). -->
+        <div class="settings-row settings-line">
+          <span>ChatGPT <span class="settings-hint" id="chatgptState" style="display:inline" aria-live="polite"></span></span>
+          <button class="btn btn-outline btn-sm" id="chatgptSignInBtn" type="button">Sign in with ChatGPT</button>
+        </div>
+        <!-- Keys save with the sheet's Save button (ui/src/settingsDialog.mjs
+             saveSettings), with no restart: the engines read these values out
+             of kit.env when a dub starts. -->
         <button class="settings-link" id="showKeysToggle" type="button">Show keys</button>
         <div class="settings-alert" id="settingsSaveError" style="display:none">
           <svg class="icon" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
@@ -2606,6 +2729,14 @@
           with the app.</div>
         </div>
       </div>
+    </div>
+    <!-- Nothing here saves until Save (Mac tester, 2026-09-28: leaving a field
+         saved it, and nobody could tell whether it had). Cancel, the X,
+         Escape and the backdrop all leave without saving. -->
+    <div class="modal-foot">
+      <span class="settings-hint" id="settingsChanges"></span>
+      <button class="btn btn-outline" id="settingsCancelBtn" type="button">Cancel</button>
+      <button class="btn btn-primary" id="settingsSaveBtn" type="button" disabled>Save</button>
     </div>
   </div>
 </div>
@@ -2715,6 +2846,8 @@
     display: flex; flex-direction: column;
     background: var(--agent-bg); border-radius: var(--radius); overflow: hidden;
     margin-left: 8px; color: var(--agent-fg); }
+  /* Measured by its own width, for the input row below. */
+  .agent { container: agentcol / inline-size; }
   body:not(.agent-open) .agent { display: none; }
   /* The running screen keeps the strip. It was taken off the page there --
      there is no script to fix yet -- but a dub in progress is exactly when a
@@ -2760,7 +2893,7 @@
   /* Points right: pressing it folds the column away to the right edge. */
   .agent-fold .chevron { transform: rotate(-90deg); }
 
-  .assistant-foot { display: flex; align-items: center; gap: 12px;
+  .assistant-foot { position: relative; display: flex; align-items: center; gap: 12px;
     margin: 6px 14px 12px; padding: 6px 6px 6px 16px; min-height: 48px;
     border: 1px solid var(--agent-field-line); border-radius: 8px;
     background: var(--agent-field); }
@@ -2768,8 +2901,19 @@
     padding: 0; outline: none; font: inherit; font-size: var(--font-ui);
     color: var(--agent-fg); max-height: 120px; }
   .assistant-input::placeholder { color: var(--agent-muted); }
+  /* A narrow column: the model button takes a line of its own above the box.
+     Beside it at 260px it left the box 47px, "Ask" and a scroll arrow
+     (Windows at 150%, 2026-09-25). At 300px and up the box keeps 87px or
+     more on one line, so the usual 320px column looks as it always did. */
+  @container agentcol (max-width: 299px) {
+    .assistant-foot { flex-wrap: wrap; row-gap: 0; }
+    .assistant-modelwrap { order: -1; flex-basis: 100%; }
+    .assistant-modelbtn { margin-left: -8px; }
+  }
 
-  .assistant-modelwrap { position: relative; flex-shrink: 0; }
+  /* Not the menu's anchor: the input box is. Hung off the button, a narrow
+     column cut the menu's left side off (user, 2026-09-24). */
+  .assistant-modelwrap { flex-shrink: 0; }
   .assistant-modelbtn { display: inline-flex; align-items: center; gap: 5px;
     cursor: pointer; border: none; background: none; color: var(--agent-fg);
     padding: 5px 8px; font: inherit; font-size: var(--font-ui); white-space: nowrap; }
@@ -2792,7 +2936,8 @@
      room, not squint back -- so the icon box is 22px, not the 14px body size. */
   .assistant-go .icon { width: 22px; height: 22px; stroke-width: 2.2; }
   /* Upwards: the button that opens it is at the bottom of the window. */
-  .assistant-menu { position: absolute; bottom: 36px; right: 0; z-index: 50; width: 216px;
+  .assistant-menu { position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 50;
+    width: 216px; max-width: 100%; box-sizing: border-box;
     background: var(--agent-box); border: 1px solid var(--agent-border); border-radius: 10px;
     box-shadow: 0 -10px 28px rgba(0,0,0,.34); padding: 6px; max-height: 60vh; overflow-y: auto; }
   .menu-group { font-size: var(--font-label); color: var(--agent-muted); letter-spacing: .05em;
@@ -2852,16 +2997,21 @@
   .assistant-stopped { align-self: stretch; font-size: var(--font-label);
     color: var(--agent-muted); }
   .assistant-err { align-self: stretch; padding: 9px 11px; border-radius: 9px;
-    font-size: var(--font-label); color: var(--destructive); border: 1px solid var(--destructive); }
+    font-size: var(--font-label); color: var(--destructive); border: 1px solid var(--destructive);
+    /* A CLI's line has long unbroken runs (paths, "rmcp::transport::worker");
+       without this one pushed the whole column sideways (Windows, 2026-09-25). */
+    overflow-wrap: anywhere; min-width: 0; }
   /* The CLI's own last words, folded away. The sentence above is what the user
      needs; this is for the one time in ten they want to know exactly what a
      tool said, or to read it out to somebody who can help. */
-  .assistant-err details { margin-top: 6px; }
-  .assistant-err summary { cursor: pointer; color: var(--agent-muted); }
-  .assistant-err pre { margin: 6px 0 0; padding: 8px; border-radius: 6px;
-    background: var(--agent-box); color: var(--agent-fg); font-size: var(--font-label);
-    white-space: pre-wrap; word-break: break-word; max-height: 160px;
-    overflow: auto; }
+  /* The agent's download offer: the only way a model download starts from the
+     conversation is this card's button. */
+  .offer-card { align-self: stretch; display: grid; gap: 6px; padding: 11px 12px;
+    border: 1px solid var(--primary); border-radius: 10px;
+    background: color-mix(in srgb, var(--primary) 12%, var(--agent-bg)); }
+  .offer-title { font-weight: 600; font-size: var(--font-ui); }
+  .offer-sub { font-size: var(--font-label); color: var(--agent-muted); }
+  .offer-btns { display: flex; gap: 8px; margin-top: 2px; }
 
   /* The left half of the heading row: one line, muted, and never in the way.
      The fold sits beside it now, so it no longer keeps a corner clear. */
@@ -2872,6 +3022,9 @@
     flex-wrap: wrap; }
   .assistant-state[hidden] { display: none; }
   .assistant-state.warn { color: var(--agent-warn); }
+  .state-signin { border: none; background: none; padding: 0; font: inherit; color: var(--primary);
+    font-weight: 600; cursor: pointer; }
+  .state-signin:hover { text-decoration: underline; }
   .assistant-state code { padding: 1px 5px; border-radius: 4px;
     background: var(--agent-box); color: var(--agent-fg); }
 </style>
@@ -2882,6 +3035,7 @@ import { gb, neededModelId, neededPackIds, modelStatusLine } from "/js/modelsUi.
 import { initModelsUi } from "/js/modelsDialog.mjs";
 import { layoutOf, pictureRect, SUB_FONT_CSS } from "/js/subtitleLayout.mjs";
 import { initSettingsUi } from "/js/settingsDialog.mjs";
+import { setupText, setupPercent, watchSetup } from "/js/chatgptSetup.mjs";
 import { initNewProjectUi } from "/js/newProject.mjs";
 import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "/js/eraseScreen.mjs";
 import { initProjectsUi, shownName } from "/js/projects.mjs";
@@ -3058,7 +3212,6 @@ $("wnOk").addEventListener("click", () => {
 $("aboutVersion").addEventListener("click", showWhatsNew);
 checkWhatsNew();
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
-$("advancedKeysLink").addEventListener("click", settings.openSettings);
 
 // ---------------- Engine availability (progressive enhancement) ----------------
 // GET /api/engines reports which translate/STT engines actually work on this
@@ -3069,11 +3222,11 @@ $("advancedKeysLink").addEventListener("click", settings.openSettings);
 // Rebuilds the option's label from a base captured on first call instead of
 // `textContent +=` -- this runs again after every Settings save, and
 // appending unconditionally would double the suffix on a second disabled run.
-function setOptionDisabledLabel(option, disabled, suffix) {
-  if (option.dataset.baseLabel === undefined) option.dataset.baseLabel = option.textContent;
-  option.disabled = disabled;
-  option.textContent = option.dataset.baseLabel + (disabled ? suffix : "");
-}
+// Which keyed engines have a key saved. A choice that needs one is no longer
+// greyed out: picking it asks for the key on the spot (Mac tester,
+// 2026-09-28 -- "needs API key" in grey said what was missing and nothing
+// about where to put it).
+const keySaved = { perso: true, gemini: true };
 
 // (loadSavedDefaults -- the GET /api/setup pass that starts those dropdowns on
 // the app's saved defaults -- moved with the dialog it fills, into
@@ -3098,16 +3251,8 @@ async function applyEngineAvailabilityToForm() {
     stt: sttSel.value,
   });
 
-  // Local models never grey out -- their state lives in the Download line
-  // under the dropdown (the model catalog). Only key-gated cloud engines do.
-  const geminiOption = translateSel.querySelector('option[value="gemini"]');
-  if (geminiOption) setOptionDisabledLabel(geminiOption, result.disable.gemini, " — needs API key");
-  const persoOption = sttSel.querySelector('option[value="perso"]');
-  if (persoOption) setOptionDisabledLabel(persoOption, result.disable.perso, " — needs API key");
-  const sepPersoOption = $("sepSelect").querySelector('option[value="perso"]');
-  if (sepPersoOption) setOptionDisabledLabel(sepPersoOption, result.disable.perso, " — needs API key");
-  const dubPersoOption = $("dubModeSelect").querySelector('option[value="perso"]');
-  if (dubPersoOption) setOptionDisabledLabel(dubPersoOption, result.disable.perso, " — needs API key");
+  keySaved.perso = !result.disable.perso;
+  keySaved.gemini = !result.disable.gemini;
 
   const warnEl = $("engineWarning");
   if (warnEl) {
@@ -3116,6 +3261,137 @@ async function applyEngineAvailabilityToForm() {
   }
 }
 applyEngineAvailabilityToForm();
+
+// Picking a keyed engine with no key saved opens the key window. Save keeps
+// the choice; Cancel puts the dropdown back where it was.
+const KEY_KINDS = {
+  perso: { title: "Perso API key", field: "perso_api_key", link: "https://developers.perso.ai/api-keys" },
+  gemini: { title: "Google (Gemini) key", field: "gemini_api_key", link: "https://aistudio.google.com/apikey" },
+};
+let keyAsk = null;   // {kind, sel, back, spaceOnly, then}
+// A Perso key's workspaces: fetched for the pasted key (or the saved one when
+// only the workspace is missing) and painted into the window's picker.
+let keySpacesRun = 0;
+async function loadKeySpaces(typedKey) {
+  const run = ++keySpacesRun;
+  const pick = $("keySpace");
+  pick.replaceChildren();
+  $("keySpaceRow").hidden = true;
+  $("keyError").textContent = "";
+  paintKeySave();
+  try {
+    const r = typedKey
+      ? await fetch("/api/perso/spaces/preview", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: typedKey }) })
+      : await fetch("/api/perso/spaces");
+    if (run !== keySpacesRun) return;
+    if (!r.ok) throw new Error();
+    const { spaces } = await r.json();
+    if (run !== keySpacesRun) return;
+    if (!spaces.length) { $("keyError").textContent = "This key has no workspace for dubbing."; return; }
+    const add = (value, label, credits) => {
+      const o = document.createElement("option");
+      o.value = value; o.textContent = label;
+      if (credits != null) o.dataset.credits = String(credits);
+      pick.appendChild(o);
+    };
+    if (spaces.length > 1) add("", "Choose a workspace…");
+    for (const s of spaces) {
+      const extra = [s.tier, s.credits != null ? `${s.credits} credits left` : null].filter(Boolean).join(", ");
+      add(String(s.seq), extra ? `${s.name} (${extra})` : s.name, s.credits);
+    }
+    // One workspace needs no choosing: it is picked and the row stays out of sight.
+    $("keySpaceRow").hidden = spaces.length === 1;
+  } catch {
+    if (run === keySpacesRun) $("keyError").textContent = "Could not check this key. Check it and try again.";
+  }
+  paintKeySave();
+}
+function paintKeySave() {
+  const pick = $("keySpace");
+  const o = pick.selectedOptions[0];
+  const zero = o && o.dataset.credits === "0";
+  const ZERO = "This workspace has 0 credits left.";
+  const err = $("keyError").textContent;
+  // The zero-credit line follows the pick; any other message stays put.
+  if (zero) $("keyError").textContent = ZERO;
+  else if (err === ZERO) $("keyError").textContent = "";
+  const perso = keyAsk && keyAsk.kind === "perso";
+  const keyOk = keyAsk && (keyAsk.spaceOnly || !!$("keyInput").value.trim());
+  $("keySave").disabled = !keyOk || (perso && !pick.value);
+}
+function askKey(kind, sel, back, { spaceOnly = false, then = null } = {}) {
+  keyAsk = { kind, sel, back, spaceOnly, then };
+  keySpacesRun += 1;
+  $("keyTitle").textContent = spaceOnly ? "Perso workspace" : KEY_KINDS[kind].title;
+  $("keyLink").href = KEY_KINDS[kind].link;
+  $("keyField").hidden = spaceOnly;
+  $("keyInput").value = "";
+  $("keySpace").replaceChildren();
+  $("keySpaceRow").hidden = true;
+  $("keyError").textContent = "";
+  $("keySave").disabled = true;
+  $("keyOverlay").classList.add("open");
+  if (spaceOnly) loadKeySpaces(null);
+  else $("keyInput").focus();
+}
+function closeKey(keep) {
+  $("keyOverlay").classList.remove("open");
+  const ask = keyAsk;
+  keyAsk = null;
+  if (ask && !keep && ask.sel) {
+    ask.sel.value = ask.back;
+    ask.sel.dispatchEvent(new Event("change"));   // the hint under it follows
+  }
+}
+for (const [id, kind, value] of [["dubModeSelect", "perso", "perso"], ["sepSelect", "perso", "perso"],
+                                 ["sttSelect", "perso", "perso"], ["translateSelect", "gemini", "gemini"]]) {
+  const sel = $(id);
+  let last = sel.value;
+  sel.addEventListener("focus", () => { last = sel.value; });
+  sel.addEventListener("change", () => {
+    if (sel.value === value && !keySaved[kind] && !keyAsk) {
+      const back = last !== value ? last : [...sel.options].find((o) => o.value !== value).value;
+      askKey(kind, sel, back);
+    } else if (!keyAsk) last = sel.value;
+  });
+}
+let keyLookupTimer = null;
+$("keyInput").addEventListener("input", () => {
+  paintKeySave();
+  if (!keyAsk || keyAsk.kind !== "perso") return;
+  clearTimeout(keyLookupTimer);
+  const key = $("keyInput").value.trim();
+  if (key.length < 20) { keySpacesRun += 1; $("keySpaceRow").hidden = true; $("keySpace").replaceChildren(); paintKeySave(); return; }
+  keyLookupTimer = setTimeout(() => loadKeySpaces(key), 400);   // a paste settles at once
+});
+$("keySpace").addEventListener("change", paintKeySave);
+$("keyInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !$("keySave").disabled) $("keySave").click(); });
+$("keyCancel").addEventListener("click", () => closeKey(false));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("keyOverlay").classList.contains("open")) { e.stopPropagation(); closeKey(false); }
+}, true);
+$("keySave").addEventListener("click", async () => {
+  if (!keyAsk) return;
+  $("keySave").disabled = true;
+  try {
+    const body = keyAsk.spaceOnly ? {} : { [KEY_KINDS[keyAsk.kind].field]: $("keyInput").value.trim() };
+    if (keyAsk.kind === "perso") body.perso_space_seq = $("keySpace").value;
+    const r = await fetch("/api/settings", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error();
+    keySaved[keyAsk.kind] = true;
+    const then = keyAsk.then;
+    closeKey(true);
+    applyEngineAvailabilityToForm();
+    if (then) then();
+  } catch {
+    $("keyError").textContent = "Could not save the key. Is the engine running?";
+    $("keySave").disabled = false;
+  }
+});
 
 // Picking Hunyuan before it is downloaded shows a Download button in the
 // field's own hint -- a 1.1GB download must be asked for, never started by a
@@ -3131,6 +3407,12 @@ const models = initModelsUi({
   $,
   onStartDubbing: startDubbing,
   onOpenSettings: settings.openSettings,
+  // Dubbing on Perso makes the voices there; no key yet opens the key window.
+  onUsePerso: () => {
+    const sel = $("dubModeSelect");
+    sel.value = "perso";
+    sel.dispatchEvent(new Event("change"));
+  },
   onRowsChanged: paintModelStatusLines,
   // The desktop app's bridge (absent in a plain browser): packs are its to install.
   shell: window.persodubShell || null,
@@ -3232,7 +3514,8 @@ const ENGINE_HINTS = {
          perso: ["Most accurate.", "Uses Perso credits."] },
   translate: { hunyuan: ["Runs on your desktop, free and fastest.", "For accuracy, use the API."],
                gemma: ["Runs on your desktop, free.", "For accuracy, use the API."],
-               gemini: ["Most accurate.", "Needs an API key."] },
+               gemini: ["Most accurate.", "Needs an API key."],
+               chatgpt: ["Free with a ChatGPT account, no download.", "Sign in on your first dub."] },
   voice: { qwen3: ["Runs on your desktop, free.", "Clones each speaker\u2019s voice."] },
 };
 function updateEngineHints() {
@@ -3265,9 +3548,9 @@ models.refreshModels();
 // shows its card inside #screen-done, but nothing on it can be fixed, so the
 // agent strip has to be able to tell the two apart.
 const SCREEN_SECTION = { failed: "done" };
-// The screens the rail's Dubbing icon owns: home, and the three a job moves
-// through after it.
-const DUB_SCREENS = new Set(["home", "running", "done", "failed"]);
+// The screens the rail's Dubbing icon owns: the three a job moves through.
+// The first screen itself is Home's, so the two never light up together.
+const DUB_SCREENS = new Set(["running", "done", "failed"]);
 function showScreen(name) {
   const id = `screen-${SCREEN_SECTION[name] || name}`;
   for (const s of document.querySelectorAll(".screen")) s.hidden = s.id !== id;
@@ -3278,6 +3561,7 @@ function showScreen(name) {
   // Dubbing owns the first screen and every screen a dub passes through, so
   // the icon stays lit from the drop to the finished video.
   $("dubToggle").classList.toggle("active", DUB_SCREENS.has(name));
+  $("homeBtn").classList.toggle("active", name === "home");
 }
 
 // The top bar carries the whole state of the app: what is open, what it is
@@ -3478,7 +3762,7 @@ const eraseScreen = initEraseScreenUi({
   },
   // The way on from an erased video: the New project dialog, opened on the
   // cleaned file rather than the one with the writing still on it.
-  onDub: (source) => newProject.openNewProject(source),
+  onDub: (source) => newProject.openNewProject({ ...source, fromErase: true }),
   // Only the desktop app can open a folder. In a browser there is none to
   // open, and the "Show" beside "Saved to Downloads" stays away.
   reveal: window.persodubShell?.revealPath
@@ -3498,6 +3782,7 @@ $("brandBtn").addEventListener("click", () => window.open(REPO_URL, "_blank", "n
 // The rail's way home. Same call as the top bar's house: a job left open is
 // left properly, not just hidden behind another screen.
 $("dubToggle").addEventListener("click", () => resetForNewJob());
+$("homeBtn").addEventListener("click", () => resetForNewJob());
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
@@ -3786,7 +4071,7 @@ $("topbarBack").addEventListener("click", () => {
   const back = eraseScreen.origin();
   const fromDialog = document.body.dataset.screen === "erase" && back;
   resetForNewJob();
-  if (fromDialog) newProject.openNewProject(back);
+  if (fromDialog) newProject.openNewProject({ ...back, fromErase: true });
 });
 
 function renderLog(job) {
@@ -4005,17 +4290,18 @@ function langsLabel() {
 // The voice engine's pack is on disk but its process is not up (its start
 // after an on-demand install timed out, or it died): the desktop app can start
 // it again, and the dub goes on -- no "quit and reopen" for the user.
-let engineRestartTried = false;
 async function restartVoiceEngine() {
   const shell = window.persodubShell;
-  if (!shell || !shell.installPack || engineRestartTried) return false;
-  engineRestartTried = true;
+  if (!shell || !shell.installPack) return false;
   $("projectError").textContent = "Starting the voice engine…";
   const r = await shell.installPack("engine").catch(() => ({ ok: false }));
   return !!(r && r.ok);
 }
 
-async function startDubbing() {
+// `retried`: this press already restarted the voice engine once. A start that
+// "succeeded" while the engine still said it was not running retried forever,
+// 2,676 times in 13 seconds on one Mac (issue #117, 2026-09-28).
+async function startDubbing(retried = false) {
   $("projectError").textContent = "";
   const np = state.newProject;
   // Three ways a video can be in this dialog: dropped, pasted as a link, or
@@ -4050,9 +4336,13 @@ async function startDubbing() {
     if (e && e.status === 409 && e.detail && e.detail.missing) {
       await models.refreshModels();
       models.showModelsDialog(e.detail);
-    } else if (e && e.status === 422 && /voice engine is not running/.test(errorText(e)) && await restartVoiceEngine()) {
-      engineRestartTried = false;
-      return startDubbing();
+    } else if (e && e.status === 422 && /ChatGPT sign-in/.test(errorText(e))) {
+      askChatgptSignIn();
+    } else if (e && e.status === 422 && /Select a Perso workspace/.test(errorText(e))) {
+      // A key with several workspaces and none picked: pick one here, then go on.
+      askKey("perso", null, null, { spaceOnly: true, then: () => startDubbing() });
+    } else if (!retried && e && e.status === 422 && /voice engine is not running/.test(errorText(e)) && await restartVoiceEngine()) {
+      return startDubbing(true);
     } else if (!showIfOutOfSpace(e)) {
       $("projectError").textContent = errorText(e);
     }
@@ -4060,6 +4350,82 @@ async function startDubbing() {
     $("startBtn").disabled = false;
   }
 }
+
+// First dub with ChatGPT and no sign-in yet: ask here instead of sending the
+// user to Settings. Sign In opens the browser; once the status says signed
+// in, the dub starts by itself. Cancel (or closing) just stops waiting.
+let chatgptSignInRun = 0;
+// What a finished sign-in does next: start the dub that asked, or -- when the
+// Dub Agent asked (one ChatGPT sign-in covers both, 2026-09-28) -- tell it.
+let chatgptSignedInThen = startDubbing;
+function paintSignIn(step, note = "") {
+  $("csTitle").textContent = step === "done" ? "Signed in" : "Sign in to ChatGPT";
+  const line = $("csLine");
+  line.classList.toggle("danger", !!note);
+  if (note) line.textContent = note;
+  else if (step === "wait") line.innerHTML = '<span class="cs-spin"></span>Finish in your browser.';
+  else if (step === "prep") line.innerHTML = '<span class="cs-spin"></span>Opening sign-in\u2026';
+  else if (step === "done") line.textContent = chatgptSignedInThen === startDubbing ? "\u2713 Starting\u2026" : "\u2713 Ready";
+  else line.textContent = chatgptSignedInThen === startDubbing ? "ChatGPT translates your video." : "Codex uses your ChatGPT account.";
+  $("csButtons").hidden = step === "done";
+  if (step !== "prep") paintSetup(null);
+  $("csSignIn").hidden = step === "wait" || step === "prep";
+}
+function paintSetup(p) {
+  // Only a computer fetching the program says so: one that has it goes
+  // straight to the browser, and "first time only" would be untrue there.
+  if (p && p.stage) $("csLine").textContent = setupText(p);
+  const pct = setupPercent(p);
+  $("csBar").hidden = pct == null;
+  if (pct != null) $("csBar").firstElementChild.style.width = pct + "%";
+}
+function askChatgptSignIn(then = startDubbing) {
+  chatgptSignedInThen = then;
+  chatgptSignInRun += 1;
+  paintSignIn("ask");
+  $("chatgptSignInOverlay").classList.add("open");
+}
+window.addEventListener("persodub:chatgpt-signin", (e) =>
+  askChatgptSignIn(typeof e.detail === "function" ? e.detail : () => {}));
+$("csCancel").addEventListener("click", () => {
+  chatgptSignInRun += 1; // any wait in progress stops at its next check
+  $("chatgptSignInOverlay").classList.remove("open");
+});
+$("csSignIn").addEventListener("click", async () => {
+  const run = ++chatgptSignInRun;
+  // The first Sign In on a computer without OpenAI's sign-in program fetches
+  // it first (app/codex_fetch.py), which takes seconds, not a browser.
+  paintSignIn("prep");
+  const stopWatching = watchSetup((p) => { if (run === chatgptSignInRun) paintSetup(p); });
+  try {
+    const r = await fetch("/api/agent/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: "chatgpt" }),
+    }).finally(stopWatching);
+    if (!r.ok) {
+      const detail = (await r.json().catch(() => ({}))).detail;
+      throw new Error(typeof detail === "string" ? detail : "");
+    }
+    if (run !== chatgptSignInRun) return;
+    paintSignIn("wait");
+    for (let i = 0; i < 60; i++) {            // every 3 s for three minutes
+      await new Promise((res) => setTimeout(res, 3000));
+      if (run !== chatgptSignInRun) return;
+      const st = await fetch("/api/agent/status?login=1").then((x) => x.json()).catch(() => ({}));
+      const a = (st.agents || []).find((x) => x.id === "chatgpt");
+      if (a && a.logged_in === true) {
+        paintSignIn("done");
+        await new Promise((res) => setTimeout(res, 1000));
+        if (run !== chatgptSignInRun) return;
+        $("chatgptSignInOverlay").classList.remove("open");
+        return chatgptSignedInThen();
+      }
+    }
+    if (run === chatgptSignInRun) paintSignIn("ask", "Didn\u2019t finish. Try again.");
+  } catch (e) {
+    if (run === chatgptSignInRun) paintSignIn("ask", (e && e.message) || "Couldn\u2019t start. Try again.");
+  }
+});
 
 // Several videos, one set of choices: the first starts now, the rest join the
 // queue, and the first screen's Up next card is where the line shows.
@@ -4082,6 +4448,11 @@ async function startBatchDubbing(files) {
     if (e && e.status === 409 && e.detail && e.detail.missing) {
       await models.refreshModels();
       models.showModelsDialog(e.detail);
+    } else if (e && e.status === 422 && /ChatGPT sign-in/.test(errorText(e))) {
+      askChatgptSignIn();
+    } else if (e && e.status === 422 && /Select a Perso workspace/.test(errorText(e))) {
+      // A key with several workspaces and none picked: pick one here, then go on.
+      askKey("perso", null, null, { spaceOnly: true, then: () => startDubbing() });
     } else if (!showIfOutOfSpace(e)) {
       $("projectError").textContent = errorText(e);
     }
@@ -4297,10 +4668,14 @@ async function renderDone(job) {
     // about it, and the log last. moveInto leaves a borrowed element where it
     // already is, which put the log above the button the second time round.
     moveInto($("doneNotice"), $("doneFailBody"));
-    $("doneFailBody").appendChild($("doneRetry"));
+    $("doneFailBody").appendChild($("doneFailActions"));
     $("doneFailBody").appendChild($("doneRetryError"));
     $("doneFailBody").appendChild($("rawLogDetails"));
     $("doneRetry").disabled = false;
+    $("doneResume").disabled = false;
+    // A cloud dub was made on Perso's side: nothing here to pick up from.
+    $("doneResume").hidden = job.dub_mode === "perso";
+    $("doneRetry").className = job.dub_mode === "perso" ? "btn btn-primary" : "btn btn-secondary";
     return;
   }
   homeNoticeAndLog();
@@ -4323,7 +4698,7 @@ async function renderDone(job) {
 $("doneRetry").addEventListener("click", async () => {
   const job = state.job;
   if (!job) return;
-  $("doneRetry").disabled = true;
+  setFailButtons(true);
   $("doneRetryError").textContent = "";
   try {
     const r = await fetch(`/api/dub/jobs/${job.id}/retry`, { method: "POST" });
@@ -4342,7 +4717,35 @@ $("doneRetry").addEventListener("click", async () => {
   } finally {
     // renderDone only clears this on a change of job, so a button left
     // disabled after a refused retry stays dead until the user navigates away.
-    $("doneRetry").disabled = false;
+    setFailButtons(false);
+  }
+});
+
+// Resume: the same job carries on in its own folder, keeping every stage the
+// earlier run finished -- separation, the transcript, the translation, each
+// voice line made -- so nothing is paid for or waited on twice (2026-09-23).
+function setFailButtons(disabled) {
+  // Both at once: Resume then Start over (or the reverse) before the screen
+  // changed started the same video twice (review 2026-09-23).
+  $("doneResume").disabled = disabled;
+  $("doneRetry").disabled = disabled;
+}
+$("doneResume").addEventListener("click", async () => {
+  const job = state.job;
+  if (!job) return;
+  setFailButtons(true);
+  runningScreen.forgetPopups(job.id);
+  $("doneRetryError").textContent = "";
+  try {
+    const r = await fetch(`/api/dub/jobs/${job.id}/resume`, { method: "POST" });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail
+      || "Could not resume this job.");
+    projects.renderHistory().catch(() => {});
+    await resumeJob(job.id);
+  } catch (e) {
+    $("doneRetryError").textContent = errorText(e);
+  } finally {
+    setFailButtons(false);
   }
 });
 
@@ -4651,6 +5054,9 @@ const scriptTable = initScriptTableUi({
   renderTimeline: (lines, duration) => {
     timeline.renderTimeline(lines, duration);
     subLinesChanged();   // new words: the subtitles' layout is measured again
+    // And shown again: the subtitle style can land before the script, and the
+    // overlay it drew then held the previous project's line (2026-09-25).
+    updateSubtitleNow();
   },
   paintPlayhead,
   getVideo: () => doneVideo,
@@ -5135,6 +5541,13 @@ window.addEventListener("persodub:script-changed", () => {
 // to follow -- the screen fetches the script again and reloads the player.
 // Fired when the assistant's turn is over, which is the first moment the
 // rebuilt video file is certainly finished being written.
+// The conversation's Download button started a model: the top bar and Settings
+// follow it from here.
+window.addEventListener("persodub:models-changed", () => { models.refreshModels().catch(() => {}); });
+window.addEventListener("persodub:jobs-changed", () => {
+  projects.renderHistory().catch(() => {});
+  projects.renderQueueCard().catch(() => {});
+});
 window.addEventListener("persodub:voices-remade", async () => {
   const jobId = scriptTable.getJobId();
   if (!jobId) return;
@@ -5166,6 +5579,6 @@ initAgentStripUi({
   $: (id) => document.getElementById(id),
   getScreen: () => document.body.dataset.screen,
   getJobId: () => document.body.dataset.jobId || null,
-  emit: (name) => window.dispatchEvent(new CustomEvent(name)),
+  emit: (name, detail) => window.dispatchEvent(new CustomEvent(name, { detail })),
 });
 </script>

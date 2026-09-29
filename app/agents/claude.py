@@ -28,6 +28,7 @@ TOOL_LABELS = {
     "get_job_status": "Checking progress",
     "remake_voices": "Remaking the changed voices",
     "remake_line_voice": "Remaking this line",
+    "retranslate_lines": "Translating again with ChatGPT",
     "change_speaker": "Changing the speaker",
     "extract_subtitles": "Extracting subtitles",
     "cut_clip": "Cutting a clip",
@@ -38,7 +39,7 @@ TOOL_LABELS = {
     "list_jobs": "Checking what is running",
     "get_setup": "Reading the setup",
     "set_default": "Changing a default",
-    "download_model": "Downloading a model",
+    "download_model": "Offering a download",
     "download_video": "Downloading a video",
     "erase_subtitles": "Erasing subtitles",
     "save_erased": "Saving the erased video",
@@ -68,6 +69,14 @@ def line_arg(args) -> Optional[int]:
     if isinstance(line, bool) or not isinstance(line, int):
         return None
     return line
+
+
+def model_arg(tool: str, args) -> Optional[str]:
+    """The model a download_model call offers, so the page can put its button up."""
+    if tool != "download_model" or not isinstance(args, dict):
+        return None
+    mid = args.get("model_id")
+    return mid if isinstance(mid, str) and mid else None
 
 
 def translate(event: dict) -> List[dict]:
@@ -102,6 +111,9 @@ def translate(event: dict) -> List[dict]:
                 line = line_arg(block.get("input"))
                 if line is not None:
                     step["line"] = line
+                model = model_arg(name, block.get("input"))
+                if model:
+                    step["model"] = model
                 out.append(step)
         return out
 
@@ -164,6 +176,8 @@ SYSTEM_PROMPT = (
     "When the user asks for the voices to be remade, call remake_voices "
     "yourself -- it respeaks only the lines whose words changed and rebuilds "
     "the video in place -- and do not tell them to press a button. "
+    "When the user asks for lines to be translated again with ChatGPT, call "
+    "retranslate_lines -- ChatGPT translates them and their voices are remade. "
     "A Perso-dubbed job reads its script from Perso and starts read-only; "
     "the screen's Make-it-editable button fetches it, and from then on its "
     "lines edit and remake normally. change_speaker can give a line a new "
@@ -174,7 +188,9 @@ SYSTEM_PROMPT = (
     "credits: relay its message to the user as a question, keeping every "
     "figure in it -- the credits it will spend AND the balance it names -- "
     "and call the tool "
-    "again with confirm=true only after they clearly agree. Answer in "
+    "again with confirm=true only after they clearly agree. download_model "
+    "never downloads: it shows the user a Download button, and only their press "
+    "starts it -- say so, with the size. Answer in "
     "the user's language, briefly. "
     "You exist only while one message is being answered: you cannot wait for "
     "a job to finish, watch it, tell the user later, or start the next step "

@@ -1,6 +1,7 @@
 {
   "notes": [
-    "A failure report now leads with the line that stopped the job, says timeout or out of memory instead of \"check the video file\", and names five kinds of failure that used to be \"unknown\".",
-    "Usage counts say which parts of a dub went through Perso and whether a Perso key is set. The key, the workspace and the balance stay on your computer."
+    "Translate with ChatGPT for free: sign in once, no subscription. It also signs in the Dub Agent.",
+    "Translate again: tick lines in the script, or take them all, and their voices are remade.",
+    "Less to download: with Perso API for dubbing there is nothing to download, and the download window shows one percent."
   ]
 }

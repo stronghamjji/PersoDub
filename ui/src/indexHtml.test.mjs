@@ -433,7 +433,7 @@ test("the player draws subtitles in the burn's font at its natural line height",
   assert.match(html, /id="subMeasure"/);
 });
 
-// Packs (the AI engine, the translation runtime) are the desktop app's to
+// Packs (the Python + PyTorch, the translation runtime) are the desktop app's to
 // install: the page hands its bridge to the models controller and, in the
 // dropdown hints, names the pack before the model while the pack is missing.
 test("the page hands the desktop bridge to the models controller and hints name packs first", () => {
@@ -464,29 +464,36 @@ test("the rail leads with the logo tile, and About shows it beside the name", ()
 // The three tools stand together in the rail, dubbing first, and the way home
 // is a house rather than a back arrow: both are what the user asked for after
 // running 0.5.5 on the mac (2026-09-09).
-test("the rail leads with the tools and keeps Projects at its foot, and the top bar's way out is Home", () => {
+test("the rail is logo, a line, Home / Dubbing / Erase, then Projects and Settings; the top bar's way out is Back", () => {
   const html = readFileSync(INDEX, "utf8");
+  const brand = html.indexOf('id="brandBtn"');
+  const divider = html.indexOf('class="rail-head"');
+  const home = html.indexOf('id="homeBtn"');
   const dub = html.indexOf('id="dubToggle"');
   const erase = html.indexOf('id="eraseToggle"');
   const spacer = html.indexOf('class="rail-spacer"');
   const projects = html.indexOf('id="historyToggle"');
   const settings = html.indexOf('id="settingsBtn"');
-  // The tools at the top, in the order they are used; Projects and Settings
-  // below the spacer, at the foot of the rail (user, 2026-09-09).
-  assert.ok(dub > 0 && dub < erase && erase < spacer && spacer < projects && projects < settings,
-    "the rail is Dubbing, Erase subtitles, then a gap, then Projects and Settings");
+  // The logo (GitHub), a line, the places in the order they are used, then a
+  // gap and Projects and Settings at the foot (user, 2026-09-09 and 2026-09-24).
+  assert.ok(divider > 0 && divider < brand && brand < home && home < dub && dub < erase
+    && erase < spacer && spacer < projects && projects < settings,
+    "the rail is logo, line, Home, Dubbing, Erase, gap, Projects, Settings");
+  assert.match(html, /id="homeBtn"[^>]*title="Home"/);
   assert.match(html, /id="dubToggle"[^>]*title="Dubbing"/);
-  // Pressing it leaves the open job rather than hiding it behind another screen.
+  // Both leave the open job for the first screen.
+  assert.match(html, /\$\("homeBtn"\)\.addEventListener\("click", \(\) => resetForNewJob\(\)\)/);
   assert.match(html, /\$\("dubToggle"\)\.addEventListener\("click", \(\) => resetForNewJob\(\)\)/);
-  // Lit on every screen a dub passes through, not just the first one.
-  assert.match(html, /DUB_SCREENS = new Set\(\["home", "running", "done", "failed"\]\)/);
-  assert.match(html, /\$\("dubToggle"\)\.classList\.toggle\("active", DUB_SCREENS\.has\(name\)\)/);
-  // The house: no tailed arrow left in the button, and it says where it goes.
+  // Home lights on the first screen, Dubbing on the screens a dub passes
+  // through -- never both at once.
+  assert.match(html, /DUB_SCREENS = new Set\(\["running", "done", "failed"\]\)/);
+  assert.match(html, /\$\("homeBtn"\)\.classList\.toggle\("active", name === "home"\)/);
+  // With Home on the rail, the top bar's button is a plain Back arrow.
   const back = html.slice(html.indexOf('id="topbarBack"'));
   const button = back.slice(0, back.indexOf("</button>"));
-  assert.ok(button.includes('title="Home"') && button.includes('aria-label="Home"'),
-    "the top bar button says Home");
-  assert.ok(!button.includes("M19 12H5"), "the back arrow's path is gone");
+  assert.ok(button.includes('title="Back"') && button.includes('aria-label="Back"'),
+    "the top bar button says Back");
+  assert.ok(button.includes("M19 12H5"), "the back arrow is drawn");
 });
 
 // Cancel stands beside the stage it cancels, and the way out of an erase that
@@ -513,7 +520,7 @@ test("Cancel sits in the progress card, and leaving an erase reopens the dialog 
   // Leaving: the dialog goes back up only when that is where the erase began.
   assert.match(html, /const back = eraseScreen\.origin\(\);/);
   assert.match(html, /document\.body\.dataset\.screen === "erase" && back/);
-  assert.match(html, /if \(fromDialog\) newProject\.openNewProject\(back\);/);
+  assert.match(html, /if \(fromDialog\) newProject\.openNewProject\(\{ \.\.\.back, fromErase: true \}\);/);
 });
 
 // A subtitle look is written to the job the moment it is changed -- there is no
@@ -592,4 +599,55 @@ test("progress reports leave the screen alone, but an opened project takes it", 
   // first report to do it -- which the guard would now swallow.
   const start = html.slice(html.indexOf("async function startDubbing"));
   assert.ok(start.slice(0, start.indexOf("runPollLoop")).includes('showScreen("running")'));
+});
+
+test("a project's script arriving redraws the subtitle on the video", () => {
+  // The style can land before the script; without this the overlay kept the
+  // previously opened project's line (Mac and Windows full test, 2026-09-25).
+  const html = readFileSync(INDEX, "utf8");
+  const cb = html.slice(html.indexOf("renderTimeline: (lines, duration) => {"));
+  const body = cb.slice(0, cb.indexOf("},"));
+  assert.match(body, /timeline\.renderTimeline\(lines, duration\)/);
+  assert.match(body, /updateSubtitleNow\(\)/);
+});
+
+test("the video's resize grip sits inside the pane, where its clipping cannot cut it off", () => {
+  // .video-pane clips its overflow for its rounded corners; a grip at a
+  // negative left was clipped away and the video could not be resized
+  // (Mac and Windows full test, 2026-09-25).
+  const html = readFileSync(INDEX, "utf8");
+  const rule = html.match(/#gripPanes \{ left: (-?\d+)(?:px)?;/);
+  assert.ok(rule, "no #gripPanes left rule found");
+  assert.ok(Number(rule[1]) >= 0, `#gripPanes left is ${rule[1]}px`);
+});
+
+test("in a narrow agent column the model button takes its own line above the box", () => {
+  // Beside the box at 260px it left 47px for typing (Windows, 2026-09-25).
+  const html = readFileSync(INDEX, "utf8");
+  assert.match(html, /\.agent \{ container: agentcol \/ inline-size; \}/);
+  const q = html.slice(html.indexOf("@container agentcol (max-width: 299px)"));
+  assert.ok(q.length > 0, "no narrow-column rule");
+  const body = q.slice(0, q.indexOf("\n  }"));
+  assert.match(body, /\.assistant-foot \{ flex-wrap: wrap;/);
+  assert.match(body, /\.assistant-modelwrap \{ order: -1; flex-basis: 100%; \}/);
+});
+
+test("a start that restarted the voice engine tries once more, never in a loop", () => {
+  // 0.6.5 reset its guard before retrying, so a 422 that kept coming back
+  // restarted the engine 2,676 times in 13 seconds (issue #117, 2026-09-28).
+  const html = readFileSync(INDEX, "utf8");
+  const branch = html.match(/else if \(([^\n]*voice engine is not running[^\n]*)\) \{\n\s*(return startDubbing\([^)]*\));/);
+  assert.ok(branch, "the voice-engine retry branch is where it was");
+  assert.match(branch[1], /^!retried && /);
+  assert.equal(branch[2], "return startDubbing(true)");
+});
+
+test("a Perso key is asked for with its workspace, and a missing workspace is asked for at the start", () => {
+  const html = readFileSync(INDEX, "utf8");
+  assert.match(html, /id="keySpace"/);
+  assert.match(html, /\/api\/perso\/spaces\/preview/);
+  // Both starts (one video, several) answer the workspace refusal with the window.
+  assert.equal((html.match(/Select a Perso workspace\/\.test\(errorText\(e\)\)\) \{\n\s*\/\/ A key with several workspaces/g) || []).length, 2);
+  // The old banner that sent people to Settings for a key is gone.
+  assert.doesNotMatch(html, /Perso and Gemini need an API key/);
 });

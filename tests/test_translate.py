@@ -602,3 +602,38 @@ def test_a_malformed_answer_is_described_by_its_length_never_quoted():
         translate.parse_json_array(json.dumps([{"a": secret, "b": secret}]), 1)
     assert secret[:10] not in str(not_text.value)
     assert "dict" in str(not_text.value)
+
+
+def test_script_ok_korean_lets_capital_acronyms_through():
+    # ChatGPT keeps the Latin letters Korean itself uses (5-minute runs, 2026-09-24).
+    from app.translate import script_ok
+    for line in ("지난주 AI로 코딩하거나 앱을 만든 분 계세요?", "그 아이디어를 UI UX 디자이너와 나눠요.",
+                 "GPT-4.0부터 시작해요.", "오픈AI 모델도 있어요.", "PM인 분도 계시고요."):
+        assert script_ok(line, "Korean"), line
+    # An English word left in the line is still caught, capitalised or not.
+    assert not script_ok("dent 자리에", "Korean")
+    assert not script_ok("Dent 자리에 있어요", "Korean")
+    assert not script_ok("AI", "Korean")          # no Hangul at all
+
+
+def test_every_korean_prompt_asks_for_one_speech_level():
+    from app.text import length_fit as lf
+    from app.translate import build_draft_prompt, build_dub_prompt
+    ko = [
+        build_dub_prompt(["hi"], "Korean", "English", [2.0]),
+        build_draft_prompt(["hi"], "Korean", "English"),
+        lf.build_budget_prompt(["hi"], "Korean", "English", [10]),
+        lf.build_shorten_prompt(["hi"], ["안녕하세요"], "Korean", [3]),
+        lf.build_candidates_prompt(["hi"], ["안녕하세요"], "Korean", [3], ["long"]),
+        lf.build_candidates_draft_prompt(["hi"], "Korean", "English", [10]),
+    ]
+    for p in ko:
+        assert "해요체" in p
+    assert "해요체" not in build_dub_prompt(["안녕"], "English", "Korean", [2.0])
+
+
+def test_korean_examples_are_all_haeyo():
+    # The examples are what the model copies; 반말 ones gave half-반말 scripts.
+    from app.text import length_fit as lf
+    for _, ko in lf._STYLE_PRIMER["ko"] + lf._COMPRESSION_EXAMPLES["ko"]:
+        assert ko.rstrip(".?!").endswith(("요", "요, 네")), ko

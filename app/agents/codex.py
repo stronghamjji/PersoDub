@@ -20,16 +20,21 @@ without a CLI installed -- see tests/test_agents_codex.py.
 import json
 import os
 import re
+import subprocess
+import tempfile
+import threading
+import time
 from typing import List, Optional
 
 # The chat panel's own vocabulary, shared with the other backends: which CLI is
 # behind the strip must not change what a step is called on screen.
 from app.agents import base
-from app.agents.claude import SYSTEM_PROMPT, TOOL_LABELS, line_arg
+from app.agents.claude import SYSTEM_PROMPT, TOOL_LABELS, line_arg, model_arg
 
 # The sentence a signed-out Codex gets instead of its own 401s. Kept as a
 # name here because this file is where the translating happens.
 SIGNED_OUT = base.signed_out_line("codex")
+NO_ACCESS = "This model isn't available on your plan. Pick another one."
 
 
 # The conversation the app itself started, remembered beside the MCP config.
@@ -99,7 +104,21 @@ def translate(event: dict, remember_in: Optional[str] = None) -> List[dict]:
         if base.is_signed_out("codex", message):
             return [{"kind": "error", "message": SIGNED_OUT,
                      "detail": message, "signed_out": True}]
-        return [{"kind": "error", "message": message}]
+        # A model the account's list offered but the account cannot use
+        # ("The model `gpt-5.5` does not exist or you do not have access to
+        # it", Mac tester 2026-09-28): said plainly, and taken off the list.
+        denied = _NO_ACCESS.search(message)
+        if denied:
+            refused(denied.group(1))
+            return [{"kind": "error", "message": NO_ACCESS, "detail": message,
+                     "models_changed": True}]
+        if base._says(base._RATE_LIMITED, message):
+            return [{"kind": "error", "detail": message,
+                     "message": "Usage limit reached. Wait a while or pick another assistant."}]
+        # Anything else: one plain sentence; the program's words go to the log.
+        base.logger.warning("Codex turn failed: %s", message[-600:])
+        return [{"kind": "error", "message": "The assistant stopped partway. Please try again.",
+                 "detail": message}]
 
     if kind == "error":
         # A transport complaint, not the end of the turn. Recorded 2026-08-26
@@ -121,15 +140,11 @@ def _transport_error(message) -> dict:
     which is red. Trimmed because a chip is one line, and these carry a URL and
     a trace id that say nothing to the person reading them.
     """
-    if not isinstance(message, str) or not message:
-        message = "The assistant lost its connection."
-    # Every retry says the same thing, so they all become the same step and
-    # the panel counts them in one chip instead of printing ten.
-    if base.is_signed_out("codex", message):
+    if isinstance(message, str) and base.is_signed_out("codex", message):
         return {"kind": "progress", "tool": "transport", "label": SIGNED_OUT}
-    if len(message) > 120:
-        message = message[:119].rstrip() + "…"
-    return {"kind": "progress", "tool": "transport", "label": message}
+    # One wording for every retry, so they fold into a single step instead of
+    # ten lines of status codes and URLs (Mac tester, 2026-09-28).
+    return {"kind": "progress", "tool": "transport", "label": "Reconnecting…"}
 
 
 def _item(kind: str, item: dict) -> List[dict]:
@@ -144,6 +159,9 @@ def _item(kind: str, item: dict) -> List[dict]:
             line = line_arg(item.get("arguments"))
             if line is not None:
                 step["line"] = line
+            model = model_arg(name, item.get("arguments"))
+            if model:
+                step["model"] = model
             return [step]
         error = item.get("error") or {}
         if error.get("message"):
@@ -192,41 +210,141 @@ def _item(kind: str, item: dict) -> List[dict]:
 MODELS: List[str] = []
 
 
-def _codex_home() -> str:
-    """Where Codex keeps its config, the way Codex decides it."""
-    return os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
+# The models this ChatGPT account can use. Codex lists what it knows
+# (`codex debug models`, under PersoDub's own sign-in), but the list carries no
+# plan: a free account was offered gpt-5.5 and refused it with a 404 (Mac
+# tester, 2026-09-28). So each listed model is tried once in the background
+# with a one-word question, and only the ones that answer are offered. Asked
+# only once signed in (app/api/agent.py); kept in a small file beside the
+# sign-in until the next sign-in, so a launch does not ask again.
+_CHECK_FILE = "persodub-models.json"
+_PROBE = "Reply with the single word OK."
+_checking = threading.Lock()
+_checked = {"ok": [], "no": [], "listed": []}
+_loaded = {"done": False}
+# A model that could not be judged (offline, a timeout, the usage limit) is
+# asked again, but not on every look at the list: each ask is a real request
+# on the user's account, and at the limit they never stopped (review, 2026-09-29).
+_RECHECK_SECONDS = 600
+_last_check = {"at": 0.0}
+_NO_ACCESS = re.compile(r"model `([A-Za-z0-9._:-]{1,64})` does not exist or you do not have access", re.I)
+_SLUG = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 
 
-# The one model Codex is set up to answer with, read straight out of its own
-# config. `codex doctor` says the same thing but takes four seconds; this is a
-# line in a file. Without it the picker offered a row saying "Codex" and the
-# strip said "Codex" beside it, neither of which is a model name -- and the
-# user had no way to line up what they picked here with what they type in a
-# terminal (user, 2026-09-11).
-def configured_model(home: Optional[str] = None) -> str:
-    path = os.path.join(home or _codex_home(), "config.toml")
+def _check_path() -> str:
+    return os.path.join(base.chatgpt_env()["CODEX_HOME"], _CHECK_FILE)
+
+
+def _load_checked() -> None:
+    if _loaded["done"]:
+        return
+    _loaded["done"] = True
     try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                # Top level only: a model named inside a [profile.x] section
-                # belongs to that profile, not to a plain run.
-                if line.startswith("["):
-                    break
-                m = re.match(r'^model\s*=\s*["\']([^"\']+)["\']', line)
-                if m:
-                    return m.group(1)
+        with open(_check_path(), encoding="utf-8") as f:
+            data = json.load(f)
+        for k in ("ok", "no", "listed"):
+            _checked[k] = [s for s in data.get(k, []) if isinstance(s, str) and _SLUG.match(s)]
+    except (OSError, ValueError, AttributeError):
+        pass
+
+
+def _save_checked() -> None:
+    try:
+        with open(_check_path(), "w", encoding="utf-8") as f:
+            json.dump(_checked, f)
     except OSError:
         pass
-    return ""
+
+
+def forget_models() -> None:
+    """A new sign-in may be another account, with another plan."""
+    _loaded["done"] = True
+    _last_check["at"] = 0.0
+    for k in _checked:
+        _checked[k] = []
+    try:
+        os.remove(_check_path())
+    except OSError:
+        pass
+
+
+def refused(model: str) -> None:
+    """A turn was turned down for this model: never offer it again."""
+    if model and model not in _checked["no"]:
+        _checked["no"].append(model)
+        if model in _checked["ok"]:
+            _checked["ok"].remove(model)
+        _save_checked()
+
+
+def _listed(binary: str) -> List[str]:
+    got = base._run_quiet([binary, "debug", "models"], env=base.chatgpt_env())
+    if got is None:
+        return []
+    try:
+        data = json.loads(got[1])
+        rows = data.get("models", []) if isinstance(data, dict) else data
+        return [m["slug"] for m in rows
+                if isinstance(m, dict) and m.get("visibility") == "list"
+                and isinstance(m.get("slug"), str) and _SLUG.match(m["slug"])]
+    except (ValueError, TypeError, KeyError):
+        return []
+
+
+def _answers(binary: str, model: str) -> Optional[bool]:
+    """True when the model answers, False when the account is refused it,
+    None when it could not be told (network, timeout)."""
+    cmd = [binary, "exec", "--json", "--skip-git-repo-check", "--ignore-user-config",
+           "-c", "model=%s" % _toml(model), "-c", 'sandbox_mode="read-only"', "-"]
+    try:
+        r = subprocess.run(cmd, input=_PROBE, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=90, env=base.chatgpt_env(),
+                           cwd=tempfile.gettempdir(),
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    said = (r.stdout or "") + (r.stderr or "")
+    if '"type":"turn.completed"' in said:
+        return True
+    if _NO_ACCESS.search(said):
+        return False
+    return None
+
+
+def _check_all(binary: str) -> None:
+    if not _checking.acquire(blocking=False):
+        return   # one check at a time
+    try:
+        listed = _listed(binary)
+        if not listed:
+            return
+        _checked["listed"] = listed
+        for model in listed:
+            if model in _checked["ok"] or model in _checked["no"]:
+                continue
+            answer = _answers(binary, model)
+            if answer is True:
+                _checked["ok"].append(model)
+            elif answer is False:
+                _checked["no"].append(model)
+            _save_checked()
+    finally:
+        _last_check["at"] = time.monotonic()
+        _checking.release()
 
 
 def models() -> List[str]:
-    """What the picker may offer. One row when Codex has said which model it
-    uses, none at all when it has not -- an empty list is the picker leaving
-    Codex as a single unopenable row, which is what it did before."""
-    name = configured_model()
-    return [name] if name else []
+    """The models this account has been seen to answer with, in Codex's own
+    order. Checks the rest in the background; until then, the checked ones."""
+    _load_checked()
+    binary = base.find_cli("codex")
+    pending = not _checked["listed"] or any(
+        m not in _checked["ok"] and m not in _checked["no"] for m in _checked["listed"])
+    rested = not _last_check["at"] or time.monotonic() - _last_check["at"] >= _RECHECK_SECONDS
+    if binary and pending and rested and not _checking.locked():
+        threading.Thread(target=_check_all, args=(binary,), daemon=True, name="codex-models").start()
+    order = _checked["listed"] or _checked["ok"]
+    return [m for m in order if m in _checked["ok"]]
 
 
 def _toml(value) -> str:
@@ -272,9 +390,9 @@ def command(mcp_config: str, resume: bool, model: str = "") -> List[str]:
     it. Pointing CODEX_HOME somewhere private would, but the user's login lives
     there too, so that trade is not ours to make quietly.
 
-    `model` is accepted to match the other drivers and deliberately unused:
-    MODELS is empty, so the picker never offers one and Codex answers with
-    whatever the user set it up to use.
+    `model` is empty for the Codex assistant (the picker offers only the one
+    its config names, and Codex answers with that anyway) and set for the
+    ChatGPT assistant, which is this same CLI told to answer as ChatGPT does.
     """
     with open(mcp_config, encoding="utf-8") as f:
         server = json.load(f)["mcpServers"]["persodub"]
@@ -305,6 +423,12 @@ def command(mcp_config: str, resume: bool, model: str = "") -> List[str]:
         # loosening the setting.
         'approvals_reviewer="auto_review"',
         'approval_policy="on-request"',
+        # This app's own tools skip that review. Each review is a separate
+        # model call, 15-80 s apiece on Windows, and a turn of a few tool calls
+        # ran into the 180 s limit (full test, 2026-09-25). The reviewer above
+        # stays for anything else Codex asks, and for a Codex too old to know
+        # this setting, which then simply reviews as before.
+        'mcp_servers.persodub.default_tools_approval_mode="approve"',
         # Read-only: Codex keeps a shell that no setting takes away, so the
         # sandbox is the fence. Verified 2026-08-26 that a real turn still
         # rewrites a script through it -- the MCP server is a separate process
@@ -339,6 +463,10 @@ def command(mcp_config: str, resume: bool, model: str = "") -> List[str]:
     ]
     for setting in settings:
         args += ["-c", setting]
+    # A named model rides the same way: the one picked from the account's
+    # list (Codex), or ChatGPT's own for translation.
+    if model:
+        args += ["-c", "model=%s" % _toml(model)]
     # Everything above is a -c override rather than a flag on purpose:
     # --approve-for-me does the same as the two approval settings, but it is an
     # option of `codex exec` alone -- `codex exec resume` does not take it -- so

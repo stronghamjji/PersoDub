@@ -116,7 +116,7 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
             "perso_credits": getattr(pc, "credits_used", None), "duration": duration}
 
 
-def work_for(job, *, cancel_check, on_notice, voices_only=False,
+def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
              run_dub=_run_dub, run_cloud_dub=run_cloud_dub,
              fetch_source=_fetch_source, cut_video=media.cut_video):
     """The work one job runs, built from its record and its folder.
@@ -187,6 +187,8 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False,
             cancel_check=cancel_check,
             on_notice=on_notice,
             log=log,
+            # Only said when it is true: the run_dub fakes in tests predate it.
+            **({"resume": True} if resume else {}),
         )
 
     return work_now

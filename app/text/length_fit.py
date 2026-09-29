@@ -15,7 +15,7 @@ import json
 import re
 
 from app.text.srt import _SYL_PER_SEC, estimate_seconds
-from app.translate import UNTRANSLATED, _ask_with_retry, _one_line_or_untranslated, script_ok
+from app.translate import UNTRANSLATED, _ask_with_retry, _one_line_or_untranslated, register_rule, script_ok
 
 # ±15% budget window (2026-07-30 calibration, replaces the old single MARGIN multiplier):
 # a line's estimated speech time must land inside [slot*WINDOW_LOW, slot*WINDOW_HIGH], or it
@@ -108,12 +108,14 @@ def _scene_window(texts, a, b):
 # These are NOT taken from any specific scene, so they are reusable and leak nothing.
 _STYLE_PRIMER = {
     "ko": [
-        ("Don't you dare walk away from me.", "감히 나한테서 도망칠 생각 마."),
-        ("I've got nothing left to lose.", "난 더 잃을 것도 없어."),
-        ("You have no idea what you've done.", "네가 무슨 짓을 했는지 넌 몰라."),
-        ("We're running out of time.", "시간이 없어."),
-        ("It's not what it looks like.", "이건 네 생각과 달라."),
-        ("Just stay with me, okay?", "정신 차려, 응?"),
+        # 해요체, the one speech level a Korean script uses (register_rule): the
+        # 반말 examples here are what the length re-asks copied (2026-09-25).
+        ("Don't you dare walk away from me.", "감히 저한테서 도망칠 생각 마세요."),
+        ("I've got nothing left to lose.", "전 더 잃을 것도 없어요."),
+        ("You have no idea what you've done.", "무슨 짓을 했는지 모르시잖아요."),
+        ("We're running out of time.", "시간이 없어요."),
+        ("It's not what it looks like.", "보이는 거랑 달라요."),
+        ("Just stay with me, okay?", "정신 차려요, 네?"),
     ],
     "en": [
         ("감히 나한테서 도망칠 생각 마.", "Don't you dare walk away from me."),
@@ -130,6 +132,10 @@ _STYLE_PRIMER = {
 _BANS = (
     "- Each output string is ONLY the translated line: no line numbers, no [speaker] tags, "
     "no markdown (no *asterisks*), no surrounding quotes, and never mix in another language.\n"
+    # A dash inside a line made the voice engine run away (2026-09-23): the
+    # lines are spoken, and a pause is a comma.
+    "- These lines are spoken aloud: no dashes (— – --), parentheses or brackets. "
+    "Use commas and periods only.\n"
 )
 
 
@@ -225,7 +231,7 @@ def build_budget_prompt(texts, target_lang, source_lang, budgets, scene_context=
     # The context goes first. It is the one part that can be long, and if a prompt
     # ever runs past the model's window it is cut from the front: what is lost is
     # then some context, never the instructions or the JSON the answer must be.
-    return ctx + header + _primer_block(target_lang) + rules + _BANS + tail
+    return ctx + header + _primer_block(target_lang) + rules + register_rule(target_lang) + _BANS + tail
 
 
 def build_shorten_prompt(sources, currents, target_lang, budgets):
@@ -243,6 +249,7 @@ def build_shorten_prompt(sources, currents, target_lang, budgets):
         "Being a bit long is better than broken grammar — an ungrammatical line is a failed translation.\n"
         "You may drop less-important modifiers and filler, but keep the core meaning and emotion. Keep it colloquial.\n"
         % (target_lang, u)
+        + register_rule(target_lang)
         + _BANS
         + "Output only a JSON array containing exactly %d strings in order. No other text.\n\n%s"
         % (len(sources), "\n".join(lines))
@@ -254,7 +261,7 @@ def build_shorten_prompt(sources, currents, target_lang, budgets):
 _COMPRESSION_EXAMPLES = {
     "ko": [
         ("I can't believe you're actually doing this to me, after everything we've been through together.",
-         "네가 진짜 이럴 줄은 몰랐어."),
+         "진짜 이러실 줄은 몰랐어요."),
     ],
     "en": [
         ("나는 이제 더 이상 너를 예전처럼 믿을 수가 없을 것 같아.",
@@ -337,6 +344,7 @@ def build_candidates_prompt(sources, currents, target_lang, budgets, directions)
         "For 'too short' lines: bring out more of the original's nuance and detail to fill the "
         "target length naturally -- do not just repeat words or add filler.\n"
         % target_lang
+        + register_rule(target_lang)
         + _compression_examples_block(target_lang)
         + _BANS
         + "Output only a JSON array of %d items, one per line in order. Each item is itself a JSON "
@@ -488,7 +496,7 @@ def build_candidates_draft_prompt(texts, target_lang, source_lang, budgets, scen
             "your 3 candidate strings (no numbering inside the string). No other text.\n\n%s"
             % (len(texts), "\n".join(lines)))
     # Context first, for the reason given in build_budget_prompt.
-    return (ctx + header + _primer_block(target_lang) + rules
+    return (ctx + header + _primer_block(target_lang) + rules + register_rule(target_lang)
             + _compression_examples_block(target_lang) + _BANS + tail)
 
 
@@ -554,7 +562,8 @@ def _draft_candidates_in_chunks(engine, texts, target_lang, source_lang, budgets
                 except ValueError:
                     candidate_lists.append([])
         for idx, (cands, w) in enumerate(zip(candidate_lists, chunk_windows)):
-            cands = [c for c in cands if script_ok(c, target_lang)] or cands
+            if getattr(engine, "recheck_script", True):
+                cands = [c for c in cands if script_ok(c, target_lang)] or cands
             if not cands:
                 out.append(UNTRANSLATED)
                 continue
@@ -657,7 +666,8 @@ def fit_translate(
         if not pairs:
             break  # if format failures keep recurring, stop and keep the current result
         for i, cands in pairs:
-            cands = [c for c in cands if script_ok(c, target_lang)]
+            if getattr(engine, "recheck_script", True):
+                cands = [c for c in cands if script_ok(c, target_lang)]
             if not cands:
                 continue  # nothing usable came back for this line -- keep the current best
             picked = pick_candidate(cands, target_lang, windows[i], index=i, log=log)

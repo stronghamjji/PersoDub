@@ -3,7 +3,10 @@
 // dub?" dialog (dub_start's 409) renders. No DOM, no fetch -- index.html does
 // the wiring, ui/src/modelsUi.test.mjs pins the words.
 
-const GB = 1024 ** 3;
+// Decimal, like the catalog's own numbers, the docs and the Mac's Finder. Divided
+// by 1024³ the eraser's 9.3 GB read "8.7 GB" beside the 9.3 measured on disk
+// (Windows full test, 2026-09-25), and Gemma's 7.6 read 7.1.
+const GB = 1e9;
 
 /** "7.6" -- bytes as one-decimal gigabytes, the unit every screen uses. */
 export function gb(bytes) {
@@ -42,29 +45,24 @@ export function modelStatusLine(row) {
 export function dubStartDialog(detail) {
   const missing = detail.missing || [];
   const total = detail.total_bytes ?? missing.reduce((n, m) => n + m.bytes, 0);
-  const one = missing.length === 1 ? missing[0] : null;
   // The desktop app installs packs (kind "pack": the AI engine, the
   // translation runtime); this page downloads models. The 409 lists packs
   // first, and Download and Start takes them in that order.
   const packs = missing.filter((m) => m.kind === "pack").map((m) => m.id);
   const models = missing.filter((m) => m.kind !== "pack").map((m) => m.id);
+  const ids = missing.map((m) => m.id);
+  // Only the size and what it is for: which files they are is nobody's
+  // question (user, 2026-09-28). The voice parts are the ones Perso dubbing
+  // does instead, so they are the ones that point there.
+  const voice = ids.includes("engine") || ids.includes("qwen3-tts");
+  const purpose = voice ? "making voices" : ids.includes("whisper") ? "transcribing" : "translating";
   return {
-    // One item gets its own name; several get the total (mockup rule).
-    // "to start dubbing": the bare "to dub?" read as a fragment (user,
-    // 2026-09-07), and "Dub" on its own is the assistant's name now.
-    title: one
-      ? `Download ${one.name} (${gb(one.bytes)} GB) to start dubbing?`
-      : packs.length
-        ? `Download ${gb(total)} GB to start dubbing?`
-        : `Download ${gb(total)} GB of AI models to start dubbing?`,
-    line: packs.length
-      ? "The AI engine and models are saved on this computer and only download once."
-      : "They are saved on this computer and only download once.",
+    title: `Download ${gb(total)} GB to start dubbing?`,
+    line: `One-time download for ${purpose} on this computer.`,
+    perso: voice,
     ids: missing.map((m) => m.id),
     packs,
     models,
-    // What the dialog lists, in download order: name, size and what it is for.
-    items: missing.map((m) => ({ id: m.id, name: m.name, size: `${gb(m.bytes)} GB`, hint: m.hint || "" })),
     totalBytes: total,
   };
 }

@@ -46,9 +46,23 @@ def _settled_to(key, want, secs=4.0):
 
 def test_status_names_both_and_says_which_can_answer():
     rows = _rows()
-    assert set(rows) == {"claude", "codex"}
+    assert set(rows) == {"claude", "codex", "chatgpt"}
     assert rows["claude"]["supported"] is True
     assert rows["codex"]["supported"] is True
+    # ChatGPT is Codex's sign-in answering as ChatGPT does: one model, the
+    # free plan's own, whatever the user's Codex config names.
+    assert rows["chatgpt"]["supported"] is True
+    assert rows["chatgpt"]["vendor"] == "OpenAI"
+    assert rows["chatgpt"]["models"] == ["gpt-5.6-luna"]
+    # Listed for its sign-in only: Settings and the sign-in window read it,
+    # the Dub Agent picker leaves it out (user, 2026-09-24).
+    assert rows["chatgpt"]["sign_in_only"] is True
+    assert rows["claude"]["sign_in_only"] is False and rows["codex"]["sign_in_only"] is False
+
+
+def test_chatgpt_is_not_a_dub_agent():
+    r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "chatgpt"})
+    assert r.status_code == 422
 
 
 def test_an_assistant_that_cannot_answer_says_why(monkeypatch):
@@ -69,27 +83,32 @@ def test_an_assistant_that_cannot_answer_says_why(monkeypatch):
     assert rows["codex"]["reason"] == ""
 
 
-def test_claude_offers_its_aliases_and_codex_the_one_it_is_set_to(monkeypatch, tmp_path):
-    """Claude's four aliases are its own vocabulary and are written down.
-    Codex has no list and no command that would give one -- every subcommand
-    was checked, and it accepts a model it has never heard of without a word.
-    What it does have is the one model it is set up to use, in its own config
-    (user, 2026-09-11)."""
-    (tmp_path / "config.toml").write_text('model = "gpt-6-astra"\n', encoding="utf-8")
-    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
-    rows = _rows()
+def test_claude_offers_its_aliases_and_codex_the_accounts_own_list(monkeypatch):
+    """Claude's four aliases always point at the newest of each line. Codex
+    offers the models its account has answered with (app/agents/codex.py
+    models), once signed in (user, 2026-09-28)."""
+    from app.agents import codex as codex_mod
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api.agent_base, "login_state",
+                        lambda kind, binary, env=None: {"logged_in": True, "account": "ChatGPT"})
+    monkeypatch.setattr(codex_mod, "models", lambda: ["gpt-6-luna", "gpt-5.6-luna"])
+    agent_api._login_cache.clear()
+    rows = _settled("codex")
     assert "fable" in rows["claude"]["models"]
-    assert rows["codex"]["models"] == ["gpt-6-astra"]
+    assert rows["codex"]["models"] == ["gpt-6-luna", "gpt-5.6-luna"]
 
 
-def test_a_codex_that_has_not_said_which_model_offers_none(monkeypatch, tmp_path):
-    """No config, or one that names no model: the picker leaves Codex as the
-    single unopenable row it was before, rather than inventing a name."""
-    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
-    assert _rows()["codex"]["models"] == []
-    (tmp_path / "config.toml").write_text("[profile.x]\nmodel = \"inside-a-profile\"\n",
-                                          encoding="utf-8")
-    assert _rows()["codex"]["models"] == []
+def test_a_signed_out_codex_offers_no_models(monkeypatch):
+    """Before a sign-in Codex lists every model it knows; a free account could
+    then pick one it does not have. The row says to sign in instead."""
+    from app.agents import codex as codex_mod
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api.agent_base, "login_state",
+                        lambda kind, binary, env=None: {"logged_in": False, "account": ""})
+    monkeypatch.setattr(codex_mod, "models",
+                        lambda: (_ for _ in ()).throw(AssertionError("asked while signed out")))
+    agent_api._login_cache.clear()
+    assert _settled("codex")["codex"]["models"] == []
 
 
 def test_status_never_starts_a_cli(monkeypatch):
@@ -122,7 +141,7 @@ def _capture(monkeypatch, tmp_path):
     seen = {}
 
     def fake_run(binary, args, translate, cwd=None, agent_name="", login_command="",
-                 input_text=None):
+                 input_text=None, env=None):
         seen["binary"] = binary
         seen["args"] = args
         seen["translate"] = translate
@@ -212,13 +231,15 @@ def test_every_turn_asks_to_carry_on_the_conversation(monkeypatch, tmp_path):
 def test_status_says_whether_each_assistant_is_signed_in(monkeypatch):
     monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(agent_api.agent_base, "login_state",
-                        lambda kind, binary: {"logged_in": True, "account": "ChatGPT"})
+                        lambda kind, binary, env=None: {"logged_in": True, "account": "ChatGPT"})
     agent_api._login_cache.clear()
     rows = _settled("codex")
     assert rows["codex"]["logged_in"] is True
     assert rows["codex"]["account"] == "ChatGPT"
     # What to type to sign in, named by the server so one place says it.
-    assert rows["codex"]["login_command"] == "codex login"
+    # Codex signs in through the app's own window now (one ChatGPT sign-in for
+    # translation and the agent, 2026-09-28): no terminal command to name.
+    assert rows["codex"]["login_command"] == ""
     assert rows["claude"]["login_command"] == "claude"
 
 
@@ -226,6 +247,8 @@ def test_an_assistant_we_cannot_run_is_never_called_signed_out(monkeypatch):
     """None means "we have not been able to ask". Showing that as "sign in"
     would send the user off to fix something that is not broken."""
     monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: None)
+    # And no sign-in program the app could fetch in its place either.
+    monkeypatch.setattr(agent_api.codex_fetch, "package", lambda: None)
     agent_api._login_cache.clear()
     rows = _rows()
     assert rows["codex"]["logged_in"] is None
@@ -237,7 +260,7 @@ def test_status_answers_at_once_even_while_a_cli_is_thinking(monkeypatch):
     whether it is signed in must not be what the picker waits for."""
     monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
 
-    def slow(kind, binary):
+    def slow(kind, binary, env=None):
         time.sleep(1.5)
         return {"logged_in": True, "account": "ChatGPT"}
 
@@ -254,7 +277,7 @@ def test_opening_the_app_does_not_start_a_single_cli(monkeypatch):
     assistant, so the screen asks for these only once the strip is visible."""
     monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
 
-    def boom(kind, binary):
+    def boom(kind, binary, env=None):
         raise AssertionError("no login check may start without being asked for")
 
     monkeypatch.setattr(agent_api.agent_base, "login_state", boom)
@@ -272,7 +295,7 @@ def test_a_login_check_that_blows_up_does_not_wedge_that_assistant(monkeypatch):
     monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(agent_api, "AGENT_LOGIN_TTL", 0.0)   # ask again on the next look
 
-    def boom(kind, binary):
+    def boom(kind, binary, env=None):
         raise RuntimeError("the CLI exploded")
 
     monkeypatch.setattr(agent_api.agent_base, "login_state", boom)
@@ -288,7 +311,7 @@ def test_a_login_check_that_blows_up_does_not_wedge_that_assistant(monkeypatch):
 
     # And the next check still runs.
     monkeypatch.setattr(agent_api.agent_base, "login_state",
-                        lambda kind, binary: {"logged_in": True, "account": "ChatGPT"})
+                        lambda kind, binary, env=None: {"logged_in": True, "account": "ChatGPT"})
     assert _settled("codex")["codex"]["logged_in"] is True
 
 
@@ -326,7 +349,7 @@ def test_a_deliberate_ask_does_not_get_a_minute_old_answer(monkeypatch):
     agent_api._login_busy.clear()
 
     answer = {"logged_in": True, "account": "ChatGPT"}
-    monkeypatch.setattr(agent_api.agent_base, "login_state", lambda kind, binary: dict(answer))
+    monkeypatch.setattr(agent_api.agent_base, "login_state", lambda kind, binary, env=None: dict(answer))
     assert _settled("codex")["codex"]["logged_in"] is True
 
     # They sign out in a Terminal. The app is none the wiser yet.

@@ -1,14 +1,15 @@
-"""The translator a dub gets when nobody chose one. User decision 2026-09-04:
-Hunyuan, the 1.1 GB model a light install actually has -- never the 7.6 GB
-Gemma, which a fresh machine does not have and would be asked to download."""
+"""The translator a dub gets when nobody chose one. User decision 2026-09-23:
+ChatGPT, through the user's own (free) ChatGPT account, so a fresh machine
+downloads no translation model at all. Before that (2026-09-04) it was
+Hunyuan, the 1.1 GB model a light install has."""
 import importlib
 
 
-def test_default_translator_is_hunyuan(monkeypatch):
+def test_default_translator_is_chatgpt(monkeypatch):
     monkeypatch.delenv("TRANSLATE_ENGINE", raising=False)
     import app.config as config
     importlib.reload(config)
-    assert config.TRANSLATE_ENGINE == "hunyuan"
+    assert config.TRANSLATE_ENGINE == "chatgpt"
 
 
 def test_kit_env_still_overrides_the_default(monkeypatch):

@@ -12,6 +12,7 @@ import { runInstall, openSteps, packPercent, downloadInterrupted, DOWNLOAD_INTER
 import { revealAllowed } from "./src/revealPolicy.js";
 import { cancelCurrent } from "./src/exec.js";
 import { readRuntime } from "./src/runtimeFile.js";
+import { markCleanExit, takeCleanExit } from "./src/cleanExit.js";
 import { download } from "./src/download.js";
 import { uniqueName } from "./src/downloadPath.js";
 import { extractTarGz } from "./src/extract.js";
@@ -33,6 +34,8 @@ import { IS_WIN } from "./src/platform.js";
 // comes to the front instead. Must run before anything else in the app.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
+// Read before anything can quit again: did the last run end with a normal quit?
+const lastRunClosedByUser = gotLock && takeCleanExit(join(app.getPath("userData"), "logs"));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let engines = null;
@@ -860,12 +863,18 @@ app.whenReady().then(() => {
       ? (job && job.error === "interrupted" ? "interrupted" : classifyError(detail))
       : undefined;
     countUsage(status === "done" ? "dub_success" : "dub_failure", bootedKitDir, code, undefined, dubFacts(job));
+    // The user closed the app on it: not a fault, so no issue (user,
+    // 2026-09-28). Still counted above, as "interrupted".
+    if (status === "error" && code === "interrupted" && lastRunClosedByUser) {
+      shellLog("[persodub-report] not sent (interrupted): the app was closed normally");
+      return;
+    }
     // Only a failure is worth a report.
     if (status === "error") {
       // An interrupted job has no log left to send, and an empty body reads as
       // "(no message)" in the issue. Say what happened instead.
       const message = code === "interrupted"
-        ? "The app closed while this job was still running."
+        ? "The app stopped without a normal quit while this job was still running."
         : detail;
       sendReport({ kind: "dub", kitDir: bootedKitDir, code, message, jobId });
     }
@@ -1072,6 +1081,7 @@ app.whenReady().then(() => {
     // quitAndInstall bypasses will-quit in some paths -- stop the engines
     // explicitly first so no uvicorn is orphaned across the swap.
     if (engines) engines.stopAll();
+    markCleanExit(join(app.getPath("userData"), "logs"));
     // (silent, relaunch): without the flags the NSIS wizard opened and asked
     // for three clicks (user, Next, Finish) on 2026-09-08. Mac ignores them.
     electronUpdater.autoUpdater.quitAndInstall(true, true);
@@ -1085,6 +1095,7 @@ app.on("will-quit", () => {
   // pids.json here is the FIRST instance's, not a stale leftover, so this
   // must not touch it -- that was the double-launch bug (2026-09-18).
   if (!gotLock) return;
+  markCleanExit(join(app.getPath("userData"), "logs"));
   if (engines) {
     engines.stopAll();
   } else {

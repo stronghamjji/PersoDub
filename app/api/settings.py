@@ -127,6 +127,9 @@ def settings_reveal_output():
     desktop app does instead (2026-08-28), and only the server knows the folder
     (the desktop shell can point the workspace anywhere)."""
     try:
+        # Made on the first dub; before that a new install has nothing here,
+        # and Windows refuses to open a folder that is not there (2026-09-23).
+        os.makedirs(state.WORKSPACE, exist_ok=True)
         _open_folder(state.WORKSPACE)
     except OSError as e:
         raise HTTPException(500, f"Could not open the folder: {e}")

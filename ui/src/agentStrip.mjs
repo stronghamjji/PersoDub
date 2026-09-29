@@ -193,9 +193,13 @@ export function chipText(label, lines) {
  * @param {() => string|null} deps.getJobId  the job the user is looking at, sent
  *        with every message so the assistant is not left asking for a number
  *        nobody can see
- * @param {(name: string) => void} deps.emit  tell the rest of the page something
+ * @param {(name: string, detail?: any) => void} deps.emit  tell the rest of the page something
  *        changed under it (persodub:script-changed, persodub:voices-remade)
  */
+// The tools that add, stop or start jobs: after a turn that used one, the
+// Projects list and the Up next card read their rows again.
+const JOB_TOOLS = new Set(["queue_dub", "cancel_dub", "erase_subtitles"]);
+
 export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJobId, emit }) {
   const log = $("assistantLog"), input = $("assistantInput");
   const stateLine = $("assistantState");
@@ -294,6 +298,16 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     // other (Windows saw it, 2026-09-11).
     stateLine.classList.add("warn");
     stateLine.textContent = anySignedIn() ? `${a.name} is not signed in.` : SIGN_IN;
+    // Codex signs in with ChatGPT in the app's own window (one sign-in for
+    // translation and the agent, 2026-09-28): a button, not a terminal command.
+    if (!a.login_command) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "state-signin";
+      b.textContent = "Sign in";
+      b.addEventListener("click", () => emit("persodub:chatgpt-signin", () => recheckLogin()));
+      stateLine.append(" ", b);
+    }
   }
 
   // Which one it is showing, and whether it can be pressed. While a turn runs it
@@ -388,13 +402,18 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
         // fix it.
         const signedOut = loginKnown(a) && !a.logged_in;
         const pickable = usable && !signedOut;
+        // One the app itself signs in (Codex, through ChatGPT): its models are
+        // the account's, so there are none to show until then (2026-09-28).
+        const signsInHere = usable && signedOut && !a.login_command;
         const row = menuRow(a.name, {
           note: !a.installed ? "not installed" : "",
           // Why this one cannot be picked, said where the picking happens -- or,
           // for one that can, whether it is signed in.
-          sub: a.installed && !a.supported ? (a.reason || "not supported") : loginWords(a),
+          sub: a.installed && !a.supported ? (a.reason || "not supported")
+            : signsInHere ? "Sign in first" : loginWords(a),
           chevron: pickable,
-          disabled: !pickable,
+          // Not greyed out when a press can fix it: it opens the sign-in.
+          disabled: !pickable && !signsInHere,
         });
         // Stopped here, because buildMenu() takes this very button off the page:
         // the click would then reach the document, which puts away any menu the
@@ -402,6 +421,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
         // is what closed the picker instead of opening the vendor's models.
         if (pickable) row.addEventListener("click", (e) => {
           e.stopPropagation(); menuLevel = a.id; buildMenu();
+        });
+        else if (signsInHere) row.addEventListener("click", () => {
+          menu.hidden = true;
+          emit("persodub:chatgpt-signin", () => recheckLogin());
         });
         menu.appendChild(row);
       }
@@ -421,7 +444,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     menu.appendChild(back);
 
     for (const m of (a && a.models && a.models.length ? a.models : [""])) {
-      const row = menuRow(MODEL_LABELS[m] || (a ? a.name : m),
+      // A Claude alias reads as its family; a Codex model is its own name,
+      // version and all ("gpt-6-luna"). Only an empty entry -- an assistant
+      // with no list -- falls back to the assistant's name.
+      const row = menuRow(MODEL_LABELS[m] || m || (a ? a.name : ""),
                           { tick: chosen.agent === menuLevel && chosen.model === m });
       row.addEventListener("click", () => {
         chosen = { agent: menuLevel, model: m, name: a ? a.name : menuLevel };
@@ -522,6 +548,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   // The Terminal command is the one thing here a person cannot guess, and it
   // is said once: the log keeps it, the rows and the heading stay short.
   let signInHintSaid = false;
+  // That sentence, kept so it can go once the sign-in lands: left in the log
+  // it went on saying "not signed in" under a strip that said signed in
+  // (Mac tester, 2026-09-28).
+  let signInHint = null;
 
   async function loadAgents({ login = false } = {}) {
     // Whether the list arrived, said plainly. An empty list happens to mean the
@@ -533,7 +563,8 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       // each CLI whether it is signed in. Off by default, so the first screen --
       // where the assistant is not even on show -- starts nothing.
       const r = await fetch("/api/agent/status" + (login ? "?login=1" : ""));
-      agentList = (await r.json()).agents || [];
+      // ChatGPT's translation sign-in rides on the same list; it is not an assistant.
+      agentList = ((await r.json()).agents || []).filter((a) => !a.sign_in_only);
       arrived = true;
       // Only the fetch's own notice is cleared here. NONE_READY is judged
       // below, from what is in the list -- clearing it first is how the two
@@ -593,6 +624,11 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
      // words and the picker for none, so this is the one place that can say
      // both what is wrong and what to do about it (user, 2026-09-10). Said once
      // -- it is the same sentence every time the strip is painted.
+    if (arrived && signInHint && !signedOutChoice()) {
+      signInHint.remove();
+      signInHint = null;
+      signInHintSaid = false;   // a later sign-out is said again
+    }
     if (arrived && !signInHintSaid && signedOutChoice()) {
       const cmds = agentList.filter((a) => loginKnown(a) && !a.logged_in && a.login_command)
         .map((a) => a.login_command);
@@ -603,26 +639,19 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       const opening = anySignedIn()
         ? `${out.name} is not signed in. Pick another assistant, or sign in.`
         : "Sign in to Claude or Codex to use this.";
-      bubble("ai", opening + (cmds.length ? ` Run ${cmds.join(" or ")} in Terminal.` : ""));
+      // Codex signs in from the button at the top: one short sentence says so.
+      signInHint = bubble("ai", !out.login_command ? `${out.name} is not signed in. Press Sign in above.`
+        : opening + (cmds.length ? ` Run ${cmds.join(" or ")} in Terminal.` : ""));
     }
   }
 
-  // A red line the user can act on, and -- only when the server sent one -- the
-  // CLI's own last words folded away under it. Built as text throughout: the tail
-  // comes from another program's output and must never be able to become a tag.
-  function showError(message, detail) {
+  // A red line the user can act on, and nothing more: the program's own words
+  // stay in the app's log (user, 2026-09-28 -- a raw "thread/resume failed ...
+  // code -32600" under Details was not something anyone using the app needs).
+  function showError(message) {
     const d = document.createElement("div");
     d.className = "assistant-err";
     d.textContent = message;
-    if (detail) {
-      const fold = document.createElement("details");
-      const head = document.createElement("summary");
-      head.textContent = "Details";
-      const body = document.createElement("pre");
-      body.textContent = detail;
-      fold.append(head, body);
-      d.appendChild(fold);
-    }
     log.appendChild(d);
     log.scrollTop = log.scrollHeight;
     return d;
@@ -630,6 +659,66 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
 
   // The three things the log can hold: a message, a step chip, and the dots that
   // say a turn is running. Each appends and scrolls, so the newest is in view.
+  // The one way a model download starts from the conversation: the person
+  // presses Download here. The agent can only put the card up (2026-09-26,
+  // after Codex started 7.6 GB by itself). Pressed once, it cannot be pressed
+  // again.
+  async function offerDownload(id) {
+    let row = null;
+    try {
+      row = ((await (await fetch("/api/models")).json()).models || []).find((m) => m.id === id) || null;
+    } catch { row = null; }
+    if (!row || row.state === "ready" || row.state === "downloading") return;
+    const gb = ((row.bytes || 0) / 1e9).toFixed(1);
+    const card = document.createElement("div");
+    card.className = "offer-card";
+    const title = document.createElement("div");
+    title.className = "offer-title";
+    title.textContent = `Download ${row.name}?`;
+    const sub = document.createElement("div");
+    sub.className = "offer-sub";
+    sub.textContent = `${gb} GB · on this computer`;
+    const btns = document.createElement("div");
+    btns.className = "offer-btns";
+    const yes = document.createElement("button");
+    yes.type = "button"; yes.className = "btn btn-primary btn-sm"; yes.textContent = "Download";
+    const no = document.createElement("button");
+    no.type = "button"; no.className = "btn btn-outline btn-sm"; no.textContent = "Not now";
+    yes.addEventListener("click", async () => {
+      yes.disabled = no.disabled = true;
+      try {
+        const r = await fetch(`/api/models/${encodeURIComponent(id)}/download`, { method: "POST" });
+        if (!r.ok) {
+          const detail = (await r.json().catch(() => ({}))).detail;
+          throw new Error(typeof detail === "string" ? detail : "Could not start the download.");
+        }
+        btns.remove();
+        sub.textContent = `Downloading · ${gb} GB`;
+        emit("persodub:models-changed");
+        // Follow it to the end: set once, the line said Downloading long after
+        // the model was ready (Windows, 2026-09-26).
+        const follow = async () => {
+          let m = null;
+          try {
+            m = ((await (await fetch("/api/models")).json()).models || []).find((x) => x.id === id) || null;
+          } catch { m = null; }
+          if (m && m.state === "ready") { sub.textContent = `Downloaded · ${gb} GB`; return; }
+          if (m && m.state !== "downloading") { sub.textContent = "Download stopped. Try again in Settings."; return; }
+          setTimeout(follow, 2000);
+        };
+        setTimeout(follow, 2000);
+      } catch (e) {
+        sub.textContent = String((e && e.message) || e);
+        yes.disabled = no.disabled = false;
+      }
+    });
+    no.addEventListener("click", () => { btns.remove(); sub.textContent = "Not downloaded."; });
+    btns.append(yes, no);
+    card.append(title, sub, btns);
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
+  }
+
   function bubble(cls, text) {
     const d = document.createElement("div");
     d.className = "bubble " + cls;
@@ -789,6 +878,13 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     // answer)" under a good reply whose last event happened to be a step.
     let saidSomething = false;
     let touchedScript = false;
+    // A job the agent queued or cancelled: the Projects list only re-read its
+    // rows when the person moved screens, so a cancel showed "queued" for over
+    // a minute (Windows full test, 2026-09-25).
+    let touchedJobs = false;
+    // A model the agent offered: its Download button goes up when the call
+    // is back. Only that press downloads (download_model never does).
+    let offerModel = null;
     let remadeVoices = false;
     let dots = thinking("Thinking…");
     const clearDots = () => { if (dots) { dots.remove(); dots = null; } };
@@ -848,6 +944,11 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
           } else if (ev.kind === "progress" && ev.done) {
             // A call the chip on screen is already counting has come back.
             chipFinished();
+            // The job is queued or cancelled now, not when the agent stops
+            // talking: waiting for the turn left the list stale while it went
+            // on (Windows recheck, 2026-09-25).
+            if (touchedJobs) emit("persodub:jobs-changed");
+            if (offerModel) { const id = offerModel; offerModel = null; offerDownload(id); }
           } else if (ev.kind === "progress") {
             clearDots(); chipStep(ev.label, ev.line, ev.tool === "transport");
             // Whatever the assistant says next belongs BELOW this step, not
@@ -870,7 +971,10 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
             // The remake is told at the end of the turn instead (below): this
             // chip fires when the tool is CALLED, and reloading the player then
             // would fetch the video halfway through being written again.
-            if (ev.tool === "remake_voices") remadeVoices = true;
+            // retranslate_lines rewrites the words AND remakes the voices.
+            if (ev.tool === "remake_voices" || ev.tool === "retranslate_lines") remadeVoices = true;
+            if (JOB_TOOLS.has(ev.tool)) touchedJobs = true;
+            if (ev.tool === "download_model" && ev.model) offerModel = ev.model;
           }
           else if (ev.kind === "text") {
             clearDots();
@@ -883,12 +987,15 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
           } else if (ev.kind === "error") {
             clearDots();
             settlePrevious();
-            showError(ev.message, ev.detail);
+            showError(ev.message);
             // The CLI just told us it has no credentials -- a flag from the
             // reader that knows each CLI's way of saying it, not a phrase
             // matched here. The strip above still says the opposite, because
             // it asked at launch and this happened after (user, 2026-09-11).
             if (ev.signed_out) recheckLogin();
+            // A model the account turned down is off the server's list now;
+            // read it again so the menu stops offering it.
+            if (ev.models_changed) recheckLogin(() => { if (!menu.hidden) buildMenu(); });
           } else if (ev.kind === "done") {
             clearDots();
             settlePrevious();
@@ -906,7 +1013,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       settlePrevious();
       // A cut stream is the Stop working, not a failure.
       if (e && e.name === "AbortError") stoppedLine();
-      else showError(String(e.message || e), "");
+      else showError(String(e.message || e));
     } finally {
       clearTimeout(slow);
       // The writes have certainly landed by the time the turn is over, so this is
@@ -919,6 +1026,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       // Same reason, and the player with it: the remake rebuilds the video in
       // place, and the turn being over is what says the new file is whole.
       if (remadeVoices) emit("persodub:voices-remade");
+      if (touchedJobs) emit("persodub:jobs-changed");
       // A turn that ends having shown nothing at all is the failure that looks
       // exactly like the app being broken. Say so instead.
       if (dots) { clearDots(); bubble("ai", "No answer came back. Try sending that again."); }

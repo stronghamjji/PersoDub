@@ -110,6 +110,21 @@ def gemini_available() -> bool:
     return bool(current_value("GEMINI_API_KEY"))
 
 
+def chatgpt_available() -> bool:
+    """A ChatGPT sign-in this machine can translate with: the sign-in program
+    is here and says it is signed in. Asked once per dub start, like the
+    Ollama probe -- a child process, not a cached guess."""
+    from app.agents import base as agent_base
+
+    binary = agent_base.find_cli("codex")
+    if not binary:
+        return False
+    # "Cannot tell yet" (a cold start past the 8 s check, common on Windows)
+    # lets the dub run: a real sign-out still stops it at translation with
+    # its own notice, and a refusal on a guess stopped signed-in users.
+    return agent_base.login_state("codex", binary, env=agent_base.chatgpt_env()).get("logged_in") is not False
+
+
 def perso_available() -> bool:
     # The key alone: PersoClient resolves the workspace id from the key at dub
     # time (GET /portal/api/v1/spaces, as the official plugin does), and the

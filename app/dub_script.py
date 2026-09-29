@@ -74,6 +74,30 @@ def _audio_seconds(path: str) -> Optional[float]:
         return None
 
 
+# Which words each remade voice was made from: {"3": "text", ...}. Written by
+# the remake (app/api/script.py), read to tell a voice that caught up with an
+# edit from one that did not. Voices the dub itself made need no entry: their
+# words are translated.srt's.
+VOICE_TEXTS_NAME = "voice_texts.json"
+
+
+def _voice_texts(work_dir: str) -> dict:
+    try:
+        with open(os.path.join(work_dir, VOICE_TEXTS_NAME), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def note_voice_text(work_dir: str, line: int, text: str) -> None:
+    """Record that line `line`'s voice was just made from `text`."""
+    data = _voice_texts(work_dir)
+    data[str(line)] = text
+    with open(os.path.join(work_dir, VOICE_TEXTS_NAME), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+
 def _voice_is_older_than(wav_path: str, script: str) -> bool:
     """True when this line's voice was made before the script was last written.
 
@@ -104,10 +128,14 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
     midpoint falls inside -- one source split into two translated lines leaves both
     halves pointing at the same source.
 
-    voice_stale compares file times, and the script file is rewritten whole on
-    every edit -- so it says "made before the last edit of anything", and only
-    means "this line's voice is out of date" for a line whose words changed.
-    A line left untranslated and written in since, with no voice yet, is stale too.
+    voice_stale is true for a line whose words differ from what the dub read
+    (translated.srt) and whose voice has not been made from the new words
+    since: the remake records the words it spoke (voice_texts.json), and a
+    line remade before that record existed falls back to file times. A line
+    left untranslated and written in since, with no voice yet, is stale too.
+    Until 2026-09-29 the file times alone decided, and the script file is
+    rewritten whole on every edit -- so translating one line again marked
+    every other edited line's fresh voice stale (Windows, six-bundle test).
     """
     path = script_path(work_dir)
     if not os.path.exists(path):
@@ -118,6 +146,17 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
     dubbed = _read_cues(os.path.join(work_dir, DUB_NAME))
     originals = _read_cues(os.path.join(work_dir, ORIGINAL_NAME))
     speakers = _read_speakers(work_dir)
+    made_from = _voice_texts(work_dir)
+
+    def stale(n: int, text: str, wav: str) -> bool:
+        # The record first: a line remade from edited words and then put back
+        # as it was reads like the dub's own line, and its voice is not.
+        spoken = made_from.get(str(n))
+        if spoken is not None:
+            return spoken != text
+        if n <= len(dubbed) and dubbed[n - 1]["text"] == text:
+            return False    # the dub's own voice: made from these words
+        return _voice_is_older_than(wav, path)
 
     lines = []
     for n, c in enumerate(cues, start=1):
@@ -156,7 +195,7 @@ def load_lines(work_dir: str, lang: str) -> List[dict]:
             # remake of "the lines whose words changed" (app/api/script.py)
             # passed it by. Only that line -- a job whose wavs were never kept
             # still shows nothing waiting.
-            "voice_stale": _voice_is_older_than(wav, path)
+            "voice_stale": stale(n, c["text"], wav)
                            or (n <= len(dubbed) and not dubbed[n - 1]["text"].strip()
                                and bool(c["text"].strip()) and not os.path.exists(wav)),
             # The translator gave this line nothing (app/translate.py
