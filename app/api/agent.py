@@ -30,10 +30,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from app import codex_fetch
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
-from app import codex_fetch
 from app.config import PERSODUB_LOG_DIR
 from app.translate import CHATGPT_DEFAULT_MODEL
 

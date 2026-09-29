@@ -13,7 +13,6 @@ from app.engines import qwen_tts as qt
 from app.engines.base import SynthesisCut, SynthesisRequest, SynthesisResult, SynthesisTimeout, VoiceEngineDown
 from app.text.speech import speech_text
 
-
 # --- the two ceilings ------------------------------------------------------
 
 def test_speech_cap_and_wait_follow_the_slot():

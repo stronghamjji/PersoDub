@@ -18,11 +18,11 @@ speaker from the reference audio alone (no transcript needed, so build_speaker_r
 skips assembling ref_text); "icl" keeps the original in-context-learning clone, which
 needs a transcript of the reference span.
 """
+import dataclasses
 import json
 import os
 import random
 import re
-import dataclasses
 import shutil
 import statistics
 import time
@@ -30,11 +30,11 @@ import wave
 from typing import Callable, Dict, List, Optional
 
 from app import media
-from app.jobs import JobCancelled
 from app.audio.ambience import apply_company_ambience
 from app.audio.merge import group_merge_units, split_unit_audio
 from app.config import QWEN_GATE_MODE, QWEN_KEEP_NONVERBAL, QWEN_VOICE_MODE
 from app.engines.base import SynthesisCut, SynthesisRequest, SynthesisTimeout, VoiceEngineDown
+from app.jobs import JobCancelled
 from app.nonverbal import apply_nonverbal_whitelist
 from app.perso_client import _safe_name
 from app.qwen_assemble import (

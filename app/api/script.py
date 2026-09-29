@@ -25,11 +25,11 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.engines.base import SynthesisTimeout, VoiceEngineDown
 from app import config, dub_launch, engines_status, perso_client, perso_materialize, state
 from app.api._shared import script_work_dir
 from app.api.dub import check_space
 from app.dub_script import DUB_NAME, edit_line, line_wav_path, load_lines, note_voice_text
+from app.engines.base import SynthesisTimeout, VoiceEngineDown
 from app.perso_client import (
     PersoCreditExhaustedError,
     PersoInvalidKeyError,
@@ -38,8 +38,8 @@ from app.perso_client import (
 )
 from app.qwen_pipeline import rebuild_dub, resynth_one_line
 from app.retranslate import retranslate_lines
-from app.translate import ChatGptLimitError, ChatGptNotSignedInError, get_translator
 from app.text.srt import parse_srt
+from app.translate import ChatGptLimitError, ChatGptNotSignedInError, get_translator
 
 router = APIRouter()
 

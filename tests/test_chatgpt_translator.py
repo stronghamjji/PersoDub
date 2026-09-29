@@ -1,7 +1,6 @@
 """The ChatGPT translator: the sign-in program is the wire, the reply file is
 the answer, and the two account states become their own errors."""
 import os
-import subprocess
 
 import pytest
 
@@ -231,7 +230,8 @@ def test_a_cancel_stops_the_translation_before_the_next_request(tmp_path, monkey
     monkeypatch.setattr(translate, "TRANSLATORS",
                         dict(translate.TRANSLATORS, chatgpt=lambda: ChatGptTranslator(binary="/bin/codex", model="")))
     asked = []
-    cancelled = lambda: bool(run.calls)        # cancelled the moment one request has gone out
+    def cancelled():        # cancelled the moment one request has gone out
+        return bool(run.calls)
     cues = [{"start": i * 2.0, "end": i * 2.0 + 1.5, "text": "안녕하세요 %d" % i} for i in range(40)]
     logs = []
     with pytest.raises(JobCancelled):

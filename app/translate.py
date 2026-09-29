@@ -8,10 +8,10 @@ screen. VertexTranslator uses a service-account (OAuth) instead -- see its docst
 """
 import hashlib
 import json
-import subprocess
-import tempfile
 import os
 import re
+import subprocess
+import tempfile
 import threading
 import time
 from typing import List, Optional
@@ -395,7 +395,7 @@ class ChatGptTranslator(TranslationEngine):
     def _ask(self, prompt: str) -> str:
         if not self.answers_dir:
             return self._ask_chatgpt(prompt)
-        key = hashlib.sha256(f"{self.model}\n{prompt}".encode("utf-8")).hexdigest()[:32]
+        key = hashlib.sha256(f"{self.model}\n{prompt}".encode()).hexdigest()[:32]
         path = os.path.join(self.answers_dir, key + ".txt")
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:

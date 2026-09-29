@@ -12,11 +12,11 @@ import pytest
 from app.dub_script import (
     DUB_NAME,
     EDITED_NAME,
-    note_voice_text,
     ORIGINAL_NAME,
     edit_line,
     export_srt,
     load_lines,
+    note_voice_text,
     script_path,
 )
 from app.text.srt import build_srt

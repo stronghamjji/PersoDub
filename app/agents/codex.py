@@ -17,6 +17,7 @@ command() below.
 translate() is a pure function so it can be tested against recorded lines
 without a CLI installed -- see tests/test_agents_codex.py.
 """
+import contextlib
 import json
 import os
 import re
@@ -262,10 +263,8 @@ def forget_models() -> None:
     _last_check["at"] = 0.0
     for k in _checked:
         _checked[k] = []
-    try:
+    with contextlib.suppress(OSError):
         os.remove(_check_path())
-    except OSError:
-        pass
 
 
 def refused(model: str) -> None:

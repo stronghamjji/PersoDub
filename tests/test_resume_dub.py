@@ -1,16 +1,16 @@
 """Resume: a stopped dub carries on in its own folder from the first stage
 with no result, keeping what the earlier run finished (2026-09-23)."""
 import os
-
-import pytest
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app import pipeline
 from app.api import dub as dub_api
 from app.engines.base import SynthesisResult
 from app.main import app
+
 # The dub API tests' own preflight fakes (every engine "available"), reused.
 from tests.test_dub_api import _all_engines_available  # noqa: F401
 

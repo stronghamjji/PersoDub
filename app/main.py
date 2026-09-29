@@ -121,7 +121,8 @@ async def unhandled_exception(request, exc):
 # Origins closes that; requests without Origin (our Electron UI same-origin
 # GETs, curl, tests) are untouched.
 def _same_origin(o, url) -> bool:
-    port = lambda p, scheme: p or (443 if scheme == "https" else 80)
+    def port(p, scheme):
+        return p or (443 if scheme == "https" else 80)
     return (o.hostname in ("127.0.0.1", "localhost")
             and port(o.port, o.scheme) == port(url.port, url.scheme))
 

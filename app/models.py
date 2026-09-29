@@ -87,10 +87,8 @@ def _hf_download_whole(base: str, markers) -> bool:
     if any(os.path.getsize(p) == 0 for p in markers):
         return False
     pieces = os.path.join(base, ".cache", "huggingface", "download")
-    for _root, _dirs, files in os.walk(pieces):
-        if any(f.endswith(".incomplete") for f in files):
-            return False
-    return True
+    return all(not any(f.endswith(".incomplete") for f in files)
+               for _root, _dirs, files in os.walk(pieces))
 
 
 def model_state(entry, kit: str) -> str:
