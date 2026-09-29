@@ -132,12 +132,14 @@ Repository: https://github.com/stronghamjji/PersoDub
    If this computer falls short, say so and stop.
 2. Install the latest release for my OS:
    https://github.com/stronghamjji/PersoDub/releases/latest
-   On Windows, SmartScreen warns (not code-signed yet): More info, then Run anyway.
+   On Windows, run the installer with /S so no wizard opens.
+   If SmartScreen warns (not code-signed yet): More info, then Run anyway.
 3. Open PersoDub and wait for the first setup (under 1 GB).
 4. Ask me if I want more accurate transcription with a free Perso key. If yes, open
    https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=install_prompt
    then open PersoDub's Settings so I can paste the key in myself. Never ask to see it.
-5. Dub one video under a minute with me. Tell me the download size (9-16 GB) first.
+5. Dub one video under a minute with me. Tell me the download size PersoDub shows first.
+   If you cannot press buttons in PersoDub, tell me which ones to press.
    If I pick ChatGPT for translation, I sign in myself. A free account is enough.
 6. Report the version, where projects are saved, and how to reopen the app.
 Finish the setup, not just a plan. Tell me any step you could not do.
