@@ -62,8 +62,9 @@ export function systemLocale() {
 /**
  * Decide the language. At launch (main.js), before any kit is known, with the
  * system locale alone; again once the boot has found the kit (bootFlow.js),
- * whose kit.env may name one. Read once per launch: a change in Settings
- * reaches the shell's words at the next launch.
+ * whose kit.env may name one; and again on every page load (windowFactory.js),
+ * so a change in Settings, which starts the page again, reaches the shell's
+ * words at once.
  */
 export function useLanguage({ osLocale, kitDir } = {}) {
   if (osLocale !== undefined) systemLanguage = localeLanguage(osLocale);

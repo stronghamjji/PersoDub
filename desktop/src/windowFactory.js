@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { zoomResetter } from "./zoomReset.js";
+import { useLanguage } from "./i18n.js";
 
 // Outbound links (the credit popup's Recharge button, Settings' "get a key") belong in
 // the user's own browser. Only http(s) is handed to the OS, so a page can never make
@@ -10,8 +11,8 @@ export function openExternally(shell, url) {
 
 /**
  * The app's one window, with the guards every page in it lives under.
- * `ctx.updateState` and `ctx.engines` are read as each page loads or
- * navigates, since neither exists yet when the window is made.
+ * `ctx.updateState`, `ctx.engines` and `ctx.kitDir` are read as each page
+ * loads or navigates, since none of them exists yet when the window is made.
  */
 export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, repo, locale }) {
   // The finished screen is a table beside a video with a strip under both, and
@@ -57,6 +58,11 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
   const resetZoom = zoomResetter();
   win.webContents.on("did-finish-load", () => {
     resetZoom(win.webContents);
+    // The page starts again when Settings saves a language; the shell's own
+    // words (its dialogs, the update window) follow at the same moment by
+    // reading kit.env again. Before this they changed at the next launch
+    // only, and an app set to English kept asking in Korean (owner, 0.8.1).
+    if (ctx.kitDir) useLanguage({ kitDir: ctx.kitDir });
     if (ctx.updateState && !win.isDestroyed()) win.webContents.send("shell:update-state", ctx.updateState);
   });
   // This window has no chrome -- no address bar, no Back -- so letting a page open

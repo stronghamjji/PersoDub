@@ -100,7 +100,7 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
              onerror="this.remove()">
         ${isErase(job) ? `<span class="proj-kind" title="${t("Erase subtitles")}"><svg viewBox="0 0 24 24" width="12" height="12"><rect x="2.5" y="5" width="15" height="11" rx="2"/><path d="M13.5 21l6.8-6.8a1.6 1.6 0 0 0 0-2.3l-1.7-1.7a1.6 1.6 0 0 0-2.3 0L9.5 17z"/></svg></span>` : ""}
         ${isSeparate(job) ? `<span class="proj-kind" title="${t("Separate audio")}"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></span>` : ""}
-        ${chip ? `<span class="proj-chip proj-chip-${chip[1]}">${escapeHtml(chip[0])}</span>` : ""}
+        ${chip ? `<span id="projChip-${escapeHtml(job.id)}" class="proj-chip proj-chip-${chip[1]}">${escapeHtml(chip[0])}</span>` : ""}
         ${dur ? `<span class="proj-dur">${escapeHtml(dur)}</span>` : ""}
       </div>
       <div class="proj-row">
@@ -229,6 +229,13 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
     const job = jobs.find((j) => j.id === jobId);
     if (!job) return;
     job._pct = pct;
+    // Only the running card's chip changes, so only its words are replaced.
+    // Repainting the whole grid on every percent made each draft card's
+    // video load again, and the drafts flickered for the length of a dub
+    // (owner, 0.8.1). A card without a chip yet is drawn again as before.
+    const chip = $(`projChip-${jobId}`);
+    const next = cardChip(job);
+    if (chip && next) { chip.textContent = next[0]; return; }
     paint();
   }
 

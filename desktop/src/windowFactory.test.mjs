@@ -3,7 +3,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createWindow, openExternally } from "./windowFactory.js";
+import { currentLanguage, useLanguage } from "./i18n.js";
 
 function setup({ workArea = { width: 1440, height: 900 }, ctx = {} } = {}) {
   const opened = [];
@@ -95,4 +98,22 @@ test("only http(s) is ever handed to the system", () => {
     openExternally({ openExternal: (u) => opened.push(u) }, url);
   }
   assert.deepEqual(opened, ["https://a.example/", "HTTP://b.example/"]);
+});
+
+test("each page load reads the language off kit.env again, so a language saved in Settings reaches the shell's dialogs at once", () => {
+  const kitDir = mkdtempSync(join(tmpdir(), "persodub-lang-"));
+  writeFileSync(join(kitDir, "kit.env"), "PERSODUB_LANG=ko\n");
+  useLanguage({ osLocale: "en-US", kitDir });
+  assert.equal(currentLanguage(), "ko");
+  const { on } = setup({ ctx: { kitDir } });
+  writeFileSync(join(kitDir, "kit.env"), "PERSODUB_LANG=en\n");   // Settings saved English; the page starts again
+  on["did-finish-load"]();
+  assert.equal(currentLanguage(), "en");
+  writeFileSync(join(kitDir, "kit.env"), "PERSODUB_LANG=auto\n");
+  on["did-finish-load"]();
+  assert.equal(currentLanguage(), "en", "auto on an English computer");
+  // No kit known yet (the loading screen before boot): nothing to read, nothing changes.
+  useLanguage({ kitDir });
+  setup({ ctx: {} }).on["did-finish-load"]();
+  assert.equal(currentLanguage(), "en");
 });

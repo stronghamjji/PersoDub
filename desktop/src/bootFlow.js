@@ -265,6 +265,9 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       // The kit is known now, and its kit.env may name a language (Settings >
       // About) over the computer's: the install screens already speak it.
       useLanguage({ kitDir: cfg.kitDir });
+      // ...and every page load after this reads it again (windowFactory.js),
+      // so a language saved in Settings reaches the shell's dialogs at once.
+      ctx.kitDir = cfg.kitDir;
       if (!(await prepareKit(win, cfg, payload, kitVersion))) return;
       shellLog(`PERSODUB_KIT kitDir=${cfg.kitDir} version=${kitVersion ?? "unknown"}`);
     }

@@ -83,9 +83,11 @@ test("a running job says Dubbing, with no percent until one is given", (t) => {
   h.api.renderProjects(JOBS());
   let html = h.$("projectsGrid").innerHTML;
   assert.match(html, /proj-chip proj-chip-run">Dubbing…/);
+  // A percent changes the chip's words in place: the grid is not drawn again,
+  // or every draft card's video would load again and flicker (0.8.1).
   h.api.setRunningPct("b", 55);
-  html = h.$("projectsGrid").innerHTML;
-  assert.match(html, /proj-chip proj-chip-run">Dubbing 55%/);
+  assert.equal(h.$("projChip-b").textContent, "Dubbing 55%");
+  assert.equal(h.$("projectsGrid").innerHTML, html);
 });
 
 test("failed, cancelled and queued jobs each carry their own chip", (t) => {
