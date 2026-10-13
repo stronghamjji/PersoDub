@@ -518,7 +518,10 @@ def test_dub_retry_starts_a_new_job_from_the_saved_video(monkeypatch):
     r = client.post(f"/api/dub/jobs/{jid}/retry")
     assert r.status_code == 200
     new_jid = r.json()["job_id"]
-    assert r.json()["status"] == "running"
+    # The answer carries the new job's status as it was read after the thread
+    # started; the fake dub fails at once, so a fast runner can see "error"
+    # already (macOS CI, 2026-10-13). A new job that ran is what matters.
+    assert r.json()["status"] in ("running", "error")
     assert new_jid != jid
 
     new = client.get(f"/api/dub/jobs/{new_jid}").json()

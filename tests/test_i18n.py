@@ -10,6 +10,7 @@ tables are empty, which hold every later change once the English one is filled.
 """
 import ast
 import json
+import os
 import pathlib
 import time
 
@@ -212,10 +213,16 @@ def korean_computer(undecided, monkeypatch):
 
 
 def _failed(store, jid):
+    """The job once it has ended AND its job.json is on disk. The run wrapper
+    flips the status first and writes the file after (app/jobs.py _wrap), so a
+    reader that stops at the status can beat the file -- the Windows CI runner
+    did (2026-10-13)."""
     for _ in range(200):
         job = store.get(jid)
         if job and job["status"] not in ("queued", "running"):
-            return job
+            work_dir = job.get("work_dir")
+            if not work_dir or os.path.exists(os.path.join(work_dir, "job.json")):
+                return job
         time.sleep(0.01)
     raise AssertionError("the job did not end")
 
