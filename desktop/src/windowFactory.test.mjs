@@ -2,13 +2,16 @@
 // BrowserWindow, the screen and the system browser are stand-ins.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { createWindow, openExternally } from "./windowFactory.js";
 import { currentLanguage, useLanguage } from "./i18n.js";
 
-function setup({ workArea = { width: 1440, height: 900 }, ctx = {} } = {}) {
+const DESKTOP = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin" } = {}) {
   const opened = [];
   const on = {};
   class BrowserWindow {
@@ -28,7 +31,7 @@ function setup({ workArea = { width: 1440, height: 900 }, ctx = {} } = {}) {
     isDestroyed() { return false; }
   }
   const win = createWindow({
-    app: { isPackaged: true }, BrowserWindow, ctx, appDir: "/app", repo: "owner/PersoDub", locale: "ko",
+    app: { isPackaged: true }, BrowserWindow, ctx, appDir: "/app", repo: "owner/PersoDub", locale: "ko", platform,
     screen: { getPrimaryDisplay: () => ({ workAreaSize: workArea }) },
     shell: { openExternal: (url) => opened.push(url) },
   });
@@ -50,7 +53,38 @@ test("the window opens at 1280 by 800, or at the screen's size when that is smal
   assert.deepEqual(big.webPreferences, { preload: join("/app", "preload.cjs"), contextIsolation: true, nodeIntegration: false,
     // The page's GitHub links follow the build's edition (preload.cjs repo).
     // ...and Auto's language follows the computer's (preload.cjs locale).
-    additionalArguments: ["--persodub-repo=owner/PersoDub", "--persodub-locale=ko"] });
+    // ...and the page is told which system it is on (preload.cjs platform).
+    additionalArguments: ["--persodub-repo=owner/PersoDub", "--persodub-locale=ko", "--persodub-platform=darwin"] });
+});
+
+// Windows hung its white system title bar over the dark app, with the app's own
+// 36px bar right under it (W26, 2026-10-14). There the system bar is hidden and
+// the window's three buttons are drawn over the page's bar in the app's colours;
+// the Mac's bar is the system's and stays as it is.
+test("on Windows the window draws its own title bar in the app's colours; the Mac keeps the system's", () => {
+  const win = setup({ platform: "win32" }).win.options;
+  assert.equal(win.titleBarStyle, "hidden");
+  assert.deepEqual(win.titleBarOverlay, { color: "#0e131b", symbolColor: "#eaf0fd", height: 36 });
+  assert.ok(win.webPreferences.additionalArguments.includes("--persodub-platform=win32"));
+  const mac = setup({ platform: "darwin" }).win.options;
+  assert.equal(mac.titleBarStyle, undefined);
+  assert.equal(mac.titleBarOverlay, undefined);
+  assert.ok(mac.webPreferences.additionalArguments.includes("--persodub-platform=darwin"));
+});
+
+// With the system bar gone on Windows, the page has to say what the window is
+// moved by. The app's page marks its top bar (static/css/app.css, by the
+// data-platform the preload stamps on the page); the bundled screens, which
+// have no bar, take a strip along their top edge.
+test("the preload stamps the system on the page, and the bundled screens can be dragged by their top edge", () => {
+  const preload = readFileSync(join(DESKTOP, "preload.cjs"), "utf8");
+  assert.match(preload, /const PLATFORM_ARG = "--persodub-platform=";/);
+  assert.match(preload, /document\.documentElement\.dataset\.platform = platform;/);
+  for (const name of ["loading", "installing", "not-installed", "error"]) {
+    const html = readFileSync(join(DESKTOP, "screens", `${name}.html`), "utf8");
+    assert.match(html, /\.drag \{ position: fixed; top: 0; left: 0; right: 0; height: 36px; -webkit-app-region: drag; \}/, name);
+    assert.match(html, /<div class="drag"><\/div>/, name);
+  }
 });
 
 test("each page load starts at 100% once per place, and hears the update's state again", () => {

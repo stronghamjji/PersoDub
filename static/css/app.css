@@ -208,6 +208,19 @@
      timeline. */
   .app { height: 100vh; display: flex; flex-direction: column; padding: 0 9px 9px;
     background: var(--desk); }
+  /* Windows drew Chromium's stock scrollbar wherever a pane scrolls: a 17px grey
+     trough with an arrow button at each end, the one thing on screen not in
+     the app's colours (W26, 2026-10-14). There it is 8px, no buttons, a
+     rounded thumb in the border's grey on nothing. Only there: the Mac floats
+     a thin bar that goes away on its own, and styling ::-webkit-scrollbar at
+     all would pin it on screen. data-platform is the preload's stamp
+     (desktop/preload.cjs). */
+  :root[data-platform="win32"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+  :root[data-platform="win32"] ::-webkit-scrollbar-track { background: transparent; }
+  :root[data-platform="win32"] ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  :root[data-platform="win32"] ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+  :root[data-platform="win32"] ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  :root[data-platform="win32"] ::-webkit-scrollbar-corner { background: transparent; }
   /* Under the bar: the projects list (when open) and the panels. */
   .shell { flex: 1; min-height: 0; display: flex; }
 
@@ -392,6 +405,18 @@
     .topbar-sub .status-chip:not(:first-child) { display: none; }
   }
   .topbar-spacer { flex: 1; }
+  /* On Windows the shell hides the system's white title bar and lays the
+     window's three buttons over the top right of the page, 36px tall, this
+     bar's height (desktop/src/windowFactory.js titleBarOverlay). So this bar
+     is what the window is moved by; what is pressed in it -- its buttons, the
+     name while it is being renamed -- still takes the click; and it stops
+     short of the window buttons by the width Chromium reports for the bar it
+     left free. And with no system bar saying PersoDub over Home, Home's bar
+     says it (W26, 2026-10-14). */
+  :root[data-platform="win32"] .topbar { -webkit-app-region: drag;
+    padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 12px); }
+  :root[data-platform="win32"] .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }
+  :root[data-platform="win32"] body[data-screen="home"] .topbar-titles { visibility: visible; }
   /* The mockup's Export: 22px high, capitals 8px tall (11px words). */
   #exportBtn { height: 22px; min-width: 67px; padding: 0 10px; border-radius: 5px;
     font-size: 11px; font-weight: 600; }

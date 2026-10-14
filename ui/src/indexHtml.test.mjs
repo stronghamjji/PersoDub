@@ -1258,3 +1258,27 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
   assert.match(html, /\[\["helpGuide", "usage"\], \["helpFaq", "faq"\]\]/);
   assert.match(html, /e\.preventDefault\(\);\n    window\.open\(`\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
 });
+
+// Windows drew Chromium's stock scrollbar wherever a pane scrolls -- a 17px grey
+// trough with arrow buttons at both ends -- and the system's white title bar over
+// the dark app; the Mac floats a thin bar that goes away and its title bar is
+// left alone (W26, 2026-10-14). Everything here hangs off the data-platform the
+// preload stamps on the page, so the Mac's scrollbars are never styled: styling
+// ::-webkit-scrollbar at all pins them on screen.
+test("on Windows the page draws its own scrollbars and is moved by its top bar; the Mac's stay the system's", () => {
+  const html = readPage();
+  // A rule pinned word for word, the stylesheet's own characters escaped.
+  const rule = (css) => new RegExp(css.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const win = ':root[data-platform="win32"]';
+  assert.match(html, rule(`${win} ::-webkit-scrollbar { width: 8px; height: 8px; }`));
+  assert.match(html, rule(`${win} ::-webkit-scrollbar-track { background: transparent; }`));
+  assert.match(html, rule(`${win} ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }`));
+  assert.match(html, rule(`${win} ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }`));
+  assert.doesNotMatch(html, /^\s*::-webkit-scrollbar/m, "the Mac's scrollbars are never styled");
+  // The bar is what the window is moved by; what is pressed in it still takes
+  // the click; and it stops short of the window buttons the shell lays over it.
+  assert.match(html, rule(`${win} .topbar { -webkit-app-region: drag;\n    padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 12px); }`));
+  assert.match(html, rule(`${win} .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }`));
+  // Home hides the name because the system's bar says PersoDub; on Windows nothing else does.
+  assert.match(html, rule(`${win} body[data-screen="home"] .topbar-titles { visibility: visible; }`));
+});

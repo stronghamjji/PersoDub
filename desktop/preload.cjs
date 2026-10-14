@@ -7,6 +7,17 @@ const { contextBridge, ipcRenderer } = require("electron");
 const REPO_ARG = "--persodub-repo=";
 // The computer's language the same way (src/i18n.js): what Auto means.
 const LOCALE_ARG = "--persodub-locale=";
+// And which system the window is on ("win32", "darwin"), the same way. Stamped
+// on the page as data-platform before its stylesheet is read, so Windows gets
+// its own scrollbars and title bar drawn (static/css/app.css) and the Mac keeps
+// the system's. The preload runs before the page has an element to stamp when
+// the document is still empty; then it waits for one.
+const PLATFORM_ARG = "--persodub-platform=";
+const platform = process.argv.find((a) => a.startsWith(PLATFORM_ARG))?.slice(PLATFORM_ARG.length) || "";
+if (platform) {
+  const stamp = () => { document.documentElement.dataset.platform = platform; };
+  if (document.documentElement) stamp(); else document.addEventListener("DOMContentLoaded", stamp);
+}
 
 contextBridge.exposeInMainWorld("persodubShell", {
   retry: () => ipcRenderer.send("shell:retry"),
