@@ -1222,8 +1222,18 @@ def test_dub_start_records_the_engines_the_job_was_made_with(monkeypatch, tmp_pa
     assert job["quality"] == 4
 
     # And they are in the file beside the video, so a restart still knows them.
-    with open(os.path.join(state.job_store.get(jid)["work_dir"], "job.json"), encoding="utf-8") as f:
-        saved = json.load(f)
+    # The run wrapper may still be writing that file when the status has already
+    # settled, and Windows refuses a read while it is (the CI runner, 2026-10-14).
+    path = os.path.join(state.job_store.get(jid)["work_dir"], "job.json")
+    for _ in range(200):
+        try:
+            with open(path, encoding="utf-8") as f:
+                saved = json.load(f)
+            break
+        except (PermissionError, FileNotFoundError, json.JSONDecodeError):
+            time.sleep(0.01)
+    else:
+        raise AssertionError("job.json never became readable")
     assert saved["stt_engine"] == "perso" and saved["translator"] == "gemini"
     assert saved["tts"] == "qwen3" and saved["quality"] == 4
 
