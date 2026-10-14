@@ -1,12 +1,10 @@
 {
   "notes": [
-    "A new look: the Perso ring as the icon and logo, tidier tool icons on the home screen, and a Korean interface that follows your computer's language and can be changed in Settings.",
-    "The Dub Agent asks once before dubbing several videos, reads every line again when asked, and stops when you say stop.",
-    "Many fixes from full tests on Mac and Windows: the timeline, model downloads, error messages and more."
+    "The home screen no longer flickers while a dub is running: the draft cards stay still and only the progress changes.",
+    "A language changed in Settings reaches every window at once, including the download and update dialogs, without a restart."
   ],
   "notes_ko": [
-    "새 모습: Perso 고리 아이콘과 로고, 첫 화면 도구 아이콘 정리, 그리고 한국어 화면. 컴퓨터 언어를 따라가고 설정에서 바꿀 수 있어요.",
-    "Dub Agent가 영상 여러 개를 더빙하기 전에 한 번 묻고, 부탁하면 모든 줄을 다시 읽고, 멈추라면 멈춰요.",
-    "맥과 윈도우 전체 시험에서 나온 수정 다수: 타임라인, 모델 다운로드, 오류 문장 등."
+    "더빙이 도는 동안 첫 화면이 깜빡이지 않아요. 드래프트 카드는 그대로 있고 진행률만 바뀌어요.",
+    "설정에서 바꾼 언어가 다시 켜지 않아도 모든 창에 바로 적용돼요. 다운로드·업데이트 창도요."
   ]
 }
