@@ -48,24 +48,26 @@ function harness(view = {}) {
 }
 
 test("the tab says why it is empty: before dubbing, and with no subtitles", () => {
-  assert.equal(captionsEmpty({ screen: "running", draft: false, lines: 3 }), AFTER_DUB);
-  assert.equal(captionsEmpty({ screen: "failed", draft: false, lines: 0 }), AFTER_DUB);
-  assert.equal(captionsEmpty({ screen: "done", draft: true, lines: 0 }), AFTER_DUB);
-  assert.equal(captionsEmpty({ screen: "done", draft: false, lines: 0 }), NO_SUBTITLES);
-  assert.equal(captionsEmpty({ screen: "done", draft: false, lines: 2 }), "");
+  assert.equal(captionsEmpty({ screen: "running", lines: 3 }), AFTER_DUB);
+  assert.equal(captionsEmpty({ screen: "failed", lines: 0 }), AFTER_DUB);
+  assert.equal(captionsEmpty({ screen: "draft", lines: 0 }), AFTER_DUB);
+  assert.equal(captionsEmpty({ screen: "done", lines: 0 }), NO_SUBTITLES);
+  assert.equal(captionsEmpty({ screen: "done", lines: 2 }), "");
   assert.equal(NO_SUBTITLES, "No captions for this project");
 });
 
-test("a draft empties the tab the moment it starts, and a finished job fills it", () => {
+test("a video held as a draft beside a finished dub (the Erase tab's) leaves the tab open", () => {
+  // Pressing Erase on a finished dub greyed Captions out (owner, 2026-10-14):
+  // the tab took the held video for a new project.
   const h = harness();
   h.tab.paint();
   assert.equal(h.$("capMain").hidden, false);
   assert.equal(h.$("capEmpty").hidden, true);
   setDraft({ downloadId: "d", name: "a.mp4", duration: 5, videoUrl: "/v" });
-  assert.equal(h.$("capMain").hidden, true, "a draft change repaints the tab by itself");
-  assert.equal(h.$("capEmpty").textContent, AFTER_DUB);
-  clearDraft();
+  h.tab.paint();
   assert.equal(h.$("capMain").hidden, false);
+  assert.deepEqual(h.locks, [false, false]);
+  clearDraft();
   h.v.lines = [];
   h.tab.paint();
   assert.equal(h.$("capEmpty").textContent, NO_SUBTITLES);
@@ -135,9 +137,8 @@ test("the sample word is the subtitles' first, kept short", () => {
 });
 
 test("the tab is shut until there is a dub, and opens once there is", () => {
-  assert.equal(captionsLocked({ draft: true, dubbed: false }), true);
-  assert.equal(captionsLocked({ draft: false, dubbed: false }), true, "running, failed, or nothing open");
-  assert.equal(captionsLocked({ draft: false, dubbed: true }), false);
+  assert.equal(captionsLocked({ dubbed: false }), true, "a draft, a running or failed job, or nothing open");
+  assert.equal(captionsLocked({ dubbed: true }), false);
   const h = harness({ dubbed: false });
   h.tab.paint();
   assert.deepEqual(h.locks, [true]);

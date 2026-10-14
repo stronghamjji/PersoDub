@@ -13,7 +13,6 @@
 // The elements this file touches: #capEmpty, #capMain, #capHint, #subSizeLv,
 // #subScopeSep, #subScopeSeg, #subScopeAll, #subScopeOne, #subShow and the
 // grid of looks, #subStyleMenu.
-import { getDraft, onDraftChange } from "./draft.mjs";
 import { t } from "./i18n.mjs";
 
 // The English sentences, compared by the tests; each is drawn through t()
@@ -25,12 +24,15 @@ export const NO_SUBTITLES = "No captions for this project";
 export const PICK_A_LINE = "Select a caption on the video";
 
 /**
- * Why the tab has nothing to show, or "" when it has.
+ * Why the tab has nothing to show, or "" when it has. Only a finished dub on
+ * screen has captions; the page's draft does not count, because the Erase
+ * tab holds a finished dub's own video as a draft beside it (ui/src/
+ * eraseScreen.mjs keep), and that must not empty the tab (owner, 2026-10-14).
  *
- * @param {{screen: string, draft: boolean, lines: number}} v
+ * @param {{screen: string, lines: number}} v
  */
-export function captionsEmpty({ screen, draft, lines }) {
-  if (draft || screen !== "done") return AFTER_DUB;
+export function captionsEmpty({ screen, lines }) {
+  if (screen !== "done") return AFTER_DUB;
   if (!lines) return NO_SUBTITLES;
   return "";
 }
@@ -38,12 +40,13 @@ export function captionsEmpty({ screen, draft, lines }) {
 /**
  * Whether the tab is shut: before a dub exists there is nothing in it, so it
  * is dimmed rather than opened onto an empty panel (owner, 2026-09-30). A
- * draft has no dub; neither does a job that is not finished.
+ * job that is not finished has no dub; a draft on its own has none open
+ * either (the page clears the job when a draft starts), so dubbed says it all.
  *
- * @param {{draft: boolean, dubbed: boolean}} v
+ * @param {{dubbed: boolean}} v
  */
-export function captionsLocked({ draft, dubbed }) {
-  return draft || !dubbed;
+export function captionsLocked({ dubbed }) {
+  return !dubbed;
 }
 
 /** The word each tile shows: the first one the subtitles say, else "Aa". */
@@ -100,8 +103,8 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
 
   function paint() {
     const v = getView();
-    setLocked(captionsLocked({ draft: !!getDraft(), dubbed: !!v.dubbed }));
-    const empty = captionsEmpty({ screen: v.screen, draft: !!getDraft(), lines: v.lines.length });
+    setLocked(captionsLocked({ dubbed: !!v.dubbed }));
+    const empty = captionsEmpty({ screen: v.screen, lines: v.lines.length });
     $("capEmpty").textContent = empty && t(empty);
     $("capEmpty").hidden = !empty;
     $("capMain").hidden = !!empty;
@@ -135,6 +138,5 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
     }
   }
 
-  onDraftChange(paint);
   return { paint };
 }
