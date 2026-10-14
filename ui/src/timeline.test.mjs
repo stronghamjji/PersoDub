@@ -310,13 +310,15 @@ test("the ruler labels every 3 seconds at zoom 1 and thins out as the strip shri
   const h = harness({ room: 200 });
   t.after(h.log.restore);
   h.api.renderTimeline(LINES, 30);
-  // Fit a 30s video in 200px would be 6.7px a second; the floor is 10.
+  // Fit: 30s in the 120px left of the 80px tail is 4px a second, however
+  // small that is -- a 26-minute job has to fit too (owner, 2026-10-14).
   h.box.fire("click", evt({ "#tlZoomFit": {} }));
   const track = h.$("timelineTrack").innerHTML;
-  assert.match(track, /class="tl-inner" style="width:380px"/);
-  assert.ok(track.includes('style="left:0.0px;width:20.0px"\n    title="안녕"'));
-  assert.ok(track.includes('<span style="left:300.0px">00:30</span>'), "a label every 30s at 10px a second");
-  assert.ok(track.includes("--tl-step:30.00px"), "and ten small ticks between two");
+  assert.match(track, /class="tl-inner" style="width:200px"/);
+  assert.ok(track.includes('style="left:0.0px;width:8.0px"\n    title="안녕"'));
+  assert.equal(labelEvery(4), 60, "a label every minute at 4px a second");
+  assert.ok(track.includes('<span style="left:0.0px">00:00</span>'));
+  assert.ok(track.includes("--tl-step:24.00px"), "and ten small ticks between two");
 });
 
 test("a line too short to draw is still wide enough to see and to grab", (t) => {

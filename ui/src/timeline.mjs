@@ -136,9 +136,10 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
                                  videos = () => [getVideo()],
                                  onStemMute = () => {},
                                  loadImage = defaultLoadImage, fetchJson = defaultFetchJson }) {
-  // The smallest a second of video may be drawn. Without a floor a long job
-  // squeezes into slivers nobody can read; with it the track scrolls instead.
-  const TL_MIN_PPS = 10;
+  // There is no floor under the scale: Fit has to show the whole video at
+  // once however long it is. A floor of 10px a second kept a 26-minute job
+  // from ever fitting (owner, 2026-10-14); past Fit the lines are slivers, but
+  // the zoom buttons bring them back.
   // The room left past the end of the strip, so the last clip's edge is not
   // flush with the scrollbar's.
   const TL_TAIL_PX = 80;
@@ -160,7 +161,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   // way instead of being thrown back to the start.
   let timelineAt = 0;
   // How far in the viewer has zoomed: 1 is 77px a second, steps of 1.5 up to
-  // 8, and down as far as fitting the whole video (never under 10px a second).
+  // 8, and down as far as fitting the whole video.
   let timelineZoom = 1;
   const TL_ZOOM_STEP = 1.5, TL_ZOOM_MAX = 8;
 
@@ -470,13 +471,13 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     title="${escapeHtml(text || t("Line {n}", { n: l.line }))}">${inner}</button>`;
   }
 
-  // The scale for the room there is: 77px a second times the zoom, never under
-  // the floor. Fit is the zoom that shows the whole length at once, the tail
-  // past the end included, so there is nothing left to scroll.
+  // The scale for the room there is: 77px a second times the zoom. Fit is the
+  // zoom that shows the whole length at once, the tail past the end included,
+  // so there is nothing left to scroll.
   function fitZoom() {
     const len = mode === "draft" ? totalOf(clips || []) : timelineDuration;
     const room = Math.max(1, timelineRoom - TL_TAIL_PX);
-    return len > 0 ? Math.min(TL_ZOOM_MAX, Math.max(TL_MIN_PPS / TL_PPS, room / len / TL_PPS)) : 1;
+    return len > 0 ? Math.min(TL_ZOOM_MAX, room / len / TL_PPS) : 1;
   }
   // Fit starts the strip at 00:00. Zooming around the playhead as the other
   // zoom buttons do left it scrolled, and the first seconds cut off.
@@ -487,7 +488,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   }
   // As far out as fitting the whole video, and for a short one that already
   // fits at zoom 1, out to half of it still.
-  const minZoom = () => Math.max(TL_MIN_PPS / TL_PPS, Math.min(0.5, fitZoom()));
+  const minZoom = () => Math.min(0.5, fitZoom());
 
   // The ruler: a label every few seconds and ten small ticks between two.
   function rulerHtml(width) {
