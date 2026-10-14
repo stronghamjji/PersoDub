@@ -1,10 +1,12 @@
 {
   "notes": [
-    "The home screen no longer flickers while a dub is running: the draft cards stay still and only the progress changes.",
-    "A language changed in Settings reaches every window at once, including the download and update dialogs, without a restart."
+    "Captions stays open after you press Erase on a finished dub.",
+    "The timeline's Fit button fits the whole video however long it is.",
+    "The film strip no longer stretches its frames on a long video."
   ],
   "notes_ko": [
-    "더빙이 도는 동안 첫 화면이 깜빡이지 않아요. 드래프트 카드는 그대로 있고 진행률만 바뀌어요.",
-    "설정에서 바꾼 언어가 다시 켜지 않아도 모든 창에 바로 적용돼요. 다운로드·업데이트 창도요."
+    "더빙 끝난 프로젝트에서 Erase를 눌러도 Captions가 꺼지지 않아요.",
+    "타임라인 전체 보기가 영상 길이와 상관없이 한 칸에 맞아요.",
+    "긴 영상에서 필름 띠 프레임이 가로로 늘어나지 않아요."
   ]
 }
