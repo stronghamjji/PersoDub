@@ -399,3 +399,135 @@ test("the body shows the diagnostics when there are any, and no section when the
   assert.ok(body.includes('"system": "direct"'), body);
   assert.ok(!issueBody(validateReport(GOOD).report).includes("### Diagnostics"));
 });
+
+// ---- the summary ---------------------------------------------------------
+// The issue's first section, read off the structured lines the app's logs
+// carry (desktop/src/logLine.js, app/jobs.py), each bullet only when the tails
+// say something. Hand-written tails, the way the app sends them.
+import { tailMessages, openStep, failedAfter, lastStarting, summaryLines } from "./report-logic.js";
+
+const head = (source, level = "INFO") => `2026-10-15 22:31:05,494 - ${source} - ${level} - `;
+const job = (...lines) => lines.map(([level, m]) => head("job-ab12cd34", level) + m).join("\n");
+const JOB_OK = job(
+  ["INFO", "JOB START (dub)"],
+  ["INFO", 'Inputs: {"kind":"dub","language":"ko","note":"a - b"}'],
+  ["INFO", "##############################"],
+  ["INFO", "[Step 1/6] separate START"],
+  ["INFO", "[Step 1/6] separate DONE (12.3s)"],
+  ["INFO", "Mem[Host total 24576M free 3120M | shell 142M | backend 310M | engine 2875M]"],
+  ["INFO", "JOB ALL DONE (240.0s)"],
+);
+const JOB_FAILED = job(
+  ["INFO", 'Inputs: {"kind":"dub","language":"ko"}'],
+  ["INFO", "[Step 2/6] transcribe START"],
+  ["INFO", "[Step 2/6] transcribe DONE (30.0s)"],
+  ["INFO", "[Step 3/6] translate START"],
+  ["INFO", "Mem[Host total 24576M free 900M | shell 142M | backend 9310M]"],
+  ["ERROR", "[Step 3/6] translate FAILED (1.2s): RuntimeError"],
+  ["ERROR", "JOB FAILED at step 3/6 translate (43.5s): RuntimeError: the model refused (5.0s)"],
+);
+const OLD_TAIL = "1/6 Separating…\n2/6 Transcribing…\n   Error: RuntimeError: x";
+
+test("a tail's messages are its lines without time, source and level, and an older line is all message", () => {
+  assert.deepEqual(tailMessages(`${head("shell")}Inputs: {"a":"x - y"}\r\n\n2026-10-10T00:00:00.000Z PERSODUB_VERSION 0.7.1`),
+    ['Inputs: {"a":"x - y"}', "2026-10-10T00:00:00.000Z PERSODUB_VERSION 0.7.1"]);
+});
+
+test("where a run stopped, after how long, and what it was given, from the structured lines", () => {
+  const ok = tailMessages(JOB_OK);
+  assert.equal(openStep(ok), "", "every step that started finished");
+  assert.equal(failedAfter(ok), "");
+  assert.equal(lastStarting(ok, "Inputs: "), 'Inputs: {"kind":"dub","language":"ko","note":"a - b"}');
+  assert.match(lastStarting(ok, "Mem["), /^Mem\[Host total 24576M/);
+
+  const failed = tailMessages(JOB_FAILED);
+  assert.equal(openStep(failed), "3/6 translate", "a step that FAILED is where it stopped");
+  assert.equal(failedAfter(failed), "1.2", "the step's own seconds, not the job's");
+  const between = tailMessages(job(["ERROR", "JOB FAILED at step ? (5.0s): OSError: x (9.9s)"]));
+  assert.equal(failedAfter(between), "5.0", "between steps: the job's seconds, the first after FAILED");
+  assert.equal(openStep(tailMessages(job(["INFO", "[Step 2/6] transcribe START"], ["INFO", "[Step 2/6] transcribe CANCELLED (3.0s)"]))), "");
+  assert.equal(openStep(tailMessages(job(["ERROR", "[Step 2/6] transcribe FAILED (9.0s): OSError"]))), "2/6 transcribe",
+    "a FAILED line names its step even when its START is out of the tail");
+  // The app's "..." stands for lines left out: the step open before it may
+  // have ended among them.
+  const gap = [`${head("job-ab12cd34")}[Step 1/6] separate START`, "...", `${head("job-ab12cd34")}3/6 Translating… 40%`].join("\n");
+  assert.equal(openStep(tailMessages(gap)), "");
+
+  const old = tailMessages(OLD_TAIL);
+  assert.deepEqual([openStep(old), failedAfter(old), lastStarting(old, "Inputs: "), lastStarting(old, "Mem[")], ["", "", "", ""]);
+});
+
+test("the issue opens with a summary: the step it stopped in, its seconds, the error, the inputs, the memory", () => {
+  const { report } = validateReport({ ...GOOD, logTails: { shell: "", app: "", job: JOB_FAILED } });
+  const body = issueBody(report);
+  assert.ok(body.indexOf("### Summary") < body.indexOf("### Environment"), body);
+  assert.deepEqual(summaryLines(report), [
+    "- Stopped at: `3/6 translate`",
+    "- After: 1.2s",
+    "- Error: engine-crash · `RuntimeError: the voice engine exited`",
+    '- Inputs: `{"kind":"dub","language":"ko"}`',
+    "- Memory: `Mem[Host total 24576M free 900M | shell 142M | backend 9310M]`",
+  ]);
+  assert.ok(body.includes("- Stopped at: `3/6 translate`\n- After: 1.2s\n"), body);
+});
+
+test("an install's summary comes from the shell's tail", () => {
+  const shell = [
+    `${head("shell")}INSTALL START (install): 6 steps, 0.9 GB to download`,
+    `${head("shell")}Inputs: {"edition":"opensource","steps":["payload","python"]}`,
+    `${head("shell")}[Step 1/6] payload START`,
+    `${head("shell", "ERROR")}[Step 1/6] payload FAILED (0.4s): ENOENT: no such file`,
+    `${head("shell", "ERROR")}INSTALL FAILED at step 1/6 payload (0.5s): unknown`,
+  ].join("\n");
+  const { report } = validateReport({ ...GOOD, kind: "install", stage: "", stageMarker: "", step: "payload",
+    code: "step-failed", message: "ENOENT: no such file", logTails: { shell, app: "", job: "" } });
+  assert.deepEqual(summaryLines(report), [
+    "- Stopped at: `1/6 payload`",
+    "- After: 0.4s",
+    "- Error: step-failed · `ENOENT: no such file`",
+    '- Inputs: `{"edition":"opensource","steps":["payload","python"]}`',
+  ]);
+});
+
+test("with no structured lines the summary is the error, and the stage when the report names one", () => {
+  const bare = { ...GOOD, stage: "", stageMarker: "", message: OLD_TAIL, logTails: { shell: "PERSODUB_READY", app: "", job: OLD_TAIL } };
+  assert.deepEqual(summaryLines(validateReport(bare).report), ["- Error: engine-crash · `Error: RuntimeError: x`"],
+    "the line that names the error, not the first one");
+  assert.deepEqual(summaryLines(validateReport({ ...bare, stage: "synthesize", stageMarker: "4/6" }).report)[0],
+    "- Stopped at: `4/6 synthesize`");
+});
+
+test("a job's summary reads only the job's log, and an install's only the shell's", () => {
+  const shell = [
+    `${head("shell")}Inputs: {"edition":"opensource"}`,
+    `${head("shell")}Mem[Host total 1M free 1M | shell 1M]`,
+    `${head("shell")}[Step 1/6] payload START`,
+  ].join("\n");
+  // A dub whose own log has no structured lines: nothing comes over from the shell's.
+  const dub = validateReport({ ...GOOD, stage: "", stageMarker: "", logTails: { shell, app: "", job: OLD_TAIL } }).report;
+  assert.deepEqual(summaryLines(dub), ["- Error: engine-crash · `RuntimeError: the voice engine exited`"]);
+  // An engine that did not start is reported as an install: the shell's log, never a job's.
+  const engine = validateReport({ ...GOOD, kind: "install", stage: "", stageMarker: "", code: "engine-start",
+    logTails: { shell, app: "", job: JOB_FAILED } }).report;
+  assert.deepEqual(summaryLines(engine), [
+    "- Stopped at: `1/6 payload`",
+    "- Error: engine-start · `RuntimeError: the voice engine exited`",
+    '- Inputs: `{"edition":"opensource"}`',
+    "- Memory: `Mem[Host total 1M free 1M | shell 1M]`",
+  ]);
+});
+
+// The relay keeps 20,000 characters of a tail. It kept the first of them, so
+// a long tail went up without its last lines, the ones naming the failure.
+test("a tail cut to fit keeps its end", () => {
+  const long = [...Array.from({ length: 3000 }, (_, i) => `line ${i} of a long log`), "THE END"].join("\n");
+  const { report } = validateReport({ ...GOOD, logTails: { shell: long, app: "", job: long } });
+  assert.equal(report.logTails.shell.length, 20000);
+  assert.ok(report.logTails.shell.endsWith("\nTHE END"));
+  assert.ok(report.logTails.job.endsWith("\nTHE END"));
+});
+
+test("the probes' findings join the summary on one line", () => {
+  const { report } = validateReport({ ...GOOD, diagnostics: { proxy: { env: false, system: "direct" } } });
+  assert.equal(summaryLines(report).at(-1), '- Diagnostics: `{"proxy":{"env":false,"system":"direct"}}`');
+});

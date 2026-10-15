@@ -24,6 +24,9 @@ export const REPORT_KINDS = new Set(["install", "dub", "erase", "agent"]);
 export const MAX_BYTES = 64 * 1024;
 // A log tail is the end of the story, never the whole of it.
 export const MAX_LOG_LINES = 200;
+// ...though a job's log keeps its opening as well: JOB START and the Inputs
+// line (app/jobs.py), which the last lines of a long job no longer reach.
+export const JOB_HEAD_LINES = 25;
 // The error sentence. Longer than this is a transcript, and the tails are
 // where a transcript belongs.
 export const MAX_MESSAGE_CHARS = 500;
@@ -210,12 +213,17 @@ export function maskText(text, { home = "", kit = "" } = {}) {
   return out.replace(LONG_TOKEN, "[REDACTED]");
 }
 
-/** The last MAX_LOG_LINES lines of a log, masked. Empty in, empty out. */
-export function maskTail(text, { home = "", kit = "", maxLines = MAX_LOG_LINES } = {}) {
+/** The last MAX_LOG_LINES lines of a log, masked, and with headLines its first
+ *  ones too, one "..." line standing for those left out between. Empty in,
+ *  empty out. */
+export function maskTail(text, { home = "", kit = "", maxLines = MAX_LOG_LINES, headLines = 0 } = {}) {
   const body = String(text ?? "");
   if (!body.trim()) return "";
   const lines = body.split(/\r?\n/);
-  return maskText(lines.slice(-maxLines).join("\n"), { home, kit }).trim();
+  const kept = lines.length > headLines + maxLines
+    ? [...lines.slice(0, headLines), ...(headLines ? ["..."] : []), ...lines.slice(-maxLines)]
+    : lines;
+  return maskText(kept.join("\n"), { home, kit }).trim();
 }
 
 /**
@@ -424,7 +432,7 @@ export function buildReport({
     logTails: {
       shell: maskTail(logTails.shell, { home, kit }),
       app: maskTail(logTails.app, { home, kit }),
-      job: maskTail(logTails.job, { home, kit }),
+      job: maskTail(logTails.job, { home, kit, headLines: JOB_HEAD_LINES }),
     },
   };
   report.fingerprint = fingerprint({

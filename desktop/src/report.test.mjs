@@ -316,6 +316,36 @@ test("a log tail is cut to 200 lines", () => {
   assert.equal(report.logTails.shell.split("\n").length, 200);
 });
 
+// A long job's last 200 lines no longer reach its JOB START and Inputs lines
+// (app/jobs.py), so the job's log keeps its first 25 as well, and only the job's.
+test("a job log keeps its first lines and its last, one line standing for those left out", () => {
+  const lines = Array.from({ length: 400 }, (_, i) => `line ${i}`);
+  const tail = maskTail(lines.join("\n"), { headLines: 25 }).split("\n");
+  assert.equal(tail.length, 226);
+  assert.deepEqual([tail[0], tail[24], tail[25], tail[26], tail.at(-1)], ["line 0", "line 24", "...", "line 200", "line 399"]);
+  const whole = lines.slice(0, 225).join("\n");
+  assert.equal(maskTail(whole, { headLines: 25 }), whole, "nothing left out, so no ...");
+
+  const log = (name) => [`${name} START`, "Inputs: {}", ...Array.from({ length: 400 }, (_, i) => `${name} ${i}`)].join("\n");
+  const report = buildReport({ ...SAMPLE, logTails: { shell: log("shell"), app: log("app"), job: log("job") } });
+  const job = report.logTails.job.split("\n");
+  assert.deepEqual([job[0], job[1], job[25], job.at(-1)], ["job START", "Inputs: {}", "...", "job 399"]);
+  for (const k of ["shell", "app"]) {
+    assert.equal(report.logTails[k].split("\n").length, 200, k);
+    assert.ok(!report.logTails[k].includes("START"), `${k} keeps only its end`);
+  }
+});
+
+test("a job log in that shape is still trimmed to the cap, oldest lines first", () => {
+  // Spaced filler: one long run of letters would be masked down to [REDACTED].
+  const fat = Array.from({ length: 600 }, (_, i) => `${i} ${"x ".repeat(150)}`).join("\n");
+  const report = buildReport({ ...SAMPLE, logTails: { shell: fat, app: "", job: fat } });
+  assert.ok(reportBytes(report) <= MAX_BYTES, `${reportBytes(report)} bytes`);
+  const job = report.logTails.job.split("\n");
+  assert.ok(job.at(-1).startsWith("599 "), "the end of the story survives");
+  assert.ok(!job[0].startsWith("0 "), "the opening goes first");
+});
+
 test("the same failure builds the same fingerprint through buildReport", () => {
   const a = buildReport(SAMPLE).fingerprint;
   const b = buildReport({ ...SAMPLE, message: "RuntimeError: the voice engine exited (exit 9)" }).fingerprint;

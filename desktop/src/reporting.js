@@ -154,7 +154,9 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
       logTails: {
         shell: shellLogText,
         app: (bundle && bundle.logTails && bundle.logTails.app) || "",
-        job: (bundle && bundle.logTails && bundle.logTails.job) || "",
+        // The job's whole log when the backend sent it, not its tail: the
+        // report keeps the log's first lines too (report.js maskTail).
+        job: (bundle && bundle.logs && bundle.logs.job) || (bundle && bundle.logTails && bundle.logTails.job) || "",
       },
       diagnostics,
     });

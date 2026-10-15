@@ -72,6 +72,21 @@ test("a failure goes to the relay with the backend's half, then its logs, and th
   assert.deepEqual(s.queued(), [], "nothing left to retry");
 });
 
+// The backend's tail of a long job has lost the job's opening; its whole log,
+// which it sends for the archive, has not.
+test("a job's report is cut from the job's whole log, so its opening lines go too", async () => {
+  const full = ["JOB START (dub)", "Inputs: {}", ...Array.from({ length: 400 }, (_, i) => `line ${i}`)].join("\n");
+  const s = setup({
+    engines: { url: "http://backend" },
+    relay: (url) => (url === "http://backend/api/report/bundle?job=abc123"
+      ? ok({ job: {}, logTails: { job: full.split("\n").slice(-200).join("\n") }, logs: { job: full } })
+      : url.endsWith("/report") ? ok(ISSUE) : { ok: true, status: 200 }),
+  });
+  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom", jobId: "abc123" });
+  const job = JSON.parse(s.calls[1].body).logTails.job.split("\n");
+  assert.deepEqual([job[0], job[1], job[25], job.at(-1)], ["JOB START (dub)", "Inputs: {}", "...", "line 399"]);
+});
+
 test("with the relay out of reach the report waits in the kit, and goes out on the next launch", async () => {
   let up = false;
   const s = setup({
