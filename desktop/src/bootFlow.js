@@ -140,7 +140,10 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
     // ollama-runtime keep being refreshed the way they always were; a pack
     // that was never installed is left alone here -- the page installs one on
     // demand through src/packIpc.js.
-    ctx.installCtx = payload ? { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run, abandonedKitDir } : null;
+    // log: every file the steps download, or have a tool download, gets its
+    // DOWNLOAD lines in shell.log (installSpec.js) -- a pack's too, since the
+    // pack IPC builds its steps from this same context.
+    ctx.installCtx = payload ? { kitDir: cfg.kitDir, payloadDir: payload, download, extract: extractTarGz, run, log: shellLog, abandonedKitDir } : null;
     // A pack's "installing" stamp left by a crash would read as downloading forever.
     for (const p of PACKS) rmSync(packInstallingMarker(cfg.kitDir, p.id), { force: true });
     const all = ctx.installCtx ? buildSteps(ctx.installCtx) : null;

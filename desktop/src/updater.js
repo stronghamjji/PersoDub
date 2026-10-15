@@ -39,6 +39,26 @@ export function resolveFeed(env, edition) {
   return editionFeed(edition);
 }
 
+/** The feed as shell.log's UPDATE CHECK line names it: the edition's GitHub
+ *  Releases page, or the test feed's own address, with the provider. */
+export function feedText(feed) {
+  const where = feed.provider === "github" ? `https://github.com/${feed.owner}/${feed.repo}/releases` : feed.url;
+  return `${where} (provider ${feed.provider})`;
+}
+
+/**
+ * The full address electron-updater downloads an update's file from, for its
+ * DOWNLOAD lines: on GitHub under the release's tag (GitHubProvider's rule,
+ * with the tag it read off the releases feed), else beside the feed's address.
+ */
+export function updateFileUrl(feed, info) {
+  const file = info.files[0].url;
+  if (feed.provider === "github") {
+    return `https://github.com/${feed.owner}/${feed.repo}/releases/download/${info.tag ?? `v${info.version}`}/${file}`;
+  }
+  return new URL(file, feed.url.endsWith("/") ? feed.url : `${feed.url}/`).href;
+}
+
 // What the page's update window shows beside the version: the release's
 // date and notes, as electron-updater's UpdateInfo carries them (the notes
 // may be HTML, plain text or a list; the page reduces them to text lines).

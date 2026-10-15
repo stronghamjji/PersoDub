@@ -20,6 +20,27 @@ export function secondsSince(from, now = Date.now()) {
   return ((now - from) / 1000).toFixed(1);
 }
 
+// A size as a DOWNLOAD line writes it: "1.2 kB", "94 kB", "17.2 MB", "1.3 GB".
+// pip's own format (decimal units) with gigabytes added, so the sizes the
+// lines copy out of pip's output read the same as the ones measured here.
+export function sizeText(bytes) {
+  if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  if (bytes > 1e4) return `${Math.floor(bytes / 1e3)} kB`;
+  if (bytes > 1e3) return `${(bytes / 1e3).toFixed(1)} kB`;
+  return `${bytes} B`;
+}
+
+// Every web address in a text, as a DOWNLOAD line writes it: whole, but for a
+// query string, which becomes "?…" because a signed link carries its token
+// there, and a user:password before the host. Paths stay whole: the failure
+// report masks the home folder when it leaves (report.js).
+export function urlText(text) {
+  return String(text ?? "")
+    .replace(/\b(https?:\/\/)[^\s/@?#"']+@/g, "$1…@")
+    .replace(/(\bhttps?:\/\/[^\s?"'<>)\]}]*)\?[^\s"'<>)\]}]*/g, "$1?…");
+}
+
 // What a tool or an engine said when it failed, as the lines under its FAILED
 // line: its last `max` lines that have anything on them, each indented two
 // spaces and cut at 300 characters, so a pip transcript cannot bury the log.

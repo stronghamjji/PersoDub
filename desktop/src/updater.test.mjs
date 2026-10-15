@@ -86,6 +86,24 @@ test("the release's date and notes ride along for the update window", () => {
     releaseDate: "2026-09-30T12:00:00.000Z", releaseNotes: "<p>New</p>" });
 });
 
+// shell.log names where an update comes from: the feed it checks, then the
+// release file's full address, built the way electron-updater builds it.
+import { feedText, updateFileUrl } from "./updater.js";
+
+test("the update check names its feed, and the download the release file's full address", () => {
+  const github = { provider: "github", owner: "stronghamjji", repo: "PersoDub" };
+  assert.equal(feedText(github), "https://github.com/stronghamjji/PersoDub/releases (provider github)");
+  const info = { version: "0.8.6", tag: "v0.8.6", files: [{ url: "PersoDub-0.8.6-arm64-mac.zip", size: 98_400_000 }] };
+  assert.equal(updateFileUrl(github, info),
+    "https://github.com/stronghamjji/PersoDub/releases/download/v0.8.6/PersoDub-0.8.6-arm64-mac.zip");
+  // No tag in the info: the release's own naming, v<version>.
+  assert.equal(updateFileUrl(github, { ...info, tag: undefined }),
+    "https://github.com/stronghamjji/PersoDub/releases/download/v0.8.6/PersoDub-0.8.6-arm64-mac.zip");
+  const local = { provider: "generic", url: "http://127.0.0.1:8099" };
+  assert.equal(feedText(local), "http://127.0.0.1:8099 (provider generic)");
+  assert.equal(updateFileUrl(local, info), "http://127.0.0.1:8099/PersoDub-0.8.6-arm64-mac.zip");
+});
+
 test("a downloaded update waits for Restart to update on every platform, quitting does not install it", () => {
   // The owner's rule (2026-10-06): the user chooses when the app changes. Mac
   // used to install on a plain quit while Windows waited for the button.

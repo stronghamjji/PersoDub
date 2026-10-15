@@ -1,10 +1,11 @@
 import { dirname, join } from "node:path";
-import { resolveUpdateMode, resolveFeed, nextUpdateState, INSTALL_ON_QUIT } from "./updater.js";
+import { resolveUpdateMode, resolveFeed, nextUpdateState, INSTALL_ON_QUIT, feedText, updateFileUrl } from "./updater.js";
 import { findForeignLockers } from "./lockCheck.js";
 import { markCleanExit } from "./cleanExit.js";
 import { envWithKit } from "./kitEnv.js";
 import { errorText } from "./errorText.js";
 import { t } from "./i18n.js";
+import { secondsSince, sizeText, urlText } from "./logLine.js";
 
 // Auto-update (packaged builds only -- see updater.js for the decision
 // rules). Checks GitHub Releases after the window is up, downloads in the
@@ -32,7 +33,8 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
     try {
       const { default: electronUpdater } = await import("electron-updater");
       const { autoUpdater } = electronUpdater;
-      autoUpdater.setFeedURL(resolveFeed(process.env, edition));
+      const feed = resolveFeed(process.env, edition);
+      autoUpdater.setFeedURL(feed);
       autoUpdater.autoDownload = true;
       // A downloaded update waits for "Restart to update" on every platform; a
       // plain quit leaves the app as it is (updater.js INSTALL_ON_QUIT).
@@ -43,14 +45,32 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
         ctx.updateState = next;
         if (!win.isDestroyed()) win.webContents.send("shell:update-state", ctx.updateState);
       };
+      // The update's own DOWNLOAD lines (logLine.js shapes): START from the
+      // release file's full address as it is found -- electron-updater names
+      // its cache folder only once the file is saved, so the FILE line says
+      // where it went -- and DONE once electron-updater has checked the
+      // file's sha512, which it does before it announces the download.
+      let downloadFrom = null;
       autoUpdater.on("update-available", (info) => {
         shellLog(`PERSODUB_UPDATE available ${info?.version ?? ""}`);
+        const file = info?.files?.[0];
+        if (file) {
+          shellLog(`UPDATE AVAILABLE ${info.version}: ${file.url} ${sizeText(file.size)}`);
+          shellLog(`DOWNLOAD START update from ${urlText(updateFileUrl(feed, info))}`);
+          downloadFrom = Date.now();
+        }
         announce("update-available", info);
       });
       autoUpdater.on("download-progress", (info) => announce("download-progress", info));
       autoUpdater.on("update-downloaded", (info) => {
         updateDownloaded = true;
         shellLog(`PERSODUB_UPDATE downloaded ${info?.version ?? ""}`);
+        const file = info?.files?.[0];
+        if (file && downloadFrom) {
+          shellLog(`DOWNLOAD FILE update: ${info.downloadedFile} ${sizeText(file.size)} from ${urlText(updateFileUrl(feed, info))}`);
+          shellLog(`DOWNLOAD DONE update: ${sizeText(file.size)} in ${secondsSince(downloadFrom)}s, sha512 ok`);
+          downloadFrom = null;
+        }
         announce("update-downloaded", info);
         // Test-only hook: lets the end-to-end update test apply the swap without
         // a human clicking the banner. (true, false) = silent, no relaunch --
@@ -61,7 +81,15 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
           autoUpdater.quitAndInstall(true, false);
         }
       });
-      autoUpdater.on("error", (err) => shellLog(`PERSODUB_UPDATE check failed: ${errorText(err)}`));
+      autoUpdater.on("error", (err) => {
+        shellLog(`PERSODUB_UPDATE check failed: ${errorText(err)}`);
+        // Only an error after the download began is the download's.
+        if (downloadFrom) {
+          shellLog(`DOWNLOAD FAILED update after ${secondsSince(downloadFrom)}s: ${urlText(errorText(err).split("\n")[0])}`, "ERROR");
+          downloadFrom = null;
+        }
+      });
+      shellLog(`UPDATE CHECK from ${feedText(feed)}`);
       await autoUpdater.checkForUpdates();
     } catch (err) {
       shellLog(`PERSODUB_UPDATE unavailable: ${errorText(err)}`);

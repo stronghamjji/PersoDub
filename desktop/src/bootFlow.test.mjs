@@ -42,6 +42,26 @@ test("the install screen is handed the version, as every other screen is", async
   assert.ok(Number(installing.query.bytes) > 0);
 });
 
+// Every file the install downloads gets its DOWNLOAD lines in shell.log: the
+// steps are handed shellLog through the install context, which the pack IPC
+// builds a pack's steps from as well.
+test("the install context hands the steps shell.log for their downloads", async () => {
+  const appDir = join(base, "app-logs");
+  mkdirSync(join(appDir, "resources", "payload", "app-repo"), { recursive: true });
+  writeFileSync(join(appDir, "resources", "payload", "KIT_VERSION"), "9.9.9+test");
+  const stop = new Error("stop before the install copies or downloads anything");
+  const win = { loadFile: async (path) => { if (path.endsWith("installing.html")) throw stop; } };
+  const app = { getVersion: () => "1.2.3", getPath: () => join(base, "userData") };
+  const ctx = {};
+  const shellLog = () => {};
+  const boot = createBoot({
+    app, ctx, appDir, shellLog, countUsage: () => {}, sendReport: () => {},
+    flushReports: async () => {}, startUpdater: () => {},
+  });
+  await assert.rejects(boot(win), (err) => err === stop);
+  assert.equal(ctx.installCtx.log, shellLog);
+});
+
 // The first install step that fails names itself on the error screen, which
 // points at the folder shell.log is in; shell.log tells the run, numbered, from
 // what it was given to where it stopped. A payload with no kit-src fails the

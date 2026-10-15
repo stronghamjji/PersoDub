@@ -10,6 +10,8 @@ import { KIT_ENV } from "./kitEnv.js";
 import { IS_WIN, venvBin, standalonePython, exeName, TTS_DEVICE, TORCH_VARIANT } from "./platform.js";
 import { errorText } from "./errorText.js";
 import { t } from "./i18n.js";
+import { lastReason } from "./installer.js";
+import { secondsSince, sizeText, urlText } from "./logLine.js";
 
 // Standalone CPython, per platform. macOS uses the Apple Silicon build; Windows
 // the x86_64 MSVC build (root layout python\python.exe, no bin/). Same upstream
@@ -279,6 +281,8 @@ const KIT_ENV_MANAGED_ADDITIONS = [
 // What a pip too old for "--progress-bar raw" says (issue #111):
 // "option --progress-bar: invalid choice: 'raw' (choose from 'on', 'off')".
 export const RAW_BAR_REFUSED = /invalid choice: '?raw'?/i;
+// What a pip too old for --report (before 22.2) says: "no such option: --report".
+export const REPORT_REFUSED = /no such option: --report/i;
 
 // Turns pip's "--progress-bar raw" lines ("Progress <got> of <total>", one
 // file at a time) into a percent of `budget` bytes, keeping the last ordinary
@@ -298,6 +302,85 @@ export function pipProgress(budget) {
     return [budget ? Math.min(99, Math.round((100 * (done + curGot)) / budget)) : null, last];
   };
 }
+
+// What one pip install fetches from and asks for, as its START line: the
+// index its arguments name, else pip's default with PIP_INDEX_URL beside it
+// when that is set (pip then reads that one instead), and the requirement
+// files by name or the packages as written.
+export function pipStartLine(what, args, env = process.env) {
+  let index = null;
+  const extra = [], wants = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--index-url") index = urlText(args[++i]);
+    else if (args[i] === "--extra-index-url") extra.push(urlText(args[++i]));
+    else if (args[i] === "-r") wants.push(basename(args[++i]));
+    else wants.push(args[i]);
+  }
+  index ??= `https://pypi.org/simple${env.PIP_INDEX_URL ? ` (PIP_INDEX_URL=${urlText(env.PIP_INDEX_URL)})` : ""}`;
+  return `DOWNLOAD START ${what} from ${[index, ...extra].join(" + ")} (${wants.join(" ")})`;
+}
+
+// pip's "Downloading fastapi-0.115.0-py3-none-any.whl (94 kB)": the file it
+// fetched (pip 26 names the file, an older pip the whole address off PyPI)
+// and the size in pip's own units -- or "Using cached ...", a file that came
+// out of pip's own cache instead (the pip upgrade runs with it).
+const PIP_FETCHED = /(Downloading|Using cached) (\S+) \(([\d.]+) (bytes|kB|MB)\)/;
+const PIP_UNIT = { bytes: 1, kB: 1e3, MB: 1e6 };
+
+// The lines that close one pip install: a FILE line for each package pip's
+// --report lists as installed, with the size pip printed as it fetched that
+// file (matched by file name), then DONE with the count -- unknown when there
+// is no report, from a pip older than the flag.
+export function pipDoneLines(what, report, fetched, secs) {
+  const sizes = new Map();
+  for (const line of fetched) {
+    const m = PIP_FETCHED.exec(line);
+    if (m) sizes.set(m[2].split("/").pop(), `${sizeText(Number(m[3]) * PIP_UNIT[m[4]])}${m[1] === "Using cached" ? " (cached)" : ""}`);
+  }
+  const installs = report?.install;
+  return [
+    ...(installs ?? []).map(({ metadata, download_info: info }) => {
+      const size = sizes.get(info.url.split("/").pop());
+      return `DOWNLOAD FILE ${what}: ${metadata.name} ${metadata.version}${size ? ` ${size}` : ""} from ${urlText(info.url)}`;
+    }),
+    `DOWNLOAD DONE ${what}: ${installs ? installs.length : "?"} packages in ${secs}s`,
+  ];
+}
+
+// urllib3's warning inside pip each time it tries a request again: "WARNING:
+// Retrying (Retry(total=9, connect=None, read=None, redirect=None,
+// status=None)) after connection broken by 'ReadTimeoutError(...)':
+// /simple/fastapi/". total is how many tries are left after this one. The
+// reason can hold quotes of its own, so it runs to the last "': ".
+const PIP_RETRYING = /Retrying \(Retry\(total=(\d+)\b.*?\)\) after connection broken by '(.*)': (\S+)\s*$/;
+// How often pip tries a request again when its arguments name no --retries.
+export const PIP_DEFAULT_RETRIES = 5;
+
+// That warning as a RETRY line: which try this is out of all of them (the
+// first plus `retries`), the seconds since the install's START, urllib3's
+// reason cut at 200, and the path it was fetching. null for any other line.
+export function pipRetryLine(what, line, retries, secs) {
+  const m = PIP_RETRYING.exec(line);
+  if (!m) return null;
+  return `DOWNLOAD RETRY ${what} (${retries - Number(m[1]) + 1}/${retries + 1}) after ${secs}s: `
+    + `${urlText(m[2]).slice(0, 200)} (${m[3].replace(/\?.*/, "?…")})`;
+}
+
+// The lines that close one hf download: a FILE line for each file the model
+// names, with its size on disk and the address hf fetched it from (the
+// pinned revision's resolve URL), then DONE with the count and the total.
+// files: [{name, bytes}], bytes null for a file that is not there.
+export function hfDoneLines(what, base, repo, revision, files, secs) {
+  const total = files.reduce((n, f) => n + (f.bytes ?? 0), 0);
+  return [
+    ...files.map((f) => `DOWNLOAD FILE ${what}: ${f.name}${f.bytes == null ? "" : ` ${sizeText(f.bytes)}`} from ${base}/${repo}/resolve/${revision}/${f.name}`),
+    // hf compares each file's size with the one the server announced.
+    `DOWNLOAD DONE ${what}: ${files.length} files, ${sizeText(total)} in ${secs}s, size checked by hf`,
+  ];
+}
+
+// A file's size, or null when it is not there.
+const sizeOf = (path) => (existsSync(path) ? statSync(path).size : null);
 
 // While the desktop app installs a pack it leaves this stamp, so the backend
 // (which cannot see the shell's work) answers "downloading" for the pack
@@ -440,6 +523,9 @@ const LEFTOVERS = (k, ctx = {}) => [
 
 export function buildSteps(ctx) {
   const k = (...p) => join(ctx.kitDir, ...p);
+  // log(line, level): shell.log, for the DOWNLOAD lines of every file the
+  // steps fetch or have a tool fetch (bootFlow.js hands it shellLog).
+  const log = ctx.log ?? (() => {});
   const modelDone = (m) => m.markers.every((rel) => existsSync(k(...rel)));
   const py = standalonePython(k("python"));
   // Per-platform pinned dependency list (bundled by collect-payload.mjs).
@@ -516,6 +602,71 @@ export function buildSteps(ctx) {
     return createHash("sha256").update(JSON.stringify(words)).digest("hex");
   };
 
+  // One pip install between its DOWNLOAD lines: START with the index and what
+  // it asks for, then a FILE line a package off pip's own --report and DONE,
+  // or FAILED with pip's last reason. `venvPy -m pip`, not the bin/pip shim:
+  // the shim carries an absolute shebang, so it is the one file in a venv
+  // that a moved or repaired environment can no longer run.
+  // `progress` (pipProgress) is for an install that counts its bytes: with
+  // --progress-bar raw pip prints "Progress <got> of <total>" per file even
+  // without a terminal, and the sum against the step's budget is the percent
+  // the page shows -- the pip step used to sit at 0% through a 3.5 GB torch
+  // (Windows, 2026-09-07). --retries/--timeout go with it: a flaky line
+  // dropped a 3.5 GB wheel five times in one pip run; pip resumes the same
+  // download, so more patience is cheap.
+  // A flag an older pip refuses is dropped and the same install runs again.
+  // "raw" arrived in pip 24.1: when the pip upgrade could not reach the
+  // index, the venv keeps the Python's own older pip, which refuses the flag
+  // outright (issue #111), and the install only loses the byte count.
+  // --report arrived in 22.2, and without it only the FILE lines are lost.
+  // pip's own tries of a request again are RETRY lines (pipRetryLine),
+  // counted out of the --retries the command names, else pip's default.
+  const pipInstall = async (venvPy, venvName, args, report, progress = null) => {
+    const what = `pip ${venvName}`;
+    const reportFile = k("downloads", `pip-report-${venvName}.json`);
+    const fetched = [];   // pip's lines naming a file and its size (PIP_FETCHED), for pipDoneLines
+    let bar = progress ? "raw" : null;
+    let listed = true;
+    mkdirSync(k("downloads"), { recursive: true });
+    log(pipStartLine(what, args));
+    const from = Date.now();
+    try {
+      for (;;) {
+        const flags = bar ? ["--no-cache-dir", "--progress-bar", bar, "--retries", "10", "--timeout", "60"] : [];
+        const argv = [venvPy, "-m", "pip", "install", ...flags, ...args, ...(listed ? ["--report", reportFile] : [])];
+        const retries = argv.includes("--retries") ? Number(argv[argv.indexOf("--retries") + 1]) : PIP_DEFAULT_RETRIES;
+        try {
+          await ctx.run(argv, {
+            onLine: (l) => {
+              if (PIP_FETCHED.test(l)) fetched.push(l);
+              const retry = pipRetryLine(what, l, retries, secondsSince(from));
+              if (retry) log(retry);
+              report(...(bar === "raw" ? progress(l) : [null, l.slice(0, 120)]));
+            },
+          });
+          break;
+        } catch (e) {
+          const said = String(e && e.message);
+          if (bar === "raw" && RAW_BAR_REFUSED.test(said)) {
+            report(null, t("pip is older than expected; installing without the progress count"));
+            bar = "off";
+          } else if (listed && REPORT_REFUSED.test(said)) {
+            listed = false;
+          } else {
+            throw e;
+          }
+        }
+      }
+      const parsed = listed && existsSync(reportFile) ? JSON.parse(readFileSync(reportFile, "utf8")) : null;
+      for (const line of pipDoneLines(what, parsed, fetched, secondsSince(from))) log(line);
+    } catch (e) {
+      log(`DOWNLOAD FAILED ${what} after ${secondsSince(from)}s: ${urlText(lastReason(errorText(e)))}`, "ERROR");
+      throw e;
+    } finally {
+      rmSync(reportFile, { force: true });
+    }
+  };
+
   // proveItWorks: an optional last word before the step stamps itself done --
   // pip can finish and still leave an environment the tool cannot be loaded
   // from. It runs with the fresh venv's python and may throw, in which case
@@ -546,32 +697,9 @@ export function buildSteps(ctx) {
       // locked while running and cannot rewrite itself ("To modify pip, please
       // run: python -m pip install --upgrade pip"). `python -m pip` is safe on
       // both platforms.
-      await ctx.run([venvPy, "-m", "pip", "install", "--upgrade", "pip"], { onLine: (l) => report(null, l.slice(0, 120)) });
-      // pip's own progress, as bytes: with --progress-bar raw it prints
-      // "Progress <got> of <total>" per file even without a terminal, and the
-      // sum against this step's budget is the percent the page shows -- the
-      // pip step used to sit at 0% through a 3.5 GB torch (Windows, 2026-09-07).
-      // --retries/--timeout: a flaky line dropped a 3.5 GB wheel five times in
-      // one pip run; pip resumes the same download, so more patience is cheap.
+      await pipInstall(venvPy, venvName, ["--upgrade", "pip"], report);
       const progress = pipProgress(budget);
-      for (const args of pipInstalls) {
-        // `venvPy -m pip`, not the bin/pip shim: the shim carries an absolute
-        // shebang, so it is the one file in a venv that a moved or repaired
-        // environment can no longer run.
-        const pipArgs = (bar) => [venvPy, "-m", "pip", "install", "--no-cache-dir", "--progress-bar", bar,
-                                   "--retries", "10", "--timeout", "60", ...args];
-        try {
-          await ctx.run(pipArgs("raw"), { onLine: (l) => report(...progress(l)) });
-        } catch (e) {
-          // "raw" arrived in pip 24.1. When the upgrade above could not reach
-          // the index, the venv keeps the Python's own older pip, which
-          // refuses the flag outright (issue #111). The same install without
-          // it only loses the byte count.
-          if (!RAW_BAR_REFUSED.test(String(e && e.message))) throw e;
-          report(null, t("pip is older than expected; installing without the progress count"));
-          await ctx.run(pipArgs("off"), { onLine: (l) => report(null, l.slice(0, 120)) });
-        }
-      }
+      for (const args of pipInstalls) await pipInstall(venvPy, venvName, args, report, progress);
       if (proveItWorks) await proveItWorks(venvPy, report);
       markOk(id, pipFingerprint(pipInstalls));
     },
@@ -669,7 +797,7 @@ export function buildSteps(ctx) {
         } else {
           report(null, t("Downloading speaker model (27 MB)"));
           await ctx.download(CAMPPLUS_URL, k("models", "campplus", "campplus.onnx"),
-                             { sha256: CAMPPLUS_SHA256 });
+                             { sha256: CAMPPLUS_SHA256, what: "campplus", log });
         }
         cpSync(join(ctx.payloadDir, "KIT_VERSION"), k("KIT_VERSION"));
       },
@@ -684,6 +812,8 @@ export function buildSteps(ctx) {
         const tarball = k("downloads", "python.tar.gz");
         await ctx.download(PYTHON_URL, tarball, {
           sha256: PYTHON_SHA256,
+          what: "python",
+          log,
           onProgress: (p) => report(p.total ? Math.round((100 * p.received) / p.total) : null, t("Downloading Python")),
         });
         report(null, t("Extracting Python"));
@@ -712,14 +842,33 @@ export function buildSteps(ctx) {
         const lines = [];
         // static-ffmpeg lives in app_venv (requirements.txt): the one venv a
         // light install always has, so ffmpeg no longer waits on the engines.
-        await ctx.run(
-          [
-            venvBin(k("app_venv"), "python"),
-            "-c",
-            "import json; from static_ffmpeg.run import get_or_fetch_platform_executables_else_raise as g; print(json.dumps(list(g())))",
-          ],
-          { onLine: (l) => lines.push(l) },
-        );
+        // It first says where it fetches from and to, and whether an earlier
+        // run already did (its installed.crumb) -- flushed, so the START line
+        // comes before the fetch. It checks no checksum.
+        let from = Date.now();
+        let fetch = null;
+        try {
+          await ctx.run(
+            [
+              venvBin(k("app_venv"), "python"),
+              "-c",
+              "import json, os; from static_ffmpeg.run import get_platform_http_zip as u, get_platform_dir as d, "
+                + "get_or_fetch_platform_executables_else_raise as g; "
+                + "print(json.dumps({'url': u(), 'dir': d(), 'cached': os.path.exists(os.path.join(d(), 'installed.crumb'))}), flush=True); "
+                + "print(json.dumps(list(g())))",
+            ],
+            { onLine: (l) => {
+              lines.push(l);
+              if (fetch || !l.startsWith('{"url"')) return;
+              fetch = JSON.parse(l);
+              from = Date.now();
+              log(`DOWNLOAD START ffmpeg from ${urlText(fetch.url)} to ${fetch.dir}`);
+            } },
+          );
+        } catch (err) {
+          log(`DOWNLOAD FAILED ffmpeg after ${secondsSince(from)}s: ${urlText(lastReason(errorText(err)))}`, "ERROR");
+          throw err;
+        }
         const jsonLine = [...lines].reverse().find((l) => l.trim().startsWith("["));
         if (!jsonLine) throw new Error("static-ffmpeg did not report binary paths");
         const [ffmpeg, ffprobe] = JSON.parse(jsonLine);
@@ -730,6 +879,17 @@ export function buildSteps(ctx) {
           const dest = k("bin", name);
           rmSync(dest, { force: true });
           cpSync(src, dest);
+        }
+        log(`DOWNLOAD DONE ffmpeg: 2 files, ${sizeText(statSync(ffmpeg).size + statSync(ffprobe).size)} in ${secondsSince(from)}s${fetch?.cached ? " (already on disk)" : ""}, not checked`);
+        // The copied binary's own first line: which ffmpeg build this kit
+        // runs. One that cannot even say that is an ERROR line, not a failed
+        // step: the step's work, the copy, is done.
+        const said = [];
+        try {
+          await ctx.run([k("bin", exeName("ffmpeg")), "-version"], { onLine: (l) => said.push(l) });
+          log(`DOWNLOAD FILE ffmpeg: ${said[0] ?? "(no output)"}`);
+        } catch (err) {
+          log(`DOWNLOAD FILE ffmpeg: -version failed: ${lastReason(errorText(err))}`, "ERROR");
         }
       },
     },
@@ -777,13 +937,28 @@ export function buildSteps(ctx) {
         // from Smart App Control or an antivirus that trusts the interpreter but
         // not a fresh .exe (issue #48, nine failures on one Windows machine).
         const venvPy = venvBin(k("app_venv"), "python");
+        // Where hf fetches from: HF_ENDPOINT when set (hf reads the same
+        // variable), else huggingface.co.
+        const base = (process.env.HF_ENDPOINT || "https://huggingface.co").replace(/\/+$/, "");
         for (const m of MODELS) {
           if (modelDone(m)) continue;
           report(null, t("Downloading {name}", { name: m.name }));
-          mkdirSync(k(...m.dir), { recursive: true });
-          await ctx.run([venvPy, "-m", "huggingface_hub.cli.hf", "download", ...m.args, "--revision", m.revision, "--local-dir", k(...m.dir)], {
-            onLine: (l) => report(null, l.slice(0, 120)),
-          });
+          const dir = k(...m.dir);
+          mkdirSync(dir, { recursive: true });
+          const [repo, ...files] = m.args;
+          const what = `hf ${repo}@${m.revision.slice(0, 7)}`;
+          log(`DOWNLOAD START ${what} from ${base}/${repo} to ${dir}`);
+          const from = Date.now();
+          try {
+            await ctx.run([venvPy, "-m", "huggingface_hub.cli.hf", "download", ...m.args, "--revision", m.revision, "--local-dir", dir], {
+              onLine: (l) => report(null, l.slice(0, 120)),
+            });
+          } catch (err) {
+            log(`DOWNLOAD FAILED ${what} after ${secondsSince(from)}s: ${urlText(lastReason(errorText(err)))}`, "ERROR");
+            throw err;
+          }
+          const got = files.map((name) => ({ name, bytes: sizeOf(join(dir, name)) }));
+          for (const line of hfDoneLines(what, base, repo, m.revision, got, secondsSince(from))) log(line);
         }
       },
     },
@@ -803,6 +978,8 @@ export function buildSteps(ctx) {
         const archive = k("downloads", IS_WIN ? "ollama.zip" : "ollama.tgz");
         await ctx.download(OLLAMA_TGZ_URL, archive, {
           sha256: OLLAMA_TGZ_SHA256,
+          what: "ollama-runtime",
+          log,
           onProgress: (p) => report(p.total ? Math.round((100 * p.received) / p.total) : null, t("Downloading the translation runtime")),
         });
         report(null, t("Unpacking the translation runtime"));
@@ -830,7 +1007,32 @@ export function buildSteps(ctx) {
         // install does not fool whisper.load_model into skipping its own
         // download, so it never gets the chance to trust it either.
         rmSync(whisperCachePath(), { force: true });
-        await ctx.run([venvBin(k("engines_venv"), "python"), "-c", "import whisper; whisper.load_model('base')"]);
+        // openai-whisper first says which address and file it fetches "base"
+        // from and to, worked out the way its load_model does -- flushed, so
+        // the START line comes before the fetch. It checks the file against
+        // the sha256 that is part of that address, and fails the load when
+        // they differ.
+        let from = Date.now();
+        let fetch = null;
+        try {
+          await ctx.run([
+            venvBin(k("engines_venv"), "python"),
+            "-c",
+            "import json, os, whisper; u = whisper._MODELS['base']; "
+              + "root = os.path.join(os.getenv('XDG_CACHE_HOME', os.path.join(os.path.expanduser('~'), '.cache')), 'whisper'); "
+              + "print(json.dumps({'url': u, 'path': os.path.join(root, os.path.basename(u))}), flush=True); "
+              + "whisper.load_model('base')",
+          ], { onLine: (l) => {
+            if (fetch || !l.startsWith('{"url"')) return;
+            fetch = JSON.parse(l);
+            from = Date.now();
+            log(`DOWNLOAD START whisper base from ${urlText(fetch.url)} to ${fetch.path}`);
+          } });
+        } catch (err) {
+          log(`DOWNLOAD FAILED whisper base after ${secondsSince(from)}s: ${urlText(lastReason(errorText(err)))}`, "ERROR");
+          throw err;
+        }
+        log(`DOWNLOAD DONE whisper base: ${sizeText(sizeOf(fetch?.path ?? whisperCachePath()) ?? 0)} in ${secondsSince(from)}s, sha256 checked by whisper`);
       },
     },
     {
@@ -850,6 +1052,8 @@ export function buildSteps(ctx) {
         const archive = k("downloads", "eraser-src.zip");
         await ctx.download(ERASER_SRC_URL, archive, {
           sha256: ERASER_SRC_SHA256,
+          what: "eraser-src",
+          log,
           onProgress: (p) => report(p.total ? Math.round((100 * p.received) / p.total) : null, t("Downloading the subtitle eraser")),
         });
         report(null, t("Unpacking the subtitle eraser"));

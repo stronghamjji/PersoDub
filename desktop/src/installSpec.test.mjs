@@ -480,8 +480,8 @@ test("ffmpeg step copies binaries reported by static-ffmpeg", async () => {
   const f2 = join(ctx.base, "real-ffprobe");
   writeFileSync(f1, "ffmpeg-bytes");
   writeFileSync(f2, "ffprobe-bytes");
-  let argv0;
-  ctx.run = async (argv, { onLine } = {}) => { argv0 = argv[0]; onLine?.(JSON.stringify([f1, f2])); };
+  let argv0;   // the fetch's; the step's last command asks the copied ffmpeg its version
+  ctx.run = async (argv, { onLine } = {}) => { argv0 ??= argv[0]; onLine?.(JSON.stringify([f1, f2])); };
   const step = byId(ctx).ffmpeg;
   assert.equal(await step.isDone(), false);
   await step.run(() => {});
@@ -1065,4 +1065,311 @@ test("kit-env step turns the dark-launch measure setting into on and leaves the 
   assert.ok(env.includes("GEMINI_API_KEY=sk-legacy-key"));
   assert.equal(await step.isDone(), true);
   assert.equal(withMissingKitEnvKeys(env), env, "a second pass changes nothing");
+});
+
+// --- shell.log's DOWNLOAD lines -------------------------------------------
+// Every file a step fetches, or has a tool fetch, is named in shell.log: START
+// with where from and where to, a FILE line for each file a tool fetched,
+// then DONE, or FAILED at ERROR. ctx.log gets each line and its level (left
+// out for INFO); bootFlow.js hands it shellLog.
+import { pipStartLine, pipDoneLines, hfDoneLines, pipRetryLine } from "./installSpec.js";
+
+const logInto = (lines) => (line, level = "INFO") => lines.push(`${level} ${line}`);
+
+// urllib3's retry warning as pip 26.2.1 prints it (captured against a closed
+// port and a server that never answers, then pointed at PyPI): the reason
+// holds quotes of its own.
+const RETRY_REFUSED = "WARNING: Retrying (Retry(total=9, connect=None, read=None, redirect=None, status=None)) after connection broken by "
+  + "'NewConnectionError(\"HTTPSConnection(host='pypi.org', port=443): Failed to establish a new connection: [Errno 61] Connection refused\")': /simple/fastapi/";
+const RETRY_TIMEOUT = "WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by "
+  + "'ReadTimeoutError(\"HTTPSConnectionPool(host='files.pythonhosted.org', port=443): Read timed out. (read timeout=60.0)\")': "
+  + "/packages/1a/2b/torch-2.8.0-cp311-none-macosx_11_0_arm64.whl";
+
+test("pip's own retry warning is a RETRY line: which try out of all, the reason in its quotes, and the path", () => {
+  assert.equal(pipRetryLine("pip app_venv", RETRY_REFUSED, 10, "3.1"),
+    "DOWNLOAD RETRY pip app_venv (2/11) after 3.1s: NewConnectionError(\"HTTPSConnection(host='pypi.org', port=443): "
+      + "Failed to establish a new connection: [Errno 61] Connection refused\") (/simple/fastapi/)");
+  assert.equal(pipRetryLine("pip engines_venv", RETRY_TIMEOUT, 10, "612.0"),
+    "DOWNLOAD RETRY pip engines_venv (11/11) after 612.0s: ReadTimeoutError(\"HTTPSConnectionPool(host='files.pythonhosted.org', "
+      + "port=443): Read timed out. (read timeout=60.0)\") (/packages/1a/2b/torch-2.8.0-cp311-none-macosx_11_0_arm64.whl)");
+  // Any other line is none; a long reason is cut at 200 characters.
+  assert.equal(pipRetryLine("pip app_venv", "  Downloading fastapi-0.115.0-py3-none-any.whl (94 kB)", 10, "1.0"), null);
+  const long = RETRY_REFUSED.replace("Connection refused", "x".repeat(300));
+  assert.equal(pipRetryLine("pip app_venv", long, 10, "1.0").split(": ").slice(1).join(": ").split(" (/simple/")[0].length, 200);
+});
+
+test("a retry pip makes inside an install is a RETRY line between its START and DONE, counted out of the command's --retries", async () => {
+  const lines = [];
+  // Each pip command warns once, as its first retry: total is one short of
+  // the --retries it runs with (pip's default 5 when it names none).
+  const ctx = freshCtx({
+    log: logInto(lines),
+    run: async (argv, { onLine } = {}) => {
+      const retries = argv.includes("--retries") ? Number(argv[argv.indexOf("--retries") + 1]) : 5;
+      onLine?.(RETRY_REFUSED.replace("total=9", `total=${retries - 1}`));
+    },
+  });
+  await withoutIndexVars(() => byId(ctx)["venv-app"].run(() => {}));
+  const retries = lines.filter((l) => l.includes("DOWNLOAD RETRY"));
+  // The pip upgrade names no --retries; the install names 10.
+  assert.equal(retries.length, 2, lines.join("\n"));
+  assert.match(retries[0], /^INFO DOWNLOAD RETRY pip app_venv \(2\/6\) after \d+\.\ds: NewConnectionError\(/);
+  assert.match(retries[1], /^INFO DOWNLOAD RETRY pip app_venv \(2\/11\) after \d+\.\ds: NewConnectionError\(/);
+  const start = lines.indexOf("INFO DOWNLOAD START pip app_venv from https://pypi.org/simple (requirements.txt)");
+  assert.ok(start >= 0 && lines.indexOf(retries[1]) === start + 1, lines.join("\n"));
+  assert.match(lines[start + 2], /^INFO DOWNLOAD DONE pip app_venv: \? packages in \d+\.\ds$/);
+});
+
+// The variables that change where pip and hf fetch from, cleared for a test
+// that reads the default address.
+async function withoutIndexVars(fn) {
+  const saved = { PIP_INDEX_URL: process.env.PIP_INDEX_URL, HF_ENDPOINT: process.env.HF_ENDPOINT };
+  delete process.env.PIP_INDEX_URL;
+  delete process.env.HF_ENDPOINT;
+  try { return await fn(); } finally {
+    for (const [name, value] of Object.entries(saved)) if (value !== undefined) process.env[name] = value;
+  }
+}
+
+test("each file a step downloads itself goes by its own name, and its lines go to the install's log", async () => {
+  const log = () => {};
+  const named = [];
+  const ctx = freshCtx({
+    log,
+    download: async (_url, dest, opts) => { named.push(opts.what); assert.equal(opts.log, log); writeFileSync(dest, "x"); },
+  });
+  makePayload(ctx.payloadDir, { campplus: false });
+  for (const id of ["payload", "python", "ollama-runtime", "eraser-src"]) await byId(ctx)[id].run(() => {});
+  assert.deepEqual(named, ["campplus", "python", "ollama-runtime", "eraser-src"]);
+});
+
+test("a pip install says where it fetches from, then each package it installed with its size and address", async () => {
+  const lines = [];
+  const argvs = [];
+  const ctx = freshCtx({
+    log: logInto(lines),
+    run: async (argv, { onLine } = {}) => {
+      argvs.push(argv);
+      const at = argv.indexOf("--report");
+      if (at < 0) return;
+      // pip's own upgrade finds nothing newer; the app's list fetches one wheel.
+      const install = argv.includes("-r") ? [{
+        download_info: { url: "https://files.pythonhosted.org/packages/1a/2b/fastapi-0.115.0-py3-none-any.whl" },
+        metadata: { name: "fastapi", version: "0.115.0" },
+      }] : [];
+      if (install.length) onLine?.("  Downloading fastapi-0.115.0-py3-none-any.whl (94 kB)");
+      writeFileSync(argv[at + 1], JSON.stringify({ version: "1", install }));
+    },
+  });
+  await withoutIndexVars(() => byId(ctx)["venv-app"].run(() => {}));
+  assert.equal(lines.length, 5, lines.join("\n"));
+  assert.equal(lines[0], "INFO DOWNLOAD START pip app_venv from https://pypi.org/simple (--upgrade pip)");
+  assert.match(lines[1], /^INFO DOWNLOAD DONE pip app_venv: 0 packages in \d+\.\ds$/);
+  assert.equal(lines[2], "INFO DOWNLOAD START pip app_venv from https://pypi.org/simple (requirements.txt)");
+  assert.equal(lines[3], "INFO DOWNLOAD FILE pip app_venv: fastapi 0.115.0 94 kB from https://files.pythonhosted.org/packages/1a/2b/fastapi-0.115.0-py3-none-any.whl");
+  assert.match(lines[4], /^INFO DOWNLOAD DONE pip app_venv: 1 packages in \d+\.\ds$/);
+  // The report is a file in the kit's downloads folder, gone once read.
+  const install = argvs.find((a) => a.includes("-r"));
+  const reportFile = install[install.indexOf("--report") + 1];
+  assert.equal(reportFile, join(ctx.kitDir, "downloads", "pip-report-app_venv.json"));
+  assert.equal(existsSync(reportFile), false);
+});
+
+test("a pip too old for --report installs without it, and its count is then unknown", async () => {
+  const lines = [];
+  const argvs = [];
+  const ctx = freshCtx({
+    log: logInto(lines),
+    run: async (argv) => {
+      argvs.push(argv.join(" "));
+      if (argv.includes("--report")) throw new Error("python exit 2\nUsage: pip install [options]\n\nno such option: --report");
+    },
+  });
+  const step = byId(ctx)["venv-app"];
+  await step.run(() => {});
+  assert.ok(argvs.some((a) => a.includes("--progress-bar raw --retries 10 --timeout 60 -r") && !a.includes("--report")),
+    argvs.join("\n"));
+  assert.match(lines.at(-1), /^INFO DOWNLOAD DONE pip app_venv: \? packages in \d+\.\ds$/);
+  assert.equal(await step.isDone(), true);
+});
+
+test("a pip install that fails is a FAILED line at ERROR, with pip's own reason", async () => {
+  const lines = [];
+  const ctx = freshCtx({
+    log: logInto(lines),
+    run: async (argv) => {
+      if (argv.includes("-r")) throw new Error("python exit 1\nERROR: No matching distribution found for fastapi");
+    },
+  });
+  await assert.rejects(byId(ctx)["venv-app"].run(() => {}), /No matching distribution/);
+  assert.match(lines.at(-1), /^ERROR DOWNLOAD FAILED pip app_venv after \d+\.\ds: ERROR: No matching distribution found for fastapi$/);
+});
+
+test("a pip install's START line names the index its arguments give, else pip's default and PIP_INDEX_URL", () => {
+  assert.equal(
+    pipStartLine("pip engines_venv", ["torch==2.8.0", "torchaudio==2.8.0", "--index-url", "https://download.pytorch.org/whl/cu128"], {}),
+    "DOWNLOAD START pip engines_venv from https://download.pytorch.org/whl/cu128 (torch==2.8.0 torchaudio==2.8.0)");
+  assert.equal(pipStartLine("pip app_venv", ["-r", join("kit", "app", "requirements.txt")], {}),
+    "DOWNLOAD START pip app_venv from https://pypi.org/simple (requirements.txt)");
+  // A password in the variable's address stays out of the log.
+  assert.equal(
+    pipStartLine("pip app_venv", ["-r", "req.txt", "--extra-index-url", "https://extra.example/simple"],
+                 { PIP_INDEX_URL: "https://me:pw@mirror.example/simple" }),
+    "DOWNLOAD START pip app_venv from https://pypi.org/simple (PIP_INDEX_URL=https://…@mirror.example/simple)"
+      + " + https://extra.example/simple (req.txt)");
+});
+
+test("pip's report becomes a FILE line a package, sized from pip's own Downloading lines, then the count", () => {
+  const report = { version: "1", install: [
+    { download_info: { url: "https://files.pythonhosted.org/packages/1a/2b/fastapi-0.115.0-py3-none-any.whl" },
+      metadata: { name: "fastapi", version: "0.115.0" } },
+    { download_info: { url: "https://download.pytorch.org/whl/cu128/torch-2.8.0%2Bcu128-cp311-cp311-win_amd64.whl" },
+      metadata: { name: "torch", version: "2.8.0+cu128" } },
+    { download_info: { url: "https://files.pythonhosted.org/packages/3c/4d/six-1.16.0-py2.py3-none-any.whl" },
+      metadata: { name: "six", version: "1.16.0" } },
+    { download_info: { url: "https://files.pythonhosted.org/packages/5e/6f/pip-26.2.1-py3-none-any.whl" },
+      metadata: { name: "pip", version: "26.2.1" } },
+  ] };
+  // pip 26 names the file; an older pip, the whole address off PyPI. The
+  // metadata file beside a wheel is not the wheel, and a file out of pip's
+  // own cache was not downloaded this time.
+  const output = [
+    "Collecting fastapi (from -r requirements.txt (line 1))",
+    "  Downloading fastapi-0.115.0-py3-none-any.whl.metadata (27 kB)",
+    "  Downloading fastapi-0.115.0-py3-none-any.whl (94 kB)",
+    "  Downloading https://download.pytorch.org/whl/cu128/torch-2.8.0%2Bcu128-cp311-cp311-win_amd64.whl (3460.2 MB)",
+    "Using cached pip-26.2.1-py3-none-any.whl (1.8 MB)",
+  ];
+  assert.deepEqual(pipDoneLines("pip engines_venv", report, output, "12.3"), [
+    "DOWNLOAD FILE pip engines_venv: fastapi 0.115.0 94 kB from https://files.pythonhosted.org/packages/1a/2b/fastapi-0.115.0-py3-none-any.whl",
+    "DOWNLOAD FILE pip engines_venv: torch 2.8.0+cu128 3.5 GB from https://download.pytorch.org/whl/cu128/torch-2.8.0%2Bcu128-cp311-cp311-win_amd64.whl",
+    "DOWNLOAD FILE pip engines_venv: six 1.16.0 from https://files.pythonhosted.org/packages/3c/4d/six-1.16.0-py2.py3-none-any.whl",
+    "DOWNLOAD FILE pip engines_venv: pip 26.2.1 1.8 MB (cached) from https://files.pythonhosted.org/packages/5e/6f/pip-26.2.1-py3-none-any.whl",
+    "DOWNLOAD DONE pip engines_venv: 4 packages in 12.3s",
+  ]);
+  assert.deepEqual(pipDoneLines("pip app_venv", null, output, "1.0"), ["DOWNLOAD DONE pip app_venv: ? packages in 1.0s"]);
+});
+
+test("an hf download's FILE lines give each file's size and the pinned revision's address, and DONE the total", () => {
+  const rev = "bf35a81b663819a8255c8fefee17f9d812b786b5";
+  const base = `https://huggingface.co/adefossez/HTDemucs/resolve/${rev}`;
+  assert.deepEqual(hfDoneLines("hf adefossez/HTDemucs@bf35a81", "https://huggingface.co", "adefossez/HTDemucs", rev,
+    [{ name: "htdemucs.yaml", bytes: 1234 }, { name: "955717e8.safetensors", bytes: 84_132_000 }, { name: "gone.bin", bytes: null }], "9.8"), [
+    `DOWNLOAD FILE hf adefossez/HTDemucs@bf35a81: htdemucs.yaml 1.2 kB from ${base}/htdemucs.yaml`,
+    `DOWNLOAD FILE hf adefossez/HTDemucs@bf35a81: 955717e8.safetensors 84.1 MB from ${base}/955717e8.safetensors`,
+    `DOWNLOAD FILE hf adefossez/HTDemucs@bf35a81: gone.bin from ${base}/gone.bin`,
+    "DOWNLOAD DONE hf adefossez/HTDemucs@bf35a81: 3 files, 84.1 MB in 9.8s, size checked by hf",
+  ]);
+});
+
+test("the models step names the repository, the pinned revision and the folder, then each file it fetched", async () => {
+  const lines = [];
+  const ctx = freshCtx({
+    log: logInto(lines),
+    run: async (argv) => {
+      const dir = argv[argv.indexOf("--local-dir") + 1];
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "htdemucs.yaml"), "y".repeat(1234));
+      writeFileSync(join(dir, "955717e8.safetensors"), "w".repeat(2000));
+    },
+  });
+  await withoutIndexVars(() => byId(ctx).models.run(() => {}));
+  const at = "https://huggingface.co/adefossez/HTDemucs/resolve/bf35a81b663819a8255c8fefee17f9d812b786b5";
+  assert.equal(lines.length, 4, lines.join("\n"));
+  assert.equal(lines[0], `INFO DOWNLOAD START hf adefossez/HTDemucs@bf35a81 from https://huggingface.co/adefossez/HTDemucs to ${join(ctx.kitDir, "models", "demucs", "HTDemucs")}`);
+  assert.equal(lines[1], `INFO DOWNLOAD FILE hf adefossez/HTDemucs@bf35a81: htdemucs.yaml 1.2 kB from ${at}/htdemucs.yaml`);
+  assert.equal(lines[2], `INFO DOWNLOAD FILE hf adefossez/HTDemucs@bf35a81: 955717e8.safetensors 2.0 kB from ${at}/955717e8.safetensors`);
+  assert.match(lines[3], /^INFO DOWNLOAD DONE hf adefossez\/HTDemucs@bf35a81: 2 files, 3\.2 kB in \d+\.\ds, size checked by hf$/);
+});
+
+test("an hf download that fails is a FAILED line at ERROR, its signed address cut at the query", async () => {
+  const lines = [];
+  const ctx = freshCtx({
+    log: logInto(lines),
+    run: async () => {
+      throw new Error("python exit 1\nrequests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://cas-bridge.xethub.hf.co/x?X-Amz-Signature=abc");
+    },
+  });
+  await assert.rejects(byId(ctx).models.run(() => {}), /403/);
+  assert.equal(lines.length, 2, lines.join("\n"));
+  assert.match(lines[1], /^ERROR DOWNLOAD FAILED hf adefossez\/HTDemucs@bf35a81 after \d+\.\ds: requests\.exceptions\.HTTPError: 403 Client Error: Forbidden for url: https:\/\/cas-bridge\.xethub\.hf\.co\/x\?…$/);
+});
+
+test("the ffmpeg step names static-ffmpeg's address and folder, the two binaries, and the build it copied", async () => {
+  const lines = [];
+  const ctx = freshCtx({ log: logInto(lines) });
+  const f1 = join(ctx.base, "real-ffmpeg");
+  const f2 = join(ctx.base, "real-ffprobe");
+  writeFileSync(f1, "f".repeat(2000));
+  writeFileSync(f2, "p".repeat(1000));
+  const zip = "https://example.invalid/ffmpeg_bins/raw/main/v8.0/darwin_arm64.zip";
+  const fetches = [];
+  ctx.run = async (argv, { onLine } = {}) => {
+    if (argv[1] === "-version") {
+      onLine?.("ffmpeg version 8.0 Copyright (c) 2000-2025 the FFmpeg developers");
+      onLine?.("built with Apple clang version 16.0.0");
+      return;
+    }
+    fetches.push(argv[2]);
+    onLine?.(JSON.stringify({ url: zip, dir: join(ctx.base, "bin"), cached: false }));
+    onLine?.(JSON.stringify([f1, f2]));
+  };
+  await byId(ctx).ffmpeg.run(() => {});
+  // The address and folder are printed, and flushed, before the fetch begins.
+  assert.ok(fetches[0].indexOf("get_platform_http_zip") >= 0 && fetches[0].indexOf("flush=True") < fetches[0].indexOf("print(json.dumps(list(g())))"), fetches[0]);
+  assert.equal(lines.length, 3, lines.join("\n"));
+  assert.equal(lines[0], `INFO DOWNLOAD START ffmpeg from ${zip} to ${join(ctx.base, "bin")}`);
+  assert.match(lines[1], /^INFO DOWNLOAD DONE ffmpeg: 2 files, 3\.0 kB in \d+\.\ds, not checked$/);
+  assert.equal(lines[2], "INFO DOWNLOAD FILE ffmpeg: ffmpeg version 8.0 Copyright (c) 2000-2025 the FFmpeg developers");
+});
+
+test("an ffmpeg that cannot tell its version is an ERROR line, and the step still finishes", async () => {
+  const lines = [];
+  const ctx = freshCtx({ log: logInto(lines) });
+  const f1 = join(ctx.base, "real-ffmpeg");
+  const f2 = join(ctx.base, "real-ffprobe");
+  writeFileSync(f1, "");
+  writeFileSync(f2, "");
+  ctx.run = async (argv, { onLine } = {}) => {
+    if (argv[1] === "-version") throw new Error("spawn EACCES");
+    onLine?.(JSON.stringify({ url: "https://example.invalid/a.zip", dir: ctx.base, cached: true }));
+    onLine?.(JSON.stringify([f1, f2]));
+  };
+  const step = byId(ctx).ffmpeg;
+  await step.run(() => {});
+  assert.match(lines[1], /^INFO DOWNLOAD DONE ffmpeg: 2 files, 0 B in \d+\.\ds \(already on disk\), not checked$/);
+  assert.equal(lines[2], "ERROR DOWNLOAD FILE ffmpeg: -version failed: spawn EACCES");
+  assert.equal(await step.isDone(), true);
+});
+
+test("the whisper step names openai-whisper's own address and file, and its size once whisper has checked it", async () => {
+  const lines = [];
+  const ctx = freshCtx({ log: logInto(lines) });
+  const cacheDir = mkdtempSync(join(tmpdir(), "odcache-"));
+  const path = join(cacheDir, "whisper", "base.pt");
+  const url = "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt";
+  let code;
+  ctx.run = async (argv, { onLine } = {}) => {
+    code = argv[2];
+    onLine?.(JSON.stringify({ url, path }));
+    mkdirSync(join(cacheDir, "whisper"), { recursive: true });
+    writeFileSync(path, "w".repeat(1500));
+  };
+  await withXdgCache(cacheDir, () => byId(ctx)["nonverbal-weights"].run(() => {}));
+  // Printed, and flushed, before load_model fetches.
+  assert.ok(code.indexOf("whisper._MODELS['base']") >= 0 && code.indexOf("flush=True") < code.indexOf("whisper.load_model('base')"), code);
+  assert.equal(lines.length, 2, lines.join("\n"));
+  assert.equal(lines[0], `INFO DOWNLOAD START whisper base from ${url} to ${path}`);
+  assert.match(lines[1], /^INFO DOWNLOAD DONE whisper base: 1\.5 kB in \d+\.\ds, sha256 checked by whisper$/);
+});
+
+test("a whisper download that fails is a FAILED line at ERROR, with whisper's own reason", async () => {
+  const lines = [];
+  const ctx = freshCtx({ log: logInto(lines) });
+  const cacheDir = mkdtempSync(join(tmpdir(), "odcache-"));
+  ctx.run = async () => {
+    throw new Error("python exit 1\nRuntimeError: Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model.");
+  };
+  await withXdgCache(cacheDir, () => assert.rejects(byId(ctx)["nonverbal-weights"].run(() => {}), /SHA256/));
+  assert.match(lines.at(-1), /^ERROR DOWNLOAD FAILED whisper base after \d+\.\ds: RuntimeError: Model has been downloaded but the SHA256 checksum does not not match\. Please retry loading the model\.$/);
 });
