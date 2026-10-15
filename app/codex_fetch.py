@@ -17,10 +17,12 @@ import shutil
 import sys
 import tarfile
 import threading
+import time
 from typing import Optional
 
 import requests
 
+from app import netlog
 from app.i18n import t
 
 log = logging.getLogger("persodub.codex_fetch")
@@ -75,18 +77,25 @@ def fetch() -> str:
 
 
 def _fetch(pkg: tuple) -> str:
+    """The download between DOWNLOAD START and DONE or FAILED lines in the
+    app log (app/netlog.py); DONE once npm's checksum has matched."""
     suffix, folder, sha512 = pkg
     root = os.path.join(_kit(), "codex")
     part = root + ".download"
     staging = root + ".unpacking"
     url = f"https://registry.npmjs.org/@openai/codex/-/codex-{VERSION}-{suffix}.tgz"
+    what = f"codex {VERSION}"
     os.makedirs(_kit(), exist_ok=True)
     digest = hashlib.sha512()
     progress.update(stage="download", got=0, total=0)
+    log.info(netlog.start(what, url, root))
+    began = time.monotonic()
     try:
         with requests.get(url, stream=True, timeout=(15, 60)) as r:
+            size = int(r.headers.get("Content-Length") or 0)
+            log.info(netlog.connected(what, r.status_code, url, size or None))
             r.raise_for_status()
-            progress["total"] = int(r.headers.get("Content-Length") or 0)
+            progress["total"] = size
             with open(part, "wb") as f:
                 for chunk in r.iter_content(1 << 20):
                     f.write(chunk)
@@ -94,11 +103,14 @@ def _fetch(pkg: tuple) -> str:
                     progress["got"] += len(chunk)
     except (requests.RequestException, OSError) as e:
         progress["stage"] = ""
+        log.error(netlog.failed(what, time.monotonic() - began, netlog.described(e), url))
         raise RuntimeError(t("Could not download the ChatGPT sign-in. Check your internet and try again.")) from e
     progress["stage"] = "unpack"
     try:
         if base64.b64encode(digest.digest()).decode() != sha512:
+            log.error(netlog.failed(what, time.monotonic() - began, "sha512 does not match npm's", url))
             raise RuntimeError(t("The ChatGPT sign-in download was damaged. Try again."))
+        log.info(netlog.done(what, time.monotonic() - began, progress["got"], "sha512 ok"))
         shutil.rmtree(staging, ignore_errors=True)
         prefix = f"package/vendor/{folder}/"
         with tarfile.open(part, "r:gz") as tar:

@@ -18,6 +18,8 @@ from typing import List, Optional
 
 import httpx
 
+from app import netlog
+
 logger = logging.getLogger("persodub.perso_client")
 
 BASE_URL = "https://api.perso.ai"
@@ -475,6 +477,10 @@ class PersoClient:
         # Perso progress polling. An attribute (not a transcribe() kwarg) so
         # existing callers and test fakes keep their signature.
         self.cancel_check = None
+        # The job's log.trace (app/jobs.py _launch), set by the caller like
+        # cancel_check: the upload's and the downloads' lines (_say) go into
+        # the job's file as well as the app log. None outside a job.
+        self.trace = None
         # Credits this client has spent so far, added up by note_credits after
         # each billed call. A finished job reports the total (usage counts).
         self.credits_used = 0
@@ -489,6 +495,11 @@ class PersoClient:
             "User-Agent": USER_AGENT,
             "X-Perso-Client-Host": CLIENT_HOST,
         }
+
+    def _say(self, line: str, level: str = "INFO") -> None:
+        """A transfer line (app/netlog.py): through the job's trace when the
+        caller set one, else into the app log."""
+        netlog.say(self.trace, logger, line, level)
 
     def describe_workspace(self) -> dict:
         """{seq, name, credits} of the workspace this client bills.
@@ -522,7 +533,9 @@ class PersoClient:
 
     def _upload_media(self, video_path: str, space: int) -> int:
         """Upload steps (1)-(3), shared by transcribe() and separate():
-        issue a SAS token, PUT the file to Azure Blob, register it -> mediaSeq."""
+        issue a SAS token, PUT the file to Azure Blob, register it -> mediaSeq.
+        The PUT is written between UPLOAD START and DONE or FAILED lines
+        (app/netlog.py); the signed link loses its query on the way."""
         cached = self._media_seq_cache.get((video_path, space))
         if cached is not None:
             return cached
@@ -539,13 +552,25 @@ class PersoClient:
         # (2) Upload to Azure Blob (direct PUT)
         with open(video_path, "rb") as f:
             data = f.read()
-        r = httpx.put(
-            blob_sas_url, content=data,
-            headers={"x-ms-blob-type": "BlockBlob",
-                     "Content-Type": "application/octet-stream"},
-            timeout=1800,
-        )
-        _raise_for_status(r)
+        what = "perso media"
+        self._say(netlog.start(what, video_path, blob_sas_url, note=f"({netlog.size_text(len(data))})",
+                               word="UPLOAD"))
+        began = time.monotonic()
+        try:
+            r = httpx.put(
+                blob_sas_url, content=data,
+                headers={"x-ms-blob-type": "BlockBlob",
+                         "Content-Type": "application/octet-stream"},
+                timeout=1800,
+            )
+            # The storage's answer comes once the whole file is sent: its size is what went.
+            self._say(netlog.connected(what, r.status_code, blob_sas_url, len(data), word="UPLOAD"))
+            _raise_for_status(r)
+        except Exception as e:
+            self._say(netlog.failed(what, time.monotonic() - began, netlog.described(e), blob_sas_url,
+                                    word="UPLOAD"), "ERROR")
+            raise
+        self._say(netlog.done(what, time.monotonic() - began, len(data), word="UPLOAD"))
 
         # (3) Register the uploaded file -> mediaSeq
         file_url = blob_sas_url.split("?")[0]
@@ -598,19 +623,14 @@ class PersoClient:
         os.makedirs(out_dir, exist_ok=True)
         out = {}
         for key, rel in tracks.items():
-            # Identity only, no API key: these are storage download links, not
-            # the Perso API -- the key must not travel to a different host.
-            url = rel if rel.startswith("http") else MEDIA_HOST + rel
-            r = httpx.get(url, headers={"User-Agent": USER_AGENT,
-                                        "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
-            _raise_for_status(r)
+            # Storage download links, fetched like every other one
+            # (download_media): identity only, no API key -- the key must not
+            # travel to a different host -- and asked for again when the
+            # connection drops.
             # The SAME names local Demucs writes (vocals.wav / background.wav):
             # the per-line voice remake reads work_dir/background.wav by name,
             # and a perso-separated job must feed it identically.
-            path = os.path.join(out_dir, f"{key}.wav")
-            with open(path, "wb") as f:
-                f.write(r.content)
-            out[key] = path
+            out[key] = self.download_media(rel, os.path.join(out_dir, f"{key}.wav"), what=f"perso {key}")
         return out
 
     def dub_video(self, video_path: str, out_path: str,
@@ -693,7 +713,7 @@ class PersoClient:
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         # A storage link, fetched like every other one: identity only, no API
         # key, and asked for again when the connection drops.
-        return self.download_media(link, out_path)
+        return self.download_media(link, out_path, what="perso dubbing")
 
     def get_project_script(self, project_seq: int, space_seq: Optional[int] = None) -> dict:
         """A dubbing project's script: {"sentences": [...], "speakers": [...]}.
@@ -888,27 +908,40 @@ class PersoClient:
         space = int(space_seq) if space_seq is not None else self.space_seq
         self._wait_completed(project_seq, space, what=what)
 
-    def download_media(self, url: str, out_path: str) -> str:
-        """Fetch one storage file (a sentence's audio, a subtitle) to disk.
-        Identity headers only -- storage links never see the API key."""
+    def download_media(self, url: str, out_path: str, what: str = "perso file") -> str:
+        """Fetch one storage file (a sentence's audio, a subtitle) to disk,
+        between DOWNLOAD START and DONE or FAILED lines (app/netlog.py).
+        Identity headers only -- storage links never see the API key.
+
+        httpx.get reads the whole answer before it returns, so the CONNECTED
+        line -- the status and the size -- is written once the bytes are in."""
         full = url if url.startswith("http") else MEDIA_HOST + url
-        # The file is the paid-for result; a connection dropped mid-body
-        # (httpx RemoteProtocolError, Windows 2026-09-29) threw it away with
-        # the credits already spent. Storage links are safe to ask for again,
-        # so a dropped connection is asked again, twice, before giving up.
-        for attempt in range(3):
-            try:
-                r = httpx.get(full, headers={"User-Agent": USER_AGENT,
-                                             "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
-                break
-            except httpx.TransportError as e:
-                if attempt == 2:
-                    raise
-                logger.warning("Perso download dropped (%s); trying again", type(e).__name__)
-                time.sleep(2 * (attempt + 1))
-        _raise_for_status(r)
-        with open(out_path, "wb") as f:
-            f.write(r.content)
+        self._say(netlog.start(what, full, out_path))
+        began = time.monotonic()
+        try:
+            # The file is the paid-for result; a connection dropped mid-body
+            # (httpx RemoteProtocolError, Windows 2026-09-29) threw it away with
+            # the credits already spent. Storage links are safe to ask for again,
+            # so a dropped connection is asked again, twice, before giving up.
+            for attempt in range(3):
+                try:
+                    r = httpx.get(full, headers={"User-Agent": USER_AGENT,
+                                                 "X-Perso-Client-Host": CLIENT_HOST}, timeout=1800)
+                    break
+                except httpx.TransportError as e:
+                    if attempt == 2:
+                        raise
+                    self._say(netlog.retry(what, attempt + 2, 3, time.monotonic() - began, netlog.described(e)),
+                              "WARNING")
+                    time.sleep(2 * (attempt + 1))
+            self._say(netlog.connected(what, r.status_code, full, len(r.content)))
+            _raise_for_status(r)
+            with open(out_path, "wb") as f:
+                f.write(r.content)
+        except Exception as e:
+            self._say(netlog.failed(what, time.monotonic() - began, netlog.described(e), full), "ERROR")
+            raise
+        self._say(netlog.done(what, time.monotonic() - began, len(r.content)))
         return out_path
 
     def download_target(self, project_seq: int, target: str, out_path: str,
@@ -939,7 +972,7 @@ class PersoClient:
         link = find_link(body)
         if not link:
             raise RuntimeError(f"Perso served no download link for {target}")
-        return self.download_media(link, out_path)
+        return self.download_media(link, out_path, what=f"perso {target}")
 
     def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
         """Upload one video to Perso STT and return scriptTimestamps (JSON).

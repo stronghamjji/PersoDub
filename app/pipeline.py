@@ -556,6 +556,8 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
     try:
         pc = perso_client or PersoClient()
         pc.cancel_check = cancel_check
+        # The upload's and the downloads' lines into the job's file too.
+        pc.trace = getattr(log, "trace", None)
         # Say which workspace is paying -- same reason as the STT stage below.
         ws = begin_credit_watch(pc)
         if ws:
@@ -648,6 +650,8 @@ def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, l
         # Let Cancel interrupt the Perso progress wait (up to an hour of
         # polling); without this, "Cancelling…" hung until Perso finished.
         pc.cancel_check = cancel_check
+        # The upload's lines into the job's file too.
+        pc.trace = getattr(log, "trace", None)
         # Say which workspace is paying. A workspace picked in Settings
         # applies only after a restart, so the active one here can differ
         # from what the Settings screen shows -- this line is how the user

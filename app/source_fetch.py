@@ -7,6 +7,7 @@ the app restarts, which is exactly the failure this module exists to recover
 from. Shelling out to a heavy tool also matches how app/stt_local.py and
 app/qwen_scoring.py already work.
 """
+import importlib.metadata
 import json
 import logging
 import os
@@ -14,9 +15,11 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from typing import Callable, List, Optional, Tuple
 from urllib.parse import urlparse
 
+from app import netlog
 from app.i18n import t
 from app.jobs import JobCancelled
 
@@ -191,29 +194,63 @@ def _probe_once(url: str) -> dict:
 
 
 _PERCENT = re.compile(r"\[download\]\s+([\d.]+)%")
+# What yt-dlp says it is about to fetch: "[info] <id>: Downloading 1 format(s):
+# 137+140". Only the formats are kept -- the id names the video.
+_FORMATS = re.compile(r"\[info\] .+?: Downloading \d+ format\(s\): (.+)")
 UPGRADE_TIMEOUT = 300
+# Where pip looks for the new yt-dlp.
+PYPI = "https://pypi.org/simple"
 # One install at a time: two into the same venv can leave it half-written, and
 # a probe and a download (or two pasted links) can reach the upgrade together.
 _UPGRADE_LOCK = threading.Lock()
 
 
-def _upgrade() -> None:
-    """Reinstall yt-dlp at the newest version, into the venv we are running in.
+def _ytdlp_version() -> str:
+    """The yt-dlp this process runs, as pip installed it ("2026.8.19")."""
+    try:
+        return importlib.metadata.version("yt-dlp")
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def _upgrade(trace=None) -> None:
+    """Reinstall yt-dlp at the newest version, into the venv we are running in,
+    between DOWNLOAD START and DONE or FAILED lines (app/netlog.py) -- through
+    `trace` into the job's file when a dub's fetch asked for it. DONE names
+    the version before and after.
 
     Separate from _run so tests can count upgrades independently of downloads.
     Failure is swallowed by the caller: an upgrade that cannot happen must not
     replace the download error the user actually needs to read.
     """
     with _UPGRADE_LOCK:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=UPGRADE_TIMEOUT,
-        )
+        before = _ytdlp_version()
+        netlog.say(trace, logger, netlog.start("pip yt-dlp", PYPI, sys.prefix))
+        began = time.monotonic()
+        try:
+            ran = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=UPGRADE_TIMEOUT,
+            )
+        except Exception as e:
+            netlog.say(trace, logger, netlog.failed("pip yt-dlp", time.monotonic() - began,
+                                                    netlog.described(e), PYPI), "ERROR")
+            raise
+        if ran.returncode:
+            # pip's own error, not the notice about a newer pip it can print last.
+            said = (ran.stderr or ran.stdout or "").strip().splitlines()
+            why = next((s for s in reversed(said) if s.startswith("ERROR")), said[-1] if said else "")
+            netlog.say(trace, logger, netlog.failed("pip yt-dlp", time.monotonic() - began,
+                                                    f"pip exited {ran.returncode}: {why}", PYPI), "ERROR")
+        else:
+            netlog.say(trace, logger, netlog.done("pip yt-dlp", time.monotonic() - began,
+                                                  f"{before} -> {_ytdlp_version()}", "sha256 checked by pip"))
 
 
-def _once_more_after_upgrade(attempt: Callable, upgrading: Optional[Callable[[], None]] = None):
+def _once_more_after_upgrade(attempt: Callable, upgrading: Optional[Callable[[], None]] = None, trace=None):
     """attempt(), and once more after upgrading yt-dlp when it failed for any
-    reason but the network; upgrading() is told just before the upgrade.
+    reason but the network; upgrading() is told just before the upgrade, and
+    the upgrade's lines go through `trace` when given.
 
     YouTube changes how it serves video every few weeks and yt-dlp ships a fix
     within days; a copy pinned at install time goes stale and the user reads it
@@ -233,7 +270,7 @@ def _once_more_after_upgrade(attempt: Callable, upgrading: Optional[Callable[[],
         if upgrading:
             upgrading()
         try:
-            _upgrade()
+            _upgrade(trace)
         except Exception:
             raise first
     try:
@@ -246,6 +283,15 @@ def _once_more_after_upgrade(attempt: Callable, upgrading: Optional[Callable[[],
 
 
 def _download_once(url: str, dest: str, log, cancel_check) -> None:
+    """One yt-dlp run, between DOWNLOAD START and DONE or FAILED lines
+    (app/netlog.py) -- into the job's file too when `log` is a job's -- with a
+    FILE line for the formats yt-dlp says it takes. A cancel ends it with
+    neither. The FAILED line says the kind of failure, never yt-dlp's own
+    words, which name the video by its id."""
+    trace = getattr(log, "trace", None)
+    netlog.say(trace, logger, netlog.start("video", url, dest, note=f"via yt-dlp {_ytdlp_version()}"))
+    began = time.monotonic()
+
     def on_line(line: str) -> None:
         m = _PERCENT.search(line)
         if m and log:
@@ -253,19 +299,31 @@ def _download_once(url: str, dest: str, log, cancel_check) -> None:
             # stage number, and STAGE_LABELS has no 0, so this shows the text
             # as-is with no stage dot lit.
             log("%s Fetching video… %s%%" % (pre_stage_marker(), m.group(1).split(".")[0]))
+        m = _FORMATS.match(line)
+        if m:
+            netlog.say(trace, logger, netlog.file_line("video", "format " + m.group(1), url))
 
-    code, _out, err = _run(
-        YTDLP_BASE + [
-            "--newline", "--no-warnings",
-            "-f", "bv*+ba/b", "--merge-output-format", "mp4",
-            "-o", dest, url,
-        ],
-        on_line=on_line,
-        cancel_check=cancel_check,
-    )
-    if code != 0:
-        reason, message = classify(err)
-        raise FetchError(reason, message, err.strip()[-300:])
+    try:
+        code, _out, err = _run(
+            YTDLP_BASE + [
+                "--newline", "--no-warnings",
+                "-f", "bv*+ba/b", "--merge-output-format", "mp4",
+                "-o", dest, url,
+            ],
+            on_line=on_line,
+            cancel_check=cancel_check,
+        )
+        if code != 0:
+            reason, message = classify(err)
+            raise FetchError(reason, message, err.strip()[-300:])
+    except JobCancelled:
+        raise
+    except Exception as e:
+        netlog.say(trace, logger, netlog.failed("video", time.monotonic() - began, netlog.described(e), url),
+                   "ERROR")
+        raise
+    size = os.path.getsize(dest) if os.path.isfile(dest) else None
+    netlog.say(trace, logger, netlog.done("video", time.monotonic() - began, size))
 
 
 def fetch(url: str, dest: str, log=None, cancel_check=None) -> None:
@@ -277,4 +335,5 @@ def fetch(url: str, dest: str, log=None, cancel_check=None) -> None:
         if log:
             log(f"{pre_stage_marker()} Updating the downloader…")
 
-    _once_more_after_upgrade(lambda: _download_once(url, dest, log, cancel_check), upgrading)
+    _once_more_after_upgrade(lambda: _download_once(url, dest, log, cancel_check), upgrading,
+                             getattr(log, "trace", None))

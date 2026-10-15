@@ -5,13 +5,11 @@ and its progress status (running/done/error/cancelling/cancelled) can be
 queried.
 """
 import contextlib
-import errno
 import glob
 import hashlib
 import json
 import logging
 import os
-import re
 import subprocess
 import threading
 import time
@@ -23,6 +21,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from app.config import PERSODUB_LOG_DIR
 from app.memline import mem_line
+from app.netlog import CUT as _CUT
+from app.netlog import described as _described
+from app.netlog import no_query as _no_query
 
 logger = logging.getLogger("persodub.jobs")
 
@@ -189,37 +190,9 @@ def _trace_memory(trace) -> None:
         trace(line)
 
 
-# How much of one message, answer or output line a failure's lines keep.
-_CUT = 300
 # The app/ package. A failure's "At:" places are named from the folder above
 # it, as the repository names them ("app/pipeline.py").
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
-# A URL's query string: "?" after "://host/path", up to a space or a quote. A
-# signed storage link (Perso's upload) carries its token there, and httpx puts
-# the whole link into its message.
-_QUERY = re.compile(r"(://[^\s\"'?]*)\?[^\s\"']*")
-
-
-def _no_query(text: str) -> str:
-    """Every URL in `text` kept to its address: "https://x.blob/y?…"."""
-    return _QUERY.sub(r"\1?…", text)
-
-
-def _described(exc: BaseException) -> str:
-    """"RuntimeError: the model refused": the type and what it says, on one
-    line and cut short, every link without its query; the type alone when it
-    says nothing."""
-    try:
-        said = " ".join(_no_query(str(exc)).split())[:_CUT]
-    except Exception:   # a __str__ that fails, which Python's own traceback copes with too
-        said = ""
-    # An OS error's sentence is in the computer's language (Windows said
-    # "대상 컴퓨터에서 연결을 거부했으므로…" for 10061); its errno name reads
-    # the same everywhere, so it goes on the end: "[ECONNREFUSED]".
-    code = errno.errorcode.get(getattr(exc, "errno", None)) if isinstance(exc, OSError) else None
-    if code:
-        said = f"{said} [{code}]" if said else f"[{code}]"
-    return f"{type(exc).__name__}: {said}" if said else type(exc).__name__
 
 
 def _chain(exc: Optional[BaseException], most: int = 6) -> list:

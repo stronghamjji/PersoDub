@@ -40,6 +40,7 @@ class _Resp:
     def __exit__(self, *a):
         return False
     headers = {}
+    status_code = 200
     def raise_for_status(self):
         pass
     def iter_content(self, n):

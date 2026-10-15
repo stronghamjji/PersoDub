@@ -143,6 +143,7 @@ import threading as _threading
 import requests as _requests
 
 from app import config as _config
+from app import netlog
 from app import runtime as _runtime
 
 _downloads = {}   # id -> {"state": "queued"|"downloading"|"failed", "pct", "error"}
@@ -420,14 +421,59 @@ def _dir_bytes(path: str) -> int:
     return total
 
 
+def _hf_files(dest):
+    """(name under dest, with "/" between folders, bytes) of every file the
+    hf tool left there, in name order. Its own .cache folder is not the model's."""
+    found = []
+    for root, dirs, files in os.walk(dest):
+        if root == dest:
+            dirs[:] = [d for d in dirs if d != ".cache"]
+        for f in files:
+            path = os.path.join(root, f)
+            found.append((os.path.relpath(path, dest).replace(os.sep, "/"), os.path.getsize(path)))
+    return sorted(found)
+
+
 def _pull_hf(entry, kit, progress, cancelled):
+    """One catalog model from Hugging Face (_hf_download), between DOWNLOAD
+    START and DONE or FAILED lines in the app log (app/netlog.py). Once it is
+    in, a FILE line for every file the folder holds, then the totals; the
+    speed is of what came this time, which a resumed download has less of."""
+    src = entry["source"]
+    dest = os.path.join(kit, *entry["dir"].split("/"))
+    base = (os.environ.get("HF_ENDPOINT") or "https://huggingface.co").rstrip("/")
+    what = "hf %s@%s" % (src["repo"], src["rev"][:7])
+    log.info(netlog.start(what, f"{base}/{src['repo']}", dest))
+    began = time.monotonic()
+    before = _dir_bytes(dest)
+    try:
+        _hf_download(entry, kit, progress, cancelled, what, began)
+    except BaseException as e:
+        # A cancel that broke the tool on its way out is no failure (_drain).
+        if not cancelled():
+            log.error(netlog.failed(what, time.monotonic() - began, netlog.described(e), base))
+        raise
+    if cancelled():
+        return
+    files = _hf_files(dest)
+    for name, size in files:
+        log.info(netlog.file_line(what, name, f"{base}/{src['repo']}/resolve/{src['rev']}/{name}", size))
+    # The tool compares each file's size with the one the server announced
+    # (the shell's hf lines say the same, desktop/src/installSpec.js).
+    log.info(netlog.done(what, time.monotonic() - began, sum(size for _name, size in files),
+                         "size checked by hf", files=len(files), fetched=max(0, _dir_bytes(dest) - before)))
+
+
+def _hf_download(entry, kit, progress, cancelled, what, began):
     """hf CLI download -- it resumes partial files by itself (--local-dir).
 
     Percent is what is on disk against the catalog's size, not the tool's own
     figure: that one counts files ("Fetching 13 files: 92%") and read 92% while
     1.2 of 3.7 GB had arrived (Windows, 2026-09-07). A failed run is tried
-    again up to HF_ATTEMPTS times -- the tool resumes its .incomplete files --
-    and the process is always ended with us, never left running on its own.
+    again up to HF_ATTEMPTS times -- the tool resumes its .incomplete files,
+    and each new try is a RETRY line named `what`, its seconds counted from
+    `began` -- and the process is always ended with us, never left running on
+    its own.
     """
     import time
 
@@ -494,9 +540,9 @@ def _pull_hf(entry, kit, progress, cancelled):
         report_from_disk(force=True)
         if rc == 0:
             return
-        log.warning("hf download of %s exited %s (attempt %d/%d): %s",
-                    entry["id"], rc, attempt, HF_ATTEMPTS, " | ".join(recent))
         if attempt < HF_ATTEMPTS:
+            log.warning(netlog.retry(what, attempt + 1, HF_ATTEMPTS, time.monotonic() - began,
+                                     f"hf download exited {rc}: " + " | ".join(recent)))
             time.sleep(3)
     # The exit code alone said nothing ("hf download exited 1", Windows,
     # 2026-09-07); the tool's own last lines say what went wrong.
@@ -504,29 +550,76 @@ def _pull_hf(entry, kit, progress, cancelled):
     raise RuntimeError(f"hf download exited {rc}" + (f": {tail}" if tail else ""))
 
 
+def _ollama_source(name):
+    """Where Ollama fetches a model name from: "gemma3:12b" from its own
+    registry's library, "hf.co/tencent/..." from the host the name begins with."""
+    first, _, rest = name.partition("/")
+    if rest and ("." in first or ":" in first):
+        return f"https://{name}"
+    return "https://registry.ollama.ai/" + (name if rest else f"library/{name}")
+
+
 def _pull_ollama(entry, progress, cancelled):
-    """Pull through the app's own running Ollama server (resume is Ollama's).
+    """Pull through the app's own running Ollama server (resume is Ollama's),
+    between DOWNLOAD START and DONE or FAILED lines in the app log
+    (app/netlog.py): a FILE line for each layer once it is in, and Ollama's
+    own "verifying sha256 digest" and "success" once each.
     A model that needs the validated chat template baked in (Hunyuan) gets a
     create call on top -- the same two-step flow verified 2026-08-31."""
     src = entry["source"]
     pull_name = src.get("pull") or src["tag"]
     ollama_url = _runtime.url("ollama")
-    r = _requests.post(f"{ollama_url}/api/pull",
-                       json={"model": pull_name, "stream": True}, stream=True, timeout=600)
-    r.raise_for_status()
-    for line in r.iter_lines():
-        if cancelled():
-            r.close()
-            return
-        if not line:
-            continue
-        d = json.loads(line)
-        if "error" in d:
-            raise RuntimeError(d["error"])
-        if d.get("total") and d.get("completed") is not None:
-            progress(int(100 * d["completed"] / d["total"]))
+    what, source = f"ollama {pull_name}", _ollama_source(pull_name)
+    log.info(netlog.start(what, source, note=f"via {ollama_url}/api/pull"))
+    began = time.monotonic()
+    # Each layer's size, and how much of it was here before this pull: the
+    # speed is of what came now, not of what Ollama had kept.
+    layers, had, logged, said = {}, {}, set(), set()
+
+    def layer_in(digest):
+        if digest not in logged:
+            logged.add(digest)
+            log.info(netlog.file_line(what, "layer " + digest.split(":")[-1][:12], source, layers[digest]))
+
+    try:
+        r = _requests.post(f"{ollama_url}/api/pull",
+                           json={"model": pull_name, "stream": True}, stream=True, timeout=600)
+        log.info(netlog.connected(what, r.status_code, ollama_url))
+        r.raise_for_status()
+        for line in r.iter_lines():
+            if cancelled():
+                r.close()
+                return
+            if not line:
+                continue
+            d = json.loads(line)
+            if "error" in d:
+                raise RuntimeError(d["error"])
+            if d.get("digest") and d.get("total"):
+                layers[d["digest"]] = d["total"]
+                had.setdefault(d["digest"], d.get("completed") or 0)
+                if (d.get("completed") or 0) >= d["total"]:
+                    layer_in(d["digest"])
+            elif not d.get("digest"):
+                # Ollama goes on to its checks only once every layer is in.
+                for digest in layers:
+                    layer_in(digest)
+                if d.get("status") in ("verifying sha256 digest", "success") and d["status"] not in said:
+                    said.add(d["status"])
+                    log.info(f"DOWNLOAD {what}: {d['status']}")
+            if d.get("total") and d.get("completed") is not None:
+                progress(int(100 * d["completed"] / d["total"]))
+    except Exception as e:
+        if not cancelled():
+            log.error(netlog.failed(what, time.monotonic() - began, netlog.described(e), source))
+        raise
     if cancelled():
         return
+    for digest in layers:
+        layer_in(digest)
+    check = "sha256 checked by ollama" if "verifying sha256 digest" in said else netlog.NOT_CHECKED
+    log.info(netlog.done(what, time.monotonic() - began, sum(layers.values()), check,
+                         files=len(layers), fetched=sum(layers[g] - had[g] for g in layers)))
     if src.get("needs_template"):
         cr = _requests.post(f"{ollama_url}/api/create",
                             json={"model": src["tag"], "from": pull_name,

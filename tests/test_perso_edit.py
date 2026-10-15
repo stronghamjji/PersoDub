@@ -277,7 +277,7 @@ def test_the_finished_video_downloads_on_its_own(pc, http, tmp_path, monkeypatch
         body={"result": {"videoFile": {"videoDownloadLink": "/perso-storage/v.mp4"}}})
     got = []
     monkeypatch.setattr(PersoClient, "download_media",
-                        lambda self, link, out: got.append((link, out)) or out)
+                        lambda self, link, out, **kw: got.append((link, out)) or out)
     out = str(tmp_path / "dubbed.mp4")
     assert pc.download_dub(77, out) == out
     assert got == [("/perso-storage/v.mp4", out)]

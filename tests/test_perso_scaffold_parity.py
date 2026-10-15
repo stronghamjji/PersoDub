@@ -113,31 +113,33 @@ def _isolated(monkeypatch):
 
 @pytest.fixture
 def drive(monkeypatch, tmp_path):
-    """drive(scaffold, client, cancel_check=None) -> Outcome; never raises.
+    """drive(scaffold, client, cancel_check=None, log=None) -> Outcome; never raises.
 
     Each is called the way its caller calls it: the two stages with the client
     handed in (run_dub's perso_client; None makes the real one), the cloud dub
     with PersoClient replaced, since it always makes its own. The cloud dub's
-    notices are read back off its job record."""
+    notices are read back off its job record. `log` stands in for a job's log
+    (out.lines collects nothing then)."""
     jids = []
 
-    def run(scaffold, client, cancel_check=None):
+    def run(scaffold, client, cancel_check=None, log=None):
         out = Outcome()
+        log = log or out.lines.append
         video = str(tmp_path / "in.mp4")
         try:
             if scaffold == "separation":
                 out.result = pipeline._stage_separate(video, str(tmp_path), "perso", client, cancel_check,
-                                                      out.notices.append, out.lines.append)
+                                                      out.notices.append, log)
             elif scaffold == "transcription":
                 out.result = pipeline._stage_transcribe_perso(video, client, cancel_check,
-                                                              out.notices.append, out.lines.append)
+                                                              out.notices.append, log)
             else:
                 if client is not None:
                     monkeypatch.setattr(perso_client, "PersoClient", lambda: client)
                 out.jid = state.job_store.create()
                 jids.append(out.jid)
                 out.result = dub_launch.run_cloud_dub(out.jid, video, str(tmp_path / "dubbed.mp4"),
-                                                      "en", "ko", None, out.lines.append)
+                                                      "en", "ko", None, log)
         except Exception as e:
             out.error = e
         if out.jid:
@@ -393,6 +395,19 @@ def test_what_the_client_polls_for_a_cancel(drive, scaffold):
         state.job_store.request_cancel(out.jid)
         got = "the job's cancel flag" if (before, client.cancel_check()) == (False, True) else repr(client.cancel_check)
     assert got == POLLS[scaffold]
+
+
+@pytest.mark.parametrize("scaffold", SCAFFOLDS)
+def test_the_client_writes_its_transfers_through_the_jobs_trace(drive, scaffold):
+    """The same on all three: the upload's and the downloads' lines
+    (app/netlog.py) go into the job's file, through the job's log.trace."""
+    def log(msg):
+        pass
+
+    log.trace = lambda msg, level="INFO": None
+    client = FakePerso()
+    assert drive(scaffold, client, log=log).error is None
+    assert client.trace is log.trace
 
 
 # ── the same on all three ──────────────────────────────────────────────────

@@ -5,6 +5,8 @@ starts a process, and every test that needs a yt-dlp result replaces it.
 """
 import json
 import logging
+import re
+import subprocess
 import sys
 
 import pytest
@@ -228,7 +230,7 @@ class _Sequence:
 
 def _count_upgrades(monkeypatch):
     box = {"n": 0}
-    monkeypatch.setattr(source_fetch, "_upgrade", lambda: box.__setitem__("n", box["n"] + 1))
+    monkeypatch.setattr(source_fetch, "_upgrade", lambda trace=None: box.__setitem__("n", box["n"] + 1))
     return box
 
 
@@ -286,13 +288,14 @@ def test_upgrades_never_run_two_at_once(monkeypatch):
     busy = {"now": 0, "most": 0}
     lock = threading.Lock()
 
-    def slow_pip(*args, **kwargs):
+    def slow_pip(args, **kwargs):
         with lock:
             busy["now"] += 1
             busy["most"] = max(busy["most"], busy["now"])
         time.sleep(0.05)
         with lock:
             busy["now"] -= 1
+        return subprocess.CompletedProcess(args, 0, "", "")
 
     monkeypatch.setattr(source_fetch.subprocess, "run", slow_pip)
     threads = [threading.Thread(target=source_fetch._upgrade) for _ in range(3)]
@@ -311,3 +314,94 @@ def test_fetch_reports_percentage_as_stage_zero(monkeypatch, tmp_path):
     # "0/6 …" keeps ui/src/dubApi.mjs:232 at stage 0, so no stage dot lights up
     # and the message is shown verbatim. See the spec's "Flow" section.
     assert any(x.startswith("0/6 ") and "45" in x for x in lines)
+
+
+# ---------------------------------------------------------------- the log lines
+# Where a video came from, where it went, which yt-dlp fetched it and what it
+# took (app/netlog.py) -- never yt-dlp's own words, which name the video by its id.
+
+def _fetch_lines(caplog):
+    return [(r.levelname, r.getMessage()) for r in caplog.records
+            if r.name == "persodub.source_fetch" and r.getMessage().startswith("DOWNLOAD ")]
+
+
+def test_a_fetch_says_where_from_where_to_with_which_yt_dlp_and_what_it_took(monkeypatch, tmp_path, caplog):
+    dest = tmp_path / "input.mp4"
+
+    def run(args, on_line=None, cancel_check=None, timeout=None):
+        for line in ("[youtube] dQw4w9WgXcQ: Downloading webpage",
+                     "[info] dQw4w9WgXcQ: Downloading 1 format(s): 137+140",
+                     "[download]  45.3% of 40MiB"):
+            on_line(line)
+        dest.write_bytes(b"v" * 17_200_000)
+        return 0, "", ""
+
+    monkeypatch.setattr(source_fetch, "_run", run)
+    monkeypatch.setattr(source_fetch, "_ytdlp_version", lambda: "2026.8.19")
+    with caplog.at_level(logging.INFO, logger="persodub.source_fetch"):
+        source_fetch.fetch("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=3", str(dest))
+    lines = [msg for _level, msg in _fetch_lines(caplog)]
+    assert lines[:2] == [
+        f"DOWNLOAD START video from https://www.youtube.com/watch?… to {dest} via yt-dlp 2026.8.19",
+        "DOWNLOAD FILE video: format 137+140 from https://www.youtube.com/watch?…",
+    ]
+    assert re.fullmatch(r"DOWNLOAD DONE video: 17\.2 MB in \d+\.\ds( \(.+/s\))?, not checked", lines[2])
+    assert len(lines) == 3
+    assert not any("dQw4w9WgXcQ" in line for line in lines)
+
+
+def test_a_fetch_that_fails_says_why_in_the_apps_words(monkeypatch, tmp_path, caplog):
+    _count_upgrades(monkeypatch)
+    monkeypatch.setattr(source_fetch, "_run", _Sequence(
+        (1, "", "ERROR: [youtube] dQw4w9WgXcQ: unable to download webpage")))
+    with caplog.at_level(logging.INFO, logger="persodub.source_fetch"), pytest.raises(source_fetch.FetchError):
+        source_fetch.fetch("https://youtu.be/dQw4w9WgXcQ", str(tmp_path / "input.mp4"))
+    level, msg = _fetch_lines(caplog)[-1]
+    assert level == "ERROR"
+    assert re.fullmatch(r"DOWNLOAD FAILED video after \d+\.\ds: FetchError: Check your internet connection\. "
+                        r"\(youtu\.be\)", msg)
+
+
+def test_a_dubs_fetch_writes_its_lines_and_its_update_into_the_jobs_file(monkeypatch, tmp_path):
+    handed = []
+    monkeypatch.setattr(source_fetch, "_upgrade", lambda trace=None: handed.append(trace))
+    monkeypatch.setattr(source_fetch, "_run", _Sequence(
+        (1, "", "ERROR: [youtube] abc: Requested format is not available"), (0, "[download] 100%", "")))
+    screen, traced = [], []
+
+    def log(msg):
+        screen.append(msg)
+
+    log.trace = lambda msg, level="INFO": traced.append((level, msg))
+    source_fetch.fetch("https://youtu.be/abc", str(tmp_path / "input.mp4"), log=log)
+    assert handed == [log.trace]
+    assert [(level, msg.split(" ")[1]) for level, msg in traced] == [
+        ("INFO", "START"), ("ERROR", "FAILED"), ("INFO", "START"), ("INFO", "DONE")]
+    assert not any(msg.startswith("DOWNLOAD") for msg in screen)
+
+
+def test_the_update_says_which_yt_dlp_it_replaced_with_which(monkeypatch, caplog):
+    versions = iter(["2026.8.19", "2026.10.1"])
+    monkeypatch.setattr(source_fetch, "_ytdlp_version", lambda: next(versions))
+    monkeypatch.setattr(source_fetch.subprocess, "run", lambda args, **kw: subprocess.CompletedProcess(args, 0, "", ""))
+    traced = []
+    with caplog.at_level(logging.INFO, logger="persodub.source_fetch"):
+        source_fetch._upgrade(lambda msg, level="INFO": traced.append((level, msg)))
+    assert traced[0] == ("INFO", f"DOWNLOAD START pip yt-dlp from https://pypi.org/simple to {sys.prefix}")
+    assert traced[1][0] == "INFO"
+    assert re.fullmatch(r"DOWNLOAD DONE pip yt-dlp: 2026\.8\.19 -> 2026\.10\.1 in \d+\.\ds, sha256 checked by pip",
+                        traced[1][1])
+    assert len(traced) == 2
+    assert _fetch_lines(caplog) == [], "a trace writes the app log itself (app/jobs.py), so not twice"
+
+
+def test_an_update_pip_refused_says_pips_error_not_its_notice(monkeypatch, caplog):
+    monkeypatch.setattr(source_fetch.subprocess, "run", lambda args, **kw: subprocess.CompletedProcess(
+        args, 1, "", "ERROR: Could not find a version that satisfies the requirement yt-dlp\n"
+                     "[notice] A new release of pip is available: 24.0 -> 25.2"))
+    with caplog.at_level(logging.INFO, logger="persodub.source_fetch"):
+        source_fetch._upgrade()   # no raise: the caller tries once more with the yt-dlp it has
+    level, msg = _fetch_lines(caplog)[-1]
+    assert level == "ERROR"
+    assert re.fullmatch(r"DOWNLOAD FAILED pip yt-dlp after \d+\.\ds: pip exited 1: ERROR: Could not find a version "
+                        r"that satisfies the requirement yt-dlp \(pypi\.org\)", msg)

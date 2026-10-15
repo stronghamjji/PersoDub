@@ -81,6 +81,8 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
     try:
         pc = perso_client.PersoClient()
         pc.cancel_check = lambda: state.job_store.is_cancel_requested(jid)
+        # The upload's and the download's lines into the job's file too.
+        pc.trace = getattr(log, "trace", None)
         ws = perso_client.begin_credit_watch(pc)
         if ws:
             log(f"   Perso workspace: {ws.get('name') or ws.get('seq')} (#{ws.get('seq')})")

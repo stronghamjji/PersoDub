@@ -4,11 +4,16 @@ gone; since issue #48 it runs `python -m huggingface_hub.cli.hf`, not the
 hf(.exe) launcher app_venv also installs (an unsigned, freshly created file
 Smart App Control or an antivirus can refuse to run -- same fix as
 desktop/src/installSpec.js's models step)."""
+import json
 import logging
 import os
 import re
 import sys
+import time
 import types
+
+import pytest
+import requests
 
 from app import models as models_module
 
@@ -200,3 +205,164 @@ def test_a_cancel_stops_a_tool_that_prints_nothing(monkeypatch, tmp_path):
     models_module._pull_hf(entry, str(tmp_path), lambda p: None, lambda: time.monotonic() - t0 > 0.3)
     assert time.monotonic() - t0 < 5, "the cancel waited for the tool to finish"
     assert started[0].poll() is not None, "the tool was left downloading"
+
+
+# ── The download's own lines (app/netlog.py): where from, where to, each
+#    file, and how it ended -- the vocabulary the desktop shell writes too.
+
+def _model_lines(caplog):
+    return [(r.levelname, r.getMessage()) for r in caplog.records if r.name == "persodub.models"]
+
+
+def test_a_hf_download_names_its_source_its_folder_and_every_file_it_holds(monkeypatch, tmp_path, caplog):
+    dest = tmp_path / "models" / "whisper" / "x"
+
+    class FakeProc:
+        def __init__(self):
+            (dest / ".cache" / "huggingface").mkdir(parents=True)
+            (dest / ".cache" / "huggingface" / "config.json.metadata").write_bytes(b"m")
+            (dest / "sub").mkdir()
+            (dest / "config.json").write_bytes(b"c" * 2100)
+            (dest / "sub" / "model.bin").write_bytes(b"w" * 3_100_000)
+            self.stdout = iter(["100%"])
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(models_module._subprocess, "Popen", lambda argv, **kw: FakeProc())
+    monkeypatch.delenv("HF_ENDPOINT", raising=False)
+    rev = "edaa852ec7e145841d8ffdb056a99866b5f0a478"
+    entry = {"id": "whisper", "dir": "models/whisper/x",
+             "source": {"kind": "hf", "repo": "Systran/faster-whisper-large-v3", "rev": rev}}
+    with caplog.at_level(logging.INFO, logger="persodub.models"):
+        models_module._pull_hf(entry, str(tmp_path), lambda p: None, lambda: False)
+    lines = [msg for _level, msg in _model_lines(caplog)]
+    what, base = "hf Systran/faster-whisper-large-v3@edaa852", "https://huggingface.co/Systran/faster-whisper-large-v3"
+    # The tool's own .cache folder is not the model's.
+    assert lines[:3] == [
+        f"DOWNLOAD START {what} from {base} to {dest}",
+        f"DOWNLOAD FILE {what}: config.json 2.1 kB from {base}/resolve/{rev}/config.json",
+        f"DOWNLOAD FILE {what}: sub/model.bin 3.1 MB from {base}/resolve/{rev}/sub/model.bin",
+    ]
+    assert re.fullmatch(rf"DOWNLOAD DONE {re.escape(what)}: 2 files, 3\.1 MB in \d+\.\ds( \(.+/s\))?, "
+                        r"size checked by hf", lines[3])
+    assert len(lines) == 4
+
+
+def test_a_hf_download_that_fails_says_so_after_its_retry(monkeypatch, tmp_path, caplog):
+    class FakeProc:
+        def __init__(self):
+            self.stdout = iter(["Read timed out."])
+
+        def wait(self):
+            return 1
+
+    monkeypatch.setattr(models_module._subprocess, "Popen", lambda argv, **kw: FakeProc())
+    monkeypatch.setattr(models_module, "HF_ATTEMPTS", 2)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    # A mirror the hf tool is pointed at is where the lines say it came from.
+    monkeypatch.setenv("HF_ENDPOINT", "https://hf-mirror.com/")
+    entry = {"id": "qwen3-tts", "dir": "models/qwen3-tts", "source": {"kind": "hf", "repo": "Qwen/x", "rev": "abc"}}
+    with caplog.at_level(logging.INFO, logger="persodub.models"), pytest.raises(RuntimeError):
+        models_module._pull_hf(entry, str(tmp_path), lambda p: None, lambda: False)
+    lines = _model_lines(caplog)
+    assert lines[0] == (
+        "INFO", f"DOWNLOAD START hf Qwen/x@abc from https://hf-mirror.com/Qwen/x to {tmp_path / 'models' / 'qwen3-tts'}")
+    # The seconds since START, as the shell counts a RETRY's (desktop/src/installSpec.js).
+    assert lines[1][0] == "WARNING"
+    assert re.fullmatch(r"DOWNLOAD RETRY hf Qwen/x@abc \(2/2\) after \d+\.\ds: hf download exited 1: Read timed out\.",
+                        lines[1][1])
+    assert lines[2][0] == "ERROR"
+    assert re.fullmatch(r"DOWNLOAD FAILED hf Qwen/x@abc after \d+\.\ds: RuntimeError: hf download exited 1: "
+                        r"Read timed out\. \| Read timed out\. \(hf-mirror\.com\)", lines[2][1])
+    assert len(lines) == 3
+
+
+class _Pull:
+    """Ollama's answer to /api/pull: a stream of status objects, one a line."""
+    status_code = 200
+
+    def __init__(self, *objects):
+        self.objects = objects
+
+    def raise_for_status(self):
+        pass
+
+    def iter_lines(self):
+        for o in self.objects:
+            yield json.dumps(o).encode()
+
+    def close(self):
+        pass
+
+
+def _ollama(monkeypatch, answer):
+    posted = []
+    monkeypatch.setattr(models_module._requests, "post", lambda url, **kw: posted.append(url) or answer)
+    monkeypatch.setattr(models_module._runtime, "url", lambda name: "http://127.0.0.1:11434")
+    return posted
+
+
+def test_an_ollama_pull_names_its_registry_each_layer_once_and_ollamas_own_check(monkeypatch, caplog):
+    big, small = "sha256:aeda25e63ebd" + "0" * 52, "sha256:e0a42594d802" + "1" * 52
+    posted = _ollama(monkeypatch, _Pull(
+        {"status": "pulling manifest"},
+        {"status": "pulling aeda25e63ebd", "digest": big, "total": 8_100_000_000},
+        {"status": "pulling aeda25e63ebd", "digest": big, "total": 8_100_000_000, "completed": 8_100_000_000},
+        {"status": "pulling aeda25e63ebd", "digest": big, "total": 8_100_000_000, "completed": 8_100_000_000},
+        # Ollama's last word on a layer can fall short of its size: it is in
+        # once Ollama has gone on to check them.
+        {"status": "pulling e0a42594d802", "digest": small, "total": 358, "completed": 100},
+        {"status": "verifying sha256 digest"}, {"status": "verifying sha256 digest"},
+        {"status": "writing manifest"}, {"status": "success"}))
+    entry = {"id": "gemma", "source": {"kind": "ollama", "tag": "gemma3:12b"}}
+    with caplog.at_level(logging.INFO, logger="persodub.models"):
+        models_module._pull_ollama(entry, lambda p: None, lambda: False)
+    lines = [msg for _level, msg in _model_lines(caplog)]
+    source = "https://registry.ollama.ai/library/gemma3:12b"
+    assert lines[:-1] == [
+        f"DOWNLOAD START ollama gemma3:12b from {source} via http://127.0.0.1:11434/api/pull",
+        "DOWNLOAD CONNECTED ollama gemma3:12b: HTTP 200 from 127.0.0.1:11434, size unknown",
+        f"DOWNLOAD FILE ollama gemma3:12b: layer aeda25e63ebd 8.1 GB from {source}",
+        f"DOWNLOAD FILE ollama gemma3:12b: layer e0a42594d802 358 B from {source}",
+        "DOWNLOAD ollama gemma3:12b: verifying sha256 digest",
+        "DOWNLOAD ollama gemma3:12b: success",
+    ]
+    assert re.fullmatch(r"DOWNLOAD DONE ollama gemma3:12b: 2 files, 8\.1 GB in \d+\.\ds( \(.+/s\))?, "
+                        r"sha256 checked by ollama", lines[-1])
+    assert posted == ["http://127.0.0.1:11434/api/pull"]
+
+
+def test_ollama_fetches_a_name_from_the_host_it_begins_with():
+    assert models_module._ollama_source("gemma3:12b") == "https://registry.ollama.ai/library/gemma3:12b"
+    assert models_module._ollama_source("someone/model:7b") == "https://registry.ollama.ai/someone/model:7b"
+    assert models_module._ollama_source("hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M") == (
+        "https://hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M")
+
+
+def test_an_ollama_pull_that_fails_says_what_the_stream_or_the_answer_said(monkeypatch, caplog):
+    entry = {"id": "hunyuan", "source": {"kind": "ollama", "pull": "hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M",
+                                         "tag": "hy-mt2:1.8b"}}
+    _ollama(monkeypatch, _Pull({"status": "pulling manifest"}, {"error": "pull model manifest: file does not exist"}))
+    with caplog.at_level(logging.INFO, logger="persodub.models"), pytest.raises(RuntimeError):
+        models_module._pull_ollama(entry, lambda p: None, lambda: False)
+    level, msg = _model_lines(caplog)[-1]
+    assert level == "ERROR"
+    assert re.fullmatch(r"DOWNLOAD FAILED ollama hf\.co/tencent/Hy-MT2-1\.8B-GGUF:Q4_K_M after \d+\.\ds: "
+                        r"RuntimeError: pull model manifest: file does not exist \(hf\.co\)", msg)
+
+    class Refused(_Pull):
+        status_code = 500
+
+        def raise_for_status(self):
+            raise requests.HTTPError("500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/pull")
+
+    caplog.clear()
+    _ollama(monkeypatch, Refused())
+    with caplog.at_level(logging.INFO, logger="persodub.models"), pytest.raises(requests.HTTPError):
+        models_module._pull_ollama(entry, lambda p: None, lambda: False)
+    lines = _model_lines(caplog)
+    assert lines[1] == ("INFO", "DOWNLOAD CONNECTED ollama hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M: "
+                                "HTTP 500 from 127.0.0.1:11434, size unknown")
+    assert lines[2][0] == "ERROR" and " after " in lines[2][1] and lines[2][1].endswith(
+        ": HTTPError: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/pull (hf.co)")

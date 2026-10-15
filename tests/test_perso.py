@@ -2,7 +2,9 @@
 against real json, and the pipeline branch is verified with a fake client.
 """
 import json
+import logging
 import os
+import re
 
 import httpx
 import pytest
@@ -1144,3 +1146,105 @@ def test_credits_of_two_perso_calls_that_overlap_are_not_counted(monkeypatch):
     perso_client_module.note_credits(ws_c, c, logs.append, "stt")
     assert c.credits_used == 5
     assert logs[-1] == "   Perso credits used: 5"
+
+
+# ── 12. The transfers' own lines (app/netlog.py) ───────────────────────────
+def _no_seconds(text):
+    """A line with its seconds and its speed taken out, which no test can pin."""
+    return re.sub(r"(in|after) \d+\.\ds( \([^)]*/s\))?", r"\1 Ns", text)
+
+
+def test_a_cloud_dubs_upload_and_download_go_into_the_jobs_file(monkeypatch, tmp_path, caplog):
+    _install_fake_perso_dub_http(
+        monkeypatch, progress_sequence=[{"progressReason": "Completed", "hasFailed": False}])
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video, out = tmp_path / "clip.mp4", tmp_path / "dubbed.mp4"
+    video.write_bytes(b"fake-video")
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    traced = []
+    # What app/dub_launch.py hands over: the job's log.trace.
+    client.trace = lambda msg, level="INFO": traced.append((level, msg))
+    with caplog.at_level(logging.INFO, logger="persodub.perso_client"):
+        client.dub_video(str(video), str(out), "ko", "en")
+    assert [(level, _no_seconds(msg)) for level, msg in traced] == [
+        # The signed link without its signature.
+        ("INFO", f"UPLOAD START perso media from {video} to https://blob.example.com/x?… (10 B)"),
+        ("INFO", "UPLOAD CONNECTED perso media: HTTP 200 from blob.example.com, 10 B"),
+        ("INFO", "UPLOAD DONE perso media: 10 B in Ns, not checked"),
+        ("INFO", f"DOWNLOAD START perso dubbing from https://media.example.com/perso-storage/dubbed_en.mp4 to {out}"),
+        ("INFO", "DOWNLOAD CONNECTED perso dubbing: HTTP 200 from media.example.com, 15 B"),
+        ("INFO", "DOWNLOAD DONE perso dubbing: 15 B in Ns, not checked"),
+    ]
+    # The trace writes the app log itself (app/jobs.py), so not twice.
+    assert not [r for r in caplog.records if r.getMessage().startswith(("UPLOAD ", "DOWNLOAD "))]
+
+
+def test_a_dropped_download_is_written_as_its_retries_and_a_refused_one_as_failed(monkeypatch, tmp_path, caplog):
+    answers = [httpx.RemoteProtocolError("peer closed connection"), httpx.RemoteProtocolError("peer closed connection"),
+               (200, b"DUB-BYTES"), (404, b"gone")]
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        r = _FakeHttpxResponse({}, status_code=answer[0])
+        r.content = answer[1]
+        return r
+
+    monkeypatch.setattr(perso_client_module, "MEDIA_HOST", "https://media.example.com")
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    dub, line = tmp_path / "dub.mp4", tmp_path / "line.src"
+    with caplog.at_level(logging.INFO, logger="persodub.perso_client"):
+        client.download_media("https://media.example.com/dub.mp4?se=1&sig=abc", str(dub), what="perso dubbing")
+        with pytest.raises(RuntimeError):
+            client.download_media("/perso-storage/line.mp3", str(line))
+    assert [(r.levelname, _no_seconds(r.getMessage())) for r in caplog.records] == [
+        ("INFO", f"DOWNLOAD START perso dubbing from https://media.example.com/dub.mp4?… to {dub}"),
+        ("WARNING", "DOWNLOAD RETRY perso dubbing (2/3) after Ns: RemoteProtocolError: peer closed connection"),
+        ("WARNING", "DOWNLOAD RETRY perso dubbing (3/3) after Ns: RemoteProtocolError: peer closed connection"),
+        ("INFO", "DOWNLOAD CONNECTED perso dubbing: HTTP 200 from media.example.com, 9 B"),
+        ("INFO", "DOWNLOAD DONE perso dubbing: 9 B in Ns, not checked"),
+        ("INFO", f"DOWNLOAD START perso file from https://media.example.com/perso-storage/line.mp3 to {line}"),
+        ("INFO", "DOWNLOAD CONNECTED perso file: HTTP 404 from media.example.com, 4 B"),
+        ("ERROR", "DOWNLOAD FAILED perso file after Ns: RuntimeError: HTTP 404 (media.example.com)"),
+    ]
+
+
+def test_an_upload_that_fails_is_written_without_its_signature(monkeypatch, tmp_path, caplog):
+    _install_fake_perso_sep_http(monkeypatch, progress_sequence=[])
+
+    def refused(url, content=None, json=None, headers=None, timeout=None):
+        raise httpx.ConnectError("[Errno 61] Connection refused for url " + url)
+
+    monkeypatch.setattr(perso_client_module.httpx, "put", refused)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    with caplog.at_level(logging.INFO, logger="persodub.perso_client"), pytest.raises(httpx.ConnectError):
+        client._upload_media(str(video), 999)
+    assert [(r.levelname, _no_seconds(r.getMessage())) for r in caplog.records] == [
+        ("INFO", f"UPLOAD START perso media from {video} to https://blob.example.com/x?… (1 B)"),
+        ("ERROR", "UPLOAD FAILED perso media after Ns: ConnectError: [Errno 61] Connection refused for url "
+                  "https://blob.example.com/x?… (blob.example.com)"),
+    ]
+    assert "sig=abc" not in caplog.text
+
+
+def test_separations_tracks_are_fetched_like_every_storage_file(monkeypatch, tmp_path, caplog):
+    _install_fake_perso_sep_http(
+        monkeypatch, progress_sequence=[{"progressReason": "Completed", "hasFailed": False}])
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    with caplog.at_level(logging.INFO, logger="persodub.perso_client"):
+        client.separate(str(video), str(tmp_path / "work"))
+    starts = [r.getMessage() for r in caplog.records if r.getMessage().startswith("DOWNLOAD START")]
+    assert starts == [
+        f"DOWNLOAD START perso vocals from https://media.example.com/perso-storage/voice.wav "
+        f"to {tmp_path / 'work' / 'vocals.wav'}",
+        f"DOWNLOAD START perso background from https://media.example.com/perso-storage/background.wav "
+        f"to {tmp_path / 'work' / 'background.wav'}",
+    ]
