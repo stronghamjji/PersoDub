@@ -162,6 +162,10 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
       shell: shellLogText,
       app: (bundle && bundle.logs && bundle.logs.app) || "",
       job: (bundle && bundle.logs && bundle.logs.job) || "",
+      // The probes' answers in full, for the dashboard: the issue body keeps
+      // only the first report of a fingerprint, so the second machine's
+      // security product or certificate signer would otherwise be lost.
+      diagnostics: names.length ? maskText(JSON.stringify(diagnostics, null, 2), { home, kit: kitDir }) : "",
     });
     return { report, archive };
   }

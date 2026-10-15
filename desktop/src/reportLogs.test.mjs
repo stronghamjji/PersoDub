@@ -46,6 +46,12 @@ test("a log that is not there is not an empty file in the archive", () => {
   assert.deepEqual(entries.map((e) => e.name), ["shell.log"]);
 });
 
+test("a probed failure's diagnostics ride along as diagnostics.json", () => {
+  const entries = untar(gunzipSync(buildLogArchive({ shell: "s", diagnostics: '{"proxy":"direct"}' })));
+  assert.deepEqual(entries.map((e) => e.name), ["shell.log", "diagnostics.json"]);
+  assert.equal(entries[1].text, '{"proxy":"direct"}');
+});
+
 test("no logs at all means no archive", () => {
   assert.equal(buildLogArchive({}), null);
 });
