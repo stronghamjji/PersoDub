@@ -36,6 +36,10 @@ Two logs sit side by side in the app's `logs` folder,
 | `job-<id>.log` | One dubbing job's progress, the same lines the screen shows, plus the full details of a failure |
 | `persodub.log` | The app itself: what it did at startup, and the whole story behind any "An internal error occurred" |
 
+Beside them, `timeline.log` is these logs and the app's own `shell.log` merged in time
+order, the one file to read first; the app rewrites it every five minutes and when it
+quits.
+
 `persodub.log` rolls over at about 2 MB and keeps three older copies
 (`persodub.log.1` and so on), so it never grows without limit. Both are plain text —
 attach them to a bug report.

@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { freeSpaceAt } from "./config.js";
 import { readKitVersion } from "./engineCheck.js";
@@ -9,6 +9,7 @@ import { buildReport, collectEnvironment, maskText, resolveReportMode, withoutEn
 import { buildLogArchive } from "./reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./reportQueue.js";
 import { envWithKit } from "./kitEnv.js";
+import { readFileEnd } from "./fileEnd.js";
 
 // Automatic failure reports. The usage count (usageIpc.js) says a dub failed;
 // this says why -- the machine, the step, the error, and the logs -- and it
@@ -20,24 +21,6 @@ export const REPORT_ENDPOINT = "https://persodub-report.persodub.workers.dev";
 // Reports wait here rather than in userData: a report belongs to the kit that
 // produced it, and a user who deletes a kit is done with its failures too.
 const reportsDir = (kitDir) => join(kitDir, "reports");
-
-// The last maxBytes of a file, as text; empty when there is no file. Read from
-// the end: an engine's console log is appended to at every launch and never
-// cut, and one had grown past 20 MB (2026-10-15).
-function readFileText(path, maxBytes = 8 * 1024 * 1024) {
-  let fd;
-  try {
-    fd = openSync(path, "r");
-    const size = fstatSync(fd).size;
-    const buf = Buffer.alloc(Math.min(size, maxBytes));
-    readSync(fd, buf, 0, buf.length, size - buf.length);
-    return buf.toString("utf8");
-  } catch {
-    return "";
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
-}
 
 // The engines' console logs, beside shell.log (orchestrator.js): where a voice
 // engine or Ollama that crashed says why. Their last 2 MB is plenty of history.
@@ -133,10 +116,10 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
     const bundle = await fetchBundle(jobId);
     const job = (bundle && bundle.job) || {};
     const logsDir = join(app.getPath("userData"), "logs");
-    const shellLogText = maskText(readFileText(join(logsDir, "shell.log")), { home, kit: kitDir });
+    const shellLogText = maskText(readFileEnd(join(logsDir, "shell.log")), { home, kit: kitDir });
     // The encoded names out first, so that the masks see every path in them.
     const engineLogs = Object.fromEntries(Object.entries(ENGINE_LOGS)
-      .map(([key, file]) => [key, withoutEncodedNames(readFileText(join(logsDir, file), ENGINE_LOG_BYTES))]));
+      .map(([key, file]) => [key, withoutEncodedNames(readFileEnd(join(logsDir, file), ENGINE_LOG_BYTES))]));
     const packs = (bundle && bundle.packs)
       || Object.fromEntries(PACKS.map((p) => [p.id, packInstalled(kitDir, p.id) ? "ready" : "missing"]));
     // What this machine can say about this kind of failure (diagnostics.js):

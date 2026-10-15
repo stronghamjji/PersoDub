@@ -14,6 +14,7 @@ import { createWindow } from "./src/windowFactory.js";
 import { EDITIONS, readEdition } from "./src/edition.js";
 import { useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
+import { writeTimeline } from "./src/timeline.js";
 
 // Two launches must never both start backends: the second would overwrite
 // pids.json with its own PIDs, and killStalePids on the NEXT boot (whichever
@@ -137,6 +138,8 @@ app.on("will-quit", () => {
   if (!gotLock) return;
   markCleanExit(join(app.getPath("userData"), "logs"));
   shellLog("QUIT: stopping engines");
+  // The merged timeline.log, with the line above in it, before the engines go.
+  writeTimeline(join(app.getPath("userData"), "logs"), shellLog);
   if (ctx.engines) {
     ctx.engines.stopAll();
   } else {

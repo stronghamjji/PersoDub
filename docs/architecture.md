@@ -147,7 +147,9 @@ macOS, `%LOCALAPPDATA%\PersoDub` on Windows), all in `desktop/src/config.js`.
 
 Outside the kit, the shell keeps `<userData>/logs/` (`shell.log`, `backend.log`,
 `sidecar.log`, `ollama.log`, `pids.json`, the `clean-exit` note, and the backend's
-own `persodub.log` and `job-<id>.log`, written there through `PERSODUB_LOG_DIR`)
+own `persodub.log` and `job-<id>.log`, written there through `PERSODUB_LOG_DIR`,
+and `timeline.log`, `shell.log`, `persodub.log` and the job logs merged in time
+order by `desktop/src/timeline.js`)
 and `<userData>/ports.json`. `<userData>` is Electron's folder for the app, named
 after `desktop/package.json`'s `name`:
 `~/Library/Application Support/persodub-desktop-shell` on macOS,

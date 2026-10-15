@@ -17,6 +17,7 @@ import { useLanguage, systemLocale, t } from "./i18n.js";
 import { screenFile } from "./screenText.js";
 import { detailLines, secondsSince } from "./logLine.js";
 import { memoryLine } from "./memoryLine.js";
+import { writeTimeline } from "./timeline.js";
 
 // Packaged builds carry the payload under Resources/; a dev checkout may have
 // one at desktop/resources/payload after running collect-payload. Exported
@@ -71,9 +72,11 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
 
   // One line of memory figures in shell.log (memoryLine.js): once the engines
   // are up, every five minutes after, and whenever one of their processes ends.
+  // timeline.log is rewritten right after it (timeline.js), and no more often.
   function logMemory() {
     return memoryLine(ctx.engines ? ctx.engines.processes() : [])
-      .then((line) => shellLog(line), () => { /* a missed figure never breaks the app */ });
+      .then((line) => shellLog(line), () => { /* a missed figure never breaks the app */ })
+      .then(() => writeTimeline(join(app.getPath("userData"), "logs"), shellLog));
   }
 
   // Prefer an existing kit (e.g. a mac_kit install); otherwise install into
