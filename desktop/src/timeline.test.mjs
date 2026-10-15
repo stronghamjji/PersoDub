@@ -77,3 +77,21 @@ test("a folder that cannot be read is said once, and never throws", () => {
   assert.equal(said.length, 1, said.join("\n"));
   assert.match(said[0], /^PERSODUB_TIMELINE not written: ENOENT/);
 });
+
+test("a job's lines copied into persodub.log are left out when the job's own log is merged", () => {
+  const persodub = file(
+    at("02,000", "persodub.main", "PersoDub 0.8.5 starting up"),
+    at("03,000", "persodub.jobs", "job-ab12cd34: [Step 1/6] separate START"),
+    at("04,000", "persodub.jobs", "job-ab12cd34: Traceback (most recent call last):", "ERROR"),
+    "ValueError: y",
+    at("05,000", "persodub.jobs", "job-ffff0000: JOB START (dub)"),
+  );
+  const job = file(at("03,000", "job-ab12cd34", "[Step 1/6] separate START"));
+  const out = mergeTimeline([{ name: "persodub.log", text: persodub }, { name: "job-ab12cd34.log", text: job }]);
+  assert.equal(out, file(
+    at("02,000", "persodub.main", "PersoDub 0.8.5 starting up"),
+    at("03,000", "job-ab12cd34", "[Step 1/6] separate START"),
+    // A job whose own log is not in the merge keeps its copy.
+    at("05,000", "persodub.jobs", "job-ffff0000: JOB START (dub)"),
+  ));
+});

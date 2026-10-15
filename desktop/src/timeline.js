@@ -13,22 +13,34 @@ import { errorText } from "./errorText.js";
 const STAMP = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} - /;
 const STAMP_LENGTH = "2026-10-15 22:31:05,494".length;
 const MAX_BYTES = 2 * 1024 * 1024;   // of each log, its end, as the failure report reads them
+// A job's line as the engine copies it into persodub.log: "… - persodub.jobs - INFO - job-<id>: …".
+const JOB_COPY = /^\S+ \S+ - persodub\.jobs - [A-Z]+ - job-(\w+): /;
 
 /**
  * texts: [{name, text}], in the order equal stamps keep. A stamped line begins
  * an entry, and the lines after it with no stamp (a traceback, a tool's
  * output) stay with it. Lines before a file's first stamp are dropped, and so
  * is all of a log in the old format, which has none.
+ *
+ * The engine copies every structural line of a job into persodub.log as well
+ * ("persodub.jobs - INFO - job-ab12cd34: [Step 1/6] …", app/jobs.py), so a job
+ * whose own log is merged would read twice. Those copies are left out for
+ * every job whose log is among the texts; a job whose log is not (older than
+ * a week) keeps them, as the only record of it here.
  */
 export function mergeTimeline(texts) {
+  const merged = new Set(texts.map(({ name }) => /^job-(\w+)\.log$/.exec(name || "")?.[1]).filter(Boolean));
   const entries = [];
   for (const { text } of texts) {
     const lines = String(text ?? "").split(/\r?\n/);
     if (lines.at(-1) === "") lines.pop();   // the file's last newline ends a line; it is not a blank one
     let entry = null;
     for (const line of lines) {
-      if (STAMP.test(line)) entries.push(entry = { stamp: line.slice(0, STAMP_LENGTH), lines: [line] });
-      else if (entry) entry.lines.push(line);
+      if (STAMP.test(line)) {
+        const copy = JOB_COPY.exec(line);
+        entry = copy && merged.has(copy[1]) ? { skip: true } : { stamp: line.slice(0, STAMP_LENGTH), lines: [line] };
+        if (!entry.skip) entries.push(entry);
+      } else if (entry && !entry.skip) entry.lines.push(line);
     }
   }
   // A stable sort: equal stamps keep the order the texts came in.
