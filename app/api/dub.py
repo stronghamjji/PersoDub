@@ -36,6 +36,8 @@ _run_cloud_dub, default_stt_engine -- are imported directly, and the tests
 that fake them patch this module; app/dub_launch.py takes them as arguments
 for exactly that reason.
 """
+import json
+import logging
 import os
 import re
 import shutil
@@ -70,6 +72,7 @@ from app.source_fetch import fetch as fetch_source
 from app.text.naming import project_name, safe_name
 
 router = APIRouter()
+logger = logging.getLogger("persodub.api.dub")
 
 # Kept as module attributes on purpose: this file's call sites read these names
 # off this module, and the tests monkeypatch them. The code itself lives in
@@ -1193,19 +1196,43 @@ def dub_start(
     "ORIOLE" or "WREN"), which the target language must have; omitted, ORIOLE
     when the language has it, else the first it has (app/languages.py model_for).
     """
-    plan = _start_plan(
-        video=video, source_url=source_url, download_id=download_id, language=language,
-        language_code=language_code, num_speakers=num_speakers, translate_engine=translate_engine,
-        stt_engine=stt_engine, sep_engine=sep_engine, dub_mode=dub_mode, n_takes=n_takes,
-        source_language_code=source_language_code, project=project, trim_start=trim_start,
-        trim_end=trim_end, ranges=ranges, tts_engine=tts_engine, stems_from=stems_from,
-        project_id=project_id, perso_model=perso_model)
-    warning = _start_preflight(plan, has_script=srt is not None)
-    work = _start_folder(plan)
+    try:
+        plan = _start_plan(
+            video=video, source_url=source_url, download_id=download_id, language=language,
+            language_code=language_code, num_speakers=num_speakers, translate_engine=translate_engine,
+            stt_engine=stt_engine, sep_engine=sep_engine, dub_mode=dub_mode, n_takes=n_takes,
+            source_language_code=source_language_code, project=project, trim_start=trim_start,
+            trim_end=trim_end, ranges=ranges, tts_engine=tts_engine, stems_from=stems_from,
+            project_id=project_id, perso_model=perso_model)
+        warning = _start_preflight(plan, has_script=srt is not None)
+        work = _start_folder(plan)
+    except HTTPException as e:
+        # What the screen sent, under the names a job's Inputs line uses
+        # (app/jobs.py): settings only -- no title, file name, path or link.
+        _log_refused(e.detail, {
+            "language": language, "language_code": language_code, "source_lang": source_language_code,
+            "from_link": bool(source_url),
+            "trim": None if trim_start is None and trim_end is None else {"start": trim_start, "end": trim_end},
+            "stt_engine": stt_engine, "translator": translate_engine, "tts": tts_engine, "quality": n_takes,
+            "separation": sep_engine, "dub_mode": dub_mode, "perso_model": perso_model,
+            "num_speakers": num_speakers, "download_id": download_id, "ranges": ranges, "project_id": project_id})
+        raise
     reused, separation = _reuse_stems(plan, work)
     _save_subtitles(work, srt, source_srt)
     fields = _start_record(plan, work, separation)
     return _start_launch(plan, work, fields, reused, warning)
+
+
+def _log_refused(detail, settings: dict) -> None:
+    """One line in the app log for a start refused before any job existed:
+    there is no job to keep a log, and the screen's sentence was all that was
+    left of it (Windows, 2026-10-16). The 409 that asks for downloads names
+    the models it is missing."""
+    if isinstance(detail, dict) and "missing" in detail:
+        said = "models needed: " + ", ".join(str(m.get("id")) for m in detail["missing"])
+    else:
+        said = " ".join(str(detail).split())
+    logger.warning("JOB REFUSED (dub): %s | %s", said, json.dumps(settings, ensure_ascii=False, default=str))
 
 
 # ---------------------------------------------------------------------------

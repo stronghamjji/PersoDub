@@ -1172,8 +1172,12 @@ def run_dub(
     # Each reuse holds only while everything before it was reused too: a stage
     # made again can change the lines, and a later stage's files from the
     # earlier run would then belong to different lines (review 2026-09-23).
-    with _timed_stage(log, "transcribe", stt_engine=stt_engine, source_language_code=source_language_code,
-                      diar_engine=diar_engine, num_speakers=num_speakers):
+    # Named as they will run: local Whisper unless Perso was asked for, the
+    # language found by itself, and the speakers named by CAM++ after Whisper
+    # (_stage_transcribe_local) or by Perso's own transcript.
+    with _timed_stage(log, "transcribe", stt_engine=stt_engine or "whisper", source=source_language_code or "auto",
+                      diar_engine=diar_engine or ("perso" if stt_engine == "perso" else "campplus"),
+                      num_speakers=num_speakers):
         src_cues, perso_cues, detected_code, perso_client, tx_reused = _transcribe_or_reuse(
             video_path, work_dir, sep_reused, vocals_path, stt_engine, source_language_code,
             diar_engine, num_speakers, perso_client, cancel_check, on_notice, log,

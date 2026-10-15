@@ -493,7 +493,7 @@ def test_every_stage_is_written_between_start_and_done_in_order(monkeypatch, tmp
     mem = ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
     # What each stage was given, under its START; the last two have nothing to say.
     given = {"separate": "resume=False duration=2.0",
-             "transcribe": "source_language_code=en num_speakers=2",
+             "transcribe": "stt_engine=whisper source=en diar_engine=campplus num_speakers=2",
              "translate": "translate_engine=gemma lines=1 target=Korean source=en srt_given=True",
              "synthesize": "lines=1 n_takes=1 speakers=1 resume=False"}
     expected = []
@@ -508,6 +508,29 @@ def test_every_stage_is_written_between_start_and_done_in_order(monkeypatch, tmp
     assert log.screen[-1] == "Done!"
     assert progress_of(log.screen) == {"stage": 4, "label": "Dubbing", "percent": 97}
     assert progress_of(log.screen + [m for _level, m in log.traced]) == progress_of(log.screen)
+
+
+def test_the_transcribe_context_names_what_runs_when_nothing_was_chosen(monkeypatch, tmp_path):
+    # Every value None (local Whisper, auto language, the default diarizer)
+    # left the step with no Context line at all (Windows, 2026-10-16).
+    _stub_qwen_io(monkeypatch)
+    monkeypatch.setattr(pipeline, "_video_duration", lambda path: 2.0)
+    monkeypatch.setattr(pipeline, "_mux", _fake_mux)
+    monkeypatch.setattr(pipeline, "ensure_video_length", lambda *a, **k: None)
+    video, out, srt = _write_inputs(tmp_path)
+
+    def transcribe_context(**kw):
+        log = _traced_log()
+        pipeline.run_dub(video_path=video, out_path=out, srt_path=srt, language="Korean", language_code="ko",
+                         qwen_engine=_FakeQwenEngine(), log=log, **kw)
+        return [m for _level, m in log.traced if m.startswith("[Step 2/6] transcribe Context: ")]
+
+    assert transcribe_context() == ["[Step 2/6] transcribe Context: stt_engine=whisper source=auto diar_engine=campplus"]
+    # Perso's transcript names its own speakers: CAM++ does not run after it.
+    monkeypatch.setattr(pipeline, "_stage_transcribe_perso",
+                        lambda *a, **k: ([{"start": 0.0, "end": 2.0, "text": "hi", "speaker_id": "A"}], None))
+    assert transcribe_context(stt_engine="perso") == [
+        "[Step 2/6] transcribe Context: stt_engine=perso source=auto diar_engine=perso"]
 
 
 def test_a_stage_that_fails_says_so_and_the_failure_carries_its_step(monkeypatch, tmp_path, fixed_memory):

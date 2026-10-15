@@ -1,5 +1,7 @@
 """dub_start's missing-model preflight: a 409 whose body is exactly what the
 screen needs to draw the "Download N GB of AI models to dub?" dialog."""
+import json
+import logging
 import os
 import sys
 import threading
@@ -490,3 +492,50 @@ def test_the_engine_says_only_what_it_will_do_for_this_dub():
     assert engine_hint(False, False) == "Makes the voices on this computer."
     assert engine_hint(True, False) == "Separates the sound and makes the voices on this computer."
     assert engine_hint(False, True) == "Transcribes and makes the voices on this computer."
+
+
+# A start the preflight refuses leaves no job, and so no job log: the app log
+# gets one line, the screen's sentence and the settings the screen sent
+# (Windows, 2026-10-16: the sentence on screen was all that was left).
+def _refusals(caplog):
+    return [r for r in caplog.records
+            if r.name == "persodub.api.dub" and r.getMessage().startswith("JOB REFUSED (dub): ")]
+
+
+@pytest.mark.parametrize("why", ["translator", "models", "trim", "perso_key"])
+def test_a_refused_start_leaves_one_line_in_the_app_log(monkeypatch, _kit, caplog, why):
+    data = {"project": "my wedding"}
+    if why == "translator":     # the translation runtime is down
+        monkeypatch.setattr(engines_status, "hunyuan_status", lambda: "unreachable")
+        data["translate_engine"] = "hunyuan"
+    if why == "trim":           # a 0-second video, trimmed to nothing
+        data.update(trim_start="0", trim_end="0")
+    if why == "perso_key":
+        monkeypatch.setattr(engines_status, "perso_available", lambda: False)
+        data["stt_engine"] = "perso"
+    # "models": the kit as the fixture lays it has no voice or Whisper model.
+    with caplog.at_level(logging.WARNING, logger="persodub.api.dub"):
+        r = _start(data)
+    assert r.status_code in (400, 409, 422)
+    [record] = _refusals(caplog)
+    assert record.levelname == "WARNING"
+    said, settings = record.getMessage()[len("JOB REFUSED (dub): "):].rsplit(" | ", 1)
+    detail = r.json()["detail"]
+    if why == "models":
+        assert said == "models needed: " + ", ".join(m["id"] for m in detail["missing"])
+    else:
+        assert said == " ".join(detail.split())
+    settings = json.loads(settings)
+    assert settings["language_code"] == "ko" and "translator" in settings
+    # Settings only: never the title, the file or where it came from.
+    assert not {"project", "title", "source_url", "video"} & set(settings)
+    assert "wedding" not in record.getMessage()
+
+
+def test_a_start_that_goes_through_leaves_no_refusal(monkeypatch, _kit, caplog):
+    _put_whisper(_kit)
+    _put_tts(_kit)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
+    with caplog.at_level(logging.WARNING, logger="persodub.api.dub"):
+        assert _start().status_code == 200
+    assert _refusals(caplog) == []
