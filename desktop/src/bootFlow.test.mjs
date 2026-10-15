@@ -81,5 +81,9 @@ test("an install that stops names its step on the error screen, and shell.log te
   assert.ok(lines.includes(`INFO [Step 1/${n}] payload START`), lines.join("\n"));
   assert.ok(!lines.some((l) => l.includes("Copying bundled files")), "the screen's title stays out of the log");
   assert.ok(lines.some((l) => new RegExp(String.raw`^ERROR \[Step 1/${n}\] payload FAILED \(\d+\.\ds\): `).test(l)), lines.join("\n"));
-  assert.match(lines.at(-1), new RegExp(String.raw`^ERROR INSTALL FAILED at step 1/${n} payload \(\d+\.\ds\): \S+$`));
+  const failed = lines.findIndex((l) => l.startsWith("ERROR INSTALL FAILED"));
+  assert.match(lines[failed], new RegExp(String.raw`^ERROR INSTALL FAILED at step 1/${n} payload \(\d+\.\ds\): \S+$`));
+  // Under it, what the step's own error said, indented: here the missing folder.
+  assert.match(lines[failed + 1], /^ERROR {3}ENOENT: no such file or directory, lstat '.*kit-src.sidecar'$/);
+  assert.equal(failed + 2, lines.length, lines.join("\n"));
 });

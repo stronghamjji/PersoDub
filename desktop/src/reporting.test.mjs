@@ -4,8 +4,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { gunzipSync } from "node:zlib";
 import { createReporter, REPORT_ENDPOINT } from "./reporting.js";
 
 const ok = (body) => ({ ok: true, status: 200, json: async () => body });
@@ -85,6 +86,30 @@ test("a job's report is cut from the job's whole log, so its opening lines go to
   await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom", jobId: "abc123" });
   const job = JSON.parse(s.calls[1].body).logTails.job.split("\n");
   assert.deepEqual([job[0], job[1], job[25], job.at(-1)], ["JOB START (dub)", "Inputs: {}", "...", "line 399"]);
+});
+
+// The engines' console logs, beside shell.log: where a voice engine or Ollama
+// that crashed says why. In the report their last 80 lines, masked; in the
+// archive their last 2 MB; a log that is not there is in neither.
+test("a report carries the engines' console logs that are there, masked, in the report and the archive", async () => {
+  const s = setup();
+  const home = dirname(s.userData);   // what the stand-in app answers for "home"
+  const logs = join(s.userData, "logs");
+  const request = `"GET /api/subtitles?video_path=${encodeURIComponent(join(home, "Secret Show.mp4"))} HTTP/1.1" 200`;
+  writeFileSync(join(logs, "backend.log"), [...Array.from({ length: 300 }, (_, i) => `backend ${i}`), request].join("\n"));
+  writeFileSync(join(logs, "sidecar.log"), `Traceback (most recent call last):\nRuntimeError: no memory at ${join(home, "kit", "x")}\n`);
+  await s.reporter.sendReport({ kind: "install", kitDir: s.kitDir, code: "engine-start", message: "boom" });
+
+  const { logTails } = JSON.parse(s.calls[0].body);
+  assert.equal(logTails.backend.split("\n").length, 80);
+  assert.equal(logTails.backend.split("\n").at(-1), '"GET /api/subtitles?… HTTP/1.1" 200');
+  assert.ok(!logTails.backend.includes("Secret"), "the encoded video path is gone");
+  assert.match(logTails.sidecar, /^Traceback \(most recent call last\):\nRuntimeError: no memory at ~/);
+  assert.equal(logTails.ollama, "", "no ollama.log, no tail");
+  const archive = gunzipSync(Buffer.from(s.calls[1].body)).toString("latin1");
+  assert.ok(archive.includes("backend.log") && archive.includes("sidecar.log"), "both are in the archive");
+  assert.ok(!archive.includes("ollama.log"));
+  assert.ok(!archive.includes("Secret"), "the archive's copy is cleaned and masked too");
 });
 
 test("with the relay out of reach the report waits in the kit, and goes out on the next launch", async () => {

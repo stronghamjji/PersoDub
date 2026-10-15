@@ -15,7 +15,7 @@ import { errorText } from "./errorText.js";
 import { hasPersoKey } from "./usageIpc.js";
 import { useLanguage, systemLocale, t } from "./i18n.js";
 import { screenFile } from "./screenText.js";
-import { secondsSince } from "./logLine.js";
+import { detailLines, secondsSince } from "./logLine.js";
 import { memoryLine } from "./memoryLine.js";
 
 // Packaged builds carry the payload under Resources/; a dev checkout may have
@@ -209,6 +209,8 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         const code = classifyError(message, { install: true });
         const place = toRun.findIndex((s) => s.id === failedStep) + 1;
         shellLog(`INSTALL FAILED at step ${place}/${toRun.length} ${failedStep} (${secondsSince(from)}s): ${code}`, "ERROR");
+        // ...and under it what the tool said: its own last lines (exec.js), or the download's error.
+        for (const line of detailLines(message)) shellLog(line, "ERROR");
         countUsage("install_failure", cfg.kitDir, code, failedStep);
         sendReport({ kind: "install", kitDir: cfg.kitDir, code, step: failedStep, message });
         const title = failedTitle ? t("The install stopped at {step}", { step: failedTitle }) : t("The install could not finish");

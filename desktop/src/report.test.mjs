@@ -13,6 +13,7 @@ import {
   normalizeLine,
   reportBytes,
   resolveReportMode,
+  withoutEncodedNames,
   worthReporting,
 } from "./report.js";
 
@@ -344,6 +345,40 @@ test("a job log in that shape is still trimmed to the cap, oldest lines first", 
   const job = report.logTails.job.split("\n");
   assert.ok(job.at(-1).startsWith("599 "), "the end of the story survives");
   assert.ok(!job[0].startsWith("0 "), "the opening goes first");
+});
+
+// The engines' console logs: where a voice engine or Ollama that crashed says
+// why. Their web requests carry a video's path percent-encoded, where the masks
+// cannot see it, so the query and any encoded segment go first.
+test("a request's query and percent-encoded names leave an engine's log, its path stays", () => {
+  assert.equal(withoutEncodedNames('INFO: 127.0.0.1 - "GET /api/subtitles?video_path=%2FUsers%2Fjane%2FMy%20Show.mp4&engine=x HTTP/1.1" 200 OK'),
+    'INFO: 127.0.0.1 - "GET /api/subtitles?… HTTP/1.1" 200 OK');
+  assert.equal(withoutEncodedNames('"GET /api/videos/My%20Show.mp4/thumb HTTP/1.1"'), '"GET /api/videos/…/thumb HTTP/1.1"');
+  assert.equal(withoutEncodedNames("loading 45% done, 100%|####|"), "loading 45% done, 100%|####|");
+});
+
+test("a report carries the last 80 lines of each engine's console log, masked", () => {
+  const log = (name) => Array.from({ length: 300 }, (_, i) => `${name} ${i} at /Users/jane/x`).join("\n");
+  const encoded = '"GET /api/subtitles?video_path=%2FUsers%2Fjane%2FSecret.mp4 HTTP/1.1" 200';
+  const report = buildReport({ ...SAMPLE, home: "/Users/jane",
+    logTails: { backend: `${log("backend")}\n${encoded}`, sidecar: log("sidecar"), ollama: "" } });
+  const backend = report.logTails.backend.split("\n");
+  assert.equal(backend.length, 80);
+  assert.equal(backend.at(-1), '"GET /api/subtitles?… HTTP/1.1" 200');
+  assert.ok(!report.logTails.backend.includes("jane") && !report.logTails.backend.includes("Secret"), report.logTails.backend);
+  assert.equal(report.logTails.sidecar.split("\n").length, 80);
+  assert.ok(report.logTails.sidecar.endsWith("sidecar 299 at ~/…"));
+  assert.equal(report.logTails.ollama, "", "a log that is not there is an empty tail");
+});
+
+test("an engine's tail is trimmed like the others when the report is too big, longest first", () => {
+  const fat = (n) => Array.from({ length: n }, (_, i) => `${i} ${"x ".repeat(400)}`).join("\n");
+  const report = buildReport({ ...SAMPLE, logTails: { backend: fat(80), sidecar: fat(80), ollama: fat(80) } });
+  assert.ok(reportBytes(report) <= MAX_BYTES, `${reportBytes(report)} bytes`);
+  for (const k of ["backend", "sidecar", "ollama"]) {
+    const lines = report.logTails[k].split("\n");
+    assert.ok(lines.length < 80 && lines.at(-1).startsWith("79 "), `${k}: ${lines.length} lines, end kept`);
+  }
 });
 
 test("the same failure builds the same fingerprint through buildReport", () => {

@@ -124,8 +124,10 @@ test("a sidecar that exits while starting is noticed at once, with its own last 
   });
   const t0 = Date.now();
   const lines = [];
+  const levels = [];
   let exits = 0;
-  const engines = await startEngines(cfg, { logDir, log: (line) => lines.push(line), onExit: () => { exits++; } });
+  const log = (line, level = "INFO") => { lines.push(line); levels.push(level); };
+  const engines = await startEngines(cfg, { logDir, log, onExit: () => { exits++; } });
   try {
     assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
     const { message } = engines.failed[0];
@@ -137,6 +139,11 @@ test("a sidecar that exits while starting is noticed at once, with its own last 
     // The end is in shell.log too, and bootFlow.js is told, for its memory line.
     assert.ok(lines.includes("engine EXITED (exit code 3)"), lines.join("\n"));
     assert.equal(exits, 1);
+    // Under the FAILED line, what the engine itself said, indented, at ERROR.
+    const failed = lines.findIndex((l) => l.startsWith("[Engine 1/2] engine FAILED"));
+    assert.deepEqual(lines.slice(failed + 1, failed + 3), ["  Last lines of sidecar.log:", "  Traceback (most recent call last):"]);
+    assert.ok(lines[failed + 3].startsWith("  RuntimeError: fake engine could not load (~/"), lines[failed + 3]);
+    assert.deepEqual(levels.slice(failed, failed + 4), ["ERROR", "ERROR", "ERROR", "ERROR"]);
   } finally {
     engines.stopAll();
   }

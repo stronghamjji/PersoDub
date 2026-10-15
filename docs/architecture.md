@@ -747,7 +747,7 @@ masks read them:
 | `Perso workspace: <name> (#<seq>)`, `Perso credits used: <N>` | `app/report_mask.py` (and, for the workspace line, `desktop/src/report.js`), which mask them before a report leaves |
 | `progress <N>%` from the eraser worker | `app/api/erase.py _PROGRESS` |
 | `Cancelled by user request`, `Error: <Type>: <text>` | the screen's raw log and failure reports |
-| `shell.log`, each line `YYYY-MM-DD HH:MM:SS,mmm - shell - <LEVEL> - <text>` in local time (`desktop/src/logLine.js`): `PERSODUB_VERSION`, `PERSODUB_EDITION`, `PERSODUB_READY`, `PERSODUB_KIT`, `PERSODUB_PACK`, and a run's numbered lines, `INSTALL START`, `Inputs:`, `[Step i/N] <id> START`/`DONE`/`FAILED`, `INSTALL ALL DONE`, `ENGINES START`, `[Engine i/N] <name> START`/`READY`/`FAILED`, `ENGINES ALL READY`, `<name> EXITED` and `Mem[...]` every five minutes and after each exit | the end-to-end update test (`PERSODUB_VERSION`) and anyone reading a support log |
+| `shell.log`, each line `YYYY-MM-DD HH:MM:SS,mmm - shell - <LEVEL> - <text>` in local time (`desktop/src/logLine.js`): `PERSODUB_VERSION`, `PERSODUB_EDITION`, `PERSODUB_READY`, `PERSODUB_KIT`, `PERSODUB_PACK`, and a run's numbered lines, `INSTALL START`, `Inputs:`, `[Step i/N] <id> START`/`DONE`/`FAILED`, `INSTALL ALL DONE`, `ENGINES START`, `[Engine i/N] <name> START`/`READY`/`FAILED`, `ENGINES ALL READY`, `<name> EXITED` and `Mem[...]` every five minutes and after each exit; under `INSTALL FAILED` and an engine's `FAILED`, the tool's or the engine's own last lines, indented two spaces | the end-to-end update test (`PERSODUB_VERSION`) and anyone reading a support log |
 
 <a id="ipc-channels"></a>**Preload IPC.** `window.persodubShell` exposes
 `retry`, `rememberJob`, `onDownloadDone`, `revealPath`, `relaunch`,

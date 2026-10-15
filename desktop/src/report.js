@@ -27,6 +27,9 @@ export const MAX_LOG_LINES = 200;
 // ...though a job's log keeps its opening as well: JOB START and the Inputs
 // line (app/jobs.py), which the last lines of a long job no longer reach.
 export const JOB_HEAD_LINES = 25;
+// An engine's console log (backend.log, sidecar.log, ollama.log) its last 80:
+// where a voice engine or Ollama that crashed says why.
+export const ENGINE_LOG_LINES = 80;
 // The error sentence. Longer than this is a transcript, and the tails are
 // where a transcript belongs.
 export const MAX_MESSAGE_CHARS = 500;
@@ -224,6 +227,16 @@ export function maskTail(text, { home = "", kit = "", maxLines = MAX_LOG_LINES, 
     ? [...lines.slice(0, headLines), ...(headLines ? ["..."] : []), ...lines.slice(-maxLines)]
     : lines;
   return maskText(kept.join("\n"), { home, kit }).trim();
+}
+
+// An engine's console log carries its web requests, and a request's query or
+// a percent-encoded path segment holds a video's path where the masks cannot
+// see it ("GET /api/subtitles?video_path=%2FUsers%2F..."). Both go before the
+// masks run; the request's path is what a reader needs.
+export function withoutEncodedNames(text) {
+  return String(text ?? "")
+    .replace(/(\/[^\s"?]*)\?[^\s"]*/g, "$1?…")
+    .replace(/[^\s/"]*%[0-9A-Fa-f]{2}[^\s/"]*/g, "…");
 }
 
 /**
@@ -433,6 +446,9 @@ export function buildReport({
       shell: maskTail(logTails.shell, { home, kit }),
       app: maskTail(logTails.app, { home, kit }),
       job: maskTail(logTails.job, { home, kit, headLines: JOB_HEAD_LINES }),
+      backend: maskTail(withoutEncodedNames(logTails.backend), { home, kit, maxLines: ENGINE_LOG_LINES }),
+      sidecar: maskTail(withoutEncodedNames(logTails.sidecar), { home, kit, maxLines: ENGINE_LOG_LINES }),
+      ollama: maskTail(withoutEncodedNames(logTails.ollama), { home, kit, maxLines: ENGINE_LOG_LINES }),
     },
   };
   report.fingerprint = fingerprint({
@@ -458,7 +474,7 @@ export function reportBytes(report) {
 export function trimToSize(report, maxBytes = MAX_BYTES) {
   const tails = report.logTails;
   while (reportBytes(report) > maxBytes) {
-    const longest = ["job", "shell", "app"]
+    const longest = ["job", "shell", "app", "backend", "sidecar", "ollama"]
       .map((k) => [k, (tails[k] ? tails[k].split("\n") : [])])
       .filter(([, lines]) => lines.length > 0)
       .sort((a, b) => b[1].length - a[1].length)[0];

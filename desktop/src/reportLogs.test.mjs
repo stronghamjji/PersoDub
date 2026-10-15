@@ -46,6 +46,12 @@ test("a log that is not there is not an empty file in the archive", () => {
   assert.deepEqual(entries.map((e) => e.name), ["shell.log"]);
 });
 
+test("the engines' console logs go in under their own names, and only those that have something", () => {
+  const entries = untar(gunzipSync(buildLogArchive({ shell: "s", backend: "uvicorn line", sidecar: "", ollama: "ollama line" })));
+  assert.deepEqual(entries.map((e) => e.name), ["shell.log", "backend.log", "ollama.log"]);
+  assert.equal(entries[1].text, "uvicorn line");
+});
+
 test("a probed failure's diagnostics ride along as diagnostics.json", () => {
   const entries = untar(gunzipSync(buildLogArchive({ shell: "s", diagnostics: '{"proxy":"direct"}' })));
   assert.deepEqual(entries.map((e) => e.name), ["shell.log", "diagnostics.json"]);

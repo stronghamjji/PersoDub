@@ -531,3 +531,63 @@ test("the probes' findings join the summary on one line", () => {
   const { report } = validateReport({ ...GOOD, diagnostics: { proxy: { env: false, system: "direct" } } });
   assert.equal(summaryLines(report).at(-1), '- Diagnostics: `{"proxy":{"env":false,"system":"direct"}}`');
 });
+
+// ---- the engines' console logs, the body's size, a failure's own words ----
+import { lastCause, stepContext, MAX_BODY_CHARS } from "./report-logic.js";
+
+test("the engines' console logs are accepted, cut to their end, and shown after the other three when they have anything", () => {
+  const long = [...Array.from({ length: 3000 }, (_, i) => `line ${i} of a long log`), "THE END"].join("\n");
+  const { report } = validateReport({ ...GOOD, logTails: { ...GOOD.logTails, backend: long, sidecar: "RuntimeError: out of memory", ollama: "" } });
+  assert.equal(report.logTails.backend.length, 20000);
+  assert.ok(report.logTails.backend.endsWith("\nTHE END"));
+  assert.equal(report.logTails.ollama, "");
+  const body = issueBody(report);
+  const at = (title) => body.indexOf(`<details><summary>${title}</summary>`);
+  assert.ok(at("job log (tail)") >= 0 && at("job log (tail)") < at("backend.log (tail)"), "after the other three");
+  assert.ok(at("backend.log (tail)") < at("sidecar.log (tail)"));
+  assert.ok(body.includes("RuntimeError: out of memory"));
+  assert.equal(at("ollama.log (tail)"), -1, "an empty log has no section");
+  assert.ok(!issueBody(validateReport(GOOD).report).includes("backend.log"), "an app that sends none reads as before");
+});
+
+// GitHub refuses a body over 65,536 characters, and the report would then
+// never be posted: six full tails add up to more than that.
+test("a body that would pass GitHub's limit loses its longest tails' oldest lines until it fits", () => {
+  const fat = (name) => Array.from({ length: 800 }, (_, i) => `${name} line ${i} ${"x ".repeat(10)}`).join("\n");
+  const { report } = validateReport(GOOD);
+  const names = ["shell", "app", "job", "backend", "sidecar", "ollama"];
+  const body = issueBody({ ...report, logTails: Object.fromEntries(names.map((n) => [n, fat(n)])) });
+  assert.ok(body.length <= MAX_BODY_CHARS, `${body.length} characters`);
+  for (const n of names) assert.ok(body.includes(`${n} line 799 `), `${n} keeps its last line`);
+  assert.ok(body.includes("### Summary"));
+  assert.ok(body.endsWith(`Fingerprint: \`${report.fingerprint}\`\n`), "everything below the tails is kept");
+});
+
+test("the summary names the error a failure was chained from, and the stopped step's context", () => {
+  const tail = [
+    job(["INFO", 'Inputs: {"kind":"dub"}'],
+      ["INFO", "[Step 2/6] transcribe Context: engine=whisper model=small"],
+      ["INFO", "[Step 3/6] translate START"],
+      ["INFO", "[Step 3/6] translate Context: translate_engine=gemma lines=12 target=English source=ko"],
+      ["ERROR", "[Step 3/6] translate FAILED (1.2s): RuntimeError"],
+      ["ERROR", "  Caused by: OSError: x"]),
+    "  Caused by: ValueError: y",   // a traceback's own line, under the one with the head
+    job(["ERROR", "JOB FAILED at step 3/6 translate (43.5s): RuntimeError: the model refused"]),
+  ].join("\n");
+  const messages = tailMessages(tail);
+  assert.equal(lastCause(messages), "ValueError: y");
+  assert.equal(stepContext(messages, "3/6 translate"), "translate_engine=gemma lines=12 target=English source=ko");
+  assert.equal(stepContext(messages, "venv-engines"), "", "only a numbered step has a Context line");
+  assert.deepEqual(summaryLines(validateReport({ ...GOOD, logTails: { shell: "", app: "", job: tail } }).report), [
+    "- Stopped at: `3/6 translate`",
+    "- After: 1.2s",
+    "- Error: engine-crash · `RuntimeError: the voice engine exited`",
+    "- Cause: `ValueError: y`",
+    '- Inputs: `{"kind":"dub"}`',
+    "- Context: `translate_engine=gemma lines=12 target=English source=ko`",
+  ]);
+  // An install has no job log: a "Caused by:" a tool printed into shell.log is not a job's cause.
+  const install = validateReport({ ...GOOD, kind: "install", stage: "", stageMarker: "", code: "step-failed",
+    logTails: { shell: `${head("shell", "ERROR")}  Caused by: NewConnectionError`, app: "", job: "" } }).report;
+  assert.ok(!summaryLines(install).some((l) => l.startsWith("- Cause") || l.startsWith("- Context")));
+});

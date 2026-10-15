@@ -2,9 +2,10 @@ import { gzipSync } from "node:zlib";
 
 // The whole logs, not just their ends. The issue body carries 200-line tails
 // (report.js) because that is what a person reads first; this is the archive
-// behind them -- the three logs in full, masked, and the diagnostics of a
-// probed failure (diagnostics.js), packed into one .tar.gz the relay stores
-// and the issue links to.
+// behind them -- the three logs in full, masked, the engines' console logs
+// (their last 2 MB, reporting.js), and the diagnostics of a probed failure
+// (diagnostics.js), packed into one .tar.gz the relay stores and the issue
+// links to.
 //
 // A tar rather than three uploads: the three files come back out named, which
 // is the only thing that made the format worth thirty lines of header code.
@@ -105,6 +106,9 @@ export function buildLogArchive(logs = {}, {
     ["shell.log", logs.shell],
     ["persodub.log", logs.app],
     ["job.log", logs.job],
+    ["backend.log", logs.backend],
+    ["sidecar.log", logs.sidecar],
+    ["ollama.log", logs.ollama],
     ["diagnostics.json", logs.diagnostics],
   ].filter(([, text]) => String(text ?? "").trim() !== "");
   if (!named.length) return null;

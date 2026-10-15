@@ -10,7 +10,7 @@ import { readRuntime, writeRuntime, clearRuntime } from "./runtimeFile.js";
 import { PACKS, packInstalled } from "./installSpec.js";
 import { maskTail } from "./report.js";
 import { errorText } from "./errorText.js";
-import { BANNER, secondsSince } from "./logLine.js";
+import { BANNER, detailLines, secondsSince } from "./logLine.js";
 
 const PIDS_FILE = "pids.json";
 
@@ -230,6 +230,8 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
       const tail = engineTail(child, cfg.kitDir);
       if (tail) err.message += `\nLast lines of ${basename(child.logPath)}:\n${tail}`;
       log(`${tag} FAILED (${secondsSince(from)}s): ${err.message.split("\n")[0]}`, "ERROR");
+      // ...and under it the engine's own last lines, the ones appended above.
+      for (const line of detailLines(err.message.split("\n").slice(1).join("\n"))) log(line, "ERROR");
       throw err;
     }
     announce();

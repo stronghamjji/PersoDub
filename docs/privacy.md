@@ -83,8 +83,10 @@ way land on one issue rather than a hundred.
 A report carries the machine (operating system and version, CPU, memory, free disk,
 which torch build, which packs are installed), where it stopped, one error code off a
 fixed list, the error sentence, your app version, a random install ID, and the logs:
-the last 200 lines of each in the issue itself, and the three logs in full as an
-archive that is deleted after 30 days.
+the last 200 lines of each of the app's three logs in the issue itself (and a dub
+log's first 25 too), the last 80 lines of the console output of each engine running
+on your computer, and the logs in full (the engines' last 2 MB) as an archive that
+is deleted after 30 days.
 
 From 0.8.4 a report also carries what the machine could say about that kind of failure,
 and nothing for the other kinds. A network or certificate error: which of the five sites
@@ -98,7 +100,9 @@ Product names, yes-or-no answers, error codes and numbers only.
 Before anything leaves your machine, every line of it is put through three rules: a
 path under your home folder is cut down to `~/…/*.mp4` — the name of the folder and the
 name of the file both go, and so does yours; anything shaped like an API key becomes
-`[REDACTED]`; and a link is cut down to its site. The one exception is PersoDub's own
+`[REDACTED]`; and a link is cut down to its site. A web request in the engines' console
+output loses its query and any encoded name first, since a file's path can sit there
+in a form the rules would not recognise. The one exception is PersoDub's own
 installation folder, whose paths are kept readable minus your name, because which model
 or which folder a step died in is the answer we are looking for. Your `kit.env`, the
 file your API keys live in, is read by the reporting code only for its on/off switches

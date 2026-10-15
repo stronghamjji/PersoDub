@@ -19,3 +19,10 @@ export const BANNER = "#".repeat(30);
 export function secondsSince(from, now = Date.now()) {
   return ((now - from) / 1000).toFixed(1);
 }
+
+// What a tool or an engine said when it failed, as the lines under its FAILED
+// line: its last `max` lines that have anything on them, each indented two
+// spaces and cut at 300 characters, so a pip transcript cannot bury the log.
+export function detailLines(text, max = 20) {
+  return String(text ?? "").split(/\r?\n/).filter((l) => l.trim()).slice(-max).map((l) => `  ${l.slice(0, 300)}`);
+}
