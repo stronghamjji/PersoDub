@@ -4,6 +4,7 @@ import { freeSpaceAt } from "./config.js";
 import { readKitVersion } from "./engineCheck.js";
 import { packInstalled, torchVariantFor, PACKS } from "./installSpec.js";
 import { loadState, saveState } from "./analytics.js";
+import { probesFor, runProbes } from "./diagnostics.js";
 import { buildReport, collectEnvironment, maskText, resolveReportMode, worthReporting } from "./report.js";
 import { buildLogArchive } from "./reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./reportQueue.js";
@@ -45,10 +46,10 @@ function queueReport(kitDir, entry, archive) {
 /**
  * The shell's failure reports, for this app. `ctx.engines` is read each time a
  * report is gathered: the backend's half of a report comes from engines that
- * may not be up yet, or never came up. `fetchImpl` is the real fetch
- * everywhere but the tests.
+ * may not be up yet, or never came up. `fetchImpl` is the real fetch, and
+ * `probeImpl` the real probes, everywhere but the tests.
  */
-export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = fetch }) {
+export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = fetch, probeImpl = runProbes }) {
   // The install id lives in its own file, not analytics.json: the two switches
   // are independent, so a user who turned the counts off must not get an id
   // minted for them by the report path, or a file that says otherwise.
@@ -122,6 +123,13 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
     const shellLogText = maskText(readFileText(join(app.getPath("userData"), "logs", "shell.log")), { home, kit: kitDir });
     const packs = (bundle && bundle.packs)
       || Object.fromEntries(PACKS.map((p) => [p.id, packInstalled(kitDir, p.id) ? "ready" : "missing"]));
+    // What this machine can say about this kind of failure (diagnostics.js):
+    // who signed the certificate pip refused, whether the runtime files are
+    // there. Four seconds at most, and a probe that fails is a line in the
+    // report, never a lost report.
+    const names = probesFor(code, message || job.error);
+    if (names.length) shellLog(`PERSODUB_REPORT diagnostics ${names.join(", ")}`);
+    const diagnostics = names.length ? await probeImpl(names, { kitDir }) : {};
     const report = buildReport({
       kind,
       step,
@@ -148,6 +156,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
         app: (bundle && bundle.logTails && bundle.logTails.app) || "",
         job: (bundle && bundle.logTails && bundle.logTails.job) || "",
       },
+      diagnostics,
     });
     const archive = buildLogArchive({
       shell: shellLogText,

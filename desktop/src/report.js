@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { arch as osArch, cpus, platform as osPlatform, release, totalmem } from "node:os";
 import { ERROR_CODES, INSTALL_STEPS } from "./analytics.js";
+import { PROBE_NAMES } from "./diagnostics.js";
 
 // Automatic failure reports. A usage count (analytics.js) says a dub failed;
 // this says WHY -- the machine, the step, the error, and the tail of the three
@@ -357,6 +358,22 @@ function safeId(value) {
   return /^[a-z0-9][a-z0-9-]{0,29}$/.test(s) ? s : "";
 }
 
+// What the probes found (diagnostics.js), held to the shape a fact has: a
+// key that is a word or a host name, a string masked and short, a list of
+// ten at most, a number, a yes or no. Anything else is dropped on the way.
+const DIAG_KEY = /^[A-Za-z0-9._-]{1,40}$/;
+function cleanDiagnostic(value, mask) {
+  if (typeof value === "string") return mask(value).slice(0, 200);
+  if (typeof value === "boolean" || value === null) return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (Array.isArray(value)) return value.slice(0, 10).map((v) => cleanDiagnostic(v, mask));
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).filter(([k]) => DIAG_KEY.test(k))
+      .map(([k, v]) => [k, cleanDiagnostic(v, mask)]));
+  }
+  return null;
+}
+
 /**
  * The whole message, and the only thing that can become one.
  *
@@ -378,6 +395,7 @@ export function buildReport({
   message = "",
   packs,
   logTails = {},
+  diagnostics = {},
   version = "",
   installId = "",
   home = "",
@@ -399,6 +417,10 @@ export function buildReport({
     message: messageForReport(maskText(message, { home, kit })),
     env: machine,
     packs: packs ?? envPacks ?? {},
+    // Only the published probe names. Built before trimToSize, so the size
+    // cap counts it.
+    diagnostics: Object.fromEntries(PROBE_NAMES.filter((n) => Object.hasOwn(diagnostics || {}, n))
+      .map((n) => [n, cleanDiagnostic(diagnostics[n], (s) => maskText(s, { home, kit }))])),
     logTails: {
       shell: maskTail(logTails.shell, { home, kit }),
       app: maskTail(logTails.app, { home, kit }),

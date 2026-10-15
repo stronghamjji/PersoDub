@@ -38,6 +38,8 @@ export const ERROR_CODES = [
   // The app was closed while the job was still running, its own word so it
   // reads apart from a real crash (2026-09-18).
   "interrupted",
+  // A certificate the computer's Python refused (2026-10-15).
+  "certificate",
   "unknown",
 ];
 export const PLATFORM_KEYS = ["mac", "win-gpu", "win-cpu"];
@@ -147,6 +149,29 @@ function flatMap(value, maxKeys = 12) {
  * allow-list already works this way; this is the same rule enforced again on
  * the far side of the network, where it cannot be bypassed by editing the app.
  */
+// What the app's probes found (desktop/src/diagnostics.js), rebuilt here the
+// way the rest of the report is: only the published probe names, keys that
+// are a word or a host name, short strings, lists of ten at most, numbers
+// and yes-or-no answers. Three levels deep, which is as deep as a probe goes.
+export const PROBE_NAMES = ["network", "proxy", "antivirus", "kitWritable", "vcRuntime", "gpu", "memory"];
+const DIAG_KEY_RE = /^[A-Za-z0-9._-]{1,40}$/;
+function diagnostic(value, depth) {
+  if (typeof value === "string") return scrubMessage(value.slice(0, 200), "unknown");
+  if (typeof value === "boolean" || value === null) return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (depth >= 3) return null;
+  if (Array.isArray(value)) return value.slice(0, 10).map((v) => diagnostic(v, depth + 1));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).filter(([k]) => DIAG_KEY_RE.test(k))
+      .map(([k, v]) => [k, diagnostic(v, depth + 1)]));
+  }
+  return null;
+}
+function diagnosticsOf(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return Object.fromEntries(PROBE_NAMES.filter((n) => Object.hasOwn(raw, n)).map((n) => [n, diagnostic(raw[n], 1)]));
+}
+
 export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
   if (typeof raw === "string") {
     if (raw.length > maxBytes) return { ok: false, reason: "too large" };
@@ -182,6 +207,7 @@ export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
       torch: str(env.torch, 20),
     },
     packs: flatMap(raw.packs),
+    diagnostics: diagnosticsOf(raw.diagnostics),
     logTails: {
       shell: str(tails.shell, 20000),
       app: str(tails.app, 20000),
@@ -292,6 +318,9 @@ export function issueBody(report, { logsRef = "" } = {}) {
     report.message || "(no message)",
     "```",
     "",
+    ...(Object.keys(report.diagnostics || {}).length
+      ? ["### Diagnostics", "", "```json", JSON.stringify(report.diagnostics, null, 2), "```", ""]
+      : []),
     details("shell.log (tail)", report.logTails.shell),
     details("persodub.log (tail)", report.logTails.app),
     details("job log (tail)", report.logTails.job),

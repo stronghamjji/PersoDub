@@ -33,6 +33,9 @@ export const ERROR_CODES = new Set([
   // The app was closed while the job was still running (app/jobs.py marks it
   // on restore). Its own word so it reads apart from a real crash (2026-09-18).
   "interrupted",
+  // A certificate the computer's Python refused: something on the machine or
+  // the company network signing HTTPS itself (2026-10-15).
+  "certificate",
   "unknown",
 ]);
 
@@ -236,6 +239,11 @@ const ERROR_PATTERNS = [
   [/ENOSPC|no space left|not enough space/i,         "disk-full"],
   [/EACCES|EPERM|permission denied/i,                "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
+  // pip and Python's ssl refusing a certificate. Ahead of "network" because
+  // the answer is the machine's security software, not its connection: two
+  // Windows laptops failed pip with "self-signed certificate in certificate
+  // chain" and both reports said only "step-failed" (2026-10-15).
+  [/CERTIFICATE_VERIFY_FAILED|SSLCertVerificationError|self.signed certificate|unable to get local issuer certificate/i, "certificate"],
   // Both spellings of a connection that went away: node and curl print the
   // errno (ECONNREFUSED), Python prints the sentence ("[Errno 61] Connection
   // refused"). Only the errno was listed, so the commonest local failure of all

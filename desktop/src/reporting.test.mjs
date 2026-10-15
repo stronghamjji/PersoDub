@@ -12,9 +12,10 @@ const ok = (body) => ({ ok: true, status: 200, json: async () => body });
 const ISSUE = { id: "r1", issue: 142, url: "https://github.com/o/r/issues/142" };
 
 // A packaged app with reports on, its kit and userData in a fresh temp folder.
-// `relay(url, init)` answers every request the reporter makes.
+// `relay(url, init)` answers every request the reporter makes, and `probes`
+// stands in for the machine's own diagnostics (diagnostics.js).
 function setup({ packaged = true, kitEnv = "PERSODUB_NO_REPORTS=0\nPERSODUB_REPORTS_DEBUG=0\n",
-                 engines = null, relay = () => ok(ISSUE) } = {}) {
+                 engines = null, relay = () => ok(ISSUE), probes = async () => ({}) } = {}) {
   const base = mkdtempSync(join(tmpdir(), "odreporting-"));
   const kitDir = join(base, "kit");
   const userData = join(base, "userData");
@@ -33,7 +34,7 @@ function setup({ packaged = true, kitEnv = "PERSODUB_NO_REPORTS=0\nPERSODUB_REPO
   };
   const reporter = createReporter({
     app, BrowserWindow: { getAllWindows: () => [win] }, ctx: { engines },
-    shellLog: (line) => logged.push(line), fetchImpl,
+    shellLog: (line) => logged.push(line), fetchImpl, probeImpl: probes,
   });
   const queued = () => (existsSync(join(kitDir, "reports")) ? readdirSync(join(kitDir, "reports")).sort() : []);
   const readQueued = (name) => JSON.parse(readFileSync(join(kitDir, "reports", name), "utf8"));
@@ -117,6 +118,33 @@ test("logs the relay has refused for good are dropped rather than asked about ev
   logs = { ok: false, status: 404 };   // the relay forgot the id
   await s.reporter.flushReports(s.kitDir);
   assert.deepEqual(s.queued(), []);
+});
+
+test("a certificate failure carries what the probes found about this machine", async () => {
+  const asked = [];
+  const s = setup({
+    probes: async (names, opts) => {
+      asked.push([names, opts.kitDir]);
+      return { network: { "pypi.org": { reachable: true, issuer: "ALYac Web Security", root: "ALYac Web Security", chainLength: 2 } },
+               proxy: { env: false, system: "direct" } };
+    },
+  });
+  const message = "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain";
+  await s.reporter.sendReport({ kind: "install", kitDir: s.kitDir, code: "certificate", step: "venv-app", message });
+  assert.deepEqual(asked, [[["network", "proxy"], s.kitDir]]);
+  assert.ok(s.logged.includes("PERSODUB_REPORT diagnostics network, proxy"), s.logged.join("\n"));
+  const sent = JSON.parse(s.calls.find((c) => c.url === `${REPORT_ENDPOINT}/report`).body);
+  assert.equal(sent.code, "certificate");
+  assert.equal(sent.diagnostics.network["pypi.org"].issuer, "ALYac Web Security");
+  assert.deepEqual(sent.diagnostics.proxy, { env: false, system: "direct" });
+});
+
+test("a failure no probe speaks to runs none", async () => {
+  let ran = false;
+  const s = setup({ probes: async () => { ran = true; return {}; } });
+  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
+  assert.equal(ran, false);
+  assert.deepEqual(JSON.parse(s.calls[0].body).diagnostics, {});
 });
 
 test("a failure that is the user's own situation is logged, never sent", async () => {

@@ -243,9 +243,39 @@ test("a field nobody named cannot leave", () => {
   assert.ok(!text.includes("sk-secret"));
   assert.ok(!text.includes("/Users/jane"));
   assert.deepEqual(Object.keys(report).sort(), [
-    "code", "env", "fingerprint", "installId", "kind", "logTails", "message",
+    "code", "diagnostics", "env", "fingerprint", "installId", "kind", "logTails", "message",
     "packs", "stage", "stageMarker", "step", "version",
   ]);
+});
+
+// ---- what the probes found --------------------------------------------
+
+test("only a published probe travels, and only as plain facts", () => {
+  const report = buildReport({
+    ...SAMPLE,
+    home: "/Users/jane",
+    diagnostics: {
+      network: { "pypi.org": { reachable: true, issuer: "ALYac Web Security", root: "ALYac Web Security", chainLength: 2 } },
+      antivirus: { products: Array.from({ length: 15 }, (_, i) => `Product ${i}`) },
+      gpu: { nvidia: "RTX ".repeat(125) },
+      kitWritable: { writable: false, error: "cannot write /Users/jane/Movies/secret.mp4" },
+      memory: { totalGB: 15.8, freeGB: Infinity, "a key with /Users/jane in it": 1 },
+      clipboard: { text: "what the user copied" },
+    },
+  });
+  const d = report.diagnostics;
+  assert.deepEqual(Object.keys(d).sort(), ["antivirus", "gpu", "kitWritable", "memory", "network"]);
+  assert.ok(!JSON.stringify(report).includes("what the user copied"));
+  assert.equal(d.network["pypi.org"].issuer, "ALYac Web Security");
+  assert.equal(d.network["pypi.org"].chainLength, 2);
+  assert.equal(d.antivirus.products.length, 10);
+  assert.equal(d.gpu.nvidia.length, 200);
+  assert.equal(d.kitWritable.error, "cannot write ~/\u2026/*.mp4");
+  assert.deepEqual(d.memory, { totalGB: 15.8, freeGB: null });
+});
+
+test("a report with no probes carries an empty diagnostics", () => {
+  assert.deepEqual(buildReport(SAMPLE).diagnostics, {});
 });
 
 test("an unpublished error code becomes unknown rather than travelling", () => {

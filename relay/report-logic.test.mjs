@@ -378,3 +378,24 @@ test("an archive carries enough to be listed without being opened", () => {
   // R2 metadata is strings only, and a number would arrive back as one anyway.
   for (const v of Object.values(s)) assert.equal(typeof v, "string");
 });
+
+test("diagnostics survive validation only in the published shape", () => {
+  const { report } = validateReport({ ...GOOD, diagnostics: {
+    network: { "pypi.org": { reachable: true, issuer: "ALYac Web Security", root: "ALYac Web Security", chainLength: 2 } },
+    proxy: { env: false, system: "direct" },
+    madeUp: { anything: 1 },
+    antivirus: { products: ["ALYac", "Windows Defender"], "bad key!": "x" },
+  } });
+  assert.deepEqual(Object.keys(report.diagnostics), ["network", "proxy", "antivirus"]);
+  assert.equal(report.diagnostics.network["pypi.org"].issuer, "ALYac Web Security");
+  assert.deepEqual(report.diagnostics.antivirus, { products: ["ALYac", "Windows Defender"] });
+  assert.deepEqual(validateReport(GOOD).report.diagnostics, {});
+});
+
+test("the body shows the diagnostics when there are any, and no section when there are none", () => {
+  const { report } = validateReport({ ...GOOD, diagnostics: { proxy: { env: false, system: "direct" } } });
+  const body = issueBody(report);
+  assert.ok(body.includes("### Diagnostics"), body);
+  assert.ok(body.includes('"system": "direct"'), body);
+  assert.ok(!issueBody(validateReport(GOOD).report).includes("### Diagnostics"));
+});

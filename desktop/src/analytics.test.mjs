@@ -421,6 +421,15 @@ test("a refused connection is recognised in either spelling", () => {
   assert.equal(classifyError("connect ECONNREFUSED 127.0.0.1:51801"), "network");
 });
 
+// The sentence pip printed on two Windows laptops whose security software
+// signs HTTPS itself. Both reports said "step-failed" (2026-10-15).
+test("a refused certificate is its own word, ahead of the network", () => {
+  const pip = "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain";
+  assert.equal(classifyError(pip), "certificate");
+  assert.equal(classifyError(`pip exit 1\n${pip} (_ssl.c:1006)`, { install: true }), "certificate");
+  assert.equal(classifyError("getaddrinfo ENOTFOUND huggingface.co"), "network");
+});
+
 test("a blocked write is recognised", () => {
   assert.equal(classifyError("EACCES: permission denied, mkdir '/Users/x/Library/PersoDub'"), "permission");
 });

@@ -86,6 +86,15 @@ fixed list, the error sentence, your app version, a random install ID, and the l
 the last 200 lines of each in the issue itself, and the three logs in full as an
 archive that is deleted after 30 days.
 
+From 0.8.4 a report also carries what the machine could say about that kind of failure,
+and nothing for the other kinds. A network or certificate error: which of the five sites
+the app uses could be reached, who signed each one's certificate (under security software
+that inspects HTTPS, that is the product's name), and whether a proxy is set, never its
+address. A file a program could not open: the security products Windows lists, and whether
+the install folder can be written. An engine that would not start: which Visual C++ runtime
+files are missing, and the NVIDIA driver line. An out-of-memory error: the memory free.
+Product names, yes-or-no answers, error codes and numbers only.
+
 Before anything leaves your machine, every line of it is put through three rules: a
 path under your home folder is cut down to `~/…/*.mp4` — the name of the folder and the
 name of the file both go, and so does yours; anything shaped like an API key becomes
