@@ -154,10 +154,12 @@ export function packAlive(children) {
 export const PACK_STATE_KEY = { engine: "tts_state", "ollama-runtime": "ollama_state" };
 
 // log and onExit as startEngines takes them. place is the pack's number in
-// shell.log's "[Engine i/N]": 1/1 for a pack started on its own after boot.
+// shell.log's "[Engine i/N]" at boot; a pack started on its own later (after
+// its install, or a restart) is logged by its name alone, since a number
+// would repeat the boot's.
 export async function startPackProcesses(cfg, packId, { logDir, env, children, record, healthTimeoutMs,
-                                                        log = () => {}, onExit = () => {}, place = "1/1" }) {
-  const tag = `[Engine ${place}] ${packId}`;
+                                                        log = () => {}, onExit = () => {}, place = "" }) {
+  const tag = place ? `[Engine ${place}] ${packId}` : packId;
   if (packId === "ollama-runtime") {
     // Local translation runs through an Ollama server owned by this app:
     // kit-contained binary and models dir, free port (never fights a user's

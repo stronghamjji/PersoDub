@@ -339,7 +339,7 @@ test("a sidecar that exits asking to be started again comes back, announced afre
     "the new process's id, not the old one's");
   // shell.log: the end that asked for it, then the engine started on its own.
   assert.ok(lines.includes("engine EXITED (exit code 75), restarting"), lines.join("\n"));
-  assert.ok(lines.some((l) => /^\[Engine 1\/1\] engine READY \(\d+\.\ds\)$/.test(l)), lines.join("\n"));
+  assert.ok(lines.some((l) => /^engine READY \(\d+\.\ds\)$/.test(l)), lines.join("\n"));
   const pids = JSON.parse(readFileSync(join(logDir, "pids.json"), "utf8"));
   engines.stopAll();
   assert.ok(await waitGone(pids), "the restarted sidecar is stopped with the rest");
