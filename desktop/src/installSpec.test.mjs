@@ -21,6 +21,9 @@ function freshCtx(extra = {}) {
   const kitDir = join(base, "kit");
   const payloadDir = join(base, "payload");
   mkdirSync(kitDir, { recursive: true });
+  // Every venv step copies the OS trust hook out of the payload.
+  mkdirSync(join(payloadDir, "kit-src", "truststore"), { recursive: true });
+  writeFileSync(join(payloadDir, "kit-src", "truststore", "persodub_truststore.py"), "# hook");
   return { base, kitDir, payloadDir, download: async () => {}, extract: async () => {}, run: async () => {}, ...extra };
 }
 
@@ -299,6 +302,36 @@ test("venv-engines installs only the merged engines list", async () => {
   assert.ok(!installs.some((a) => a.includes("static-ffmpeg")), "static-ffmpeg belongs to app_venv now");
   assert.ok(!installs.some((a) => a.includes("huggingface_hub")), "hf CLI belongs to app_venv now");
   assert.ok(!argvs.some((a) => a.includes("qwen_venv")), "no second venv is created");
+});
+
+test("every venv gets the OS trust hook before its first download", async () => {
+  // Company security software that inspects HTTPS hands Python a certificate
+  // only the OS knows (2026-10-15): truststore goes in from the payload, with
+  // no network, before pip's own upgrade, and a .pth loads it in every
+  // interpreter of the venv.
+  for (const id of ["venv-app", "venv-engines", "venv-eraser"]) {
+    const argvs = [];
+    const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });
+    await byId(ctx)[id].run(() => {});
+    const venv = argvs.findIndex((a) => a.includes("-m venv"));
+    const trust = argvs.findIndex((a) => a.includes("--no-index --find-links") && a.endsWith(" truststore"));
+    const upgrade = argvs.findIndex((a) => a.includes("--upgrade pip"));
+    assert.ok(venv >= 0 && trust === venv + 1 && upgrade === trust + 1, `${id}: ${argvs.join("\n")}`);
+    assert.ok(argvs[trust].includes(join(ctx.payloadDir, "kit-src", "truststore")), argvs[trust]);
+    const venvDir = argvs[venv].split(" ").pop();
+    const site = IS_WIN ? join(venvDir, "Lib", "site-packages") : join(venvDir, "lib", "python3.11", "site-packages");
+    assert.equal(readFileSync(join(site, "persodub_truststore.py"), "utf8"), "# hook");
+    assert.equal(readFileSync(join(site, "persodub_truststore.pth"), "utf8"), "import persodub_truststore\n");
+  }
+});
+
+test("a changed trust hook re-opens a venv step that was done", async () => {
+  const ctx = freshCtx();
+  const step = byId(ctx)["venv-app"];
+  await step.run(() => {});
+  assert.equal(await step.isDone(), true);
+  writeFileSync(join(ctx.payloadDir, "kit-src", "truststore", "persodub_truststore.py"), "# hook v2");
+  assert.equal(await step.isDone(), false);
 });
 
 test("every pip install runs without the pip cache", async () => {
@@ -913,7 +946,8 @@ test("venv-eraser installs its own torch pair first, then the eraser's list", as
   const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });
   await byId(ctx)["venv-eraser"].run(() => {});
   assert.ok(argvs.some((a) => a.includes("-m venv") && a.includes("venv-eraser")));
-  const installs = argvs.filter((a) => a.includes(" install ") && !a.includes("--upgrade pip"));
+  // Not pip's own upgrade, nor the offline OS trust hook (--no-index).
+  const installs = argvs.filter((a) => a.includes(" install ") && !a.includes("--upgrade pip") && !a.includes("--no-index"));
   // torch 2.7.0/torchvision 0.22.0 -- older than the engines venv's pair,
   // which is why the eraser gets an environment of its own.
   assert.ok(installs[0].includes("torch==2.7.0") && installs[0].includes("torchvision==0.22.0"), installs[0]);

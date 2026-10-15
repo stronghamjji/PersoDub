@@ -471,6 +471,19 @@ export function buildSteps(ctx) {
     ? ["torch==2.7.0", "torchvision==0.22.0", "--index-url", torchIndex]
     : ["torch==2.7.0", "torchvision==0.22.0"];
   const okPath = (id) => k(".install", `${id}.ok`);
+  // Trust what this computer trusts (vendor/truststore/persodub_truststore.py):
+  // company security software that inspects HTTPS hands Python a certificate
+  // only the OS knows, and pip, hf and the Perso API calls all stopped on
+  // CERTIFICATE_VERIFY_FAILED (2026-10-15). The wheel ships in the payload,
+  // so installing it needs no network; the .pth loads the hook in every
+  // interpreter of the venv.
+  const trustDir = join(ctx.payloadDir, "kit-src", "truststore");
+  const trustHook = join(trustDir, "persodub_truststore.py");
+  // The venv's site-packages: Windows keeps one path, POSIX names the Python
+  // (the kit's python3.11, standalonePython).
+  const sitePackages = (venvDir) => IS_WIN
+    ? join(venvDir, "Lib", "site-packages")
+    : join(venvDir, "lib", basename(py), "site-packages");
   const markOk = (id, note = "") => {
     mkdirSync(k(".install"), { recursive: true });
     writeFileSync(okPath(id), note);
@@ -498,6 +511,8 @@ export function buildSteps(ctx) {
         }
       }
     }
+    // The hook's text too, so a changed hook reaches kits already installed.
+    words.push(existsSync(trustHook) ? readFileSync(trustHook, "utf8") : "(missing)");
     return createHash("sha256").update(JSON.stringify(words)).digest("hex");
   };
 
@@ -519,11 +534,18 @@ export function buildSteps(ctx) {
       const budget = existsSync(venvDir) ? Math.min(bytes, 0.5 * GB) : bytes;
       report(null, t("Creating {name}", { name: venvName }));
       await ctx.run([py, "-m", "venv", venvDir]);
+      const venvPy = venvBin(venvDir, "python");
+      // The OS trust hook goes in before the first download (trustDir above).
+      await ctx.run([venvPy, "-m", "pip", "install", "--no-cache-dir", "--no-index", "--find-links", trustDir, "truststore"],
+                    { onLine: (l) => report(null, l.slice(0, 120)) });
+      const site = sitePackages(venvDir);
+      mkdirSync(site, { recursive: true });
+      cpSync(trustHook, join(site, "persodub_truststore.py"));
+      writeFileSync(join(site, "persodub_truststore.pth"), "import persodub_truststore\n");
       // Upgrade pip via `python -m pip`, not `pip.exe`: on Windows pip.exe is
       // locked while running and cannot rewrite itself ("To modify pip, please
       // run: python -m pip install --upgrade pip"). `python -m pip` is safe on
       // both platforms.
-      const venvPy = venvBin(venvDir, "python");
       await ctx.run([venvPy, "-m", "pip", "install", "--upgrade", "pip"], { onLine: (l) => report(null, l.slice(0, 120)) });
       // pip's own progress, as bytes: with --progress-bar raw it prints
       // "Progress <got> of <total>" per file even without a terminal, and the
