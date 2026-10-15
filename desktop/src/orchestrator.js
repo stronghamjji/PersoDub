@@ -263,9 +263,11 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
   // after the kit env, so a stale kit.env can never override what this build actually is.
   // The computer's language goes the same way: what a language setting of "auto" means to
   // the backend (app/i18n.py), a fact of this computer and not a setting. The edition
-  // decides where a dub runs by default (app/setup.py).
+  // decides where a dub runs by default (app/setup.py). And the log folder: the
+  // backend's persodub.log and job-<id>.log go beside shell.log and the engines'
+  // console logs, so everything a support request needs is in one folder.
   env = { ...env, PERSODUB_CLIENT: "desktop", PERSODUB_APP_VERSION: appVersion ?? "",
-          PERSODUB_LOCALE: locale ?? "en", PERSODUB_EDITION: edition ?? "" };
+          PERSODUB_LOCALE: locale ?? "en", PERSODUB_EDITION: edition ?? "", PERSODUB_LOG_DIR: logDir };
 
   const children = [];
   const packChildren = new Map();   // pack id -> the processes it owns

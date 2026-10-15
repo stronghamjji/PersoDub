@@ -27,7 +27,9 @@ below.
 
 ### Logs
 
-Two logs sit side by side in the app's `logs` folder:
+Two logs sit side by side in the app's `logs` folder,
+`~/Library/Application Support/persodub-desktop-shell/logs` on macOS and
+`%APPDATA%\persodub-desktop-shell\logs` on Windows:
 
 | File | What it holds |
 |---|---|
@@ -39,7 +41,8 @@ Two logs sit side by side in the app's `logs` folder:
 attach them to a bug report.
 
 Set `PERSODUB_DEBUG=1` before starting the app to record much more detail in
-`persodub.log`; set `PERSODUB_LOG_DIR` to put both logs somewhere else.
+`persodub.log`; set `PERSODUB_LOG_DIR` to put both logs somewhere else when you
+run the server yourself (the desktop app always keeps them in its own folder).
 
 ## FAQ
 

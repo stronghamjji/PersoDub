@@ -34,7 +34,7 @@ from app import codex_fetch
 from app.agents import base as agent_base
 from app.agents import claude as claude_agent
 from app.agents import codex as codex_agent
-from app.config import PERSODUB_LOG_DIR
+from app.config import DEFAULT_LOG_DIR
 from app.i18n import t
 from app.translate import CHATGPT_DEFAULT_MODEL
 
@@ -79,8 +79,11 @@ AGENTS = {
 }
 
 # Where the assistant's own files live. Never the user's global CLI config:
-# their everyday setup has to keep working exactly as it did.
-AGENT_DIR = os.path.join(PERSODUB_LOG_DIR, "agent")
+# their everyday setup has to keep working exactly as it did. Nor wherever the
+# logs are sent (PERSODUB_LOG_DIR): the CLI runs in this folder, and Claude's
+# -c continues the conversation of the folder it runs in, so a folder that
+# moved would start every thread over. The app's own logs/agent, as always.
+AGENT_DIR = os.path.join(DEFAULT_LOG_DIR, "agent")
 
 # --- Which account each CLI is signed in with -------------------------------
 # Asking costs a process, so the answer is kept for a minute -- and the asking

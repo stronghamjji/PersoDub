@@ -240,9 +240,10 @@ test("hands the backend its desktop identity, overriding a stale kit.env", async
   const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
   // Inherited from the environment here, the way a stale value in the kit's kit.env would
   // reach the same merge -- what this build is must win over what it once was told.
-  const prior = { client: process.env.PERSODUB_CLIENT, edition: process.env.PERSODUB_EDITION };
+  const prior = { client: process.env.PERSODUB_CLIENT, edition: process.env.PERSODUB_EDITION, logs: process.env.PERSODUB_LOG_DIR };
   process.env.PERSODUB_CLIENT = "server";
   process.env.PERSODUB_EDITION = "production";
+  process.env.PERSODUB_LOG_DIR = "/stale/logs";
   let stop = () => {};
   try {
     const { url, stopAll } = await startEngines(fakeCfg(), { logDir, appVersion: "1.2.3", locale: "ko", edition: "opensource" });
@@ -253,13 +254,15 @@ test("hands the backend its desktop identity, overriding a stale kit.env", async
       // What "auto" means to the backend's language (app/i18n.py).
       PERSODUB_LOCALE: "ko",
       PERSODUB_EDITION: "opensource",
+      // The engine's own logs go in the shell's log folder, beside shell.log.
+      PERSODUB_LOG_DIR: logDir,
     });
   } finally {
     stop();
-    if (prior.client === undefined) delete process.env.PERSODUB_CLIENT;
-    else process.env.PERSODUB_CLIENT = prior.client;
-    if (prior.edition === undefined) delete process.env.PERSODUB_EDITION;
-    else process.env.PERSODUB_EDITION = prior.edition;
+    for (const [name, value] of [["PERSODUB_CLIENT", prior.client], ["PERSODUB_EDITION", prior.edition], ["PERSODUB_LOG_DIR", prior.logs]]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   }
 });
 

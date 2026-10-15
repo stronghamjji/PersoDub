@@ -260,9 +260,15 @@ QWEN_KEEP_NONVERBAL = _env_int("QWEN_KEEP_NONVERBAL", 1)
 NONVERBAL_WHISPER_PYTHON = os.environ.get("NONVERBAL_WHISPER_PYTHON", "python3")
 NONVERBAL_WHISPER_MODEL = os.environ.get("NONVERBAL_WHISPER_MODEL", "base")
 
-# Where per-job progress logs are written (app/jobs.py). Relative to the working
-# directory, so a desktop run lands them next to the code the app is serving.
-PERSODUB_LOG_DIR = os.environ.get("PERSODUB_LOG_DIR", "logs")
+# The app's own logs/ folder, relative to the working directory: where the logs
+# went before the desktop app named a folder for them. The Dub Agent's working
+# folder stays in it (app/api/agent.py), and a job dubbed then has its log in
+# it (app/api/report.py).
+DEFAULT_LOG_DIR = "logs"
+# Where the logs are written: persodub.log (app/logging_setup.py) and each
+# job's job-<id>.log (app/jobs.py). The desktop app names the folder, beside
+# its own shell.log; without it, the folder above.
+PERSODUB_LOG_DIR = os.environ.get("PERSODUB_LOG_DIR", DEFAULT_LOG_DIR)
 
 # Cap, in seconds, on how much leading silence app/qwen_assemble.py's
 # _trim_lead_tail_silence will ever trim off a synthesized line before it's

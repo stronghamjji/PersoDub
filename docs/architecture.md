@@ -132,7 +132,7 @@ macOS, `%LOCALAPPDATA%\PersoDub` on Windows), all in `desktop/src/config.js`.
 | `runtime.json` | where each pack's process listens right now, and its process id | shell (`desktop/src/runtimeFile.js`) |
 | `app/` | the backend's code, copied from the bundled payload | installer `payload` step |
 | `app/workspace/` | every job folder (`<day>/<project>_<lang>`) and held videos (`downloads/<id>`) | backend (`app/state.py` `WORKSPACE`) |
-| `app/logs/` | `persodub.log` (rotating), `job-<id>.log`, the Dub Agent's working folders | backend (`PERSODUB_LOG_DIR`, default `logs` relative to the working directory) |
+| `app/logs/` | the Dub Agent's working folders, and `persodub.log` (rotating) and `job-<id>.log` only for a backend run without the desktop app, which keeps them in `<userData>/logs/` (below) | backend (`PERSODUB_LOG_DIR`, default `logs` relative to the working directory) |
 | `python/`, `app_venv/` | standalone CPython 3.11 and the backend's venv | installer |
 | `bin/` | `ffmpeg`, `ffprobe` (put on the backend's `PATH`) | installer `ffmpeg` step |
 | `sidecar/` | the voice server's code | installer `payload` step |
@@ -146,8 +146,9 @@ macOS, `%LOCALAPPDATA%\PersoDub` on Windows), all in `desktop/src/config.js`.
 | `downloads/`, `reports/` | install archives; failure reports waiting for a network | installer; shell |
 
 Outside the kit, the shell keeps `<userData>/logs/` (`shell.log`, `backend.log`,
-`sidecar.log`, `ollama.log`, `pids.json`, the `clean-exit` note) and
-`<userData>/ports.json`. `<userData>` is Electron's folder for the app, named
+`sidecar.log`, `ollama.log`, `pids.json`, the `clean-exit` note, and the backend's
+own `persodub.log` and `job-<id>.log`, written there through `PERSODUB_LOG_DIR`)
+and `<userData>/ports.json`. `<userData>` is Electron's folder for the app, named
 after `desktop/package.json`'s `name`:
 `~/Library/Application Support/persodub-desktop-shell` on macOS,
 `%APPDATA%\persodub-desktop-shell` on Windows.
@@ -175,8 +176,9 @@ after `desktop/package.json`'s `name`:
    - kills whatever `pids.json` says the last launch left running;
    - builds the environment: the shell's own, `kit.env` laid over it, `<kit>/bin`
      prepended to `PATH`, and `PERSODUB_CLIENT=desktop`,
-     `PERSODUB_APP_VERSION=<desktop/package.json version>` and
-     `PERSODUB_LOCALE=<ko|en, the computer's language>` set last;
+     `PERSODUB_APP_VERSION=<desktop/package.json version>`,
+     `PERSODUB_LOCALE=<ko|en, the computer's language>` and
+     `PERSODUB_LOG_DIR=<userData>/logs` set last;
    - clears the addresses in `runtime.json`, then starts each installed pack on
      a free port, writes its state as `"starting"`, waits for its health
      answer (two minutes of silence at most; the voice engine's "loading"

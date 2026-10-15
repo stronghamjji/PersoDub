@@ -232,6 +232,27 @@ def test_the_bundle_names_the_stage_the_engines_and_the_error(failed_job):
     assert body["job"]["error"] == "The voice engine exited (exit 1)"
 
 
+def test_a_job_dubbed_before_the_logs_moved_is_read_from_the_old_folder(tmp_path, monkeypatch):
+    # The desktop app now names the log folder (PERSODUB_LOG_DIR); a job
+    # dubbed before that has its log in the app's own logs/ folder.
+    old = tmp_path / "app-logs"
+    old.mkdir()
+    monkeypatch.setattr(report_api, "DEFAULT_LOG_DIR", str(old))
+    jid = state.job_store.create()
+    state.job_store.update(jid, kind="dub", status="error", error="x")
+    (old / ("job-%s.log" % jid)).write_text("the video\n3/6 translating\n", encoding="utf-8")
+    body = client.get("/api/report/bundle", params={"job": jid}).json()
+    assert body["job"]["stageMarker"] == "3/%d" % len(STAGES)
+    assert "3/6 translating" in body["logs"]["job"]
+    # One in the log folder is the one that counts.
+    new = os.path.join(state.job_store.log_dir, "job-%s.log" % jid)
+    os.makedirs(os.path.dirname(new), exist_ok=True)
+    with open(new, "w", encoding="utf-8") as f:
+        f.write("the video\n5/6 checking\n")
+    body = client.get("/api/report/bundle", params={"job": jid}).json()
+    assert body["job"]["stageMarker"] == "5/%d" % len(STAGES)
+
+
 def test_the_bundle_carries_the_log_tails_and_the_whole_logs(failed_job):
     body = client.get("/api/report/bundle", params={"job": failed_job}).json()
     assert "4/6 synthesize line 3" in body["logTails"]["job"]

@@ -5,6 +5,7 @@ promise the panel -- which assistant is usable, why one is not, and that the
 backend the panel names is the backend that answers.
 """
 import json
+import os
 import time
 
 from fastapi.testclient import TestClient
@@ -479,3 +480,10 @@ def test_an_email_address_never_reaches_the_panel_even_cut_in_pieces(monkeypatch
     shown = "".join(e.get("text", "") for e in events if e.get("kind") == "text")
     assert "@" not in r.text and "some.on" not in shown
     assert shown == "You're signed in as (email hidden). Anything else?"
+
+
+def test_the_agent_folder_stays_where_it_was_when_the_logs_move():
+    # The logs go where the desktop app says (PERSODUB_LOG_DIR); the CLI runs
+    # in this folder, and Claude's -c continues the conversation of the folder
+    # it runs in, so it stays in the app's own logs/agent.
+    assert os.path.join("logs", "agent") == agent_api.AGENT_DIR

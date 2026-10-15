@@ -25,6 +25,7 @@ from fastapi import APIRouter
 
 from app import models, state
 from app.api._shared import work_dir_of
+from app.config import DEFAULT_LOG_DIR
 from app.jobs import kind_of
 from app.logging_setup import LOG_FILE_NAME
 from app.report_mask import mask_tail, mask_text, read_masked
@@ -83,6 +84,14 @@ def strip_source_line(text: str) -> str:
     return "[video]" + sep + rest
 
 
+def _job_log_path(log_dir: str, job: str) -> str:
+    """A job's log: in the log folder, else -- a job dubbed before the desktop
+    app named that folder -- in the app's own logs/ it was written to then."""
+    name = "job-%s.log" % job
+    path = os.path.join(log_dir, name)
+    return path if os.path.exists(path) else os.path.join(DEFAULT_LOG_DIR, name)
+
+
 def _packs():
     """Which heavy packs are on this kit, as the models catalog sees them."""
     try:
@@ -114,7 +123,7 @@ def report_bundle(job: Optional[str] = None):
 
     j = state.job_store.get(job) if job else None
     if j:
-        job_log = strip_source_line(read_masked(os.path.join(log_dir, "job-%s.log" % job), home, kit))
+        job_log = strip_source_line(read_masked(_job_log_path(log_dir, job), home, kit))
         marker, stage = stage_of(job_log)
         record = {
             "kind": kind_of(j),

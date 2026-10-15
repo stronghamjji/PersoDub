@@ -150,8 +150,7 @@ Use the uninstaller in the **Start menu**, or **Settings > Apps**.
 
 Attach these when you report a bug:
 
-- Per-dub logs: `%LOCALAPPDATA%\PersoDub\app\logs`
-- Engine logs: `%APPDATA%\persodub-desktop-shell\logs`
+- Per-dub and engine logs, all in one folder: `%APPDATA%\persodub-desktop-shell\logs`
 
 Next: [After installing](#after-installing).
 

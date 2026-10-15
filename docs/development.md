@@ -96,7 +96,7 @@ blocks `.env`, `*.env`, and `config/`.
 | `SEP_PYTHON` / `SEP_MODEL_DIR` | `python3` / `models/demucs` | Interpreter for local separation (Mel-Band RoFormer or Demucs) / Demucs's model path |
 | `DIAR_PYTHON` / `PERSODUB_CAMPPLUS_MODEL` | `python3` / `models/campplus/campplus.onnx` | Interpreter and model for local CAM++ |
 | `QWEN_SCORER_PYTHON` / `QWEN_N_TAKES` | `python3` / `4` | Take-scoring interpreter · candidates per line (best-of-N) |
-| `PERSODUB_LOG_DIR` | `logs` | Where `persodub.log` and the per-job `job-<id>.log` files are written |
+| `PERSODUB_LOG_DIR` | `logs` | Where `persodub.log` and the per-job `job-<id>.log` files are written: `logs` for a server run, while the desktop app sets it to its own logs folder, beside `shell.log` |
 | `PERSODUB_DEBUG` | (unset) | `1` = DEBUG detail in `persodub.log` instead of INFO |
 
 A number this table gives that the environment sets to something unreadable

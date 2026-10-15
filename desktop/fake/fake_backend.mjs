@@ -11,8 +11,8 @@ createServer((req, res) => {
     return;
   }
   // Lets a test assert what the shell actually handed the backend. The real backend reads
-  // these to tell Perso it is the desktop app and which version (app/perso_client.py), and
-  // the edition to pick where a dub runs by default (app/setup.py).
+  // these to tell Perso it is the desktop app and which version (app/perso_client.py), the
+  // edition to pick where a dub runs by default (app/setup.py), and where to write its logs.
   if (req.url === "/env") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
@@ -20,6 +20,7 @@ createServer((req, res) => {
       PERSODUB_APP_VERSION: process.env.PERSODUB_APP_VERSION ?? null,
       PERSODUB_LOCALE: process.env.PERSODUB_LOCALE ?? null,
       PERSODUB_EDITION: process.env.PERSODUB_EDITION ?? null,
+      PERSODUB_LOG_DIR: process.env.PERSODUB_LOG_DIR ?? null,
     }));
     return;
   }
