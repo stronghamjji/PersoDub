@@ -30,7 +30,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // Which build this is, and so which repository the updates come from and the
 // page's GitHub links open (src/edition.js). Read once, from the same payload
 // the boot installs from; the window is made before the boot runs.
-const edition = readEdition({ payloadDir: findPayloadDir(HERE), env: process.env });
+const edition = readEdition({ payloadDir: findPayloadDir(HERE), env: process.env, userDataDir: app.getPath("userData") });
 // What the shell's parts share. Set as the app comes up, and read by each part
 // at the moment it needs it -- none of it exists when the parts are made.
 const ctx = {

@@ -36,13 +36,22 @@ export function buildEdition(env) {
   return name;
 }
 
-// The running app's edition: the payload's EDITION file when there is one,
-// otherwise the environment. An unknown name is the default, since a running
-// app has no build to stop.
-export function readEdition({ payloadDir, env }) {
+// The running app's edition: the installer's EDITION mark in the app's user
+// data folder when there is one, else the payload's EDITION file, else the
+// environment. An unknown name is the default, since a running app has no
+// build to stop.
+//
+// The mark: one signed Windows installer serves both editions. A copy of it
+// whose file name ends in "-production.exe" writes the mark as it installs
+// (desktop/build/installer.nsh), so the company hands out that copy and the
+// public release carries the plain name, and the file is signed once.
+export function readEdition({ payloadDir, env, userDataDir }) {
   let name = env.PERSODUB_EDITION;
   if (payloadDir) {
     try { name = readFileSync(join(payloadDir, "EDITION"), "utf8").trim(); } catch { /* no EDITION file: the environment's */ }
+  }
+  if (userDataDir) {
+    try { name = readFileSync(join(userDataDir, "EDITION"), "utf8").trim(); } catch { /* no mark: the build's */ }
   }
   return Object.hasOwn(EDITIONS, name) ? name : DEFAULT_EDITION;
 }

@@ -111,6 +111,13 @@ payload's `EDITION` file. At launch `desktop/src/edition.js` reads that file
 (the environment cannot override it; without the file, as in `npm start`, it
 reads `PERSODUB_EDITION`), `updater.js resolveFeed` sets the feed from it,
 and the window passes the repository to the page as `persodubShell.repo`.
+The kit remembers the edition it first ran as in `kit.env`
+(`rememberedEdition`), so an update from the public releases keeps it. On
+Windows one signed installer serves both editions: a copy named
+`...-production.exe` writes an `EDITION` mark into the app's user data folder
+as it installs (`desktop/build/installer.nsh`), and that mark wins over the
+payload's file. The release carries the plain name; the company hands out
+the renamed copy.
 The shell also hands the edition to the backend as `PERSODUB_EDITION`
 (`desktop/src/orchestrator.js startEngines`), and `app/setup.py` makes Perso's
 cloud the dub default for production only; the open-source edition, and a

@@ -46,6 +46,14 @@ test("with no EDITION file the running app reads the environment", () => {
   assert.equal(readEdition({ payloadDir: null, env: {} }), "opensource");
 });
 
+test("the installer's mark in the user data folder wins over the payload", () => {
+  // desktop/build/installer.nsh writes it when the installer's file name ends
+  // in -production.exe; the same signed build then installs as production.
+  assert.equal(readEdition({ payloadDir: payload("opensource"), env: {}, userDataDir: payload("production\n") }), "production");
+  assert.equal(readEdition({ payloadDir: payload("opensource"), env: {}, userDataDir: payload() }), "opensource");
+  assert.equal(readEdition({ payloadDir: null, env: {}, userDataDir: payload("nonsense") }), "opensource");
+});
+
 test("an unknown edition at run time is the open-source one", () => {
   assert.equal(readEdition({ payloadDir: payload("nonsense"), env: { PERSODUB_EDITION: "production" } }), "opensource");
   assert.equal(readEdition({ payloadDir: payload(""), env: { PERSODUB_EDITION: "production" } }), "opensource");
