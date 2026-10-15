@@ -67,8 +67,9 @@ export function registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog }) {
       try {
         await runInstall(steps, {
           stop: () => packCancelled,
+          // Each step's lines say which pack they are for; the banner stays bare.
+          log: (line, level) => shellLog(line.startsWith("#") ? line : `pack ${id} ${line}`, level),
           onProgress: (p) => {
-            if (p.state === "start" || p.state === "done" || p.state === "error") shellLog(`PERSODUB_PACK ${id} ${p.stepId} ${p.state}${p.detail ? ": " + p.detail.slice(0, 300) : ""}`);
             if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
             // A progress line without a percent (unpacking, a pip line) keeps
             // the pack's last one: the dialog fell back to 0% for those (2026-09-08).

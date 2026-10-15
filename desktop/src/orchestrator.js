@@ -10,6 +10,7 @@ import { readRuntime, writeRuntime, clearRuntime } from "./runtimeFile.js";
 import { PACKS, packInstalled } from "./installSpec.js";
 import { maskTail } from "./report.js";
 import { errorText } from "./errorText.js";
+import { BANNER, secondsSince } from "./logLine.js";
 
 const PIDS_FILE = "pids.json";
 
@@ -57,7 +58,8 @@ function substitute(argv, port) {
   return argv.map((a) => a.replaceAll("{port}", String(port)));
 }
 
-function launch(argv, { cwd, env, logPath }) {
+// name is the process's name in shell.log ("backend" or the pack's id).
+function launch(argv, { cwd, env, logPath, name, log, onExit }) {
   const fd = openSync(logPath, "a");
   // POSIX detaches so the engine leads a process group stopChild can signal.
   // Windows must NOT detach: DETACHED_PROCESS strips the console entirely and
@@ -73,6 +75,14 @@ function launch(argv, { cwd, env, logPath }) {
   // A program that is not there never runs, and never exits either: without
   // this it counted as alive, and the unhandled event took the shell down.
   child.on("error", (err) => { child.launchError = err; });
+  child.name = name;
+  // Every end goes in shell.log, a memory line after it (bootFlow.js): an
+  // engine the system killed mid-session left no trace there. 75 is the voice
+  // engine asking to be started again (watchRestart below).
+  child.once("exit", () => {
+    log(`${name} EXITED (${howItEnded(child)})${child.exitCode === RESTART_EXIT_CODE ? ", restarting" : ""}`);
+    onExit();
+  });
   return child;
 }
 
@@ -115,6 +125,9 @@ export function sidecarArgv(kitDir, port) {
 // demand) has none -- and must not withdraw another pack's address when it is
 // installed or removed.
 export const PACK_RUNTIME_KEY = { engine: "tts_url", "ollama-runtime": "ollama_url" };
+// ...and its process id beside the address, written and withdrawn with it, so
+// the backend can measure that process's memory (app/runtime.py).
+export const PACK_PID_KEY = { engine: "tts_pid", "ollama-runtime": "ollama_pid" };
 
 // One pack's process: started at boot for every pack already on disk, and
 // again by the install-pack IPC the moment a pack finishes downloading -- the
@@ -140,7 +153,11 @@ export function packAlive(children) {
 // and its preflight refuses a local dub that needs it with that sentence.
 export const PACK_STATE_KEY = { engine: "tts_state", "ollama-runtime": "ollama_state" };
 
-export async function startPackProcesses(cfg, packId, { logDir, env, children, record, healthTimeoutMs }) {
+// log and onExit as startEngines takes them. place is the pack's number in
+// shell.log's "[Engine i/N]": 1/1 for a pack started on its own after boot.
+export async function startPackProcesses(cfg, packId, { logDir, env, children, record, healthTimeoutMs,
+                                                        log = () => {}, onExit = () => {}, place = "1/1" }) {
+  const tag = `[Engine ${place}] ${packId}`;
   if (packId === "ollama-runtime") {
     // Local translation runs through an Ollama server owned by this app:
     // kit-contained binary and models dir, free port (never fights a user's
@@ -152,15 +169,15 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
     const child = launch([ollamaBin, "serve"], {
       cwd: cfg.kitDir,
       env: { ...env, OLLAMA_HOST: `127.0.0.1:${port}`, OLLAMA_MODELS: join(cfg.kitDir, "models", "ollama") },
-      logPath: join(logDir, "ollama.log"),
+      logPath: join(logDir, "ollama.log"), name: packId, log, onExit,
     });
     children.push(child);
     record();
     // Announced only once it answers: right after an on-demand install the
     // page pulls a model within the second, and a server still binding its
     // port turned that first pull into a refused connection.
-    await announceWhenUp(`http://127.0.0.1:${port}/api/tags`, (b) => Array.isArray(b.models),
-                         () => writeRuntime(cfg.kitDir, { ollama_url: `http://127.0.0.1:${port}` }));
+    await announceWhenUp(port, `http://127.0.0.1:${port}/api/tags`, (b) => Array.isArray(b.models),
+                         () => writeRuntime(cfg.kitDir, { ollama_url: `http://127.0.0.1:${port}`, ollama_pid: child.pid }));
     return [child];
   }
   if (packId === "engine") {
@@ -171,6 +188,7 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
     writeRuntime(cfg.kitDir, { tts_state: "starting" });
     const child = launch(fake ? substitute(cfg.sidecarCmd, port) : sidecarArgv(cfg.kitDir, port), {
       cwd: fake ? process.cwd() : join(cfg.kitDir, "sidecar"), env, logPath: join(logDir, "sidecar.log"),
+      name: packId, log, onExit,
     });
     children.push(child);
     record();
@@ -180,8 +198,8 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
     // /synthesize answers 503 until then. Waiting on model_loaded here made
     // every model-less boot a 2-minute timeout and an error screen. A model
     // that IS on disk loads after the port opens, and "loading" is progress.
-    await announceWhenUp(`http://127.0.0.1:${port}/health`, (b) => b.status === "ok",
-                         () => writeRuntime(cfg.kitDir, { tts_url: `http://127.0.0.1:${port}` }),
+    await announceWhenUp(port, `http://127.0.0.1:${port}/health`, (b) => b.status === "ok",
+                         () => writeRuntime(cfg.kitDir, { tts_url: `http://127.0.0.1:${port}`, tts_pid: child.pid }),
                          (b) => b.status === "loading");
     return [child];
   }
@@ -193,8 +211,11 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
   // stops the wait at once: waiting two minutes on a dead engine told nobody
   // anything. Either way the pack is marked failed for the page, and the
   // error carries the engine's own last lines for the log and the report.
-  async function announceWhenUp(url, predicate, announce, busy) {
+  async function announceWhenUp(port, url, predicate, announce, busy) {
     const child = children[children.length - 1];
+    const from = Date.now();
+    log(BANNER);
+    log(`${tag} START (port ${port})`);
     try {
       await waitForHealth(url, {
         timeoutMs: healthTimeoutMs ?? cfg.sidecarHealthTimeoutMs, predicate, busy,
@@ -208,14 +229,19 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
       writeRuntime(cfg.kitDir, { [PACK_STATE_KEY[packId]]: "failed" });
       const tail = engineTail(child, cfg.kitDir);
       if (tail) err.message += `\nLast lines of ${basename(child.logPath)}:\n${tail}`;
+      log(`${tag} FAILED (${secondsSince(from)}s): ${err.message.split("\n")[0]}`, "ERROR");
       throw err;
     }
     announce();
     clearRuntime(cfg.kitDir, [PACK_STATE_KEY[packId]]);
+    log(`${tag} READY (${secondsSince(from)}s)`);
   }
 }
 
-export async function startEngines(cfg, { logDir, appVersion, locale, edition, preferredBackendPort }) {
+// log(line, level) gets shell.log's engine lines, the level left out for INFO
+// and "ERROR" for a failure; onExit() runs after any of the processes ends.
+export async function startEngines(cfg, { logDir, appVersion, locale, edition, preferredBackendPort,
+                                          log = () => {}, onExit = () => {} }) {
   mkdirSync(logDir, { recursive: true });
   await killStalePids(logDir);
 
@@ -242,24 +268,32 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
   const pids = () => children.map((c) => c.pid);
   const stopAll = () => children.forEach(stopChild);
   const record = () => writeFileSync(join(logDir, PIDS_FILE), JSON.stringify(pids()));
-  const packOpts = { logDir, env, children, record };
+  const packOpts = { logDir, env, children, record, log, onExit };
 
   const failed = [];   // {pack, message}: packs that did not start, for bootFlow.js to log and report
+
+  // Every pack already on this kit's disk starts now; a pack installed
+  // later in the session starts through startPack below, the same way.
+  // A kit with no engine pack simply has no sidecar yet: the backend
+  // answers that the voice engine is not installed, and its preflight
+  // asks for the pack before a local dub. Dev and tests start the fake
+  // sidecar in the engine pack's place.
+  const bootPacks = overrideMode ? ["engine"] : PACKS.filter((p) => packInstalled(cfg.kitDir, p.id)).map((p) => p.id);
+  // shell.log numbers the engines: each pack with a process of its own (the
+  // eraser has none, and no line), then the backend, last.
+  const enginePacks = bootPacks.filter((id) => PACK_RUNTIME_KEY[id]);
+  const total = enginePacks.length + 1;
+  const backendTag = `[Engine ${total}/${total}] backend`;
+  log(`ENGINES START: kit=${cfg.kitDir} edition=${edition} locale=${locale} version=${appVersion} packs=${enginePacks.join(",") || "none"}`);
+  let backendFrom = Date.now();   // reset at the backend's launch: its READY and FAILED count from there
 
   try {
     // Addresses (and states) from the last launch must not outlive it: a
     // pack that was removed since would otherwise still be announced.
-    clearRuntime(cfg.kitDir, ["ollama_url", "tts_url", ...Object.values(PACK_STATE_KEY)]);
-    // Every pack already on this kit's disk starts now; a pack installed
-    // later in the session starts through startPack below, the same way.
-    // A kit with no engine pack simply has no sidecar yet: the backend
-    // answers that the voice engine is not installed, and its preflight
-    // asks for the pack before a local dub. Dev and tests start the fake
-    // sidecar in the engine pack's place.
-    const bootPacks = overrideMode ? ["engine"] : PACKS.filter((p) => packInstalled(cfg.kitDir, p.id)).map((p) => p.id);
+    clearRuntime(cfg.kitDir, ["ollama_url", "tts_url", ...Object.values(PACK_PID_KEY), ...Object.values(PACK_STATE_KEY)]);
     for (const id of bootPacks) {
       try {
-        packChildren.set(id, await startPackProcesses(cfg, id, packOpts));
+        packChildren.set(id, await startPackProcesses(cfg, id, { ...packOpts, place: `${enginePacks.indexOf(id) + 1}/${total}` }));
       } catch (err) {
         // One engine that will not start costs only the work that needs it:
         // Perso dubs, erasing, exporting and finished projects need neither,
@@ -276,11 +310,15 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
       ? substitute(cfg.backendCmd, backendPort)
       : [venvBin(join(cfg.kitDir, "app_venv"), "uvicorn"),
          "app.main:app", "--host", "127.0.0.1", "--port", String(backendPort)];
-    children.push(launch(backendArgv, { cwd: backendCwd, env, logPath: join(logDir, "backend.log") }));
+    children.push(launch(backendArgv, { cwd: backendCwd, env, logPath: join(logDir, "backend.log"), name: "backend", log, onExit }));
     record();
+    backendFrom = Date.now();
+    log(BANNER);
+    log(`${backendTag} START (port ${backendPort})`);
     await waitForHealth(`http://127.0.0.1:${backendPort}/health`, {
       timeoutMs: cfg.backendHealthTimeoutMs,
     });
+    log(`${backendTag} READY (${secondsSince(backendFrom)}s)`);
 
     // The install-pack IPC (packIpc.js) starts a pack's process the moment its
     // files are down; remove-pack stops it and withdraws its address.
@@ -300,7 +338,7 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
         if (i >= 0) children.splice(i, 1);
       }
       packChildren.delete(id);
-      if (PACK_RUNTIME_KEY[id]) clearRuntime(cfg.kitDir, [PACK_RUNTIME_KEY[id], PACK_STATE_KEY[id]]);
+      if (PACK_RUNTIME_KEY[id]) clearRuntime(cfg.kitDir, [PACK_RUNTIME_KEY[id], PACK_PID_KEY[id], PACK_STATE_KEY[id]]);
       // A pack started right after its install imports torch cold, on a disk
       // that just wrote gigabytes: the boot's two minutes were not enough on
       // Windows (2026-09-07), and a start that gives up leaves the dub refused.
@@ -327,12 +365,20 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
       }
       packChildren.delete(id);
       record();
-      if (PACK_RUNTIME_KEY[id]) clearRuntime(cfg.kitDir, [PACK_RUNTIME_KEY[id], PACK_STATE_KEY[id]]);
+      if (PACK_RUNTIME_KEY[id]) clearRuntime(cfg.kitDir, [PACK_RUNTIME_KEY[id], PACK_PID_KEY[id], PACK_STATE_KEY[id]]);
     };
 
+    // The live processes, for bootFlow.js's memory line: the backend, then the
+    // packs in PACKS order, so one line reads against the next.
+    const order = ["backend", ...PACKS.map((p) => p.id)];
+    const processes = () => children.filter((c) => c.pid && packAlive([c]))
+      .sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name))
+      .map((c) => ({ name: c.name, pid: c.pid }));
+
     return { url: `http://127.0.0.1:${backendPort}`, port: backendPort, pids: pids(), stopAll,
-             startPack, stopPack, failed };
+             startPack, stopPack, failed, processes };
   } catch (err) {
+    log(`${backendTag} FAILED (${secondsSince(backendFrom)}s): ${errorText(err).split("\n")[0]}`, "ERROR");
     stopAll();
     err.logDir = logDir;
     throw err;

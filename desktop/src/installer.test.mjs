@@ -42,6 +42,27 @@ test("failing step emits error and halts", async () => {
   assert.ok(!events.includes("b:start"));
 });
 
+// shell.log's lines for a run: numbered by place in the list, a banner over
+// each step that runs, its seconds, and the failure at ERROR (the level is
+// left out for INFO, which shellLog fills in). English only: a step is named
+// by its id, and its title, which is in the user's language, stays out.
+test("each step's lines are numbered, timed, and a failure is an ERROR", async () => {
+  const lines = [];
+  const steps = [step("a", { done: true }, []), step("b", {}, []), step("c", { fail: true }, [])];
+  for (const s of steps) s.title = `${s.id} 단계 제목`;
+  await assert.rejects(runInstall(steps, { log: (line, level = "INFO") => lines.push(`${level} ${line}`) }), /c blew up/);
+  assert.equal(lines.length, 7, lines.join("\n"));
+  assert.deepEqual(lines.slice(0, 3), [
+    "INFO [Step 1/3] a SKIPPED (already done)",
+    "INFO ##############################",
+    "INFO [Step 2/3] b START",
+  ]);
+  assert.match(lines[3], /^INFO \[Step 2\/3\] b DONE \(\d+\.\ds\)$/);
+  assert.deepEqual(lines.slice(4, 6), ["INFO ##############################", "INFO [Step 3/3] c START"]);
+  assert.match(lines[6], /^ERROR \[Step 3\/3\] c FAILED \(\d+\.\ds\): c blew up$/);
+  assert.ok(!lines.some((l) => l.includes("단계")), "no title in the log");
+});
+
 test("step whose run finishes but isDone stays false throws", async () => {
   const log = [];
   await assert.rejects(
@@ -129,12 +150,20 @@ test("a 503 twice then success runs the step three times and reports the retries
   const log = [];
   const events = [];
   const busy = "requests.exceptions.HTTPError: 503 Server Error: Backend is unhealthy for url: https://media.githubusercontent.com/x";
-  await runInstall([flaky([busy, "download failed 503: https://x"], log)], { ...noWait, onProgress: (e) => events.push(e) });
+  const lines = [];
+  await runInstall([flaky([busy, "download failed 503: https://x"], log)],
+    { ...noWait, onProgress: (e) => events.push(e), log: (line) => lines.push(line) });
   assert.deepEqual(log, [1, 2, 3]);
   assert.deepEqual(events.filter((e) => /retrying/.test(e.detail || "")).map((e) => e.detail),
     ["Connection problem, retrying (2/3)", "Connection problem, retrying (3/3)"]);
   assert.ok(!events.some((e) => e.state === "error"));
   assert.equal(events.at(-1).state, "done");
+  // shell.log says each retry with the reason, and the step still ends DONE.
+  assert.deepEqual(lines.filter((l) => l.includes("RETRY")), [
+    `[Step 1/1] ffmpeg RETRY (2/3): ${busy}`,
+    "[Step 1/1] ffmpeg RETRY (3/3): download failed 503: https://x",
+  ]);
+  assert.match(lines.at(-1), /^\[Step 1\/1\] ffmpeg DONE \(\d+\.\ds\)$/);
 });
 
 test("IncompleteRead three times gives up after three tries with the last error", async () => {

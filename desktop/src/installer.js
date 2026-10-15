@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { win32 } from "node:path";
 import { errorText } from "./errorText.js";
 import { t } from "./i18n.js";
+import { BANNER, secondsSince } from "./logLine.js";
 
 // Step runner: skips steps whose isDone() is already true (resume), streams
 // progress events, and verifies each step actually produced its artifacts.
@@ -16,17 +17,26 @@ export function worthRetrying(message) {
   return downloadInterrupted(message) || SERVER_BUSY.test(String(message || ""));
 }
 
+// log(line, level) gets each step's lines for shell.log, numbered by the
+// step's place in this list; the level is left out for INFO and is "ERROR"
+// for a failure. The lines name a step by its id, never its title: the title
+// is in the user's language, and the log is read in English.
 export async function runInstall(steps, {
   onProgress = () => {}, stop = () => false, retryDelaysMs = RETRY_DELAYS_MS,
-  sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms)), log = () => {},
 } = {}) {
-  for (const step of steps) {
+  for (const [i, step] of steps.entries()) {
+    const tag = `[Step ${i + 1}/${steps.length}] ${step.id}`;
     // bytes rides along on every event -- the screen adds it up as steps
     // finish, to show how much of the total it has received.
     if (await step.isDone()) {
+      log(`${tag} SKIPPED (already done)`);
       onProgress({ stepId: step.id, title: step.title, state: "skipped", bytes: step.bytes });
       continue;
     }
+    log(BANNER);
+    log(`${tag} START`);
+    const from = Date.now();
     onProgress({ stepId: step.id, title: step.title, state: "start", bytes: step.bytes });
     for (let attempt = 1; ; attempt++) {
       try {
@@ -44,6 +54,7 @@ export async function runInstall(steps, {
         const detail = errorText(err);
         const retry = attempt <= retryDelaysMs.length && worthRetrying(detail) && !stop();
         if (retry) {
+          log(`${tag} RETRY (${attempt + 1}/${retryDelaysMs.length + 1}): ${lastReason(detail)}`);
           // Left in English: the page knows a retry by this sentence's first
           // words (ui/src/modelsDialog.mjs).
           onProgress({ stepId: step.id, title: step.title, state: "progress", pct: null, detail: `Connection problem, retrying (${attempt + 1}/${retryDelaysMs.length + 1})`, bytes: step.bytes });
@@ -51,11 +62,13 @@ export async function runInstall(steps, {
         }
         // A cancel during the wait ends it here too, not with one more try.
         if (!retry || stop()) {
+          log(`${tag} FAILED (${secondsSince(from)}s): ${lastReason(detail)}`, "ERROR");
           onProgress({ stepId: step.id, title: step.title, state: "error", detail, bytes: step.bytes });
           throw err;
         }
       }
     }
+    log(`${tag} DONE (${secondsSince(from)}s)`);
     onProgress({ stepId: step.id, title: step.title, state: "done", bytes: step.bytes });
   }
 }

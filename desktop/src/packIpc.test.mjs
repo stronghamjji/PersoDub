@@ -72,6 +72,7 @@ test("an install runs the pack's steps, reports the pack's percent, starts its p
     { pack: "ollama-runtime", stepId: "start", title: "Installed. Starting it up", state: "progress", pct: 100 }]);
   assert.deepEqual(s.logged, [
     "PERSODUB_PACK install ollama-runtime: ollama-runtime",
+    "pack ollama-runtime [Step 1/1] ollama-runtime SKIPPED (already done)",
     'PERSODUB_PACK ollama-runtime process up: {"version":1}',
     "PERSODUB_PACK install ollama-runtime ok",
   ]);
@@ -113,6 +114,10 @@ test("a cancelled install answers Cancelled, and a failed download names its own
   // A killed download reads like a network error; a cancel must not retry it.
   fail(new Error("ECONNRESET"));
   assert.deepEqual(await cancelled, { ok: false, reason: "Cancelled." });
+  // shell.log: the banner bare, the step's own lines named for the pack.
+  assert.ok(s.logged.includes("##############################"), s.logged.join("\n"));
+  assert.ok(s.logged.includes("pack ollama-runtime [Step 1/1] ollama-runtime START"), s.logged.join("\n"));
+  assert.ok(s.logged.some((l) => /^pack ollama-runtime \[Step 1\/1\] ollama-runtime FAILED \(\d+\.\ds\): ECONNRESET$/.test(l)), s.logged.join("\n"));
 
   fail = null;
   const broken = s.ask("shell:install-pack", "ollama-runtime");

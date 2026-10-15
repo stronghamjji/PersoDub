@@ -13,6 +13,7 @@ import { registerPackIpc } from "./src/packIpc.js";
 import { createWindow } from "./src/windowFactory.js";
 import { EDITIONS, readEdition } from "./src/edition.js";
 import { useLanguage, systemLocale } from "./src/i18n.js";
+import { logLine } from "./src/logLine.js";
 
 // Two launches must never both start backends: the second would overwrite
 // pids.json with its own PIDs, and killStalePids on the NEXT boot (whichever
@@ -30,7 +31,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // Which build this is, and so which repository the updates come from and the
 // page's GitHub links open (src/edition.js). Read once, from the same payload
 // the boot installs from; the window is made before the boot runs.
-const edition = readEdition({ payloadDir: findPayloadDir(HERE), env: process.env, userDataDir: app.getPath("userData") });
+const edition = readEdition({ payloadDir: findPayloadDir(HERE), env: process.env });
 // What the shell's parts share. Set as the app comes up, and read by each part
 // at the moment it needs it -- none of it exists when the parts are made.
 const ctx = {
@@ -61,12 +62,12 @@ app.on("second-instance", () => {
 // The shell's own lines go to a file as well as the console: a packaged app
 // has no console, and the one question a support log could not answer on
 // Windows (2026-09-07) was why a pack's process did not start.
-function shellLog(line) {
+function shellLog(line, level = "INFO") {
   console.log(line);
   try {
     const dir = join(app.getPath("userData"), "logs");
     mkdirSync(dir, { recursive: true });
-    appendFileSync(join(dir, "shell.log"), `${new Date().toISOString()} ${line}\n`);
+    appendFileSync(join(dir, "shell.log"), `${logLine("shell", level, line)}\n`);
   } catch { /* logging never breaks the app */ }
 }
 
@@ -135,6 +136,7 @@ app.on("will-quit", () => {
   // must not touch it -- that was the double-launch bug (2026-09-18).
   if (!gotLock) return;
   markCleanExit(join(app.getPath("userData"), "logs"));
+  shellLog("QUIT: stopping engines");
   if (ctx.engines) {
     ctx.engines.stopAll();
   } else {

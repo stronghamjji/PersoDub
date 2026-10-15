@@ -112,12 +112,7 @@ payload's `EDITION` file. At launch `desktop/src/edition.js` reads that file
 reads `PERSODUB_EDITION`), `updater.js resolveFeed` sets the feed from it,
 and the window passes the repository to the page as `persodubShell.repo`.
 The kit remembers the edition it first ran as in `kit.env`
-(`rememberedEdition`), so an update from the public releases keeps it. On
-Windows one signed installer serves both editions: a copy named
-`...-production.exe` writes an `EDITION` mark into the app's user data folder
-as it installs (`desktop/build/installer.nsh`), and that mark wins over the
-payload's file. The release carries the plain name; the company hands out
-the renamed copy.
+(`rememberedEdition`), so an update from the public releases keeps it.
 The shell also hands the edition to the backend as `PERSODUB_EDITION`
 (`desktop/src/orchestrator.js startEngines`), and `app/setup.py` makes Perso's
 cloud the dub default for production only; the open-source edition, and a
@@ -134,7 +129,7 @@ macOS, `%LOCALAPPDATA%\PersoDub` on Windows), all in `desktop/src/config.js`.
 |---|---|---|
 | `kit.env` | the one settings file: interpreter paths, model paths, API keys, dub defaults, switches | installer `kit-env` step; Settings and the Dub Agent through `app/settings_env.py` |
 | `KIT_VERSION` | the version of the payload the kit was installed from | installer `payload` step |
-| `runtime.json` | where each pack's process listens right now | shell (`desktop/src/runtimeFile.js`) |
+| `runtime.json` | where each pack's process listens right now, and its process id | shell (`desktop/src/runtimeFile.js`) |
 | `app/` | the backend's code, copied from the bundled payload | installer `payload` step |
 | `app/workspace/` | every job folder (`<day>/<project>_<lang>`) and held videos (`downloads/<id>`) | backend (`app/state.py` `WORKSPACE`) |
 | `app/logs/` | `persodub.log` (rotating), `job-<id>.log`, the Dub Agent's working folders | backend (`PERSODUB_LOG_DIR`, default `logs` relative to the working directory) |
@@ -186,8 +181,9 @@ after `desktop/package.json`'s `name`:
      a free port, writes its state as `"starting"`, waits for its health
      answer (two minutes of silence at most; the voice engine's "loading"
      answers extend that up to fifteen minutes) and only then writes its
-     address. A pack that does not come up is stopped and marked `"failed"`;
-     the window still opens, and only local work that needs it is refused;
+     address and process id. A pack that does not come up is stopped and
+     marked `"failed"`; the window still opens, and only local work that
+     needs it is refused;
    - starts the backend on last launch's port from `ports.json` when it is
      free (so the page's origin, and its `localStorage`, survive a relaunch)
      and waits up to a minute for `GET /health`.
@@ -733,8 +729,9 @@ values are written bare.
 | `PERSODUB_NO_ANALYTICS`, `PERSODUB_NO_REPORTS` (`1` means off) | Settings | shell, re-read before every send |
 | `PERSODUB_LANG` (`auto`, `en`, `ko`; `auto` means `PERSODUB_LOCALE`) | Settings > About | backend (`app/i18n.py`, switched on save), page (through `GET /api/settings`), shell (`desktop/src/i18n.js`, at launch) |
 
-**runtime.json.** `{"version": 1, "tts_url", "ollama_url", "tts_state",
-"ollama_state"}`. An address appears only once its process answers; a state
+**runtime.json.** `{"version": 1, "tts_url", "ollama_url", "tts_pid", "ollama_pid",
+"tts_state", "ollama_state"}`. An address appears only once its process answers,
+with that process's id beside it, which the backend measures its memory by; a state
 is `"starting"` or `"failed"` and disappears when the address arrives. The
 shell writes it atomically (temp file, rename), and the backend treats a
 missing or broken file as "no pack is up".
@@ -750,7 +747,7 @@ masks read them:
 | `Perso workspace: <name> (#<seq>)`, `Perso credits used: <N>` | `app/report_mask.py` (and, for the workspace line, `desktop/src/report.js`), which mask them before a report leaves |
 | `progress <N>%` from the eraser worker | `app/api/erase.py _PROGRESS` |
 | `Cancelled by user request`, `Error: <Type>: <text>` | the screen's raw log and failure reports |
-| `shell.log`: `PERSODUB_VERSION`, `PERSODUB_EDITION`, `PERSODUB_READY`, `PERSODUB_KIT`, `PERSODUB_PACK` | the end-to-end update test (`PERSODUB_VERSION`) and anyone reading a support log |
+| `shell.log`, each line `YYYY-MM-DD HH:MM:SS,mmm - shell - <LEVEL> - <text>` in local time (`desktop/src/logLine.js`): `PERSODUB_VERSION`, `PERSODUB_EDITION`, `PERSODUB_READY`, `PERSODUB_KIT`, `PERSODUB_PACK`, and a run's numbered lines, `INSTALL START`, `Inputs:`, `[Step i/N] <id> START`/`DONE`/`FAILED`, `INSTALL ALL DONE`, `ENGINES START`, `[Engine i/N] <name> START`/`READY`/`FAILED`, `ENGINES ALL READY`, `<name> EXITED` and `Mem[...]` every five minutes and after each exit | the end-to-end update test (`PERSODUB_VERSION`) and anyone reading a support log |
 
 <a id="ipc-channels"></a>**Preload IPC.** `window.persodubShell` exposes
 `retry`, `rememberJob`, `onDownloadDone`, `revealPath`, `relaunch`,
