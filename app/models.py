@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import shutil
+import time
 
 from app.i18n import t
 
@@ -366,10 +367,28 @@ def _stopped_reason(exc) -> str:
 
 
 def _run_download(entry, kit, progress, cancelled):
-    if entry["source"].get("kind") == "ollama":
-        _pull_ollama(entry, progress, cancelled)
-    else:
-        _pull_hf(entry, kit, progress, cancelled)
+    """One model's download, end to end, between a START line and a DONE,
+    CANCELLED or FAILED line with its seconds in the app log."""
+    kind = "ollama" if entry["source"].get("kind") == "ollama" else "hf"
+    log.info("MODEL %s DOWNLOAD START (%s)", entry["id"], kind)
+    began = time.monotonic()
+    try:
+        if kind == "ollama":
+            _pull_ollama(entry, progress, cancelled)
+        else:
+            _pull_hf(entry, kit, progress, cancelled)
+    except Exception as e:
+        # A cancel that broke the connection on its way out is still a
+        # cancel, as _drain counts it.
+        if cancelled():
+            log.info("MODEL %s DOWNLOAD CANCELLED (%.1fs)", entry["id"], time.monotonic() - began)
+        else:
+            log.error("MODEL %s DOWNLOAD FAILED (%.1fs): %s: %s",
+                      entry["id"], time.monotonic() - began, type(e).__name__, e)
+        raise
+    # A cancel returns too, with the pieces kept.
+    log.info("MODEL %s DOWNLOAD %s (%.1fs)", entry["id"], "CANCELLED" if cancelled() else "DONE",
+             time.monotonic() - began)
 
 
 def _venv_python(kit: str) -> str:

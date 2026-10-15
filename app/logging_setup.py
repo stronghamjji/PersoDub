@@ -28,7 +28,9 @@ LOG_FILE_NAME = "persodub.log"
 # attach to an issue.
 MAX_BYTES = 2 * 1024 * 1024
 BACKUP_COUNT = 3
-LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+# "2026-10-15 20:11:05,745 - persodub.jobs - INFO - ...": the shape the job
+# logs are written in too (app/jobs.py), so the two read alike side by side.
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
 class _ClientWentAway(logging.Filter):

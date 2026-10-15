@@ -626,38 +626,46 @@ class PersoClient:
         Request contract mirrors the official plugin's api_adapter.mjs
         requestTranslation/download exactly (verified 2026-08-31).
         """
+        from app.jobs import timed_step  # late, as _wait_completed's JobCancelled
+
         log = log or (lambda m: None)
         space = int(space_seq) if space_seq is not None else self.space_seq
-        log("   Uploading the video to Perso…")
-        media_seq = self._upload_media(video_path, space)
-        log("   Perso is dubbing… this takes a few minutes.")
+        # Three steps in the job's file, each between START and DONE lines
+        # (timed_step); the three lines the screen reads its progress from
+        # are as they were.
+        with timed_step(log, "1/3", "upload"):
+            log("   Uploading the video to Perso…")
+            media_seq = self._upload_media(video_path, space)
+        with timed_step(log, "2/3", "perso-dubbing"):
+            log("   Perso is dubbing… this takes a few minutes.")
 
-        r = httpx.post(
-            f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/translate",
-            json={
-                "mediaSeq": media_seq,
-                "isVideoProject": True,
-                # "auto" is the server's own detect-the-source value.
-                "sourceLanguageCode": source_code or "auto",
-                # languageTag tells Perso's regional variants apart (en-GB,
-                # es-ES, pt-PT); the plain code alone means its default region.
-                "targetLanguages": [{"languageCode": target_code, "ttsModel": tts_model,
-                                     **({"languageTag": target_tag} if target_tag else {})}],
-                "numberOfSpeakers": int(num_speakers) if num_speakers else 1,
-                "preferredSpeedType": "GREEN",
-            },
-            headers=self._headers, timeout=120,
-        )
-        _raise_for_status(r)
-        project_seq = r.json()["result"]["startGenerateProjectIdList"][0]
-        # Kept on the client so the caller can stamp it on the job record --
-        # the script viewer reads the project back through it later.
-        self.last_dub_project_seq = project_seq
-        logger.info("Perso dubbing project %s (workspace %s)", project_seq, space)
+            r = httpx.post(
+                f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/translate",
+                json={
+                    "mediaSeq": media_seq,
+                    "isVideoProject": True,
+                    # "auto" is the server's own detect-the-source value.
+                    "sourceLanguageCode": source_code or "auto",
+                    # languageTag tells Perso's regional variants apart (en-GB,
+                    # es-ES, pt-PT); the plain code alone means its default region.
+                    "targetLanguages": [{"languageCode": target_code, "ttsModel": tts_model,
+                                         **({"languageTag": target_tag} if target_tag else {})}],
+                    "numberOfSpeakers": int(num_speakers) if num_speakers else 1,
+                    "preferredSpeedType": "GREEN",
+                },
+                headers=self._headers, timeout=120,
+            )
+            _raise_for_status(r)
+            project_seq = r.json()["result"]["startGenerateProjectIdList"][0]
+            # Kept on the client so the caller can stamp it on the job record --
+            # the script viewer reads the project back through it later.
+            self.last_dub_project_seq = project_seq
+            logger.info("Perso dubbing project %s (workspace %s)", project_seq, space)
 
-        self._wait_completed(project_seq, space, what="Perso dubbing")
-        log("   Downloading the finished video…")
-        return self.download_dub(project_seq, out_path, space)
+            self._wait_completed(project_seq, space, what="Perso dubbing")
+        with timed_step(log, "3/3", "download"):
+            log("   Downloading the finished video…")
+            return self.download_dub(project_seq, out_path, space)
 
     def download_dub(self, project_seq: int, out_path: str,
                      space_seq: Optional[int] = None) -> str:

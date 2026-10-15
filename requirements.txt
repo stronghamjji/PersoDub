@@ -21,3 +21,5 @@ num2words==0.5.14
 # upstream change must not reach fresh installs unpinned. 3.0 is the version
 # the 2026-09-03 device install produced.
 static-ffmpeg==3.0
+# The "Mem[...]" lines in each job's log: memory per process (app/memline.py).
+psutil

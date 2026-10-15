@@ -733,8 +733,20 @@ def test_perso_client_dub_video_happy_path(monkeypatch, tmp_path):
     out = tmp_path / "dubbed.mp4"
 
     client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
-    result = client.dub_video(str(video), str(out), "ko", "en", num_speakers=2)
+    screen, traced = [], []
 
+    def log(msg):
+        screen.append(msg)
+
+    log.trace = lambda msg, level="INFO": traced.append(msg)
+    result = client.dub_video(str(video), str(out), "ko", "en", num_speakers=2, log=log)
+
+    # Three steps in the job's file (app/jobs.py timed_step); the screen keeps
+    # the three lines it reads its progress from.
+    assert "[Step 1/3] upload START" in traced
+    assert any(t.startswith("[Step 3/3] download DONE (") for t in traced)
+    assert screen == ["   Uploading the video to Perso…", "   Perso is dubbing… this takes a few minutes.",
+                      "   Downloading the finished video…"]
     assert result == str(out)
     assert out.read_bytes() == b"FAKE-DUBBED-MP4"
     # The translate request carries the exact contract the plugin validated.
@@ -778,7 +790,7 @@ def test_perso_client_dub_video_raises_when_video_not_ready(monkeypatch, tmp_pat
         client.dub_video(str(video), str(tmp_path / "out.mp4"), "ko", "en")
 
 
-def test_perso_client_dub_video_raises_on_hasFailed(monkeypatch, tmp_path):
+def test_perso_client_dub_video_raises_on_hasFailed(monkeypatch, tmp_path, fixed_memory):
     _install_fake_perso_dub_http(
         monkeypatch,
         progress_sequence=[{"progressReason": "Failed", "hasFailed": True}],
@@ -787,8 +799,19 @@ def test_perso_client_dub_video_raises_on_hasFailed(monkeypatch, tmp_path):
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"x")
     client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
-    with pytest.raises(RuntimeError):
-        client.dub_video(str(video), str(tmp_path / "out.mp4"), "ko", "en")
+    traced = []
+
+    def log(msg):
+        pass
+
+    log.trace = lambda msg, level="INFO": traced.append((level, msg))
+    with pytest.raises(RuntimeError) as caught:
+        client.dub_video(str(video), str(tmp_path / "out.mp4"), "ko", "en", log=log)
+    # The step it stopped in, for the job's FAILED line.
+    assert caught.value.persodub_step == "2/3 perso-dubbing"
+    assert traced[-2][0] == "ERROR"
+    assert traced[-2][1].startswith("[Step 2/3] perso-dubbing FAILED (")
+    assert traced[-1] == ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
 
 
 # ── 10. PersoClient.get_project_script() (mocked httpx, no network) ────────

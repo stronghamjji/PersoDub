@@ -19,6 +19,7 @@ environment with the stock ports as defaults.
 """
 import json
 import os
+from typing import Optional
 
 from app import config
 
@@ -59,3 +60,19 @@ def state(name: str) -> str:
         return ""
     value = data.get(f"{name}_state") if isinstance(data, dict) else None
     return value if value in ("starting", "failed") else ""
+
+
+def pid(name: str) -> Optional[int]:
+    """The process id the shell wrote beside pack `name`'s URL in
+    runtime.json ("tts" -> tts_pid, "ollama" -> ollama_pid), or None. Read
+    for the memory line in the job log only (app/memline.py)."""
+    kit = os.environ.get("PERSODUB_KIT_DIR")
+    if not kit:
+        return None
+    try:
+        with open(os.path.join(kit, "runtime.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    value = data.get(f"{name}_pid") if isinstance(data, dict) else None
+    return value if isinstance(value, int) and value > 0 else None

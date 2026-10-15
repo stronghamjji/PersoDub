@@ -22,7 +22,7 @@ from app.diar_campplus_client import diarize
 from app.engines.base import VoiceEngineDown
 from app.engines.qwen_tts import QwenTTSEngine
 from app.i18n import both
-from app.jobs import JobCancelled, raise_if_cancelled, shown_error
+from app.jobs import JobCancelled, raise_if_cancelled, shown_error, timed_step
 from app.perso_client import (
     PersoClient,
     PersoCreditExhaustedError,
@@ -87,6 +87,12 @@ ensure_video_length = media.ensure_video_length
 def _log_stage(log: Callable[[str], None], name: str, text: str) -> None:
     """Log one stage line: the stage's marker, a space, then the given text."""
     log(f"{stage_marker(name)} {text}")
+
+
+def _timed_stage(log: Callable[[str], None], name: str):
+    """One stage between its START and DONE lines in the job's file
+    (app/jobs.py timed_step), numbered as its "N/6" lines are."""
+    return timed_step(log, stage_marker(name), name)
 
 
 # The cancellation checkpoint between stages (and between a translator's asks)
@@ -1151,65 +1157,73 @@ def run_dub(
         _check_cancel(cancel_check, log)
         _check_room(work_dir, video_path, video_duration)
 
+    # Each stage sits between START and DONE lines in the job's file, which
+    # the screen never reads (_timed_stage); its "N/6" lines are as before.
     _check_room(work_dir, video_path, video_duration)
-    vocals_path, background_path, perso_client, sep_model, sep_reused = _separate_or_reuse(
-        video_path, work_dir, resume, sep_engine, perso_client, cancel_check, on_notice, log,
-        video_duration=video_duration)
+    with _timed_stage(log, "separate"):
+        vocals_path, background_path, perso_client, sep_model, sep_reused = _separate_or_reuse(
+            video_path, work_dir, resume, sep_engine, perso_client, cancel_check, on_notice, log,
+            video_duration=video_duration)
 
     checkpoint()
 
     # Each reuse holds only while everything before it was reused too: a stage
     # made again can change the lines, and a later stage's files from the
     # earlier run would then belong to different lines (review 2026-09-23).
-    src_cues, perso_cues, detected_code, perso_client, tx_reused = _transcribe_or_reuse(
-        video_path, work_dir, sep_reused, vocals_path, stt_engine, source_language_code,
-        diar_engine, num_speakers, perso_client, cancel_check, on_notice, log,
-        video_duration=video_duration)
-    source_cues = _pick_source_cues(source_srt_path, perso_cues, src_cues)
+    with _timed_stage(log, "transcribe"):
+        src_cues, perso_cues, detected_code, perso_client, tx_reused = _transcribe_or_reuse(
+            video_path, work_dir, sep_reused, vocals_path, stt_engine, source_language_code,
+            diar_engine, num_speakers, perso_client, cancel_check, on_notice, log,
+            video_duration=video_duration)
+        source_cues = _pick_source_cues(source_srt_path, perso_cues, src_cues)
 
     checkpoint()
 
     # Translated subtitles (provided or auto-translated)
-    segments, auto_translated, translation_reused = _translate_or_reuse(
-        tx_reused and srt_path is None, srt_path, source_cues, language, translate_engine, translator,
-        work_dir, on_notice, log, cancel_check=cancel_check)
+    with _timed_stage(log, "translate"):
+        segments, auto_translated, translation_reused = _translate_or_reuse(
+            tx_reused and srt_path is None, srt_path, source_cues, language, translate_engine, translator,
+            work_dir, on_notice, log, cancel_check=cancel_check)
 
-    # Preserve emotion & speaker -- the reference lines the Qwen path builds its
-    # per-speaker voice samples from. (If source subtitles exist, their timing is
-    # more accurate, so prefer them.)
-    ref_cues = source_cues or src_cues
-    # The voice samples are cut from the transcript's own lines when no script
-    # was given: the merged lines run past the 7 s a sample may be, and in a
-    # Shuka lecture the only one short enough was its last, which the end of
-    # the video cut off mid-sentence (2026-10-04).
-    sample_cues = None if source_srt_path else src_cues
+        # Preserve emotion & speaker -- the reference lines the Qwen path builds its
+        # per-speaker voice samples from. (If source subtitles exist, their timing is
+        # more accurate, so prefer them.)
+        ref_cues = source_cues or src_cues
+        # The voice samples are cut from the transcript's own lines when no script
+        # was given: the merged lines run past the 7 s a sample may be, and in a
+        # Shuka lecture the only one short enough was its last, which the end of
+        # the video cut off mid-sentence (2026-10-04).
+        sample_cues = None if source_srt_path else src_cues
 
-    # A script the app translated itself may be written again once its lines
-    # are voiced, by the same translator, to fit each slot at the speaker's
-    # real pace (app/qwen_pipeline.fit_to_pace). Never a script the user gave.
-    pace_tr = None
-    if config.PACE_FIT and auto_translated:
-        pace_tr = _ready_translator(translator, translate_engine, work_dir, cancel_check, log)
-        if not getattr(pace_tr, "length_rules", True):
-            log("   pace fit off: %s does not follow a length" % (getattr(pace_tr, "display_name", "") or "this translator"))
-            pace_tr = None
+        # A script the app translated itself may be written again once its lines
+        # are voiced, by the same translator, to fit each slot at the speaker's
+        # real pace (app/qwen_pipeline.fit_to_pace). Never a script the user gave.
+        pace_tr = None
+        if config.PACE_FIT and auto_translated:
+            pace_tr = _ready_translator(translator, translate_engine, work_dir, cancel_check, log)
+            if not getattr(pace_tr, "length_rules", True):
+                log("   pace fit off: %s does not follow a length" % (getattr(pace_tr, "display_name", "") or "this translator"))
+                pace_tr = None
 
     checkpoint()
-    audio_wav = _stage_synthesize(
-        segments, ref_cues, work_dir, vocals_path, background_path,
-        language, n_takes, qwen_engine, on_notice, log, video_duration=video_duration,
-        reuse_lines=bool(resume and (translation_reused or srt_path)), cancel_check=cancel_check,
-        translator=pace_tr, sample_cues=sample_cues)
+    with _timed_stage(log, "synthesize"):
+        audio_wav = _stage_synthesize(
+            segments, ref_cues, work_dir, vocals_path, background_path,
+            language, n_takes, qwen_engine, on_notice, log, video_duration=video_duration,
+            reuse_lines=bool(resume and (translation_reused or srt_path)), cancel_check=cancel_check,
+            translator=pace_tr, sample_cues=sample_cues)
 
     checkpoint()
 
     # The check stage: catch original speech bleeding through the dub.
-    audio_wav = leakage_gate(audio_wav, vocals_path,
-                             os.path.join(work_dir, "nonverbal_manifest.json"),
-                             work_dir, log)
+    with _timed_stage(log, "check"):
+        audio_wav = leakage_gate(audio_wav, vocals_path,
+                                 os.path.join(work_dir, "nonverbal_manifest.json"),
+                                 work_dir, log)
 
     _check_room(work_dir, video_path, video_duration)
-    _stage_finish(video_path, audio_wav, out_path, work_dir, log)
+    with _timed_stage(log, "build"):
+        _stage_finish(video_path, audio_wav, out_path, work_dir, log)
     log("Done!")
     return _result_of(job_id, out_path, video_path, work_dir, segments, auto_translated, detected_code,
                       perso_client, sep_model)

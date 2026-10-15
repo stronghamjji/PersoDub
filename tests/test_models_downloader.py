@@ -4,7 +4,9 @@ gone; since issue #48 it runs `python -m huggingface_hub.cli.hf`, not the
 hf(.exe) launcher app_venv also installs (an unsigned, freshly created file
 Smart App Control or an antivirus can refuse to run -- same fix as
 desktop/src/installSpec.js's models step)."""
+import logging
 import os
+import re
 import sys
 import types
 
@@ -41,6 +43,25 @@ def test_pull_hf_invokes_the_app_venv_interpreter_as_a_module(monkeypatch, tmp_p
     assert seen["argv"][0] == models_module._venv_python(str(tmp_path))
     assert seen["argv"][1:4] == ["-m", "huggingface_hub.cli.hf", "download"]
     assert seen["argv"][-2:] == ["--local-dir", os.path.join(str(tmp_path), "models", "demucs", "HTDemucs")]
+
+
+def test_a_model_download_is_written_between_start_and_done(monkeypatch, tmp_path, caplog):
+    # The app log says when a download began and how long it took, whichever
+    # way it ended (persodub.log goes with a failure report).
+    class FakeProc:
+        stdout = iter(["100%"])
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(models_module._subprocess, "Popen", lambda argv, **kw: FakeProc())
+    entry = {"id": "demucs", "dir": "models/demucs/HTDemucs",
+             "source": {"kind": "hf", "repo": "adefossez/HTDemucs", "rev": "abc"}}
+    with caplog.at_level(logging.INFO, logger="persodub.models"):
+        models_module._run_download(entry, str(tmp_path), lambda p: None, lambda: False)
+    lines = [r.getMessage() for r in caplog.records if r.name == "persodub.models"]
+    assert lines[0] == "MODEL demucs DOWNLOAD START (hf)"
+    assert re.fullmatch(r"MODEL demucs DOWNLOAD DONE \(\d+\.\ds\)", lines[-1])
 
 
 def test_pull_hf_never_regresses_to_the_unsigned_hf_launcher(monkeypatch, tmp_path):

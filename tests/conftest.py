@@ -8,7 +8,9 @@ behind). By 2026-08-02 that had accumulated 559 litter directories against 4
 genuine jobs.
 """
 import logging
+import sys
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -118,6 +120,39 @@ def no_line_check(monkeypatch):
     def no_embedder(paths):
         raise RuntimeError("no CAM++ in tests")
     monkeypatch.setattr(qwen_pipeline, "_embed_files", no_embedder)
+
+
+@pytest.fixture
+def fixed_memory(monkeypatch):
+    """psutil with fixed figures for the memory lines in a job's log
+    (app/memline.py), the same on every machine, psutil installed or not:
+    the computer has 24576M with 11376M available and this process (pid
+    None) holds 310M and has started nothing. A test adds processes to .mib
+    (pid -> MiB) and who started whom to .kids (pid -> child pids); a pid
+    with no figure reads as gone. No kit: runtime.json names no process
+    unless the test makes one."""
+    mib, kids = {None: 310}, {}
+
+    class Process:
+        def __init__(self, pid=None):
+            self.pid = pid
+
+        def memory_info(self):
+            if self.pid not in mib:
+                raise ProcessLookupError(self.pid)   # psutil.NoSuchProcess, near enough
+            return SimpleNamespace(rss=mib[self.pid] * 1024 * 1024)
+
+        def children(self, recursive=False):
+            found = [Process(pid) for pid in kids.get(self.pid, ())]
+            if recursive:
+                found += [grandchild for child in found for grandchild in child.children(recursive=True)]
+            return found
+
+    monkeypatch.setitem(sys.modules, "psutil", SimpleNamespace(
+        virtual_memory=lambda: SimpleNamespace(total=24576 * 1024 * 1024, available=11376 * 1024 * 1024),
+        Process=Process))
+    monkeypatch.delenv("PERSODUB_KIT_DIR", raising=False)
+    return SimpleNamespace(mib=mib, kids=kids)
 
 
 @pytest.fixture

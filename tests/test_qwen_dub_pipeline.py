@@ -3,11 +3,13 @@ that replaced the old container client's upload()/import_srt() (fakes only -- no
 container, no ffmpeg, no GPU). Qwen3-TTS is the app's only TTS engine now.
 """
 import os
+import re
 
 import pytest
 
 from app import pipeline
 from app.jobs import JobCancelled
+from app.stages import progress_of
 from app.translate import TranslationEngine
 
 
@@ -455,3 +457,70 @@ def test_voice_samples_come_from_the_transcript_lines_not_the_merged_ones(monkey
                      language="Korean", language_code="ko", qwen_engine=_FakeQwenEngine(), log=[].append)
     assert len(captured["ref_cues"]) == 1                      # merged: one 4 s line
     assert [c["text"] for c in captured["sample_cues"]] == ["First sentence.", "Second one."]
+
+
+# --- the job's file: every stage between START and DONE ----------------------
+
+def _traced_log():
+    """A log shaped like JobStore's: what it is called with is the screen's,
+    what its .trace is called with goes to the job's file only."""
+    def log(msg):
+        log.screen.append(msg)
+
+    log.screen, log.traced = [], []
+    log.trace = lambda msg, level="INFO": log.traced.append((level, msg))
+    return log
+
+
+def _no_seconds(traced):
+    return [(level, re.sub(r"\(\d+\.\ds\)", "(Ns)", msg)) for level, msg in traced]
+
+
+def test_every_stage_is_written_between_start_and_done_in_order(monkeypatch, tmp_path, fixed_memory):
+    _stub_qwen_io(monkeypatch)
+    monkeypatch.setattr(pipeline, "_video_duration", lambda path: 2.0)
+    monkeypatch.setattr(pipeline, "_mux", _fake_mux)
+    monkeypatch.setattr(pipeline, "ensure_video_length", lambda *a, **k: None)
+    video, out, srt = _write_inputs(tmp_path)
+    log = _traced_log()
+    pipeline.run_dub(video_path=video, out_path=out, srt_path=srt, language="Korean",
+                     language_code="ko", qwen_engine=_FakeQwenEngine(), log=log)
+
+    mem = ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
+    expected = []
+    for i, (name, _label) in enumerate(pipeline.STAGES, 1):
+        expected += [("INFO", "#" * 30), ("INFO", f"[Step {i}/6] {name} START"), mem,
+                     ("INFO", f"[Step {i}/6] {name} DONE (Ns)"), mem]
+    assert _no_seconds(log.traced) == expected
+    # The screen keeps the lines it always had, so its bar reads the same.
+    assert not any(m.startswith(("#", "[Step")) for m in log.screen)
+    assert log.screen[-1] == "Done!"
+    assert progress_of(log.screen) == {"stage": 4, "label": "Dubbing", "percent": 97}
+    assert progress_of(log.screen + [m for _level, m in log.traced]) == progress_of(log.screen)
+
+
+def test_a_stage_that_fails_says_so_and_the_failure_carries_its_step(monkeypatch, tmp_path, fixed_memory):
+    _stub_qwen_io(monkeypatch)
+    monkeypatch.setattr(pipeline, "_video_duration", lambda path: 2.0)
+
+    def broken(*a, **k):
+        raise ValueError("no reference voice")
+
+    monkeypatch.setattr(pipeline, "run_qwen_dub", broken)
+    video, out, srt = _write_inputs(tmp_path)
+    log = _traced_log()
+    with pytest.raises(ValueError, match="no reference voice") as caught:
+        pipeline.run_dub(video_path=video, out_path=out, srt_path=srt, language="Korean",
+                         language_code="ko", qwen_engine=_FakeQwenEngine(), log=log)
+    # The job's own FAILED line names the step from this (app/jobs.py).
+    assert caught.value.persodub_step == "4/6 synthesize"
+    mem = ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
+    assert _no_seconds(log.traced)[-7:] == [
+        ("INFO", "[Step 3/6] translate DONE (Ns)"),
+        mem,
+        ("INFO", "#" * 30),
+        ("INFO", "[Step 4/6] synthesize START"),
+        mem,
+        ("ERROR", "[Step 4/6] synthesize FAILED (Ns): ValueError"),
+        mem,
+    ]

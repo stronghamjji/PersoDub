@@ -1,10 +1,12 @@
 import json
+import logging
+import re
 import threading
 import time
 
 import pytest
 
-from app.jobs import JobCancelled, JobStore, error_text_for_ui, kind_of, raise_if_cancelled
+from app.jobs import JobCancelled, JobStore, error_text_for_ui, kind_of, raise_if_cancelled, timed_step
 from app.perso_client import PersoCreditExhaustedError
 
 
@@ -168,6 +170,171 @@ def test_log_dir_override_applies_to_stores_created_earlier(tmp_path, monkeypatc
     jid = store.create()
     store.append_log(jid, "redirected line")
     assert (tmp_path / "redir" / ("job-%s.log" % jid)).exists()
+
+
+# Each line in the file is stamped like the app's own log (time - job - level),
+# so a job log reads like an operations log; the list the screen parses keeps
+# the bare line.
+_STAMPED = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} - job-(\w+) - (INFO|ERROR) - (.*)$")
+
+
+def _file_text(tmp_path, jid):
+    return (tmp_path / ("job-%s.log" % jid)).read_text(encoding="utf-8")
+
+
+def test_a_file_line_is_stamped_and_the_screen_line_is_not(tmp_path):
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store.append_log(jid, "1/6 Separating background audio…")
+    m = _STAMPED.match(_file_text(tmp_path, jid).splitlines()[0])
+    assert m and m.groups() == (jid, "INFO", "1/6 Separating background audio…")
+    assert store.get(jid)["logs"] == ["1/6 Separating background audio…"]
+
+
+def test_an_error_line_is_written_at_error(tmp_path):
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store.append_log(jid, "Error: RuntimeError: No dialogue lines were found in this video.")
+    store.append_log(jid, "   Error: Perso credits are used up. Recharge to continue.")
+    store.append_log(jid, "   leakage gate: PASS (3 windows checked)")
+    levels = [_STAMPED.match(line).group(2) for line in _file_text(tmp_path, jid).splitlines()]
+    assert levels == ["ERROR", "ERROR", "INFO"]
+
+
+def test_a_file_only_line_stays_off_the_screen(tmp_path):
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store.append_log(jid, "[Step 1/6] separate START", screen=False)
+    assert store.get(jid)["logs"] == []
+    assert _file_text(tmp_path, jid).endswith(" - INFO - [Step 1/6] separate START\n")
+
+
+def test_a_job_writes_its_start_inputs_and_end_to_the_file_only(tmp_path, caplog):
+    (tmp_path / "x").mkdir()
+    store = JobStore(log_dir=str(tmp_path))
+    jid = store.create()
+    store._update(jid, language="Korean", language_code="ko", translator="gemma", quality=3,
+                  project="my wedding", title="my wedding", work_dir=str(tmp_path / "x"),
+                  source_url="https://example.com/watch?v=1")
+
+    def work(log):
+        log("1/6 Separating background audio…")
+        log.trace("a structural line")
+        return {"ok": True}
+
+    with caplog.at_level(logging.INFO, logger="persodub.jobs"):
+        store.start(jid, work)
+        # The ending is written just after the status flips, and the app
+        # log's copy of it last of all: wait for that, not for the status.
+        for _ in range(100):
+            if "job-%s: JOB ALL DONE (" % jid in caplog.text:
+                break
+            time.sleep(0.02)
+    text = _file_text(tmp_path, jid)
+    assert store.get(jid)["status"] == "done"
+    assert store.get(jid)["logs"] == ["1/6 Separating background audio…"]
+    assert " - INFO - JOB START (dub)\n" in text
+    assert " - INFO - a structural line\n" in text
+    assert re.search(r" - INFO - JOB ALL DONE \(\d+\.\ds\)$", text, re.M)
+    inputs = json.loads(text.split(" - Inputs: ", 1)[1].splitlines()[0])
+    assert inputs["language"] == "Korean" and inputs["translator"] == "gemma" and inputs["quality"] == 3
+    # Nothing that names the video or says where it lives: the job's log goes
+    # out with a failure report (docs/privacy.md).
+    assert not {"id", "status", "project", "title", "work_dir", "source_url"} & set(inputs)
+    assert "wedding" not in text and "example.com" not in text
+    # The app log carries the same timeline.
+    assert "job-%s: JOB START (dub)" % jid in caplog.text
+    assert "job-%s: JOB ALL DONE (" % jid in caplog.text
+
+
+def test_a_failed_job_names_the_step_it_stopped_in(tmp_path, caplog, fixed_memory):
+    store = JobStore(log_dir=str(tmp_path))
+
+    def work(log):
+        with timed_step(log, "2/6", "transcribe"):
+            raise ValueError("no speech")
+
+    with caplog.at_level(logging.INFO, logger="persodub.jobs"):
+        jid = store.run_async(work)
+        _wait(store, jid)
+    lines = [_STAMPED.match(line).groups()[1:] for line in _file_text(tmp_path, jid).splitlines()]
+    shapes = [(level, re.sub(r"\(\d+\.\ds\)", "(Ns)", msg)) for level, msg in lines]
+    mem = ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
+    assert shapes[-5:] == [
+        ("ERROR", "[Step 2/6] transcribe FAILED (Ns): ValueError"),
+        mem,
+        ("ERROR", "Error: ValueError: no speech"),
+        mem,
+        ("ERROR", "JOB FAILED at step 2/6 transcribe (Ns): ValueError: no speech"),
+    ]
+    assert store.get(jid)["logs"] == ["Error: ValueError: no speech"]
+    assert any(r.levelname == "ERROR" and "JOB FAILED at step 2/6 transcribe" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_a_failure_re_raised_as_a_sentence_still_names_its_step(tmp_path):
+    # The cloud dub turns Perso's error into a sentence of its own
+    # (app/dub_launch.py); the step is found on the error it came from.
+    store = JobStore(log_dir=str(tmp_path))
+
+    def work(log):
+        try:
+            with timed_step(log, "2/3", "perso-dubbing"):
+                raise ConnectionError("peer closed connection")
+        except ConnectionError as e:
+            raise RuntimeError("Perso dubbing failed (peer closed connection).") from e
+
+    jid = store.run_async(work)
+    _wait(store, jid)
+    assert "JOB FAILED at step 2/3 perso-dubbing (" in _file_text(tmp_path, jid)
+
+
+def test_a_failure_between_steps_says_it_does_not_know_where(tmp_path):
+    store = JobStore(log_dir=str(tmp_path))
+
+    def work(log):
+        raise RuntimeError("Not enough room on this computer.")
+
+    jid = store.run_async(work)
+    _wait(store, jid)
+    assert "JOB FAILED at step ? (" in _file_text(tmp_path, jid)
+
+
+def test_a_cancelled_job_says_so_in_its_file(tmp_path):
+    store = JobStore(log_dir=str(tmp_path))
+
+    def work(log):
+        with timed_step(log, "4/6", "synthesize"):
+            raise JobCancelled("cancelled by user")
+
+    jid = store.run_async(work)
+    j = _wait(store, jid)
+    text = _file_text(tmp_path, jid)
+    assert j["status"] == "cancelled"
+    assert "[Step 4/6] synthesize CANCELLED (" in text and " - INFO - JOB CANCELLED (" in text
+
+
+def test_a_job_that_ran_to_its_end_after_cancel_is_logged_as_cancelled(tmp_path):
+    # Its result is dropped and its status says cancelled, so its file must too.
+    store = JobStore(log_dir=str(tmp_path))
+    started, release = threading.Event(), threading.Event()
+
+    def work(log):
+        started.set()
+        release.wait(2)
+        return {"ok": True}
+
+    jid = store.run_async(work)
+    started.wait(2)
+    store.request_cancel(jid)
+    release.set()
+    for _ in range(100):  # the ending is written just after the status flips
+        text = _file_text(tmp_path, jid)
+        if "JOB CANCELLED (" in text:
+            break
+        time.sleep(0.02)
+    assert store.get(jid)["status"] == "cancelled"
+    assert "JOB CANCELLED (" in text and "JOB ALL DONE" not in text
 
 
 # ---------------- job.json: a job outlives the process that ran it ----------
