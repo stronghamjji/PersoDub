@@ -745,6 +745,11 @@ def test_perso_client_dub_video_happy_path(monkeypatch, tmp_path):
     # the three lines it reads its progress from.
     assert "[Step 1/3] upload START" in traced
     assert any(t.startswith("[Step 3/3] download DONE (") for t in traced)
+    assert [t for t in traced if " Context: " in t] == [
+        "[Step 1/3] upload Context: bytes=10",
+        "[Step 2/3] perso-dubbing Context: target=en model=ORIOLE speakers=2",
+        "[Step 3/3] download Context: project=888",
+    ]
     assert screen == ["   Uploading the video to Perso…", "   Perso is dubbing… this takes a few minutes.",
                       "   Downloading the finished video…"]
     assert result == str(out)
@@ -809,8 +814,13 @@ def test_perso_client_dub_video_raises_on_hasFailed(monkeypatch, tmp_path, fixed
         client.dub_video(str(video), str(tmp_path / "out.mp4"), "ko", "en", log=log)
     # The step it stopped in, for the job's FAILED line.
     assert caught.value.persodub_step == "2/3 perso-dubbing"
-    assert traced[-2][0] == "ERROR"
-    assert traced[-2][1].startswith("[Step 2/3] perso-dubbing FAILED (")
+    failed = next(i for i, (_level, m) in enumerate(traced) if " FAILED (" in m)
+    assert traced[failed][0] == "ERROR"
+    assert traced[failed][1].startswith("[Step 2/3] perso-dubbing FAILED (")
+    assert traced[failed][1].endswith("s): PersoProjectFailedError: Perso dubbing failed: Failed")
+    # Where it broke, then the memory line.
+    assert [m for _level, m in traced[failed + 1:-1]] and all(
+        m.startswith("  At: app/perso_client.py:") for _level, m in traced[failed + 1:-1])
     assert traced[-1] == ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
 
 

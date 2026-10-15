@@ -257,13 +257,15 @@ def test_a_failed_job_names_the_step_it_stopped_in(tmp_path, caplog, fixed_memor
     with caplog.at_level(logging.INFO, logger="persodub.jobs"):
         jid = store.run_async(work)
         _wait(store, jid)
-    lines = [_STAMPED.match(line).groups()[1:] for line in _file_text(tmp_path, jid).splitlines()]
+    # A traceback's own lines carry no stamp of their own, as in the app log.
+    lines = [m.groups()[1:] for m in map(_STAMPED.match, _file_text(tmp_path, jid).splitlines()) if m]
     shapes = [(level, re.sub(r"\(\d+\.\ds\)", "(Ns)", msg)) for level, msg in lines]
     mem = ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
-    assert shapes[-5:] == [
-        ("ERROR", "[Step 2/6] transcribe FAILED (Ns): ValueError"),
+    assert shapes[-6:] == [
+        ("ERROR", "[Step 2/6] transcribe FAILED (Ns): ValueError: no speech"),
         mem,
         ("ERROR", "Error: ValueError: no speech"),
+        ("ERROR", "Traceback (most recent call last):"),
         mem,
         ("ERROR", "JOB FAILED at step 2/6 transcribe (Ns): ValueError: no speech"),
     ]

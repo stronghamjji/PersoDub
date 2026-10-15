@@ -89,10 +89,11 @@ def _log_stage(log: Callable[[str], None], name: str, text: str) -> None:
     log(f"{stage_marker(name)} {text}")
 
 
-def _timed_stage(log: Callable[[str], None], name: str):
+def _timed_stage(log: Callable[[str], None], name: str, **context):
     """One stage between its START and DONE lines in the job's file
-    (app/jobs.py timed_step), numbered as its "N/6" lines are."""
-    return timed_step(log, stage_marker(name), name)
+    (app/jobs.py timed_step), numbered as its "N/6" lines are; `context` is
+    what the stage is given, for its Context line: settings and counts only."""
+    return timed_step(log, stage_marker(name), name, **context)
 
 
 # The cancellation checkpoint between stages (and between a translator's asks)
@@ -1160,7 +1161,8 @@ def run_dub(
     # Each stage sits between START and DONE lines in the job's file, which
     # the screen never reads (_timed_stage); its "N/6" lines are as before.
     _check_room(work_dir, video_path, video_duration)
-    with _timed_stage(log, "separate"):
+    with _timed_stage(log, "separate", sep_engine=sep_engine, resume=resume,
+                      duration=None if video_duration is None else round(video_duration, 1)):
         vocals_path, background_path, perso_client, sep_model, sep_reused = _separate_or_reuse(
             video_path, work_dir, resume, sep_engine, perso_client, cancel_check, on_notice, log,
             video_duration=video_duration)
@@ -1170,7 +1172,8 @@ def run_dub(
     # Each reuse holds only while everything before it was reused too: a stage
     # made again can change the lines, and a later stage's files from the
     # earlier run would then belong to different lines (review 2026-09-23).
-    with _timed_stage(log, "transcribe"):
+    with _timed_stage(log, "transcribe", stt_engine=stt_engine, source_language_code=source_language_code,
+                      diar_engine=diar_engine, num_speakers=num_speakers):
         src_cues, perso_cues, detected_code, perso_client, tx_reused = _transcribe_or_reuse(
             video_path, work_dir, sep_reused, vocals_path, stt_engine, source_language_code,
             diar_engine, num_speakers, perso_client, cancel_check, on_notice, log,
@@ -1180,7 +1183,8 @@ def run_dub(
     checkpoint()
 
     # Translated subtitles (provided or auto-translated)
-    with _timed_stage(log, "translate"):
+    with _timed_stage(log, "translate", translate_engine=translate_engine, lines=len(source_cues),
+                      target=language, source=source_language_code or detected_code, srt_given=bool(srt_path)):
         segments, auto_translated, translation_reused = _translate_or_reuse(
             tx_reused and srt_path is None, srt_path, source_cues, language, translate_engine, translator,
             work_dir, on_notice, log, cancel_check=cancel_check)
@@ -1206,11 +1210,16 @@ def run_dub(
                 pace_tr = None
 
     checkpoint()
-    with _timed_stage(log, "synthesize"):
+    reuse_lines = bool(resume and (translation_reused or srt_path))
+    # The voices are cloned from the reference lines' speakers: the script's
+    # own lines (parse_srt) carry none.
+    with _timed_stage(log, "synthesize", lines=len(segments), n_takes=n_takes,
+                      speakers=len({cue_speaker(c) for c in ref_cues if cue_speaker(c)}) or None,
+                      resume=reuse_lines):
         audio_wav = _stage_synthesize(
             segments, ref_cues, work_dir, vocals_path, background_path,
             language, n_takes, qwen_engine, on_notice, log, video_duration=video_duration,
-            reuse_lines=bool(resume and (translation_reused or srt_path)), cancel_check=cancel_check,
+            reuse_lines=reuse_lines, cancel_check=cancel_check,
             translator=pace_tr, sample_cues=sample_cues)
 
     checkpoint()

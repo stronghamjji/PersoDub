@@ -10,6 +10,8 @@ import hashlib
 import json
 import logging
 import os
+import re
+import subprocess
 import threading
 import time
 import traceback
@@ -186,22 +188,122 @@ def _trace_memory(trace) -> None:
         trace(line)
 
 
+# How much of one message, answer or output line a failure's lines keep.
+_CUT = 300
+# The app/ package. A failure's "At:" places are named from the folder above
+# it, as the repository names them ("app/pipeline.py").
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# A URL's query string: "?" after "://host/path", up to a space or a quote. A
+# signed storage link (Perso's upload) carries its token there, and httpx puts
+# the whole link into its message.
+_QUERY = re.compile(r"(://[^\s\"'?]*)\?[^\s\"']*")
+
+
+def _no_query(text: str) -> str:
+    """Every URL in `text` kept to its address: "https://x.blob/y?…"."""
+    return _QUERY.sub(r"\1?…", text)
+
+
+def _described(exc: BaseException) -> str:
+    """"RuntimeError: the model refused": the type and what it says, on one
+    line and cut short, every link without its query; the type alone when it
+    says nothing."""
+    try:
+        said = " ".join(_no_query(str(exc)).split())[:_CUT]
+    except Exception:   # a __str__ that fails, which Python's own traceback copes with too
+        said = ""
+    return f"{type(exc).__name__}: {said}" if said else type(exc).__name__
+
+
+def _chain(exc: Optional[BaseException], most: int = 6) -> list:
+    """The exception and the ones it came from, walked as Python's traceback
+    walks them: __cause__, else __context__ unless `from None` hid it."""
+    found = []
+    while exc is not None and len(found) < most:
+        found.append(exc)
+        exc = exc.__cause__ if exc.__cause__ is not None else (
+            None if exc.__suppress_context__ else exc.__context__)
+    return found
+
+
+def _http_line(exc: BaseException) -> str:
+    """"HTTP 503 GET https://host/path: <the answer's first words>". The
+    address goes without its query string, which can carry a key or a name."""
+    response = exc.response
+    words = ["HTTP", str(response.status_code)]
+    for owner in (exc, response):
+        with contextlib.suppress(Exception):   # httpx raises when none was set
+            if owner.request is not None:
+                words += [str(owner.request.method), str(owner.request.url).split("?", 1)[0]]
+                break
+    body = ""
+    with contextlib.suppress(Exception):   # an answer that was never read
+        body = " ".join(_no_query(response.text).split())[:_CUT]
+    return " ".join(words) + (f": {body}" if body else "")
+
+
+def _output_lines(exc: subprocess.CalledProcessError) -> list:
+    """The last 20 lines a program that failed printed: its errors, else its output."""
+    out = exc.stderr or exc.output or ""
+    if isinstance(out, bytes):
+        out = out.decode("utf-8", "replace")
+    tail = [_no_query(line.rstrip())[:_CUT] for line in out.strip().splitlines()[-20:]]
+    return ["  Output:"] + ["    " + line for line in tail] if tail else []
+
+
+def _app_places(chain: list) -> list:
+    """Up to three "app/pipeline.py:812 in _stage_finish", innermost first,
+    from the deepest error in the chain that passed through app/: where it
+    broke, not where it was put into words. Nothing from this file: the step
+    timer's own frame sits in every step's traceback."""
+    root, here = os.path.dirname(_APP_DIR), os.path.abspath(__file__)
+    for exc in reversed(chain):
+        frames = [(os.path.abspath(f.filename), f) for f in traceback.extract_tb(exc.__traceback__)]
+        frames = [(path, f) for path, f in frames if path.startswith(_APP_DIR + os.sep) and path != here]
+        if frames:
+            return ["%s:%s in %s" % (os.path.relpath(path, root).replace(os.sep, "/"), f.lineno, f.name)
+                    for path, f in reversed(frames[-3:])]
+    return []
+
+
+def _failure_lines(exc: BaseException) -> list:
+    """The block under a step's FAILED line, each part only when it applies:
+    the errors it came from, the HTTP answer or the program output behind it,
+    and where in app/ it broke."""
+    chain = _chain(exc)
+    lines = [f"  Caused by: {_described(c)}" for c in chain[1:]]
+    answered = next((c for c in chain
+                     if getattr(getattr(c, "response", None), "status_code", None) is not None), None)
+    if answered is not None:
+        lines.append("  " + _http_line(answered))
+    ran = next((c for c in chain if isinstance(c, subprocess.CalledProcessError)), None)
+    if ran is not None:
+        lines += _output_lines(ran)
+    return lines + [f"  At: {place}" for place in _app_places(chain)]
+
+
 @contextlib.contextmanager
-def timed_step(log, step: str, name: str):
+def timed_step(log, step: str, name: str, **context):
     """One step of a job between a START line and a DONE, CANCELLED or FAILED
     line with its seconds ("[Step 1/6] separate DONE (12.3s)"), each followed
     by a memory line, so the job's file reads like an operations log.
 
     Written through log.trace, the file-only line JobStore's log carries
     (_launch below): the screen keeps exactly the progress lines it parses. A
-    log without one (a test's list) is handed them as plain lines. A failure
-    leaves with the step it stopped in (persodub_step), which the job's own
-    FAILED line names.
+    log without one (a test's list) is handed them as plain lines. `context`
+    is what the step was given -- settings and counts, never a file name or a
+    path -- for a Context line under START; None is left out. A failure says
+    what it was and, under that, why and where (_failure_lines), and leaves
+    with the step it stopped in (persodub_step), which the job's own FAILED
+    line names.
     """
     trace = getattr(log, "trace", None) or (lambda msg, level="INFO": log(msg))
     label = f"[Step {step}] {name}"
     trace("#" * 30)
     trace(f"{label} START")
+    given = " ".join(f"{key}={value}" for key, value in context.items() if value is not None)
+    if given:
+        trace(f"{label} Context: {given}")
     _trace_memory(trace)
     began = time.monotonic()
     try:
@@ -211,7 +313,11 @@ def timed_step(log, step: str, name: str):
         _trace_memory(trace)
         raise
     except Exception as e:
-        trace(f"{label} FAILED ({time.monotonic() - began:.1f}s): {type(e).__name__}", level="ERROR")
+        trace(f"{label} FAILED ({time.monotonic() - began:.1f}s): {_described(e)}", level="ERROR")
+        # Describing a failure must never become the failure.
+        with contextlib.suppress(Exception):
+            for line in _failure_lines(e):
+                trace(line, level="ERROR")
         _trace_memory(trace)
         # An exception that takes no attributes still fails the job; its
         # FAILED line just cannot say where.
@@ -227,11 +333,10 @@ def _failed_step(exc: Optional[BaseException]) -> str:
     down the exception's chain too: the cloud dub re-raises Perso's error as a
     sentence of its own (app/dub_launch.py), and that is what reaches the job.
     "?" for a failure between steps."""
-    while exc is not None:
-        step = getattr(exc, "persodub_step", None)
+    for e in _chain(exc):
+        step = getattr(e, "persodub_step", None)
         if step:
             return step
-        exc = exc.__cause__ or exc.__context__
     return "?"
 
 
@@ -359,9 +464,9 @@ class JobStore:
     def _write_log_line(self, jid: str, msg: str, level: Optional[str] = None):
         """Mirror a log line to log_dir/job-<jid>.log, stamped the way the app's
         own log is (app/logging_setup.py LOG_FORMAT): the time, the job, the
-        level (ERROR for an "Error:" line unless told otherwise), the line.
+        level (ERROR for an "Error:" line or a traceback unless told otherwise), the line.
         Best-effort: a logging problem must never fail the dub it is describing."""
-        level = level or ("ERROR" if msg.lstrip().startswith("Error:") else "INFO")
+        level = level or ("ERROR" if msg.lstrip().startswith(("Error:", "Traceback (")) else "INFO")
         now = datetime.now()
         stamp = now.strftime("%Y-%m-%d %H:%M:%S") + ",%03d" % (now.microsecond // 1000)
         try:
@@ -734,10 +839,15 @@ class JobStore:
                 # An unexpected failure also gets its traceback in the job's
                 # own log, where the "see the job log" sentence is pointing;
                 # a failure with a written-out message (credits used up, no
-                # dialogue found) is not a bug and gets none, so the friendly
-                # sentence stays the last thing under the red bar.
+                # dialogue found) is not a bug and gets none on the screen, so
+                # the friendly sentence stays the last thing under the red bar.
                 if not isinstance(e, USER_FACING_ERRORS):
                     log(traceback.format_exc())
+                else:
+                    # A failure worded for the user still came from somewhere:
+                    # its traceback goes to the file, never the screen, and the
+                    # errors it quotes keep their links but not their queries.
+                    trace(_no_query("".join(traceback.format_exception(e))).rstrip(), level="ERROR")
                 _trace_memory(trace)
                 trace("JOB FAILED at step %s (%.1fs): %s: %s" % (
                     _failed_step(e), time.monotonic() - began, type(e).__name__, error_text_for_ui(e)),

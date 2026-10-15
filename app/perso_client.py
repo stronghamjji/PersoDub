@@ -633,10 +633,11 @@ class PersoClient:
         # Three steps in the job's file, each between START and DONE lines
         # (timed_step); the three lines the screen reads its progress from
         # are as they were.
-        with timed_step(log, "1/3", "upload"):
+        with timed_step(log, "1/3", "upload",
+                        bytes=os.path.getsize(video_path) if os.path.isfile(video_path) else None):
             log("   Uploading the video to Perso…")
             media_seq = self._upload_media(video_path, space)
-        with timed_step(log, "2/3", "perso-dubbing"):
+        with timed_step(log, "2/3", "perso-dubbing", target=target_code, model=tts_model, speakers=num_speakers):
             log("   Perso is dubbing… this takes a few minutes.")
 
             r = httpx.post(
@@ -663,7 +664,7 @@ class PersoClient:
             logger.info("Perso dubbing project %s (workspace %s)", project_seq, space)
 
             self._wait_completed(project_seq, space, what="Perso dubbing")
-        with timed_step(log, "3/3", "download"):
+        with timed_step(log, "3/3", "download", project=project_seq):
             log("   Downloading the finished video…")
             return self.download_dub(project_seq, out_path, space)
 

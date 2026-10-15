@@ -481,16 +481,27 @@ def test_every_stage_is_written_between_start_and_done_in_order(monkeypatch, tmp
     monkeypatch.setattr(pipeline, "_video_duration", lambda path: 2.0)
     monkeypatch.setattr(pipeline, "_mux", _fake_mux)
     monkeypatch.setattr(pipeline, "ensure_video_length", lambda *a, **k: None)
+    # CAM++ names one speaker, whose voice the synthesis then clones.
+    monkeypatch.setattr(pipeline, "diarize", lambda vocals, cues, num_speakers=None, video_duration=None:
+                        [{"speaker": "SPEAKER_00"} for _ in cues])
     video, out, srt = _write_inputs(tmp_path)
     log = _traced_log()
-    pipeline.run_dub(video_path=video, out_path=out, srt_path=srt, language="Korean",
-                     language_code="ko", qwen_engine=_FakeQwenEngine(), log=log)
+    pipeline.run_dub(video_path=video, out_path=out, srt_path=srt, language="Korean", language_code="ko",
+                     translate_engine="gemma", source_language_code="en", num_speakers=2, n_takes=1,
+                     qwen_engine=_FakeQwenEngine(), log=log)
 
     mem = ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
+    # What each stage was given, under its START; the last two have nothing to say.
+    given = {"separate": "resume=False duration=2.0",
+             "transcribe": "source_language_code=en num_speakers=2",
+             "translate": "translate_engine=gemma lines=1 target=Korean source=en srt_given=True",
+             "synthesize": "lines=1 n_takes=1 speakers=1 resume=False"}
     expected = []
     for i, (name, _label) in enumerate(pipeline.STAGES, 1):
-        expected += [("INFO", "#" * 30), ("INFO", f"[Step {i}/6] {name} START"), mem,
-                     ("INFO", f"[Step {i}/6] {name} DONE (Ns)"), mem]
+        expected += [("INFO", "#" * 30), ("INFO", f"[Step {i}/6] {name} START")]
+        if name in given:
+            expected.append(("INFO", f"[Step {i}/6] {name} Context: {given[name]}"))
+        expected += [mem, ("INFO", f"[Step {i}/6] {name} DONE (Ns)"), mem]
     assert _no_seconds(log.traced) == expected
     # The screen keeps the lines it always had, so its bar reads the same.
     assert not any(m.startswith(("#", "[Step")) for m in log.screen)
@@ -515,12 +526,17 @@ def test_a_stage_that_fails_says_so_and_the_failure_carries_its_step(monkeypatch
     # The job's own FAILED line names the step from this (app/jobs.py).
     assert caught.value.persodub_step == "4/6 synthesize"
     mem = ("INFO", "Mem[Host total 24576M avail 11376M | backend 310M]")
-    assert _no_seconds(log.traced)[-7:] == [
+    # Where it broke, innermost first: the fake that raised is a test's, so
+    # the places named are the two in app/ that called it.
+    assert [(level, re.sub(r":\d+ in ", ":N in ", msg)) for level, msg in _no_seconds(log.traced)[-10:]] == [
         ("INFO", "[Step 3/6] translate DONE (Ns)"),
         mem,
         ("INFO", "#" * 30),
         ("INFO", "[Step 4/6] synthesize START"),
+        ("INFO", "[Step 4/6] synthesize Context: lines=1 resume=False"),
         mem,
-        ("ERROR", "[Step 4/6] synthesize FAILED (Ns): ValueError"),
+        ("ERROR", "[Step 4/6] synthesize FAILED (Ns): ValueError: no reference voice"),
+        ("ERROR", "  At: app/pipeline.py:N in _stage_synthesize"),
+        ("ERROR", "  At: app/pipeline.py:N in run_dub"),
         mem,
     ]
