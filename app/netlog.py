@@ -9,11 +9,13 @@ moves says where it came from, that it connected, and that it finished:
   DOWNLOAD RETRY perso dubbing (2/3) after 31.2s: RemoteProtocolError: peer closed connection
   DOWNLOAD DONE hf Qwen/x@fd4b254: 12 files, 4.5 GB in 180.2s (25.2 MB/s), size checked by hf
   DOWNLOAD FAILED video after 3.1s: FetchError: Check your internet connection. (youtu.be)
+  DOWNLOAD CANCELLED hf Qwen/x@fd4b254 after 42.0s
   UPLOAD START perso media from /…/input.mp4 to https://x.blob.core.windows.net/y/input.mp4?… (17.2 MB)
 
 A tool's own milestones go between them as "DOWNLOAD <what>: <its words>".
-A link is written whole but for its query, which can carry a signed token; a
-path is written whole. Before a log leaves this computer both are cut down
+A link is written whole but for its query, which can carry a signed token,
+and a user:password before its host, which become "?…" and "…@"; a path is
+written whole. Before a log leaves this computer both are cut down
 (app/report_mask.py): a link to its site, a path under the home folder to
 "~/…/*.mp4".
 
@@ -30,13 +32,18 @@ CUT = 300
 # signed storage link (Perso's upload) carries its token there, and httpx puts
 # the whole link into its message.
 _QUERY = re.compile(r"(://[^\s\"'?]*)\?[^\s\"']*")
+# A user and password before a link's host: "https://me:secret@mirror/…". A
+# package mirror's address can carry them; the shell's urlText cuts them the
+# same way (desktop/src/logLine.js).
+_USERINFO = re.compile(r"\b(https?://)[^\s/@?#\"']+@")
 # What a DONE line says when nothing compared the file with a checksum.
 NOT_CHECKED = "not checked"
 
 
 def no_query(text: str) -> str:
-    """Every URL in `text` kept to its address: "https://x.blob/y?…"."""
-    return _QUERY.sub(r"\1?…", text)
+    """Every URL in `text` kept to its address: "https://x.blob/y?…", and
+    a user:password before its host as "…@"."""
+    return _QUERY.sub(r"\1?…", _USERINFO.sub(r"\1…@", text))
 
 
 def described(exc: BaseException) -> str:
@@ -71,8 +78,9 @@ def size_text(n: int) -> str:
 
 
 def host_of(url: str) -> str:
-    """The site a link points at, with its port: "127.0.0.1:11434"."""
-    return urlsplit(url).netloc
+    """The site a link points at, with its port and without any
+    user:password: "127.0.0.1:11434"."""
+    return urlsplit(url).netloc.rpartition("@")[2]
 
 
 def say(trace, logger: logging.Logger, line: str, level: str = "INFO") -> None:
@@ -142,3 +150,9 @@ def failed(what: str, secs: float, reason: str, url: str, word: str = "DOWNLOAD"
     """"DOWNLOAD FAILED video after 3.1s: <Type>: <message> (<host>)", for
     the ERROR level. `reason` is described(exc) for an exception."""
     return f"{word} FAILED {what} after {secs:.1f}s: {_one_line(reason)} ({host_of(url)})"
+
+
+def cancelled(what: str, secs: float, word: str = "DOWNLOAD") -> str:
+    """"DOWNLOAD CANCELLED video after 3.1s": a cancel stopped it, which is
+    no failure. It closes the START line as DONE or FAILED would."""
+    return f"{word} CANCELLED {what} after {secs:.1f}s"

@@ -405,3 +405,23 @@ def test_an_update_pip_refused_says_pips_error_not_its_notice(monkeypatch, caplo
     assert level == "ERROR"
     assert re.fullmatch(r"DOWNLOAD FAILED pip yt-dlp after \d+\.\ds: pip exited 1: ERROR: Could not find a version "
                         r"that satisfies the requirement yt-dlp \(pypi\.org\)", msg)
+
+
+def test_a_cancelled_fetch_closes_its_start(monkeypatch, tmp_path):
+    def cancelled_run(args, on_line=None, cancel_check=None, timeout=None):
+        raise source_fetch.JobCancelled()
+
+    upgrades = _count_upgrades(monkeypatch)
+    monkeypatch.setattr(source_fetch, "_run", cancelled_run)
+    traced = []
+
+    def log(msg):
+        pass
+
+    log.trace = lambda msg, level="INFO": traced.append((level, msg))
+    with pytest.raises(source_fetch.JobCancelled):
+        source_fetch.fetch("https://youtu.be/abc", str(tmp_path / "input.mp4"), log=log, cancel_check=lambda: True)
+    assert [level for level, _msg in traced] == ["INFO", "INFO"]
+    assert traced[0][1].startswith("DOWNLOAD START video from https://youtu.be/abc to ")
+    assert re.fullmatch(r"DOWNLOAD CANCELLED video after \d+\.\ds", traced[1][1])
+    assert upgrades["n"] == 0, "a cancel is no reason to update yt-dlp"

@@ -436,9 +436,10 @@ def _hf_files(dest):
 
 def _pull_hf(entry, kit, progress, cancelled):
     """One catalog model from Hugging Face (_hf_download), between DOWNLOAD
-    START and DONE or FAILED lines in the app log (app/netlog.py). Once it is
-    in, a FILE line for every file the folder holds, then the totals; the
-    speed is of what came this time, which a resumed download has less of."""
+    START and DONE, CANCELLED or FAILED lines in the app log (app/netlog.py).
+    Once it is in, a FILE line for every file the folder holds, then the
+    totals; the speed is of what came this time, which a resumed download has
+    less of."""
     src = entry["source"]
     dest = os.path.join(kit, *entry["dir"].split("/"))
     base = (os.environ.get("HF_ENDPOINT") or "https://huggingface.co").rstrip("/")
@@ -449,11 +450,15 @@ def _pull_hf(entry, kit, progress, cancelled):
     try:
         _hf_download(entry, kit, progress, cancelled, what, began)
     except BaseException as e:
-        # A cancel that broke the tool on its way out is no failure (_drain).
-        if not cancelled():
+        # A cancel that broke the tool on its way out is a cancel, as _drain
+        # and _run_download count it.
+        if cancelled():
+            log.info(netlog.cancelled(what, time.monotonic() - began))
+        else:
             log.error(netlog.failed(what, time.monotonic() - began, netlog.described(e), base))
         raise
     if cancelled():
+        log.info(netlog.cancelled(what, time.monotonic() - began))
         return
     files = _hf_files(dest)
     for name, size in files:
@@ -561,7 +566,7 @@ def _ollama_source(name):
 
 def _pull_ollama(entry, progress, cancelled):
     """Pull through the app's own running Ollama server (resume is Ollama's),
-    between DOWNLOAD START and DONE or FAILED lines in the app log
+    between DOWNLOAD START and DONE, CANCELLED or FAILED lines in the app log
     (app/netlog.py): a FILE line for each layer once it is in, and Ollama's
     own "verifying sha256 digest" and "success" once each.
     A model that needs the validated chat template baked in (Hunyuan) gets a
@@ -589,7 +594,7 @@ def _pull_ollama(entry, progress, cancelled):
         for line in r.iter_lines():
             if cancelled():
                 r.close()
-                return
+                break
             if not line:
                 continue
             d = json.loads(line)
@@ -610,10 +615,15 @@ def _pull_ollama(entry, progress, cancelled):
             if d.get("total") and d.get("completed") is not None:
                 progress(int(100 * d["completed"] / d["total"]))
     except Exception as e:
-        if not cancelled():
+        # A cancel that broke the stream on its way out is a cancel, as
+        # _run_download counts it.
+        if cancelled():
+            log.info(netlog.cancelled(what, time.monotonic() - began))
+        else:
             log.error(netlog.failed(what, time.monotonic() - began, netlog.described(e), source))
         raise
     if cancelled():
+        log.info(netlog.cancelled(what, time.monotonic() - began))
         return
     for digest in layers:
         layer_in(digest)

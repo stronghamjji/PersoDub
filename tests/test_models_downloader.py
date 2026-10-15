@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import sys
+import threading
 import time
 import types
 
@@ -366,3 +367,59 @@ def test_an_ollama_pull_that_fails_says_what_the_stream_or_the_answer_said(monke
                                 "HTTP 500 from 127.0.0.1:11434, size unknown")
     assert lines[2][0] == "ERROR" and " after " in lines[2][1] and lines[2][1].endswith(
         ": HTTPError: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/pull (hf.co)")
+
+
+def test_a_cancelled_hf_download_closes_its_start(monkeypatch, tmp_path, caplog):
+    import app.agents.base as base
+    monkeypatch.setattr(base, "_end", lambda proc: None)
+    stop = threading.Event()
+
+    class FakeProc:
+        def __init__(self):
+            def lines():
+                stop.set()   # Cancel pressed while the tool runs
+                yield "Fetching 3 files"
+            self.stdout = lines()
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(models_module._subprocess, "Popen", lambda argv, **kw: FakeProc())
+    entry = {"id": "whisper", "dir": "models/whisper/x", "source": {"kind": "hf", "repo": "r/x", "rev": "abc"}}
+    with caplog.at_level(logging.INFO, logger="persodub.models"):
+        models_module._run_download(entry, str(tmp_path), lambda p: None, stop.is_set)
+    lines = _model_lines(caplog)
+    assert [level for level, _msg in lines] == ["INFO"] * 4
+    assert lines[1][1].startswith("DOWNLOAD START hf r/x@abc from ")
+    assert re.fullmatch(r"DOWNLOAD CANCELLED hf r/x@abc after \d+\.\ds", lines[2][1])
+    assert re.fullmatch(r"MODEL whisper DOWNLOAD CANCELLED \(\d+\.\ds\)", lines[3][1])
+
+
+def test_a_cancelled_ollama_pull_closes_its_start_whichever_way_it_stops(monkeypatch, caplog):
+    stop = threading.Event()
+    entry = {"id": "gemma", "source": {"kind": "ollama", "tag": "gemma3:12b"}}
+
+    class Stopped(_Pull):
+        def iter_lines(self):
+            yield json.dumps({"status": "pulling manifest"}).encode()
+            stop.set()
+            yield json.dumps({"status": "pulling aeda25e63ebd", "digest": "sha256:" + "a" * 64, "total": 10}).encode()
+
+    _ollama(monkeypatch, Stopped())
+    with caplog.at_level(logging.INFO, logger="persodub.models"):
+        models_module._pull_ollama(entry, lambda p: None, stop.is_set)
+    level, msg = _model_lines(caplog)[-1]
+    assert level == "INFO" and re.fullmatch(r"DOWNLOAD CANCELLED ollama gemma3:12b after \d+\.\ds", msg)
+
+    # A cancel that broke the stream on its way out is a cancel, never a failure.
+    class Broken(_Pull):
+        def iter_lines(self):
+            raise requests.ConnectionError("Connection aborted.")
+
+    caplog.clear()
+    _ollama(monkeypatch, Broken())
+    with caplog.at_level(logging.INFO, logger="persodub.models"), pytest.raises(requests.ConnectionError):
+        models_module._pull_ollama(entry, lambda p: None, stop.is_set)
+    lines = _model_lines(caplog)
+    assert [level for level, _msg in lines] == ["INFO"] * 3
+    assert re.fullmatch(r"DOWNLOAD CANCELLED ollama gemma3:12b after \d+\.\ds", lines[-1][1])

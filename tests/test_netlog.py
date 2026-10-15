@@ -33,6 +33,22 @@ def test_a_link_keeps_its_address_and_loses_its_query():
     assert "SECRET" not in netlog.failed("x", 1.0, "ConnectError: refused for url " + signed, signed)
 
 
+def test_a_links_user_and_password_go_as_the_shell_cuts_them():
+    # desktop/src/logLine.js urlText: "https://…@host".
+    assert netlog.no_query("from https://me:s3cret@mirror.example/simple?token=1 or http://me@h:8080/x") == (
+        "from https://…@mirror.example/simple?… or http://…@h:8080/x")
+    # An @ further along a link is its path's, not a user's.
+    assert netlog.no_query("https://www.youtube.com/@channel/videos") == "https://www.youtube.com/@channel/videos"
+    mirror = "https://me:s3cret@mirror.example:8443/simple"
+    assert netlog.host_of(mirror) == "mirror.example:8443"
+    assert netlog.start("pip yt-dlp", mirror, "/v") == "DOWNLOAD START pip yt-dlp from https://…@mirror.example:8443/simple to /v"
+    assert "s3cret" not in netlog.failed("pip yt-dlp", 1.0, "pip exited 1: " + mirror, mirror)
+    assert "s3cret" not in netlog.connected("pip yt-dlp", 401, mirror)
+    # A job's failure lines describe errors with the same function (app/jobs.py).
+    assert netlog.described(RuntimeError("GET " + mirror + "?k=1 failed")) == (
+        "RuntimeError: GET https://…@mirror.example:8443/simple?… failed")
+
+
 def test_each_line_has_its_shape():
     assert netlog.start("video", "https://youtu.be/abc", "/w/input.mp4", note="via yt-dlp 2026.8.19") == (
         "DOWNLOAD START video from https://youtu.be/abc to /w/input.mp4 via yt-dlp 2026.8.19")
@@ -47,6 +63,8 @@ def test_each_line_has_its_shape():
         "DOWNLOAD RETRY perso dubbing (2/3) after 2.0s: RemoteProtocolError: peer closed")
     assert netlog.failed("video", 3.14, "FetchError: Check your internet connection.", "https://youtu.be/abc") == (
         "DOWNLOAD FAILED video after 3.1s: FetchError: Check your internet connection. (youtu.be)")
+    assert netlog.cancelled("hf r/x@abc1234", 42.0) == "DOWNLOAD CANCELLED hf r/x@abc1234 after 42.0s"
+    assert netlog.cancelled("perso media", 1.0, word="UPLOAD") == "UPLOAD CANCELLED perso media after 1.0s"
 
 
 def test_done_says_how_much_how_fast_and_what_checked_it():

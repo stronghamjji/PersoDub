@@ -283,11 +283,11 @@ def _once_more_after_upgrade(attempt: Callable, upgrading: Optional[Callable[[],
 
 
 def _download_once(url: str, dest: str, log, cancel_check) -> None:
-    """One yt-dlp run, between DOWNLOAD START and DONE or FAILED lines
-    (app/netlog.py) -- into the job's file too when `log` is a job's -- with a
-    FILE line for the formats yt-dlp says it takes. A cancel ends it with
-    neither. The FAILED line says the kind of failure, never yt-dlp's own
-    words, which name the video by its id."""
+    """One yt-dlp run, between DOWNLOAD START and DONE, CANCELLED or FAILED
+    lines (app/netlog.py) -- into the job's file too when `log` is a job's --
+    with a FILE line for the formats yt-dlp says it takes. The FAILED line
+    says the kind of failure, never yt-dlp's own words, which name the video
+    by its id."""
     trace = getattr(log, "trace", None)
     netlog.say(trace, logger, netlog.start("video", url, dest, note=f"via yt-dlp {_ytdlp_version()}"))
     began = time.monotonic()
@@ -317,6 +317,7 @@ def _download_once(url: str, dest: str, log, cancel_check) -> None:
             reason, message = classify(err)
             raise FetchError(reason, message, err.strip()[-300:])
     except JobCancelled:
+        netlog.say(trace, logger, netlog.cancelled("video", time.monotonic() - began))
         raise
     except Exception as e:
         netlog.say(trace, logger, netlog.failed("video", time.monotonic() - began, netlog.described(e), url),
