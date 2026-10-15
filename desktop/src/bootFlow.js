@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt, inEnglish } from "./config.js";
 import { checkKit, readKitVersion } from "./engineCheck.js";
 import { startEngines } from "./orchestrator.js";
+import { rememberedEdition } from "./edition.js";
 import { buildSteps, bytesStillNeeded, bootSteps, packInstallingMarker, PACKS } from "./installSpec.js";
 import { runInstall, openSteps } from "./installer.js";
 import { classifyError } from "./analytics.js";
@@ -200,12 +201,15 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
   // The engines, then the app page in the window.
   async function startApp(win, cfg) {
     await showScreen(win, "loading.html");
+    // The kit's own edition, remembered from its first run (src/edition.js).
+    const runEdition = rememberedEdition(cfg.kitDir, edition);
+    shellLog(`PERSODUB_EDITION kit runs as ${runEdition}`);
     try {
       ctx.engines = await startEngines(cfg, {
         logDir: join(app.getPath("userData"), "logs"),
         appVersion: app.getVersion(), // desktop/package.json -- the one place the version lives
         locale: systemLocale(),
-        edition, // where a dub runs by default (app/setup.py)
+        edition: runEdition, // where a dub runs by default (app/setup.py)
         preferredBackendPort: readRememberedPorts().backend,
       });
       rememberPorts({ backend: ctx.engines.port });

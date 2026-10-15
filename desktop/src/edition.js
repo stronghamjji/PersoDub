@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { KIT_ENV, parseEnvFile } from "./kitEnv.js";
 
 // One codebase, two builds, one repository. Both editions read their updates
 // from the public repository, and open the page's GitHub links, Help
@@ -12,7 +13,8 @@ import { join } from "node:path";
 // collected (scripts/collect-payload.mjs writes it into the payload's EDITION
 // file), so a packaged app carries its edition and the environment it runs in
 // cannot change it. A run with no payload (npm start) reads PERSODUB_EDITION
-// from its own environment.
+// from its own environment. The kit remembers the edition it first ran as
+// (rememberedEdition below), and that is the one a dub follows.
 //
 // package.json's build.publish entry stays only so electron-builder writes
 // latest.yml and app-update.yml; the feed itself is set at run time from the
@@ -49,4 +51,21 @@ export function readEdition({ payloadDir, env }) {
 export function editionFeed(edition) {
   const [owner, repo] = EDITIONS[edition].split("/");
   return { provider: "github", owner, repo };
+}
+
+// The edition a kit runs as. Every packaged app updates from the public
+// releases, which are the open-source build, so a production install turned
+// into an open-source one at its first update (2026-10-14). The kit now
+// remembers the edition it first ran as in kit.env, next to the user's other
+// settings, and that wins over the build's from then on. A kit.env without
+// the key takes the running build's edition and keeps it.
+export function rememberedEdition(kitDir, build) {
+  const path = kitDir ? join(kitDir, KIT_ENV) : null;
+  if (!path || !existsSync(path)) return build;
+  const text = readFileSync(path, "utf8");
+  const name = parseEnvFile(text).PERSODUB_EDITION;
+  if (Object.hasOwn(EDITIONS, name)) return name;
+  const sep = text === "" || text.endsWith("\n") ? "" : "\n";
+  appendFileSync(path, `${sep}# The edition this kit first ran as. Updates do not change it.\nPERSODUB_EDITION=${build}\n`);
+  return build;
 }
