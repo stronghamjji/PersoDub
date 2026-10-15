@@ -5,6 +5,7 @@ and its progress status (running/done/error/cancelling/cancelled) can be
 queried.
 """
 import contextlib
+import errno
 import glob
 import hashlib
 import json
@@ -212,6 +213,12 @@ def _described(exc: BaseException) -> str:
         said = " ".join(_no_query(str(exc)).split())[:_CUT]
     except Exception:   # a __str__ that fails, which Python's own traceback copes with too
         said = ""
+    # An OS error's sentence is in the computer's language (Windows said
+    # "대상 컴퓨터에서 연결을 거부했으므로…" for 10061); its errno name reads
+    # the same everywhere, so it goes on the end: "[ECONNREFUSED]".
+    code = errno.errorcode.get(getattr(exc, "errno", None)) if isinstance(exc, OSError) else None
+    if code:
+        said = f"{said} [{code}]" if said else f"[{code}]"
     return f"{type(exc).__name__}: {said}" if said else type(exc).__name__
 
 

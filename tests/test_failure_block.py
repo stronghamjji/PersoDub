@@ -179,3 +179,16 @@ def test_a_bug_keeps_its_traceback_on_the_screen_and_once_in_the_file(tmp_path):
     assert text.count("Traceback (most recent call last):") == 1
     assert " - ERROR - Traceback (most recent call last):\n" in text
     assert any(line.startswith("Traceback (most recent call last):") for line in job["logs"])
+
+
+def test_an_os_error_names_its_errno_code_in_english():
+    # Windows words a refused connection in the computer's language; the
+    # errno name does not change with it.
+    import errno as _errno
+
+    from app.jobs import _described
+
+    e = ConnectionRefusedError(_errno.ECONNREFUSED, "대상 컴퓨터에서 연결을 거부했으므로 연결하지 못했습니다")
+    line = _described(e)
+    assert line.startswith("ConnectionRefusedError: ")
+    assert line.endswith("[ECONNREFUSED]")
