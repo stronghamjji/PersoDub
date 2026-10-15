@@ -1,12 +1,12 @@
 {
   "notes": [
-    "Captions stays open after you press Erase on a finished dub.",
-    "The timeline's Fit button fits the whole video however long it is.",
-    "The film strip no longer stretches its frames on a long video."
+    "Installs on company computers whose security software inspects HTTPS: the app now trusts what the computer trusts.",
+    "A production install stays production through updates.",
+    "A failure report names the security product or missing runtime behind the error."
   ],
   "notes_ko": [
-    "더빙 끝난 프로젝트에서 Erase를 눌러도 Captions가 꺼지지 않아요.",
-    "타임라인 전체 보기가 영상 길이와 상관없이 한 칸에 맞아요.",
-    "긴 영상에서 필름 띠 프레임이 가로로 늘어나지 않아요."
+    "회사 보안 프로그램이 인터넷 통신을 검사하는 PC에서도 설치돼요. 앱이 컴퓨터가 믿는 인증서를 함께 믿어요.",
+    "운영판으로 설치한 앱은 업데이트 뒤에도 운영판으로 남아요.",
+    "오류 보고에 원인 단서(보안 프로그램 이름, 빠진 구성 요소)가 함께 실려요."
   ]
 }
