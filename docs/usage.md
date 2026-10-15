@@ -4,7 +4,7 @@ A walkthrough of the app, screen by screen. To install it, see the
 [Get started section of the README](../README.md#get-started).
 
 > The screenshots that used to be here have been taken out while a video
-> walkthrough is made. Everything below describes 0.8.4 as it stands.
+> walkthrough is made. Everything below describes 0.8.5 as it stands.
 
 ## First launch
 
