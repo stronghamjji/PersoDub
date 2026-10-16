@@ -175,7 +175,7 @@ export function wireUpdates({ $, shell, releases }) {
   $("updGo").addEventListener("click", () => shell?.restartToUpdate?.());
 
   paintIcon();
-  shell?.onUpdateState?.((s) => {
+  const onState = (s) => {
     state = s;
     paintIcon();
     if (overlay.classList.contains("open")) paint();
@@ -183,5 +183,12 @@ export function wireUpdates({ $, shell, releases }) {
       autoShown = true;
       open();
     }
-  });
+  };
+  shell?.onUpdateState?.(onState);
+  // The announcement can come before this listener: app.mjs waits for the
+  // page's language first, and a quick download (or one already on disk) is
+  // announced, and re-sent at page load, while it waits. 0.8.3 said "up to
+  // date" with 0.8.5 downloaded (2026-10-17), so the page also asks once. An
+  // answer never replaces a state the listener has had since.
+  shell?.getUpdateState?.().then((s) => { if (s && !state) onState(s); }, () => {});
 }

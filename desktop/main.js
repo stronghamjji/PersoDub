@@ -117,6 +117,9 @@ app.whenReady().then(() => {
   // all, and the last one that went out. A page that loads after the report
   // was sent (the error screen's own reload) reads it back rather than missing
   // the announcement.
+  // The update as last announced (src/updateFlow.js), for a page that started
+  // listening after the announcement went out.
+  ipcMain.handle("shell:last-update-state", () => ctx.updateState);
   ipcMain.handle("shell:last-report", async () => ({
     mode: ctx.bootedKitDir ? reporter.reportMode(ctx.bootedKitDir) : "off",
     last: reporter.lastReport(),

@@ -2,7 +2,7 @@
 // the shell announces -- including an older shell that sends no date or notes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { updateLive, updateIconView, updateWindowView, noteLines, releaseDay } from "./updateWindow.mjs";
+import { updateLive, updateIconView, updateWindowView, noteLines, releaseDay, wireUpdates } from "./updateWindow.mjs";
 
 const DOWNLOADING = { version: "0.7.1", phase: "downloading", pct: 42 };
 const READY = { version: "0.7.1", phase: "ready", pct: 100,
@@ -91,4 +91,70 @@ test("release day reads an ISO date and gives up on anything else", () => {
   assert.equal(releaseDay("2026-09-30T12:00:00.000Z"), "2026-09-30");
   assert.equal(releaseDay("not a date"), "");
   assert.equal(releaseDay(undefined), "");
+});
+
+// wireUpdates on a stand-in page. The shell's announcement can come before the
+// page listens -- app.mjs waits for its language first -- so the page asks the
+// shell once as well (0.8.3 said "up to date" with 0.8.5 downloaded, 2026-10-17).
+function standInPage() {
+  const els = new Map();
+  const el = () => {
+    const classes = new Set();
+    return {
+      innerHTML: "", textContent: "", title: "", hidden: false, disabled: false, href: "", className: "",
+      classList: {
+        toggle(c, on = !classes.has(c)) { if (on) classes.add(c); else classes.delete(c); },
+        add(c) { classes.add(c); },
+        remove(c) { classes.delete(c); },
+        contains(c) { return classes.has(c); },
+      },
+      setAttribute() {}, addEventListener() {}, replaceChildren() {},
+    };
+  };
+  const $ = (id) => { if (!els.has(id)) els.set(id, el()); return els.get(id); };
+  const saved = { window: globalThis.window, document: globalThis.document, fetch: globalThis.fetch };
+  globalThis.window = { addEventListener() {} };
+  globalThis.document = { addEventListener() {}, createElement: () => el(), querySelector: () => null };
+  globalThis.fetch = async () => ({ ok: false });
+  const restore = () => {
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete globalThis[k]; else globalThis[k] = v; }
+  };
+  return { $, restore };
+}
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+test("an update announced before the page listened is asked for and offered", async () => {
+  const { $, restore } = standInPage();
+  try {
+    let listening = false;
+    const shell = { onUpdateState: () => { listening = true; }, getUpdateState: async () => READY };
+    wireUpdates({ $, shell, releases: "" });
+    await settle();
+    assert.ok($("updateBtn").classList.contains("live"), "the icon lights");
+    assert.ok($("updateOverlay").classList.contains("open"), "the window opens by itself");
+    assert.equal($("updGo").textContent, "Restart to update");
+    assert.ok(listening, "and the page still listens for what comes next");
+  } finally { restore(); }
+});
+
+test("a state the shell announced to the listener is not replaced by the answer", async () => {
+  const { $, restore } = standInPage();
+  try {
+    const shell = { onUpdateState: (cb) => cb(READY), getUpdateState: async () => DOWNLOADING };
+    wireUpdates({ $, shell, releases: "" });
+    await settle();
+    assert.equal($("updGo").textContent, "Restart to update");
+  } finally { restore(); }
+});
+
+test("a shell with nothing to say, or without the question, leaves the icon grey", async () => {
+  const { $, restore } = standInPage();
+  try {
+    wireUpdates({ $, shell: { onUpdateState() {}, getUpdateState: async () => null }, releases: "" });
+    await settle();
+    assert.equal($("updateBtn").classList.contains("live"), false);
+    wireUpdates({ $, shell: { onUpdateState() {} }, releases: "" });
+    await settle();
+    assert.equal($("updateBtn").classList.contains("live"), false);
+  } finally { restore(); }
 });

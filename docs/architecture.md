@@ -756,12 +756,12 @@ masks read them:
 <a id="ipc-channels"></a>**Preload IPC.** `window.persodubShell` exposes
 `retry`, `rememberJob`, `onDownloadDone`, `revealPath`, `relaunch`,
 `onInstallProgress`, `installPack`, `cancelPack`, `removePack`, `packStatus`,
-`onUpdateState`, `restartToUpdate`, `countDub`, `countErase`, `onReportSent`
-and `getLastReport`, over the channels `shell:retry`, `shell:remember-job`,
+`onUpdateState`, `getUpdateState`, `restartToUpdate`, `countDub`, `countErase`,
+`onReportSent` and `getLastReport`, over the channels `shell:retry`, `shell:remember-job`,
 `shell:download-done`, `shell:reveal`, `shell:relaunch`,
 `shell:install-progress`, `shell:install-pack`, `shell:cancel-pack`,
 `shell:remove-pack`, `shell:pack-status`, `shell:update-state`,
-`shell:restart-to-update`, `shell:count-dub`, `shell:count-erase`,
+`shell:last-update-state`, `shell:restart-to-update`, `shell:count-dub`, `shell:count-erase`,
 `shell:report-sent` and `shell:last-report`. The contract test reads all
 three halves (preload, main-process handlers, page) and fails on a channel
 that is not wired the whole way through. Besides the functions it carries two

@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // lights within seconds of launch and the update window's button turns
   // into "Restart to update" when the file is on disk.
   onUpdateState: (cb) => ipcRenderer.on("shell:update-state", (_e, state) => cb(state)),
+  // ...and that state on request, for a page that started listening after the
+  // announcement (ui/src/updateWindow.mjs asks once it listens).
+  getUpdateState: () => ipcRenderer.invoke("shell:last-update-state"),
   restartToUpdate: () => ipcRenderer.send("shell:restart-to-update"),
   // Usage counts for finished dubs. The page hands over the raw log tail
   // because it cannot classify it -- the shell turns that into one published
