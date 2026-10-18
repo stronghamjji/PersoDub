@@ -797,6 +797,10 @@ class JobStore:
                 # the shell reads them off the job the moment it sees "done".
                 spent = {k: result[k] for k in ("perso_credits", "duration", "separation_model")
                          if isinstance(result, dict) and result.get(k) is not None}
+                # The memory line before the status flips, as on the other two
+                # endings: measuring takes a moment, and a job that reads "done"
+                # while it still holds the air leaves the next one queued behind it.
+                _trace_memory(trace)
                 with self._lock:
                     cancelled = self._jobs[jid]["status"] == JobStatus.CANCELLING
                     if cancelled:
@@ -807,7 +811,6 @@ class JobStore:
                         self._jobs[jid]["result"] = result
                         if detected and not self._jobs[jid].get("source_lang"):
                             self._jobs[jid]["source_lang"] = detected
-                _trace_memory(trace)
                 # Cancel pressed while the work ran to its end: still a cancel.
                 trace("JOB %s (%.1fs)" % ("CANCELLED" if cancelled else "ALL DONE", time.monotonic() - began))
             except JobCancelled:

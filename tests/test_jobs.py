@@ -247,6 +247,22 @@ def test_a_job_writes_its_start_inputs_and_end_to_the_file_only(tmp_path, caplog
     assert "job-%s: JOB ALL DONE (" % jid in caplog.text
 
 
+def test_a_job_measures_its_memory_before_it_reads_done(monkeypatch):
+    # Measuring takes a moment (psutil walks every process), and a job that
+    # read "done" while it still measured held the one local seat: a dub
+    # started that moment was queued behind it (the Linux and Windows
+    # runners, 2026-10-18). Measured first, as a failure and a cancel are.
+    from app import jobs as jobs_module
+
+    store = JobStore()
+    jid = store.create()
+    seen = []
+    monkeypatch.setattr(jobs_module, "_trace_memory", lambda trace: seen.append(store.get(jid)["status"]))
+    store.start(jid, lambda log: {"ok": True})
+    assert _wait(store, jid)["status"] == "done"
+    assert seen == ["running", "running"]
+
+
 def test_a_jobs_inputs_name_the_edition_it_ran_under_first(tmp_path, monkeypatch):
     # The edition decides where a dub runs when nothing is chosen (app/setup.py);
     # the desktop shell hands it over (desktop/src/orchestrator.js). A plain

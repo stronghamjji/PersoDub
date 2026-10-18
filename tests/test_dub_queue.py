@@ -81,6 +81,11 @@ def test_a_second_dub_waits_until_the_first_is_done(slow_dub):
     # and the pipeline really has not been entered for it.
     assert second["status"] == "queued"
     assert _status(second["job_id"]) == "queued"
+    # The first reaches the pipeline once its thread has written its opening
+    # lines, a memory line among them: a moment, not at once.
+    deadline = time.time() + 5
+    while not ran and time.time() < deadline:
+        time.sleep(0.01)
     assert len(ran) == 1
 
     gate.set()

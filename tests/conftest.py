@@ -48,6 +48,25 @@ def isolate_job_logs(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def jobs_end_inside_their_test(monkeypatch):
+    """A job a test started is over before the next test begins.
+
+    The job store is one for the whole session and a job runs on its own
+    thread, so a test that stopped looking once it had its answer left that
+    thread running into the next test: there it called that test's fakes and
+    held the one local seat that test's job needed. The memory lines
+    (app/memline.py) made every job a little slower, and the Linux and
+    Windows runners failed 24 and 2 tests this way (2026-10-18). This waits
+    before monkeypatch undoes the test's fakes -- it asks for monkeypatch, so
+    it is torn down first -- and for five seconds at most.
+    """
+    yield
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and (state.job_store._active or state.job_store._pending):
+        time.sleep(0.01)
+
+
+@pytest.fixture(autouse=True)
 def english_engine(monkeypatch):
     """Every test hears the engine in English, whatever the machine running it
     says (PERSODUB_LOCALE, a kit.env's PERSODUB_LANG): the tests compare its
