@@ -70,8 +70,8 @@ export function initChatgptSignIn({ $, startDubbing, onTranslateHere }) {
     chatgptSignInRun += 1; // any wait in progress stops at its next check
     $("chatgptSignInOverlay").classList.remove("open");
   });
-  // No ChatGPT account, or no wish to sign in: the dub goes on translating on
-  // this computer, the way the download window offers Perso. Without it a user
+  // No ChatGPT account, or no wish to sign in: the dub goes on translating with
+  // a local model (Hunyuan), the way the download window offers Perso. Without it a user
   // with no account stopped here unless they knew the Advanced options (owner,
   // 2026-10-18). Its download, if any, is the dub's own download window next.
   $("csLocal").addEventListener("click", () => {

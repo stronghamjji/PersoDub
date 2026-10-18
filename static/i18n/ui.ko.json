@@ -590,7 +590,7 @@
   "Transcribing": "받아쓰기",
   "Transcription": "받아쓰기",
   "Translate again": "다시 번역",
-  "Translate on this computer": "이 컴퓨터에서 번역",
+  "Translate with a local model": "로컬 모델로 번역",
   "Translated": "번역",
   "Translating": "번역",
   "Translating 1 line with {name}…": "1줄 번역 중… ({name})",

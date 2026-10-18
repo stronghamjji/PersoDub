@@ -95,10 +95,10 @@ test("the Dub Agent's sign-in asks with the Codex words, and a dub after it has 
   }
 });
 
-// A dub's window also offers the way round the sign-in: translate on this
-// computer (Hunyuan) instead. Without it a user with no ChatGPT account stopped
+// A dub's window also offers the way round the sign-in: translate with a
+// local model (Hunyuan) instead. Without it a user with no ChatGPT account stopped
 // here unless they knew the Advanced options (owner, 2026-10-18).
-test("a dub's window offers translating on this computer, and the Dub Agent's does not", () => {
+test("a dub's window offers translating with a local model, and the Dub Agent's does not", () => {
   const page = harness();
   try {
     page.signIn.askChatgptSignIn(() => {});
@@ -110,7 +110,7 @@ test("a dub's window offers translating on this computer, and the Dub Agent's do
   }
 });
 
-test("translating on this computer switches the translator, closes the window and goes on with the dub", async () => {
+test("translating with a local model switches the translator, closes the window and goes on with the dub", async () => {
   const page = harness();
   try {
     page.signIn.askChatgptSignIn(() => { page.ran.push(["retry"]); });
