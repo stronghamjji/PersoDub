@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { EDITIONS, buildEdition, readEdition, editionFeed, rememberedEdition } from "./edition.js";
+import { EDITIONS, buildEdition, readEdition, editionFeed, rememberedEdition, kitEdition, editionLine } from "./edition.js";
 
 // A payload folder, with an EDITION file when `edition` is given.
 function payload(edition) {
@@ -87,4 +87,22 @@ test("rememberedEdition falls back to the build without a kit.env, or with an un
   const dir = kit("PERSODUB_EDITION=enterprise\n");
   assert.equal(rememberedEdition(dir, "opensource"), "opensource");
   assert.ok(readFileSync(join(dir, "kit.env"), "utf8").endsWith("PERSODUB_EDITION=opensource\n"));
+});
+
+test("kitEdition reads a kit's remembered edition and writes nothing", () => {
+  const remembered = kit("PERSODUB_KIT_DIR=/x\nPERSODUB_EDITION=production\n");
+  assert.equal(kitEdition(remembered), "production");
+  const none = kit("PERSODUB_KIT_DIR=/x\n");
+  assert.equal(kitEdition(none), null);
+  assert.equal(readFileSync(join(none, "kit.env"), "utf8"), "PERSODUB_KIT_DIR=/x\n", "nothing written");
+  assert.equal(kitEdition(kit("PERSODUB_EDITION=enterprise\n")), null);
+  assert.equal(kitEdition(kit()), null);
+  assert.equal(kitEdition(null), null);
+});
+
+test("the EDITION line says what the edition decides and where it came from", () => {
+  assert.equal(editionLine("production", "opensource", "kept in kit.env"),
+    "EDITION production: dubs default to the Perso API (kept in kit.env; app file: opensource build)");
+  assert.equal(editionLine("opensource", "opensource", "first run of this kit, written to kit.env"),
+    "EDITION opensource: dubs default to this computer (first run of this kit, written to kit.env; app file: opensource build)");
 });

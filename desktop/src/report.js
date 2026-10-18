@@ -352,6 +352,7 @@ export function collectEnvironment({
   torchVariant = "",
   packs = {},
   freeDiskBytes = null,
+  edition = "",
   sys = systemFacts(),
 } = {}) {
   const isWin = String(sys.platform || "").startsWith("win");
@@ -366,6 +367,9 @@ export function collectEnvironment({
     appVersion,
     kitVersion,
     torch: torchVariant,
+    // The edition the kit runs as (desktop/src/edition.js): it decides where a
+    // dub runs when nothing is chosen.
+    edition,
     packs,
   };
 }

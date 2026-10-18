@@ -778,8 +778,12 @@ class JobStore:
             try:
                 rec = self.get(jid) or {}
                 trace("JOB START (%s)" % kind_of(rec))
-                trace("Inputs: " + json.dumps({k: rec[k] for k in _INPUT_FIELDS if k in rec},
-                                              ensure_ascii=False, default=str))
+                # The edition first: it decides where a dub runs when nothing
+                # is chosen (app/setup.py), and the desktop shell hands it over
+                # (desktop/src/orchestrator.js). A plain server run has none.
+                given = {"edition": os.environ.get("PERSODUB_EDITION") or "opensource",
+                         **{k: rec[k] for k in _INPUT_FIELDS if k in rec}}
+                trace("Inputs: " + json.dumps(given, ensure_ascii=False, default=str))
                 _trace_memory(trace)
                 result = target(log)
                 # A job left on auto-detect only learns its source language by

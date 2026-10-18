@@ -43,6 +43,7 @@ export const ERROR_CODES = [
   "unknown",
 ];
 export const PLATFORM_KEYS = ["mac", "win-gpu", "win-cpu"];
+export const EDITIONS = ["opensource", "production"];
 
 const ID_RE = /^[0-9a-f]{32}$/;
 const FINGERPRINT_RE = /^[0-9a-f]{12}$/;
@@ -212,6 +213,8 @@ export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
       appVersion: str(env.appVersion, 20),
       kitVersion: str(env.kitVersion, 20),
       torch: str(env.torch, 20),
+      // The edition the kit runs as (desktop/src/edition.js), one of the two.
+      edition: oneOf(env.edition, EDITIONS, ""),
     },
     packs: flatMap(raw.packs),
     diagnostics: diagnosticsOf(raw.diagnostics),
@@ -410,6 +413,7 @@ export function issueBody(report, { logsRef = "" } = {}) {
     ["RAM", e.ramGb == null ? "?" : `${e.ramGb} GB`],
     ["Free disk", e.freeDiskGb == null ? "?" : `${e.freeDiskGb} GB`],
     ["App / kit", `${e.appVersion || "?"} / ${e.kitVersion || "?"}`],
+    ["Edition", e.edition || "?"],
     ["Torch", e.torch || "?"],
     ["Packs", packs.length ? packs.map(([id, s]) => `${id}=${s}`).join(", ") : "none"],
   ];

@@ -69,3 +69,20 @@ export function rememberedEdition(kitDir, build) {
   appendFileSync(path, `${sep}# The edition this kit first ran as. Updates do not change it.\nPERSODUB_EDITION=${build}\n`);
   return build;
 }
+
+// The kit's remembered edition, read only: null while kit.env has none (a
+// kit's first run, before rememberedEdition writes it) or names no edition.
+export function kitEdition(kitDir) {
+  const path = kitDir ? join(kitDir, KIT_ENV) : null;
+  if (!path || !existsSync(path)) return null;
+  const name = parseEnvFile(readFileSync(path, "utf8")).PERSODUB_EDITION;
+  return Object.hasOwn(EDITIONS, name) ? name : null;
+}
+
+// shell.log's EDITION line: the edition this kit runs as, what that decides
+// (where a dub runs when nothing is chosen, app/setup.py), and where it came
+// from -- `how` -- beside the edition this app file was built as.
+export function editionLine(runEdition, build, how) {
+  const dubs = runEdition === "production" ? "the Perso API" : "this computer";
+  return `EDITION ${runEdition}: dubs default to ${dubs} (${how}; app file: ${build} build)`;
+}

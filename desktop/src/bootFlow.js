@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt, inEnglish } from "./config.js";
 import { checkKit, readKitVersion } from "./engineCheck.js";
 import { startEngines } from "./orchestrator.js";
-import { rememberedEdition } from "./edition.js";
+import { rememberedEdition, kitEdition, editionLine } from "./edition.js";
 import { buildSteps, bytesStillNeeded, bootSteps, packInstallingMarker, PACKS } from "./installSpec.js";
 import { runInstall, openSteps } from "./installer.js";
 import { classifyError } from "./analytics.js";
@@ -232,9 +232,13 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
   // The engines, then the app page in the window.
   async function startApp(win, cfg) {
     await showScreen(win, "loading.html");
-    // The kit's own edition, remembered from its first run (src/edition.js).
+    // The kit's own edition, remembered from its first run (src/edition.js),
+    // and where this run's came from: the kit's memory, or this app file.
+    const kept = kitEdition(cfg.kitDir);
     const runEdition = rememberedEdition(cfg.kitDir, edition);
-    shellLog(`PERSODUB_EDITION kit runs as ${runEdition}`);
+    const how = kept ? "kept in kit.env"
+      : kitEdition(cfg.kitDir) ? "first run of this kit, written to kit.env" : "no kit.env to keep it in";
+    shellLog(editionLine(runEdition, edition, how));
     try {
       const from = Date.now();
       ctx.engines = await startEngines(cfg, {

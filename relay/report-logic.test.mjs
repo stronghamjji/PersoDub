@@ -591,3 +591,11 @@ test("the summary names the error a failure was chained from, and the stopped st
     logTails: { shell: `${head("shell", "ERROR")}  Caused by: NewConnectionError`, app: "", job: "" } }).report;
   assert.ok(!summaryLines(install).some((l) => l.startsWith("- Cause") || l.startsWith("- Context")));
 });
+
+test("the edition is kept when it is one of the two, dropped otherwise, and shown in the issue", () => {
+  const { report } = validateReport({ ...GOOD, env: { ...GOOD.env, edition: "production" } });
+  assert.equal(report.env.edition, "production");
+  assert.ok(issueBody(report).includes("| Edition | production |"), issueBody(report));
+  assert.equal(validateReport({ ...GOOD, env: { ...GOOD.env, edition: "<b>x</b>" } }).report.env.edition, "");
+  assert.ok(issueBody(validateReport(GOOD).report).includes("| Edition | ? |"));
+});

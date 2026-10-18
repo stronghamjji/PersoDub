@@ -9,6 +9,7 @@ import { buildReport, collectEnvironment, maskText, resolveReportMode, withoutEn
 import { buildLogArchive } from "./reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./reportQueue.js";
 import { envWithKit } from "./kitEnv.js";
+import { kitEdition } from "./edition.js";
 import { readFileEnd } from "./fileEnd.js";
 
 // Automatic failure reports. The usage count (usageIpc.js) says a dub failed;
@@ -149,6 +150,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
         torchVariant: torchVariantFor(kitDir),
         packs,
         freeDiskBytes: await freeSpaceAt(kitDir),
+        edition: kitEdition(kitDir) || "",
       }),
       logTails: {
         shell: shellLogText,

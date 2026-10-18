@@ -560,3 +560,8 @@ test("a Windows path logged as a Python list is masked", () => {
   assert.ok(!out.includes("broken-test_ko"), out);
   assert.ok(out.includes("input.mp4"), out);
 });
+
+test("the environment names the edition the kit runs as, and nothing when unknown", () => {
+  assert.equal(collectEnvironment({ sys: MAC, edition: "production" }).edition, "production");
+  assert.equal(collectEnvironment({ sys: MAC }).edition, "");
+});

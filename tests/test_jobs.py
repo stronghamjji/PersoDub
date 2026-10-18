@@ -247,6 +247,31 @@ def test_a_job_writes_its_start_inputs_and_end_to_the_file_only(tmp_path, caplog
     assert "job-%s: JOB ALL DONE (" % jid in caplog.text
 
 
+def test_a_jobs_inputs_name_the_edition_it_ran_under_first(tmp_path, monkeypatch):
+    # The edition decides where a dub runs when nothing is chosen (app/setup.py);
+    # the desktop shell hands it over (desktop/src/orchestrator.js). A plain
+    # server run has none, and runs as the open-source edition does.
+    def inputs_under(edition):
+        if edition is None:
+            monkeypatch.delenv("PERSODUB_EDITION", raising=False)
+        else:
+            monkeypatch.setenv("PERSODUB_EDITION", edition)
+        store = JobStore(log_dir=str(tmp_path))
+        jid = store.create()
+        store._update(jid, language="Korean", language_code="ko")
+        store.start(jid, lambda log: {"ok": True})
+        path = tmp_path / ("job-%s.log" % jid)
+        for _ in range(100):
+            if path.exists() and "JOB ALL DONE (" in path.read_text(encoding="utf-8"):
+                break
+            time.sleep(0.02)
+        line = _file_text(tmp_path, jid).split(" - Inputs: ", 1)[1].splitlines()[0]
+        return list(json.loads(line).items())
+
+    assert inputs_under("production")[0] == ("edition", "production")
+    assert inputs_under(None)[0] == ("edition", "opensource")
+
+
 def test_a_failed_job_names_the_step_it_stopped_in(tmp_path, caplog, fixed_memory):
     store = JobStore(log_dir=str(tmp_path))
 
