@@ -1,11 +1,10 @@
 import { dirname, join } from "node:path";
-import { resolveUpdateMode, resolveFeed, nextUpdateState, INSTALL_ON_QUIT, feedText, updateFileUrl } from "./updater.js";
+import { resolveUpdateMode, resolveFeed, nextUpdateState, INSTALL_ON_QUIT, feedText, updateFileUrl, updateErrorText } from "./updater.js";
 import { findForeignLockers } from "./lockCheck.js";
 import { markCleanExit } from "./cleanExit.js";
 import { envWithKit } from "./kitEnv.js";
-import { errorText } from "./errorText.js";
 import { t } from "./i18n.js";
-import { secondsSince, sizeText, urlText } from "./logLine.js";
+import { homeText, secondsSince, sizeText, urlText } from "./logLine.js";
 
 // Auto-update (packaged builds only -- see updater.js for the decision
 // rules). Checks GitHub Releases after the window is up, downloads in the
@@ -29,12 +28,33 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
     // The documented off-switch (PERSODUB_DISABLE_UPDATE_CHECK=1) lives in the
     // kit's kit.env with the user's other settings -- read it from there, since
     // a GUI app's process.env never carries it.
-    if (resolveUpdateMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) }) !== "auto") return;
+    if (resolveUpdateMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) }) !== "auto") {
+      shellLog(`UPDATE CHECK OFF: ${app.isPackaged ? "PERSODUB_DISABLE_UPDATE_CHECK=1" : "not a packaged app"}`);
+      return;
+    }
+    // Whether the error event below has said what went wrong: a failed check
+    // also rejects checkForUpdates, and the catch at the end must not say it twice.
+    let reported = false;
     try {
       const { default: electronUpdater } = await import("electron-updater");
       const { autoUpdater } = electronUpdater;
       const feed = resolveFeed(process.env, edition);
       autoUpdater.setFeedURL(feed);
+      // What electron-updater's own requests met, each once: the address and
+      // what answered it, a redirect and where it led (GitHub hands a release
+      // file to its download host, behind a signed link whose query urlText
+      // cuts), or why there was no answer. They run on a session of their own
+      // (electron-updater's NET_SESSION_NAME); an abort is electron-updater
+      // dropping a request it no longer needs, not a failure.
+      const { session } = await import("electron");
+      const said = new Set();
+      const once = (line, level) => { if (!said.has(line)) { said.add(line); shellLog(line, level); } };
+      const web = session.fromPartition("electron-updater", { cache: false }).webRequest;
+      web.onResponseStarted((d) => once(`CONNECTED update: HTTP ${d.statusCode} from ${urlText(d.url)}`));
+      web.onBeforeRedirect((d) => once(`REDIRECT update: HTTP ${d.statusCode} from ${urlText(d.url)} to ${urlText(d.redirectURL)}`));
+      web.onErrorOccurred((d) => {
+        if (d.error !== "net::ERR_ABORTED") once(`CONNECT FAILED update: ${d.error} at ${urlText(d.url)}`, "ERROR");
+      });
       autoUpdater.autoDownload = true;
       // A downloaded update waits for "Restart to update" on every platform; a
       // plain quit leaves the app as it is (updater.js INSTALL_ON_QUIT).
@@ -51,15 +71,21 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
       // where it went -- and DONE once electron-updater has checked the
       // file's sha512, which it does before it announces the download.
       let downloadFrom = null;
+      let checkFrom = null;
       autoUpdater.on("update-available", (info) => {
         shellLog(`PERSODUB_UPDATE available ${info?.version ?? ""}`);
         const file = info?.files?.[0];
         if (file) {
-          shellLog(`UPDATE AVAILABLE ${info.version}: ${file.url} ${sizeText(file.size)}`);
+          shellLog(`UPDATE CHECK DONE (${secondsSince(checkFrom)}s): ${info.version} available, ${file.url} ${sizeText(file.size)}`);
           shellLog(`DOWNLOAD START update from ${urlText(updateFileUrl(feed, info))}`);
           downloadFrom = Date.now();
         }
+        checkFrom = null;
         announce("update-available", info);
+      });
+      autoUpdater.on("update-not-available", (info) => {
+        shellLog(`UPDATE CHECK DONE (${secondsSince(checkFrom)}s): up to date, the latest release is ${info?.version ?? "unknown"}`);
+        checkFrom = null;
       });
       autoUpdater.on("download-progress", (info) => announce("download-progress", info));
       autoUpdater.on("update-downloaded", (info) => {
@@ -67,7 +93,7 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
         shellLog(`PERSODUB_UPDATE downloaded ${info?.version ?? ""}`);
         const file = info?.files?.[0];
         if (file && downloadFrom) {
-          shellLog(`DOWNLOAD FILE update: ${info.downloadedFile} ${sizeText(file.size)} from ${urlText(updateFileUrl(feed, info))}`);
+          shellLog(`DOWNLOAD FILE update: ${homeText(info.downloadedFile)} ${sizeText(file.size)} from ${urlText(updateFileUrl(feed, info))}`);
           shellLog(`DOWNLOAD DONE update: ${sizeText(file.size)} in ${secondsSince(downloadFrom)}s, sha512 ok`);
           downloadFrom = null;
         }
@@ -81,18 +107,25 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
           autoUpdater.quitAndInstall(true, false);
         }
       });
+      // One line, whichever part failed: the check before it found an answer,
+      // or the download after it began (updater.js updateErrorText).
       autoUpdater.on("error", (err) => {
-        shellLog(`PERSODUB_UPDATE check failed: ${errorText(err)}`);
-        // Only an error after the download began is the download's.
+        reported = true;
         if (downloadFrom) {
-          shellLog(`DOWNLOAD FAILED update after ${secondsSince(downloadFrom)}s: ${urlText(errorText(err).split("\n")[0])}`, "ERROR");
+          shellLog(`DOWNLOAD FAILED update after ${secondsSince(downloadFrom)}s: ${updateErrorText(err)}`, "ERROR");
           downloadFrom = null;
+        } else if (checkFrom) {
+          shellLog(`UPDATE CHECK FAILED (${secondsSince(checkFrom)}s): ${updateErrorText(err)}`, "ERROR");
+          checkFrom = null;
+        } else {
+          shellLog(`UPDATE FAILED: ${updateErrorText(err)}`, "ERROR");
         }
       });
-      shellLog(`UPDATE CHECK from ${feedText(feed)}`);
+      shellLog(`UPDATE CHECK START from ${feedText(feed)}, this app ${app.getVersion()}`);
+      checkFrom = Date.now();
       await autoUpdater.checkForUpdates();
     } catch (err) {
-      shellLog(`PERSODUB_UPDATE unavailable: ${errorText(err)}`);
+      if (!reported) shellLog(`UPDATE CHECK FAILED: ${updateErrorText(err)}`, "ERROR");
     }
   }
 

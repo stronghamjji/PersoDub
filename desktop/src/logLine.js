@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+
 // One line of shell.log: "2026-10-15 22:31:05,494 - shell - INFO - PERSODUB_VERSION 0.8.5".
 // The time is the computer's own, in Python logging's asctime shape -- the one
 // the backend's persodub.log is stamped with -- so the two logs read side by
@@ -46,4 +48,15 @@ export function urlText(text) {
 // spaces and cut at 300 characters, so a pip transcript cannot bury the log.
 export function detailLines(text, max = 20) {
   return String(text ?? "").split(/\r?\n/).filter((l) => l.trim()).slice(-max).map((l) => `  ${l.slice(0, 300)}`);
+}
+
+// The home folder in a text as "~", the way an update's FILE line writes the
+// file it saved: the folder carries the computer's user name, which a log line
+// has no need of. Only a whole folder name matches (/Users/kim, not
+// /Users/kimberly), in any case, as the Mac and Windows disks read names.
+export function homeText(text, home = homedir()) {
+  const s = String(text ?? "");
+  if (!home) return s;
+  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return s.replace(new RegExp(`${escaped}(?=[\\\\/]|$|[^\\w.-])`, "gi"), "~");
 }

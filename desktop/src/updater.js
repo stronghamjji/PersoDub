@@ -1,6 +1,7 @@
 // Auto-update decision logic. Pure functions -- the Electron wiring lives in
 // updateFlow.js; everything testable without Electron lives here.
 import { editionFeed } from "./edition.js";
+import { urlText } from "./logLine.js";
 
 /**
  * Should this run check for updates at all?
@@ -93,4 +94,17 @@ export function nextUpdateState(prev, event, info) {
     return { ...prev, version: info?.version || prev.version, phase: "ready", pct: 100, ...about(info) };
   }
   return prev;
+}
+
+/**
+ * An update failure as one line of shell.log: the error's first line, every
+ * address in it without its query, and its code. electron-updater's HttpError
+ * writes the whole response's headers into its message -- cookies, a company
+ * network's own headers -- and shell.log goes out with a failure report.
+ */
+export function updateErrorText(err) {
+  const message = String(err?.message ?? err ?? "");
+  const first = message.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "unknown error";
+  const code = typeof err?.code === "string" && err.code ? ` [${err.code}]` : "";
+  return urlText(first).slice(0, 300 - code.length) + code;
 }

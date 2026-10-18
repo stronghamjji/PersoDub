@@ -2,7 +2,7 @@
 // parts, so the test reads the same in every time zone.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { logLine, BANNER, detailLines, secondsSince, sizeText, urlText } from "./logLine.js";
+import { logLine, BANNER, detailLines, secondsSince, sizeText, urlText, homeText } from "./logLine.js";
 
 test("a line is the local time, the source, the level and the message", () => {
   assert.equal(logLine("shell", "INFO", "PERSODUB_VERSION 0.8.5", new Date(2026, 9, 15, 22, 31, 5, 494)),
@@ -46,4 +46,15 @@ test("an address keeps everything but its query and a password", () => {
     "403 Forbidden for url: https://cas-bridge.xethub.hf.co/a?… (try again)");
   assert.equal(urlText("https://me:s3cret@pypi.corp.example/simple"), "https://…@pypi.corp.example/simple");
   assert.equal(urlText("/Users/x/kit/downloads/python.tar.gz"), "/Users/x/kit/downloads/python.tar.gz");
+});
+
+test("the home folder in a path reads as ~, and only a whole folder name matches", () => {
+  const mac = "/Users/kim";
+  assert.equal(homeText("/Users/kim/Library/Caches/x-updater/pending/PersoDub.zip 163 MB", mac),
+    "~/Library/Caches/x-updater/pending/PersoDub.zip 163 MB");
+  assert.equal(homeText("/Users/kimberly/a and /users/KIM/b", mac), "/Users/kimberly/a and ~/b");
+  assert.equal(homeText("C:\\Users\\Kim\\AppData\\Local\\x.exe", "C:\\Users\\Kim"), "~\\AppData\\Local\\x.exe");
+  assert.equal(homeText("/Users/kim", mac), "~");
+  assert.equal(homeText("nothing here", mac), "nothing here");
+  assert.equal(homeText("/Users/kim/a", ""), "/Users/kim/a", "no home known, nothing changed");
 });
