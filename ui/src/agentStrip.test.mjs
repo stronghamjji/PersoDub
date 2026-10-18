@@ -1114,3 +1114,32 @@ test("the first turn after the page opens starts a new conversation, the next co
     assert.deepEqual(resumes(), [false, true, false]);
   } finally { h.log.restore(); }
 });
+
+// Codex checks each model of its list against the account before offering it,
+// and the list sat empty until those checks were done, half a minute after a
+// sign-in (owner, 2026-10-18). The whole list now shows at once: a model still
+// being checked, or one the account cannot use, is there, greyed, saying so.
+test("Codex's list shows at once, a model still being checked or out of the plan greyed and saying so", async () => {
+  const codex = { ...CODEX, logged_in: true, login_command: "", models: ["gpt-6-astra"],
+                  model_states: [{ id: "gpt-6-astra", state: "ok" }, { id: "gpt-6-luna", state: "checking" },
+                                 { id: "gpt-5.5", state: "no" }] };
+  const h = harness({ agents: [CLAUDE, codex] });
+  try {
+    await flush();
+    const menu = h.$("assistantMenu");
+    await h.$("assistantModelBtn").fire("click");
+    await flush();
+    await menu.children[2].fire("click", { stopPropagation() {} });   // into Codex
+    const rows = () => menu.children.slice(1);
+    assert.deepEqual(rows().map((r) => words(r.children[0])),
+      ["gpt-6-astra", "gpt-6-luna" + "Checking…", "gpt-5.5" + "Not available on this account"]);
+    assert.deepEqual(rows().map((r) => r.disabled), [false, true, true]);
+    // While one is being checked the list is asked for again, and drawn again.
+    codex.models = ["gpt-6-astra", "gpt-6-luna"];
+    codex.model_states = [{ id: "gpt-6-astra", state: "ok" }, { id: "gpt-6-luna", state: "ok" },
+                          { id: "gpt-5.5", state: "no" }];
+    await h.log.timers.pop()();
+    await flush();
+    assert.deepEqual(rows().map((r) => r.disabled), [false, false, true]);
+  } finally { h.log.restore(); }
+});

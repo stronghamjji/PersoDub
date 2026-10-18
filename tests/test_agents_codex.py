@@ -485,3 +485,29 @@ def test_a_usage_limit_in_a_connection_complaint_ends_the_turn_instead_of_reconn
     out = ev('{"type":"error","message":"Reconnecting... 2/5 (usage limit reached, try again later)"}')
     assert out[0]["kind"] == "error" and out[0]["stop"] is True
     assert "Usage limit" in out[0]["message"]
+
+
+def test_codex_lists_every_model_with_where_its_check_stands(monkeypatch, tmp_path):
+    """The picker shows Codex's whole list at once, each model with its check:
+    answered, refused, or still being asked. Only the answered ones could be
+    seen before, so the list sat empty for half a minute after a sign-in
+    (owner, 2026-10-18)."""
+    from app.agents import codex
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    codex.forget_models()
+    monkeypatch.setattr(codex.base, "find_cli", lambda name: "/usr/bin/codex")
+    started = []
+
+    class Later:   # the background check, started but not run here
+        def __init__(self, target, args=(), **k): started.append(target)
+        def start(self): pass
+    monkeypatch.setattr(codex.threading, "Thread", Later)
+    codex._checked.update(listed=["gpt-6-astra", "gpt-5.5", "gpt-6-luna"], ok=["gpt-6-astra"], no=["gpt-5.5"])
+    assert codex.model_states() == [
+        {"id": "gpt-6-astra", "state": "ok"},
+        {"id": "gpt-5.5", "state": "no"},
+        {"id": "gpt-6-luna", "state": "checking"},
+    ]
+    assert started, "a model not yet answered keeps the background check going"
+    assert codex.models() == ["gpt-6-astra"], "only an answered model can be picked"
+    codex.forget_models()

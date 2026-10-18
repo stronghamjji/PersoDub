@@ -458,6 +458,8 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
   // Two steps, the way the reference does it: the vendor first, then that
   // vendor's models. One flat list of every model from every vendor is a wall.
   let menuLevel = "";
+  // The one pending look at the list while a Codex model is still being checked.
+  let statesTimer = null;
 
   function buildMenu() {
     menu.innerHTML = "";
@@ -516,23 +518,50 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     back.addEventListener("click", (e) => { e.stopPropagation(); menuLevel = ""; buildMenu(); });
     menu.appendChild(back);
 
+    // Codex's whole list, each model with its check, when it has one: a model
+    // still being checked, or one the account cannot use, is shown greyed and
+    // says so, and the list is asked for again until the checks are done. The
+    // list sat empty for half a minute after a sign-in (owner, 2026-10-18).
+    const states = (a && a.model_states) || [];
+    if (states.length) {
+      for (const { id: m, state } of states) {
+        const row = menuRow(MODEL_LABELS[m] || m, {
+          tick: state === "ok" && chosen.agent === menuLevel && chosen.model === m,
+          sub: state === "checking" ? t("Checking…") : state === "no" ? t("Not available on this account") : "",
+          disabled: state !== "ok",
+        });
+        if (state === "ok") row.addEventListener("click", () => pickModel(a, m));
+        menu.appendChild(row);
+      }
+      if (states.some((s) => s.state === "checking") && !statesTimer) {
+        const level = menuLevel;
+        statesTimer = setTimeout(async () => {
+          statesTimer = null;
+          await loadAgents().catch(() => {});
+          if (!menu.hidden && menuLevel === level) buildMenu();
+        }, 3000);
+      }
+      return;
+    }
     for (const m of (a && a.models && a.models.length ? a.models : [""])) {
       // A Claude alias reads as its family; a Codex model is its own name,
       // version and all ("gpt-6-luna"). Only an empty entry -- an assistant
       // with no list -- falls back to the assistant's name.
       const row = menuRow(MODEL_LABELS[m] || m || (a ? a.name : ""),
                           { tick: chosen.agent === menuLevel && chosen.model === m });
-      row.addEventListener("click", () => {
-        chosen = { agent: menuLevel, model: m, name: a ? a.name : menuLevel };
-        servedModel = "";
-        saveChoice();
-        paintChoice();
-        menu.hidden = true;
-        menuLevel = "";
-        buildMenu();
-      });
+      row.addEventListener("click", () => pickModel(a, m));
       menu.appendChild(row);
     }
+  }
+  // A row of a vendor's models picked: that model from now on.
+  function pickModel(a, m) {
+    chosen = { agent: menuLevel, model: m, name: a ? a.name : menuLevel };
+    servedModel = "";
+    saveChoice();
+    paintChoice();
+    menu.hidden = true;
+    menuLevel = "";
+    buildMenu();
   }
 
   // The button opens the menu, and the same button closes it again -- that is how

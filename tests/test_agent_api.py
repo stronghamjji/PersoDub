@@ -109,8 +109,11 @@ def test_a_signed_out_codex_offers_no_models(monkeypatch):
                         lambda kind, binary, env=None: {"logged_in": False, "account": ""})
     monkeypatch.setattr(codex_mod, "models",
                         lambda: (_ for _ in ()).throw(AssertionError("asked while signed out")))
+    monkeypatch.setattr(codex_mod, "model_states",
+                        lambda: (_ for _ in ()).throw(AssertionError("asked while signed out")))
     agent_api._login_cache.clear()
     assert _settled("codex")["codex"]["models"] == []
+    assert _settled("codex")["codex"]["model_states"] == []
 
 
 def test_status_never_starts_a_cli(monkeypatch):
@@ -487,3 +490,21 @@ def test_the_agent_folder_stays_where_it_was_when_the_logs_move():
     # in this folder, and Claude's -c continues the conversation of the folder
     # it runs in, so it stays in the app's own logs/agent.
     assert os.path.join("logs", "agent") == agent_api.AGENT_DIR
+
+
+def test_a_signed_in_codex_lists_every_model_with_its_check(monkeypatch):
+    """Beside the models that can be picked, the whole list with where each
+    one's check stands, so the picker can show it at once (owner, 2026-10-18).
+    Claude's list is written down and has no checks."""
+    from app.agents import codex as codex_mod
+    monkeypatch.setattr(agent_api.agent_base, "find_cli", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(agent_api.agent_base, "login_state",
+                        lambda kind, binary, env=None: {"logged_in": True, "account": "ChatGPT"})
+    monkeypatch.setattr(codex_mod, "models", lambda: ["gpt-6-astra"])
+    states = [{"id": "gpt-6-astra", "state": "ok"}, {"id": "gpt-6-luna", "state": "checking"}]
+    monkeypatch.setattr(codex_mod, "model_states", lambda: states)
+    agent_api._login_cache.clear()
+    rows = _settled("codex")
+    assert rows["codex"]["models"] == ["gpt-6-astra"]
+    assert rows["codex"]["model_states"] == states
+    assert rows["claude"]["model_states"] == []

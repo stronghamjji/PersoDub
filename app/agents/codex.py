@@ -353,6 +353,17 @@ def models() -> List[str]:
     return [m for m in order if m in _checked["ok"]]
 
 
+def model_states() -> List[dict]:
+    """Every model Codex lists for this account, in its own order, with where
+    its check stands: "ok" (it answered), "no" (the account is refused it) or
+    "checking" (not answered yet). The picker shows the whole list at once;
+    with models() alone it sat empty until every check was done, half a minute
+    after a sign-in (owner, 2026-10-18)."""
+    models()   # starts the background check, or keeps it going, as models() does
+    return [{"id": m, "state": "ok" if m in _checked["ok"] else "no" if m in _checked["no"] else "checking"}
+            for m in _checked["listed"]]
+
+
 def _toml(value) -> str:
     """A Python value as the TOML literal `codex -c key=value` expects.
 
