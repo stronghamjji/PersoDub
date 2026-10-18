@@ -1,7 +1,6 @@
 {
   "notes": [
     "Installs on company computers whose security software inspects HTTPS: the app now trusts what the computer trusts.",
-    "A production install stays production through updates.",
     "Logs that read as a timeline: every install step, engine start and dubbing stage with its seconds, inputs, memory, and why a step failed.",
     "A failure report carries the engines' own logs and opens with where, after how long and why.",
     "No ChatGPT account? Choose \"Translate with a local model\" right in the sign-in window.",
@@ -9,7 +8,6 @@
   ],
   "notes_ko": [
     "회사 보안 프로그램이 인터넷 통신을 검사하는 PC에서도 설치돼요. 앱이 컴퓨터가 믿는 인증서를 함께 믿어요.",
-    "운영판으로 설치한 앱은 업데이트 뒤에도 운영판으로 남아요.",
     "로그가 흐름대로 남아요. 설치 단계, 엔진 켜기, 더빙 단계마다 걸린 시간과 입력값, 메모리, 실패한 이유까지요.",
     "오류 보고에 엔진 로그가 함께 실리고, 어디서 얼마 만에 왜 멈췄는지 요약이 맨 위에 붙어요.",
     "ChatGPT 계정이 없어도 로그인 창에서 바로 '로컬 모델로 번역'을 고를 수 있어요.",
