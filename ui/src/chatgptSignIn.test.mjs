@@ -44,7 +44,10 @@ function harness() {
   globalThis.setTimeout = (fn) => setImmediate(fn);
   // What each sign-in went on with, and the window's line at that moment.
   const ran = [];
-  const signIn = initChatgptSignIn({ $, startDubbing: async () => { ran.push(["startDubbing", $("csLine").textContent]); } });
+  const signIn = initChatgptSignIn({
+    $, startDubbing: async () => { ran.push(["startDubbing", $("csLine").textContent]); },
+    onTranslateHere: () => { ran.push(["translate here"]); },
+  });
   return {
     $, signIn, ran,
     line: () => $("csLine").textContent,
@@ -87,6 +90,44 @@ test("the Dub Agent's sign-in asks with the Codex words, and a dub after it has 
 
     page.signIn.askChatgptSignIn(() => {});
     assert.equal(page.line(), "Translation uses your ChatGPT account.");
+  } finally {
+    page.restore();
+  }
+});
+
+// A dub's window also offers the way round the sign-in: translate on this
+// computer (Hunyuan) instead. Without it a user with no ChatGPT account stopped
+// here unless they knew the Advanced options (owner, 2026-10-18).
+test("a dub's window offers translating on this computer, and the Dub Agent's does not", () => {
+  const page = harness();
+  try {
+    page.signIn.askChatgptSignIn(() => {});
+    assert.equal(page.$("csLocal").hidden, false);
+    page.agentAsks(() => {});
+    assert.equal(page.$("csLocal").hidden, true, "Codex has no translator to switch");
+  } finally {
+    page.restore();
+  }
+});
+
+test("translating on this computer switches the translator, closes the window and goes on with the dub", async () => {
+  const page = harness();
+  try {
+    page.signIn.askChatgptSignIn(() => { page.ran.push(["retry"]); });
+    await page.$("csLocal").click();
+    assert.deepEqual(page.ran, [["translate here"], ["retry"]]);
+    assert.equal(page.$("chatgptSignInOverlay").classList.contains("open"), false);
+  } finally {
+    page.restore();
+  }
+});
+
+test("the link is gone while the sign-in runs", async () => {
+  const page = harness();
+  try {
+    page.signIn.askChatgptSignIn(() => {});
+    await page.$("csSignIn").click();
+    assert.equal(page.$("csLocal").hidden, true);
   } finally {
     page.restore();
   }

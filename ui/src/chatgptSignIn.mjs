@@ -6,7 +6,7 @@
 // unchanged (2026-10-10).
 //
 // The elements this file touches: #chatgptSignInOverlay and what is in it
-// (#csTitle, #csLine, #csBar, #csButtons, #csSignIn, #csCancel).
+// (#csTitle, #csLine, #csBar, #csButtons, #csSignIn, #csCancel, #csLocal).
 import { setupText, setupPercent, watchSetup } from "./chatgptSetup.mjs";
 import { errorText } from "./format.mjs";
 import { t } from "./i18n.mjs";
@@ -16,11 +16,13 @@ import { t } from "./i18n.mjs";
  * @param {(id: string) => any} deps.$   the page's getElementById helper
  * @param {() => Promise<void>} deps.startDubbing  the New project dialog's
  *        start: what a sign-in goes on with when nothing else is named
+ * @param {() => void} deps.onTranslateHere  picks the translator that runs on
+ *        this computer, for a dub that goes on without ChatGPT
  * @returns {{ askChatgptSignIn: (then?: () => any) => void }}
  *   askChatgptSignIn opens the window for a dub; `then` runs once signed in.
  *   The Dub Agent asks through the persodub:chatgpt-signin event instead.
  */
-export function initChatgptSignIn({ $, startDubbing }) {
+export function initChatgptSignIn({ $, startDubbing, onTranslateHere }) {
   // First dub with ChatGPT and no sign-in yet: ask here instead of sending the
   // user to Settings. Sign In opens the browser; once the status says signed
   // in, the dub starts by itself. Cancel (or closing) just stops waiting.
@@ -42,6 +44,8 @@ export function initChatgptSignIn({ $, startDubbing }) {
     else if (step === "done") line.textContent = "\u2713 " + (agentAsked ? t("Ready") : t("Starting\u2026"));
     else line.textContent = agentAsked ? t("Codex uses your ChatGPT account.") : t("Translation uses your ChatGPT account.");
     $("csButtons").hidden = step === "done";
+    // The way round the sign-in, for a dub only: Codex has no translator to switch.
+    $("csLocal").hidden = agentAsked || step !== "ask";
     if (step !== "prep") paintSetup(null);
     $("csSignIn").hidden = step === "wait" || step === "prep";
   }
@@ -65,6 +69,16 @@ export function initChatgptSignIn({ $, startDubbing }) {
   $("csCancel").addEventListener("click", () => {
     chatgptSignInRun += 1; // any wait in progress stops at its next check
     $("chatgptSignInOverlay").classList.remove("open");
+  });
+  // No ChatGPT account, or no wish to sign in: the dub goes on translating on
+  // this computer, the way the download window offers Perso. Without it a user
+  // with no account stopped here unless they knew the Advanced options (owner,
+  // 2026-10-18). Its download, if any, is the dub's own download window next.
+  $("csLocal").addEventListener("click", () => {
+    chatgptSignInRun += 1;
+    $("chatgptSignInOverlay").classList.remove("open");
+    onTranslateHere();
+    return chatgptSignedInThen();
   });
   $("csSignIn").addEventListener("click", async () => {
     const run = ++chatgptSignInRun;

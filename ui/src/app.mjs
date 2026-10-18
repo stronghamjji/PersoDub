@@ -1567,7 +1567,14 @@ async function startDubbing() {
 // First dub with ChatGPT and no sign-in yet: ask in a window of its own
 // (ui/src/chatgptSignIn.mjs) instead of sending the user to Settings. Handed
 // startDubbing: what a sign-in goes on with when no retry is named (a batch).
-const chatgptSignIn = initChatgptSignIn({ $, startDubbing });
+const chatgptSignIn = initChatgptSignIn({
+  $, startDubbing,
+  onTranslateHere: () => {
+    const sel = $("translateSelect");
+    sel.value = "hunyuan";
+    sel.dispatchEvent(new Event("change"));
+  },
+});
 
 // Several videos, one set of choices: the first starts now, the rest join the
 // queue, and the first screen's Up next card is where the line shows.
