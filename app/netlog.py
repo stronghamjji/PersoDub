@@ -58,6 +58,10 @@ def described(exc: BaseException) -> str:
     # "대상 컴퓨터에서 연결을 거부했으므로…" for 10061); its errno name reads
     # the same everywhere, so it goes on the end: "[ECONNREFUSED]".
     code = errno.errorcode.get(getattr(exc, "errno", None)) if isinstance(exc, OSError) else None
+    # Windows names a socket error WSAE...; without the "WSA" it reads as
+    # macOS and Linux name it: Windows' WSAECONNREFUSED is their ECONNREFUSED.
+    if code and code.startswith("WSAE"):
+        code = code[3:]
     if code:
         said = f"{said} [{code}]" if said else f"[{code}]"
     return f"{type(exc).__name__}: {said}" if said else type(exc).__name__

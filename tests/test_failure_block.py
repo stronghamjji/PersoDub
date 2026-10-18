@@ -192,3 +192,15 @@ def test_an_os_error_names_its_errno_code_in_english():
     line = _described(e)
     assert line.startswith("ConnectionRefusedError: ")
     assert line.endswith("[ECONNREFUSED]")
+
+
+def test_a_windows_socket_error_reads_as_macos_and_linux_name_it(monkeypatch):
+    # Windows' own table names 10061 WSAECONNREFUSED; the same refusal is
+    # ECONNREFUSED on macOS and Linux, and a report should read the same from
+    # all three (the Windows runner, 2026-10-18).
+    import errno as _errno
+
+    from app.jobs import _described
+
+    monkeypatch.setitem(_errno.errorcode, 10061, "WSAECONNREFUSED")
+    assert _described(ConnectionRefusedError(10061, "refused")).endswith("[ECONNREFUSED]")
