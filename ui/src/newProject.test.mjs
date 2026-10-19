@@ -804,14 +804,33 @@ async function persoDialog(extra = {}, storage = memoryStorage()) {
   await h.$("dubModeSelect").fire("change");
   return h;
 }
-const segments = (h) => h.$("persoModelSeg").children.map((b) => (b.className === "on" ? `[${b.textContent}]` : b.textContent));
+// The Dubbing model choice: a button, and the list it opens under it. A model
+// row's name is the first line of its text.
+const pick = (h) => h.$("persoModelPick");
+async function openModels(h) {
+  if (pick(h).children.length < 2) await pick(h).children[0].fire("click");
+  return pick(h).children[1].children;
+}
+const nameOf = (opt) => opt.children[0].children[0].textContent;
+/** Every model the list offers, the chosen one in brackets; the list is closed again after. */
+async function models(h) {
+  const names = (await openModels(h)).map((o) => (o.attrs["aria-selected"] === "true" ? `[${nameOf(o)}]` : nameOf(o)));
+  await pick(h).children[0].fire("click");
+  return names;
+}
+/** Open the list and press the row named `name`. */
+async function chooseModel(h, name) {
+  const opt = (await openModels(h)).find((o) => nameOf(o) === name);
+  await opt.fire("click");
+  return opt;
+}
 const targets = (h) => h.$("targetLangSelect").children.map((o) => o.value);
 
 test("the Dubbing model row shows only under Perso API, with Oriole selected", async (t) => {
   const h = await persoDialog();
   t.after(h.log.restore);
   assert.equal(h.$("persoModelRow").hidden, false);
-  assert.deepEqual(segments(h), ["Nightingale", "[Oriole]", "Wren"]);
+  assert.deepEqual(await models(h), ["[Oriole]", "Wren", "Nightingale"]);
   assert.equal(h.api.readOptions().persoModel, "ORIOLE");
 
   h.$("dubModeSelect").value = "local";
@@ -822,9 +841,9 @@ test("the Dubbing model row shows only under Perso API, with Oriole selected", a
 test("pressing a segment chooses that model, and it is what the dubbing starts with", async (t) => {
   const h = await persoDialog();
   t.after(h.log.restore);
-  await h.$("persoModelSeg").children[2].fire("click");
-  assert.deepEqual(segments(h), ["Nightingale", "Oriole", "[Wren]"]);
-  assert.equal(h.$("persoModelSeg").children[2].attrs["aria-pressed"], "true");
+  await chooseModel(h, "Wren");
+  assert.deepEqual(await models(h), ["Oriole", "[Wren]", "Nightingale"]);
+  assert.equal(nameOf({ children: [pick(h).children[0]] }), "Wren");     // the button names it
   assert.equal(h.api.readOptions().persoModel, "WREN");
   assert.equal(h.api.persoModel(), "WREN");
 });
@@ -833,32 +852,66 @@ test("the target languages are the ones the chosen model has", async (t) => {
   const h = await persoDialog();
   t.after(h.log.restore);
   assert.deepEqual(targets(h), ["en", "en-GB"]);                    // Oriole
-  await h.$("persoModelSeg").children[0].fire("click");            // Nightingale
+  await chooseModel(h, "Nightingale");            // Nightingale
   assert.deepEqual(targets(h), ["en", "en-GB", "en-AU"]);
-  assert.equal(h.$("persoModelHint").textContent, "3 languages");
-  assert.deepEqual(segments(h), ["[Nightingale]", "Oriole", "Wren"]);
-  await h.$("persoModelSeg").children[2].fire("click");            // Wren
+  assert.equal(h.$("persoModelHint").textContent, "6 credits per second · 3 languages · Perso Pro plan and up");
+  assert.deepEqual(await models(h), ["Oriole", "Wren", "[Nightingale]"]);
+  await chooseModel(h, "Wren");            // Wren
   assert.deepEqual(targets(h), ["en"]);
 });
 
-test("a model that lacks the chosen language cannot be pressed, so the language never changes under the user", async (t) => {
-  // Pressing it used to swap the language for English without a word, and a
+test("a model that lacks the chosen language cannot be chosen, so the language never changes under the user", async (t) => {
+  // Choosing it used to swap the language for English without a word, and a
   // Start then dubbed into the wrong language for credits (Windows C11, 2026-10-07).
   const h = await persoDialog();
   t.after(h.log.restore);
-  await h.$("persoModelSeg").children[0].fire("click");            // Nightingale
+  await chooseModel(h, "Nightingale");
   h.$("targetLangSelect").value = "en-GB";
   await h.$("targetLangSelect").fire("change");
-  const seg = () => h.$("persoModelSeg").children;
-  assert.equal(seg()[1].disabled, false);                          // Oriole has en-GB
-  assert.equal(seg()[2].disabled, true);                           // Wren does not
-  assert.equal(seg()[2].title, "Wren has no English (UK)");
-  await seg()[2].fire("click");
+  const [oriole, wren] = await openModels(h);
+  assert.equal(oriole.disabled, false);                            // Oriole has en-GB
+  assert.equal(wren.disabled, true);                               // Wren does not
+  assert.equal(wren.title, "Wren has no English (UK)");
+  await wren.fire("click");
   assert.equal(h.$("targetLangSelect").value, "en-GB");
   assert.equal(h.api.readOptions().persoModel, "NIGHTINGALE");
-  await seg()[1].fire("click");                                    // Oriole has en-GB
+  await chooseModel(h, "Oriole");                                       // Oriole has en-GB
   assert.equal(h.$("targetLangSelect").value, "en-GB");
   assert.equal(h.api.readOptions().persoModel, "ORIOLE");
+});
+
+test("a remembered model Perso no longer names gives way to Oriole", async (t) => {
+  const storage = memoryStorage();
+  storage.setItem("persodub.lastChoices", JSON.stringify({ persoModel: { value: "DODO", over: null } }));
+  const h = await persoDialog({}, storage);
+  t.after(h.log.restore);
+  assert.equal(h.api.readOptions().persoModel, "ORIOLE");
+});
+
+test("every model Perso names is offered, a new one under a name made from its id, each with its line", async (t) => {
+  // A model Perso adds shows up without an app update (owner, 2026-10-19).
+  const h = harness({ responses: { "/api/languages": ok({ local: [], perso: [
+    { id: "en", code: "en", name: "English (US)", tag: null, models: ["NIGHTINGALE", "FINCH", "ORIOLE", "NEW_ONE"] },
+  ] }) } });
+  t.after(h.log.restore);
+  fillAdvanced(h.$);
+  await new Promise((r) => setTimeout(r, 0));
+  h.$("dubModeSelect").value = "perso";
+  await h.$("dubModeSelect").fire("change");
+  const rows = await openModels(h);
+  assert.deepEqual(rows.map(nameOf), ["Oriole", "Finch", "Nightingale", "New One"]);
+  const caption = (o) => o.children[0].children[1].textContent;
+  assert.equal(caption(rows[0]), "Default · 1 credits per second · 1 languages");
+  assert.equal(caption(rows[1]), "Lowest-cost basic dubbing · 0.2 credits per second · 1 languages");
+  assert.equal(caption(rows[3]), "1 languages");                    // nothing known of it but its languages
+  assert.equal(rows[1].children[1].textContent, "Pro and up");       // the Pro badge
+  assert.equal(rows[0].children.length, 1);                          // none on Oriole
+  assert.equal(rows[0].attrs.role, "option");
+  assert.equal(pick(h).children[1].attrs.role, "listbox");
+  await rows[1].fire("click");
+  assert.equal(h.api.readOptions().persoModel, "FINCH");
+  assert.equal(pick(h).children.length, 1, "choosing closes the list");
+  assert.equal(h.$("persoModelHint").textContent, "0.2 credits per second · 1 languages · Perso Pro plan and up");
 });
 
 test("the chosen model survives the trip to Erase subtitles, and a new video starts on it too", async (t) => {
@@ -869,18 +922,18 @@ test("the chosen model survives the trip to Erase subtitles, and a new video sta
   t.after(h.log.restore);
   h.api.openNewProject({ downloadId: "d1", title: "A talk" });
   await new Promise((r) => setTimeout(r, 0));
-  await h.$("persoModelSeg").children[2].fire("click");            // Wren
+  await chooseModel(h, "Wren");            // Wren
 
   await h.$("eraseBtn").fire("click");
   h.api.openNewProject({ downloadId: "d1", title: "A talk", fromErase: true });
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(segments(h), ["Nightingale", "Oriole", "[Wren]"]);
+  assert.deepEqual(await models(h), ["Oriole", "[Wren]", "Nightingale"]);
 
   // The next project is the person's next one: Wren was their choice, so it
   // is remembered (owner, 2026-10-06; Oriole came back in Windows test B7).
   h.api.openNewProject({ downloadId: "d2", title: "Another" });
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(segments(h), ["Nightingale", "Oriole", "[Wren]"]);
+  assert.deepEqual(await models(h), ["Oriole", "[Wren]", "Nightingale"]);
 });
 
 // -- the choices remembered for the next project ----------------------------
@@ -901,7 +954,7 @@ test("Perso API with Wren is what the next project starts on, after a restart to
   h.api.openNewProject({ downloadId: "d1", title: "First" });
   await tick();
   await choose(h, "dubModeSelect", "perso");
-  await h.$("persoModelSeg").children[2].fire("click");            // Wren
+  await chooseModel(h, "Wren");            // Wren
   await choose(h, "numSpeakers", "2");
   h.log.restore();
 
@@ -911,7 +964,7 @@ test("Perso API with Wren is what the next project starts on, after a restart to
   h2.api.openNewProject({ downloadId: "d2", title: "Next" });
   await tick();
   assert.equal(h2.$("dubModeSelect").value, "perso");
-  assert.deepEqual(segments(h2), ["Nightingale", "Oriole", "[Wren]"]);
+  assert.deepEqual(await models(h2), ["Oriole", "[Wren]", "Nightingale"]);
   assert.equal(h2.$("persoModelRow").hidden, false);
   assert.equal(h2.$("numSpeakers").value, "2");
   assert.equal(h2.api.readOptions().persoModel, "WREN");
@@ -998,7 +1051,7 @@ test("a dubbing's own choices (Add language) win over the remembered ones", asyn
   h.api.openNewProject({ downloadId: "d1", title: "First" });
   await tick();
   await choose(h, "dubModeSelect", "perso");
-  await h.$("persoModelSeg").children[2].fire("click");            // Wren
+  await chooseModel(h, "Wren");            // Wren
   await choose(h, "numSpeakers", "3");
 
   await h.api.startOnDefaults({ dubMode: "local", source: "", speakers: "1", translator: "gemini" });
@@ -1015,7 +1068,7 @@ test("a storage the browser blocks leaves the dialog working on its defaults", a
   h.api.openNewProject({ downloadId: "d1", title: "First" });
   await tick();
   await choose(h, "dubModeSelect", "perso");
-  await h.$("persoModelSeg").children[2].fire("click");
+  await chooseModel(h, "Wren");
   assert.equal(h.api.readOptions().persoModel, "WREN");
   h.api.openNewProject({ downloadId: "d2", title: "Next" });
   await tick();

@@ -1192,8 +1192,9 @@ def dub_start(
     separation stage is not run again (app/separate_launch.py stems_for).
     project_id = the first dubbing of the project this one joins (Add
     language): one video's languages are one project on Home.
-    perso_model = the Perso voice model of a Perso cloud dubbing ("NIGHTINGALE",
-    "ORIOLE" or "WREN"), which the target language must have; omitted, ORIOLE
+    perso_model = the Perso voice model of a Perso cloud dubbing, any one Perso's
+    language list names ("ORIOLE", "LINNET_4", "FINCH", ...), which the target
+    language must have; omitted, ORIOLE
     when the language has it, else the first it has (app/languages.py model_for).
     """
     try:

@@ -603,6 +603,28 @@ def test_the_cloud_path_names_the_plan_limit_when_perso_refuses_a_long_video(mon
                                  "or set Dubbing to This computer. Perso said: 영상 길이가 60000ms를 초과했습니다 (F4008)")
 
 
+def test_the_cloud_path_says_a_higher_plan_is_needed_when_perso_refuses_the_model(monkeypatch, tmp_path):
+    from app import perso_client as pc_module
+
+    class FakeClient:
+        def describe_workspace(self):
+            return None
+
+        def dub_video(self, *a, **kw):
+            raise pc_module.PersoPlanRequiredError(reason="Pro plan required")
+
+    monkeypatch.setattr(pc_module, "PersoClient", FakeClient)
+    jid = state.job_store.create()
+    with pytest.raises(RuntimeError):
+        dub_api._run_cloud_dub(jid, str(tmp_path / "in.mp4"), str(tmp_path / "out.mp4"),
+                               "en", "ko", None, lambda m: None, tts_model="FINCH")
+    [notice] = state.job_store.get(jid)["notices"]
+    assert notice["type"] == "perso_plan_required"
+    assert notice["link"] == pc_module.PRICING_LINK
+    assert notice["message"] == ("This dubbing model needs a higher Perso plan. Upgrade your plan, or choose "
+                                 "another dubbing model. Perso said: Pro plan required (VT40314)")
+
+
 def test_the_cloud_path_hands_perso_the_voice_model(monkeypatch, tmp_path):
     from app import perso_client as pc_module
     sent = []

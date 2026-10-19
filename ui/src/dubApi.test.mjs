@@ -510,7 +510,9 @@ test("engineChips: a cloud dub gets a Dubbing chip; a local one stays silent", (
   assert.ok(!local.some((c) => c.role === "Dubbing"));
   // The voice model it was made with, once the record keeps one.
   assert.equal(engineLine({ dub_mode: "perso", perso_model: "WREN" }), "Dubbing Perso Wren");
-  assert.equal(engineLine({ dub_mode: "perso", perso_model: "DODO" }), "Dubbing Perso");
+  // A model the app has never heard of is named from its id; no id, no name.
+  assert.equal(engineLine({ dub_mode: "perso", perso_model: "LINNET_9" }), "Dubbing Perso Linnet 9");
+  assert.equal(engineLine({ dub_mode: "perso", perso_model: "not a model" }), "Dubbing Perso");
 });
 
 test("parseProgress follows the three Perso cloud phases", () => {

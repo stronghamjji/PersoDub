@@ -35,6 +35,9 @@ export const ERROR_CODES = [
   // A video longer than the Perso plan allows (F4008; the free plan stops at
   // one minute). The user's plan, not our code (2026-10-19).
   "perso-length",
+  // A voice model the Perso plan does not cover (VT40314; FINCH and NIGHTINGALE
+  // need Pro). The user's plan, not our code (2026-10-19).
+  "perso-plan",
   "gemini-busy", "gemini-quota",
   // Four families that were all "unknown" until 0.6.1.
   "model-download", "engine-500", "perso-bad-request", "translate-parse",

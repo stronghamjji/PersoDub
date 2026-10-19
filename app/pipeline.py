@@ -28,6 +28,7 @@ from app.perso_client import (
     PersoCreditExhaustedError,
     PersoDurationLimitError,
     PersoInvalidKeyError,
+    PersoPlanRequiredError,
     PersoProjectFailedError,
     PersoUnavailableError,
     begin_credit_watch,
@@ -156,6 +157,13 @@ _NOTICE_ERRORS = {
         "link",
         None,
     ),
+    # A voice model the plan does not cover (FINCH, NIGHTINGALE need Pro).
+    PersoPlanRequiredError: (
+        "perso_plan_required",
+        lambda: both("This dubbing model needs a higher Perso plan. Upgrade your plan, or choose another dubbing model."),
+        "link",
+        None,
+    ),
     PersoInvalidKeyError: (
         "perso_invalid_key",
         lambda: both("Perso rejected the API key. Open Settings and check the key."),
@@ -220,7 +228,7 @@ _NOTICE_ERRORS = {
 # and that is what an unexpected provider error must keep landing in.
 _PERSO_NOTICE_ERRORS = (
     PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError,
-    PersoProjectFailedError, PersoDurationLimitError,
+    PersoProjectFailedError, PersoDurationLimitError, PersoPlanRequiredError,
 )
 _GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError,
                          ChatGptNotSignedInError, ChatGptLimitError)
@@ -1151,7 +1159,7 @@ def run_dub(
     JobCancelled and stops the job before the next stage starts. on_notice,
     if given, is called with a structured {"type", "message", "link"} dict
     for events the caller may want to surface outside the plain log stream
-    ("perso_credit_exhausted", "perso_duration_limit", "perso_invalid_key", "perso_unavailable",
+    ("perso_credit_exhausted", "perso_duration_limit", "perso_plan_required", "perso_invalid_key", "perso_unavailable",
     "gemini_quota_exhausted", "gemini_unavailable" -- see app/api/dub.py,
     which wires it to JobStore.append_notice so the job status JSON carries it
     for the UI).

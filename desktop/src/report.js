@@ -58,7 +58,7 @@ export const MAX_MESSAGE_CHARS = 500;
 // we sent it, which is ours to look at.
 export const USER_SIDE_CODES = new Set([
   "disk-full", "cloud-refused",
-  "perso-busy", "perso-credits", "perso-key", "perso-length", "gemini-busy", "gemini-quota",
+  "perso-busy", "perso-credits", "perso-key", "perso-length", "perso-plan", "gemini-busy", "gemini-quota",
 ]);
 
 /** Is this failure worth an issue, or is it the user's own machine saying no? */

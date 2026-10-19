@@ -447,7 +447,7 @@ test("a missing log tail leaves out its whole details block", () => {
 test("a failure the user can only fix themselves does not become an issue", () => {
   assert.equal(worthReporting("disk-full"), false);
   assert.equal(worthReporting("cloud-refused"), false);
-  for (const code of ["perso-busy", "perso-credits", "perso-key", "perso-length", "gemini-busy", "gemini-quota"]) {
+  for (const code of ["perso-busy", "perso-credits", "perso-key", "perso-length", "perso-plan", "gemini-busy", "gemini-quota"]) {
     assert.equal(worthReporting(code), false, code);
   }
 });

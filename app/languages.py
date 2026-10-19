@@ -21,7 +21,7 @@ from typing import Optional
 
 from app import config
 from app.i18n import t
-from app.perso_client import DEFAULT_TTS_MODEL, TTS_MODELS
+from app.perso_client import DEFAULT_TTS_MODEL, TTS_MODEL_RE, TTS_MODELS, model_label
 
 BUNDLED = os.path.join(os.path.dirname(__file__), "perso_languages.json")
 CACHE_NAME = "perso_languages.json"
@@ -36,8 +36,11 @@ def local_languages() -> list:
 
 
 def _offered(models) -> list:
-    """The offered voice models among these, in the screen's order."""
-    return [m for m in TTS_MODELS if m in (models or ())]
+    """Every voice model Perso names among these, the known ones first in the
+    screen's order and any other after them as Perso lists them: a model Perso
+    adds is offered without an app update (owner, 2026-10-19)."""
+    named = [m for m in (models or ()) if isinstance(m, str) and TTS_MODEL_RE.match(m)]
+    return [m for m in TTS_MODELS if m in named] + [m for m in named if m not in TTS_MODELS]
 
 
 def _with_ids(entries) -> list:
@@ -64,9 +67,8 @@ def _read(path: str) -> Optional[list]:
 
 
 def _fetch() -> Optional[list]:
-    """Perso's own list, only the entries an offered voice model can dub into
-    (perso_client.TTS_MODELS), without the "auto" pseudo-language. None when
-    it cannot be had."""
+    """Perso's own list, only the entries some voice model can dub into,
+    without the "auto" pseudo-language. None when it cannot be had."""
     try:
         from app import perso_client
         from app.settings_env import current_value
@@ -139,6 +141,6 @@ def model_for(entry: dict, wanted: Optional[str] = None) -> str:
         return DEFAULT_TTS_MODEL if DEFAULT_TTS_MODEL in models else models[0]
     if wanted not in models:
         raise ValueError(t("Perso's {model} model cannot dub into {language}. It can be dubbed with: {models}.",
-                           model=wanted.capitalize(), language=entry["name"],
-                           models=", ".join(m.capitalize() for m in models)))
+                           model=model_label(wanted), language=entry["name"],
+                           models=", ".join(model_label(m) for m in models)))
     return wanted

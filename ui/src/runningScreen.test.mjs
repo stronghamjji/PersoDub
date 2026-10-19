@@ -318,6 +318,19 @@ test("a plan limit that is not whole minutes, or not named, still reads", (t) =>
     "Your Perso plan does not take a video this long. Upgrade your plan, or set Dubbing to This computer.");
 });
 
+test("a voice model the plan does not cover has its own popup, not the wrong-key one", (t) => {
+  // VT40314 came as a 403 and read as a rejected key until 2026-10-19.
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.showCreditModal({ type: "perso_plan_required", link: "https://perso.ai/pricing?utm_content=pricing" });
+  assert.equal(h.$("creditTitle").textContent, "Higher plan needed");
+  assert.equal(h.$("creditMessage").textContent,
+    "This dubbing model needs a higher Perso plan. Upgrade your plan, or choose another dubbing model.");
+  assert.equal(h.$("creditRechargeBtn").textContent, "See plans");
+  assert.deepEqual(h.log.opened, ["https://perso.ai/pricing?utm_content=pricing"]);
+});
+
 test("the wrong-key popup keeps the user in the app: its button opens Settings", async (t) => {
   const h = harness();
   t.after(h.log.restore);

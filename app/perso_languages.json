@@ -1,63 +1,17 @@
 {
- "fetched": "2026-10-02",
+ "fetched": "2026-10-19",
  "languages": [
   {
    "code": "en",
    "name": "English (US)",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
-   ]
-  },
-  {
-   "code": "en",
-   "name": "English (UK)",
-   "tag": "en-GB",
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
-   ]
-  },
-  {
-   "code": "ko",
-   "name": "Korean",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE",
-    "WREN"
-   ]
-  },
-  {
-   "code": "hi",
-   "name": "Hindi",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE",
-    "WREN"
-   ]
-  },
-  {
-   "code": "zh",
-   "name": "Chinese",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE",
-    "WREN"
-   ]
-  },
-  {
-   "code": "id",
-   "name": "Indonesian",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -65,27 +19,12 @@
    "name": "Portuguese (Brazil)",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
-   ]
-  },
-  {
-   "code": "pt",
-   "name": "Portuguese (Portugal)",
-   "tag": "pt-PT",
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
-   ]
-  },
-  {
-   "code": "es",
-   "name": "Spanish (Spain)",
-   "tag": "es-ES",
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -93,9 +32,72 @@
    "name": "Spanish (Mexico)",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "fr",
+   "name": "French",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "it",
+   "name": "Italian",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "es",
+   "name": "Spanish (Spain)",
+   "tag": "es-ES",
+   "models": [
+    "ORIOLE",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "th",
+   "name": "Thai",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "de",
+   "name": "German",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -103,19 +105,25 @@
    "name": "Japanese",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
-   "code": "vi",
-   "name": "Vietnamese",
+   "code": "ru",
+   "name": "Russian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -123,8 +131,10 @@
    "name": "Afrikaans",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -156,9 +166,12 @@
    "name": "Arabic",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -174,8 +187,10 @@
    "name": "Armenian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -183,8 +198,19 @@
    "name": "Assamese",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "ast",
+   "name": "Asturian",
+   "tag": null,
+   "models": [
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -192,8 +218,10 @@
    "name": "Azerbaijani",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -209,8 +237,10 @@
    "name": "Belarusian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -218,7 +248,9 @@
    "name": "Bengali",
    "tag": null,
    "models": [
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -226,8 +258,10 @@
    "name": "Bosnian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -235,9 +269,12 @@
    "name": "Bulgarian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -253,7 +290,7 @@
    "name": "Cantonese",
    "tag": null,
    "models": [
-    "NIGHTINGALE"
+    "LINNET_4"
    ]
   },
   {
@@ -261,8 +298,10 @@
    "name": "Catalan",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -270,8 +309,10 @@
    "name": "Cebuano",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -279,7 +320,22 @@
    "name": "Chichewa",
    "tag": null,
    "models": [
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH"
+   ]
+  },
+  {
+   "code": "zh",
+   "name": "Chinese",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -295,9 +351,12 @@
    "name": "Croatian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -305,9 +364,12 @@
    "name": "Czech",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -315,9 +377,12 @@
    "name": "Danish",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -333,9 +398,12 @@
    "name": "Dutch",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -355,12 +423,23 @@
    ]
   },
   {
+   "code": "en",
+   "name": "English (UK)",
+   "tag": "en-GB",
+   "models": [
+    "ORIOLE",
+    "NIGHTINGALE"
+   ]
+  },
+  {
    "code": "et",
    "name": "Estonian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -368,9 +447,12 @@
    "name": "Filipino",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -378,19 +460,12 @@
    "name": "Finnish",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
-   ]
-  },
-  {
-   "code": "fr",
-   "name": "French",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -406,8 +481,10 @@
    "name": "Galician",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -415,18 +492,10 @@
    "name": "Georgian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
-   ]
-  },
-  {
-   "code": "de",
-   "name": "German",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -434,9 +503,12 @@
    "name": "Greek",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -444,8 +516,10 @@
    "name": "Gujarati",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -453,8 +527,10 @@
    "name": "Hausa",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -462,8 +538,23 @@
    "name": "Hebrew",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "hi",
+   "name": "Hindi",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -471,9 +562,12 @@
    "name": "Hungarian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -481,8 +575,23 @@
    "name": "Icelandic",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "id",
+   "name": "Indonesian",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -490,17 +599,9 @@
    "name": "Irish",
    "tag": null,
    "models": [
-    "ORIOLE"
-   ]
-  },
-  {
-   "code": "it",
-   "name": "Italian",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -508,8 +609,10 @@
    "name": "Javanese",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -517,8 +620,10 @@
    "name": "Kannada",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -526,8 +631,11 @@
    "name": "Kazakh",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -555,12 +663,27 @@
    ]
   },
   {
+   "code": "ko",
+   "name": "Korean",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
    "code": "ky",
    "name": "Kyrgyz",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -568,8 +691,10 @@
    "name": "Latvian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -577,7 +702,9 @@
    "name": "Lingala",
    "tag": null,
    "models": [
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -585,8 +712,10 @@
    "name": "Lithuanian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -602,7 +731,9 @@
    "name": "Luxembourgish",
    "tag": null,
    "models": [
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -610,8 +741,10 @@
    "name": "Macedonian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -619,9 +752,12 @@
    "name": "Malay",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -629,8 +765,28 @@
    "name": "Malayalam",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "mt",
+   "name": "Maltese",
+   "tag": null,
+   "models": [
+    "LINNET_4",
+    "FINCH"
+   ]
+  },
+  {
+   "code": "mi",
+   "name": "Maori",
+   "tag": null,
+   "models": [
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -638,8 +794,10 @@
    "name": "Marathi",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -655,8 +813,10 @@
    "name": "Nepali",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -664,9 +824,30 @@
    "name": "Norwegian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "oc",
+   "name": "Occitan",
+   "tag": null,
+   "models": [
+    "LINNET_4",
+    "FINCH"
+   ]
+  },
+  {
+   "code": "or",
+   "name": "Odia",
+   "tag": null,
+   "models": [
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -674,7 +855,9 @@
    "name": "Pashto",
    "tag": null,
    "models": [
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -682,8 +865,10 @@
    "name": "Persian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -691,9 +876,21 @@
    "name": "Polish",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
+   "code": "pt",
+   "name": "Portuguese (Portugal)",
+   "tag": "pt-PT",
+   "models": [
+    "ORIOLE",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -701,8 +898,10 @@
    "name": "Punjabi",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -710,19 +909,12 @@
    "name": "Romanian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
-   ]
-  },
-  {
-   "code": "ru",
-   "name": "Russian",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -738,7 +930,9 @@
    "name": "Serbian",
    "tag": null,
    "models": [
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -754,8 +948,10 @@
    "name": "Sindhi",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -763,9 +959,12 @@
    "name": "Slovak",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -773,8 +972,10 @@
    "name": "Slovenian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -782,7 +983,9 @@
    "name": "Somali",
    "tag": null,
    "models": [
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH"
    ]
   },
   {
@@ -814,8 +1017,10 @@
    "name": "Swahili",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -831,9 +1036,12 @@
    "name": "Swedish",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -849,9 +1057,12 @@
    "name": "Tamil",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -859,17 +1070,10 @@
    "name": "Telugu",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
-   ]
-  },
-  {
-   "code": "th",
-   "name": "Thai",
-   "tag": null,
-   "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -901,9 +1105,12 @@
    "name": "Turkish",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -911,9 +1118,12 @@
    "name": "Ukrainian",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
     "ORIOLE",
-    "WREN"
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -921,8 +1131,10 @@
    "name": "Urdu",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {
@@ -950,6 +1162,19 @@
    ]
   },
   {
+   "code": "vi",
+   "name": "Vietnamese",
+   "tag": null,
+   "models": [
+    "ORIOLE",
+    "LINNET_4",
+    "LINNET_3",
+    "WREN",
+    "FINCH",
+    "NIGHTINGALE"
+   ]
+  },
+  {
    "code": "war",
    "name": "Waray",
    "tag": null,
@@ -962,8 +1187,10 @@
    "name": "Welsh",
    "tag": null,
    "models": [
-    "NIGHTINGALE",
-    "ORIOLE"
+    "ORIOLE",
+    "LINNET_4",
+    "FINCH",
+    "NIGHTINGALE"
    ]
   },
   {

@@ -729,8 +729,9 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     "qwen3" (free, this machine); empty keeps the app's default.
 
     perso_model picks the voice model of a perso dub when the user names one
-    -- "nightingale", "oriole" (the default) or "wren"; empty lets the app
-    choose. Not every language has every model: a refusal names the ones the
+    -- any model Perso lists for the language, such as "oriole" (the default),
+    "linnet_4", "linnet_3", "wren", "finch" or "nightingale" (finch and
+    nightingale need a Perso Pro plan); empty lets the app choose. Not every language has every model: a refusal names the ones the
     language has, so tell the user exactly that.
 
     Returns {"job_id", "status"}; the home screen's Up next card shows the

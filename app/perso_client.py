@@ -190,6 +190,25 @@ class PersoDurationLimitError(RuntimeError):
         return cls(reason=_DURATION_CODE_RE.sub("", said).strip(" ./"), limit_seconds=limit or None)
 
 
+# The code Perso answers a model the plan does not cover with (FINCH and
+# NIGHTINGALE need Pro, its API docs, 2026-10-19). It comes as a 403, which
+# read as a rejected key until it had its own error.
+PLAN_REQUIRED_CODE = "VT40314"
+
+
+class PersoPlanRequiredError(RuntimeError):
+    """Perso refused the voice model as one the account's plan does not cover
+    (HTTP 403, code VT40314: FINCH and NIGHTINGALE need Pro). Not the key, which
+    is what a bare 403 means, and nothing to retry: the screen says so and
+    links to the plans."""
+
+    def __init__(self, reason: str = "", code: str = PLAN_REQUIRED_CODE, link: str = PRICING_LINK):
+        self.reason = reason
+        self.code = code
+        self.link = link
+        super().__init__(f"Perso refused the voice model for this plan: {reason or code}")
+
+
 class PersoModelRefusedError(RuntimeError):
     """Perso refused because this project's voice model cannot do what was
     asked (HTTP 400, code VT40918): a NIGHTINGALE project has no per-sentence
@@ -200,13 +219,21 @@ class PersoModelRefusedError(RuntimeError):
 # The code Perso answers with when the project's voice model lacks the option.
 MODEL_REFUSED_CODE = "VT40918"
 NIGHTINGALE = "NIGHTINGALE"
-# The voice models a dubbing can be made with, in the order the screen shows
-# them: the three Perso's own site offers. Its list names a fourth, DODO,
-# which is not offered here. ORIOLE is what a dubbing gets when nobody chose,
-# as on Perso's site; it covers the languages AUDIO_ENGINE_V3 did before that
-# name left Perso's list (seen 2026-10-02).
-TTS_MODELS = (NIGHTINGALE, "ORIOLE", "WREN")
+# The voice models a dubbing can be made with are the ones Perso's language
+# list names, so one Perso adds is offered without an app update (owner,
+# 2026-10-19). These are the ones known on 2026-10-19, in the order the screen
+# lists them; a name not here comes after them, in the list's own order.
+# ORIOLE is what a dubbing gets when nobody chose, as on Perso's site.
+TTS_MODELS = ("ORIOLE", "LINNET_4", "LINNET_3", "WREN", "FINCH", NIGHTINGALE)
 DEFAULT_TTS_MODEL = "ORIOLE"
+# What a model's name may look like: Perso's own ids are like "LINNET_4".
+TTS_MODEL_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,30}$")
+
+
+def model_label(model: str) -> str:
+    """A model id as people read it: "LINNET_4" is "Linnet 4"."""
+    return " ".join(w.capitalize() for w in str(model or "").split("_") if w)
+
 
 
 def _dubbing_space_candidates(api_key: str, base_url: str = BASE_URL) -> list:
@@ -360,6 +387,9 @@ def _raise_for_status(r: httpx.Response) -> None:
     """
     if r.status_code == 402:
         raise PersoCreditExhaustedError()
+    if r.status_code == 403 and PLAN_REQUIRED_CODE in _perso_said(r):
+        # Perso's sentence without its code, which the notice adds back once.
+        raise PersoPlanRequiredError(reason=_perso_said(r).replace(PLAN_REQUIRED_CODE, "").strip(" ./"))
     if r.status_code in (401, 403):
         raise PersoInvalidKeyError(f"Perso rejected the API key (HTTP {r.status_code})")
     if r.status_code >= 500:

@@ -83,6 +83,13 @@ const CREDIT_MODALS = {
       : t("Your Perso plan does not take a video this long. Upgrade your plan, or set Dubbing to This computer.")),
     get button() { return t("See plans"); },
   },
+  // A voice model the plan does not cover (VT40314: FINCH and NIGHTINGALE
+  // need Pro). It came as a 403 and read as a wrong key until 2026-10-19.
+  perso_plan_required: {
+    get title() { return t("Higher plan needed"); },
+    get message() { return t("This dubbing model needs a higher Perso plan. Upgrade your plan, or choose another dubbing model."); },
+    get button() { return t("See plans"); },
+  },
   perso_invalid_key: {
     get title() { return t("Check your Perso key"); },
     get message() { return t("Perso rejected the key."); },

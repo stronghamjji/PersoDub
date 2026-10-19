@@ -20,7 +20,7 @@ import { LANGUAGES, fetchLanguages, startDownload, fetchDownload,
 import { fmtLength } from "./format.mjs";
 import { initTrimBar } from "./trimBar.mjs";
 import { downloadsLabel, errorText } from "./format.mjs";
-import { PERSO_MODELS, DEFAULT_MODEL, languagesFor } from "./persoModels.mjs";
+import { DEFAULT_MODEL, languagesFor, modelCaption, modelHint, modelInfo, modelsIn } from "./persoModels.mjs";
 import { readRemembered, rememberChoice, choicesToPutBack } from "./rememberedChoices.mjs";
 import { languageName, t } from "./i18n.mjs";
 
@@ -58,6 +58,9 @@ const LANG_FLAGS = {
   "es-CL": "🇨🇱", "eu": "🇪🇸", "fr-CA": "🇨🇦", "ki": "🇰🇪", "lg": "🇺🇬", "mn": "🇲🇳", "my": "🇲🇲", "nso": "🇿🇦",
   "rn": "🇧🇮", "rw": "🇷🇼", "sq": "🇦🇱", "ss": "🇸🇿", "st": "🇱🇸", "su": "🇮🇩", "tg": "🇹🇯", "tn": "🇧🇼",
   "ts": "🇿🇦", "uz": "🇺🇿", "ve": "🇿🇦", "war": "🇵🇭", "wo": "🇸🇳", "yo": "🇳🇬", "zu": "🇿🇦",
+  // In Perso's list by 2026-10-19: Asturian and Occitan under the country
+  // they are spoken in, as Basque is.
+  "ast": "🇪🇸", "mi": "🇳🇿", "mt": "🇲🇹", "oc": "🇫🇷", "or": "🇮🇳",
 };
 
 // How often the dialog asks how far along a link's download is. A second is
@@ -169,39 +172,148 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     paintPersoModel();
   }
 
-  // The Dubbing model row: Perso's voice models as one row of segments
-  // (ui/src/persoModels.mjs), shown when Perso does the dubbing. Choosing one
-  // refills the target languages with the ones that model has.
+  // The Dubbing model: a button naming the chosen model and, pressed, a list
+  // of every model Perso's language list names (ui/src/persoModels.mjs), each
+  // with a line of what it is under its name -- an Apple menu item's subtitle
+  // -- since "Oriole, Linnet 4, Wren" say nothing by their names alone (owner,
+  // 2026-10-19). Choosing one refills the target languages with its own.
+  let pickOpen = false;
+  let pickBtn = null;
   function paintPersoModel() {
+    // A remembered model Perso no longer names (once its list has answered)
+    // gives way to the default rather than starting a dubbing Perso refuses.
+    if (languageLists.perso.some((l) => l.models) && !modelsIn(languageLists.perso).includes(persoModel)) {
+      persoModel = DEFAULT_MODEL;
+    }
     $("persoModelRow").hidden = $("dubModeSelect").value !== "perso";
-    const seg = $("persoModelSeg");
-    seg.innerHTML = "";
-    // A model without the chosen target language cannot be pressed: pressing
+    if ($("persoModelRow").hidden) pickOpen = false;
+    const box = $("persoModelPick");
+    box.innerHTML = "";
+    // A model without the chosen target language cannot be chosen: choosing
     // it used to swap the language for English without a word, and a Start
     // then dubbed into the wrong language for credits (Windows C11, 2026-10-07).
     const target = $("targetLangSelect") ? $("targetLangSelect").value : "";
     const targetName = (languageLists.perso.find((l) => l.id === target) || {}).name || target;
-    for (const m of PERSO_MODELS) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = m.label;
-      b.className = m.id === persoModel ? "on" : "";
-      b.setAttribute("aria-pressed", String(m.id === persoModel));
-      const lacks = !!target && m.id !== persoModel
-        && !languagesFor(languageLists.perso, m.id).some((l) => l.id === target);
-      b.disabled = lacks;
-      b.title = lacks ? t("{model} has no {language}", { model: m.label, language: targetName }) : "";
-      b.addEventListener("click", () => {
-        if (lacks) return;
-        persoModel = m.id;
-        rememberChoice(storage, "persoModel", m.id, savedDefaults);
-        refillTargetLanguages();
-      });
-      seg.appendChild(b);
+    const chosen = modelInfo(persoModel);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "persoModelBtn";
+    btn.className = "model-pick-btn";
+    btn.setAttribute("aria-haspopup", "listbox");
+    btn.setAttribute("aria-expanded", String(pickOpen));
+    btn.setAttribute("aria-labelledby", "persoModelLabel persoModelBtn");
+    const name = document.createElement("span");
+    name.className = "model-name";
+    name.textContent = chosen.label;
+    btn.appendChild(name);
+    if (chosen.pro) btn.appendChild(proBadge());
+    btn.addEventListener("click", () => {
+      pickOpen = !pickOpen;
+      paintPersoModel();
+    });
+    pickBtn = btn;
+    box.appendChild(btn);
+    if (pickOpen) {
+      const list = modelList(target, targetName);
+      box.appendChild(list);
+      placeList(list, btn);
     }
-    // How many target languages the chosen model has.
-    $("persoModelHint").textContent = t("{n} languages", { n: languagesFor(languageLists.perso, persoModel).length });
+    $("persoModelHint").textContent = modelHint(chosen, languagesFor(languageLists.perso, persoModel).length);
   }
+  function proBadge() {
+    const badge = document.createElement("span");
+    badge.className = "model-pro";
+    badge.textContent = t("Pro and up");
+    return badge;
+  }
+  function modelList(target, targetName) {
+    const list = document.createElement("div");
+    list.id = "persoModelList";
+    list.className = "model-pick-list";
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-labelledby", "persoModelLabel");
+    for (const id of modelsIn(languageLists.perso)) {
+      const info = modelInfo(id);
+      const lacks = !!target && id !== persoModel
+        && !languagesFor(languageLists.perso, id).some((l) => l.id === target);
+      const opt = document.createElement("button");
+      opt.type = "button";
+      opt.className = id === persoModel ? "model-opt on" : "model-opt";
+      opt.setAttribute("role", "option");
+      opt.setAttribute("aria-selected", String(id === persoModel));
+      opt.dataset.model = id;
+      opt.disabled = lacks;
+      opt.title = lacks ? t("{model} has no {language}", { model: info.label, language: targetName }) : "";
+      const text = document.createElement("span");
+      text.className = "model-text";
+      const label = document.createElement("span");
+      label.className = "model-name";
+      label.textContent = info.label;
+      const caption = document.createElement("span");
+      caption.className = "model-caption";
+      caption.textContent = modelCaption(info, languagesFor(languageLists.perso, id).length);
+      text.append(label, caption);
+      opt.appendChild(text);
+      if (info.pro) opt.appendChild(proBadge());
+      opt.addEventListener("click", () => {
+        if (lacks) return;
+        persoModel = id;
+        pickOpen = false;
+        rememberChoice(storage, "persoModel", id, savedDefaults);
+        refillTargetLanguages();
+        pickBtn?.focus?.();
+      });
+      list.appendChild(opt);
+    }
+    // Up and down move between the models that can be chosen; Escape closes
+    // the list and not the dialog under it.
+    list.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        pickOpen = false;
+        paintPersoModel();
+        pickBtn?.focus?.();
+        return;
+      }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const opts = [...list.querySelectorAll(".model-opt:not([disabled])")];
+      const at = opts.indexOf(document.activeElement);
+      const next = opts[(at + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length];
+      if (next) next.focus();
+    });
+    setTimeout(() => { list.querySelector(".model-opt.on")?.focus?.(); }, 0);
+    return list;
+  }
+  // Under the button, as wide as it (300 to 420 pixels), or over it when the
+  // screen has no room below.
+  function placeList(list, btn) {
+    const r = btn.getBoundingClientRect();
+    list.style.left = `${r.left}px`;
+    list.style.width = `${Math.min(Math.max(r.width, 300), 420)}px`;
+    const below = r.bottom + 5;
+    const screen = globalThis.innerHeight ?? Infinity;   // none in the tests' stand-in page
+    list.style.top = below + list.offsetHeight > screen && r.top > list.offsetHeight + 5
+      ? `${r.top - 5 - list.offsetHeight}px` : `${below}px`;
+  }
+  function closePick() {
+    if (!pickOpen) return;
+    pickOpen = false;
+    paintPersoModel();
+  }
+  // Scrolling or resizing would leave the list where the button was.
+  globalThis.addEventListener?.("resize", closePick);
+  document.addEventListener("scroll", (e) => {
+    if (e.target && typeof e.target.closest === "function" && e.target.closest("#persoModelList")) return;
+    closePick();
+  }, true);
+  // A press anywhere else closes the list.
+  document.addEventListener("pointerdown", (e) => {
+    if (!pickOpen || !e.target || typeof e.target.closest !== "function") return;
+    if (e.target.closest("#persoModelPick")) return;
+    pickOpen = false;
+    paintPersoModel();
+  });
   fetchLanguages().then((lists) => {
     languageLists = { local: asEntries(lists.local), perso: asEntries(lists.perso) };
     refillTargetLanguages();

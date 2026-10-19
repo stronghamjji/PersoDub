@@ -85,9 +85,11 @@ test("without the app's setup only the choices that need nothing from it come ba
                    { persoModel: "WREN", target: "ko", speakers: "2" });
 });
 
-test("a Perso model no longer offered, or a speaker count that is not a number, is left out", () => {
+test("a Perso model that is no model id, or a speaker count that is not a number, is left out", () => {
+  // Any model id is put back (one Perso adds is offered without an app
+  // update); the dialog falls back to Oriole when Perso's list no longer has it.
   const s = storage();
-  rememberChoice(s, "persoModel", "DODO", DEFAULTS);
+  rememberChoice(s, "persoModel", "not a model", DEFAULTS);
   rememberChoice(s, "speakers", "two", DEFAULTS);
   assert.deepEqual(choicesToPutBack(readRemembered(s), setup()), {});
   // An emptied speaker count is a choice too: back to Auto-detect.

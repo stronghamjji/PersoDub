@@ -9,7 +9,7 @@
 //
 // Nothing here touches the page or the network.
 import { neededModelId, neededPackIds } from "./modelsUi.mjs";
-import { PERSO_MODELS } from "./persoModels.mjs";
+import { isModelId } from "./persoModels.mjs";
 
 const KEY = "persodub.lastChoices";
 
@@ -65,7 +65,7 @@ export function choicesToPutBack(all, setup) {
     const key = (KEYED[name] || {})[value];
     if (key && !keys[key]) continue;
     if (name === "translator" && gone([...neededPackIds("translate", value), neededModelId("translate", value)].filter(Boolean))) continue;
-    if (name === "persoModel" && !PERSO_MODELS.some((m) => m.id === value)) continue;
+    if (name === "persoModel" && !isModelId(value)) continue;
     if (name === "speakers" && !/^\d*$/.test(value)) continue;
     out[name] = value;
   }

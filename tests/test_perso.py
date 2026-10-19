@@ -1086,6 +1086,19 @@ def test_a_video_longer_than_the_plan_gets_its_own_error():
         perso_client_module._raise_for_status(_refusal(400, {"message": "no", "code": "F4001"}))
 
 
+def test_a_model_the_plan_does_not_cover_is_not_a_wrong_key():
+    """VT40314 comes as a 403: FINCH and NIGHTINGALE need Pro. It read as a
+    rejected key, which sends the user to fix a key that is fine."""
+    r = _refusal(403, {"message": "Pro plan required", "code": "VT40314"})
+    with pytest.raises(perso_client_module.PersoPlanRequiredError) as e:
+        perso_client_module._raise_for_status(r)
+    assert e.value.reason == "Pro plan required"
+    assert e.value.code == "VT40314"
+    assert e.value.link.startswith("https://perso.ai/pricing?utm_source=")
+    with pytest.raises(perso_client_module.PersoInvalidKeyError):
+        perso_client_module._raise_for_status(_refusal(403, {"message": "invalid key"}))
+
+
 # ── note_credits: the line, the running total, and never a failure ─────────
 def test_note_credits_logs_the_difference_and_adds_it_up():
     from app.perso_client import note_credits

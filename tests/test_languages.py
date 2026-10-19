@@ -23,10 +23,12 @@ def test_bundled_perso_list_is_persos_offered_models_minus_auto_with_region_tags
     assert len(langs) >= 100
     gb = next(e for e in langs if e["id"] == "en-GB")
     assert gb == {"id": "en-GB", "code": "en", "name": "English (UK)", "tag": "en-GB",
-                  "models": ["NIGHTINGALE", "ORIOLE"]}
-    # Every entry names the offered models it has, in the screen's order.
-    assert all(e["models"] and set(e["models"]) <= set(languages.TTS_MODELS) for e in langs)
-    assert next(e for e in langs if e["id"] == "ko")["models"] == ["NIGHTINGALE", "ORIOLE", "WREN"]
+                  "models": ["ORIOLE", "NIGHTINGALE"]}
+    # Every entry names the models it has, the known ones in the screen's order
+    # (the list as Perso answered on 2026-10-19).
+    assert all(e["models"] and all(languages.TTS_MODEL_RE.match(m) for m in e["models"]) for e in langs)
+    assert next(e for e in langs if e["id"] == "ko")["models"] == [
+        "ORIOLE", "LINNET_4", "LINNET_3", "WREN", "FINCH", "NIGHTINGALE"]
     assert next(e for e in langs if e["id"] == "en-AU")["models"] == ["NIGHTINGALE"]
 
 
@@ -69,9 +71,10 @@ class _Answer:
         return self._body
 
 
-def test_fetch_keeps_each_language_with_an_offered_model_and_says_which(monkeypatch):
+def test_fetch_keeps_each_language_with_a_model_and_says_which(monkeypatch):
     # Perso's list as it answered on 2026-10-02: AUDIO_ENGINE_V3 is gone from
-    # it, and filtering on that name kept no language at all.
+    # it, and filtering on that name kept no language at all. Since 2026-10-19
+    # every model Perso names is offered, a name the app has never seen too.
     import httpx
 
     from app import settings_env
@@ -87,9 +90,10 @@ def test_fetch_keeps_each_language_with_an_offered_model_and_says_which(monkeypa
     monkeypatch.setattr(httpx, "get", lambda url, headers=None, timeout=None: _Answer({"languages": raw}))
     assert languages._fetch() == [
         {"id": "ko", "code": "ko", "name": "Korean", "tag": None,
-         "models": ["NIGHTINGALE", "ORIOLE", "WREN"]},
+         "models": ["ORIOLE", "WREN", "NIGHTINGALE", "DODO"]},
         {"id": "en-AU", "code": "en", "name": "English (Australia)", "tag": "en-AU",
          "models": ["NIGHTINGALE"]},
+        {"id": "xx", "code": "xx", "name": "Dodo only", "tag": None, "models": ["DODO"]},
     ]
 
 
@@ -112,5 +116,6 @@ def test_model_for_takes_the_one_asked_for_or_oriole_or_the_first_the_language_h
     assert languages.model_for({"name": "Old", "code": "zz"}) == "ORIOLE"   # no models kept
     with pytest.raises(ValueError, match="Wren.*English \\(Australia\\)"):
         languages.model_for(au, "WREN")
-    with pytest.raises(ValueError, match="Dodo"):
-        languages.model_for(ko, "DODO")                           # not offered
+    with pytest.raises(ValueError, match="Linnet 4"):
+        languages.model_for(ko, "LINNET_4")                       # not this language's
+    assert languages.model_for({"name": "Korean", "models": ["ORIOLE", "LINNET_4"]}, "linnet_4") == "LINNET_4"

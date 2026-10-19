@@ -2535,11 +2535,35 @@
   .opt-row > select, .opt-row > input { grid-column: 2; grid-row: 1; height: 24px; padding: 0 8px;
     border: 1px solid transparent; border-radius: 5px; background-color: var(--secondary); font-size: 11.5px; }
   .opt-row > select:focus, .opt-row > input:focus { border-color: var(--primary); }
-  /* A row of segments in place of a dropdown (Dubbing model): the Captions
-     tab's segment on the dropdowns' fill, lit in the primary colour. */
-  .opt-row > .cap-seg { grid-column: 2; grid-row: 1; display: flex; background: var(--secondary); }
-  .opt-row > .cap-seg button { flex: 1; padding: 3px 4px; }
-  .opt-row > .cap-seg button.on { background: var(--primary); color: var(--primary-foreground); }
+  /* The Dubbing model: a button on the dropdowns' fill and, pressed, a list
+     in the ratio menu's dress with a line of what each model is under its
+     name (ui/src/newProject.mjs paintPersoModel). The list is fixed to the
+     screen so the options panel's scrolling cannot clip it. */
+  .opt-row > .model-pick { grid-column: 2; grid-row: 1; min-width: 0; }
+  .model-pick-btn { display: flex; align-items: center; gap: 8px; width: 100%; height: 24px; padding: 0 8px;
+    border: 1px solid transparent; border-radius: 5px; background: var(--secondary); color: var(--foreground);
+    font: inherit; font-size: 11.5px; text-align: left; cursor: pointer; }
+  .model-pick-btn:focus-visible, .model-pick-btn[aria-expanded="true"] { outline: none; border-color: var(--primary); }
+  .model-pick-btn::after { content: ""; width: 5px; height: 5px; margin: -3px 2px 0 auto; opacity: 0.7;
+    border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
+  .model-pick-list { position: fixed; z-index: 60; padding: 5px; box-sizing: border-box;
+    display: flex; flex-direction: column; gap: 1px;
+    background: var(--popover, var(--background)); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); }
+  .model-opt { position: relative; display: flex; align-items: center; gap: 10px; padding: 6px 9px 6px 24px;
+    border: 0; border-radius: 6px; background: none; color: var(--foreground); font: inherit;
+    text-align: left; cursor: pointer; }
+  .model-opt:hover:not(:disabled), .model-opt:focus-visible { outline: none;
+    background: color-mix(in srgb, var(--foreground) 10%, transparent); }
+  .model-opt.on { background: color-mix(in srgb, var(--primary) 22%, transparent); }
+  .model-opt.on::before { content: "\2713"; position: absolute; left: 8px; color: var(--primary); font-size: 11px; }
+  .model-opt:disabled { opacity: 0.4; cursor: default; }
+  .model-text { display: grid; gap: 1px; flex: 1; min-width: 0; }
+  .model-name { font-size: 11.5px; font-weight: 600; }
+  .model-pick-btn .model-name { font-weight: 400; }
+  .model-caption { font-size: 10.5px; color: var(--muted-foreground); }
+  .model-pro { flex: none; padding: 1px 7px; border: 1px solid var(--border); border-radius: 999px;
+    font-size: 10px; color: var(--muted-foreground); white-space: nowrap; }
   .opt-row > .settings-hint { grid-column: 2; margin: 5px 0 0; font-size: 11px; color: var(--muted-foreground); }
   .opt-row > .settings-hint:empty { display: none; }
   .opt-row > .settings-hint.model-busy { color: var(--destructive); }
