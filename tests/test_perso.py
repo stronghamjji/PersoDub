@@ -1071,6 +1071,21 @@ def test_a_refusal_in_plain_text_or_with_nothing_to_say():
     assert "Perso said" not in str(e.value)
 
 
+def test_a_video_longer_than_the_plan_gets_its_own_error():
+    """F4008: the free plan stops at one minute. About thirty reports came from
+    this one refusal (2026-10-19); it gets its own popup and is not filed."""
+    r = _refusal(400, {"message": "영상 길이가 60000ms를 초과했습니다.", "code": "F4008"})
+    with pytest.raises(perso_client_module.PersoDurationLimitError) as e:
+        perso_client_module._raise_for_status(r)
+    assert e.value.limit_seconds == 60
+    assert e.value.code == "F4008"
+    assert e.value.reason == "영상 길이가 60000ms를 초과했습니다"
+    assert e.value.link.startswith("https://perso.ai/pricing?utm_source=")
+    # Another code is still a plain refusal with Perso's reason.
+    with pytest.raises(httpx.HTTPStatusError):
+        perso_client_module._raise_for_status(_refusal(400, {"message": "no", "code": "F4001"}))
+
+
 # ── note_credits: the line, the running total, and never a failure ─────────
 def test_note_credits_logs_the_difference_and_adds_it_up():
     from app.perso_client import note_credits

@@ -26,6 +26,9 @@ export const ERROR_CODES = new Set([
   // and stays on the list for as long as they are running -- dropping it would
   // turn every one of their refusals into "unknown".
   "cloud-refused", "perso-busy", "perso-credits", "perso-key", "perso-failed",
+  // A video longer than the Perso plan allows (F4008; the free plan stops at
+  // one minute). The user's plan, not our code (2026-10-19).
+  "perso-length",
   "gemini-busy", "gemini-quota",
   // Four families that were all "unknown" until 0.6.1. Every one of them was
   // a real, repeated failure nobody could see (2026-09-15).
@@ -279,6 +282,7 @@ const ERROR_PATTERNS = [
   [/temporarily unavailable/i,        "perso-busy"],
   [/credits are used up/i,            "perso-credits"],
   [/rejected the api key/i,           "perso-key"],
+  [/longer than your perso plan allows/i, "perso-length"],
   [/could not finish this job/i,      "perso-failed"],
   [/temporarily overloaded/i,         "gemini-busy"],
   [/quota is used up/i,               "gemini-quota"],

@@ -291,6 +291,33 @@ test("a busy-server notice has nowhere to send anyone, so it shows no button", (
   assert.deepEqual(h.log.opened, []);
 });
 
+test("a video too long for the Perso plan pops its own popup: the limit Perso named and the plan page", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.paintNotices({ id: "j2", status: "error", error: "This video is longer than your Perso plan allows.",
+    notices: [{ type: "perso_duration_limit", message: "This video is longer than your Perso plan allows.",
+                link: "https://perso.ai/pricing?utm_content=pricing", limit_seconds: 60 }] });
+  assert.equal(h.$("creditTitle").textContent, "Video too long");
+  assert.equal(h.$("creditMessage").textContent,
+    "Your Perso plan dubs videos up to 1 min. Upgrade your plan, or set Dubbing to This computer.");
+  assert.equal(h.$("creditRechargeBtn").textContent, "See plans");
+  assert.deepEqual(h.log.opened, ["https://perso.ai/pricing?utm_content=pricing"]);
+  assert.ok(h.$("creditOverlay").classList.contains("open"));
+});
+
+test("a plan limit that is not whole minutes, or not named, still reads", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  h.api.showCreditModal({ type: "perso_duration_limit", limit_seconds: 90, link: "https://perso.ai/pricing" });
+  assert.equal(h.$("creditMessage").textContent,
+    "Your Perso plan dubs videos up to 90 s. Upgrade your plan, or set Dubbing to This computer.");
+  h.api.showCreditModal({ type: "perso_duration_limit", link: "https://perso.ai/pricing" });
+  assert.equal(h.$("creditMessage").textContent,
+    "Your Perso plan does not take a video this long. Upgrade your plan, or set Dubbing to This computer.");
+});
+
 test("the wrong-key popup keeps the user in the app: its button opens Settings", async (t) => {
   const h = harness();
   t.after(h.log.restore);

@@ -61,11 +61,27 @@ export function stoppedMark(status) {
 // `choose` popup's message is a function: it names the button to press once
 // that is dealt with (Resume, or Translate again), and the other translators
 // when there are some to offer.
+// "1 min" for a whole number of minutes, "90 s" otherwise: a plan's limit.
+function limitText(seconds) {
+  return seconds % 60 === 0 ? t("{n} min", { n: seconds / 60 }) : t("{n} s", { n: seconds });
+}
+
 const CREDIT_MODALS = {
   perso_credit_exhausted: {
     get title() { return t("Out of credits"); },
     get message() { return t("Recharge, then try again."); },
     get button() { return t("Recharge"); },
+  },
+  // Perso refused the video as longer than the plan allows (F4008). The one
+  // who meets it is almost always on the free plan, so the button is the
+  // public plan page, and the limit is the one Perso named.
+  perso_duration_limit: {
+    get title() { return t("Video too long"); },
+    message: (notice) => (notice && notice.limit_seconds
+      ? t("Your Perso plan dubs videos up to {limit}. Upgrade your plan, or set Dubbing to This computer.",
+        { limit: limitText(notice.limit_seconds) })
+      : t("Your Perso plan does not take a video this long. Upgrade your plan, or set Dubbing to This computer.")),
+    get button() { return t("See plans"); },
   },
   perso_invalid_key: {
     get title() { return t("Check your Perso key"); },
@@ -310,7 +326,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
   // once there are translators to offer, the line says they are there.
   // Opened by Translate again, the button to press later is that one.
   function creditMessage(notice, cfg, canSwitch) {
-    if (!cfg.choose) return cfg.message;
+    if (!cfg.choose) return typeof cfg.message === "function" ? cfg.message(notice) : cfg.message;
     const button = modalPick ? t("Translate again") : t("Resume");
     const resets = resetsSentence(notice.message);
     if (!resets) return cfg.message(button, canSwitch);

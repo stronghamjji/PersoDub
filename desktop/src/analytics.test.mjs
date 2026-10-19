@@ -98,6 +98,9 @@ test("an install step that merely exited nonzero is not called an engine crash",
 
 test("a dub-time engine death keeps the name it was made for", () => {
   assert.equal(classifyError("worker exit 1"), "engine-crash");
+  // A video longer than the Perso plan allows (F4008): its own word.
+  assert.equal(classifyError("This video is longer than your Perso plan allows. Upgrade your plan, or set "
+    + "Dubbing to This computer. Perso said: 영상 길이가 60000ms를 초과했습니다 (F4008)"), "perso-length");
   assert.equal(classifyError("sidecar did not become ready"), "engine-crash");
 });
 

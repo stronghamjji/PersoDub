@@ -32,6 +32,9 @@ export const ERROR_CODES = [
   // one word for all six until 0.6.0 and stays for as long as 0.5.4 and
   // earlier are still running.
   "cloud-refused", "perso-busy", "perso-credits", "perso-key", "perso-failed",
+  // A video longer than the Perso plan allows (F4008; the free plan stops at
+  // one minute). The user's plan, not our code (2026-10-19).
+  "perso-length",
   "gemini-busy", "gemini-quota",
   // Four families that were all "unknown" until 0.6.1.
   "model-download", "engine-500", "perso-bad-request", "translate-parse",

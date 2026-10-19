@@ -26,6 +26,7 @@ from app.jobs import JobCancelled, raise_if_cancelled, shown_error, timed_step
 from app.perso_client import (
     PersoClient,
     PersoCreditExhaustedError,
+    PersoDurationLimitError,
     PersoInvalidKeyError,
     PersoProjectFailedError,
     PersoUnavailableError,
@@ -147,6 +148,14 @@ _NOTICE_ERRORS = {
         "link",
         None,
     ),
+    # Longer than the plan allows: the free plan stops at one minute. Its own
+    # popup says the limit and links to the plans; nothing to retry.
+    PersoDurationLimitError: (
+        "perso_duration_limit",
+        lambda: both("This video is longer than your Perso plan allows. Upgrade your plan, or set Dubbing to This computer."),
+        "link",
+        None,
+    ),
     PersoInvalidKeyError: (
         "perso_invalid_key",
         lambda: both("Perso rejected the API key. Open Settings and check the key."),
@@ -211,7 +220,7 @@ _NOTICE_ERRORS = {
 # and that is what an unexpected provider error must keep landing in.
 _PERSO_NOTICE_ERRORS = (
     PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError,
-    PersoProjectFailedError,
+    PersoProjectFailedError, PersoDurationLimitError,
 )
 _GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError,
                          ChatGptNotSignedInError, ChatGptLimitError)
@@ -260,6 +269,9 @@ def raise_notice(e, log, on_notice) -> NoReturn:
         msg, shown = both("ChatGPT usage limit reached. Resets {resets}. Resume then, or continue with "
                           "another translator.", resets=resets)
     notice = {"type": notice_type, "message": msg, "message_shown": shown}
+    # The plan's limit, for the popup that names it ("up to 1 min").
+    if getattr(e, "limit_seconds", None):
+        notice["limit_seconds"] = e.limit_seconds
     if link_attr:
         notice["link"] = getattr(e, link_attr)
         log(f"   Error: {msg} ({notice['link']})")
@@ -1139,7 +1151,7 @@ def run_dub(
     JobCancelled and stops the job before the next stage starts. on_notice,
     if given, is called with a structured {"type", "message", "link"} dict
     for events the caller may want to surface outside the plain log stream
-    ("perso_credit_exhausted", "perso_invalid_key", "perso_unavailable",
+    ("perso_credit_exhausted", "perso_duration_limit", "perso_invalid_key", "perso_unavailable",
     "gemini_quota_exhausted", "gemini_unavailable" -- see app/api/dub.py,
     which wires it to JobStore.append_notice so the job status JSON carries it
     for the UI).

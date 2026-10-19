@@ -79,6 +79,11 @@ PERSO_RECHARGE_URL = os.environ.get(
 # happens there too, so this is the app's only path to a new Perso account.
 PERSO_SIGNUP_URL = os.environ.get("PERSO_SIGNUP_URL", "https://developers.perso.ai/api-keys")
 
+# Where a video too long for the plan sends the user: the public plan page,
+# readable without signing in, since the one who meets that limit is almost
+# always on the free plan (user, 2026-10-19).
+PERSO_PRICING_URL = os.environ.get("PERSO_PRICING_URL", "https://perso.ai/pricing")
+
 # UTM tags on the outbound links -- mirrors the API-call identity above, the same scheme the
 # official plugin uses (messages.mjs:13 "UTM identity — mirrors the API-call identity"):
 # utm_source carries the exact CLIENT_HOST the API headers send, so Perso can line up
@@ -98,6 +103,7 @@ PROOFREAD_SETTLE_S = 60
 
 RECHARGE_LINK = _with_utm(PERSO_RECHARGE_URL, "recharge")
 SIGNUP_LINK = _with_utm(PERSO_SIGNUP_URL, "signup")
+PRICING_LINK = _with_utm(PERSO_PRICING_URL, "pricing")
 
 
 class PersoCreditExhaustedError(RuntimeError):
@@ -150,6 +156,38 @@ class PersoProjectFailedError(RuntimeError):
         said = reason or "no reason given"
         super().__init__(f"{what} failed: {said} ({code})" if code
                          else f"{what} failed: {said}")
+
+
+# What Perso answers when a video is longer than the plan allows, and the
+# limit inside its sentence: "영상 길이가 60000ms를 초과했습니다 / F4008".
+DURATION_LIMIT_CODE = "F4008"
+_DURATION_CODE_RE = re.compile(r"\s*/?\s*\b%s\b" % DURATION_LIMIT_CODE)
+_LIMIT_MS_RE = re.compile(r"(\d+)\s*ms")
+
+
+class PersoDurationLimitError(RuntimeError):
+    """Perso refused the video as longer than the account's plan allows (HTTP
+    400, code F4008). The free plan stops at one minute and the paid ones at 3
+    to 60 (perso.ai/pricing, 2026-10-19): about thirty reports came from this one
+    refusal, each after the whole video had gone up. Nothing to retry and
+    nothing in the app to fix, so the screen says how long the plan allows and
+    links to the plans."""
+
+    def __init__(self, reason: str = "", code: str = DURATION_LIMIT_CODE,
+                 limit_seconds: Optional[int] = None, link: str = PRICING_LINK):
+        self.reason = reason
+        self.code = code
+        self.limit_seconds = limit_seconds
+        self.link = link
+        super().__init__(f"Perso refused the video as too long for the plan: {reason or code}")
+
+    @classmethod
+    def from_said(cls, said: str) -> "PersoDurationLimitError":
+        """From Perso's line as _perso_said gives it, the code taken out of the
+        reason (the notice adds it back once) and the limit read off it."""
+        found = _LIMIT_MS_RE.search(said)
+        limit = int(found.group(1)) // 1000 if found else None
+        return cls(reason=_DURATION_CODE_RE.sub("", said).strip(" ./"), limit_seconds=limit or None)
 
 
 class PersoModelRefusedError(RuntimeError):
@@ -331,6 +369,8 @@ def _raise_for_status(r: httpx.Response) -> None:
         # reached the issue tracker with nothing to go on (2026-09-28). Perso's
         # answer says why, so it rides along -- without the address.
         said = _perso_said(r)
+        if r.status_code == 400 and DURATION_LIMIT_CODE in said:
+            raise PersoDurationLimitError.from_said(said)
         if said:
             raise httpx.HTTPStatusError(
                 f"Client error '{r.status_code} {r.reason_phrase}': Perso said {said}",
