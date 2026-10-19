@@ -117,6 +117,8 @@ Listen for pacing: PersoDub fits the translation to the time instead of speeding
 2. Drop in a video, or paste a link.
 3. Pick a language and press **Start dubbing**.
 
+**Updating from 0.8.4 or earlier?** Download and install the latest version once. From 0.8.5 on, PersoDub updates itself.
+
 Start dubbing uses this computer by default and needs no key. Speech-to-text still uses Perso while a Perso key is saved, and on a new install translation uses ChatGPT through your own sign-in. To keep everything on your computer, open **Advanced options** and set **Speech-to-text** to **Whisper** and **Translation** to **Hunyuan** or **Gemma 3**. To dub with the Perso API instead, save a free [Perso API key](docs/configuration.md) and set **Dubbing** to **Perso API**.
 
 First setup is under 1 GB. A Perso API dub downloads nothing more. The first dub on this computer downloads Python + PyTorch and the models: about 10 GB on a Mac, 17 GB on a Windows PC with an NVIDIA GPU, 9 GB without one. A local translator adds 1.6 to 10 GB and the subtitle eraser 4.4 to 9.3 GB, so keep 30 GB free, 40 GB on Windows with an NVIDIA GPU. [Full table](docs/requirements.md)
@@ -124,7 +126,7 @@ First setup is under 1 GB. A Perso API dub downloads nothing more. The first dub
 <details>
 <summary>Install notes</summary>
 
-**macOS** — Open the `.dmg` and drag **PersoDub** into Applications. It is signed and notarized, so it opens with a normal double-click, and it checks for updates on launch. **On 0.7.0 or earlier?** Install this `.dmg` by hand once: the automatic update cannot install 0.8.1, because the app is now signed with ESTsoft's certificate. From 0.8.1 on, updates are automatic again.
+**macOS** — Open the `.dmg` and drag **PersoDub** into Applications. It is signed and notarized, so it opens with a normal double-click, and it checks for updates on launch.
 
 **Windows** — Run the `.exe`. It installs for your user account only. It is not code-signed yet, so SmartScreen shows "Windows protected your PC" the first time: click **More info**, then **Run anyway**. [Details](INSTALL.md#windows).
 
