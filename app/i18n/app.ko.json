@@ -101,6 +101,7 @@
   "Perso rejected the API key. Open Settings and check the key.": "Perso가 API 키를 받지 않았어요. 설정을 열고 키를 확인해 주세요.",
   "Perso said: no reason given": "Perso 답: 이유를 알려 주지 않았어요",
   "Perso said: {said}": "Perso 답: {said}",
+  "Error code {code}": "오류 코드 {code}",
   "Perso separation failed. Check Settings, or switch separation back to Local.": "Perso 오디오 분리에 실패했어요. 설정을 확인하거나 오디오 분리를 Demucs로 바꿔 주세요.",
   "Perso separation needs an API key. Open Settings and save your Perso API key, or choose Local separation.": "Perso 오디오 분리에는 API 키가 필요해요. 설정을 열고 Perso API 키를 저장하거나, 오디오 분리를 Demucs로 바꿔 주세요.",
   "Perso transcription needs an API key. Open Settings and save your Perso API key, or choose Local transcription.": "Perso 받아쓰기에는 API 키가 필요해요. 설정을 열고 Perso API 키를 저장하거나, 받아쓰기를 Whisper로 바꿔 주세요.",

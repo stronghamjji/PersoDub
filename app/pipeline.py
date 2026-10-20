@@ -270,16 +270,18 @@ def raise_notice(e, log, on_notice) -> NoReturn:
     # reason, its code and the advice after them were lost.
     sentence = shown
     detail = None
-    # Perso's own words, kept whole and put after ours: the sentence above
-    # says what to do, and this says what Perso said, so the screen can be
-    # held up against Perso's dashboard (user, 2026-09-11).
+    # Perso's own words stay whole in the log and the report, so they can be
+    # held up against Perso's dashboard (user, 2026-09-11). On screen only
+    # its code: Perso writes in English, and the code is all that asking
+    # Perso needs (user, 2026-10-20).
     said = getattr(e, "reason", "") or ""
     code = getattr(e, "code", "") or ""
     if said or code:
         perso = both("Perso said: {said}", said=said) if said else both("Perso said: no reason given")
-        msg, shown, detail = f"{msg} {perso[0]}", f"{shown} {perso[1]}", perso[1]
-        if code:
-            msg, shown, detail = f"{msg} ({code})", f"{shown} ({code})", f"{detail} ({code})"
+        msg = f"{msg} {perso[0]}" + (f" ({code})" if code else "")
+    if code:
+        detail = both("Error code {code}", code=code)[1]
+        shown = f"{shown} {detail}"
     # Last, after their own words: the code is the thing to quote when asking.
     if ask:
         asked = ask()

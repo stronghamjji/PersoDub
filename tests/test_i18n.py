@@ -284,7 +284,8 @@ def test_a_failure_with_no_twin_shows_its_english(korean_computer, tmp_path):
 def test_a_perso_refusal_is_english_in_the_error_and_the_notice_and_korean_beside_them(korean_computer):
     """raise_notice: the error, the log line and the notice's message stay
     English (the Dub Agent and the reports read them); message_shown and the
-    exception's twin are the user's language, Perso's own words kept as they came."""
+    exception's twin are the user's language. Perso's own words stay in the
+    English error; on screen only its code, under our sentence."""
     from app import pipeline
     from app.perso_client import PersoProjectFailedError
     lines, notices = [], []
@@ -295,14 +296,13 @@ def test_a_perso_refusal_is_english_in_the_error_and_the_notice_and_korean_besid
                "Perso said: Audio is too short (VT5001) Ask Perso if it keeps happening.")
     ko = _table("ko")
     sentence = ko["Perso could not finish this job. Try again, or check the project on Perso."]
-    perso_said = ko["Perso said: {said}"].replace("{said}", "Audio is too short") + " (VT5001)"
+    code = ko["Error code {code}"].replace("{code}", "VT5001")
     asked = ko["Ask Perso if it keeps happening."]
-    korean = " ".join([sentence, perso_said, asked])
+    korean = " ".join([sentence, code, asked])
     assert str(caught.value) == english
-    # The failed job's screen: our sentence whole, and Perso's words under it.
-    # In one sentence the screen cut it at "Perso said:" (ui/src/format.mjs).
+    # The failed job's screen: our sentence whole, and Perso's code under it.
     assert caught.value.shown == f"{sentence} {asked}"
-    assert caught.value.detail == perso_said == "Perso 답: Audio is too short (VT5001)"
+    assert caught.value.detail == code == "오류 코드 VT5001"
     assert lines == ["   Error: " + english]
     assert notices == [{"type": "perso_project_failed", "message": english, "message_shown": korean}]
 

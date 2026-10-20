@@ -101,6 +101,7 @@
   "Perso rejected the API key. Open Settings and check the key.": "Perso rejected the API key. Open Settings and check the key.",
   "Perso said: no reason given": "Perso said: no reason given",
   "Perso said: {said}": "Perso said: {said}",
+  "Error code {code}": "Error code {code}",
   "Perso separation failed. Check Settings, or switch separation back to Local.": "Perso separation failed. Check Settings, or switch separation back to Local.",
   "Perso separation needs an API key. Open Settings and save your Perso API key, or choose Local separation.": "Perso separation needs an API key. Open Settings and save your Perso API key, or choose Local separation.",
   "Perso transcription needs an API key. Open Settings and save your Perso API key, or choose Local transcription.": "Perso transcription needs an API key. Open Settings and save your Perso API key, or choose Local transcription.",

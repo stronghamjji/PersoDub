@@ -424,6 +424,9 @@ PROJECT_FAILED = ("Perso could not finish this job. Try again, or check the proj
                   "Perso said: Audio is too short (VT5001) Ask Perso if it keeps happening.")
 UNAVAILABLE = ("Perso's server is temporarily unavailable. Wait a few minutes, then run this job again. "
                "Ask Perso if it keeps happening.")
+# On screen Perso's own words give way to its code; they stay in the error.
+PROJECT_FAILED_SHOWN = ("Perso could not finish this job. Try again, or check the project on Perso. "
+                        "Error code VT5001 Ask Perso if it keeps happening.")
 
 
 @pytest.mark.parametrize("scaffold", SCAFFOLDS)
@@ -437,7 +440,8 @@ UNAVAILABLE = ("Perso's server is temporarily unavailable. Wait a few minutes, t
     pytest.param(lambda: PersoUnavailableError("Perso server error (HTTP 503)"),
                  "   Error: " + UNAVAILABLE, {"type": "perso_unavailable", "message": UNAVAILABLE}, id="perso-down"),
     pytest.param(lambda: PersoProjectFailedError("Dubbing", reason="Audio is too short", code="VT5001"),
-                 "   Error: " + PROJECT_FAILED, {"type": "perso_project_failed", "message": PROJECT_FAILED},
+                 "   Error: " + PROJECT_FAILED, {"type": "perso_project_failed", "message": PROJECT_FAILED,
+                                              "message_shown": PROJECT_FAILED_SHOWN},
                  id="project-failed"),
 ])
 def test_the_four_perso_refusals_read_the_same_everywhere(drive, scaffold, make, line, notice):
@@ -445,7 +449,7 @@ def test_the_four_perso_refusals_read_the_same_everywhere(drive, scaffold, make,
     out = drive(scaffold, FakePerso(fail=boom))
     assert out.lines == [HEADER[scaffold], WORKSPACE, line]
     # message_shown: the same sentence in the user's language, English here.
-    assert out.notices == [{**notice, "message_shown": notice["message"]}]
+    assert out.notices == [{"message_shown": notice["message"], **notice}]
     assert type(out.error) is RuntimeError
     assert str(out.error) == notice["message"]
     assert out.error.__cause__ is boom
