@@ -62,6 +62,9 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
   let query = "";
   let menuJobId = null;
   let renamingId = null;
+  // What the grid last drew: the search, the card being renamed and its
+  // cards in order. While those stay the same, the cards stay.
+  let drawn = "";
 
   function cardDuration(job) {
     if (job.trim) return fmtLength(job.trim.end - job.trim.start);
@@ -86,6 +89,11 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
       : projectMeta(members[0], langName);
   }
 
+  // A project's picture. One the server has none for yet (a link still coming
+  // down) takes itself off and leaves the plain tile.
+  const thumbImg = (job) => `<img class="proj-img" src="/api/dub/jobs/${encodeURIComponent(job.id)}/thumb" loading="lazy" alt=""
+             onerror="this.remove()">`;
+
   function cardHtml(members) {
     const job = members[0];
     const chip = cardChip(job);
@@ -96,8 +104,7 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
       : `<div class="proj-name">${escapeHtml(name)}</div>`;
     return `<div class="proj-card" data-job="${escapeHtml(job.id)}" tabindex="0" role="button" aria-label="${t("Open {name}", { name: escapeHtml(name) })}">
       <div class="proj-thumb">
-        <img class="proj-img" src="/api/dub/jobs/${encodeURIComponent(job.id)}/thumb" loading="lazy" alt=""
-             onerror="this.remove()">
+        ${thumbImg(job)}
         ${isErase(job) ? `<span class="proj-kind" title="${t("Erase subtitles")}"><svg viewBox="0 0 24 24" width="12" height="12"><rect x="2.5" y="5" width="15" height="11" rx="2"/><path d="M13.5 21l6.8-6.8a1.6 1.6 0 0 0 0-2.3l-1.7-1.7a1.6 1.6 0 0 0-2.3 0L9.5 17z"/></svg></span>` : ""}
         ${isSeparate(job) ? `<span class="proj-kind" title="${t("Separate audio")}"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></span>` : ""}
         ${chip ? `<span id="projChip-${escapeHtml(job.id)}" class="proj-chip proj-chip-${chip[1]}">${escapeHtml(chip[0])}</span>` : ""}
@@ -111,12 +118,15 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
     </div>`;
   }
 
+  // How many seconds of a draft its cuts keep.
+  const keptOf = (d) => d.ranges.reduce((s, [a, b]) => s + (b - a), 0);
+
   // A kept draft: a frame of its video (the held file itself, stopped near
   // its start -- a draft has no thumbnail made for it), how much of it the
   // cuts kept, and "Draft" where a project says what state it is in.
   function draftCardHtml(d) {
     const name = d.name || t("Draft");
-    const kept = d.ranges.reduce((s, [a, b]) => s + (b - a), 0);
+    const kept = keptOf(d);
     return `<div class="proj-card" data-draft="${escapeHtml(d.downloadId)}" tabindex="0" role="button" aria-label="${t("Open the draft {name}", { name: escapeHtml(name) })}">
       <div class="proj-thumb">
         <video class="proj-img" src="/api/downloads/${encodeURIComponent(d.downloadId)}/video#t=0.5" preload="metadata"
@@ -130,6 +140,51 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
                 aria-haspopup="menu" aria-label="${t("More for {name}", { name: escapeHtml(name) })}">${lucide("ellipsis", 14)}</button>
       </div>
     </div>`;
+  }
+
+  // A card still on show, brought up to date where it is: its name (renamed
+  // on another screen, or put back), the words under it, its chip and length,
+  // and a picture the server had none for when the card was drawn.
+  function patchCard(card, members) {
+    const job = members[0];
+    const name = shownName(job);
+    setName(card, name, t("Open {name}", { name }));
+    card.querySelector(".proj-meta").textContent = cardMeta(members);
+    const thumb = card.querySelector(".proj-thumb");
+    const chip = cardChip(job);
+    setLabel(thumb, ".proj-chip", chip && chip[0], chip && `proj-chip proj-chip-${chip[1]}`, `projChip-${job.id}`);
+    setLabel(thumb, ".proj-dur", cardDuration(job), "proj-dur");
+    if (!thumb.querySelector(".proj-img")) thumb.insertAdjacentHTML("afterbegin", thumbImg(job));
+  }
+
+  // A draft's name, and how much its cuts keep, change as it is worked on.
+  function patchDraft(card, d) {
+    const name = d.name || t("Draft");
+    setName(card, name, t("Open the draft {name}", { name }));
+    card.querySelector(".proj-dur").textContent = fmtLength(keptOf(d));
+  }
+
+  // The name is a field while its card is being renamed, and is left as typed.
+  function setName(card, name, label) {
+    const el = card.querySelector(".proj-name");
+    if (el) el.textContent = name;
+    card.setAttribute("aria-label", label);
+    card.querySelector(".proj-more").setAttribute("aria-label", t("More for {name}", { name }));
+  }
+
+  // A label on a card's picture said again: taken off when there is nothing
+  // to say, put on where there was none -- the chip ahead of the length, as
+  // cardHtml has them.
+  function setLabel(thumb, sel, text, className, id) {
+    let el = thumb.querySelector(sel);
+    if (!text) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement("span");
+      if (id) el.id = id;
+      thumb.insertBefore(el, thumb.querySelector(".proj-dur"));
+    }
+    el.className = className;
+    el.textContent = text;
   }
 
   // Every job of the project the card for `jobId` stands for.
@@ -201,6 +256,16 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
     const all = projects.length + drafts.length;
     if ($("projectsCount")) $("projectsCount").textContent = !all ? ""
       : q ? t("{shown} of {all}", { shown: shown.length + shownDrafts.length, all }) : String(all);
+    const layout = JSON.stringify([q, renamingId, shownDrafts.map((d) => d.downloadId), shown.map((m) => m[0].id)]);
+    // Patched, not drawn again: a redraw loaded every draft's <video> again (it flickered) and lost clicks.
+    if (layout === drawn && (shown.length || shownDrafts.length)) {
+      for (const card of grid.querySelectorAll(".proj-card")) {
+        if (card.dataset.draft) patchDraft(card, shownDrafts.find((d) => d.downloadId === card.dataset.draft));
+        else patchCard(card, shown.find((m) => m[0].id === card.dataset.job));
+      }
+      return;
+    }
+    drawn = layout;
     grid.innerHTML = shown.length || shownDrafts.length
       ? shownDrafts.map(draftCardHtml).join("") + shown.map(cardHtml).join("")
       : `<div class="projects-empty">${jobs.length || drafts.length ? t("No projects match your search.") : t("No projects yet.")}</div>`;
