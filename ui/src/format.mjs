@@ -136,7 +136,8 @@ export function modKey(platform = (globalThis.navigator || {}).platform || "") {
 
 // What a program says when it breaks, as opposed to what a person would say:
 // an exception's name, a path, a file and line, a status code, code punctuation.
-const RAW_TEXT = /Traceback|\b\w*(Error|Exception)\b|Errno|\.py\b|\bline \d+|0x[0-9a-f]+|HTTP \d|exit(ed)? (code|status)|[{}\[\]<>_=\\]|\/\w+\//;
+// A ">" with a space on both sides is a person's: "Settings > Models".
+const RAW_TEXT = /Traceback|\b\w*(Error|Exception)\b|Errno|\.py\b|\bline \d+|0x[0-9a-f]+|HTTP \d|exit(ed)? (code|status)|[{}\[\]<_=\\]|\S>|>\S|\/\w+\//;
 
 /**
  * The plain sentence in a failure's text, for the screen: "" when there is

@@ -11,6 +11,7 @@ import os
 import pytest
 
 from app import separate as sep
+from app.run_errors import PartsMissing
 
 
 def _write_output(out_dir, payload):
@@ -22,7 +23,8 @@ def _write_output(out_dir, payload):
 
 def test_separate_raises_when_interpreter_missing(tmp_path):
     engine = sep.SeparationEngine(python_path="/no/such/python")
-    with pytest.raises(RuntimeError, match="interpreter not found"):
+    # Its own kind: the advice is to download it again, not to check the video.
+    with pytest.raises(PartsMissing, match="interpreter not found"):
         engine.separate("/fake/video.mp4", str(tmp_path))
 
 
@@ -48,7 +50,7 @@ def test_separate_raises_when_script_missing(monkeypatch, tmp_path):
     import sys
     monkeypatch.setattr(sep, "SCRIPT_PATH", "/no/such/script.py")
     engine = sep.SeparationEngine(python_path=sys.executable)
-    with pytest.raises(RuntimeError, match="script missing"):
+    with pytest.raises(PartsMissing, match="script missing"):
         engine.separate("/fake/video.mp4", str(tmp_path))
 
 

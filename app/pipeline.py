@@ -38,7 +38,7 @@ from app.perso_client import (
     short_reason,
 )
 from app.qwen_pipeline import cleanup_takes, run_qwen_dub
-from app.run_errors import advice_both
+from app.run_errors import PartsMissing, advice_both
 from app.scripts.check_leakage import _validate_manifest_spans, measure_leakage
 from app.scripts.suppress_vocal_echo import suppress_vocal_echo
 from app.separate import SeparationEngine
@@ -48,7 +48,7 @@ from app.separate import SeparationEngine
 # and pipeline.STAGES / pipeline.stage_marker stay valid names because tests
 # and other modules already read them off this module.
 from app.stages import STAGES, pre_stage_marker, stage_marker  # noqa: F401
-from app.stt_local import transcribe_local
+from app.stt_local import NoSpeech, transcribe_local
 from app.text.cues import cue_speaker, match_cue_index
 from app.text.length_fit import fit_translate
 from app.text.srt import (
@@ -140,6 +140,14 @@ def _ask_google():
 
 def _check_file():
     return both("Check the video file.")
+
+
+# A helper that is missing its own interpreter or script (app/run_errors.py
+# PartsMissing): the download is broken, not the video.
+def _advice(e):
+    if isinstance(e, PartsMissing):
+        return both("Some parts it needs are missing or broken. Download them again in Settings > Models.")
+    return advice_both(str(e), _check_file())
 
 
 _NOTICE_ERRORS = {
@@ -640,7 +648,7 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
             # ask -- but which thing to look at depends on what stopped it. A
             # timeout and a full disk are not a broken file, and saying so
             # sent people to check the one thing that was fine (2026-09-15).
-            advice = advice_both(str(e), _check_file())
+            advice = _advice(e)
             failed = both("Voice separation failed on this computer.")
             raise shown_error(f"{failed[0]} {advice[0]} ({str(e)[:400]})",
                              f"{failed[1]} {advice[1]} ({str(e)[:400]})")
@@ -739,10 +747,16 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, 
         )
     except JobCancelled:
         raise  # a user cancel is not a failure of this stage
+    except NoSpeech as e:
+        # A music-only or silent video: said so, instead of "Speech
+        # recognition failed. Check the video file." about a file that is fine.
+        msg, shown = both("No speech was found in this video. Check that someone is speaking in it.")
+        log(f"   Error: {msg}")
+        raise shown_error(msg, shown) from e
     except Exception as e:
         # Was re-raised bare, which put a library's own words on the failure
         # card with no hint of which part had stopped (user, 2026-09-11).
-        advice = advice_both(str(e), _check_file())
+        advice = _advice(e)
         failed = both("Speech recognition failed on this computer.")
         msg = f"{failed[0]} {advice[0]} ({str(e)[:400]})"
         log(f"   Error: {msg}")

@@ -14,6 +14,7 @@ import sys
 import pytest
 
 from app import stt_local
+from app.run_errors import PartsMissing
 
 
 def _ok_result(segments=None):
@@ -50,14 +51,15 @@ def test_raises_when_audio_missing(tmp_path):
 
 def test_raises_when_interpreter_missing(monkeypatch, audio_file):
     monkeypatch.setattr(stt_local, "STT_PYTHON", "/no/such/python")
-    with pytest.raises(RuntimeError, match="interpreter not found"):
+    # Its own kind: the advice is to download it again, not to check the video.
+    with pytest.raises(PartsMissing, match="interpreter not found"):
         stt_local.transcribe_local(audio_file)
 
 
 def test_raises_when_script_missing(monkeypatch, audio_file):
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", "/no/such/script.py")
-    with pytest.raises(RuntimeError, match="script missing"):
+    with pytest.raises(PartsMissing, match="script missing"):
         stt_local.transcribe_local(audio_file)
 
 
@@ -143,7 +145,8 @@ def test_raises_on_empty_audio_no_segments(monkeypatch, audio_file):
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
     monkeypatch.setattr(stt_local.subprocess, "run", _fake_run_writing(_ok_result(segments=[])))
-    with pytest.raises(RuntimeError, match="This video has no speech to transcribe"):
+    # Its own kind, so the job says no one speaks in it (app/pipeline.py).
+    with pytest.raises(stt_local.NoSpeech, match="This video has no speech to transcribe"):
         stt_local.transcribe_local(audio_file)
 
 

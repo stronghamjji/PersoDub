@@ -19,11 +19,13 @@ import contextlib
 import json
 import os
 import queue
+import re
 import subprocess
 import threading
 
 from app.i18n import both, t
 from app.jobs import JobCancelled, shown_error
+from app.run_errors import advice_both, ran_out_of_memory
 from app.settings_env import current_value
 
 SCRIPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
@@ -92,9 +94,22 @@ def _stopped_in(reached):
 
 # The same sentence the dubbing stages that run on this machine end with
 # (app/pipeline.py's _check_file): there is no service to ask about work done
-# here, so the file is the thing to look at.
+# here, so the file is the thing to look at -- unless the script's last words
+# say the machine ran out of time or memory (app/run_errors.py advice_both),
+# when the video was never the problem.
 def _check_file():
     return both("Check the video file.")
+
+
+def _why_stopped(reached, tail):
+    """(English, the user's language) for a run that exited with an error."""
+    last = _last_real_line(tail)
+    # The graphics card's memory: CUDA and Apple's MPS say "out of memory"
+    # with their name on it. Its own sentence, since the stage is beside the point.
+    if ran_out_of_memory(last) and re.search(r"cuda|mps|gpu", last, re.IGNORECASE):
+        return both("The subtitle eraser stopped because the graphics memory ran out. Close other apps and try again.")
+    stopped, advice = _stopped_in(reached), advice_both(last, _check_file())
+    return f"{stopped[0]} {advice[0]}", f"{stopped[1]} {advice[1]}"
 
 
 class EraserMissing(RuntimeError):
@@ -241,8 +256,8 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
         if any(mark in line for line in tail for mark in NO_SUBTITLES_MARKS):
             raise shown_error(NO_SUBTITLES_MESSAGE,
                              t("No subtitles were found in that area. Move the box and try again."))
-        stopped, check = _stopped_in(reached), _check_file()
-        raise _fail(f"{stopped[0]} {check[0]}", tail, f"{stopped[1]} {check[1]}")
+        said, shown = _why_stopped(reached, tail)
+        raise _fail(said, tail, shown)
     if not os.path.exists(out_path):
         wrote, check = both("The subtitle eraser finished without writing a video."), _check_file()
         raise _fail(f"{wrote[0]} {check[0]}", list(errors), f"{wrote[1]} {check[1]}")

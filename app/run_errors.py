@@ -17,6 +17,12 @@ from typing import Tuple
 from app.i18n import both
 
 
+class PartsMissing(RuntimeError):
+    """A helper's own interpreter or script is not on this computer: the part
+    of the app it comes in is missing or broken. Downloading it again is the
+    answer, and the video is not the thing to check."""
+
+
 def describe_start_failure(what: str, exc: BaseException, timeout=None) -> str:
     """The process never returned a result: it timed out, or never started."""
     if isinstance(exc, subprocess.TimeoutExpired):
@@ -65,9 +71,15 @@ def advice_both(detail: str, otherwise: Tuple[str, str]) -> Tuple[str, str]:
     text = str(detail or "").lower()
     if "timed out" in text or "timeout" in text:
         return both("This computer needed more time than allowed. A shorter video will finish.")
-    if "not enough memory" in text or "out of memory" in text or "cannot allocate" in text:
+    if ran_out_of_memory(text):
         return both("This computer ran out of memory. Close other apps and try again.")
     return otherwise
+
+
+def ran_out_of_memory(detail: str) -> bool:
+    """Whether a failure's own words say the memory ran out."""
+    text = str(detail or "").lower()
+    return "not enough memory" in text or "out of memory" in text or "cannot allocate" in text
 
 
 def advice_for(detail: str, otherwise: str) -> str:

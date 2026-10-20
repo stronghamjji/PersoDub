@@ -184,6 +184,11 @@ test("a failure's plain sentence is shown, and a program's own words are not", (
     "Could not look for subtitles in this video.");
   assert.equal(plainFailure("local STT reported an error ([Errno 2] No such file)"), "Local STT reported an error.");
   assert.equal(plainFailure("Qwen dub mux failed: Conversion failed! /tmp/x.mp4"), "Qwen dub mux failed.");
+  // A menu path is a person's words; the path in parentheses is not.
+  assert.equal(plainFailure("내 컴퓨터에서 받아쓰기에 실패했어요. 필요한 부품이 없거나 깨졌어요. 설정 > 모델에서 다시 받아 주세요. "
+    + "(local STT script missing: /Users/x/kit/app/scripts/whisper_transcribe.py)"),
+    "내 컴퓨터에서 받아쓰기에 실패했어요. 필요한 부품이 없거나 깨졌어요. 설정 > 모델에서 다시 받아 주세요.");
+  assert.equal(plainFailure("Could not run x->y"), "");
   // A program's words through and through: nothing for the screen.
   assert.equal(plainFailure("[Errno 28] No space left on device: '/Users/x/y'"), "");
   assert.equal(plainFailure("Traceback (most recent call last):"), "");

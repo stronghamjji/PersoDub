@@ -42,6 +42,13 @@ if mode == "killed":
     print("Connectivity check to the model hoster has been skipped because "
           "`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` is enabled.", file=sys.stderr, flush=True)
     sys.exit(1)
+if mode in ("gpu-memory", "memory", "timeout"):
+    print("progress 60%", flush=True)
+    said = {"gpu-memory": "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB",
+            "memory": "RuntimeError: DefaultCPUAllocator: not enough memory: you tried to allocate 8 bytes",
+            "timeout": "TimeoutError: the frame reader timed out"}[mode]
+    print(said, file=sys.stderr, flush=True)
+    sys.exit(1)
 if mode == "nosub":
     print("Traceback (most recent call last):", file=sys.stderr, flush=True)
     print("    raise Exception(tr['Main']['NoSubtitleDetected'].format(self.video_path))",
@@ -678,6 +685,23 @@ def test_a_startup_notice_is_never_quoted_as_the_reason(installed, tmp_path, mon
     # And it still says which half it was in, and what to look at.
     assert said.startswith("The subtitle eraser stopped while erasing them.")
     assert "Check the video file." in said
+
+
+@pytest.mark.parametrize("mode, sentence", [
+    ("gpu-memory", "The subtitle eraser stopped because the graphics memory ran out. Close other apps and try again."),
+    ("memory", "The subtitle eraser stopped while erasing them. This computer ran out of memory. "
+               "Close other apps and try again."),
+    ("timeout", "The subtitle eraser stopped while erasing them. This computer needed more time than allowed. "
+                "A shorter video will finish."),
+])
+def test_out_of_memory_or_time_is_not_blamed_on_the_video(installed, tmp_path, monkeypatch, mode, sentence):
+    """A graphics card out of memory was told to check the video file."""
+    monkeypatch.setenv("STUB_MODE", mode)
+    with pytest.raises(RuntimeError) as failed:
+        eraser.run_erase(_video(tmp_path), str(tmp_path / "erased.mp4"), None,
+                         log=lambda _: None, cancel_check=lambda: False)
+    assert str(failed.value).startswith(sentence + " (")
+    assert "Check the video file." not in str(failed.value)
 
 
 def test_a_real_line_still_wins_over_the_notices_around_it():

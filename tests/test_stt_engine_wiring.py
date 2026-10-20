@@ -141,6 +141,39 @@ def test_stt_engine_local_failure_raises(monkeypatch, tmp_path):
     assert any("Speech recognition failed on this computer" in m for m in logs)
 
 
+def test_a_video_with_no_speech_says_so_instead_of_blaming_the_file(monkeypatch, tmp_path):
+    # A music-only clip was told "Speech recognition failed. Check the video file."
+    from app.stt_local import NoSpeech
+    _stub_common(monkeypatch)
+
+    def _silent(audio_path, language=None, **k):
+        raise NoSpeech("This video has no speech to transcribe.")
+
+    monkeypatch.setattr(pipeline, "transcribe_local", _silent)
+    video, out, srt = _write_inputs(tmp_path)
+    with pytest.raises(RuntimeError) as e:
+        pipeline.run_dub(video_path=video, out_path=out, srt_path=srt,
+                         language="Korean", language_code="ko", log=[].append)
+    assert str(e.value) == "No speech was found in this video. Check that someone is speaking in it."
+
+
+def test_missing_whisper_parts_send_the_user_to_the_models_not_the_video(monkeypatch, tmp_path):
+    from app.run_errors import PartsMissing
+    _stub_common(monkeypatch)
+
+    def _gone(audio_path, language=None, **k):
+        raise PartsMissing("local STT script missing: /kit/x.py")
+
+    monkeypatch.setattr(pipeline, "transcribe_local", _gone)
+    video, out, srt = _write_inputs(tmp_path)
+    with pytest.raises(RuntimeError) as e:
+        pipeline.run_dub(video_path=video, out_path=out, srt_path=srt,
+                         language="Korean", language_code="ko", log=[].append)
+    assert str(e.value).startswith("Speech recognition failed on this computer. Some parts it needs are "
+                                   "missing or broken. Download them again in Settings > Models. (")
+    assert "Check the video file." not in str(e.value)
+
+
 class _FakePerso:
     def transcribe(self, video_path, space_seq=None):
         return [

@@ -21,7 +21,7 @@ from typing import Callable, List, Optional
 
 from app.config import NONVERBAL_WHISPER_MODEL, NONVERBAL_WHISPER_PYTHON
 from app.nonverbal import _PUNCT_RE, MIN_RMS_DBFS, _span_rms_db
-from app.run_errors import describe_exit_failure, describe_start_failure
+from app.run_errors import PartsMissing, describe_exit_failure, describe_start_failure
 from app.text.srt import clamp_cues
 from app.timeouts import scaled_timeout
 
@@ -64,6 +64,11 @@ def _made_up(cue: dict, vocals_path: str) -> bool:
         return False
 
 
+class NoSpeech(RuntimeError):
+    """Whisper heard nobody speaking: a music-only or silent video. The
+    video is fine; it simply has nothing to dub."""
+
+
 def transcribe_local(
     audio_path: str,
     language: Optional[str] = None,
@@ -94,9 +99,9 @@ def transcribe_local(
     if not os.path.exists(audio_path):
         raise RuntimeError("audio file not found: %s" % audio_path)
     if not (os.path.exists(STT_PYTHON) and os.access(STT_PYTHON, os.X_OK)):
-        raise RuntimeError("local STT interpreter not found: %s" % STT_PYTHON)
+        raise PartsMissing("local STT interpreter not found: %s" % STT_PYTHON)
     if not os.path.exists(SCRIPT_PATH):
-        raise RuntimeError("local STT script missing: %s" % SCRIPT_PATH)
+        raise PartsMissing("local STT script missing: %s" % SCRIPT_PATH)
 
     # video_duration, when known, scales `timeout` up for long videos (see
     # app.timeouts.scaled_timeout); omitted, it's today's fixed value.
@@ -140,7 +145,7 @@ def transcribe_local(
     if vocals_path:
         segments = [c for c in segments if not _made_up(c, vocals_path)]
     if not segments:
-        raise RuntimeError("This video has no speech to transcribe.")
+        raise NoSpeech("This video has no speech to transcribe.")
     return segments
 
 

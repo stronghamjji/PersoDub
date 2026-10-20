@@ -21,7 +21,7 @@ import subprocess
 from typing import Dict, Optional
 
 from app.config import SEP_MODEL_DIR, SEP_PYTHON
-from app.run_errors import describe_exit_failure, describe_start_failure
+from app.run_errors import PartsMissing, describe_exit_failure, describe_start_failure
 from app.timeouts import scaled_timeout
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "demucs_separate.py")
@@ -79,10 +79,10 @@ class SeparationEngine:
             # bare command name (e.g. the "python3" default) -- resolve via PATH
             py = shutil.which(py) or py
         if not (os.path.exists(py) and os.access(py, os.X_OK)):
-            raise RuntimeError("local separation interpreter not found (%s)" % py)
+            raise PartsMissing("local separation interpreter not found (%s)" % py)
         script = ROFORMER_SCRIPT_PATH if self.roformer_path else SCRIPT_PATH
         if not os.path.exists(script):
-            raise RuntimeError("local separation script missing (%s)" % script)
+            raise PartsMissing("local separation script missing (%s)" % script)
 
         os.makedirs(out_dir, exist_ok=True)
         in_path = os.path.join(out_dir, "sep_input.json")
