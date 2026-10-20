@@ -687,6 +687,36 @@ def test_run_async_lifts_perso_credits_and_duration_onto_the_record():
     assert saved["perso_credits"] == 7 and saved["duration"] == 150.2
 
 
+def test_a_finished_or_failed_job_says_when_it_started_and_how_long_each_step_took():
+    # Whole numbers for the usage count (desktop/src/analytics.js dubFacts),
+    # on the record before the status flips; a step that did not run is not
+    # named, and none of it is saved with the job.
+    store = JobStore()
+
+    def work(log):
+        with timed_step(log, "1/6", "separate"):
+            pass
+        with timed_step(log, "2/6", "transcribe"):
+            pass
+        return {"ok": True}
+
+    j = _wait(store, store.run_async(work))
+    assert j["status"] == "done"
+    assert j["stage_seconds"] == {"separate": 0, "transcribe": 0}
+    assert j["elapsed_seconds"] == 0
+    assert j["started_hour"] in range(24)
+    assert "stage_seconds" not in JobStore._saved(j)
+
+    def fails(log):
+        with timed_step(log, "3/6", "translate"):
+            raise RuntimeError("Translation failed.")
+
+    j = _wait(store, store.run_async(fails))
+    assert j["status"] == "error"
+    assert j["stage_seconds"] == {"translate": 0}
+    assert isinstance(j["elapsed_seconds"], int) and j["started_hour"] in range(24)
+
+
 def test_run_async_leaves_the_record_alone_when_the_result_says_nothing():
     store = JobStore()
     jid = store.run_async(lambda log: {"ok": True, "perso_credits": None})

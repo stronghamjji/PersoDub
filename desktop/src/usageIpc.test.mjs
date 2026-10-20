@@ -52,13 +52,15 @@ test("a failed dub is counted and reported once, however often the page draws it
 });
 
 test("a cancel is neither counted nor reported; a success is counted with the job's own facts", async () => {
-  const be = await backend({ fedcba: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso", perso_credits: 3, duration: 12.4 } });
+  const be = await backend({ fedcba: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso", perso_credits: 3, duration: 12.4,
+                                       started_hour: 9, elapsed_seconds: 80, stage_seconds: { transcribe: 20 } } });
   try {
     const s = setup({ engines: { url: be.url } });
     await s.on["shell:count-dub"]({}, { status: "cancelled", job: "0a0a0a" });
     await s.on["shell:count-dub"]({}, { status: "done", job: "fedcba" });
     assert.deepEqual(s.counted, [["dub_success", "/kit", undefined, undefined,
-      { engines: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso" }, credits: 3, seconds: 12 }]]);
+      { engines: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso" }, credits: 3, seconds: 12,
+        timing: { started_hour: 9, elapsed_seconds: 80, stage_seconds: { transcribe: 20 } } }]]);
     assert.deepEqual(s.reported, []);
   } finally {
     be.close();

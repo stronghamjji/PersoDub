@@ -5,8 +5,11 @@ import { STEP_IDS } from "./installSpec.js";
 
 // Usage counts. The decisions live here as pure functions so they can be tested
 // without Electron; usageIpc.js and the renderer do the wiring. What a payload is
-// allowed to contain is fixed by buildPayload below and repeated in the
-// README's "Usage counts" -- the two must not drift.
+// allowed to contain is fixed by buildPayload below and repeated in
+// docs/privacy.md's "Usage counts" -- the two must not drift. The count worker
+// (not in this repository) accepts exactly these names; a dub's are stt,
+// separation, mode, credits, seconds and, from 0.8.6, started_hour,
+// elapsed_seconds, sep_seconds, stt_seconds, translate_seconds, voice_seconds.
 
 const DAILY_EVENTS = new Set(["app_launch"]);
 const FAILURE_EVENTS = new Set(["dub_failure", "install_failure", "erase_failure"]);
@@ -84,9 +87,14 @@ const persoOrLocal = (v) => (v === "perso" ? "perso" : "local");
 // out of the message, and the table stores NULL for it.
 const isCount = (n) => Number.isInteger(n) && n >= 0;
 
+// A step's seconds by the name the job's record keeps it under (app/jobs.py
+// timed_step, app/stages.py) -> the name it travels as. Only these four leave.
+const STAGE_FIELDS = [["separate", "sep_seconds"], ["transcribe", "stt_seconds"],
+                      ["translate", "translate_seconds"], ["synthesize", "voice_seconds"]];
+
 /** The whole message. A field not named here cannot leave. */
 export function buildPayload({ event, os, version, device, errorCode, step,
-                               engines, credits, seconds, persoKey }) {
+                               engines, credits, seconds, timing, persoKey }) {
   const payload = { event, os, version, device };
   if (FAILURE_EVENTS.has(event)) {
     payload.error_code = ERROR_CODES.has(errorCode) ? errorCode : "unknown";
@@ -110,6 +118,17 @@ export function buildPayload({ event, os, version, device, errorCode, step,
     }
     if (isCount(credits)) payload.credits = credits;
     if (isCount(seconds)) payload.seconds = seconds;
+    // When it started (the computer's hour, 0-23), how long it ran, and each
+    // step's seconds (0.8.6): whole numbers only, and a step that did not run
+    // is left out rather than sent as 0.
+    if (timing) {
+      if (isCount(timing.started_hour) && timing.started_hour < 24) payload.started_hour = timing.started_hour;
+      if (isCount(timing.elapsed_seconds)) payload.elapsed_seconds = timing.elapsed_seconds;
+      for (const [stage, field] of STAGE_FIELDS) {
+        const n = (timing.stage_seconds || {})[stage];
+        if (isCount(n)) payload[field] = n;
+      }
+    }
   }
   // Whether a Perso key is set when the app starts -- yes or no, never the key.
   if (event === "app_launch" && typeof persoKey === "boolean") {
@@ -120,8 +139,9 @@ export function buildPayload({ event, os, version, device, errorCode, step,
 
 /**
  * What a job's own record tells the count: its engine fields, the Perso
- * credits it spent and its length in seconds. A record the shell could not
- * fetch gives nothing, and buildPayload then sends nothing for it.
+ * credits it spent, its length in seconds, and how long it ran (the record's
+ * started_hour, elapsed_seconds and stage_seconds, app/jobs.py). A record the
+ * shell could not fetch gives nothing, and buildPayload then sends nothing for it.
  *
  * Seconds, not minutes. 0.6.2 and 0.6.3 sent whole minutes and two thirds of
  * what they sent read 0, because most of the videos people put in are under
@@ -135,6 +155,8 @@ export function dubFacts(job) {
     engines: { stt_engine, separation, dub_mode },
     credits: job.perso_credits,
     seconds: Number.isFinite(job.duration) ? Math.round(job.duration) : undefined,
+    timing: { started_hour: job.started_hour, elapsed_seconds: job.elapsed_seconds,
+              stage_seconds: job.stage_seconds },
   };
 }
 
@@ -205,7 +227,7 @@ export function saveState(file, { device, lastDay = null }) {
  */
 export async function countEvent(event, {
   mode, stateFile, url, os, version, errorCode, step,
-  engines, credits, seconds, persoKey,
+  engines, credits, seconds, timing, persoKey,
   today = new Date().toISOString().slice(0, 10),
   timeoutMs, fetchImpl, log = console.log,
 }) {
@@ -217,7 +239,7 @@ export async function countEvent(event, {
   if (!shouldReport({ event, lastDay: state.lastDay, today })) return false;
 
   const payload = buildPayload({ event, os, version, device: state.device, errorCode, step,
-                                 engines, credits, seconds, persoKey });
+                                 engines, credits, seconds, timing, persoKey });
 
   if (mode === "debug") {
     log(`[persodub-analytics] would send: ${JSON.stringify(payload)}`);

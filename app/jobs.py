@@ -106,7 +106,10 @@ SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lan
 # A key a record carries only at run time, left out on purpose. `started`
 # (app/separate_launch.py) is when a separation began, for the time the screen
 # counts while it runs -- and nothing is running after a restart (restore turns
-# it into an error).
+# it into an error). `started_hour`, `elapsed_seconds` and `stage_seconds`
+# (JobStore._launch) are how long the run took, read by the shell's usage count
+# the moment the job ends (desktop/src/analytics.js dubFacts) and by nothing
+# after it.
 
 # What GET /api/dub/jobs sends the screen: the same minus the two absolute
 # paths. The sidebar names a job, colours its dot and addresses everything else
@@ -290,6 +293,9 @@ def timed_step(log, step: str, name: str, **context):
         trace(f"{label} Context: {given}")
     _trace_memory(trace)
     began = time.monotonic()
+    # The job's tally of each step's whole seconds, when its log keeps one
+    # (JobStore._launch): a step that ran, done or failed, is in it by name.
+    tally = getattr(log, "stage_seconds", None)
     try:
         yield
     except JobCancelled:
@@ -298,6 +304,8 @@ def timed_step(log, step: str, name: str, **context):
         raise
     except Exception as e:
         trace(f"{label} FAILED ({time.monotonic() - began:.1f}s): {_described(e)}", level="ERROR")
+        if tally is not None:
+            tally[name] = round(time.monotonic() - began)
         # Describing a failure must never become the failure.
         with contextlib.suppress(Exception):
             for line in _failure_lines(e):
@@ -309,6 +317,8 @@ def timed_step(log, step: str, name: str, **context):
             e.persodub_step = f"{step} {name}"
         raise
     trace(f"{label} DONE ({time.monotonic() - began:.1f}s)")
+    if tally is not None:
+        tally[name] = round(time.monotonic() - began)
     _trace_memory(trace)
 
 
@@ -783,9 +793,19 @@ class JobStore:
             (logger.error if level == "ERROR" else logger.info)("job-%s: %s", jid, msg)
 
         log.trace = trace
+        log.stage_seconds = {}   # filled by timed_step, one entry per step that ran
 
         def _wrap():
             began = time.monotonic()
+            # When it started, on this computer's clock, and how long it took:
+            # whole numbers for the usage count, which lands on the record with
+            # the ending, before the status flips, as the credits do below.
+            started_hour = datetime.now().hour
+
+            def timing():
+                return {"started_hour": started_hour,
+                        "elapsed_seconds": round(time.monotonic() - began),
+                        "stage_seconds": dict(log.stage_seconds)}
             try:
                 rec = self.get(jid) or {}
                 trace("JOB START (%s)" % kind_of(rec))
@@ -817,7 +837,7 @@ class JobStore:
                     if cancelled:
                         self._jobs[jid]["status"] = JobStatus.CANCELLED
                     else:
-                        self._jobs[jid].update(spent)
+                        self._jobs[jid].update(spent, **timing())
                         self._jobs[jid]["status"] = JobStatus.DONE
                         self._jobs[jid]["result"] = result
                         if detected and not self._jobs[jid].get("source_lang"):
@@ -851,7 +871,8 @@ class JobStore:
                     _failed_step(e), time.monotonic() - began, type(e).__name__, error_text_for_ui(e)),
                     level="ERROR")
                 self.update(jid, status=JobStatus.ERROR, error=error_text_for_ui(e),
-                            error_shown=shown_text_for_ui(e), error_detail=getattr(e, "detail", None))
+                            error_shown=shown_text_for_ui(e), error_detail=getattr(e, "detail", None),
+                            **timing())
             # However it ended, the file beside the video now says so -- this is
             # the only moment the final status exists to be written down.
             work_dir = (self.get(jid) or {}).get("work_dir")

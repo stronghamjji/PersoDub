@@ -613,3 +613,43 @@ test("a video under thirty seconds keeps its length instead of rounding to nothi
   // A video that really is a blink still says so, and 0 is a count.
   assert.equal(dubFacts({ duration: 0 }).seconds, 0);
 });
+
+
+// ---- how long a dub ran (0.8.6) ----
+
+test("a dub says its starting hour, how long it ran and each step's seconds, by those names only", () => {
+  const job = { stt_engine: "whisper", separation: "local", dub_mode: "local", duration: 60,
+                started_hour: 14, elapsed_seconds: 701,
+                stage_seconds: { separate: 40, transcribe: 55, translate: 30, synthesize: 520, build: 9 },
+                title: "my private video" };
+  for (const event of ["dub_success", "dub_failure"]) {
+    const p = buildPayload({ event, os: "mac", version: "0.8.6", device: "a".repeat(32), ...dubFacts(job) });
+    assert.equal(p.started_hour, 14);
+    assert.equal(p.elapsed_seconds, 701);
+    assert.equal(p.sep_seconds, 40);
+    assert.equal(p.stt_seconds, 55);
+    assert.equal(p.translate_seconds, 30);
+    assert.equal(p.voice_seconds, 520);
+    // A step not on the list (build) and anything with a name stay home.
+    assert.equal(JSON.stringify(p).includes("build"), false);
+    assert.equal(JSON.stringify(p).includes("private"), false);
+  }
+});
+
+test("a step that did not run is left out, and a time that is not a whole number never leaves", () => {
+  const base = { event: "dub_success", os: "mac", version: "0.8.6", device: "a".repeat(32) };
+  const p = buildPayload({ ...base, ...dubFacts({ started_hour: 0, elapsed_seconds: 0,
+                                                  stage_seconds: { transcribe: 0, synthesize: 12.5 } }) });
+  assert.equal(p.started_hour, 0);
+  assert.equal(p.elapsed_seconds, 0);
+  assert.equal(p.stt_seconds, 0);
+  for (const field of ["sep_seconds", "translate_seconds", "voice_seconds"]) assert.equal(field in p, false);
+  const odd = buildPayload({ ...base, timing: { started_hour: 24, elapsed_seconds: -3, stage_seconds: "x" } });
+  for (const field of ["started_hour", "elapsed_seconds", "stt_seconds"]) assert.equal(field in odd, false);
+  // A record the shell could not fetch, or an older app's, says nothing.
+  assert.equal("elapsed_seconds" in buildPayload({ ...base, ...dubFacts(null) }), false);
+  assert.equal("started_hour" in buildPayload({ ...base, ...dubFacts({ duration: 5 }) }), false);
+  // An erase carries none of it.
+  const e = buildPayload({ ...base, event: "erase_success", timing: { started_hour: 3, elapsed_seconds: 9 } });
+  assert.deepEqual(Object.keys(e).sort(), ["device", "event", "os", "version"]);
+});
