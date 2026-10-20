@@ -175,7 +175,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 // Three lines of a real script: one whose voice fits its slot, one that runs a
 // second past it, and one with no voice made yet.
 const LINES = [
-  { line: 1, start: 0, end: 2, slot: 2, estimated: 1.5, audio_sec: 1.5,
+  { line: 1, start: 0, end: 2, slot: 2, estimated: 1.7, audio_sec: 1.7,
     text: "Hello", source: "안녕", fits: true },
   { line: 2, start: 2, end: 4, slot: 2, estimated: 3, audio_sec: 3,
     text: "Over", source: "길게", fits: false },
@@ -185,7 +185,8 @@ const LINES = [
 
 // -- a finished job, drawn ------------------------------------------------
 
-// One line, six seconds, six hundred pixels of room, 77px to the second. Every
+// One line, six seconds, six hundred pixels of room, 77px to the second -- its
+// 1.2s of voice in a 2s slot much shorter than it, so orange. Every
 // line below the first of the strip's templates is HTML the browser receives,
 // so its indentation is output, not layout. A pixel that moves has to move on
 // purpose.
@@ -200,7 +201,7 @@ const ONE_LINE_TRACK = [
   '    data-start="0" data-end="2"',
   '    style="left:0.0px;width:154.0px"',
   '    title="안녕">안녕</button></div>',
-  '    <div class="tl-lane tl-lane-dub"><button type="button" class="tl-blk tl-voice tl-s1"',
+  '    <div class="tl-lane tl-lane-dub"><button type="button" class="tl-blk tl-voice tl-short tl-s1"',
   '    data-start="0" data-end="2"',
   '    style="left:0.0px;width:154.0px"',
   '    title="Hello">Hello<i class="tl-vlen" style="width:60.0%"></i></button></div>',
@@ -233,6 +234,8 @@ test("the toolbar carries the legend, the clock, fit, zoom and the fold; the nam
   assert.ok(html.includes('<span><i class="tl-sw-voice"></i>Voice length</span>'));
   assert.ok(html.includes('<span><i class="tl-sw-slot"></i>Time available</span>'));
   assert.ok(html.includes('<span><i class="tl-sw-over"></i>Over time</span>'));
+  assert.ok(html.indexOf('<span><i class="tl-sw-short"></i>Much shorter</span>')
+    > html.indexOf('<span><i class="tl-sw-over"></i>Over time</span>'), "and after it, Much shorter");
   assert.ok(html.includes('<span class="tl-clock" id="timelineClock">00:00:00.0 / 00:00:30.0</span>'));
   for (const id of ["tlZoomFit", "tlZoomOut", "tlZoomLevel", "tlZoomIn", "timelineFold", "tlSubEye"]) {
     assert.ok(html.includes(`id="${id}"`), id);
@@ -255,8 +258,8 @@ test("three lines land where their seconds are, and a long voice runs red past i
   const track = h.$("timelineTrack").innerHTML;
 
   assert.match(track, /class="tl-inner" style="width:2390px"/, "30s at 77px, and 80px past the end");
-  // Line 1: two seconds of slot from the very start, 1.5s of voice along its foot.
-  assert.ok(track.includes('style="left:0.0px;width:154.0px"\n    title="Hello">Hello<i class="tl-vlen" style="width:75.0%"></i>'));
+  // Line 1: two seconds of slot from the very start, 1.7s of voice along its foot.
+  assert.ok(track.includes('style="left:0.0px;width:154.0px"\n    title="Hello">Hello<i class="tl-vlen" style="width:85.0%"></i>'));
   // Line 2 runs a second past its slot: a red clip, a red foot all the way,
   // and a tint carrying on over what follows, saying how far.
   assert.ok(track.includes('class="tl-blk tl-voice tl-over tl-s1"'));
@@ -273,6 +276,28 @@ test("three lines land where their seconds are, and a long voice runs red past i
   // The subtitle lane draws one block per line, over the same seconds.
   assert.ok(track.includes('<div class="tl-cap" data-idx="2"\n' +
                            '      style="left:385.0px;width:77.0px"'));
+});
+
+test("a voice much shorter than its slot is orange, as in the table, its foot as long as the voice", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const voice = (line, start, slot, sec) => ({ line, start, end: start + slot, slot, estimated: sec,
+    audio_sec: sec, text: `L${line}`, source: "원문", fits: true });
+
+  h.api.renderTimeline([
+    voice(1, 0, 3.0, 1.6),     // 1.4 short: more than a second
+    voice(2, 3, 4.0, 3.1),     // 0.9 short: more than a fifth of the slot
+    voice(3, 7, 4.7, 4.4),     // 0.3 short: fits
+    voice(4, 12, 1.9, 2.5),    // 0.6 over
+  ], 30);
+  const track = h.$("timelineTrack").innerHTML;
+
+  assert.ok(track.includes('class="tl-blk tl-voice tl-short tl-s1"\n    data-start="0"'));
+  assert.ok(track.includes('title="L1">L1<i class="tl-vlen" style="width:53.3%"></i>'));
+  assert.ok(track.includes('class="tl-blk tl-voice tl-short tl-s1"\n    data-start="3"'));
+  assert.ok(track.includes('class="tl-blk tl-voice tl-s1"\n    data-start="7"'), "green while it fits");
+  assert.ok(track.includes('class="tl-blk tl-voice tl-over tl-s1"\n    data-start="12"'), "red past its slot");
+  assert.equal((track.match(/tl-short/g) || []).length, 2);
 });
 
 test("each speaker wears a colour on the top edge of their lines", (t) => {

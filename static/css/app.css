@@ -42,7 +42,8 @@
        clip; --timeline-fit-bg is the clip itself. */
     --timeline-fit: #49a072;
     /* A line much shorter than its slot: orange, for the script table's dot
-       and difference (length-dots mockup, owner 2026-10-20). */
+       and difference and the timeline's bar; --timeline-short-bg is the
+       clip (length-dots mockup, owner 2026-10-20). */
     --timeline-short: #f59e0b;
     --warning: #dfa11a;
     /* The Settings save-failure panel: a dark amber with ink light enough to
@@ -139,6 +140,7 @@
     --tl-ruler-ink: #6f7683;
     --tl-ruler-tick: #373d47;
     --timeline-fit-bg: #254533;
+    --timeline-short-bg: #4a3412;
     --video-clip: #2b415c;
     --waveform: #5682bb;
     --lane-original: #243a52;
@@ -1897,6 +1899,7 @@
   .tl-sw-voice { background: var(--timeline-fit); }
   .tl-sw-slot { border: 1px dashed var(--muted-foreground); }
   .tl-sw-over { background: var(--destructive); }
+  .tl-sw-short { background: var(--timeline-short); }
   .tl-clock { font-size: 10.5px; margin-left: auto; margin-right: 12px; font-variant-numeric: tabular-nums; }
   .tl-zoom { display: inline-flex; align-items: center; gap: 10px; }
   /* A 78px line with an 8x12 grip on it. */
@@ -2023,6 +2026,10 @@
   /* Over time: a red clip with a red ring, its foot red all the way. */
   .tl-voice.tl-over { background: var(--destructive-soft); outline: 1px solid var(--destructive); outline-offset: -1px; }
   .tl-over .tl-vlen { background: var(--destructive); }
+  /* Much shorter than its slot (the table's orange dot): the same in orange,
+     its foot only as long as the voice. */
+  .tl-voice.tl-short { background: var(--timeline-short-bg); outline: 1px solid var(--timeline-short); outline-offset: -1px; }
+  .tl-short .tl-vlen { background: var(--timeline-short); }
   /* The part past the slot: a red tint laid over whatever follows, as far as
      the voice actually runs. A tint, so the next line's block and words still
      read through it (user decision 2026-08-28). */

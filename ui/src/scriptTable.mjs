@@ -20,9 +20,9 @@
 // page too -- they are the bridge from the assistant strip, not part of the
 // table, and they only need getJobId/countStale/renderScript to do their work.
 //
-// lineOverBy is exported on its own, without init: the timeline colours its
-// bars by the same rule, and one rule for "too long" said in two places is how
-// the two would come to disagree.
+// lineVerdict (and lineOverBy under it) is exported on its own, without init:
+// the timeline colours its bars by the same verdict, and one rule said in two
+// places is how the two would come to disagree.
 //
 // The elements this file touches: #scriptBox, #scriptSaving, #scriptCount --
 // the count beside the pane's own name -- and the pane head's three buttons
