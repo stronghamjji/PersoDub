@@ -340,7 +340,7 @@ def _stub_run_dub_until_translation(monkeypatch):
     monkeypatch.setattr(
         pipeline, "transcribe_local",
         lambda video, language=None, word_timestamps=False, log=None, on_language=None, video_duration=None,
-        vocals_path=None: [{"start": 0.0, "end": 2.0, "text": "hi"}],
+        vocals_path=None, cancel_check=None: [{"start": 0.0, "end": 2.0, "text": "hi"}],
     )
     monkeypatch.setattr(pipeline, "diarize", lambda path, cues, num_speakers=None, video_duration=None: cues)
 

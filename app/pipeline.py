@@ -739,7 +739,7 @@ def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, l
 
 
 def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, video_duration=None,
-                            vocals_path=None):
+                            vocals_path=None, cancel_check=None):
     """Stage 2/6 -- local Whisper transcription (no container at all).
 
     Returns (src_cues, detected_source_language_code, diar_engine): Whisper
@@ -749,6 +749,8 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, 
     video_duration, when known, scales the subprocess timeout for long videos
     (see app.timeouts.scaled_timeout) and ends every line where the video
     does; vocals_path lets Whisper's made-up lines over quiet stretches go.
+    cancel_check is asked while Whisper runs, so Stop ends it there instead
+    of after the whole run.
     """
     _log_stage(log, "transcribe", "Transcribing locally (Whisper, no container)…")
     detected = {"code": None}
@@ -761,7 +763,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, 
         src_cues = transcribe_local(
             video_path, language=source_language_code, word_timestamps=True, log=log,
             on_language=lambda c: detected.__setitem__("code", c),
-            video_duration=video_duration, vocals_path=vocals_path,
+            video_duration=video_duration, vocals_path=vocals_path, cancel_check=cancel_check,
         )
     except JobCancelled:
         raise  # a user cancel is not a failure of this stage
@@ -1089,7 +1091,7 @@ def _transcribe_or_reuse(video_path, work_dir, reuse, vocals_path, stt_engine, s
     if perso_cues is None:
         src_cues, detected_code, diar_engine = _stage_transcribe_local(
             video_path, source_language_code, diar_engine, log, video_duration=video_duration,
-            vocals_path=vocals_path)
+            vocals_path=vocals_path, cancel_check=cancel_check)
     else:
         src_cues = perso_cues
     # A machine transcript can start a line before its speech (Whisper

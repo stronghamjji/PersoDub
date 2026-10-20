@@ -1,19 +1,22 @@
 """app/stt_local.py: subprocess bridge to the local Whisper worker
 (app/scripts/whisper_transcribe.py).
 
-All subprocess.run calls are monkeypatched (no real interpreter, no model
-weights) -- this tests the contract: happy-path cue shape, and that every
-failure mode raises a clear RuntimeError (transcribe_local is the LAST
-fallback, so unlike app/qwen_scoring.score_takes() it must never swallow
-errors into a None/empty return).
+The process is replaced (stt_local._run) in most tests, with no model weights
+-- this tests the contract: happy-path cue shape, and that every failure mode
+raises a clear RuntimeError (transcribe_local is the LAST fallback, so unlike
+app/qwen_scoring.score_takes() it must never swallow errors into a None/empty
+return). A few run a tiny real child in Whisper's place (_child).
 """
 import json
 import os
 import sys
+import threading
+import time
 
 import pytest
 
 from app import stt_local
+from app.jobs import JobCancelled
 from app.run_errors import PartsMissing
 
 
@@ -23,7 +26,7 @@ def _ok_result(segments=None):
 
 
 def _fake_run_writing(output_payload):
-    """Build a fake subprocess.run that writes output_payload to --output and
+    """Build a fake _run that writes output_payload to --output and
     succeeds (returncode 0)."""
     def fake_run(cmd, **kwargs):
         out_path = cmd[cmd.index("--output") + 1]
@@ -35,6 +38,15 @@ def _fake_run_writing(output_payload):
             stderr = ""
         return _R()
     return fake_run
+
+
+def _child(monkeypatch, tmp_path, code):
+    """Whisper replaced by `code`, run as a real process the way Whisper is:
+    for what a fake cannot show, that it is ended and both pipes are read."""
+    script = tmp_path / "worker.py"
+    script.write_text(code, encoding="utf-8")
+    monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
+    monkeypatch.setattr(stt_local, "SCRIPT_PATH", str(script))
 
 
 @pytest.fixture
@@ -70,7 +82,7 @@ def test_raises_on_subprocess_exception(monkeypatch, audio_file):
     def boom(*a, **k):
         raise OSError("no such file")
 
-    monkeypatch.setattr(stt_local.subprocess, "run", boom)
+    monkeypatch.setattr(stt_local, "_run", boom)
     with pytest.raises(RuntimeError, match="failed to start"):
         stt_local.transcribe_local(audio_file)
 
@@ -89,7 +101,7 @@ def test_transcribe_says_it_timed_out(monkeypatch, audio_file):
             timeout=900,
         )
 
-    monkeypatch.setattr(stt_local.subprocess, "run", boom)
+    monkeypatch.setattr(stt_local, "_run", boom)
     with pytest.raises(RuntimeError) as caught:
         stt_local.transcribe_local(audio_file, timeout=900)
     assert "timed out after 900 seconds" in str(caught.value)
@@ -103,7 +115,7 @@ def test_raises_on_nonzero_exit(monkeypatch, audio_file):
         returncode = 1
         stderr = "model load failed"
 
-    monkeypatch.setattr(stt_local.subprocess, "run", lambda cmd, **k: _R())
+    monkeypatch.setattr(stt_local, "_run", lambda cmd, **k: _R())
     with pytest.raises(RuntimeError, match="exited with an error"):
         stt_local.transcribe_local(audio_file)
 
@@ -118,7 +130,7 @@ def test_a_broken_whisper_model_file_is_parts_missing(monkeypatch, audio_file):
         stderr = ("__WHISPER_TRANSCRIBE_ERROR__ Cannot load the target vocabulary "
                   "from the model directory")
 
-    monkeypatch.setattr(stt_local.subprocess, "run", lambda cmd, **k: _R())
+    monkeypatch.setattr(stt_local, "_run", lambda cmd, **k: _R())
     with pytest.raises(PartsMissing, match="target vocabulary"):
         stt_local.transcribe_local(audio_file)
 
@@ -137,7 +149,7 @@ def test_raises_on_invalid_json_output(monkeypatch, audio_file):
             stderr = ""
         return _R()
 
-    monkeypatch.setattr(stt_local.subprocess, "run", fake_run)
+    monkeypatch.setattr(stt_local, "_run", fake_run)
     with pytest.raises(RuntimeError, match="invalid output"):
         stt_local.transcribe_local(audio_file)
 
@@ -146,7 +158,7 @@ def test_raises_when_worker_reports_failure(monkeypatch, audio_file):
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
     monkeypatch.setattr(
-        stt_local.subprocess, "run",
+        stt_local, "_run",
         _fake_run_writing({"ok": False, "error": "WHISPER_MODEL_DIR not found: /bad/path"}),
     )
     with pytest.raises(RuntimeError, match="WHISPER_MODEL_DIR not found"):
@@ -159,7 +171,7 @@ def test_raises_on_empty_audio_no_segments(monkeypatch, audio_file):
     convention as PersoClient's 'Perso result is empty' check in pipeline.py."""
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
-    monkeypatch.setattr(stt_local.subprocess, "run", _fake_run_writing(_ok_result(segments=[])))
+    monkeypatch.setattr(stt_local, "_run", _fake_run_writing(_ok_result(segments=[])))
     # Its own kind, so the job says no one speaks in it (app/pipeline.py).
     with pytest.raises(stt_local.NoSpeech, match="This video has no speech to transcribe"):
         stt_local.transcribe_local(audio_file)
@@ -172,7 +184,7 @@ def test_happy_path_returns_cue_shape(monkeypatch, audio_file):
         {"start": 0.0, "end": 1.5, "text": "You let five people die."},
         {"start": 1.5, "end": 3.2, "text": "Then you let Dent take your place."},
     ])
-    monkeypatch.setattr(stt_local.subprocess, "run", _fake_run_writing(payload))
+    monkeypatch.setattr(stt_local, "_run", _fake_run_writing(payload))
 
     result = stt_local.transcribe_local(audio_file)
 
@@ -200,7 +212,7 @@ def test_language_and_word_timestamps_flags_passed_through(monkeypatch, audio_fi
             stderr = ""
         return _R()
 
-    monkeypatch.setattr(stt_local.subprocess, "run", fake_run)
+    monkeypatch.setattr(stt_local, "_run", fake_run)
     stt_local.transcribe_local(audio_file, language="en", word_timestamps=True)
 
     cmd = captured["cmd"]
@@ -224,7 +236,7 @@ def test_language_omitted_when_not_given(monkeypatch, audio_file):
             stderr = ""
         return _R()
 
-    monkeypatch.setattr(stt_local.subprocess, "run", fake_run)
+    monkeypatch.setattr(stt_local, "_run", fake_run)
     stt_local.transcribe_local(audio_file)
 
     assert "--language" not in captured["cmd"]
@@ -237,7 +249,7 @@ def test_language_omitted_when_not_given(monkeypatch, audio_file):
 def test_logs_detected_language_when_no_hint_given(monkeypatch, audio_file):
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
-    monkeypatch.setattr(stt_local.subprocess, "run", _fake_run_writing(_ok_result()))  # language: "en"
+    monkeypatch.setattr(stt_local, "_run", _fake_run_writing(_ok_result()))  # language: "en"
     logs = []
 
     stt_local.transcribe_local(audio_file, log=logs.append)
@@ -250,7 +262,7 @@ def test_does_not_log_detected_language_when_a_hint_was_given(monkeypatch, audio
     # (possibly different) auto-detected value back would just be confusing.
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
-    monkeypatch.setattr(stt_local.subprocess, "run", _fake_run_writing(_ok_result()))
+    monkeypatch.setattr(stt_local, "_run", _fake_run_writing(_ok_result()))
     logs = []
 
     stt_local.transcribe_local(audio_file, language="en", log=logs.append)
@@ -262,7 +274,7 @@ def test_no_log_callable_is_fine_when_no_hint_given(monkeypatch, audio_file):
     # log is optional -- must not raise when the caller doesn't pass one.
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
-    monkeypatch.setattr(stt_local.subprocess, "run", _fake_run_writing(_ok_result()))
+    monkeypatch.setattr(stt_local, "_run", _fake_run_writing(_ok_result()))
 
     result = stt_local.transcribe_local(audio_file)
 
@@ -288,7 +300,7 @@ def test_stt_python_env_override(monkeypatch, audio_file):
             stderr = ""
         return _R()
 
-    monkeypatch.setattr(stt_local.subprocess, "run", fake_run)
+    monkeypatch.setattr(stt_local, "_run", fake_run)
     stt_local.transcribe_local(audio_file)
 
     assert captured["cmd"][0] == sys.executable
@@ -302,35 +314,23 @@ def test_default_stt_python_reads_env_var_at_import(monkeypatch):
     assert os.environ.get("STT_PYTHON", "python3") == "/custom/venv/bin/python"
 
 
-def test_subprocess_run_does_not_override_env(monkeypatch, audio_file):
-    """stt_local.py must not pass env= to subprocess.run -- that would strip
+def test_subprocess_run_does_not_override_env(monkeypatch, audio_file, tmp_path):
+    """stt_local.py must not pass env= to the process -- that would strip
     inherited variables like WHISPER_MODEL_DIR (read by the worker script) and
     break the env-override contract described in app/docs/INTEGRATION_SPEC.md."""
-    monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
-    monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
-    captured_kwargs = {}
+    monkeypatch.setenv("WHISPER_MODEL_DIR", "/kit/models/whisper")
+    _child(monkeypatch, tmp_path, "import json, os, sys\n"
+           "text = os.environ.get('WHISPER_MODEL_DIR', 'not inherited')\n"
+           "with open(sys.argv[sys.argv.index('--output') + 1], 'w') as f:\n"
+           "    json.dump({'ok': True, 'segments': [{'start': 0.0, 'end': 1.0, 'text': text}]}, f)\n")
 
-    def fake_run(cmd, **kwargs):
-        captured_kwargs.update(kwargs)
-        out_path = cmd[cmd.index("--output") + 1]
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(_ok_result(), f)
-
-        class _R:
-            returncode = 0
-            stderr = ""
-        return _R()
-
-    monkeypatch.setattr(stt_local.subprocess, "run", fake_run)
-    stt_local.transcribe_local(audio_file)
-
-    assert "env" not in captured_kwargs
+    assert stt_local.transcribe_local(audio_file)[0]["text"] == "/kit/models/whisper"
 
 
 # --- timeout scales with the video's length (long videos used to die on a
 # fixed 900s wall regardless of how long the video actually was). The formula
 # itself is tested once, shared, in tests/test_timeouts.py -- this is just the
-# wiring: the computed timeout must actually reach subprocess.run.
+# wiring: the computed timeout must actually reach the process (_run).
 
 def test_transcribe_passes_computed_timeout_to_subprocess_run(monkeypatch, audio_file):
     from app import timeouts
@@ -352,7 +352,7 @@ def test_transcribe_passes_computed_timeout_to_subprocess_run(monkeypatch, audio
             stderr = ""
         return _R()
 
-    monkeypatch.setattr(stt_local.subprocess, "run", fake_run)
+    monkeypatch.setattr(stt_local, "_run", fake_run)
     stt_local.transcribe_local(audio_file, video_duration=600.0)  # 10 min
 
     assert captured["timeout"] == 6000.0
@@ -410,7 +410,7 @@ def _vocals(path, seconds, loud_from=None, loud_to=None):
 def _heard(monkeypatch, segments):
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
-    monkeypatch.setattr(stt_local.subprocess, "run", _fake_run_writing(_ok_result(segments=segments)))
+    monkeypatch.setattr(stt_local, "_run", _fake_run_writing(_ok_result(segments=segments)))
 
 
 def test_lines_end_where_the_video_ends(monkeypatch, audio_file):
@@ -449,3 +449,48 @@ def test_a_clip_of_only_made_up_lines_has_no_speech(monkeypatch, audio_file, tmp
     _heard(monkeypatch, [{"start": 0.0, "end": 29.98, "text": "Thank you for watching!"}])
     with pytest.raises(RuntimeError, match="This video has no speech to transcribe"):
         stt_local.transcribe_local(audio_file, video_duration=10.0, vocals_path=vocals)
+
+
+# --- Stop while Whisper runs (Windows test C10, 2026-10-20) ------------------
+# Stop pressed during Transcribing waited for the whole Whisper run, 47 s.
+
+def test_stop_ends_whisper_within_a_second(monkeypatch, audio_file, tmp_path):
+    beat = tmp_path / "beat"
+    # A run that says it is alive every 50 ms, for 20 s at most.
+    _child(monkeypatch, tmp_path, "import time\nfor _ in range(400):\n"
+           "    with open(%r, 'a') as f:\n        f.write('.')\n    time.sleep(0.05)\n" % str(beat))
+    stop, pressed = threading.Event(), []
+
+    def press():  # once the run is surely going
+        while not beat.exists():
+            time.sleep(0.01)
+        pressed.append(time.monotonic())
+        stop.set()
+
+    threading.Thread(target=press, daemon=True).start()
+    with pytest.raises(JobCancelled):
+        stt_local.transcribe_local(audio_file, cancel_check=stop.is_set)
+    assert time.monotonic() - pressed[0] < 1.5
+    # Nothing runs it any more -- on Windows that includes the real python.exe
+    # a venv's python.exe starts.
+    size = beat.stat().st_size
+    time.sleep(0.3)
+    assert beat.stat().st_size == size
+
+
+def test_whispers_words_on_stderr_still_name_a_broken_model(monkeypatch, audio_file, tmp_path):
+    # Also more on stdout than a pipe holds: a pipe nobody reads stalls the
+    # child, and the run would end on its timeout instead of on its error.
+    _child(monkeypatch, tmp_path, "import sys\nsys.stdout.write('x' * 200000)\n"
+           "sys.stderr.write('__WHISPER_TRANSCRIBE_ERROR__ Cannot load the target vocabulary "
+           "from the model directory')\nsys.exit(1)\n")
+    with pytest.raises(PartsMissing, match="target vocabulary"):
+        stt_local.transcribe_local(audio_file, timeout=10)
+
+
+def test_whisper_past_its_time_is_ended(monkeypatch, audio_file, tmp_path):
+    _child(monkeypatch, tmp_path, "import time\ntime.sleep(20)\n")
+    began = time.monotonic()
+    with pytest.raises(RuntimeError, match="timed out after 1 seconds"):
+        stt_local.transcribe_local(audio_file, timeout=1)
+    assert time.monotonic() - began < 5

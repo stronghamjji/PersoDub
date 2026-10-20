@@ -141,6 +141,27 @@ def test_stt_engine_local_failure_raises(monkeypatch, tmp_path):
     assert any("Speech recognition failed on this computer" in m for m in logs)
 
 
+def test_stop_while_whisper_runs_is_a_cancel_not_a_failure(monkeypatch, tmp_path):
+    # The job's cancel_check reaches Whisper itself, so Stop does not wait for
+    # the whole run (Windows test C10, 2026-10-20).
+    from app.jobs import JobCancelled
+    _stub_common(monkeypatch)
+    pressed = []
+
+    def _stopped(audio_path, language=None, cancel_check=None, **k):
+        pressed.append(True)   # Stop, while Whisper runs
+        assert cancel_check()
+        raise JobCancelled("Transcription was stopped.")
+
+    monkeypatch.setattr(pipeline, "transcribe_local", _stopped)
+    video, out, srt = _write_inputs(tmp_path)
+    logs = []
+    with pytest.raises(JobCancelled):
+        pipeline.run_dub(video_path=video, out_path=out, srt_path=srt, language="Korean",
+                         language_code="ko", log=logs.append, cancel_check=lambda: bool(pressed))
+    assert not any("Speech recognition failed" in m for m in logs)
+
+
 def test_a_video_with_no_speech_says_so_instead_of_blaming_the_file(monkeypatch, tmp_path):
     # A music-only clip was told "Speech recognition failed. Check the video file."
     from app.stt_local import NoSpeech
