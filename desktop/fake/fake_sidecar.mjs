@@ -1,5 +1,5 @@
 // Fake Qwen3-TTS sidecar for tests: /health -> {"status": str, "model_loaded": bool}
-// usage: node fake_sidecar.mjs <port> [--never-ready] [--no-model] [--loading=<ms>] [--die]
+// usage: node fake_sidecar.mjs <port> [--never-ready] [--no-model] [--loading=<ms>] [--die] [--die-out-of-memory]
 import { createServer } from "node:http";
 
 const port = Number(process.argv[2]);
@@ -17,6 +17,13 @@ const started = Date.now();
 if (process.argv.includes("--die")) {
   process.stderr.write(`Traceback (most recent call last):\nRuntimeError: fake engine could not load (${process.env.HOME || "home"}/secret)\n`);
   setTimeout(() => process.exit(3), 100);
+}
+
+// Mirrors issue #187: Windows out of paging file while the engine loaded.
+// The line as the log kept it, the system's own words mojibake around the code.
+if (process.argv.includes("--die-out-of-memory")) {
+  process.stderr.write("Traceback (most recent call last):\nOSError: �� �۾��� �Ϸ��ϱ� ���� ����¡ ������ �ʹ� �۽��ϴ�. (os error 1455)\n");
+  setTimeout(() => process.exit(1), 100);
 }
 
 createServer((req, res) => {

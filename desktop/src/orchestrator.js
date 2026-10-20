@@ -152,6 +152,15 @@ export function packAlive(children) {
 // gone once it answers. The backend words it (app/runtime.py, GET /api/engines)
 // and its preflight refuses a local dub that needs it with that sentence.
 export const PACK_STATE_KEY = { engine: "tts_state", "ollama-runtime": "ollama_state" };
+// ...and beside "failed", why, when the engine's last lines say: "memory"
+// when the computer ran out of it, "" otherwise. The voice engine then says
+// so (app/engines_status.py) instead of "PersoDub could not start it".
+export const PACK_FAILURE_KEY = { engine: "tts_failure", "ollama-runtime": "ollama_failure" };
+// What an engine that ran out of memory leaves as its last words: Windows'
+// "paging file is too small" (os error 1455, the only part that is not in the
+// computer's own language -- issue #187's log is mojibake around it), Python's
+// MemoryError, torch's DefaultCPUAllocator "not enough memory".
+export const OUT_OF_MEMORY = /os error 1455|paging file|out of memory|not enough memory|MemoryError|DefaultCPUAllocator/i;
 
 // log and onExit as startEngines takes them. place is the pack's number in
 // shell.log's "[Engine i/N]" at boot; a pack started on its own later (after
@@ -228,8 +237,10 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
       stopChild(child);
       children.pop();
       record();
-      writeRuntime(cfg.kitDir, { [PACK_STATE_KEY[packId]]: "failed" });
       const tail = engineTail(child, cfg.kitDir);
+      err.outOfMemory = OUT_OF_MEMORY.test(tail);
+      writeRuntime(cfg.kitDir, { [PACK_STATE_KEY[packId]]: "failed",
+                                 [PACK_FAILURE_KEY[packId]]: err.outOfMemory ? "memory" : "" });
       if (tail) err.message += `\nLast lines of ${basename(child.logPath)}:\n${tail}`;
       log(`${tag} FAILED (${secondsSince(from)}s): ${err.message.split("\n")[0]}`, "ERROR");
       // ...and under it the engine's own last lines, the ones appended above.
@@ -237,7 +248,7 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
       throw err;
     }
     announce();
-    clearRuntime(cfg.kitDir, [PACK_STATE_KEY[packId]]);
+    clearRuntime(cfg.kitDir, [PACK_STATE_KEY[packId], PACK_FAILURE_KEY[packId]]);
     log(`${tag} READY (${secondsSince(from)}s)`);
   }
 }
@@ -276,7 +287,7 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
   const record = () => writeFileSync(join(logDir, PIDS_FILE), JSON.stringify(pids()));
   const packOpts = { logDir, env, children, record, log, onExit };
 
-  const failed = [];   // {pack, message}: packs that did not start, for bootFlow.js to log and report
+  const failed = [];   // {pack, message, outOfMemory}: packs that did not start, for bootFlow.js to log and report
 
   // Every pack already on this kit's disk starts now; a pack installed
   // later in the session starts through startPack below, the same way.
@@ -296,7 +307,8 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
   try {
     // Addresses (and states) from the last launch must not outlive it: a
     // pack that was removed since would otherwise still be announced.
-    clearRuntime(cfg.kitDir, ["ollama_url", "tts_url", ...Object.values(PACK_PID_KEY), ...Object.values(PACK_STATE_KEY)]);
+    clearRuntime(cfg.kitDir, ["ollama_url", "tts_url", ...Object.values(PACK_PID_KEY), ...Object.values(PACK_STATE_KEY),
+                              ...Object.values(PACK_FAILURE_KEY)]);
     for (const id of bootPacks) {
       try {
         packChildren.set(id, await startPackProcesses(cfg, id, { ...packOpts, place: `${enginePacks.indexOf(id) + 1}/${total}` }));
@@ -305,7 +317,7 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
         // Perso dubs, erasing, exporting and finished projects need neither,
         // so the window still opens. The page learns it through runtime.json
         // and the retry is the install-pack IPC, which starts it again.
-        failed.push({ pack: id, message: errorText(err) });
+        failed.push({ pack: id, message: errorText(err), outOfMemory: !!err.outOfMemory });
       }
     }
 

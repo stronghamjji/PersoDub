@@ -63,3 +63,17 @@ def test_reads_the_state_the_shell_wrote_and_nothing_else(tmp_path, monkeypatch)
     assert runtime.state("tts") == ""
     monkeypatch.delenv("PERSODUB_KIT_DIR")
     assert runtime.state("tts") == ""
+
+
+def test_reads_why_a_pack_failed_and_nothing_else(tmp_path, monkeypatch):
+    # "memory" beside "failed" when the engine's last lines said it ran out
+    # (desktop/src/orchestrator.js PACK_FAILURE_KEY); anything else is "".
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    (tmp_path / "runtime.json").write_text(
+        json.dumps({"version": 1, "tts_failure": "memory", "ollama_failure": ""}))
+    assert runtime.failure("tts") == "memory"
+    assert runtime.failure("ollama") == ""
+    (tmp_path / "runtime.json").write_text("{not json")
+    assert runtime.failure("tts") == ""
+    monkeypatch.delenv("PERSODUB_KIT_DIR")
+    assert runtime.failure("tts") == ""

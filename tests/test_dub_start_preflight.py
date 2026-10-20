@@ -307,6 +307,11 @@ def test_a_voice_engine_that_failed_to_start_is_refused_with_the_shells_sentence
     assert r.status_code == 422
     assert r.json()["detail"] == engines_status.local_engine("voice")["message"]
     assert "voice engine is not running because it could not start" in r.json()["detail"]
+    # Out of memory keeps the phrase the page restarts the engine on: closing
+    # other apps and pressing Start again is what works (issue #187).
+    _runtime(_kit, tts_state="failed", tts_failure="memory")
+    said = _start().json()["detail"]
+    assert "voice engine is not running" in said and "ran out of memory" in said
     _runtime(_kit, tts_state="starting")
     assert "still starting" in _start().json()["detail"]
     # A Perso dub needs no voice engine on this computer at all.

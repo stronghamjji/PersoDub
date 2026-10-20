@@ -393,6 +393,13 @@ test("a stage that ran out of time is its own word, not a crash", () => {
   assert.equal(classifyError("connect ETIMEDOUT 1.2.3.4:443"), "network");
 });
 
+// Issue #187: the voice engine's last line on a Windows PC out of paging
+// file, the system's words mojibake around the code.
+test("Windows' paging file that is too small is a machine out of memory", () => {
+  assert.equal(classifyError("OSError: �� �۾��� �Ϸ��ϱ� ���� ����¡ ������ �ʹ� �۽��ϴ�. (os error 1455)"), "out-of-memory");
+  assert.equal(classifyError("OSError: The paging file is too small for this operation to complete."), "out-of-memory");
+});
+
 test("torch's own wording for a machine with no memory left is recognised", () => {
   assert.equal(
     classifyError("DefaultCPUAllocator: not enough memory: you tried to allocate 2147483648 bytes"),

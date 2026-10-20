@@ -266,8 +266,10 @@ const ERROR_PATTERNS = [
   // of them counted as "unknown" (2026-09-15).
   [/timed out after|timed out|TimeoutExpired/i,      "timeout"],
   // "not enough memory" is torch's own wording (DefaultCPUAllocator), which
-  // the /allocate/ rule below never matched -- it says "Allocator".
-  [/out of memory|not enough memory|ENOMEM|allocate/i, "out-of-memory"],
+  // the /allocate/ rule below never matched -- it says "Allocator". Windows'
+  // "paging file is too small" is os error 1455, in the computer's own
+  // language around the number (issue #187).
+  [/out of memory|not enough memory|ENOMEM|allocate|os error 1455|paging file/i, "out-of-memory"],
   [/unsupported|unrecognized codec|invalid data found/i, "unsupported-format"],
   [/did not become ready|exit \d+/i,                 "engine-crash"],
   // The cloud service saying no. These sentences are the app's own published

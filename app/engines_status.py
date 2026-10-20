@@ -223,17 +223,23 @@ TRANSLATOR_NAMES = {t.name: t.label for t in TRANSLATORS.values() if t.offered}
 _LOCAL_ENGINES = {"voice": ("tts", "engine"), "translation": ("ollama", "ollama-runtime")}
 
 
-def _engine_words(which: str, state: str) -> str:
+def _engine_words(which: str, state: str, failure: str = "") -> str:
     """The words an engine's state is told in, said when they are asked for.
     GET /api/engines hands them to the page, and dub_start's preflight
     (app/api/dub.py) refuses a dub with the same sentence. The voice engine's
-    two "voice engine is not running" stay in English: the page answers that
-    phrase by asking the shell to start the engine again (ui/src/app.mjs)."""
+    "voice engine is not running" sentences stay in English: the page answers
+    that phrase by asking the shell to start the engine again (ui/src/app.mjs).
+    `failure` is why it failed, when the shell could tell (app/runtime.py)."""
     if which == "voice":
+        # Out of memory: closing other apps and pressing Start again (which
+        # restarts the engine once) is what works (issue #187).
+        if state == "failed" and failure == "memory":
+            return ("The voice engine is not running: this computer ran out of memory. "
+                    "Close other apps and try again, or try the Perso API.")
         return {
             "starting": i18n.t("The voice engine is still starting. Try again in a minute."),
             "failed": "The voice engine is not running because it could not start. "
-                      "Try again, or use Perso for dubbing.",
+                      "Quit and reopen PersoDub, then try again, or try the Perso API.",
             "stopped": "The voice engine is not running. Quit and reopen PersoDub.",
         }[state]
     return {
@@ -259,7 +265,7 @@ def local_engine(which: str) -> dict:
     # downloading while the shell is already starting its process.
     state = runtime.state(name)
     if state:
-        return {"state": state, "message": _engine_words(which, state)}
+        return {"state": state, "message": _engine_words(which, state, runtime.failure(name))}
     entry = model_store.find(pack)
     kit = model_store.kit_dir()
     if not (kit and entry and model_store.model_state(entry, kit) == "ready"):

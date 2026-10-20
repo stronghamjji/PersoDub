@@ -263,11 +263,14 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       // An engine that did not start no longer stops the app (orchestrator.js):
       // the page tells the user through GET /api/engines. Counted and reported
       // as the whole boot's failure was, with the pack's first step saying which.
+      // One that ran out of memory is counted as that: the answer is closing
+      // other apps, not a broken install (issue #187).
       for (const f of ctx.engines.failed) {
         shellLog(`PERSODUB_PACK ${f.pack} did not start: ${f.message}`);
         const step = PACKS.find((p) => p.id === f.pack)?.steps[0];
-        countUsage("install_failure", cfg.kitDir, "engine-start", step);
-        sendReport({ kind: "install", kitDir: cfg.kitDir, code: "engine-start", step, message: f.message });
+        const code = f.outOfMemory ? "out-of-memory" : "engine-start";
+        countUsage("install_failure", cfg.kitDir, code, step);
+        sendReport({ kind: "install", kitDir: cfg.kitDir, code, step, message: f.message });
       }
       ctx.bootedKitDir = cfg.kitDir;
       countUsage("app_launch", cfg.kitDir, undefined, undefined, { persoKey: hasPersoKey(cfg.kitDir) });

@@ -62,6 +62,22 @@ def state(name: str) -> str:
     return value if value in ("starting", "failed") else ""
 
 
+def failure(name: str) -> str:
+    """Why pack `name` failed, when the shell could tell from its last lines:
+    "memory" (the computer ran out of it), else "". Written beside its
+    "failed" state (desktop/src/orchestrator.js PACK_FAILURE_KEY)."""
+    kit = os.environ.get("PERSODUB_KIT_DIR")
+    if not kit:
+        return ""
+    try:
+        with open(os.path.join(kit, "runtime.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    value = data.get(f"{name}_failure") if isinstance(data, dict) else None
+    return value if value == "memory" else ""
+
+
 def pid(name: str) -> Optional[int]:
     """The process id the shell wrote beside pack `name`'s URL in
     runtime.json ("tts" -> tts_pid, "ollama" -> ollama_pid), or None. Read

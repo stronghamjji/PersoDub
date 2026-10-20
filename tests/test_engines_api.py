@@ -550,6 +550,16 @@ def test_local_engine_states_follow_what_the_shell_wrote(monkeypatch, tmp_path):
     rt(tts_state="failed")
     failed = engines_status.local_engine("voice")
     assert failed["state"] == "failed" and "could not start" in failed["message"]
+    assert failed["message"].endswith("or try the Perso API.")
+    # The shell read "out of memory" in the engine's last lines (issue #187).
+    rt(tts_state="failed", tts_failure="memory")
+    assert engines_status.local_engine("voice") == {
+        "state": "failed",
+        "message": "The voice engine is not running: this computer ran out of memory. "
+                   "Close other apps and try again, or try the Perso API."}
+    # The reason belongs to "failed" only.
+    rt(tts_state="starting", tts_failure="memory")
+    assert "still starting" in engines_status.local_engine("voice")["message"]
     rt(tts_url="http://127.0.0.1:1")
     assert engines_status.local_engine("voice") == {"state": "running", "message": ""}
     rt(ollama_state="failed")

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
-import { startEngines, startPackProcesses, killStalePids, applyBinDir, sidecarArgv, packAlive } from "./orchestrator.js";
+import { startEngines, startPackProcesses, killStalePids, applyBinDir, sidecarArgv, packAlive, OUT_OF_MEMORY } from "./orchestrator.js";
 import { readRuntime } from "./runtimeFile.js";
 import { DEFAULTS } from "./config.js";
 import { PATH_SEP, venvBin } from "./platform.js";
@@ -147,6 +147,49 @@ test("a sidecar that exits while starting is noticed at once, with its own last 
   } finally {
     engines.stopAll();
   }
+});
+
+// Issue #187: Windows ran out of paging file while the voice engine loaded,
+// and the page said only that it "could not start".
+test("a sidecar that ran out of memory while starting is marked failed for that reason", async () => {
+  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
+  const cfg = fakeCfg({
+    sidecarCmd: [process.execPath, join(FAKE, "fake_sidecar.mjs"), "{port}", "--die-out-of-memory"],
+  });
+  const engines = await startEngines(cfg, { logDir });
+  try {
+    assert.equal(engines.failed[0].outOfMemory, true);
+    assert.match(engines.failed[0].message, /\(os error 1455\)/);
+    const rt = readRuntime(cfg.kitDir);
+    assert.equal(rt.tts_state, "failed");
+    assert.equal(rt.tts_failure, "memory");
+  } finally {
+    engines.stopAll();
+  }
+  // Any other reason leaves no such word, and an engine that answers takes it away.
+  const children = [];
+  const opts = { logDir, env: process.env, children, record: () => {} };
+  const dying = { ...cfg, sidecarCmd: [process.execPath, join(FAKE, "fake_sidecar.mjs"), "{port}", "--die"] };
+  await assert.rejects(startPackProcesses(dying, "engine", opts), (err) => err.outOfMemory === false);
+  assert.equal(readRuntime(cfg.kitDir).tts_failure, "");
+  writeFileSync(join(cfg.kitDir, "runtime.json"), JSON.stringify({ tts_state: "failed", tts_failure: "memory" }));
+  const [child] = await startPackProcesses({ ...cfg, sidecarCmd: [process.execPath, join(FAKE, "fake_sidecar.mjs"), "{port}"] },
+                                           "engine", opts);
+  try {
+    assert.equal(readRuntime(cfg.kitDir).tts_failure, undefined);
+  } finally {
+    child.kill();
+  }
+});
+
+test("the words an engine that ran out of memory leaves behind", () => {
+  for (const line of ["OSError: �� �۾��� �Ϸ��ϱ� ���� ����¡ ������ �ʹ� �۽��ϴ�. (os error 1455)",
+                      "OSError: The paging file is too small for this operation to complete. (os error 1455)",
+                      "MemoryError", "RuntimeError: [enforce fail at alloc_cpu.cpp:114] . DefaultCPUAllocator: not enough memory",
+                      "torch.OutOfMemoryError: CUDA out of memory."]) {
+    assert.ok(OUT_OF_MEMORY.test(line), line);
+  }
+  assert.ok(!OUT_OF_MEMORY.test("RuntimeError: fake engine could not load"));
 });
 
 test("a sidecar still loading its model is waited for past the silence limit", async () => {
