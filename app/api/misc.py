@@ -133,6 +133,13 @@ def logo():
                         media_type="image/png")
 
 
+@router.get("/perso-dubbing.svg")
+def perso_logo():
+    """Perso's wordmark (static/perso-dubbing.svg), in the Home sidebar's perso.ai button."""
+    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "static", "perso-dubbing.svg"),
+                        media_type="image/svg+xml")
+
+
 # The interface's own fonts (static/fonts: fonts.css and its woff2 files), so
 # the page looks the same with no network. A name only, never a path.
 _FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "static", "fonts")

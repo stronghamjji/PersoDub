@@ -903,6 +903,7 @@
   .home-side .home-perso { display: flex; align-items: center; justify-content: center;
     padding: 3px 6px; border: none; border-radius: 6px; font-weight: 700; color: #0b1220;
     background: linear-gradient(90deg, #dfe8ff, #bfe3ff); }
+  .home-perso img { display: block; height: 16px; width: auto; }
   .home-grp { color: var(--muted-foreground); font-size: 11px; font-weight: 500; margin: 10px 0 -4px; }
   .home-sep { height: 1px; background: var(--border); margin: 12px 0 0; flex: none; }
   .home-grow { flex: 1; }
