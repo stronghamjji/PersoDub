@@ -76,3 +76,6 @@ docs/superpowers/
 # can build the Windows installer with them; the iconset is scratch.
 !desktop/build/
 desktop/build/icon.iconset/
+
+# A symlink named node_modules (a dev try-out points desktop/ at another checkout) is a file, which "node_modules/" above does not match.
+desktop/node_modules
