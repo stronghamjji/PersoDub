@@ -227,6 +227,24 @@ def test_local_separation_failure_aborts_job_with_no_fallback(monkeypatch, tmp_p
         assert "Check the video file." in str(e)
 
 
+def test_missing_separation_parts_name_demucs(monkeypatch, tmp_path):
+    from app.run_errors import PartsMissing
+
+    class _Gone(_FailingSeparationEngine):
+        def separate(self, video_path, out_dir):
+            raise PartsMissing("local separation script missing (/kit/x.py)")
+
+    monkeypatch.setattr(pipeline, "SeparationEngine", _Gone)
+    video, out, srt = _write_inputs(tmp_path)
+    with pytest.raises(RuntimeError) as e:
+        pipeline.run_dub(video_path=video, out_path=out, srt_path=srt,
+                         language="Korean", language_code="ko",
+                         qwen_engine=_FakeQwenEngine(), log=[].append)
+    assert str(e.value).startswith("Voice separation failed on this computer. The Demucs files for audio "
+                                   "separation are missing or damaged. Open Settings > Models and "
+                                   "download Demucs again. (")
+
+
 def test_n_takes_reaches_run_qwen_dub(monkeypatch, tmp_path):
     # n_takes=None (the default) resolves to app.config.QWEN_N_TAKES; an explicit
     # value overrides it. Both must reach run_qwen_dub's n_takes argument.

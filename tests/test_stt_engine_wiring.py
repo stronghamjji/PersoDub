@@ -169,8 +169,9 @@ def test_missing_whisper_parts_send_the_user_to_the_models_not_the_video(monkeyp
     with pytest.raises(RuntimeError) as e:
         pipeline.run_dub(video_path=video, out_path=out, srt_path=srt,
                          language="Korean", language_code="ko", log=[].append)
-    assert str(e.value).startswith("Speech recognition failed on this computer. Some parts it needs are "
-                                   "missing or broken. Download them again in Settings > Models. (")
+    assert str(e.value).startswith("Speech recognition failed on this computer. The Whisper files for "
+                                   "speech-to-text are missing or damaged. Open Settings > Models and "
+                                   "download Whisper again. (")
     assert "Check the video file." not in str(e.value)
 
 

@@ -143,11 +143,20 @@ def _check_file():
     return both("Check the video file.")
 
 
-# A helper that is missing its own interpreter or script (app/run_errors.py
-# PartsMissing): the download is broken, not the video.
-def _advice(e):
+# A helper that is missing its own interpreter, script or model file
+# (app/run_errors.py PartsMissing): the download is broken, not the video. The
+# sentence names the part, so the user knows which one to download again.
+_PARTS_MISSING = {
+    "Whisper": lambda: both("The Whisper files for speech-to-text are missing or damaged. "
+                            "Open Settings > Models and download Whisper again."),
+    "Demucs": lambda: both("The Demucs files for audio separation are missing or damaged. "
+                           "Open Settings > Models and download Demucs again."),
+}
+
+
+def _advice(e, part):
     if isinstance(e, PartsMissing):
-        return both("Some parts it needs are missing or broken. Download them again in Settings > Models.")
+        return _PARTS_MISSING[part]()
     return advice_both(str(e), _check_file())
 
 
@@ -657,7 +666,7 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
             # ask -- but which thing to look at depends on what stopped it. A
             # timeout and a full disk are not a broken file, and saying so
             # sent people to check the one thing that was fine (2026-09-15).
-            advice = _advice(e)
+            advice = _advice(e, "Demucs")
             failed = both("Voice separation failed on this computer.")
             raise shown_error(f"{failed[0]} {advice[0]} ({str(e)[:400]})",
                              f"{failed[1]} {advice[1]} ({str(e)[:400]})")
@@ -765,7 +774,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, 
     except Exception as e:
         # Was re-raised bare, which put a library's own words on the failure
         # card with no hint of which part had stopped (user, 2026-09-11).
-        advice = _advice(e)
+        advice = _advice(e, "Whisper")
         failed = both("Speech recognition failed on this computer.")
         msg = f"{failed[0]} {advice[0]} ({str(e)[:400]})"
         log(f"   Error: {msg}")
