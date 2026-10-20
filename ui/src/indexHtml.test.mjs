@@ -673,6 +673,10 @@ test("a dub refused because the voice engine is not running is retried after the
   const start = html.slice(html.indexOf("async function submitDubStart"));
   const refused = start.slice(start.indexOf("} catch (e) {"), start.indexOf("return false;"));
   assert.match(refused, /if \(errorEl\.textContent\) errorEl\.scrollIntoView\(\{ block: "nearest" \}\);\n\s*$/);
+  // Into view above the Start bar stuck over the card's foot, not behind it
+  // (H29): the card keeps the bar's height clear at its bottom.
+  const card = html.slice(html.indexOf("  .draft-setup {"), html.indexOf("  .draft-label {"));
+  assert.match(card, /scroll-padding-bottom: 67px;/);
   assert.match(html, /keepPolling: \(\) => \$\("settingsOverlay"\)\.classList\.contains\("open"\)/);
 });
 
@@ -1001,7 +1005,8 @@ test("the New project dialog is two columns, and its options carry their own loo
   assert.doesNotMatch(html, /\.project-(modal|right|options) \.opt-/, "no option rule depends on the dialog around it");
   assert.match(html, /\.project-modal \{ width: min\(720px, 92vw\);/);
   assert.match(html, /grid-template-columns: 320px minmax\(0, 1fr\); gap: 16px; padding: 16px; \}/);
-  assert.match(html, /@media \(max-width: 759px\) \{\n    \.project-modal \{ overflow-y: auto; \}/);
+  // Scrolling, the dialog keeps its stuck 55 foot clear the way the draft card does (H29).
+  assert.match(html, /@media \(max-width: 759px\) \{\n    \.project-modal \{ overflow-y: auto; scroll-padding-bottom: 55px; \}/);
 });
 
 test("the confirms keep their corner X for its listeners, but hidden", () => {

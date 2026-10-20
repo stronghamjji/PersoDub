@@ -1199,7 +1199,12 @@
      project dialog's own (ui/src/newProject.mjs moveOptionsInto) -- their look
      is that dialog's .option-grid/.field/.advanced-btn, unchanged. */
   .draft-setup { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px;
-    padding: 14px 12px; overflow: auto; }
+    padding: 14px 12px; overflow: auto;
+    /* What is scrolled into view here -- a refused Start's reason, a focused
+       option -- stops above the Start bar stuck over the card's foot, not
+       behind it (H29, 2026-10-20): the bar's 57 (its line, 10 and 14 around
+       the 32 button) and the 10 gap above it. */
+    scroll-padding-bottom: 67px; }
   .draft-label { font-size: var(--font-title); font-weight: 500; color: var(--foreground);
     display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
   .draft-card { background: var(--well); border: 1px solid var(--well-line); border-radius: var(--radius);
@@ -2520,9 +2525,11 @@
     font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; }
   .project-length .lu { color: var(--icon); }
   .project-length:has(#projectLength:empty) { visibility: hidden; }
-  /* Under 760 of window the two columns become one, and the window scrolls. */
+  /* Under 760 of window the two columns become one, and the window scrolls --
+     what is scrolled into view (a refused Start's reason) stopping above the
+     55 foot stuck at its bottom. */
   @media (max-width: 759px) {
-    .project-modal { overflow-y: auto; }
+    .project-modal { overflow-y: auto; scroll-padding-bottom: 55px; }
     .project-modal .modal-body { height: auto; flex: none; grid-template-columns: minmax(0, 1fr); }
     .project-options { overflow: visible; }
     .project-modal .modal-head { position: sticky; top: 0; z-index: 4; }
