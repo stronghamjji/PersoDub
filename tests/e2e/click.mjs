@@ -17,9 +17,10 @@ import { basename, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
 const { values: opt } = parseArgs({ options: {
-  video: { type: "string" }, out: { type: "string" }, port: { type: "string", default: "9333" } } });
+  video: { type: "string" }, out: { type: "string" }, port: { type: "string", default: "9333" },
+  translator: { type: "string" } } });
 if (!opt.video || !existsSync(opt.video)) {
-  console.error("usage: node tests/e2e/click.mjs --video <short mp4 with speech> [--out <folder>] [--port 9333]");
+  console.error("usage: node tests/e2e/click.mjs --video <short mp4 with speech> [--out <folder>] [--port 9333] [--translator hunyuan]");
   process.exit(2);
 }
 const startedAt = new Date();
@@ -228,6 +229,13 @@ async function newProjectStep(snap, base) {
   // The mode first: changing it refills the target list.
   await choose("#dubModeSelect", "local");
   await choose("#targetLangSelect", "ko");
+  // Without --translator the dub keeps the one the app starts a new project
+  // on, which hangs on whoever used the app last; with it, Advanced options
+  // is opened with its own button and that translator picked.
+  if (opt.translator) {
+    if (!(await inPage(shown, "#translateSelect"))) await click("#advancedBtn");
+    await choose("#translateSelect", opt.translator);
+  }
   await shot(`${base}-draft`);
   const before = await js(`document.body.dataset.jobId || ""`);
   await click("#draftStartBtn");
@@ -237,13 +245,16 @@ async function newProjectStep(snap, base) {
     const error = document.querySelector("#draftError").textContent.trim();
     if (error) return `refused: ${error}`;
     const d = document.querySelector(".modal-overlay.open");
-    return d ? `#${d.id} opened (${(d.querySelector("h2")?.textContent || "").trim()})` : "";
+    const said = d && [...d.querySelectorAll("h2, p")].map((e) => e.textContent.trim()).filter(Boolean).join(" ");
+    return d ? `#${d.id} opened ("${said.slice(0, 200)}")` : "";
   }, before);
   if (!started.startsWith("job:")) throw new Error(`Start was ${started}`);
   run.jobId = started.slice(4);
   run.job = await api(`/api/dub/jobs/${run.jobId}`);
   const j = run.job;
-  if (j.language_code !== "ko" || j.dub_mode !== "local") throw new Error(`the dub went to ${j.language_code} via ${j.dub_mode}`);
+  if (j.language_code !== "ko" || j.dub_mode !== "local" || (opt.translator && j.translator !== opt.translator)) {
+    throw new Error(`the dub went to ${j.language_code} via ${j.dub_mode} with ${j.translator}`);
+  }
   await snap();
   return { note: `${PROJECT}.mp4 → ko on this computer; job ${run.jobId} ${j.status}; `
     + `stt ${j.stt_engine}, translator ${j.translator}, voice ${j.tts}, separation ${j.separation}` };
