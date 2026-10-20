@@ -7,6 +7,7 @@ from app.text import dub_prompt
 from app.text.dub_prompt import build_dub_prompt, parse_json_array
 from app.translate import (
     GEMINI_UPGRADE_URL,
+    GeminiInvalidKeyError,
     GeminiQuotaExhaustedError,
     GeminiTranslator,
     GeminiUnavailableError,
@@ -304,6 +305,39 @@ def test_gemini_5xx_raises_unavailable_immediately(monkeypatch):
     with pytest.raises(GeminiUnavailableError):
         GeminiTranslator(api_key="K")._ask("hi")
     assert len(calls) == 1
+
+
+def _gemini_refusal(status, text):
+    import requests
+
+    class FakeResp:
+        status_code = status
+
+        def raise_for_status(self):
+            raise requests.exceptions.HTTPError(
+                f"{status} Client Error: Bad Request for url: https://generativelanguage.googleapis.com/x")
+
+    FakeResp.text = text
+    return FakeResp()
+
+
+@pytest.mark.parametrize("status", [400, 401, 403])
+def test_gemini_refusing_the_key_raises_invalid_key(monkeypatch, status):
+    # A wrong key was "400 Client Error: Bad Request for url: ..." on screen,
+    # sent to ask Google about a key only the user can fix (2026-10-20).
+    body = ('{"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.", '
+            '"status": "INVALID_ARGUMENT", "details": [{"reason": "API_KEY_INVALID"}]}}')
+    monkeypatch.setattr(translate.requests, "post", lambda *a, **k: _gemini_refusal(status, body))
+    with pytest.raises(GeminiInvalidKeyError):
+        GeminiTranslator(api_key="wrong")._ask("hi")
+
+
+def test_gemini_400_about_something_else_is_not_a_key_problem(monkeypatch):
+    import requests
+    body = '{"error": {"code": 400, "message": "Request contains an invalid argument."}}'
+    monkeypatch.setattr(translate.requests, "post", lambda *a, **k: _gemini_refusal(400, body))
+    with pytest.raises(requests.exceptions.HTTPError):
+        GeminiTranslator(api_key="K")._ask("hi")
 
 
 # --- Vertex AI Gemini adapter (service-account OAuth, no consumer key) ---

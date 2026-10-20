@@ -331,7 +331,21 @@ _CODE_FIELDS = ("errorCode", "failCode", "code", "errorType")
 
 # Anything with "://" in it and whatever follows, plus the "for url" that
 # httpx puts in front of it.
-_URL_IN_TEXT = re.compile(r"\s*(?:for url\s*)?'?\S+://\S+'?", re.I)
+_URL_IN_TEXT = re.compile(r"\s*(?:for url:?\s*)?'?\S+://\S+'?", re.I)
+
+# The words a Python library puts around a failure, which read as noise on
+# screen: requests' "400 Client Error: Bad Request", urllib3's connection pool
+# name, the path after "with url:", and the chain of causes behind it. The
+# Gemini key refusal read "400 Client Error: Bad Request for url: https://..."
+# cut in the middle of the address (2026-10-20).
+_LIBRARY_WORDS = re.compile(r"\b(?:Client|Server) Error:\s*"
+                            r"|HTTPS?ConnectionPool\([^)]*\):\s*"
+                            r"|\s*with url:\s*\S+"
+                            r"|\s*\(Caused by .*$")
+
+# Long enough for a status and Perso's reason with its code, short enough to
+# read at a glance under the sentence.
+_REASON_MAX = 90
 
 
 def short_reason(e) -> str:
@@ -345,8 +359,11 @@ def short_reason(e) -> str:
     log, where it is the diagnosis.
     """
     text = " ".join(str(e or "").split())
-    text = _URL_IN_TEXT.sub("", text).strip(" .,:;")
-    return text[:160] if text else type(e).__name__
+    text = _URL_IN_TEXT.sub("", text)
+    text = _LIBRARY_WORDS.sub("", text).strip(" .,:;")
+    if len(text) > _REASON_MAX:
+        text = text[:_REASON_MAX].rsplit(" ", 1)[0].rstrip(" .,:;/") + "…"
+    return text or type(e).__name__
 
 
 def perso_failure(res):

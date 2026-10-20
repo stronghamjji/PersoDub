@@ -63,6 +63,7 @@ from app.text.srt import (
 from app.translate import (
     ChatGptLimitError,
     ChatGptNotSignedInError,
+    GeminiInvalidKeyError,
     GeminiQuotaExhaustedError,
     GeminiUnavailableError,
     TranslationEngine,
@@ -202,6 +203,12 @@ _NOTICE_ERRORS = {
         "link",
         None,
     ),
+    GeminiInvalidKeyError: (
+        "gemini_invalid_key",
+        lambda: both("Gemini rejected the API key. Open Settings and check the key."),
+        None,
+        None,
+    ),
     GeminiUnavailableError: (
         "gemini_unavailable",
         lambda: both("Google's Gemini server is temporarily overloaded. Wait a few minutes, then run this job again."),
@@ -238,7 +245,7 @@ _PERSO_NOTICE_ERRORS = (
     PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError,
     PersoProjectFailedError, PersoDurationLimitError, PersoPlanRequiredError,
 )
-_GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError,
+_GEMINI_NOTICE_ERRORS = (GeminiQuotaExhaustedError, GeminiUnavailableError, GeminiInvalidKeyError,
                          ChatGptNotSignedInError, ChatGptLimitError)
 
 
@@ -876,9 +883,10 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
             where = _ask_google() if "gemini" in tr_name.lower() else \
                 both("Try again, or pick another translator in Settings.")
             failed = both("{translator} translation failed.", translator=tr_name)
-            # The reason under the sentence, whole (the job's error_detail):
-            # inside it, the screen cut "(ChatGPT: no reply)" at the colon.
-            reason = both("Reason: {reason}", reason=str(e)[:120])
+            # The reason under the sentence (the job's error_detail): inside
+            # it, the screen cut "(ChatGPT: no reply)" at the colon. Shortened
+            # by short_reason, which keeps a URL and requests' own words out.
+            reason = both("Reason: {reason}", reason=short_reason(e))
             msg = f"{failed[0]} {where[0]} ({reason[0]})"
             log(f"   Error: {msg}")
             raise shown_error(msg, f"{failed[1]} {where[1]}", reason[1]) from e
@@ -1186,7 +1194,7 @@ def run_dub(
     if given, is called with a structured {"type", "message", "link"} dict
     for events the caller may want to surface outside the plain log stream
     ("perso_credit_exhausted", "perso_duration_limit", "perso_plan_required", "perso_invalid_key", "perso_unavailable",
-    "gemini_quota_exhausted", "gemini_unavailable" -- see app/api/dub.py,
+    "gemini_quota_exhausted", "gemini_invalid_key", "gemini_unavailable" -- see app/api/dub.py,
     which wires it to JobStore.append_notice so the job status JSON carries it
     for the UI).
     """

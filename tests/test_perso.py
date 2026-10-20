@@ -1032,6 +1032,17 @@ def test_a_shown_reason_never_ends_in_an_address():
     assert short_reason("Server error 502 for url https://api.perso.ai/x") == "Server error 502"
 
 
+def test_a_shown_reason_drops_requests_words_and_stays_short():
+    assert short_reason("400 Client Error: Bad Request for url: "
+                        "https://generativelanguage.googleapis.com/v1beta/models/x:generateContent") \
+        == "400 Bad Request"
+    said = short_reason("HTTPSConnectionPool(host='generativelanguage.googleapis.com', port=443): "
+                        "Max retries exceeded with url: /v1beta/models/x (Caused by NewConnectionError('x'))")
+    assert said == "Max retries exceeded"
+    long = short_reason("word " * 60)
+    assert len(long) <= 91 and long.endswith("word…")
+
+
 def test_a_reason_with_no_address_is_left_alone():
     assert short_reason("timed out") == "timed out"
     assert short_reason(TimeoutError("timed out")) == "timed out"

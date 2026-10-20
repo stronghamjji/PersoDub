@@ -40,6 +40,7 @@
   "Dubbing needs 8 GB of memory on this computer.": "Dubbing needs 8 GB of memory on this computer.",
   "Editing through Perso failed ({kind}).": "Editing through Perso failed ({kind}).",
   "Enter a Perso API key to see its workspaces": "Enter a Perso API key to see its workspaces",
+  "Gemini rejected the API key. Open Settings and check the key.": "Gemini rejected the API key. Open Settings and check the key.",
   "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset.": "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset.",
   "Gemini translation needs an API key. Open Settings and save your Gemini API key first.": "Gemini translation needs an API key. Open Settings and save your Gemini API key first.",
   "Give both a start and an end.": "Give both a start and an end.",

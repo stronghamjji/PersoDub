@@ -16,6 +16,7 @@ from app import pipeline
 from app.text.srt import parse_srt
 from app.translate import (
     GEMINI_UPGRADE_URL,
+    GeminiInvalidKeyError,
     GeminiQuotaExhaustedError,
     GeminiUnavailableError,
     TranslationEngine,
@@ -387,6 +388,46 @@ def test_gemini_unavailable_fails_the_job_with_a_try_later_notice(monkeypatch, t
     assert len(notices) == 1
     assert notices[0]["type"] == "gemini_unavailable"
     assert "link" not in notices[0]
+
+
+class _WrongKeyTranslator(FakeTranslator):
+    def _ask(self, prompt):
+        raise GeminiInvalidKeyError("Gemini rejected the API key (HTTP 400)")
+
+
+def test_a_refused_gemini_key_sends_the_user_to_settings_not_to_google(monkeypatch, tmp_path):
+    _stub_run_dub_until_translation(monkeypatch)
+    video = tmp_path / "in.mp4"; video.write_bytes(b"vid")
+    notices = []
+    with pytest.raises(RuntimeError) as e:
+        pipeline.run_dub(
+            video_path=str(video), out_path=str(tmp_path / "out.mp4"),
+            srt_path=None, language="Korean", language_code="ko",
+            translator=_WrongKeyTranslator(), on_notice=notices.append,
+        )
+    assert str(e.value) == "Gemini rejected the API key. Open Settings and check the key."
+    assert [n["type"] for n in notices] == ["gemini_invalid_key"]
+    assert "Google" not in notices[0]["message"]
+
+
+class _RequestsBoom(FakeTranslator):
+    display_name = "Gemini"
+
+    def _ask(self, prompt):
+        raise RuntimeError("400 Client Error: Bad Request for url: "
+                           "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent")
+
+
+def test_a_failed_translations_reason_has_no_address_or_library_words(monkeypatch, tmp_path):
+    _stub_run_dub_until_translation(monkeypatch)
+    video = tmp_path / "in.mp4"; video.write_bytes(b"vid")
+    with pytest.raises(RuntimeError) as e:
+        pipeline.run_dub(
+            video_path=str(video), out_path=str(tmp_path / "out.mp4"),
+            srt_path=None, language="Korean", language_code="ko",
+            translator=_RequestsBoom(),
+        )
+    assert e.value.detail == "Reason: 400 Bad Request"
 
 
 class _GeminiBoom(FakeTranslator):

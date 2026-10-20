@@ -154,6 +154,20 @@ class GeminiUnavailableError(RuntimeError):
     problem -- recharging won't help, retrying later will."""
 
 
+class GeminiInvalidKeyError(RuntimeError):
+    """Google refused the key itself (400/401/403 saying the API key is
+    invalid or expired). The user fixes it in Settings; Google has nothing
+    to answer for."""
+
+
+def _gemini_key_refused(said: str) -> bool:
+    """Whether Google's answer says the API key is the problem, as in
+    "API key not valid. Please pass a valid API key." (API_KEY_INVALID)."""
+    text = str(said or "").lower()
+    return ("api key" in text or "api_key" in text) and \
+        any(w in text for w in ("invalid", "not valid", "expired"))
+
+
 class GeminiTranslator(TranslationEngine):
     id = "gemini"
     display_name = "Google Gemini (AI Studio)"
@@ -201,6 +215,8 @@ class GeminiTranslator(TranslationEngine):
                     continue
                 if status >= 500:
                     raise GeminiUnavailableError(f"Gemini server error (HTTP {status})")
+                if status in (400, 401, 403) and _gemini_key_refused(getattr(r, "text", "")):
+                    raise GeminiInvalidKeyError(f"Gemini rejected the API key (HTTP {status})")
                 r.raise_for_status()
                 return r.json()["candidates"][0]["content"]["parts"][0]["text"]
             except requests.exceptions.Timeout as e:
