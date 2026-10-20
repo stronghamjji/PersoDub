@@ -20,9 +20,9 @@
 // page too -- they are the bridge from the assistant strip, not part of the
 // table, and they only need getJobId/countStale/renderScript to do their work.
 //
-// lineOverBy is exported on its own, without init: the timeline colours its
-// bars by the same rule, and one rule for "too long" said in two places is how
-// the two would come to disagree.
+// lineVerdict (and lineOverBy under it) is exported on its own, without init:
+// the timeline colours its bars by the same verdict, and one rule said in two
+// places is how the two would come to disagree.
 //
 // The elements this file touches: #scriptBox, #scriptSaving, #scriptCount --
 // the count beside the pane's own name -- and the pane head's three buttons
@@ -53,6 +53,22 @@ export function lineOverBy(l) {
   if (l.audio_sec == null && l.fits) return 0;
   const over = lineLength(l) - l.slot;
   return over > OVER_TOLERANCE ? over : 0;
+}
+
+// What a line's length comes to, in one word, and the seconds behind it
+// (owner, 2026-10-20): "cut" by what the assembly step cut off (clippedMap,
+// from job.result.clipped) -- whatever its own numbers say, because the true
+// story is not "it fits", it is "it was made to fit by force"; "over" by the
+// overrun; "short" by the shortfall, once more than a second of the slot, or
+// more than a fifth of it, is left empty; and "fit" in between.
+export function lineVerdict(l, clippedMap) {
+  const cut = clippedMap && clippedMap.get(l.line);
+  if (cut != null) return { kind: "cut", by: cut };
+  const over = lineOverBy(l);
+  if (over) return { kind: "over", by: over };
+  const under = l.slot - lineLength(l);
+  if (under > 1.0 || under > 0.2 * l.slot) return { kind: "short", by: under };
+  return { kind: "fit", by: 0 };
 }
 
 // The row's three buttons, all Lucide now (script-same.html mockup,
@@ -162,23 +178,19 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
          title="${t("Speaker {n}. Perso can give this line a new voice.", { n })}"
          aria-label="${t("Speaker {n}. Give this line a new voice", { n })}"><b>${speakerLetter(n)}</b></button>`
       : `<span class="spk-chip" title="${t("Speaker {n}", { n })}" aria-label="${t("Speaker {n}", { n })}"><b>${speakerLetter(n)}</b></span>`;
-    const over = lineOverBy(l);
-    // "1.6s / 0.2s · +1.4s": how long the voice is, how long the slot is, and
-    // the difference in one glance -- red when it runs over, grey when it is
-    // well short, green "fits" otherwise (user decision 2026-08-28).
-    const under = l.slot - lineLength(l);
-    // A line the assembly step cut short (job.result.clipped, point 3) is
-    // marked red whatever its own verdict says -- the true story is not "it
-    // fits", it is "it was made to fit by force".
-    const cutS = clippedMap && clippedMap.get(l.line);
-    const verdictClass = cutS != null ? "sc-over" : over ? "sc-over" : under > 0.3 ? "sc-under" : "sc-fit";
-    const verdictText = cutS != null ? t("cut {s}s", { s: cutS.toFixed(1) })
-      : over ? `+${t("{s}s", { s: over.toFixed(1) })}` : under > 0.3 ? `−${t("{s}s", { s: under.toFixed(1) })}` : t("fits");
-    const verdictTitle = cutS != null ? ` title="${t("Cut off by {s}s", { s: cutS.toFixed(1) })}"` : "";
-    const verdict = `<span class="${verdictClass}"${verdictTitle}>${verdictText}</span>`;
-    // The verdict is the answer; the two numbers behind it are the working.
-    // A narrow table drops the working (the stylesheet hides .sc-num) and keeps
-    // the answer, so the row still says whether the line fits.
+    // "1.9 / 2.5s · +0.6s": the time the line has, how long its voice runs
+    // (in bold) and the difference, behind a dot in the verdict's colour --
+    // red over time or cut, orange much shorter, green when it fits, which
+    // then says nothing past its numbers (owner, 2026-10-20).
+    const verdict = lineVerdict(l, clippedMap);
+    const by = verdict.by.toFixed(1);
+    const diffText = verdict.kind === "cut" ? t("cut {s}s", { s: by })
+      : verdict.kind === "over" ? `+${t("{s}s", { s: by })}` : verdict.kind === "short" ? `−${t("{s}s", { s: by })}` : "";
+    const diffTitle = verdict.kind === "cut" ? ` title="${t("Cut off by {s}s", { s: by })}"` : "";
+    const diff = diffText && `<span class="sc-diff"${diffTitle}>${diffText}</span>`;
+    // The dot and the difference are the answer; the two numbers are the
+    // working. A narrow table drops the working (the stylesheet hides .sc-num)
+    // and keeps the answer, so the row still says whether the line fits.
     // A line the translator gave nothing (app/dub_script.py load_lines sets
     // `untranslated`) has no words and no voice, so no length either: the cell
     // stays empty and the words' own cell says what is missing -- in red, in
@@ -189,7 +201,8 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // refused (user decision 2026-09-18).
     const untr = !!l.untranslated;
     const lengthCell = untr ? ""
-      : `<span class="sc-num"><b>${t("{s}s", { s: lineLength(l).toFixed(1) })}</b> / ${t("{s}s", { s: l.slot.toFixed(1) })} · </span>${verdict}`;
+      : `<span class="sc-dot"></span><span class="sc-num">${l.slot.toFixed(1)} / ${t("{s}s", { s: `<b>${lineLength(l).toFixed(1)}</b>` })}${diff ? " · " : ""}</span>${diff}`;
+    const verdictClass = untr ? "" : ` sc-v-${verdict.kind}`;
     const off = untr ? " sc-off" : "";
     const offAttr = untr ? " disabled" : "";
     const WRITE_FIRST = t("Write the translation first");
@@ -229,7 +242,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       title="${untr ? WRITE_FIRST : t("Play this line in the video")}">${PLAY_ICON}</button>
     <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
       data-line="${l.line}"${untr ? ` data-empty="${t("Not translated")}"` : ""}${stale && !untr ? ` data-note="${t("Words changed")}"` : reworded}>${escapeHtml(l.text)}</div>
-    <div class="sc-tools"><span class="sc-len">${lengthCell}</span>${viaPerso() ? `<span></span>${undo}` : `${undo}${wave}`}</div>
+    <div class="sc-tools"><span class="sc-len${verdictClass}">${lengthCell}</span>${viaPerso() ? `<span></span>${undo}` : `${undo}${wave}`}</div>
   </div>`;
   }
 
@@ -304,7 +317,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     <div class="sc-row head">
       <label class="sc-h-n"><input class="sc-pick" type="checkbox" data-pick="all" aria-label="${t("Choose every line")}">#</label><div class="sc-h-spk">${t("Who")}</div><div class="sc-h-t">${t("Time")}</div><div class="sc-h-src">${escapeHtml(t(sourceName))}</div>
       <div class="sc-h-dst">${escapeHtml(t(targetName))}</div>
-      <div class="sc-tools"><span>${t("Length")}</span><span></span>${viaPerso() ? "<span></span>" : `<span class="sc-h-voice">${t("Voice")}</span>`}</div>
+      <div class="sc-tools"><span><span class="sc-h-len">${t("Original / Translated (s)")}</span><span class="sc-h-len-narrow">${t("Length")}</span></span><span></span>${viaPerso() ? "<span></span>" : `<span class="sc-h-voice">${t("Voice")}</span>`}</div>
     </div>
     ${data.lines.map((l) => scriptRow(l, speakers, clippedMap)).join("")}`;
     // The timeline draws the same lines, under the table, to the video's real

@@ -36,10 +36,11 @@
 // handed it (getSubStyle), told when to save it (saveSubStyle) and when the
 // overlay must be redrawn (updateSubtitleNow).
 //
-// lineOverBy is imported rather than passed: the table colours its lines by
-// the same rule, and one rule for "too long" said in two places is how the two
-// would come to disagree. numberSpeakers arrives the same way, so a line that
-// is Speaker 2 in the table wears Speaker 2's colour here.
+// lineVerdict is imported rather than passed: the table colours its lines by
+// the same verdict, and one rule for "too long" or "much shorter" said in two
+// places is how the two would come to disagree. numberSpeakers arrives the
+// same way, so a line that is Speaker 2 in the table wears Speaker 2's colour
+// here.
 //
 // The elements this file touches: #timeline and everything it draws inside
 // itself, the four grips and the panes they size, and -- while a draft is on
@@ -48,7 +49,7 @@
 // `state`.
 import { escapeHtml, fmtClockTenths, fmtLength, modKey } from "./format.mjs";
 import { lucide } from "./icons.mjs";
-import { lineOverBy } from "./scriptTable.mjs";
+import { lineVerdict } from "./scriptTable.mjs";
 import { numberSpeakers } from "./speakers.mjs";
 import { getDraft, setRanges, normalizeRanges, onDraftChange } from "./draft.mjs";
 import { t } from "./i18n.mjs";
@@ -302,6 +303,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
         <span><i class="tl-sw-voice"></i>${t("Voice length")}</span>
         <span><i class="tl-sw-slot"></i>${t("Time available")}</span>
         <span><i class="tl-sw-over"></i>${t("Over time")}</span>
+        <span><i class="tl-sw-short"></i>${t("Much shorter")}</span>
       </span>`;
     return `
     <div class="tl-head">
@@ -597,10 +599,15 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
         // No voice on disk yet: the slot alone, dashed, is the whole truth.
         voices += timelineBlock(l, `tl-voice tl-novoice${spk}`, l.text, label, true);
       } else {
-        const over = lineOverBy(l);
+        // The table's verdict, in its colours: red past the slot, orange much
+        // shorter than it, green between. The strip is not handed the cut
+        // list, so a line the assembly cut is red here by its own numbers --
+        // as nearly every one is: only what still runs over sped up is cut.
+        const { kind, by } = lineVerdict(l);
+        const over = kind === "over" ? by : 0;
         const slot = Math.max(l.end - l.start, 0.001);
         const fill = over ? 100 : Math.min(100, (l.audio_sec / slot) * 100);
-        voices += timelineBlock(l, `tl-voice${over ? " tl-over" : ""}${spk}`, l.text,
+        voices += timelineBlock(l, `tl-voice${over ? " tl-over" : kind === "short" ? " tl-short" : ""}${spk}`, l.text,
           `${label}<i class="tl-vlen" style="width:${fill.toFixed(1)}%"></i>`, true);
         // A long voice: past its slot, a red tint over whatever follows, so the
         // next line's block still reads while the red says how far this runs.

@@ -41,6 +41,10 @@
        (new-layout mockup, user 2026-09-29). The bar is the line under the
        clip; --timeline-fit-bg is the clip itself. */
     --timeline-fit: #49a072;
+    /* A line much shorter than its slot: orange, for the script table's dot
+       and difference and the timeline's bar; --timeline-short-bg is the
+       clip (length-dots mockup, owner 2026-10-20). */
+    --timeline-short: #f59e0b;
     --warning: #dfa11a;
     /* The Settings save-failure panel: a dark amber with ink light enough to
        read on it. --warning itself is the border and the icon, and is far too
@@ -136,6 +140,7 @@
     --tl-ruler-ink: #6f7683;
     --tl-ruler-tick: #373d47;
     --timeline-fit-bg: #254533;
+    --timeline-short-bg: #4a3412;
     --video-clip: #2b415c;
     --waveform: #5682bb;
     --lane-original: #243a52;
@@ -1310,6 +1315,9 @@
      in the head row anyway. */
   .sc-row.head .sc-tools { background: var(--canvas); }
   .sc-h-voice { justify-self: end; white-space: nowrap; }
+  /* Over the length, what its two numbers are -- or plain "Length" in a table
+     too narrow to show them (the 975px tier below). */
+  .sc-h-len-narrow { display: none; }
   /* Four fixed slots, not a flex row that fits itself to whatever the length
      cell happens to say. As a flex row this cell was 149px wide on one line
      and 189px on the next, and because the grid column it sits in is `auto`,
@@ -1326,7 +1334,7 @@
     background: var(--background); align-self: stretch;
     display: grid; grid-template-columns: 100px 22px 22px;
     align-items: center; gap: 8px; }
-  /* Left, not right: every one of these reads "N.Ns / N.Ns · " in tabular
+  /* Left, not right: every one of these reads "● N.N / N.Ns" in tabular
      figures, so aligning the starts puts all six numbers in a column and
      leaves only the verdict ragged. Right-aligned it was the numbers that
      were ragged, which is the half a reader actually compares
@@ -1336,17 +1344,20 @@
   .sc-len { font-size: var(--font-label); color: var(--muted-foreground); white-space: nowrap;
     font-variant-numeric: tabular-nums; }
   .sc-len b { font-weight: 600; color: var(--foreground); }
-  /* The verdict pill (script-same.html mockup, 2026-09-29): green on dark
-     green for "fits", red on dark red for "runs over" -- also forced onto a
-     line the assembly step cut short (clippedNotice, ui/src/scriptTable.mjs),
-     whatever its own verdict says -- and dim text on the plain pill colour
-     for "well short". */
-  .sc-over { font-size: 11px; padding: 2px 6px; border-radius: 4px;
-    background: var(--destructive-soft); color: var(--destructive); font-weight: 600; }
-  .sc-under { font-size: 11px; padding: 2px 6px; border-radius: 4px;
-    background: var(--secondary); color: var(--muted-foreground); }
-  .sc-fit { font-size: 11px; padding: 2px 6px; border-radius: 4px;
-    background: var(--timeline-fit-bg); color: var(--success); font-weight: 600; }
+  /* The verdict (length-dots mockup, owner 2026-10-20): a dot in front of
+     the numbers and the difference after them, in one colour -- red over
+     time, or cut short by the assembly step whatever its own numbers say
+     (lineVerdict, ui/src/scriptTable.mjs); orange much shorter; green fits,
+     with no difference to show. A dot where the pill was, so the cell keeps
+     its width and the words beside it lose nothing. */
+  .sc-v-over, .sc-v-cut { --verdict: var(--destructive); }
+  .sc-v-short { --verdict: var(--timeline-short); }
+  .sc-v-fit { --verdict: var(--success); }
+  /* On the baseline, where an 8px dot sits on the digits' centre to 0.4px;
+     vertical-align: middle put it 0.7px low (measured, 2026-10-20). */
+  .sc-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px;
+    border-radius: 50%; background: var(--verdict); }
+  .sc-diff { color: var(--verdict); font-weight: 600; }
 
   /* ---------------- The script table, narrow ---------------- */
   /* 706px is the row above at its floors, so a pane thinner than that would
@@ -1367,14 +1378,20 @@
        column (user, 2026-09-11). */
     .sc-row.head { padding-left: 12px; padding-right: 12px; }
     .sc-t-b { display: none; }
-    /* And the length keeps its verdict alone -- "fits", "+1.4s" -- rather than
+    /* And the length keeps its verdict alone -- the dot, "+1.4s" -- rather than
        the two numbers it was worked out from. Those are on the timeline's bars
        and in the cell's own tooltip. */
     .sc-num { display: none; }
+    /* Their heading goes with them, and "Length" says what is left. In
+       English it took four lines of the 58px below and ran out of the 40px
+       head row (measured, 2026-10-20). */
+    .sc-h-len { display: none; }
+    .sc-h-len-narrow { display: inline; }
     /* Only the verdict is left in it, so the slot the numbers needed is not.
        58 is the widest verdict there is, "cut 0.3s", measured: at 44 (and 40
        and 30 in the tiers below) it ran under the revert button beside it,
-       and on a 1280px window so did every "+0.5s" (2026-09-30). The last
+       and on a 1280px window so did every "+0.5s" (2026-09-30). With a dot in
+       front where a pill's padding was, it is 57.9 (2026-10-20). The last
        track above is this cell: 10 + 58 + 6 + 22 + 6 + 22. */
     .sc-tools { grid-template-columns: 58px 22px 22px; gap: 6px; }
   }
@@ -1502,7 +1519,7 @@
   /* === script: the cut-off notice (point 3, user 2026-09-29) === */
   /* One line above the table, from job.result.clipped: the lines the
      assembly step had to cut short. A click scrolls to the first of them --
-     the red pill on each such row (the .sc-over override in scriptRow) is
+     the red dot and "cut" on each such row (lineVerdict in scriptRow) are
      the per-line mark. */
   .sc-clipped { display: flex; align-items: center; gap: 8px;
     padding: 8px 14px; font-size: var(--font-label); font-weight: 600;
@@ -1885,6 +1902,7 @@
   .tl-sw-voice { background: var(--timeline-fit); }
   .tl-sw-slot { border: 1px dashed var(--muted-foreground); }
   .tl-sw-over { background: var(--destructive); }
+  .tl-sw-short { background: var(--timeline-short); }
   .tl-clock { font-size: 10.5px; margin-left: auto; margin-right: 12px; font-variant-numeric: tabular-nums; }
   .tl-zoom { display: inline-flex; align-items: center; gap: 10px; }
   /* A 78px line with an 8x12 grip on it. */
@@ -2011,6 +2029,10 @@
   /* Over time: a red clip with a red ring, its foot red all the way. */
   .tl-voice.tl-over { background: var(--destructive-soft); outline: 1px solid var(--destructive); outline-offset: -1px; }
   .tl-over .tl-vlen { background: var(--destructive); }
+  /* Much shorter than its slot (the table's orange dot): the same in orange,
+     its foot only as long as the voice. */
+  .tl-voice.tl-short { background: var(--timeline-short-bg); outline: 1px solid var(--timeline-short); outline-offset: -1px; }
+  .tl-short .tl-vlen { background: var(--timeline-short); }
   /* The part past the slot: a red tint laid over whatever follows, as far as
      the voice actually runs. A tint, so the next line's block and words still
      read through it (user decision 2026-08-28). */
