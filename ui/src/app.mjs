@@ -1537,6 +1537,9 @@ async function submitDubStart({ fd, label, errorEl, retry, retried = false }) {
     } else if (!confirmDialogs.showIfOutOfSpace(e)) {
       errorEl.textContent = errorText(e);
     }
+    // With the advanced options open the line sits below the fold, where a
+    // refused Start looked like nothing happened (2026-10-20).
+    if (errorEl.textContent) errorEl.scrollIntoView({ block: "nearest" });
     return false;
   }
 }
