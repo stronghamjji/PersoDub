@@ -3,7 +3,8 @@
 app's HTTP API, each one timed and checked with numbers.
 
     python tests/e2e/regress.py --base http://127.0.0.1:52252 \\
-        --clip speech-10s.mp4 --subs-clip subtitles-10s.mp4 --out runs/today [--perso]
+        --clip speech-10s.mp4 --subs-clip subtitles-10s.mp4 --out runs/today \\
+        [--translator hunyuan] [--perso]
 
 Every route is asked in the shape the page asks it (ui/src/dubApi.mjs,
 ui/src/exportDialog.mjs), so a change that breaks the page's own requests
@@ -48,7 +49,7 @@ SETTINGS_FIELDS = ("gemini_key_set", "perso_key_set", "gemini_api_key", "perso_a
 VERDICT_FIELDS = ("line", "slot", "audio_sec", "estimated", "fits")
 
 BASE = ""            # the app, from --base
-FFPROBE = "ffprobe"  # from --ffprobe
+FFPROBE = "ffprobe"  # find_ffprobe's answer
 
 
 class Fail(Exception):
@@ -114,7 +115,28 @@ def fetch(path, dest, timeout=600):
 def detail(body):
     """A refusal's words, short enough for a table cell."""
     said = body.get("detail", body) if isinstance(body, dict) else body
+    # The 409 that asks for downloads is a payload for a dialog: its ids are the news.
+    if isinstance(said, dict) and "missing" in said:
+        said = "models needed: " + ", ".join(str(m.get("id")) for m in said["missing"])
     return " ".join(str(said).split())[:200]
+
+
+def find_ffprobe():
+    """ffprobe, or None: PERSODUB_FFPROBE when it is set, then the kit's own
+    copy, then PATH. The kit's copy is <kit>/bin, the folder the desktop shell
+    puts on the app's PATH; it is found from the Python running this script
+    when that is the kit's (<kit>/python/... or <kit>/app_venv/...), which is
+    how a Windows computer with no ffprobe of its own runs this."""
+    if os.environ.get("PERSODUB_FFPROBE"):
+        return os.environ["PERSODUB_FFPROBE"]
+    exe = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+    folder = os.path.dirname(os.path.abspath(sys.executable))
+    for _ in range(3):
+        folder = os.path.dirname(folder)
+        # kit.env beside bin is what says this folder is a kit, not /usr.
+        if os.path.isfile(os.path.join(folder, "kit.env")) and os.path.isfile(os.path.join(folder, "bin", exe)):
+            return os.path.join(folder, "bin", exe)
+    return shutil.which("ffprobe")
 
 
 def seconds(path):
@@ -227,11 +249,14 @@ def start_dub(ctx, dub_mode, project):
     Fast. Transcription and separation are named outright, because a blank
     means the saved default, which may be Perso and would spend credits on a
     run that is meant to stay on this computer; a Perso dubbing ignores both
-    (the cloud does every stage). The translator stays blank, as the dialog
-    leaves it, so the saved one translates; its evidence names which."""
+    (the cloud does every stage). The translator is --translator, sent the
+    way the dialog's Translation dropdown sends a choice; without it the
+    field stays blank and the saved one translates. Its evidence names which."""
     form = {"download_id": held(ctx, ctx["args"].clip), "language": "Korean", "language_code": "ko",
             "source_language_code": "en", "n_takes": "1", "stt_engine": "local", "sep_engine": "local",
             "dub_mode": dub_mode, "project": project}
+    if ctx["args"].translator:
+        form["translate_engine"] = ctx["args"].translator
     return started(ctx, *api("POST", "/api/dub/start", form=form, timeout=600))
 
 
@@ -476,11 +501,13 @@ def main():
     parser.add_argument("--subs-clip", required=True, help="about 10 seconds with subtitles burned in")
     parser.add_argument("--out", required=True, help="folder for report.md, report.json and the files fetched")
     parser.add_argument("--perso", action="store_true", help="also dub through Perso (spends credits)")
-    parser.add_argument("--ffprobe", default=shutil.which("ffprobe") or "ffprobe",
-                        help="ffprobe, when it is not on PATH")
+    parser.add_argument("--translator", help="the dub's translator, any name in app/engines_status.py "
+                                             "TRANSLATORS (e.g. hunyuan); default: the saved one")
     args = parser.parse_args()
     global BASE, FFPROBE
-    BASE, FFPROBE = args.base.rstrip("/"), args.ffprobe
+    BASE, FFPROBE = args.base.rstrip("/"), find_ffprobe()
+    if not FFPROBE:
+        parser.error("no ffprobe: set PERSODUB_FFPROBE, run this with the kit's Python, or put ffprobe on PATH")
     # A job's log may be in Korean; a console or pipe that cannot print it
     # must not end the run.
     sys.stdout.reconfigure(errors="replace")
