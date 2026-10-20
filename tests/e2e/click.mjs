@@ -150,10 +150,15 @@ async function shot(name) {
   writeFileSync(join(out, `${name}.png`), Buffer.from(data, "base64"));
   return `${name}.png`;
 }
-const snippet = (sel) => inPage((s) => {
-  const el = document.querySelector(s);
-  return `screen=${document.body.dataset.screen} ${(el ? el.outerHTML.replace(/\s+/g, " ") : `(no ${s})`).slice(0, 1500)}`;
-}, sel);
+// The first of a step's areas that is on screen: a failed dub shows its card,
+// not the table. Only areas named here, never the Settings dialog as a whole,
+// which can hold account details.
+const snippet = (looks) => inPage((sels) => {
+  const els = sels.map((s) => document.querySelector(s)).filter(Boolean);
+  const el = els.find((e) => e.getClientRects().length > 0) || els[0];
+  const html = el ? el.outerHTML.replace(/<!--[\s\S]*?-->/g, "").replace(/\s+/g, " ") : `(none of ${sels})`;
+  return `screen=${document.body.dataset.screen} ${html.slice(0, 1500)}`;
+}, looks);
 
 // ---- the app as it stands --------------------------------------------------
 await send("Page.enable");
@@ -362,12 +367,12 @@ async function backHomeStep(snap) {
 }
 
 const STEPS = [
-  { id: "home", title: "Home", look: ".home-side", run: homeStep },
-  { id: "settings", title: "Settings > Models", look: "#settingsPanel-models", run: settingsStep },
-  { id: "new-project", title: "New dubbing into Korean", look: "#tabDubbing", run: newProjectStep },
-  { id: "dub", title: "Dub finished: script and timeline", look: "#scriptBox", run: dubStep },
-  { id: "export", title: "Export", look: "#exportOverlay", run: exportStep },
-  { id: "back-home", title: "Home again, new card", look: "#projectsGrid", run: backHomeStep },
+  { id: "home", title: "Home", look: [".home-side"], run: homeStep },
+  { id: "settings", title: "Settings > Models", look: ["#settingsPanel-models"], run: settingsStep },
+  { id: "new-project", title: "New dubbing into Korean", look: ["#draftSetup", "#dubbingImport"], run: newProjectStep },
+  { id: "dub", title: "Dub finished: script and timeline", look: ["#doneFail", "#scriptBox"], run: dubStep },
+  { id: "export", title: "Export", look: ["#exportOverlay"], run: exportStep },
+  { id: "back-home", title: "Home again, new card", look: ["#projectsGrid"], run: backHomeStep },
 ];
 
 // ---- the run ---------------------------------------------------------------
