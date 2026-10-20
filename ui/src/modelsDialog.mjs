@@ -426,10 +426,11 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
     // The painted rows, not the raw ones: a pack's percent lives on the
     // painted row (rowsToPaint), the engine's own row has none.
     const pct = overallProgress(rowsToPaint(), pendingDub.ids);
-    $("mnBar").style.width = pct + "%";
+    $("mnBar").style.width = (pct ?? 0) + "%";
     // One number, where the eye lands. Which file or step it is on is left
-    // out: nobody downloading asked (user, 2026-09-28).
-    $("mnTitle").textContent = t("Downloading {pct}%", { pct });
+    // out: nobody downloading asked (user, 2026-09-28). No number before
+    // there is one (overallProgress).
+    $("mnTitle").textContent = pct == null ? t("Getting ready…") : t("Downloading {pct}%", { pct });
     $("mnLine").textContent = "";
     if (packBusy) return;
     // A model whose download stopped: paused with its pieces on disk, or --

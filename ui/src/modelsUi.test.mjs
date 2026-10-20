@@ -23,6 +23,10 @@ test("modelStatusLine covers the four states with the mockup's words", () => {
   assert.deepEqual(
     modelStatusLine({ state: "downloading", name: "Whisper", progress: null }),
     { cls: "model-busy", text: "Waiting to download Whisper…", button: "cancel" });
+  // A pack is never queued: no figure yet is its set-up (Windows C2).
+  assert.deepEqual(
+    modelStatusLine({ state: "downloading", role: "pack", name: "Python + PyTorch", progress: null }),
+    { cls: "model-busy", text: "Getting ready…", button: "cancel" });
   assert.deepEqual(modelStatusLine({ state: "paused" }),
     { cls: "model-busy", text: "Paused", button: "resume" });
   // The server's reason, then what to do: never the exception (Windows H9/H10, 2026-10-06).
@@ -78,6 +82,17 @@ test("overallProgress is byte-weighted and treats ready as done", () => {
   // (100*100% + 300*50% + 100*0%) / 500 = 50%
   assert.equal(overallProgress(rows, ["a", "b", "c"]), 50);
   assert.equal(overallProgress(rows, []), 0);
+});
+
+test("overallProgress has no number while nothing on its way has a figure yet", () => {
+  const pack = { id: "engine", role: "pack", bytes: 900, state: "downloading", progress: null };
+  const whisper = { id: "whisper", bytes: 100, state: "not_downloaded" };
+  // A pack still making its venv: null, never the 0% that read as stuck (Windows C2).
+  assert.equal(overallProgress([pack, whisper], ["engine", "whisper"]), null);
+  assert.equal(overallProgress([{ ...pack, progress: 10 }, whisper], ["engine", "whisper"]), 9);
+  // A queued model beside one with a figure: the figure.
+  assert.equal(overallProgress([{ ...whisper, state: "downloading", progress: 50 }, { ...pack, role: "tts" }],
+                               ["engine", "whisper"]), 5);
 });
 
 test("allReady flips only when every needed model is ready", () => {

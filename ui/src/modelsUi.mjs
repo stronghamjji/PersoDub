@@ -30,8 +30,9 @@ export function modelStatusLine(row) {
   if (row.state === "ready") return { cls: "model-ok", text: t("Ready"), button: null };
   if (row.state === "downloading") {
     // progress null = queued behind another download; say so instead of 0%.
+    // A pack has no queue: null is its set-up before a byte counts (Windows C2).
     const text = row.progress == null
-      ? t("Waiting to download {name}…", { name: row.name })
+      ? (row.role === "pack" ? t("Getting ready…") : t("Waiting to download {name}…", { name: row.name }))
       : t("Downloading {name}… {pct}%", { name: row.name, pct: row.progress });
     return { cls: "model-busy", text, button: "cancel" };
   }
@@ -104,10 +105,15 @@ export function neededPackIds(role, value) {
 }
 
 /** One number for the dialog's single progress bar: byte-weighted percent
- * across the models being fetched (a ready model counts as 100). */
+ * across the models being fetched (a ready model counts as 100), or null
+ * while none on its way has a figure yet. */
 export function overallProgress(rows, ids) {
   const wanted = rows.filter((r) => ids.includes(r.id));
   if (!wanted.length) return 0;
+  // A pack setting itself up has no figure: 0% held for seconds read as
+  // stuck, so the dialog says "Getting ready…" instead (Windows C2).
+  const going = wanted.filter((r) => r.state === "downloading");
+  if (going.length && going.every((r) => r.progress == null)) return null;
   let got = 0, total = 0;
   for (const r of wanted) {
     total += r.bytes;

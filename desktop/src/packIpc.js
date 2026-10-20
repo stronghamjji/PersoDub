@@ -63,7 +63,10 @@ export function registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog }) {
       // The page gets the pack's overall percent on every event (installer.js
       // packPercent), not the running step's own -- a pip step has none.
       const done = new Set();
-      let lastPct = 0;
+      // No figure (null) until a byte counts: making the venv, its trust hook,
+      // the pip upgrade and pip's resolving count none, and the 0% they held
+      // for seconds read as stuck; the page says "Getting ready…" (Windows C2).
+      let lastPct = null;
       try {
         await runInstall(steps, {
           stop: () => packCancelled,
@@ -73,9 +76,10 @@ export function registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog }) {
             if (p.state === "done" || p.state === "skipped") done.add(p.stepId);
             // A progress line without a percent (unpacking, a pip line) keeps
             // the pack's last one: the dialog fell back to 0% for those (2026-09-08).
-            const pct = p.state === "progress" && p.pct == null
+            let pct = p.state === "progress" && p.pct == null
               ? lastPct
               : packPercent(steps, done, p.stepId, p.state === "progress" ? p.pct : null);
+            if (lastPct == null && !pct) pct = null;
             lastPct = pct;
             if (!ctx.win.isDestroyed()) ctx.win.webContents.send("shell:install-progress", { ...p, pack: id, pct });
           },

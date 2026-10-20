@@ -530,6 +530,12 @@ test("while a pack installs the dialog shows its progress line, and Cancel stops
   h.api.showModelsDialog({ missing: [PACK_409.missing[0]] });
   h.$("mnDownload").click();
   await settle();
+  // Before a byte counts the shell sends no percent: no number, where 0% held
+  // for seconds read as stuck (Windows C2). The Settings row says the same.
+  shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing Python + PyTorchs", state: "start", pct: null });
+  assert.equal(h.$("mnTitle").textContent, "Getting ready…");
+  assert.equal(h.$("mnBar").style.width, "0%");
+  assert.equal(listRows(h)[0].children[2].textContent, "Getting ready… · Installing Python + PyTorchs");
   shell.progress({ pack: "engine", stepId: "venv-engines", title: "Installing Python + PyTorchs", state: "progress", detail: "torch 40%", pct: 40 });
   assert.equal(h.$("mnBar").style.width, "40%", "the bar follows the pack's percent, not the engine's row");
   // Only the percent: which file or step it is on is not shown (user, 2026-09-28).

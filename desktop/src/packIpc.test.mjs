@@ -127,6 +127,21 @@ test("a cancelled install answers Cancelled, and a failed download names its own
   assert.equal(existsSync(join(s.kitDir, ".install", "ollama-runtime.installing")), false);
 });
 
+test("the pack's percent is none until a byte counts, then the bytes' own", async (t) => {
+  const s = setup({ download: async (_url, _dest, { onProgress }) => {
+    onProgress({ received: 0, total: 1000 });
+    onProgress({ received: 400, total: 1000 });
+    throw new Error("download failed 404: https://example.com/ollama.tgz");
+  } });
+  const bytes = packSteps(buildSteps(s.ctx.installCtx), "ollama-runtime")[0].bytes;
+  if (notEnoughSpace(bytes, await freeSpaceAt(s.kitDir))) return t.skip("not enough free disk for the pack's preflight");
+  await s.ask("shell:install-pack", "ollama-runtime");
+  // The start, the step's own first line and 0 bytes were all 0% before: held
+  // for seconds through the engine pack's set-up, it read as stuck (Windows C2).
+  assert.deepEqual(s.sent.slice(0, 4).map(([, p]) => [p.state, p.pct]),
+    [["start", null], ["progress", null], ["progress", null], ["progress", 40]]);
+});
+
 test("pack status is read from the kit's disk, the booted kit's when nothing is being installed", async () => {
   const s = setup({ installCtx: false });
   assert.deepEqual(await s.ask("shell:pack-status"),
