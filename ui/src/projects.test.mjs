@@ -16,12 +16,23 @@ function makeEl(id) {
     scrollWidth: 0, clientWidth: 0,
     children: [], listeners: {}, attrs: {},
     // The lists are emptied with innerHTML = "" and filled with appendChild;
-    // the empty states are the only strings ever written whole.
-    set innerHTML(v) { this.html = v; if (v === "") this.children = []; },
+    // the empty states are the only strings ever written whole. A queue row's
+    // HTML also makes the two nodes the card writes to later: its state and,
+    // on the job on air, its bar.
+    set innerHTML(v) {
+      this.html = v;
+      if (v === "") this.children = [];
+      const state = v.match(/class="q-state[^"]*">([^<]*)</);
+      const bar = v.match(/<i style="width:([^"]*)"/);
+      this.parts = { ".q-state": state ? [{ textContent: state[1] }] : [],
+                     ".queue-bar i": bar ? [{ style: { width: bar[1] } }] : [] };
+    },
     get innerHTML() { return this.html || ""; },
-    // Only markClippedNames asks, and only for .job-name -- tests that care
-    // about it hand back their own list.
-    querySelectorAll() { return []; },
+    // What a browser finds under this node, in page order. markClippedNames
+    // asks for .job-name, which tests that care about hand back themselves.
+    querySelectorAll(sel) {
+      return [...((this.parts || {})[sel] || []), ...this.children.flatMap((kid) => kid.querySelectorAll(sel))];
+    },
     setAttribute(k, v) { this.attrs[k] = v; },
     removeAttribute(k) { delete this.attrs[k]; },
     appendChild(kid) { this.children.push(kid); return kid; },
@@ -286,6 +297,91 @@ test("a queue row's X hands the job to the page, and a job on its way out has no
   assert.deepEqual(h.log.cancelled, ["q1"]);
   // Cancelling is the page's to do: the list asks the server for nothing.
   assert.deepEqual(h.log.calls, [`GET ${JOBS}`, "GET /api/dub/jobs/r1"]);
+});
+
+test("a tick that finds the same line keeps its rows and X buttons, and moves only the words and the bar", async (t) => {
+  // The rows used to be drawn again every tick, so an X pressed just then was
+  // a button already gone: the second Cancel did nothing (Windows C18).
+  let logs = ["Uploading the video to Perso"];
+  const h = harness({
+    responses: {
+      [JOBS]: () => ok({ jobs: [
+        { id: "q1", status: "queued", project: "Second" },
+        { id: "r1", status: "running", project: "First" },
+      ] }),
+      "/api/dub/jobs/r1": () => ok({ logs }),
+    },
+  });
+  t.after(h.log.restore);
+  await h.api.renderQueueCard();
+  const rows = h.$("queueRows");
+  const [onAir, waiting] = rows.children;
+  const [row, stop] = onAir.children;
+  const x = waiting.children[1];
+  const [state, waitingState] = rows.querySelectorAll(".q-state");
+  const [bar] = rows.querySelectorAll(".queue-bar i");
+  assert.equal(state.textContent, "Dubbing 15%");
+  assert.equal(bar.style.width, "15%");
+
+  logs = ["Uploading the video to Perso", "Perso is dubbing"];
+  await h.api.renderQueueCard();
+  assert.equal(rows.children.length, 2);
+  assert.equal(rows.children[0], onAir);
+  assert.equal(rows.children[1], waiting);
+  assert.equal(onAir.children[0], row);
+  assert.equal(onAir.children[1], stop);
+  assert.equal(waiting.children[1], x);
+  assert.equal(x.listeners.click.length, 1, "a kept X is not given a second listener");
+  assert.equal(rows.querySelectorAll(".q-state")[0], state);
+  assert.equal(state.textContent, "Dubbing 55%");
+  assert.equal(waitingState.textContent, "Waiting");
+  assert.equal(bar.style.width, "55%");
+  assert.equal(h.$("queueSummary").textContent, "1 running · 1 waiting");
+  // The kept X still takes its job out of line.
+  await x.fire("click", clickEvent());
+  assert.deepEqual(h.log.cancelled, ["q1"]);
+});
+
+test("the rows are drawn again when the line changes: one taken out mid-tick, a rename, the next one's turn", async (t) => {
+  let jobs = [
+    { id: "q2", status: "queued", project: "Third" },
+    { id: "q1", status: "queued", project: "Second" },
+    { id: "r1", status: "running", project: "First" },
+  ];
+  const h = harness({
+    responses: {
+      [JOBS]: () => ok({ jobs }),
+      "/api/dub/jobs/r1": ok({ logs: [] }),
+      "/api/dub/jobs/q1": ok({ logs: [] }),
+    },
+  });
+  t.after(h.log.restore);
+  const lines = () => h.$("queueRows").children;
+  const names = () => lines().map((l) => l.children[0].innerHTML.match(/q-name">([^<]*)/)[1]);
+  await h.api.renderQueueCard();
+  let before = lines();
+
+  // Taken out of line while a tick was still asking: the later answer stays drawn.
+  const tick = h.api.renderQueueCard();
+  jobs = jobs.filter((j) => j.id !== "q2");
+  await Promise.all([tick, h.api.renderQueueCard()]);
+  assert.deepEqual(names(), ["First", "Second"]);
+  assert.notEqual(lines()[0], before[0]);
+
+  // Renamed on another screen: the row says the new name.
+  before = lines();
+  jobs = jobs.map((j) => (j.id === "q1" ? { ...j, title: "Second, renamed" } : j));
+  await h.api.renderQueueCard();
+  assert.deepEqual(names(), ["First", "Second, renamed"]);
+  assert.notEqual(lines()[1], before[1]);
+
+  // The first one is done and the next one's turn has come: its row has a bar
+  // now, and its X stops it instead of taking it out of line.
+  jobs = [{ id: "q1", status: "running", project: "Second", title: "Second, renamed" }];
+  await h.api.renderQueueCard();
+  assert.deepEqual(names(), ["Second, renamed"]);
+  assert.match(lines()[0].children[0].innerHTML, /class="queue-bar"/);
+  assert.equal(lines()[0].children[1].title, "Stop dubbing");
 });
 
 test("a job that leaves the line has the project list read again, so its card stops saying a percent", async (t) => {

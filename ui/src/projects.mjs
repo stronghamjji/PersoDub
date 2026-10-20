@@ -127,6 +127,9 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
   // The jobs that were in line at the last look: one that has left it since
   // (done, failed, stopped) is what the project cards must be told about.
   let inLine = new Set();
+  // The line the rows on show were drawn for: each job's id, state and name,
+  // in order. A job's turn coming, a rename or a job leaving draws them again.
+  let drawnLine = "";
 
   async function renderQueueCard() {
     const card = $("queueCard");
@@ -160,19 +163,36 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       if (onRunningPct) onRunningPct(running[0].id, pct);
     }
 
+    $("queueSummary").textContent =
+      t("{running} running · {waiting} waiting", { running: running.length, waiting: waiting.length });
+    card.hidden = false;
+
+    const queue = [...running, ...waiting];
+    const stateText = (job) => {
+      const doing = doingWord(job);
+      return job.status === "cancelling" ? t("Stopping…")
+        : job.status !== "queued" ? (pct != null ? `${doing} ${pct}%` : `${doing}…`) : t("Waiting");
+    };
     const rows = $("queueRows");
+    const lineKey = JSON.stringify(queue.map((job) => [job.id, job.status, shownName(job)]));
+    // Patched, not drawn again: a redraw every tick swapped the X out under a click (Windows C18).
+    if (lineKey === drawnLine) {
+      const states = rows.querySelectorAll(".q-state");
+      const bars = rows.querySelectorAll(".queue-bar i");
+      queue.forEach((job, i) => { states[i].textContent = stateText(job); });
+      for (const bar of bars) bar.style.width = `${pct ?? 0}%`;
+      return;
+    }
+    drawnLine = lineKey;
     rows.innerHTML = "";
-    for (const job of [...running, ...waiting]) {
+    for (const job of queue) {
       const live = job.status !== "queued";
       const row = document.createElement("button");
       row.type = "button";
       row.className = "queue-row";
-      const doing = doingWord(job);
-      const stateText = job.status === "cancelling" ? t("Stopping…")
-        : live ? (pct != null ? `${doing} ${pct}%` : `${doing}…`) : t("Waiting");
       row.innerHTML = `<span class="q-name">${escapeHtml(shownName(job))}${
         live ? `<div class="queue-bar"><i style="width:${pct ?? 0}%"></i></div>` : ""
-      }</span><span class="q-state${live ? " run" : ""}">${stateText}</span>`;
+      }</span><span class="q-state${live ? " run" : ""}">${stateText(job)}</span>`;
       row.addEventListener("click", () => onOpenJob(job.id));
       const line = document.createElement("div");
       line.className = "queue-line";
@@ -197,9 +217,6 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       }
       rows.appendChild(line);
     }
-    $("queueSummary").textContent =
-      t("{running} running · {waiting} waiting", { running: running.length, waiting: waiting.length });
-    card.hidden = false;
   }
 
   async function renderHistory() {
