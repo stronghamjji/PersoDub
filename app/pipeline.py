@@ -256,6 +256,12 @@ def raise_notice(e, log, on_notice) -> NoReturn:
         raise e
     notice_type, words, link_attr, ask = entry
     msg, shown = words()
+    # The failed job's sentence on screen: ours, with what to do. Perso's
+    # words go on a line of their own under it (the job's error_detail): the
+    # screen cut one sentence holding both at "Perso said:", and Perso's
+    # reason, its code and the advice after them were lost.
+    sentence = shown
+    detail = None
     # Perso's own words, kept whole and put after ours: the sentence above
     # says what to do, and this says what Perso said, so the screen can be
     # held up against Perso's dashboard (user, 2026-09-11).
@@ -263,13 +269,13 @@ def raise_notice(e, log, on_notice) -> NoReturn:
     code = getattr(e, "code", "") or ""
     if said or code:
         perso = both("Perso said: {said}", said=said) if said else both("Perso said: no reason given")
-        msg, shown = f"{msg} {perso[0]}", f"{shown} {perso[1]}"
+        msg, shown, detail = f"{msg} {perso[0]}", f"{shown} {perso[1]}", perso[1]
         if code:
-            msg, shown = f"{msg} ({code})", f"{shown} ({code})"
+            msg, shown, detail = f"{msg} ({code})", f"{shown} ({code})", f"{detail} ({code})"
     # Last, after their own words: the code is the thing to quote when asking.
     if ask:
         asked = ask()
-        msg, shown = f"{msg} {asked[0]}", f"{shown} {asked[1]}"
+        msg, shown, sentence = f"{msg} {asked[0]}", f"{shown} {asked[1]}", f"{sentence} {asked[1]}"
     # A ChatGPT limit that named its reset time says it (weeks, on a free plan),
     # in the order the popup says it: when, then the two ways on.
     resets = getattr(e, "resets", None)
@@ -287,7 +293,7 @@ def raise_notice(e, log, on_notice) -> NoReturn:
         log(f"   Error: {msg}")
     if on_notice:
         on_notice(notice)
-    raise shown_error(msg, shown) from e
+    raise shown_error(msg, sentence if detail else shown, detail) from e
 
 
 # The name the stages below were written against.
@@ -295,16 +301,13 @@ _raise_notice = raise_notice
 
 
 # What each Perso part says when it fails on an error none of its except
-# clauses named: which part stopped, why ({reason}), and what to switch to --
-# one whole sentence per part, so each language words it its own way.
+# clauses named: which part stopped and what to switch to -- one whole
+# sentence per part, so each language words it its own way. Why it stopped
+# goes under it (_raise_perso_failed).
 _PERSO_FAILED = {
-    "Perso separation": lambda reason: both(
-        "Perso separation failed ({reason}). Check Settings, or switch separation back to Local.",
-        reason=reason),
-    "Perso STT": lambda reason: both(
-        "Perso STT failed ({reason}). Check Settings, or switch to Whisper (free, offline).", reason=reason),
-    "Perso dubbing": lambda reason: both(
-        "Perso dubbing failed ({reason}). Check Settings, or use this computer for dubbing.", reason=reason),
+    "Perso separation": lambda: both("Perso separation failed. Check Settings, or switch separation back to Local."),
+    "Perso STT": lambda: both("Perso STT failed. Check Settings, or switch to Whisper (free, offline)."),
+    "Perso dubbing": lambda: both("Perso dubbing failed. Check Settings, or use this computer for dubbing."),
 }
 
 
@@ -321,11 +324,15 @@ def _raise_perso_failed(e, log, what) -> NoReturn:
     # and a sentence that finishes with a URL reads as somewhere the user
     # is being sent (user, 2026-09-11). The whole of it goes to the log.
     logger.warning("%s failed: %s", what, e)
-    msg, shown = _PERSO_FAILED[what](short_reason(e))
+    msg, shown = _PERSO_FAILED[what]()
     asked = _ask_perso()
-    msg, shown = f"{msg} {asked[0]}", f"{shown} {asked[1]}"
+    # The reason on a line of its own under the sentence (the job's
+    # error_detail): inside it, the screen cut the sentence at the reason's
+    # first colon and the advice went with it.
+    reason = both("Reason: {reason}", reason=short_reason(e))
+    msg, shown = f"{msg} {asked[0]} ({reason[0]})", f"{shown} {asked[1]}"
     log(f"   Error: {msg}")
-    raise shown_error(msg, shown) from e
+    raise shown_error(msg, shown, reason[1]) from e
 
 
 def _manifest_exclude_spans(manifest_path, mix_wav, log):
@@ -852,10 +859,13 @@ def _stage_translate(srt_path, source_cues, language, translate_engine, translat
             logger.warning("Translation failed (%s): %s", engine_label, e)
             where = _ask_google() if "gemini" in tr_name.lower() else \
                 both("Try again, or pick another translator in Settings.")
-            failed = both("Translation failed ({translator}: {reason}).", translator=tr_name, reason=str(e)[:120])
-            msg = f"{failed[0]} {where[0]}"
+            failed = both("{translator} translation failed.", translator=tr_name)
+            # The reason under the sentence, whole (the job's error_detail):
+            # inside it, the screen cut "(ChatGPT: no reply)" at the colon.
+            reason = both("Reason: {reason}", reason=str(e)[:120])
+            msg = f"{failed[0]} {where[0]} ({reason[0]})"
             log(f"   Error: {msg}")
-            raise shown_error(msg, f"{failed[1]} {where[1]}") from e
+            raise shown_error(msg, f"{failed[1]} {where[1]}", reason[1]) from e
         auto_translated = True
     else:
         _log_stage(log, "translate", "Using the provided translated subtitles")

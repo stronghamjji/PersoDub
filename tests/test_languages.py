@@ -114,8 +114,11 @@ def test_model_for_takes_the_one_asked_for_or_oriole_or_the_first_the_language_h
     assert languages.model_for(au) == "NIGHTINGALE"
     assert languages.model_for(ko, "wren") == "WREN"             # case-insensitive
     assert languages.model_for({"name": "Old", "code": "zz"}) == "ORIOLE"   # no models kept
-    with pytest.raises(ValueError, match="Wren.*English \\(Australia\\)"):
+    with pytest.raises(ValueError, match="Wren.*English \\(Australia\\)") as refused:
         languages.model_for(au, "WREN")
+    # No ": " before the list: the failed-job line cuts a sentence there.
+    assert str(refused.value).endswith("This language can be dubbed with Nightingale.")
+    assert ": " not in str(refused.value)
     with pytest.raises(ValueError, match="Linnet 4"):
         languages.model_for(ko, "LINNET_4")                       # not this language's
     assert languages.model_for({"name": "Korean", "models": ["ORIOLE", "LINNET_4"]}, "linnet_4") == "LINNET_4"

@@ -409,6 +409,9 @@
     border-radius: var(--radius); color: var(--warning-ink); font-size: var(--font-ui); font-weight: 600; }
   .settings-alert .icon { color: var(--warning); }
   .job-notice a { color: var(--warning); font-weight: 600; }
+  /* A failure's cause, on a smaller line of its own under the sentence that
+     says what to do (ui/src/runningScreen.mjs paintNotices). */
+  .job-notice .notice-detail { display: block; margin-top: 2px; font-size: var(--font-label); font-weight: 400; }
 
   details.raw-log { margin-top: 8px; }
   details.raw-log summary { cursor: pointer; font-size: var(--font-label); color: var(--muted-foreground); list-style: none; display: flex; align-items: center; gap: 4px; }

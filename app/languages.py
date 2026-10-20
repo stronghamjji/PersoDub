@@ -140,7 +140,10 @@ def model_for(entry: dict, wanted: Optional[str] = None) -> str:
     if not wanted:
         return DEFAULT_TTS_MODEL if DEFAULT_TTS_MODEL in models else models[0]
     if wanted not in models:
-        raise ValueError(t("Perso's {model} model cannot dub into {language}. It can be dubbed with: {models}.",
+        # No colon before the list: the failed-job line cuts a sentence at
+        # its first ": ", and the models it can be dubbed with were lost.
+        raise ValueError(t("Perso's {model} model cannot dub into {language}. "
+                           "This language can be dubbed with {models}.",
                            model=model_label(wanted), language=entry["name"],
                            models=", ".join(model_label(m) for m in models)))
     return wanted

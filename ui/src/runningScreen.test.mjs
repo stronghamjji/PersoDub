@@ -226,6 +226,28 @@ test("a failed job shows the engine's sentence in the page's language, error_sho
   assert.equal(h.$("jobNotice").innerHTML, "다시 진행 중");
 });
 
+test("a failure sent with its cause apart shows the whole sentence, and the cause under it", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+
+  // Cut at its first ": " this read "Translation failed (ChatGPT." -- the
+  // advice and the reason both gone.
+  h.api.paintNotices({ id: "j1", status: "error",
+                       error: "ChatGPT translation failed. Try again, or pick another translator in Settings. (Reason: ChatGPT: no reply)",
+                       error_shown: "ChatGPT 번역에 실패했어요. 다시 시도하거나 설정에서 다른 번역기를 골라 주세요.",
+                       error_detail: "이유: ChatGPT: no reply" });
+  for (const id of ["jobNotice", "doneNotice"]) {
+    assert.equal(h.$(id).innerHTML, "ChatGPT 번역에 실패했어요. 다시 시도하거나 설정에서 다른 번역기를 골라 주세요."
+      + '<span class="notice-detail">이유: ChatGPT: no reply</span>');
+  }
+  // Perso's own words, code and all, under the sentence and its advice.
+  h.api.paintNotices({ id: "j1", status: "error", error: "Perso could not finish this job. ...",
+                       error_shown: "Perso could not finish this job. Try again, or check the project on Perso. Ask Perso if it keeps happening.",
+                       error_detail: "Perso said: <too short> (VT5001)" });
+  assert.equal(h.$("jobNotice").innerHTML, "Perso could not finish this job. Try again, or check the project on Perso. "
+    + 'Ask Perso if it keeps happening.<span class="notice-detail">Perso said: &lt;too short&gt; (VT5001)</span>');
+});
+
 test("no notice and no failure means no line at all", (t) => {
   const h = harness();
   t.after(h.log.restore);

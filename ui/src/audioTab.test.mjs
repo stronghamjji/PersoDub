@@ -133,6 +133,10 @@ test("the estimate, the percentage and the lines", () => {
   assert.equal(stoppedLine({ status: "error", error: "Voice separation failed on this computer.",
                              error_shown: "이 컴퓨터에서 오디오 분리에 실패했어요." }),
     "이 컴퓨터에서 오디오 분리에 실패했어요.");
+  // A cause the engine sent apart (error_detail) is said after the sentence.
+  assert.equal(stoppedLine({ status: "error", error: "x", error_shown: "Perso 오디오 분리에 실패했어요.",
+                             error_detail: "이유: Client error '400 Bad Request'" }),
+    "Perso 오디오 분리에 실패했어요. 이유: Client error '400 Bad Request'");
 });
 
 // ---- no video yet ------------------------------------------------------------

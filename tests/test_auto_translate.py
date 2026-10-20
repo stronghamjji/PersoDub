@@ -416,9 +416,12 @@ def test_an_unexpected_gemini_failure_names_the_part_and_sends_them_to_google(
             srt_path=None, language="Korean", language_code="ko",
             translator=_GeminiBoom(),
         )
-    assert str(e.value).startswith("Translation failed (Gemini:")
-    assert "502 Bad Gateway" in str(e.value)
-    assert str(e.value).endswith("Ask Google if it keeps happening.")
+    assert str(e.value) == ("Gemini translation failed. Ask Google if it keeps happening. "
+                            "(Reason: Server error '502 Bad Gateway')")
+    # The screen's two lines: the sentence whole, and the reason under it. In
+    # one sentence the screen cut "(Gemini: ...)" at the colon, advice and all.
+    assert e.value.shown == "Gemini translation failed. Ask Google if it keeps happening."
+    assert e.value.detail == "Reason: Server error '502 Bad Gateway'"
 
 
 class _CursedLineTranslator(TranslationEngine):
@@ -484,7 +487,7 @@ def test_a_local_translator_failing_points_at_settings_not_at_google(
             srt_path=None, language="Korean", language_code="ko",
             translator=_LocalBoom(),
         )
-    assert str(e.value).startswith("Translation failed (Gemma:")
+    assert str(e.value).startswith("Gemma translation failed.")
     assert "Google" not in str(e.value)
     assert "pick another translator in Settings" in str(e.value)
 

@@ -205,12 +205,15 @@ def test_a_workspace_with_no_name(drive, scaffold):
 # ── difference 2: a client that cannot be made ─────────────────────────────
 
 NO_KEY = "PERSO_API_KEY environment variable is not set"
-SEP_NO_KEY = ("Perso separation failed (PERSO_API_KEY environment variable is not set). Check Settings, "
-              "or switch separation back to Local. Ask Perso if it keeps happening.")
-STT_NO_KEY = ("Perso STT failed (PERSO_API_KEY environment variable is not set). Check Settings, "
-              "or switch to Whisper (free, offline). Ask Perso if it keeps happening.")
-CLOUD_NO_KEY = ("Perso dubbing failed (PERSO_API_KEY environment variable is not set). Check Settings, "
-                "or use this computer for dubbing. Ask Perso if it keeps happening.")
+# The reason last, in parentheses: on screen it is a line of its own under
+# the sentence (the job's error_detail), and in one sentence the screen cut
+# the sentence at the reason's first colon.
+SEP_NO_KEY = ("Perso separation failed. Check Settings, or switch separation back to Local. "
+              "Ask Perso if it keeps happening. (Reason: PERSO_API_KEY environment variable is not set)")
+STT_NO_KEY = ("Perso STT failed. Check Settings, or switch to Whisper (free, offline). "
+              "Ask Perso if it keeps happening. (Reason: PERSO_API_KEY environment variable is not set)")
+CLOUD_NO_KEY = ("Perso dubbing failed. Check Settings, or use this computer for dubbing. "
+                "Ask Perso if it keeps happening. (Reason: PERSO_API_KEY environment variable is not set)")
 
 # (the job log, what is raised, what the done screen says, the error the raised one replaced)
 NO_CLIENT = {
@@ -244,12 +247,12 @@ def unpinned_key(monkeypatch):
 
 
 OFFLINE = "[Errno 8] nodename nor servname provided, or not known"
-SEP_OFFLINE = ("Perso separation failed (%s). Check Settings, or switch separation back to Local. "
-               "Ask Perso if it keeps happening." % OFFLINE)
-STT_OFFLINE = ("Perso STT failed (%s). Check Settings, or switch to Whisper (free, offline). "
-               "Ask Perso if it keeps happening." % OFFLINE)
-CLOUD_OFFLINE = ("Perso dubbing failed (%s). Check Settings, or use this computer for dubbing. "
-                 "Ask Perso if it keeps happening." % OFFLINE)
+SEP_OFFLINE = ("Perso separation failed. Check Settings, or switch separation back to Local. "
+               "Ask Perso if it keeps happening. (Reason: %s)" % OFFLINE)
+STT_OFFLINE = ("Perso STT failed. Check Settings, or switch to Whisper (free, offline). "
+               "Ask Perso if it keeps happening. (Reason: %s)" % OFFLINE)
+CLOUD_OFFLINE = ("Perso dubbing failed. Check Settings, or use this computer for dubbing. "
+                 "Ask Perso if it keeps happening. (Reason: %s)" % OFFLINE)
 
 # (the job log, what the done screen says)
 MADE_OFFLINE = {
@@ -278,12 +281,12 @@ def test_a_client_made_offline(drive, unpinned_key, monkeypatch, scaffold):
 
 ADDRESS = "https://api.perso.ai/file/api/upload/video"
 HTTPX_SAID = "Client error '400 Bad Request' for url '%s'" % ADDRESS
-SEP_SAID = ("Perso separation failed (Client error '400 Bad Request'). Check Settings, "
-            "or switch separation back to Local. Ask Perso if it keeps happening.")
-STT_SAID = ("Perso STT failed (Client error '400 Bad Request'). Check Settings, "
-            "or switch to Whisper (free, offline). Ask Perso if it keeps happening.")
-CLOUD_SAID = ("Perso dubbing failed (Client error '400 Bad Request'). Check Settings, "
-              "or use this computer for dubbing. Ask Perso if it keeps happening.")
+SEP_SAID = ("Perso separation failed. Check Settings, or switch separation back to Local. "
+            "Ask Perso if it keeps happening. (Reason: Client error '400 Bad Request')")
+STT_SAID = ("Perso STT failed. Check Settings, or switch to Whisper (free, offline). "
+            "Ask Perso if it keeps happening. (Reason: Client error '400 Bad Request')")
+CLOUD_SAID = ("Perso dubbing failed. Check Settings, or use this computer for dubbing. "
+              "Ask Perso if it keeps happening. (Reason: Client error '400 Bad Request')")
 
 
 def _http_400():
@@ -315,6 +318,9 @@ def test_an_error_no_except_clause_names(drive, caplog, scaffold):
            repr(out.error))
     assert how == raised
     assert error_text_for_ui(out.error) == screen
+    # On screen: the sentence, then the reason on a line of its own.
+    assert out.error.shown == screen[:screen.index(" (Reason: ")]
+    assert out.error.detail == "Reason: Client error '400 Bad Request'"
     assert out.notices == []
     assert [(r.levelname, r.getMessage()) for r in caplog.records
             if r.name.startswith("persodub") and r.levelno >= logging.WARNING] == app_log
@@ -364,8 +370,8 @@ def test_an_empty_transcript_fails_after_the_credits_are_counted(drive):
     (test_a_paid_call_that_works)."""
     client = FakePerso(answer=[])
     out = drive("transcription", client)
-    said = ("Perso STT failed (Perso result is empty). Check Settings, or switch to Whisper (free, offline). "
-            "Ask Perso if it keeps happening.")
+    said = ("Perso STT failed. Check Settings, or switch to Whisper (free, offline). "
+            "Ask Perso if it keeps happening. (Reason: Perso result is empty)")
     assert out.lines == [HEADER["transcription"], WORKSPACE, "   Perso credits used: 6", "   Error: " + said]
     assert type(out.error) is RuntimeError and str(out.error) == said
     assert client.space["credits"] == 94 and client.credits_used == 6   # what Perso billed, counted

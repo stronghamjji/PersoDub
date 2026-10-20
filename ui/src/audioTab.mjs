@@ -105,7 +105,9 @@ export function stoppedLine(job) {
   if (job.error === "interrupted") return t("PersoDub was closed before this finished.");
   if (job.status === "done") return t("The separated audio is no longer on this computer.");
   // error_shown: the engine's sentence in the page's language; error stays
-  // English for the desktop app and the failure reports.
+  // English for the desktop app and the failure reports. error_detail is the
+  // cause the engine sent apart from it (Perso's reason), said after it.
+  if (job.error_shown && job.error_detail) return `${job.error_shown} ${job.error_detail}`;
   return job.error_shown || job.error || t("Separating stopped.");
 }
 
@@ -323,6 +325,7 @@ export function initAudioTab({ $, state, getVideo, goToTab, importSource, say,
   function record(jid, j, extra = {}) {
     return { ...(job && job.id === jid ? job : {}), id: jid, status: j.status,
              elapsed: j.elapsed || 0, done: !!j.done, error: j.error || "", error_shown: j.error_shown || "",
+             error_detail: j.error_detail || "",
              logs: j.logs || [], engine: j.separation === "perso" ? "perso" : "local", ...extra };
   }
 

@@ -584,7 +584,7 @@ def dub_job_resume(jid: str, body: Optional[ResumeRequest] = None):
     _require_local_models(engines, None if translator or translated else engines.get("translator"))
     check_space(state.WORKSPACE)
     if not state.job_store.claim(jid, RESUMABLE, status=JobStatus.QUEUED, error=None, error_shown=None,
-                                 cancel_requested=False, notices=[],
+                                 error_detail=None, cancel_requested=False, notices=[],
                                  **({"translator": translator} if translator else {})):
         raise HTTPException(status_code=409, detail=t("This project is already running again."))
     state.job_store.append_log(jid, "Resuming from where it stopped…")

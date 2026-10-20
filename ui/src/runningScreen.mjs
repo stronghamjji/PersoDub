@@ -284,14 +284,21 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     // sentence in the page's language when it sent one (error_shown, a
     // notice's message_shown); error and message stay English for the
     // desktop app and the failure reports.
+    // A failure the engine sent with its cause apart (error_detail: "Reason:
+    // no reply", "Perso said: ... (code)") is its own sentence through and
+    // through, so it is shown whole, advice and all, and the cause goes under
+    // it -- plainFailure cut such a sentence at its first colon.
     const said = n && (n.message_shown || n.message);
+    const detail = failed ? (job.error_detail || "") : "";
     const message = failed
-      ? (ERROR_SENTENCES[job.error] || plainFailure(job.error_shown || job.error) || said || failedAt(job))
+      ? (ERROR_SENTENCES[job.error] || (detail && job.error_shown)
+         || plainFailure(job.error_shown || job.error) || said || failedAt(job))
       : said;
     const linkText = n && CREDIT_MODALS[n.type] ? CREDIT_MODALS[n.type].button : t("Recharge");
-    const html = (n && n.link && linkText)
+    const html = ((n && n.link && linkText)
       ? `${escapeHtml(message)} <a href="${escapeHtml(n.link)}" target="_blank" rel="noopener">${linkText}</a>`
-      : escapeHtml(message || "");
+      : escapeHtml(message || ""))
+      + (detail ? `<span class="notice-detail">${escapeHtml(detail)}</span>` : "");
     for (const id of ["jobNotice", "doneNotice"]) {
       const el = $(id);
       // "danger" only ever comes from the poll loop's own failure
