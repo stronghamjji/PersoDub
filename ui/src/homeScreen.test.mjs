@@ -3,6 +3,8 @@
 // uses. Where a test needs to press a card, it pre-loads the fake grid's
 // querySelectorAll answer (`grid.qs[selector]`) with the nodes the browser
 // would have built from that string, then fires their listeners by hand.
+// The tests of painting the same cards again use liveGrid instead, which
+// builds those nodes from the string itself, anew on every write.
 //
 // Run with: node --test ui/src/homeScreen.test.mjs
 import test from "node:test";
@@ -35,7 +37,8 @@ function harness({ fetchOk = true } = {}) {
 
   const real = { fetch: globalThis.fetch, document: globalThis.document };
   const docListeners = {};
-  globalThis.document = { addEventListener(ev, fn) { (docListeners[ev] ||= []).push(fn); } };
+  globalThis.document = { addEventListener(ev, fn) { (docListeners[ev] ||= []).push(fn); },
+                          createElement: () => node("") };
   globalThis.fetch = async (url, init) => {
     log.calls.push(`${(init && init.method) || "GET"} ${url}${init && init.body ? " " + init.body : ""}`);
     return { ok: fetchOk, json: async () => ({}) };
@@ -53,6 +56,68 @@ function harness({ fetchOk = true } = {}) {
   });
   return { $, api, log };
 }
+
+// A node of a card, as much of one as paint() reaches for: its classes and
+// words, its attributes and listeners, and the nodes inside it, found by class.
+function node(className, textContent = "", kids = []) {
+  const n = {
+    className, textContent, kids, dataset: {}, attrs: {}, listeners: {}, parent: null,
+    setAttribute(k, v) { this.attrs[k] = v; },
+    addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); },
+    querySelector(sel) {
+      for (const kid of this.kids) {
+        const hit = kid.className.split(" ").includes(sel.slice(1)) ? kid : kid.querySelector(sel);
+        if (hit) return hit;
+      }
+      return null;
+    },
+    insertBefore(kid, ref) {
+      kid.parent = this;
+      this.kids.splice(ref ? this.kids.indexOf(ref) : this.kids.length, 0, kid);
+      return kid;
+    },
+    // Only ever asked for "afterbegin".
+    insertAdjacentHTML(where, html) { this.insertBefore(node(html.match(/class="([^"]*)"/)[1]), this.kids[0]); },
+    remove() { this.parent.kids.splice(this.parent.kids.indexOf(this), 1); },
+  };
+  for (const kid of kids) kid.parent = n;
+  return n;
+}
+
+// The card a browser builds from one card's HTML, down to those parts.
+function cardFrom(html) {
+  const words = (cls) => (html.match(new RegExp(`class="${cls}">([^<]*)<`)) || [])[1];
+  const chip = html.match(/class="(proj-chip [^"]*)">([^<]*)</);
+  const picture = Object.assign(node("proj-img"), { tag: html.includes("<video") ? "video" : "img" });
+  const thumb = node("proj-thumb", "", [picture, ...(chip ? [node(chip[1], chip[2])] : []),
+                                        ...(words("proj-dur") ? [node("proj-dur", words("proj-dur"))] : [])]);
+  const more = node("proj-more");
+  more.attrs["aria-label"] = (html.match(/aria-label="(More for [^"]*)"/) || [])[1];
+  const card = node("proj-card", "", [thumb, ...(words("proj-name") ? [node("proj-name", words("proj-name"))] : []),
+                                      node("proj-meta", words("proj-meta")), more]);
+  card.dataset = { job: (html.match(/data-job="([^"]*)"/) || [])[1], draft: (html.match(/data-draft="([^"]*)"/) || [])[1] };
+  card.attrs["aria-label"] = (html.match(/aria-label="([^"]*)"/) || [])[1];
+  return card;
+}
+
+// A grid that builds its cards from the HTML written into it, as a browser
+// does: every write is new nodes, so a card (or a draft's <video>) that is
+// the same object after a paint is one that paint did not draw again.
+function liveGrid(h) {
+  const grid = h.$("projectsGrid");
+  let html = "";
+  grid.writes = 0;
+  Object.defineProperty(grid, "innerHTML", {
+    get: () => html,
+    set(v) {
+      html = v;
+      grid.writes += 1;
+      grid.qs[".proj-card"] = v.split('<div class="proj-card"').slice(1).map(cardFrom);
+    },
+  });
+  return grid;
+}
+const cardOf = (grid, id) => grid.qs[".proj-card"].find((c) => c.dataset.job === id);
 
 // A fresh copy per call: renderProjects's job objects are painted in place
 // (a rename writes .title straight onto them, optimistically), so two tests
@@ -197,6 +262,7 @@ test("an empty result says there are no projects, not nothing at all", (t) => {
 test("a rename the server refuses puts the old name back and says so in one line", async (t) => {
   const h = harness({ fetchOk: false });
   t.after(h.log.restore);
+  const grid = liveGrid(h);
   const more = makeEl("more-a");
   more.dataset.more = "a";
   h.$("projectsGrid").qs[".proj-more"] = [more];
@@ -210,8 +276,10 @@ test("a rename the server refuses puts the old name back and says so in one line
   await input.fire("keydown", { key: "Enter", preventDefault() {} });
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(h.log.errors, ["Could not rename the project. Try again."]);
-  assert.match(h.$("projectsGrid").innerHTML, /Interview/);
-  assert.doesNotMatch(h.$("projectsGrid").innerHTML, /New name/);
+  // Put back on the card that is there: the same projects are still on show.
+  const card = cardOf(grid, "a");
+  assert.equal(card.querySelector(".proj-name").textContent, "Interview");
+  assert.equal(card.attrs["aria-label"], "Open Interview");
 });
 
 test("a search says how many it found, and Escape closes the field", async (t) => {
@@ -305,16 +373,15 @@ const FAMILY = () => [
 test("a project of two languages is one card that names both and opens the newest", async (t) => {
   const h = harness();
   t.after(h.log.restore);
+  const card = makeEl("card");
+  card.dataset.job = "en2";
+  h.$("projectsGrid").qs[".proj-card"] = [card];
   h.api.renderProjects(FAMILY());
   const html = h.$("projectsGrid").innerHTML;
   assert.equal((html.match(/class="proj-card"/g) || []).length, 2, "the old job with no project is its own card");
   assert.match(html, /data-job="en2"[^]*?proj-meta">Korean · English</);
   assert.doesNotMatch(html, /data-job="ko1"/);
   assert.equal(h.$("projectsCount").textContent, "2");
-  const card = makeEl("card");
-  card.dataset.job = "en2";
-  h.$("projectsGrid").qs[".proj-card"] = [card];
-  h.api.renderProjects(FAMILY());
   await card.fire("click");
   assert.deepEqual(h.log.opened, ["en2"]);
 });
@@ -357,4 +424,126 @@ test("Rename on a project's card renames every language", async (t) => {
     'POST /api/dub/jobs/en2/title {"title":"Kittens"}',
     'POST /api/dub/jobs/ko1/title {"title":"Kittens"}',
   ]);
+});
+
+// -- painting the same cards again ------------------------------------------
+// Writing the whole grid on every refresh made each draft's video load again,
+// so the drafts flickered, and a press that landed meanwhile was lost.
+
+test("the same cards painted again stay the same nodes, and a draft's <video> is not made again", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const grid = liveGrid(h);
+  h.api.renderProjects(JOBS());
+  h.api.renderDrafts(KEPT);
+  const draft = grid.qs[".proj-card"][0];
+  const interview = cardOf(grid, "a");
+  const video = draft.querySelector(".proj-img");
+  assert.equal(video.tag, "video");
+  assert.equal(grid.writes, 2);
+
+  // The next refresh: a new list of the same projects, and the same draft.
+  h.api.renderProjects(JOBS());
+  h.api.renderDrafts(KEPT.map((d) => ({ ...d })));
+  assert.equal(grid.writes, 2, "the grid's HTML is not written again");
+  assert.equal(grid.qs[".proj-card"][0], draft);
+  assert.equal(draft.querySelector(".proj-img"), video);
+  assert.equal(cardOf(grid, "a"), interview);
+  assert.equal(interview.listeners.click.length, 1, "a kept card is not given a second listener");
+  assert.equal(interview.querySelector(".proj-name").textContent, "Interview");
+  assert.equal(interview.querySelector(".proj-meta").textContent, "Korean → English");
+});
+
+test("a job whose state changed has its chip, length and words changed on the card it already has", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const grid = liveGrid(h);
+  h.api.renderProjects(JOBS());
+  const ids = ["a", "b", "e", "f"];
+  const before = ids.map((id) => cardOf(grid, id));
+  const [finished, onAir, next, erase] = before;
+
+  // The one on air is done and knows its length now, the next one's turn has
+  // come, a finished one waits to be made again and an erase runs again.
+  const jobs = JOBS();
+  Object.assign(jobs[1], { status: "done", duration: 75 });
+  jobs[4].status = "running";
+  jobs[0].status = "queued";
+  jobs[5].status = "running";
+  h.api.renderProjects(jobs);
+  assert.equal(grid.writes, 1);
+  ids.forEach((id, i) => assert.equal(cardOf(grid, id), before[i], `card ${id} was drawn again`));
+  assert.equal(onAir.querySelector(".proj-chip"), null, "a finished card carries no chip");
+  assert.equal(onAir.querySelector(".proj-dur").textContent, "01:15");
+  assert.equal(next.querySelector(".proj-chip").className, "proj-chip proj-chip-run");
+  assert.equal(next.querySelector(".proj-chip").textContent, "Dubbing…");
+  assert.equal(erase.querySelector(".proj-meta").textContent, "Erasing");
+  // A chip put back goes ahead of the length, under the id the percent finds it by.
+  const labels = finished.querySelector(".proj-thumb").kids;
+  assert.deepEqual(labels.map((k) => k.className), ["proj-img", "proj-chip proj-chip-queued", "proj-dur"]);
+  assert.equal(labels[1].id, "projChip-a");
+  assert.equal(labels[1].textContent, "Queued");
+});
+
+test("a name changed elsewhere, and a draft cut again, show on the cards already there", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const grid = liveGrid(h);
+  h.api.renderProjects(JOBS());
+  h.api.renderDrafts(KEPT);
+  const draft = grid.qs[".proj-card"][0];
+  const interview = cardOf(grid, "a");
+  const video = draft.querySelector(".proj-img");
+
+  const jobs = JOBS();
+  jobs[0].title = "Interview, cut";   // renamed in the top bar of its own screen
+  h.api.renderProjects(jobs);
+  h.api.renderDrafts([{ ...KEPT[0], ranges: [[0, 20]] }]);
+  assert.equal(grid.writes, 2);
+  assert.equal(interview.querySelector(".proj-name").textContent, "Interview, cut");
+  assert.equal(interview.attrs["aria-label"], "Open Interview, cut");
+  assert.equal(interview.querySelector(".proj-more").attrs["aria-label"], "More for Interview, cut");
+  assert.equal(draft.querySelector(".proj-dur").textContent, "00:20");
+  assert.equal(draft.querySelector(".proj-img"), video);
+});
+
+test("a job added or deleted, the same ones in another order and a search each draw the grid again", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const grid = liveGrid(h);
+  h.api.renderProjects(JOBS());
+  const first = cardOf(grid, "a");
+
+  h.api.renderProjects([{ id: "g", status: "queued", project: "New one" }, ...JOBS()]);
+  assert.equal(grid.writes, 2);
+  assert.notEqual(cardOf(grid, "a"), first);
+  assert.equal(grid.qs[".proj-card"][0].dataset.job, "g");
+
+  h.api.renderProjects(JOBS().filter((j) => j.id !== "c"));   // deleted between two refreshes
+  assert.equal(grid.writes, 3);
+  assert.equal(cardOf(grid, "c"), undefined);
+
+  h.api.renderProjects(JOBS().filter((j) => j.id !== "c").reverse());
+  assert.equal(grid.writes, 4);
+  assert.deepEqual(grid.qs[".proj-card"].map((c) => c.dataset.job), ["f", "e", "d", "b", "a"]);
+
+  h.$("projectSearchInput").value = "ad spot";
+  h.$("projectSearchInput").fire("input");
+  assert.equal(grid.writes, 5);
+  assert.deepEqual(grid.qs[".proj-card"].map((c) => c.dataset.job), ["b"]);
+});
+
+test("a picture the server had none for is asked for again when the cards are painted again", (t) => {
+  // Its <img> takes itself off when there is no picture yet (a link still
+  // coming down). Drawing the grid again used to put it back; so does this.
+  const h = harness();
+  t.after(h.log.restore);
+  const grid = liveGrid(h);
+  h.api.renderProjects(JOBS());
+  const card = cardOf(grid, "e");
+  card.querySelector(".proj-img").remove();
+  h.api.renderProjects(JOBS());
+  assert.equal(grid.writes, 1);
+  assert.equal(cardOf(grid, "e"), card);
+  assert.equal(card.querySelector(".proj-thumb").kids[0].className, "proj-img");
 });

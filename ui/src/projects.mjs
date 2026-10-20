@@ -14,7 +14,8 @@
 // polling tick that keeps the Up next card fresh is the page's as well, so
 // that a test can call renderQueueCard without leaving a timer running.
 //
-// Everything this file touches is #historyList and the #queueCard box.
+// Everything this file touches is #historyList (drawn only while
+// #historySidebar is open) and the #queueCard box.
 import { escapeHtml, fmtLength } from "./format.mjs";
 import { parseProgress } from "./dubApi.mjs";
 import { erasePercent } from "./eraseArea.mjs";
@@ -127,6 +128,9 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
   // The jobs that were in line at the last look: one that has left it since
   // (done, failed, stopped) is what the project cards must be told about.
   let inLine = new Set();
+  // The line the rows on show were drawn for: each job's id, state and name,
+  // in order. A job's turn coming, a rename or a job leaving draws them again.
+  let drawnLine = "";
 
   async function renderQueueCard() {
     const card = $("queueCard");
@@ -160,19 +164,36 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       if (onRunningPct) onRunningPct(running[0].id, pct);
     }
 
+    $("queueSummary").textContent =
+      t("{running} running · {waiting} waiting", { running: running.length, waiting: waiting.length });
+    card.hidden = false;
+
+    const queue = [...running, ...waiting];
+    const stateText = (job) => {
+      const doing = doingWord(job);
+      return job.status === "cancelling" ? t("Stopping…")
+        : job.status !== "queued" ? (pct != null ? `${doing} ${pct}%` : `${doing}…`) : t("Waiting");
+    };
     const rows = $("queueRows");
+    const lineKey = JSON.stringify(queue.map((job) => [job.id, job.status, shownName(job)]));
+    // Patched, not drawn again: a redraw every tick swapped the X out under a click (Windows C18).
+    if (lineKey === drawnLine) {
+      const states = rows.querySelectorAll(".q-state");
+      const bars = rows.querySelectorAll(".queue-bar i");
+      queue.forEach((job, i) => { states[i].textContent = stateText(job); });
+      for (const bar of bars) bar.style.width = `${pct ?? 0}%`;
+      return;
+    }
+    drawnLine = lineKey;
     rows.innerHTML = "";
-    for (const job of [...running, ...waiting]) {
+    for (const job of queue) {
       const live = job.status !== "queued";
       const row = document.createElement("button");
       row.type = "button";
       row.className = "queue-row";
-      const doing = doingWord(job);
-      const stateText = job.status === "cancelling" ? t("Stopping…")
-        : live ? (pct != null ? `${doing} ${pct}%` : `${doing}…`) : t("Waiting");
       row.innerHTML = `<span class="q-name">${escapeHtml(shownName(job))}${
         live ? `<div class="queue-bar"><i style="width:${pct ?? 0}%"></i></div>` : ""
-      }</span><span class="q-state${live ? " run" : ""}">${stateText}</span>`;
+      }</span><span class="q-state${live ? " run" : ""}">${stateText(job)}</span>`;
       row.addEventListener("click", () => onOpenJob(job.id));
       const line = document.createElement("div");
       line.className = "queue-line";
@@ -197,10 +218,12 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
       }
       rows.appendChild(line);
     }
-    $("queueSummary").textContent =
-      t("{running} running · {waiting} waiting", { running: running.length, waiting: waiting.length });
-    card.hidden = false;
   }
+
+  // Folded away, the list is not drawn at all: nothing has opened it since the
+  // Home grid took its place (app.mjs), and its rows were drawn for no one on
+  // every refresh. Whatever opens it again calls renderHistory then.
+  const folded = () => $("historySidebar").classList.contains("collapsed");
 
   async function renderHistory() {
     const container = $("historyList");
@@ -208,10 +231,11 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
     try {
       jobs = (await (await fetch("/api/dub/jobs")).json()).jobs || [];
     } catch {
-      container.innerHTML = `<div class="history-empty">${t("PersoDub is not running. Restart the app.")}</div>`;
+      if (!folded()) container.innerHTML = `<div class="history-empty">${t("PersoDub is not running. Restart the app.")}</div>`;
       return;
     }
     if (onJobs) onJobs(jobs);
+    if (folded()) return;
     if (jobs.length === 0) {
       container.innerHTML = `<div class="history-empty">${t("No projects yet - drop a video to start one.")}</div>`;
       return;

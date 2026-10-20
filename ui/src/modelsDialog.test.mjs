@@ -42,8 +42,10 @@ function harness({ rows = [], shell = null, ramOk = true } = {}) {
 
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
+  const realWindow = globalThis.window;
   const realSetTimeout = globalThis.setTimeout;
-  globalThis.document = { createElement: (tag) => makeEl(tag) };
+  globalThis.document = Object.assign(makeEl("document"), { createElement: (tag) => makeEl(tag) });
+  globalThis.window = makeEl("window");
   globalThis.setTimeout = (fn, ms) => { state.timers.push({ fn, ms }); return state.timers.length; };
   globalThis.fetch = async (url, opts) => {
     state.calls.push(`${(opts && opts.method) || "GET"} ${url}`);
@@ -53,6 +55,7 @@ function harness({ rows = [], shell = null, ramOk = true } = {}) {
   state.restore = () => {
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
+    globalThis.window = realWindow;
     globalThis.setTimeout = realSetTimeout;
   };
 
@@ -92,6 +95,11 @@ const settle = () => new Promise((r) => setImmediate(r));
 
 /** The Settings catalog's model rows, without the group headings between them. */
 const listRows = (h) => h.$("modelsList").children.filter((c) => c.className.includes("model-row"));
+
+/** What the browser does when an event reaches `el`: its listeners run. */
+const fire = (el, ev) => { for (const fn of el.listeners[ev] || []) fn({}); };
+/** The timers set for the next tick -- not the 2s poll's. */
+const nextTick = (h) => h.state.timers.filter((x) => x.ms === 0);
 
 const DETAIL_TWO = {
   missing: [{ id: "whisper", name: "Whisper", bytes: 1.5e9 },
@@ -423,6 +431,74 @@ test("downloadModel and cancelModel hit their endpoints and start the poll", asy
   assert.deepEqual(h.state.timers, []);
 });
 
+
+// A refresh that rebuilt the list between pointerdown and click took the
+// pressed button away, so the click reached no button: the second Cancel on
+// Gemma sent nothing and the download went on (Windows C18, 2026-10-20).
+test("a refresh during a press keeps the pressed Cancel, and its click still stops the download", async (t) => {
+  const h = harness({ rows: [downloading("gemma", "Gemma 3", 8e9, 7)] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const cancel = listRows(h)[0].children[3];
+  assert.equal(cancel.textContent, "Cancel");
+
+  fire(h.$("modelsList"), "pointerdown");
+  h.state.rows = [downloading("gemma", "Gemma 3", 8e9, 24)];
+  await h.api.refreshModels();   // the focus refresh a click into a background window starts
+  assert.equal(listRows(h)[0].children[3], cancel, "the button under the finger is still on screen");
+
+  fire(document, "pointerup");
+  cancel.onclick();
+  await settle();
+  assert.equal(h.state.calls.includes("POST /api/models/gemma/cancel"), true);
+});
+
+test("the refresh a press held back is drawn just after the release, however the press ends", async (t) => {
+  const h = harness({ rows: [downloading("gemma", "Gemma 3", 8e9, 7)] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const status = () => listRows(h)[0].children[2].textContent;
+
+  let pct = 7;
+  for (const [el, ev] of [[document, "pointerup"], [document, "pointercancel"],
+                          [window, "blur"], [document, "visibilitychange"]]) {
+    fire(h.$("modelsList"), "pointerdown");
+    pct += 1;
+    h.state.rows = [downloading("gemma", "Gemma 3", 8e9, pct)];
+    await h.api.refreshModels();
+    assert.equal(status(), `Downloading Gemma 3… ${pct - 1}%`, `held back until ${ev}`);
+
+    assert.equal(nextTick(h).length, 0);
+    fire(el, ev);
+    // A tick later, so the click that follows pointerup lands first.
+    const later = nextTick(h);
+    assert.equal(later.length, 1, `${ev} sends the repaint`);
+    h.state.timers.splice(h.state.timers.indexOf(later[0]), 1);
+    later[0].fn();
+    assert.equal(status(), `Downloading Gemma 3… ${pct}%`, `drawn after ${ev}`);
+  }
+});
+
+test("a refresh with no press rebuilds the list at once, and a keyboard click still cancels", async (t) => {
+  const h = harness({ rows: [downloading("gemma", "Gemma 3", 8e9, 7)] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const before = listRows(h)[0].children[3];
+
+  h.state.rows = [downloading("gemma", "Gemma 3", 8e9, 24)];
+  await h.api.refreshModels();
+  assert.equal(listRows(h)[0].children[2].textContent, "Downloading Gemma 3… 24%");
+  assert.notEqual(listRows(h)[0].children[3], before, "rebuilt, as it always was");
+  assert.deepEqual(nextTick(h), [], "nothing waits for a release");
+  // A release with no press before it schedules nothing either.
+  fire(document, "pointerup");
+  assert.deepEqual(nextTick(h), []);
+
+  // Enter or Space on the focused button: a click with no pointer before it.
+  listRows(h)[0].children[3].onclick();
+  await settle();
+  assert.equal(h.state.calls.includes("POST /api/models/gemma/cancel"), true);
+});
 
 // ── packs: the desktop app installs them, then the models download ─────────
 test("Download and Start installs the packs through the desktop app first, then downloads the models", async (t) => {

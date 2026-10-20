@@ -26,7 +26,7 @@ def _fake_worker(monkeypatch, tmp_path, payload):
     py.write_text("#!/bin/sh\n")
     py.chmod(0o755)
     monkeypatch.setattr(stt_local, "STT_PYTHON", str(py))
-    monkeypatch.setattr(stt_local.subprocess, "run", fake_run)
+    monkeypatch.setattr(stt_local, "_run", fake_run)
     return str(audio)
 
 

@@ -16,10 +16,13 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import wave
 from typing import Callable, List, Optional
 
+from app.agents.base import _end
 from app.config import NONVERBAL_WHISPER_MODEL, NONVERBAL_WHISPER_PYTHON
+from app.jobs import JobCancelled
 from app.nonverbal import _PUNCT_RE, MIN_RMS_DBFS, _span_rms_db
 from app.run_errors import PartsMissing, describe_exit_failure, describe_start_failure, model_failed_to_load
 from app.text.srt import clamp_cues
@@ -69,6 +72,42 @@ class NoSpeech(RuntimeError):
     video is fine; it simply has nothing to dub."""
 
 
+def _run(cmd: List[str], timeout: float,
+         cancel_check: Optional[Callable[[], bool]] = None) -> subprocess.CompletedProcess:
+    """subprocess.run(cmd, capture_output=True, text=True, timeout=timeout),
+    with cancel_check asked every half second: a yes ends the process and
+    raises JobCancelled. run heard no Stop until Whisper was done, and Stop
+    during Transcribing took 47 s (Windows test C10, 2026-10-20).
+
+    The single place transcribe_local starts Whisper -- tests replace exactly
+    this function.
+    """
+    deadline = time.monotonic() + timeout
+    # `with` waits for the process before this returns, so the temp folder
+    # holding its output is never removed while it is still in use (Windows
+    # refuses to).
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          text=True, encoding="utf-8", errors="replace") as proc:
+        try:
+            while True:
+                try:
+                    # Both pipes are read while it waits: a full one stalls Whisper.
+                    out, err = proc.communicate(timeout=0.5)
+                    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+                except subprocess.TimeoutExpired:
+                    pass
+                if cancel_check is not None and cancel_check():
+                    raise JobCancelled("Transcription was stopped.")
+                if time.monotonic() >= deadline:
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+        except BaseException:
+            # The whole tree: on Windows STT_PYTHON is a venv's python.exe, a
+            # launcher that starts the real interpreter as its own child, which
+            # ending the launcher alone can leave running.
+            _end(proc)
+            raise
+
+
 def transcribe_local(
     audio_path: str,
     language: Optional[str] = None,
@@ -78,6 +117,7 @@ def transcribe_local(
     on_language: Optional[Callable[[str], None]] = None,
     video_duration: Optional[float] = None,
     vocals_path: Optional[str] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> List[dict]:
     """Transcribe audio_path with local Whisper. Returns a list of cues in the
     same shape the pipeline expects everywhere else: [{"start": float,
@@ -85,7 +125,9 @@ def transcribe_local(
 
     video_duration, when known, also ends every line where the video ends.
     vocals_path, when given, drops Whisper's made-up lines ("Thank you for
-    watching!") wherever that track is quiet (_made_up).
+    watching!") wherever that track is quiet (_made_up). cancel_check, when
+    given, is asked while Whisper runs (_run): a Stop ends it there and then
+    and raises JobCancelled, which is not a failure.
 
     Raises RuntimeError (with a clear message) on any failure: missing
     interpreter/script, subprocess crash/timeout, non-zero exit, bad JSON
@@ -116,8 +158,9 @@ def transcribe_local(
             cmd += ["--word-timestamps"]
 
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               timeout=effective_timeout)
+            r = _run(cmd, timeout=effective_timeout, cancel_check=cancel_check)
+        except JobCancelled:
+            raise  # a Stop, not a failure to start
         except Exception as e:
             raise RuntimeError(describe_start_failure("local STT", e, effective_timeout)) from e
 
