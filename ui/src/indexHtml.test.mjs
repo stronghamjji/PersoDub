@@ -666,7 +666,9 @@ test("a dub refused because the voice engine is not running is retried after the
   const html = readPage();
   assert.match(html, /async function restartVoiceEngine\(errorEl\)/);
   // serverText: the engine's English, which the refusal is known by (ui/src/format.mjs).
-  assert.match(html, /voice engine is not running\/\.test\(serverText\(e\)\) && await restartVoiceEngine\(errorEl\)/);
+  assert.match(html, /voice engine is not running\/\.test\(serverText\(e\)\)\) \{\n\s*const restart = await restartVoiceEngine\(errorEl\);/);
+  // When it does not come back, why is said under the refusal, not thrown away.
+  assert.match(html, /errorEl\.textContent = \[errorText\(e\), restart\.why\]\.filter\(Boolean\)\.join\("\\n"\);/);
   assert.match(html, /keepPolling: \(\) => \$\("settingsOverlay"\)\.classList\.contains\("open"\)/);
 });
 
@@ -891,7 +893,7 @@ test("a start that restarted the voice engine tries once more, never in a loop",
   // dialog's Start and a draft's own (ui/src/draftSetup.mjs), so neither has
   // to carry it separately.
   const html = readPage();
-  const branch = html.match(/else if \(([^\n]*voice engine is not running[^\n]*)\) \{\n\s*(return submitDubStart\([^;]*\));/);
+  const branch = html.match(/else if \(([^\n]*voice engine is not running[^\n]*)\) \{\n[^\n]*restartVoiceEngine[^\n]*\n\s*if \(restart\.ok\) \{\n\s*(return submitDubStart\([^;]*\));/);
   assert.ok(branch, "the voice-engine retry branch is where it was");
   assert.match(branch[1], /^!retried && /);
   assert.equal(branch[2], "return submitDubStart({ fd, label, errorEl, retry, retried: true })");

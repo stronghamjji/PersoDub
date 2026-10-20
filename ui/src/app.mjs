@@ -50,7 +50,7 @@ import { clearDraft, getDraft, onDraftChange, setDraft, setRanges, setDraftRatio
 import { readKept, keepDraft, dropKept, draftMark } from "./keptDrafts.mjs";
 import { initRatioUi } from "./ratio.mjs";
 import { wireUpdates } from "./updateWindow.mjs";
-import { fmtClock, fmtClockTenths, fmtLength, formatBytes, escapeHtml, errorText, serverText, statusParts, rawLogLines } from "./format.mjs";
+import { fmtClock, fmtClockTenths, fmtLength, formatBytes, escapeHtml, errorText, serverText, statusParts, rawLogLines, restartFailure } from "./format.mjs";
 import { languageName, pageLanguage, t } from "./i18n.mjs";
 import { paintMarkupWords } from "./markupWords.mjs";
 
@@ -1474,12 +1474,15 @@ function langsLabel() {
 // errorEl: the dialog's own line -- or, for a draft's Start dubbing
 // (ui/src/draftSetup.mjs), that panel's own -- since this is the one status
 // word shown while the engine comes back up.
+// {ok, why}: why is the line said under the refusal when it did not come back
+// (ui/src/format.mjs restartFailure) -- without it the same "try again" came
+// back and the shell's reason was thrown away.
 async function restartVoiceEngine(errorEl) {
   const shell = window.persodubShell;
-  if (!shell || !shell.installPack) return false;
+  if (!shell || !shell.installPack) return { ok: false, why: "" };
   errorEl.textContent = t("Starting the voice engine…");
   const r = await shell.installPack("engine").catch(() => ({ ok: false }));
-  return !!(r && r.ok);
+  return r && r.ok ? { ok: true } : { ok: false, why: restartFailure(r && r.reason) };
 }
 
 // Posts the form and walks through every way a start can come back short --
@@ -1524,8 +1527,13 @@ async function submitDubStart({ fd, label, errorEl, retry, retried = false }) {
     } else if (e && e.status === 422 && /Select a Perso workspace/.test(serverText(e))) {
       // A key with several workspaces and none picked: pick one here, then go on.
       keyWindow.askKey("perso", null, null, { spaceOnly: true, then: retry });
-    } else if (!retried && e && e.status === 422 && /voice engine is not running/.test(serverText(e)) && await restartVoiceEngine(errorEl)) {
-      return submitDubStart({ fd, label, errorEl, retry, retried: true });
+    } else if (!retried && e && e.status === 422 && /voice engine is not running/.test(serverText(e))) {
+      const restart = await restartVoiceEngine(errorEl);
+      if (restart.ok) {
+        return submitDubStart({ fd, label, errorEl, retry, retried: true });
+      }
+      // The refusal, and under it why starting the engine again did not work.
+      errorEl.textContent = [errorText(e), restart.why].filter(Boolean).join("\n");
     } else if (!confirmDialogs.showIfOutOfSpace(e)) {
       errorEl.textContent = errorText(e);
     }

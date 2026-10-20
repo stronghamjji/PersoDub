@@ -5,7 +5,7 @@
 // Run with: node --test ui/src/format.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { modKey, plainFailure, rawLogLines, fmtLength, videoCard, videoCardHtml } from "./format.mjs";
+import { modKey, plainFailure, rawLogLines, restartFailure, fmtLength, videoCard, videoCardHtml } from "./format.mjs";
 import {
   fmtClock,
   fmtClockTenths,
@@ -191,6 +191,20 @@ test("a failure's plain sentence is shown, and a program's own words are not", (
   assert.equal(plainFailure("'NoneType' object has no attribute 'get'"), "");
   assert.equal(plainFailure("interrupted"), "");
   assert.equal(plainFailure(""), "");
+});
+
+test("why the voice engine did not start again is said in plain words, never the engine's own line", () => {
+  // Issue #187's engine, as the shell hands it back (desktop/src/packIpc.js).
+  assert.equal(restartFailure("Installed, but it could not start: OSError: �� �۾��� �Ϸ��ϱ� ���� ����¡ ������ �ʹ� �۽��ϴ�. (os error 1455)"),
+    "Starting it again did not work: this computer ran out of memory.");
+  assert.equal(restartFailure("Installed, but it could not start: Health check timed out after 300000ms: http://127.0.0.1:5/health"),
+    "Starting it again did not work: it took too long to start.");
+  // The shell's own sentence is said as it is.
+  assert.equal(restartFailure("Windows needs Microsoft Visual C++ to run Python + PyTorch. Install it, then try again."),
+    "Starting it again did not work. Windows needs Microsoft Visual C++ to run Python + PyTorch. Install it, then try again.");
+  // A program's words, or nothing at all: only that it did not work.
+  assert.equal(restartFailure("Installed, but it could not start: RuntimeError: boom"), "Starting it again did not work.");
+  assert.equal(restartFailure(undefined), "Starting it again did not work.");
 });
 
 test("Raw log holds the failure's own text when the screen did not show it whole", () => {

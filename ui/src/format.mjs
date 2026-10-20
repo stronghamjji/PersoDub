@@ -157,6 +157,24 @@ export function plainFailure(text) {
   return /[.!?]$/.test(head) ? head : head + ".";
 }
 
+/**
+ * Why the voice engine did not come back when the page asked the desktop app
+ * to start it again (persodubShell.installPack's reason), as one plain line.
+ * The reason is the shell's: a sentence of its own (no room, no Visual C++),
+ * or "Installed, but it could not start: <the engine's own last line>", whose
+ * second half is a program's and stays in shell.log. The memory words are the
+ * shell's own list (desktop/src/orchestrator.js OUT_OF_MEMORY).
+ */
+export function restartFailure(reason) {
+  const text = String(reason ?? "").trim();
+  if (/os error 1455|paging file|out of memory|not enough memory|MemoryError|DefaultCPUAllocator/i.test(text)) {
+    return t("Starting it again did not work: this computer ran out of memory.");
+  }
+  if (/timed out/i.test(text)) return t("Starting it again did not work: it took too long to start.");
+  const plain = plainFailure(text);
+  return plain && plain === text ? `${t("Starting it again did not work.")} ${plain}` : t("Starting it again did not work.");
+}
+
 /** A job's log lines for Raw log, with its failure text added at the end when
     the screen did not show it whole and the log does not hold it already. */
 export function rawLogLines(logs, error) {
