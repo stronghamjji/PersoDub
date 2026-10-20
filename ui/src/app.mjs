@@ -401,7 +401,7 @@ const ENGINE_HINTS = {
   translate: { get hunyuan() { return [t("Runs on this computer, free and fastest."), t("For accuracy, use the API.")]; },
                get gemma() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
                get gemini() { return [t("Most accurate."), t("Needs an API key.")]; },
-               get chatgpt() { return [t("Free within a ChatGPT account's limit. Sign in once, no download."), t("Sign in on your first dubbing.")]; } },
+               get chatgpt() { return [t("Free within a ChatGPT account's limit. Sign in once, no download.")]; } },
   voice: { get qwen3() { return [t("Runs on this computer, free."), t("Clones each speaker\u2019s voice.")]; } },
 };
 function updateEngineHints() {
