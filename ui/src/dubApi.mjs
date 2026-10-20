@@ -181,8 +181,12 @@ export function buildDubFormData(opts) {
  * explains the rest through the 409 dialog. Only key-gated cloud engines
  * grey out.
  *
- * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available}
- * @param {Object} current - {translate, stt} the Upload form's current select values
+ * The warning is the voice engine's, when it failed to start and the dub is
+ * to run on this computer: said before Start dubbing, not only after it
+ * (issue #187: the reason came at the very end, after every choice was made).
+ *
+ * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available, local_engines}
+ * @param {Object} current - {translate, stt, dubMode} the Upload form's current select values
  * @returns {{disable: {gemma: boolean, gemini: boolean, perso: boolean}, translate: string, warning: (string|null)}}
  */
 export function applyEngineAvailability(av, current) {
@@ -194,7 +198,13 @@ export function applyEngineAvailability(av, current) {
     gemini: !av.gemini_available,
     perso: !av.perso_available,
   };
-  return { disable, translate: current.translate, warning: null };
+  // Its message is the engine's sentence of why (app/engines_status.py),
+  // kept in English there and said in the page's language here.
+  const voice = (av.local_engines || {}).voice || {};
+  const warning = current.dubMode !== "perso" && voice.state === "failed"
+    ? `${t("The voice engine is off. This computer cannot dub until it starts.")}\n${t(voice.message || "")}`.trim()
+    : null;
+  return { disable, translate: current.translate, warning };
 }
 
 /** POST /api/dub/start and return the new job id. */

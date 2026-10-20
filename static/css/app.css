@@ -838,6 +838,8 @@
   .keys-link:hover { border-color: var(--primary); }
   .keys-link:disabled { opacity: 0.4; cursor: default; border-color: var(--control-line); }
   .form-error { color: var(--destructive); font-size: var(--font-label); }
+  /* Two lines: that the voice engine is off, then why (ui/src/dubApi.mjs). */
+  .engine-warning { white-space: pre-line; }
 
   /* ---------------- Up next: the waiting line on the first screen ------- */
   .queue-card { margin-top: 2px; background: var(--background); text-align: left;

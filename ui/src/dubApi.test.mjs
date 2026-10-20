@@ -349,6 +349,23 @@ test("applyEngineAvailability: all engines available -> no disabling, no switch,
   assert.equal(result.warning, null);
 });
 
+// Issue #187: the voice engine failed at start and nothing said so until
+// Start dubbing, after every choice had been made.
+test("applyEngineAvailability: a voice engine that failed to start is a warning for a dub on this computer", () => {
+  const failed = { state: "failed", message: "The voice engine is not running because it could not start." };
+  const av = { ...ALL_AVAILABLE, local_engines: { voice: failed, translation: { state: "running", message: "" } } };
+  assert.equal(applyEngineAvailability(av, { translate: "chatgpt", stt: "local", dubMode: "local" }).warning,
+    "The voice engine is off. This computer cannot dub until it starts.\n"
+    + "The voice engine is not running because it could not start.");
+  // Perso does the whole dub: it needs no voice engine here.
+  assert.equal(applyEngineAvailability(av, { translate: "chatgpt", stt: "local", dubMode: "perso" }).warning, null);
+  // Starting, running or not installed has its own way of being told.
+  for (const state of ["starting", "running", "not_installed"]) {
+    const other = { ...av, local_engines: { voice: { state, message: "" } } };
+    assert.equal(applyEngineAvailability(other, { translate: "chatgpt", stt: "local", dubMode: "local" }).warning, null);
+  }
+});
+
 test("applyEngineAvailability: a missing local Gemma is neither disabled nor switched away", () => {
   // Its Download line under the dropdown handles absence now (the catalog);
   // greying it out or hopping to Gemini would hide the way to get it.

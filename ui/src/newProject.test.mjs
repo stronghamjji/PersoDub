@@ -1143,9 +1143,11 @@ test("the options block goes home to the box that scrolls, in order, and out to 
   t.after(h.log.restore);
 
   h.api.openNewProject({ probe: PROBE });
-  assert.deepEqual(h.$("projectOptions").children.map((e) => e.id), ["langGrid", "advancedBtn", "advancedBody"]);
+  // The voice engine's warning goes with the languages (issue #187).
+  assert.deepEqual(h.$("projectOptions").children.map((e) => e.id),
+    ["langGrid", "engineWarning", "advancedBtn", "advancedBody"]);
 
   const slot = h.$("draftOptionsSlot");
   h.api.moveOptionsInto(slot);
-  assert.deepEqual(slot.children.map((e) => e.id), ["langGrid", "advancedBtn", "advancedBody"]);
+  assert.deepEqual(slot.children.map((e) => e.id), ["langGrid", "engineWarning", "advancedBtn", "advancedBody"]);
 });

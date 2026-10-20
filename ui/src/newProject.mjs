@@ -578,9 +578,11 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   }
 
   /** Lets a draft's Dubbing tab borrow the block while there is no dialog to
-      show it in (ui/src/draftSetup.mjs). Order: languages, then Advanced. */
+      show it in (ui/src/draftSetup.mjs). Order: languages, the voice
+      engine's warning, then Advanced. */
   function moveOptionsInto(container) {
     container.appendChild($("langGrid"));
+    container.appendChild($("engineWarning"));
     container.appendChild($("advancedBtn"));
     container.appendChild($("advancedBody"));
   }

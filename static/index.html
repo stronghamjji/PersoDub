@@ -845,6 +845,10 @@
             <div class="field opt-row"><label data-i18n for="sourceLangSelect">Original language</label><select id="sourceLangSelect"><option value="" selected data-i18n>Auto-detect</option></select></div>
             <div class="field opt-row"><label data-i18n for="targetLangSelect">Target language</label><select id="targetLangSelect"></select></div>
           </div>
+          <!-- The voice engine that failed to start, for a dub on this computer,
+               said here rather than only after Start (ui/src/dubApi.mjs
+               applyEngineAvailability). Travels with the languages. -->
+          <div class="form-error engine-warning" id="engineWarning"></div>
           <button class="advanced-btn" id="advancedBtn" type="button" aria-expanded="false">
             <span class="chev"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span data-i18n>Advanced options</span>
           </button>

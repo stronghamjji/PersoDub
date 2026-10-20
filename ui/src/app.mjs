@@ -251,6 +251,7 @@ async function applyEngineAvailabilityToForm() {
   const result = applyEngineAvailability(av, {
     translate: translateSel.value,
     stt: sttSel.value,
+    dubMode: $("dubModeSelect").value,
   });
 
   keySaved.perso = !result.disable.perso;
@@ -258,11 +259,7 @@ async function applyEngineAvailabilityToForm() {
   voiceModels = av.voice_models || {};
   for (const o of $("voiceSelect").options) o.textContent = voiceLabel(o.value, voiceModels);
 
-  const warnEl = $("engineWarning");
-  if (warnEl) {
-    warnEl.textContent = result.warning || "";
-    warnEl.style.display = result.warning ? "" : "none";
-  }
+  $("engineWarning").textContent = result.warning || "";
 }
 applyEngineAvailabilityToForm();
 
@@ -421,7 +418,9 @@ function paintDubMode() {
     $(id).disabled = cloud;
   }
 }
-$("dubModeSelect").addEventListener("change", () => { paintDubMode(); models.repaint(); });
+// The voice engine's warning is for a dub on this computer only: asked again
+// when the choice changes.
+$("dubModeSelect").addEventListener("change", () => { paintDubMode(); models.repaint(); applyEngineAvailabilityToForm(); });
 paintDubMode();
 models.refreshModels();
 
