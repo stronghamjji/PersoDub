@@ -292,7 +292,32 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
     repaint();
   }
 
+  // No rebuild under a finger. Each paint throws the buttons away, and one that
+  // landed between pointerdown and click (the 2s poll, or the refresh that a
+  // click into the window from behind starts on focus) took the pressed Cancel
+  // with it: the click reached no button, and the download went on (Windows
+  // C18, 2026-10-20). The paint waits for the release instead. The keyboard
+  // needs none of this: Enter and Space click with no pointer before it.
+  let pressed = false;
+  let paintWaiting = false;
+  $("modelsList").addEventListener("pointerdown", () => { pressed = true; });
+  function release() {
+    if (!pressed) return;
+    pressed = false;
+    // A tick later: the click comes after pointerup, and painting now would
+    // still take its button away.
+    if (paintWaiting) setTimeout(renderModelsList, 0);
+  }
+  // On the whole page, so a press let go off the list ends too; and one the
+  // window loses (switched away from, hidden) must not hold the list for good.
+  document.addEventListener("pointerup", release);
+  document.addEventListener("pointercancel", release);
+  document.addEventListener("visibilitychange", release);
+  window.addEventListener("blur", release);
+
   function renderModelsList() {
+    if (pressed) { paintWaiting = true; return; }
+    paintWaiting = false;
     const list = $("modelsList");
     list.replaceChildren();
     let onDisk = 0;
