@@ -21,7 +21,10 @@ from app.settings_env import current_value, write_values
 STAGES = {
     "dub_mode": ("DUB_MODE", ("local", "perso"), None),
     "separation": ("SEP_ENGINE", ("local", "perso"), "local"),
-    "stt": ("STT_ENGINE", ("local", "perso"), None),
+    # Local Whisper even with a Perso key saved: every stage starts on the free
+    # local choice, and Perso speech-to-text runs only when chosen
+    # (owner, 2026-10-20).
+    "stt": ("STT_ENGINE", ("local", "perso"), "local"),
     "translator": ("TRANSLATE_ENGINE", tuple(t.name for t in TRANSLATORS.values() if t.offered), None),
     "voice_quality": ("VOICE_QUALITY", ("fast", "high"), "fast"),
     "voice": ("TTS_ENGINE", ("qwen3",), "qwen3"),
@@ -40,11 +43,6 @@ def _hunyuan_installed() -> bool:
 
 
 def _fallback(stage: str) -> str:
-    if stage == "stt":
-        # Perso when a key is saved, else the free local engine. This is the
-        # one place the rule lives: config.default_stt_engine asks here and
-        # only translates "local" into the "" its callers read.
-        return "perso" if current_value("PERSO_API_KEY") else "local"
     if stage == "dub_mode":
         # One build, two defaults. The production edition, the company's
         # build, dubs on Perso, key or no key: without one, Start says to save

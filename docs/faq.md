@@ -51,9 +51,9 @@ run the server yourself (the desktop app always keeps them in its own folder).
 ## FAQ
 
 **Does my video leave my computer?**
-By default, no: Start dubbing uses this computer. While a Perso key is saved, set
-**Advanced options > Speech-to-text** to **Whisper** to keep it here, or the video is
-uploaded for transcription. **Dubbing** set to **Perso API** uploads it to Perso's
+By default, no: Start dubbing uses this computer. **Advanced options >
+Speech-to-text** set to **Perso API** uploads it for transcription, and
+**Dubbing** set to **Perso API** uploads it to Perso's
 cloud, which makes the whole dub. Translation sends only the transcript text: to
 ChatGPT through your own sign-in on a new install, or nowhere with a local translator.
 See [Data and privacy](privacy.md).

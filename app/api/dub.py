@@ -1175,8 +1175,8 @@ def dub_start(
     tts_engine = "qwen3" (this computer); omitted uses the saved default
     (app/setup.py "voice").
     stt_engine = "perso" for cloud STT+diarization (best quality); if omitted, the
-    server default applies (see app.config.default_stt_engine) — "perso" when a
-    PERSO_API_KEY is configured, else local Whisper. A Perso failure FAILS the
+    server default applies (see app.config.default_stt_engine) — the saved
+    STT_ENGINE, else local Whisper, key or no key. A Perso failure FAILS the
     job with an actionable message (no silent local substitute — the engine was
     chosen for a reason); pick Whisper explicitly for the free offline path.
     trim_start/trim_end = dub only these seconds of the video. Both or neither:

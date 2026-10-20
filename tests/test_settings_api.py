@@ -396,13 +396,14 @@ def test_preview_reuses_the_last_answer_for_the_same_key(monkeypatch):
 
 # --- a saved key applies to the next dub, with no restart ------------------
 
-def test_default_stt_engine_picks_perso_from_a_key_saved_after_startup(tmp_path, monkeypatch):
+def test_default_stt_engine_stays_local_with_a_key_saved_after_startup(tmp_path, monkeypatch):
     # The process env is empty (the key did not exist when the app started) and
-    # kit.env has it -- exactly the state right after Settings saves a key.
+    # kit.env has it -- exactly the state right after Settings saves a key. A
+    # key alone does not pick Perso speech-to-text (owner, 2026-10-20).
     _kit(tmp_path, monkeypatch, BASE + "PERSO_API_KEY=SAVEDKEY\n")
     monkeypatch.delenv("PERSO_API_KEY", raising=False)
     monkeypatch.delenv("STT_ENGINE", raising=False)
-    assert config.default_stt_engine() == "perso"
+    assert config.default_stt_engine() == ""
 
 
 def test_default_stt_engine_stays_local_without_any_key(tmp_path, monkeypatch):
@@ -414,7 +415,7 @@ def test_default_stt_engine_stays_local_without_any_key(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("envtext, expected_setup, expected_config", [
     (BASE, "local", ""),                                    # no key at all
-    (BASE + "PERSO_API_KEY=SAVEDKEY\n", "perso", "perso"),  # key saved
+    (BASE + "PERSO_API_KEY=SAVEDKEY\n", "local", ""),      # key saved, nothing chosen
     (BASE + "STT_ENGINE=local\n", "local", ""),             # local chosen and saved
     (BASE + "STT_ENGINE=perso\n", "perso", "perso"),        # perso chosen and saved
 ])
@@ -500,7 +501,7 @@ def test_key_absent_from_kit_env_falls_back_to_the_process_env(tmp_path, monkeyp
     monkeypatch.setenv("PERSO_API_KEY", "ENVKEY")
     monkeypatch.delenv("STT_ENGINE", raising=False)
     assert settings_env.current_value("PERSO_API_KEY") == "ENVKEY"
-    assert config.default_stt_engine() == "perso"
+    assert engines_status.perso_available() is True
     monkeypatch.setattr(settings_api, "list_dubbing_spaces",
                         lambda key: [{"seq": 1, "name": "solo", "tier": None, "credits": None}])
     assert client.get("/api/perso/spaces").status_code == 200

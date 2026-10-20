@@ -318,11 +318,10 @@ def default_stt_engine() -> str:
 
     The rule itself lives in app/setup.py, which owns every stage's default:
     STT_ENGINE from kit.env wins (the Settings screen and the Dub Agent write
-    it there), then the process env, then "perso" when a Perso API key is
-    configured (best quality in our comparisons), else the local engine. The
-    key is read live (not cached at import time), so a key just saved in
-    Settings picks Perso for the very next dub instead of waiting for a
-    restart, and tests can monkeypatch the env per case.
+    it there), then the process env, else the local engine -- a saved Perso
+    key alone no longer picks Perso (owner, 2026-10-20). The value is read
+    live (not cached at import time), so a choice just saved in Settings is in
+    force for the very next dub, and tests can monkeypatch the env per case.
 
     Only the word for "local" differs: setup says "local", this answers ""
     (local Whisper, optionally + diar_engine="campplus"), which is what this

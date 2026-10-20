@@ -312,8 +312,9 @@ def test_dub_start_translate_engine_blank_means_the_saved_default(monkeypatch):
     assert captured["translate_engine"] == "gemma"
 
 
-def test_dub_start_stt_engine_defaults_to_perso_with_key(monkeypatch):
-    # Omitting stt_engine while a PERSO_API_KEY IS configured -> auto-select perso
+def test_dub_start_stt_engine_stays_local_with_key(monkeypatch):
+    # Omitting stt_engine while a PERSO_API_KEY IS configured -> still local
+    # (None): a saved key alone does not pick Perso (owner, 2026-10-20).
     captured = {}
 
     def fake_run_dub(**kw):
@@ -339,7 +340,7 @@ def test_dub_start_stt_engine_defaults_to_perso_with_key(monkeypatch):
         if client.get(f"/api/dub/jobs/{jid}").json()["status"] != "running":
             break
         time.sleep(0.02)
-    assert captured["stt_engine"] == "perso"
+    assert captured["stt_engine"] is None
 
 
 def test_dub_result_srt_finds_auto_translated_file(monkeypatch, tmp_path):

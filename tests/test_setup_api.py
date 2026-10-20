@@ -41,12 +41,12 @@ def test_get_reports_chatgpt_and_local_as_the_untouched_defaults(tmp_path, monke
 
 def test_the_keys_and_the_stt_default_read_the_same_source(tmp_path, monkeypatch):
     # A key that lives in the process env only (a server deployment, or a kit
-    # that never mentions the key): the stt default has always seen it, so the
-    # report must not say stt "perso" beside keys.perso false.
+    # that never mentions the key): the report sees it as saved, and the stt
+    # default stays local, key or no key (owner, 2026-10-20).
     _kit(tmp_path, monkeypatch)
     monkeypatch.setenv("PERSO_API_KEY", "ENVKEY")
     body = client.get("/api/setup").json()
-    assert body["defaults"]["stt"] == "perso"
+    assert body["defaults"]["stt"] == "local"
     assert body["defaults"]["dub_mode"] == "local"  # this computer, key or no key
     assert body["keys"]["perso"] is True
 

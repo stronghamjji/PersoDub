@@ -81,7 +81,7 @@ this computer, and are greyed out while Perso dubs.
 | **Dubbing** | On this computer | *On this computer* runs the steps below, free. *Perso API* uploads the video and Perso does every step. |
 | **Dubbing model** | Oriole | Shown while Perso dubs: Perso's voice model, *Nightingale*, *Oriole* or *Wren*. The target languages follow it. |
 | **Audio separation** | Demucs | Splits the voice from the music and effects. Runs Mel-Band RoFormer instead once its model is downloaded in **Settings > Models**. *Perso API* needs a Perso key. |
-| **Speech-to-text** | Whisper, or Perso API once a Perso key is saved | Turns the speech in your video into text. *Perso API* uploads the video. |
+| **Speech-to-text** | Whisper; Perso API when you choose it | Turns the speech in your video into text. *Perso API* uploads the video. |
 | **Translation** | ChatGPT (Hunyuan on a computer that already has the Hunyuan model) | *ChatGPT* uses your own free ChatGPT account; you sign in on your first dub. *Hunyuan* and *Gemma 3* translate locally. *Gemini API* needs a Google key. |
 | **Text-to-speech** | Qwen3-TTS | Speaks the translated lines in the cloned voice. |
 | **Voice quality** | Fast | *Fast* voices each line once. *High quality* voices it four times and keeps the best take, which is noticeably better and takes about four times as long. |

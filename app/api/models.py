@@ -34,7 +34,8 @@ def setup_get():
     The keys are read with current_value (kit.env first, process env second) --
     the very same source the stage defaults use. read_key_status sees kit.env
     alone, so on a server deployment (key in the env, no kit) this report said
-    stt: "perso" beside keys.perso: false and read as a contradiction."""
+    stt: "perso" beside keys.perso: false and read as a contradiction (back
+    when a saved key alone picked Perso speech-to-text, before 2026-10-20)."""
     return {
         "defaults": dub_setup.defaults(),
         "choices": {stage: list(spec[1]) for stage, spec in dub_setup.STAGES.items()},

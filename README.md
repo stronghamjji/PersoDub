@@ -119,7 +119,7 @@ Listen for pacing: PersoDub fits the translation to the time instead of speeding
 
 **Updating from 0.8.4 or earlier?** Download and install the latest version once. From 0.8.5 on, PersoDub updates itself.
 
-Start dubbing uses this computer by default and needs no key. Speech-to-text still uses Perso while a Perso key is saved, and on a new install translation uses ChatGPT through your own sign-in. To keep everything on your computer, open **Advanced options** and set **Speech-to-text** to **Whisper** and **Translation** to **Hunyuan** or **Gemma 3**. To dub with the Perso API instead, save a free [Perso API key](docs/configuration.md) and set **Dubbing** to **Perso API**.
+Start dubbing uses this computer by default and needs no key. Speech-to-text uses Whisper unless you choose Perso API, and on a new install translation uses ChatGPT through your own sign-in. To keep everything on your computer, open **Advanced options** and set **Translation** to **Hunyuan** or **Gemma 3**. To dub with the Perso API instead, save a free [Perso API key](docs/configuration.md) and set **Dubbing** to **Perso API**.
 
 First setup is under 1 GB. A Perso API dub downloads nothing more. The first dub on this computer downloads Python + PyTorch and the models: about 10 GB on a Mac, 17 GB on a Windows PC with an NVIDIA GPU, 9 GB without one. A local translator adds 1.6 to 10 GB and the subtitle eraser 4.4 to 9.3 GB, so keep 30 GB free, 40 GB on Windows with an NVIDIA GPU. [Full table](docs/requirements.md)
 
