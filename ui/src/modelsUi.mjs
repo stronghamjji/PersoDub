@@ -130,6 +130,14 @@ export function overallProgress(rows, ids) {
   return total ? Math.round((100 * got) / total) : 0;
 }
 
+/** Nothing in `ids` is on its way and one of them stopped (paused, or failed
+ * before it began): a failed row is not a download at 0%. */
+export function downloadStopped(rows, ids) {
+  const wanted = rows.filter((r) => ids.includes(r.id));
+  return !wanted.some((r) => r.state === "downloading")
+    && wanted.some((r) => r.state === "paused" || (r.state === "not_downloaded" && !!r.error));
+}
+
 /** Every id in `ids` is ready -- the dialog's cue to resubmit the dub. */
 export function allReady(rows, ids) {
   return ids.every((id) => rows.some((r) => r.id === id && r.state === "ready"));

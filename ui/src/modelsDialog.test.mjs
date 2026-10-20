@@ -581,6 +581,23 @@ test("a pack the desktop app could not install stops the dub and says why, with 
   assert.ok(!h.state.calls.some((c) => c.startsWith("POST")), "no model download was started");
 });
 
+// The dev build's refusal comes right after Start: the title stayed
+// "Downloading 0%" above the reason and the Download button (click-through, 2026-10-21).
+test("a pack that fails at once puts the dialog's opening words back, without the bar or a percent", async (t) => {
+  const shell = fakeShell({ install: async () => ({ ok: false, reason: "This build carries no bundled files to install from." }) });
+  const h = harness({ rows: [ENGINE, WHISPER], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  h.api.showModelsDialog(PACK_409);
+  const opening = [h.$("mnTitle").textContent, h.$("mnLine").textContent];
+  h.$("mnDownload").click();
+  await settle(); await settle(); await settle();
+  assert.equal(h.$("mnError").textContent, "Python + PyTorch: This build carries no bundled files to install from.");
+  assert.deepEqual([h.$("mnTitle").textContent, h.$("mnLine").textContent], opening);
+  assert.equal(h.$("mnProgress").hidden, true);
+  assert.equal(h.$("mnDownload").hidden, false);
+});
+
 test("without the desktop app a pack cannot be installed from the page, and the dialog says so", async (t) => {
   const h = harness({ rows: [ENGINE, WHISPER] });
   t.after(h.state.restore);

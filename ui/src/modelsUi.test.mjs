@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText, dubStartDialog, overallProgress, allReady, groupModels } from "./modelsUi.mjs";
+import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText, dubStartDialog, overallProgress, downloadStopped, allReady, groupModels } from "./modelsUi.mjs";
 
 test("neededModelId maps each dropdown choice to its catalog model", () => {
   assert.equal(neededModelId("stt", "local"), "whisper");
@@ -82,6 +82,16 @@ test("overallProgress is byte-weighted and treats ready as done", () => {
   // (100*100% + 300*50% + 100*0%) / 500 = 50%
   assert.equal(overallProgress(rows, ["a", "b", "c"]), 50);
   assert.equal(overallProgress(rows, []), 0);
+});
+
+test("downloadStopped: one stopped and none on its way, never while another still downloads", () => {
+  const failedPack = { id: "engine", state: "paused", error: "This build carries no bundled files to install from." };
+  const whisper = { id: "whisper", state: "not_downloaded" };
+  assert.equal(downloadStopped([failedPack, whisper], ["engine", "whisper"]), true);
+  assert.equal(downloadStopped([{ id: "gemma", state: "not_downloaded", error: "Connection lost." }], ["gemma"]), true);
+  assert.equal(downloadStopped([failedPack, { ...whisper, state: "downloading", progress: 5 }], ["engine", "whisper"]), false);
+  // Not started yet is not stopped.
+  assert.equal(downloadStopped([whisper], ["whisper"]), false);
 });
 
 test("the topbar chip has no number while the download has none, never null% or 0%", () => {

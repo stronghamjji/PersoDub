@@ -11,7 +11,7 @@
 //
 // A single 2s poll runs only while something is downloading (same cadence as
 // the dub-progress poll).
-import { gb, modelStatusLine, dubStartDialog, overallProgress, allReady, groupModels } from "./modelsUi.mjs";
+import { gb, modelStatusLine, dubStartDialog, overallProgress, downloadStopped, allReady, groupModels } from "./modelsUi.mjs";
 import { t } from "./i18n.mjs";
 
 /** The desktop app's "Connection problem, retrying (2/3)" in the page's
@@ -405,12 +405,14 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
   // -- the dub-start dialog (dub_start's 409) ------------------------------
   function showModelsDialog(detail) {
     const d = dubStartDialog(detail, ramOk());
-    pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false };
-    $("mnTitle").textContent = d.title;
     // The memory note rides on the one line a small confirm has; a computer
     // short of memory gets its sentence in red, as the dialog's error
     // instead: the download could not end in a dub here, so its button is off.
-    $("mnLine").textContent = d.ram && !d.ramLow ? `${d.line} ${d.ram}` : d.line;
+    const line = d.ram && !d.ramLow ? `${d.line} ${d.ram}` : d.line;
+    // The opening words are kept: a download that stops puts them back.
+    pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false, title: d.title, line };
+    $("mnTitle").textContent = d.title;
+    $("mnLine").textContent = line;
     $("mnDownload").disabled = d.ramLow;
     // The way round it is the link under the line: Perso dubbing makes the
     // voices itself, so nothing here has to download (user, 2026-09-28).
@@ -425,13 +427,20 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
     if (!pendingDub || !pendingDub.downloading) return;
     // The painted rows, not the raw ones: a pack's percent lives on the
     // painted row (rowsToPaint), the engine's own row has none.
-    const pct = overallProgress(rowsToPaint(), pendingDub.ids);
+    const rows = rowsToPaint();
+    const pct = overallProgress(rows, pendingDub.ids);
+    // Stopped -- a pack the desktop app could not install, a model paused --
+    // the dialog's opening words come back, without the bar: "Downloading 0%"
+    // stayed above the reason and the Download button (click-through, 2026-10-21).
+    const stopped = downloadStopped(rows, pendingDub.ids);
+    $("mnProgress").hidden = stopped;
     $("mnBar").style.width = (pct ?? 0) + "%";
     // One number, where the eye lands. Which file or step it is on is left
     // out: nobody downloading asked (user, 2026-09-28). No number before
     // there is one (overallProgress).
-    $("mnTitle").textContent = pct == null ? t("Getting ready…") : t("Downloading {pct}%", { pct });
-    $("mnLine").textContent = "";
+    $("mnTitle").textContent = stopped ? pendingDub.title
+      : pct == null ? t("Getting ready…") : t("Downloading {pct}%", { pct });
+    $("mnLine").textContent = stopped ? pendingDub.line : "";
     if (packBusy) return;
     // A model whose download stopped: paused with its pieces on disk, or --
     // an Ollama pull that failed before it began -- not_downloaded with the
