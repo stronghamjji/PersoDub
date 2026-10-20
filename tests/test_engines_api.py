@@ -9,7 +9,7 @@ These checks let the UI/backend fail fast instead.
 import requests
 from fastapi.testclient import TestClient
 
-from app import config, engines_status
+from app import config, engines_status, room
 from app.api import _launch as launch_api
 from app.api import dub as dub_api
 from app.main import app
@@ -230,6 +230,7 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
     monkeypatch.setattr(engines_status, "eraser_available", lambda: False)
     monkeypatch.setattr(engines_status, "local_engine", lambda w: {"state": "running", "message": ""})
     monkeypatch.setattr(engines_status, "voice_models", lambda: {"qwen3": "1.7B"})
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: 16 * room.GB)  # not the runner's own
 
     r = client.get("/api/engines")
     assert r.status_code == 200
@@ -243,6 +244,7 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
         "eraser_available": False,
         "local_engines": {"voice": {"state": "running", "message": ""},
                           "translation": {"state": "running", "message": ""}},
+        "ram_ok": True,
     }
 
 
@@ -256,6 +258,7 @@ def test_engines_endpoint_all_available(monkeypatch):
     monkeypatch.setattr(engines_status, "eraser_available", lambda: True)
     monkeypatch.setattr(engines_status, "local_engine", lambda w: {"state": "running", "message": ""})
     monkeypatch.setattr(engines_status, "voice_models", lambda: {"qwen3": "1.7B"})
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: 16 * room.GB)  # not the runner's own
 
     r = client.get("/api/engines")
     assert r.status_code == 200
@@ -269,7 +272,18 @@ def test_engines_endpoint_all_available(monkeypatch):
         "eraser_available": True,
         "local_engines": {"voice": {"state": "running", "message": ""},
                           "translation": {"state": "running", "message": ""}},
+        "ram_ok": True,
     }
+
+
+@pytest.mark.parametrize("total, expected", [
+    (6 * room.GB, False),    # under the rule a start refuses by
+    (8 * room.GB, True),
+    (None, True),            # a size the computer will not give is enough
+])
+def test_engines_endpoint_says_whether_this_computer_has_the_memory(monkeypatch, total, expected):
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: total)
+    assert client.get("/api/engines").json()["ram_ok"] is expected
 
 
 def test_dub_start_gemma_unreachable_422_message(monkeypatch):

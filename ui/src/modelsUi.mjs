@@ -43,8 +43,10 @@ export function modelStatusLine(row) {
   return { cls: "", text: `${gb(row.bytes)} GB`, button: "download" };
 }
 
-/** What the dub-start warning dialog shows, from the 409's detail. */
-export function dubStartDialog(detail) {
+/** What the dub-start warning dialog shows, from the 409's detail. ramOk is
+ * GET /api/engines' ram_ok: false when the computer has too little memory to
+ * dub on it. */
+export function dubStartDialog(detail, ramOk = true) {
   const missing = detail.missing || [];
   const total = detail.total_bytes ?? missing.reduce((n, m) => n + m.bytes, 0);
   // The desktop app installs packs (kind "pack": the AI engine, the
@@ -65,6 +67,15 @@ export function dubStartDialog(detail) {
     title: t("Download {size} GB?", { size: gb(total) }),
     line: downloadLine(purpose),
     perso: voice && !detail.purpose,
+    // The memory a dub on this computer needs, said before the download, and
+    // in its place, on a computer without it, why the download is off
+    // (owner, 2026-10-20). Only for the dub's own download: Separate audio
+    // and a translator alone are not held to it.
+    ram: voice && !detail.purpose
+      ? (ramOk ? t("Needs 8 GB of memory (16 GB recommended).")
+        : t("This computer does not have enough memory to dub on this computer. Try the Perso API."))
+      : "",
+    ramLow: voice && !detail.purpose && !ramOk,
     ids: missing.map((m) => m.id),
     packs,
     models,

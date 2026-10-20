@@ -32,7 +32,7 @@ function makeEl(id) {
 
 /** A page, a fetch log and a stopped clock. `fetchModels` is the rows the next
  * GET /api/models answers with; `write` records every other call. */
-function harness({ rows = [], shell = null } = {}) {
+function harness({ rows = [], shell = null, ramOk = true } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -64,6 +64,7 @@ function harness({ rows = [], shell = null } = {}) {
     onRowsChanged: (r) => { state.painted.push(r); },
     shell,
     keepPolling: () => state.keepPolling === true,
+    ramOk: () => ramOk,
   });
   return { $, api, state };
 }
@@ -132,12 +133,43 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
   h.api.showModelsDialog(DETAIL_TWO);
 
   assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB?");
-  assert.equal(h.$("mnLine").textContent, "One-time download for making voices.");
+  assert.equal(h.$("mnLine").textContent,
+    "One-time download for making voices. Needs 8 GB of memory (16 GB recommended).");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnProgress").hidden, true);
   assert.equal(h.$("mnDownload").hidden, false);
   assert.equal(h.$("mnHide").hidden, true);
   assert.equal(h.$("modelsNeededOverlay").classList.contains("open"), true);
+});
+
+test("the dub's download says the memory it needs, and Download and Start is on", (t) => {
+  const h = harness();
+  t.after(h.state.restore);
+  h.api.showModelsDialog(DETAIL_TWO);
+  assert.equal(h.$("mnLine").textContent,
+    "One-time download for making voices. Needs 8 GB of memory (16 GB recommended).");
+  assert.equal(h.$("mnError").textContent, "");
+  assert.equal(h.$("mnDownload").disabled, false);
+});
+
+test("a computer short of memory gets the red line instead, and no download", (t) => {
+  const h = harness({ ramOk: false });
+  t.after(h.state.restore);
+  h.api.showModelsDialog(DETAIL_TWO);
+  assert.equal(h.$("mnLine").textContent, "One-time download for making voices.");
+  assert.equal(h.$("mnError").textContent,
+    "This computer does not have enough memory to dub on this computer. Try the Perso API.");
+  assert.equal(h.$("mnDownload").disabled, true);
+  assert.equal(h.$("mnSettings").hidden, false);   // Use Perso API is the way round
+});
+
+test("a download that is not a dub's (Separate audio) says nothing about memory", (t) => {
+  const h = harness({ ramOk: false });
+  t.after(h.state.restore);
+  h.api.showModelsDialog({ ...PACK_409, purpose: "separating audio" });
+  assert.equal(h.$("mnLine").textContent, "One-time download for separating audio.");
+  assert.equal(h.$("mnError").textContent, "");
+  assert.equal(h.$("mnDownload").disabled, false);
 });
 
 test("Download and Start fetches only what is missing and swaps the buttons", async (t) => {

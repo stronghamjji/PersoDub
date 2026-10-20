@@ -26,7 +26,7 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import engines_status, languages
+from app import engines_status, languages, room
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -203,6 +203,11 @@ def engines_status_route():
         # that failed to start leaves the rest of the app working, and this
         # is how the page knows which local work is off and why.
         "local_engines": {w: engines_status.local_engine(w) for w in ("voice", "translation")},
+        # False when this computer has too little memory to dub on it -- the
+        # same rule a start refuses by (app/room.py) -- so the download dialog
+        # can say so before 3 GB are fetched for nothing. A size the computer
+        # will not give counts as enough, as it does there.
+        "ram_ok": room.ram_refusal(room.total_ram_bytes()) is None,
     }
 
 

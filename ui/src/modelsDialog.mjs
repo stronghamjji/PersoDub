@@ -36,7 +36,7 @@ export function retryLine(detail) {
  *        and labelled in the returned object, so pruning this surface later
  *        does not have to guess which member has a caller off the page.
  */
-export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = () => {}, onRowsChanged, shell = null, keepPolling = () => false }) {
+export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = () => {}, onRowsChanged, shell = null, keepPolling = () => false, ramOk = () => true }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
   // ui/src/settingsDialog.mjs. A missing id is a broken page, and a crash on
@@ -379,13 +379,17 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
 
   // -- the dub-start dialog (dub_start's 409) ------------------------------
   function showModelsDialog(detail) {
-    const d = dubStartDialog(detail);
+    const d = dubStartDialog(detail, ramOk());
     pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false };
     $("mnTitle").textContent = d.title;
-    $("mnLine").textContent = d.line;
+    // The memory note rides on the one line a small confirm has; a computer
+    // short of memory gets its sentence in red, as the dialog's error
+    // instead: the download could not end in a dub here, so its button is off.
+    $("mnLine").textContent = d.ram && !d.ramLow ? `${d.line} ${d.ram}` : d.line;
+    $("mnDownload").disabled = d.ramLow;
     // The way round it is the link under the line: Perso dubbing makes the
     // voices itself, so nothing here has to download (user, 2026-09-28).
-    $("mnError").textContent = "";
+    $("mnError").textContent = d.ramLow ? d.ram : "";
     $("mnProgress").hidden = true;
     $("mnDownload").hidden = false;
     $("mnSettings").hidden = !d.perso;

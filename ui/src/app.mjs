@@ -229,6 +229,9 @@ const keySaved = { perso: true, gemini: true };
 // The model behind each voice engine (GET /api/engines voice_models): the
 // Text-to-speech dropdown and a job's engine line name it with the engine.
 let voiceModels = {};
+// Whether this computer has the memory to dub on it (GET /api/engines ram_ok),
+// for the download dialog. Enough until the answer comes.
+let ramOk = true;
 
 // (loadSavedDefaults -- the GET /api/setup pass that starts those dropdowns on
 // the app's saved defaults -- moved with the dialog it fills, into
@@ -257,6 +260,7 @@ async function applyEngineAvailabilityToForm() {
   keySaved.perso = !result.disable.perso;
   keySaved.gemini = !result.disable.gemini;
   voiceModels = av.voice_models || {};
+  ramOk = av.ram_ok !== false;
   for (const o of $("voiceSelect").options) o.textContent = voiceLabel(o.value, voiceModels);
 
   $("engineWarning").textContent = result.warning || "";
@@ -297,6 +301,7 @@ const models = initModelsUi({
   shell: window.persodubShell || null,
   // Keep the catalog fresh while Settings shows it.
   keepPolling: () => $("settingsOverlay").classList.contains("open"),
+  ramOk: () => ramOk,
 });
 
 // Everything a dropdown choice needs, in the order it downloads: the pack it
