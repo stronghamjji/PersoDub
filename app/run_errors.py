@@ -23,6 +23,20 @@ class PartsMissing(RuntimeError):
     answer, and the video is not the thing to check."""
 
 
+# What a model library says when the weights on disk are there but cannot be
+# read: faster-whisper's model.bin cut short or overwritten says "Cannot load
+# the target vocabulary from the model directory" (2026-10-20, a 4 KB file).
+# The download is broken, so the advice is the same as PartsMissing.
+_BROKEN_MODEL_WORDS = ("vocabulary", "model directory", "unable to open", "corrupt",
+                       "invalid model", "unable to load", "failed to load")
+
+
+def model_failed_to_load(detail: str) -> bool:
+    """Whether a failure's own words say a model file on disk could not be read."""
+    text = str(detail or "").lower()
+    return "model" in text and any(w in text for w in _BROKEN_MODEL_WORDS)
+
+
 def describe_start_failure(what: str, exc: BaseException, timeout=None) -> str:
     """The process never returned a result: it timed out, or never started."""
     if isinstance(exc, subprocess.TimeoutExpired):

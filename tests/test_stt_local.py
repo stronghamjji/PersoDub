@@ -108,6 +108,21 @@ def test_raises_on_nonzero_exit(monkeypatch, audio_file):
         stt_local.transcribe_local(audio_file)
 
 
+def test_a_broken_whisper_model_file_is_parts_missing(monkeypatch, audio_file):
+    # A 4 KB junk model.bin: the advice is to download it again, not to check the video.
+    monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
+    monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)
+
+    class _R:
+        returncode = 1
+        stderr = ("__WHISPER_TRANSCRIBE_ERROR__ Cannot load the target vocabulary "
+                  "from the model directory")
+
+    monkeypatch.setattr(stt_local.subprocess, "run", lambda cmd, **k: _R())
+    with pytest.raises(PartsMissing, match="target vocabulary"):
+        stt_local.transcribe_local(audio_file)
+
+
 def test_raises_on_invalid_json_output(monkeypatch, audio_file):
     monkeypatch.setattr(stt_local, "STT_PYTHON", sys.executable)
     monkeypatch.setattr(stt_local, "SCRIPT_PATH", sys.executable)

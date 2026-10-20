@@ -21,7 +21,7 @@ from typing import Callable, List, Optional
 
 from app.config import NONVERBAL_WHISPER_MODEL, NONVERBAL_WHISPER_PYTHON
 from app.nonverbal import _PUNCT_RE, MIN_RMS_DBFS, _span_rms_db
-from app.run_errors import PartsMissing, describe_exit_failure, describe_start_failure
+from app.run_errors import PartsMissing, describe_exit_failure, describe_start_failure, model_failed_to_load
 from app.text.srt import clamp_cues
 from app.timeouts import scaled_timeout
 
@@ -122,7 +122,9 @@ def transcribe_local(
             raise RuntimeError(describe_start_failure("local STT", e, effective_timeout)) from e
 
         if r.returncode != 0 or not os.path.exists(out_path):
-            raise RuntimeError(describe_exit_failure("local STT", r))
+            detail = describe_exit_failure("local STT", r)
+            # A broken model file is a broken download, not a broken video.
+            raise (PartsMissing if model_failed_to_load(detail) else RuntimeError)(detail)
 
         try:
             with open(out_path, encoding="utf-8") as f:
