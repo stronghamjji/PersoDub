@@ -84,6 +84,10 @@ PERSO_SIGNUP_URL = os.environ.get("PERSO_SIGNUP_URL", "https://developers.perso.
 # always on the free plan (user, 2026-10-19).
 PERSO_PRICING_URL = os.environ.get("PERSO_PRICING_URL", "https://perso.ai/pricing")
 
+# Where the Home sidebar's perso.ai button goes: Perso's workspace. No language in the
+# path on purpose -- the site sends the browser to /ko/ or /en/ by its own language.
+PERSO_WORKSPACE_URL = os.environ.get("PERSO_WORKSPACE_URL", "https://perso.ai/workspace/vt")
+
 # UTM tags on the outbound links -- mirrors the API-call identity above, the same scheme the
 # official plugin uses (messages.mjs:13 "UTM identity — mirrors the API-call identity"):
 # utm_source carries the exact CLIENT_HOST the API headers send, so Perso can line up
@@ -104,6 +108,7 @@ PROOFREAD_SETTLE_S = 60
 RECHARGE_LINK = _with_utm(PERSO_RECHARGE_URL, "recharge")
 SIGNUP_LINK = _with_utm(PERSO_SIGNUP_URL, "signup")
 PRICING_LINK = _with_utm(PERSO_PRICING_URL, "pricing")
+WORKSPACE_LINK = _with_utm(PERSO_WORKSPACE_URL, "home")
 
 
 class PersoCreditExhaustedError(RuntimeError):

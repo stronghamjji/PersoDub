@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from app import i18n, state
 from app.i18n import t
-from app.perso_client import APP_VERSION, SIGNUP_LINK, list_dubbing_spaces
+from app.perso_client import APP_VERSION, SIGNUP_LINK, WORKSPACE_LINK, list_dubbing_spaces
 from app.settings_env import (
     current_value,
     read_analytics_off,
@@ -63,6 +63,8 @@ def settings_get():
             "perso_api_key": read_value("PERSO_API_KEY"),
             "perso_space_seq": read_value("PERSO_SPACE_SEQ"),
             "perso_signup_link": SIGNUP_LINK,
+            # Tagged the same way; the Home sidebar's perso.ai button opens it.
+            "perso_workspace_link": WORKSPACE_LINK,
             "analytics_off": read_analytics_off(),
             "reports_off": read_reports_off(),
             # "auto", "en" or "ko" (app/i18n.py): the page resolves "auto"

@@ -103,7 +103,7 @@ Outside the computer:
 differ in where a dub runs when nothing is chosen: open source (the
 default) dubs on this computer, production dubs with the Perso API. Both
 point at the same repository, `stronghamjji/PersoDub`.
-The repository decides the update feed, the page's GitHub, Star and Send
+The repository decides the update feed, the page's GitHub and Send
 feedback links, the Help window's User guide and FAQ, and the update
 window's release-notes link. `PERSODUB_EDITION` picks the edition when the
 payload is collected, and `scripts/collect-payload.mjs` writes it into the

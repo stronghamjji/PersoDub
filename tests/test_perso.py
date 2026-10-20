@@ -519,9 +519,10 @@ def test_version_is_not_a_second_hardcoded_copy():
 
 def test_outbound_links_carry_the_running_identity():
     # The UTM source must be the exact host the API headers send, so Perso can line up
-    # "API usage by this app" with "visits from this app"; utm_content separates the two links.
+    # "API usage by this app" with "visits from this app"; utm_content separates the links.
     for link, kind in ((perso_client_module.SIGNUP_LINK, "signup"),
-                       (perso_client_module.RECHARGE_LINK, "recharge")):
+                       (perso_client_module.RECHARGE_LINK, "recharge"),
+                       (perso_client_module.WORKSPACE_LINK, "home")):
         assert "utm_source=%s" % perso_client_module.CLIENT_HOST in link
         assert "utm_content=%s" % kind in link
         assert "utm_term=v%s" % perso_client_module.APP_VERSION in link

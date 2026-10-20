@@ -899,11 +899,10 @@
     display: grid; place-items: center; flex: none; }
   .home-gh-mark svg { width: 15px; height: 15px; fill: #ffffff; }
   /* A fixed pale blue with dark words, like the banner: the mockup's colour,
-     not a theme one. The star is the one yellow on the screen. */
-  .home-side .home-gh-star { display: flex; align-items: center; justify-content: center; gap: 5px;
+     not a theme one. */
+  .home-side .home-perso { display: flex; align-items: center; justify-content: center;
     padding: 3px 6px; border: none; border-radius: 6px; font-weight: 700; color: #0b1220;
     background: linear-gradient(90deg, #dfe8ff, #bfe3ff); }
-  .home-gh-star svg { width: 14px; height: 14px; fill: #f5b301; stroke: #c98f00; stroke-width: 1.2; }
   .home-grp { color: var(--muted-foreground); font-size: 11px; font-weight: 500; margin: 10px 0 -4px; }
   .home-sep { height: 1px; background: var(--border); margin: 12px 0 0; flex: none; }
   .home-grow { flex: 1; }

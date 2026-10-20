@@ -57,8 +57,9 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     r = client.get("/api/settings")
     assert r.status_code == 200
     body = r.json()
-    # Both are computed, not stored -- popped so the rest stays an exact shape check.
+    # These are computed, not stored -- popped so the rest stays an exact shape check.
     assert body.pop("perso_signup_link").startswith(perso_client.PERSO_SIGNUP_URL)
+    assert body.pop("perso_workspace_link").startswith(perso_client.PERSO_WORKSPACE_URL)
     assert body.pop("app_version") == perso_client.APP_VERSION
     # Where the finished videos actually are. The screen used to guess at this
     # path; it comes from the server now, so a moved workspace still reads true.
@@ -79,6 +80,16 @@ def test_get_carries_the_utm_tagged_signup_link(tmp_path, monkeypatch):
     assert link.startswith(perso_client.PERSO_SIGNUP_URL)
     assert f"utm_source={perso_client.CLIENT_HOST}" in link
     assert "utm_content=signup" in link
+
+
+def test_get_carries_the_utm_tagged_workspace_link(tmp_path, monkeypatch):
+    # The Home sidebar's perso.ai button opens Perso's workspace, tagged like the signup link
+    # but as the home link, so visits from that button are countable on their own.
+    _kit(tmp_path, monkeypatch, BASE)
+    link = client.get("/api/settings").json()["perso_workspace_link"]
+    assert link.startswith(perso_client.PERSO_WORKSPACE_URL)
+    assert f"utm_source={perso_client.CLIENT_HOST}" in link
+    assert "utm_content=home" in link
 
 
 def test_get_returns_saved_key_values(tmp_path, monkeypatch):

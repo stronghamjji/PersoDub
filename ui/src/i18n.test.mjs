@@ -13,7 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   t, setLanguage, currentLanguage, loadTable, applyTranslations, pickLanguage, markupKey, LANGUAGES,
-  languageName,
+  languageName, pageLanguage, savedSettings,
 } from "./i18n.mjs";
 
 const SRC = fileURLToPath(new URL("./", import.meta.url));
@@ -128,6 +128,25 @@ test("applyTranslations rewrites the marked text, title, placeholder and label, 
     assert.equal(button.getAttribute("title"), "Close");
     assert.equal(input.getAttribute("placeholder"), "Not set");
   });
+});
+
+test("the start-up keeps the whole settings answer, and asks for it once", async () => {
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const asked = [];
+  const answer = { ui_language: "en", perso_workspace_link: "https://perso.test/workspace/vt?utm_content=home" };
+  globalThis.fetch = async (url) => { asked.push(url); return { ok: true, json: async () => answer }; };
+  globalThis.document = { documentElement: {}, ...root([]) };
+  try {
+    assert.equal(savedSettings(), null, "nothing before the answer");
+    assert.equal(await pageLanguage(), "en");
+    await pageLanguage();
+    assert.deepEqual(savedSettings(), answer);
+    assert.deepEqual(asked, ["/api/settings"]);
+  } finally {
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+  }
 });
 
 test("the language: a setting of en or ko wins, else the shell's, else the browser's", () => {

@@ -51,7 +51,7 @@ import { readKept, keepDraft, dropKept, draftMark } from "./keptDrafts.mjs";
 import { initRatioUi } from "./ratio.mjs";
 import { wireUpdates } from "./updateWindow.mjs";
 import { fmtClock, fmtClockTenths, fmtLength, formatBytes, escapeHtml, errorText, serverText, statusParts, rawLogLines, restartFailure } from "./format.mjs";
-import { languageName, pageLanguage, t } from "./i18n.mjs";
+import { languageName, pageLanguage, savedSettings, t } from "./i18n.mjs";
 import { paintMarkupWords } from "./markupWords.mjs";
 
 // The language before anything is drawn, so the first paint is already in it
@@ -1352,6 +1352,9 @@ async function reopenDraft(downloadId) {
 // user 2026-09-30): each one opens a way in this page already has.
 initHomeSidebar({
   $, body: document.body, repoUrl: REPO_URL,
+  // The UTM-tagged link from the start-up's GET /api/settings; the plain page
+  // until that has answered.
+  persoUrl: () => savedSettings()?.perso_workspace_link || "https://perso.ai/workspace/vt",
   openUrl: (url) => window.open(url, "_blank", "noopener"),
   // An empty new project on its Dubbing tab: the Import block there takes a
   // file or a link, where the bare file picker took only a file (owner, 2026-10-09).

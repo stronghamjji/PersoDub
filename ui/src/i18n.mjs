@@ -141,12 +141,19 @@ export async function useLanguage(setting) {
 // when it arrives.
 const START_CAP_MS = 1500;
 let started = null;
+// The whole answer is kept for the page (the Home sidebar's perso.ai link),
+// so it is asked for once; null until it has come, or when it never does.
+let startSettings = null;
+export const savedSettings = () => startSettings;
 export function pageLanguage() {
   started ??= (async () => {
     let setting = "";
     try {
       const r = await fetch("/api/settings");
-      if (r.ok) setting = (await r.json()).ui_language || "";
+      if (r.ok) {
+        startSettings = await r.json();
+        setting = startSettings.ui_language || "";
+      }
     } catch { /* no setting: "auto" */ }
     return useLanguage(setting);
   })().catch(() => "en");

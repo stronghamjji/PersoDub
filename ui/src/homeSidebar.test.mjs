@@ -39,6 +39,7 @@ function harness({ screen = "home", classes = [], version = "0.7.1" } = {}) {
   log.restore = () => { globalThis.window = realWindow; };
   initHomeSidebar({
     $, body, repoUrl: "https://example.test/owner/PersoDub",
+    persoUrl: () => "https://perso.test/workspace/vt?utm_content=home",
     openUrl: (u) => log.urls.push(u),
     onDubbing: () => log.calls.push("dub"),
     onErase: () => log.calls.push("erase"),
@@ -59,15 +60,15 @@ test("the agent column is held back on Home only, until Home opens it", () => {
   assert.equal(homeAgentHidden(makeBody("done")), false);
 });
 
-test("both GitHub buttons open the repo, and Send feedback its issues page", (t) => {
+test("the GitHub button opens the repo, perso.ai the workspace link, and Send feedback the issues page", (t) => {
   const h = harness();
   t.after(h.log.restore);
   h.$("homeGhName").fire("click");
-  h.$("homeGhStar").fire("click");
+  h.$("homePerso").fire("click");
   h.$("homeFeedback").fire("click");
   assert.deepEqual(h.log.urls, [
     "https://example.test/owner/PersoDub",
-    "https://example.test/owner/PersoDub",
+    "https://perso.test/workspace/vt?utm_content=home",
     "https://example.test/owner/PersoDub/issues",
   ]);
 });

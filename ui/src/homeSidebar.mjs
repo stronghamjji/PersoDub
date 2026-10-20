@@ -1,7 +1,7 @@
 // The Home screen's left sidebar and the Dub Agent card beside the banner
 // (the mockup's first screen, user 2026-09-30).
 //
-// Owns the sidebar's buttons (#homeGhName, #homeGhStar, #homeNavDub,
+// Owns the sidebar's buttons (#homeGhName, #homePerso, #homeNavDub,
 // #homeNavAudio, #homeNavErase, #homeNavSave, #homeNavProjects, #homeNavSettings,
 // #homeHelp, #homeFeedback, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
 // the banner (#homeAgentCard with its [data-prompt] chips, #homeDubCard,
@@ -44,6 +44,7 @@ export function whatsNewTitle(version) {
  * @param {(id: string) => any} deps.$
  * @param {object} deps.body            document.body
  * @param {string} deps.repoUrl         the project's GitHub page
+ * @param {() => string} deps.persoUrl  Perso's workspace, UTM-tagged once the settings have loaded
  * @param {(url: string) => void} deps.openUrl   opens in the system browser
  * @param {() => void} deps.onDubbing     a new project on its Dubbing tab (file or link)
  * @param {() => void} deps.onErase
@@ -53,12 +54,12 @@ export function whatsNewTitle(version) {
  * @param {() => void} deps.onHelp        the Help dialog: what each tool does
  * @param {() => Promise<{version?: string}>} deps.loadWhatsNew
  */
-export function initHomeSidebar({ $, body, repoUrl, openUrl, onDubbing, onErase,
+export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing, onErase,
                                   onAudio = () => {}, onSaveVideo, onSettings, onHelp, loadWhatsNew }) {
   const on = (id, fn) => $(id).addEventListener("click", fn);
 
   on("homeGhName", () => openUrl(repoUrl));
-  on("homeGhStar", () => openUrl(repoUrl));
+  on("homePerso", () => openUrl(persoUrl()));
   on("homeNavDub", onDubbing);
   on("homeNavAudio", onAudio);
   on("homeNavErase", onErase);
