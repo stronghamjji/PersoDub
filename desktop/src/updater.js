@@ -74,7 +74,8 @@ function about(info) {
 /**
  * The update as the page should see it, folded from electron-updater's
  * events: {version, phase: "downloading" | "ready", pct, releaseDate?,
- * releaseNotes?}. Kept outside
+ * releaseNotes?}, or {phase: "check-failed"} when the check itself found no
+ * answer -- the window said "up to date" then, which nobody knew. Kept outside
  * updateFlow.js so the two-step announcement ("found, downloading" first, "ready"
  * once the file is on disk) is testable. Returns `prev` unchanged for events
  * that carry nothing new -- progress before a version is known, or an event
@@ -93,6 +94,9 @@ export function nextUpdateState(prev, event, info) {
   if (event === "update-downloaded" && (info?.version || prev?.version)) {
     return { ...prev, version: info?.version || prev.version, phase: "ready", pct: 100, ...about(info) };
   }
+  // Only before an update is known: a download that fails after it began is
+  // not a check that failed.
+  if (event === "check-failed" && !prev?.version) return { phase: "check-failed" };
   return prev;
 }
 

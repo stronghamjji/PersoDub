@@ -35,6 +35,12 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
     // Whether the error event below has said what went wrong: a failed check
     // also rejects checkForUpdates, and the catch at the end must not say it twice.
     let reported = false;
+    const announce = (event, info) => {
+      const next = nextUpdateState(ctx.updateState, event, info);
+      if (next === ctx.updateState) return;
+      ctx.updateState = next;
+      if (!win.isDestroyed()) win.webContents.send("shell:update-state", ctx.updateState);
+    };
     try {
       const { default: electronUpdater } = await import("electron-updater");
       const { autoUpdater } = electronUpdater;
@@ -59,12 +65,6 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
       // A downloaded update waits for "Restart to update" on every platform; a
       // plain quit leaves the app as it is (updater.js INSTALL_ON_QUIT).
       autoUpdater.autoInstallOnAppQuit = INSTALL_ON_QUIT;
-      const announce = (event, info) => {
-        const next = nextUpdateState(ctx.updateState, event, info);
-        if (next === ctx.updateState) return;
-        ctx.updateState = next;
-        if (!win.isDestroyed()) win.webContents.send("shell:update-state", ctx.updateState);
-      };
       // The update's own DOWNLOAD lines (logLine.js shapes): START from the
       // release file's full address as it is found -- electron-updater names
       // its cache folder only once the file is saved, so the FILE line says
@@ -117,6 +117,8 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
         } else if (checkFrom) {
           shellLog(`UPDATE CHECK FAILED (${secondsSince(checkFrom)}s): ${updateErrorText(err)}`, "ERROR");
           checkFrom = null;
+          // The window says the check failed, not "up to date".
+          announce("check-failed");
         } else {
           shellLog(`UPDATE FAILED: ${updateErrorText(err)}`, "ERROR");
         }
@@ -125,7 +127,10 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
       checkFrom = Date.now();
       await autoUpdater.checkForUpdates();
     } catch (err) {
-      if (!reported) shellLog(`UPDATE CHECK FAILED: ${updateErrorText(err)}`, "ERROR");
+      if (!reported) {
+        shellLog(`UPDATE CHECK FAILED: ${updateErrorText(err)}`, "ERROR");
+        announce("check-failed");
+      }
     }
   }
 

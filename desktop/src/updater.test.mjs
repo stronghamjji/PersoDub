@@ -68,6 +68,13 @@ test("unknown events and a missing version leave the state alone", () => {
     "progress before a version is known is noise");
 });
 
+test("a check that found no answer is its own state; a download that failed after it began is not", () => {
+  // The window said "up to date" after a failed check (2026-10-20).
+  assert.deepEqual(nextUpdateState(null, "check-failed"), { phase: "check-failed" });
+  const downloading = { version: "0.5.2", phase: "downloading", pct: 10 };
+  assert.equal(nextUpdateState(downloading, "check-failed"), downloading);
+});
+
 test("progress that rounds to the same percent is not a new state", () => {
   const prev = { version: "0.5.2", phase: "downloading", pct: 42 };
   assert.equal(nextUpdateState(prev, "download-progress", { percent: 42.4 }), prev);

@@ -27,6 +27,16 @@ test("with no update the window says so and shows the running version's list", (
   assert.equal(v.notesLink, null);
 });
 
+test("a check that found no answer says so, not that PersoDub is up to date", () => {
+  const v = updateWindowView({ phase: "check-failed" }, { current: "0.8.5", currentNotes: ["One"] });
+  assert.equal(v.title, "Could not check for updates.");
+  assert.equal(v.next, "Check your internet connection, then open PersoDub again.");
+  assert.equal(v.current, "Current version: 0.8.5");
+  assert.equal(v.button, null);
+  assert.deepEqual(v.notes, ["One"]);
+  assert.equal(updateIconView({ phase: "check-failed" }).live, false);
+});
+
 test("a from-source run's 0.0.0 is not shown as a version", () => {
   assert.equal(updateWindowView(null, { current: "0.0.0" }).current, "");
 });

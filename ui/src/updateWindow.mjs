@@ -70,6 +70,14 @@ export function noteLines(notes, version) {
  */
 export function updateWindowView(state, { current = "", currentNotes = [], dubRunning = false, releases } = {}) {
   const shownCurrent = current && current !== "0.0.0" ? t("Current version: {version}", { version: current }) : "";
+  // The shell could not reach the releases (desktop/src/updater.js): saying
+  // "up to date" then was a guess, and a wrong one when an update was out.
+  // It checks once a launch, so opening PersoDub again is what checks again.
+  if (state?.phase === "check-failed") {
+    return { title: t("Could not check for updates."), current: shownCurrent,
+      next: t("Check your internet connection, then open PersoDub again."), released: "", button: null,
+      running: "", notes: currentNotes, notesLink: null };
+  }
   if (!updateLive(state)) {
     return { title: t("PersoDub is up to date"), current: shownCurrent, next: "", released: "", button: null,
       running: "", notes: currentNotes, notesLink: null };
