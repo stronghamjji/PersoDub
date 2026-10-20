@@ -11,7 +11,7 @@
 // with the launch token, so an update never runs this file against a module a
 // browser kept from the version before.
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, parseProgress, applyEngineAvailability, probeSource, engineChips, engineLine, voiceLabel, dubAgainSource, holdDownload, downloadVideoUrl } from "./dubApi.mjs";
-import { gb, neededModelId, neededPackIds, modelStatusLine } from "./modelsUi.mjs";
+import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText } from "./modelsUi.mjs";
 import { initModelsUi } from "./modelsDialog.mjs";
 import { initSubtitleOverlay } from "./subtitleOverlay.mjs";
 import { initEscapeKey } from "./escapeKey.mjs";
@@ -381,7 +381,7 @@ function paintModelStatusLines(rows) {
   const shownElsewhere = dl && dl.id === ERASER_PACK_ID
     && document.body.dataset.screen === "erase";
   $("topbarDl").hidden = !dl || dialogOpen || shownElsewhere;
-  if (dl) $("topbarDl").textContent = `${dl.name} · ${dl.progress ?? 0}%`;
+  if (dl) $("topbarDl").textContent = downloadChipText(dl);
 }
 
 $("topbarDl").addEventListener("click", () => models.reopenDialogOrSettings());

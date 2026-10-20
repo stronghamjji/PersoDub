@@ -44,6 +44,13 @@ export function modelStatusLine(row) {
   return { cls: "", text: `${gb(row.bytes)} GB`, button: "download" };
 }
 
+/** The topbar chip's words for the download it stands for: the name and its
+ * percent, or no number while it has none -- the 0% it showed through a pack's
+ * set-up read as stuck (Windows C2). */
+export function downloadChipText(row) {
+  return `${row.name} · ${row.progress == null ? t("Getting ready…") : `${row.progress}%`}`;
+}
+
 /** What the dub-start warning dialog shows, from the 409's detail. ramOk is
  * GET /api/engines' ram_ok: false when the computer has too little memory to
  * dub on it. */

@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { gb, neededModelId, neededPackIds, modelStatusLine, dubStartDialog, overallProgress, allReady, groupModels } from "./modelsUi.mjs";
+import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText, dubStartDialog, overallProgress, allReady, groupModels } from "./modelsUi.mjs";
 
 test("neededModelId maps each dropdown choice to its catalog model", () => {
   assert.equal(neededModelId("stt", "local"), "whisper");
@@ -82,6 +82,12 @@ test("overallProgress is byte-weighted and treats ready as done", () => {
   // (100*100% + 300*50% + 100*0%) / 500 = 50%
   assert.equal(overallProgress(rows, ["a", "b", "c"]), 50);
   assert.equal(overallProgress(rows, []), 0);
+});
+
+test("the topbar chip has no number while the download has none, never null% or 0%", () => {
+  assert.equal(downloadChipText({ name: "Python + PyTorch", progress: null }), "Python + PyTorch · Getting ready…");
+  assert.equal(downloadChipText({ name: "Python + PyTorch", progress: 0 }), "Python + PyTorch · 0%");
+  assert.equal(downloadChipText({ name: "Whisper", progress: 41 }), "Whisper · 41%");
 });
 
 test("overallProgress has no number while nothing on its way has a figure yet", () => {
