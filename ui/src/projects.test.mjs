@@ -28,6 +28,7 @@ function makeEl(id) {
                      ".queue-bar i": bar ? [{ style: { width: bar[1] } }] : [] };
     },
     get innerHTML() { return this.html || ""; },
+    get classList() { return { contains: (name) => this.className.split(" ").includes(name) }; },
     // What a browser finds under this node, in page order. markClippedNames
     // asks for .job-name, which tests that care about hand back themselves.
     querySelectorAll(sel) {
@@ -42,7 +43,7 @@ function makeEl(id) {
 }
 
 /** A page, a fetch log and the callbacks the list reaches out through. */
-function harness({ responses = {}, screen = "home", jobId = null } = {}) {
+function harness({ responses = {}, screen = "home", jobId = null, onJobs } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -73,6 +74,7 @@ function harness({ responses = {}, screen = "home", jobId = null } = {}) {
     onOpenJob: (id) => log.opened.push(id),
     onDeleteJob: (job) => log.deleted.push(job.id),
     onCancelJob: (job) => log.cancelled.push(job.id),
+    onJobs,
   });
   return { $, api, log };
 }
@@ -167,6 +169,33 @@ test("an empty list invites a video; an unreachable engine says so instead", asy
   await down.api.renderHistory();
   assert.equal(down.$("historyList").innerHTML,
     '<div class="history-empty">PersoDub is not running. Restart the app.</div>');
+});
+
+test("folded away, the sidebar's list is left as it is, and the Home grid still gets the list", async (t) => {
+  // Nothing has opened the old sidebar since the Home grid took its place, so
+  // its rows were drawn for no one on every refresh.
+  const handed = [];
+  const h = harness({
+    responses: { [JOBS]: ok({ jobs: [{ id: "a", status: "done", project: "Interview" }] }) },
+    onJobs: (jobs) => handed.push(jobs.map((j) => j.id)),
+  });
+  t.after(h.log.restore);
+  h.$("historySidebar").className = "history-sidebar collapsed";
+  const list = h.$("historyList");
+  list.innerHTML = "as the page left it";
+
+  await h.api.renderHistory();
+  assert.equal(list.innerHTML, "as the page left it");
+  assert.equal(list.children.length, 0);
+  assert.deepEqual(handed, [["a"]]);
+
+  // An engine that cannot be reached is not written into it either.
+  const down = harness({ responses: { [JOBS]: () => { throw new Error("offline"); } } });
+  t.after(down.log.restore);
+  down.$("historySidebar").className = "history-sidebar collapsed";
+  down.$("historyList").innerHTML = "as the page left it";
+  await down.api.renderHistory();
+  assert.equal(down.$("historyList").innerHTML, "as the page left it");
 });
 
 test("only the names too long for their column get a tooltip", async (t) => {

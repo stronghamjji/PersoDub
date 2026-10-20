@@ -14,7 +14,8 @@
 // polling tick that keeps the Up next card fresh is the page's as well, so
 // that a test can call renderQueueCard without leaving a timer running.
 //
-// Everything this file touches is #historyList and the #queueCard box.
+// Everything this file touches is #historyList (drawn only while
+// #historySidebar is open) and the #queueCard box.
 import { escapeHtml, fmtLength } from "./format.mjs";
 import { parseProgress } from "./dubApi.mjs";
 import { erasePercent } from "./eraseArea.mjs";
@@ -219,16 +220,22 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
     }
   }
 
+  // Folded away, the list is not drawn at all: nothing has opened it since the
+  // Home grid took its place (app.mjs), and its rows were drawn for no one on
+  // every refresh. Whatever opens it again calls renderHistory then.
+  const folded = () => $("historySidebar").classList.contains("collapsed");
+
   async function renderHistory() {
     const container = $("historyList");
     let jobs;
     try {
       jobs = (await (await fetch("/api/dub/jobs")).json()).jobs || [];
     } catch {
-      container.innerHTML = `<div class="history-empty">${t("PersoDub is not running. Restart the app.")}</div>`;
+      if (!folded()) container.innerHTML = `<div class="history-empty">${t("PersoDub is not running. Restart the app.")}</div>`;
       return;
     }
     if (onJobs) onJobs(jobs);
+    if (folded()) return;
     if (jobs.length === 0) {
       container.innerHTML = `<div class="history-empty">${t("No projects yet - drop a video to start one.")}</div>`;
       return;
