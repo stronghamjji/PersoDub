@@ -9,6 +9,7 @@
 // Run with: node --test ui/src/homeScreen.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { initHomeScreen } from "./homeScreen.mjs";
 
 function makeEl(id) {
@@ -347,10 +348,16 @@ test("a draft left on the Erase or Audio tab says what it was being made into, t
   const erase = html.slice(html.indexOf('data-draft="0a1b2c3d"'), html.indexOf('data-draft="0a1b2c3e"'));
   assert.match(erase, /<span class="proj-kind" title="Erase subtitles"><svg viewBox="0 0 24 24" width="12" height="12">/);
   assert.match(erase, /<span class="proj-chip proj-chip-muted">Draft<\/span>/);
-  assert.match(erase, /<div class="proj-meta">Erase subtitles · Not finished<\/div>/);
+  assert.match(erase, /<div class="proj-meta">Not erased yet<\/div>/);
   const sep = html.slice(html.indexOf('data-draft="0a1b2c3e"'));
   assert.doesNotMatch(sep, /proj-kind/);
-  assert.match(sep, /<div class="proj-meta">Separate audio · Not finished<\/div>/);
+  assert.match(sep, /<div class="proj-meta">Not separated yet<\/div>/);
+  // The Korean the owner approved names the tool (2026-10-21). The English is
+  // the Dubbing card's shape: "Separate audio · Not finished" ran past the
+  // card's 124px in the app's own font (2026-10-22).
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Not erased yet"], "자막 지우기 · 미완료");
+  assert.equal(ko["Not separated yet"], "오디오 분리 · 미완료");
   // The same draft moved to Dubbing is drawn again with its own words.
   h.api.renderDrafts([{ ...KEPT[0], tab: "dubbing" }, audio]);
   const again = h.$("projectsGrid").innerHTML;
