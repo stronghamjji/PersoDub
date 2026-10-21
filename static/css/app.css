@@ -1012,6 +1012,9 @@
   .home-agent-card { cursor: pointer; background: linear-gradient(160deg, #1b3470, #15223f);
     border: 1px solid #2a4b9a; }
   .home-agent-head { display: flex; align-items: center; gap: 7px; color: #9cc2ff; font-weight: 600; }
+  /* The mascot in place of the speech bubble (2026-10-21), as tall as the
+     bubble was; its own width follows from the picture's 4:3. */
+  .home-agent-head img { height: 18px; width: auto; display: block; }
   .home-agent-q { font-size: 15px; font-weight: 600; color: #ffffff; }
   .home-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .home-chip { border: none; border-radius: 99px; padding: 3px 9px; font: inherit; font-size: 11px;

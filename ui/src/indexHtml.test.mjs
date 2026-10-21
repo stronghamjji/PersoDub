@@ -1282,3 +1282,11 @@ test("on Windows the page draws its own scrollbars and is moved by its top bar; 
   // Home hides the name because the system's bar says PersoDub; on Windows nothing else does.
   assert.match(html, rule(`${win} body[data-screen="home"] .topbar-titles { visibility: visible; }`));
 });
+
+// The Dub Agent card heads with the mascot in place of the speech bubble
+// (2026-10-21), as tall as the bubble was; app/api/misc.py serves the picture.
+test("the Dub Agent card heads with the mascot, the bubble's height", () => {
+  const html = readPage();
+  assert.match(html, /<div class="home-agent-head"><img src="\/mascot\.png" alt="">Dub Agent<\/div>/);
+  assert.match(html, /\.home-agent-head img \{ height: 18px; width: auto; display: block; \}/);
+});
