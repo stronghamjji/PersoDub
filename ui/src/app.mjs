@@ -390,10 +390,11 @@ for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
 }
 // One sentence per line (they read as a wall when joined -- user feedback):
 // the hint slots render these with pre-line whitespace. Getters, so each is
-// read in the language of the moment.
+// read in the language of the moment. The Perso API dubbing hint names the
+// free first minute (owner, 2026-10-21): it is what gets people to sign up.
 const ENGINE_HINTS = {
   dubMode: { get local() { return [t("Runs on this computer, free."), t("You can edit the script after.")]; },
-             get perso() { return [t("Perso does the dubbing start to finish."), t("Uses Perso credits.")]; } },
+             get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that.")]; } },
   sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
   stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
