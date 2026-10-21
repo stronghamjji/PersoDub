@@ -2,7 +2,7 @@
 // (the mockup's first screen, user 2026-09-30).
 //
 // Owns the sidebar's buttons (#homeGhName, #homePerso, #homeNavDub,
-// #homeNavAudio, #homeNavErase, #homeNavSave, #homeNavProjects, #homeNavSettings,
+// #homeNavAudio, #homeNavErase, #homeNavSave, #homeNavSettings,
 // #homeHelp, #homeFeedback, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
 // the banner (#homeAgentCard with its [data-prompt] chips, #homeDubCard,
 // #homeAudioCard, #homeEraseCard, #homeSaveCard). Every one of them opens something the page
@@ -64,12 +64,13 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
   on("homeNavAudio", onAudio);
   on("homeNavErase", onErase);
   on("homeNavSave", onSaveVideo);
-  on("homeNavProjects", () => $("projectsHead").scrollIntoView({ behavior: "smooth", block: "start" }));
   on("homeNavSettings", () => onSettings());
   on("homeHelp", onHelp);
   // The app has no feedback form of its own; the issues page is where it goes.
   on("homeFeedback", () => openUrl(`${repoUrl}/issues`));
-  // The update module listens for this event and opens its window.
+  // The update module listens for this event and opens its window: the
+  // running version's list, or the update on offer (ui/src/updateWindow.mjs,
+  // which also marks this card while one downloads or waits).
   on("homeWhatsNew", () => window.dispatchEvent(new CustomEvent("persodub:open-update")));
 
   on("homeDubCard", onDubbing);
@@ -84,7 +85,10 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
     openHomeAgent($, body, chip ? t(chip.dataset.prompt) : "");
   });
 
+  // Not over an update's "ready" title, should that have come in first.
   loadWhatsNew()
-    .then((info) => { $("homeWhatsNewTitle").textContent = whatsNewTitle(info && info.version); })
+    .then((info) => {
+      if (!$("homeWhatsNew").classList.contains("ready")) $("homeWhatsNewTitle").textContent = whatsNewTitle(info && info.version);
+    })
     .catch(() => { /* the card keeps its plain title */ });
 }

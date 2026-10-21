@@ -14,7 +14,7 @@ export function openExternally(shell, url) {
  * `ctx.updateState`, `ctx.engines` and `ctx.kitDir` are read as each page
  * loads or navigates, since none of them exists yet when the window is made.
  */
-export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, repo, locale }) {
+export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, repo, locale, platform = process.platform }) {
   // The finished screen is a table beside a video with a strip under both, and
   // it needs 1280 to show the table's full set of columns. Clamped to the screen
   // the window opens on, so a small laptop gets a window that fits it rather
@@ -24,7 +24,7 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
   const room = screen.getPrimaryDisplay().workAreaSize;
   // Packaged builds carry build/icon.icns / icon.ico; a dev run (npm start)
   // would otherwise show Electron's own icon in the dock and the taskbar.
-  if (!app.isPackaged && process.platform === "darwin" && app.dock) {
+  if (!app.isPackaged && platform === "darwin" && app.dock) {
     try { app.dock.setIcon(join(appDir, "build", "icon.png")); } catch { /* cosmetic */ }
   }
   const win = new BrowserWindow({
@@ -36,6 +36,23 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
     // window, in English whatever the app's language. Hidden; Alt shows it. The
     // Mac menu bar is the system's and stays.
     autoHideMenuBar: true,
+    // Windows hung its white system title bar over the dark app, with the app's
+    // own 36px bar right under it (W26, 2026-10-14). There the system bar is
+    // hidden and the window's three buttons are drawn over the page's bar in
+    // the desk's colours (static/css/app.css --desk, --foreground), the bar's
+    // height; the page marks its bar as what the window is moved by (the
+    // data-platform below).
+    ...(platform === "win32"
+      ? { titleBarStyle: "hidden", titleBarOverlay: { color: "#0e131b", symbolColor: "#eaf0fd", height: 36 } }
+      : {}),
+    // The Mac's system bar goes too, so both systems show one 36px bar
+    // (2026-10-21): the three lights sit in the page's bar, which starts
+    // after them (static/css/app.css). trafficLightPosition is where their
+    // 16px-tall row starts, so y = (36 - 16) / 2 = 10 centres them in it,
+    // and x = 12 matches the bar's own 12px left edge.
+    ...(platform === "darwin"
+      ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 12, y: (36 - 16) / 2 } }
+      : {}),
     width: Math.min(1280, room.width),
     height: Math.min(800, room.height),
     minWidth: Math.min(960, room.width),
@@ -48,7 +65,11 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
       // page's GitHub links; preload.cjs reads it back as persodubShell.repo.
       // And the computer's language ("ko" or "en", src/i18n.js), which the
       // page reads as persodubShell.locale for a language setting of Auto.
-      additionalArguments: [`--persodub-repo=${repo}`, `--persodub-locale=${locale}`],
+      // And which system this is ("win32", "darwin"), which preload.cjs stamps
+      // on the page as data-platform: the stylesheet draws Windows' scrollbars
+      // itself and leaves the Mac's to the system, and makes its top bar what
+      // the window is moved by on both.
+      additionalArguments: [`--persodub-repo=${repo}`, `--persodub-locale=${locale}`, `--persodub-platform=${platform}`],
     },
   });
   // Every page load -- the app page arriving after boot, or a reload mid

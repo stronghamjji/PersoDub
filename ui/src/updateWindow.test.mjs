@@ -1,18 +1,21 @@
-// What the update icon and the "Version update" window show for each state
+// What the What's new card and the "Version update" window show for each state
 // the shell announces -- including an older shell that sends no date or notes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { updateLive, updateIconView, updateWindowView, noteLines, releaseDay, wireUpdates } from "./updateWindow.mjs";
+import { updateLive, updateCardView, updateWindowView, noteLines, releaseDay, wireUpdates } from "./updateWindow.mjs";
 
 const DOWNLOADING = { version: "0.7.1", phase: "downloading", pct: 42 };
 const READY = { version: "0.7.1", phase: "ready", pct: 100,
   releaseDate: "2026-09-30T12:00:00.000Z", releaseNotes: "<ul><li>ElevenLabs voices.</li><li>Erase box fits</li></ul>" };
 
-test("the icon is grey with no update and lit while one downloads or waits", () => {
-  assert.deepEqual(updateIconView(null), { live: false, title: "Updates" });
-  assert.deepEqual(updateIconView(undefined), { live: false, title: "Updates" });
-  assert.equal(updateIconView(DOWNLOADING).live, true);
-  assert.equal(updateIconView(READY).live, true);
+// The top bar's update icon moved onto the Home sidebar's What's new card
+// (2026-10-21): a dot while an update downloads or waits, and the title names
+// it once it is on disk.
+test("the card is plain What's new with no update, dotted while one downloads, and named once ready", () => {
+  assert.deepEqual(updateCardView(null), { live: false, tip: "", title: "" });
+  assert.deepEqual(updateCardView(undefined), { live: false, tip: "", title: "" });
+  assert.deepEqual(updateCardView(DOWNLOADING), { live: true, tip: "Update available", title: "" });
+  assert.deepEqual(updateCardView(READY), { live: true, tip: "Update available", title: "Update 0.7.1 is ready" });
   assert.equal(updateLive({ version: "0.7.1", phase: "something-else" }), false);
   assert.equal(updateLive({ phase: "ready" }), false, "no version, nothing to offer");
 });
@@ -34,7 +37,7 @@ test("a check that found no answer says so, not that PersoDub is up to date", ()
   assert.equal(v.current, "Current version: 0.8.5");
   assert.equal(v.button, null);
   assert.deepEqual(v.notes, ["One"]);
-  assert.equal(updateIconView({ phase: "check-failed" }).live, false);
+  assert.equal(updateCardView({ phase: "check-failed" }).live, false);
 });
 
 test("a from-source run's 0.0.0 is not shown as a version", () => {
@@ -140,7 +143,8 @@ test("an update announced before the page listened is asked for and offered", as
     const shell = { onUpdateState: () => { listening = true; }, getUpdateState: async () => READY };
     wireUpdates({ $, shell, releases: "" });
     await settle();
-    assert.ok($("updateBtn").classList.contains("live"), "the icon lights");
+    assert.ok($("homeWhatsNew").classList.contains("live"), "the card has its dot");
+    assert.equal($("homeWhatsNewTitle").textContent, "Update 0.7.1 is ready");
     assert.ok($("updateOverlay").classList.contains("open"), "the window opens by itself");
     assert.equal($("updGo").textContent, "Restart to update");
     assert.ok(listening, "and the page still listens for what comes next");
@@ -157,14 +161,27 @@ test("a state the shell announced to the listener is not replaced by the answer"
   } finally { restore(); }
 });
 
-test("a shell with nothing to say, or without the question, leaves the icon grey", async () => {
+test("a shell with nothing to say, or without the question, leaves the card as it is", async () => {
   const { $, restore } = standInPage();
   try {
     wireUpdates({ $, shell: { onUpdateState() {}, getUpdateState: async () => null }, releases: "" });
     await settle();
-    assert.equal($("updateBtn").classList.contains("live"), false);
+    assert.equal($("homeWhatsNew").classList.contains("live"), false);
     wireUpdates({ $, shell: { onUpdateState() {} }, releases: "" });
     await settle();
-    assert.equal($("updateBtn").classList.contains("live"), false);
+    assert.equal($("homeWhatsNew").classList.contains("live"), false);
+  } finally { restore(); }
+});
+
+test("a downloading update dots the card and leaves its What's new title alone", async () => {
+  const { $, restore } = standInPage();
+  try {
+    $("homeWhatsNewTitle").textContent = "What’s new in 0.7.0";
+    wireUpdates({ $, shell: { onUpdateState: (cb) => cb(DOWNLOADING) }, releases: "" });
+    await settle();
+    assert.ok($("homeWhatsNew").classList.contains("live"));
+    assert.equal($("homeWhatsNew").classList.contains("ready"), false);
+    assert.equal($("homeWhatsNewTitle").textContent, "What’s new in 0.7.0");
+    assert.equal($("homeWhatsNew").title, "Update available");
   } finally { restore(); }
 });

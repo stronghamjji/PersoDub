@@ -208,6 +208,19 @@
      timeline. */
   .app { height: 100vh; display: flex; flex-direction: column; padding: 0 9px 9px;
     background: var(--desk); }
+  /* Windows drew Chromium's stock scrollbar wherever a pane scrolls: a 17px grey
+     trough with an arrow button at each end, the one thing on screen not in
+     the app's colours (W26, 2026-10-14). There it is 8px, no buttons, a
+     rounded thumb in the border's grey on nothing. Only there: the Mac floats
+     a thin bar that goes away on its own, and styling ::-webkit-scrollbar at
+     all would pin it on screen. data-platform is the preload's stamp
+     (desktop/preload.cjs). */
+  :root[data-platform="win32"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+  :root[data-platform="win32"] ::-webkit-scrollbar-track { background: transparent; }
+  :root[data-platform="win32"] ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  :root[data-platform="win32"] ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+  :root[data-platform="win32"] ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  :root[data-platform="win32"] ::-webkit-scrollbar-corner { background: transparent; }
   /* Under the bar: the projects list (when open) and the panels. */
   .shell { flex: 1; min-height: 0; display: flex; }
 
@@ -362,8 +375,8 @@
      clicked, and the field it becomes is the same size in the same place so
      the bar does not move (user, 2026-09-10). 12px and dim, the way a window
      names itself. */
-  /* Home has no project to name, and the window's own title bar already says
-     PersoDub: saying it twice, one above the other, read as a mistake. */
+  /* Home has no project to name, and the bar says PersoDub on no system
+     (one-line title bar, 2026-10-21). */
   body[data-screen="home"] .topbar-titles { visibility: hidden; }
   .topbar-title { font-size: 11px; font-weight: 400; color: var(--muted-foreground);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -392,6 +405,33 @@
     .topbar-sub .status-chip:not(:first-child) { display: none; }
   }
   .topbar-spacer { flex: 1; }
+  /* On Windows the shell hides the system's white title bar and lays the
+     window's three buttons over the top right of the page, 36px tall, this
+     bar's height (desktop/src/windowFactory.js titleBarOverlay). So this bar
+     is what the window is moved by; what is pressed in it -- its buttons, the
+     name while it is being renamed -- still takes the click; and it stops
+     short of the window buttons by the width Chromium reports for the bar it
+     left free (W26, 2026-10-14). */
+  :root[data-platform="win32"] .topbar { -webkit-app-region: drag;
+    padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 12px); }
+  :root[data-platform="win32"] .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }
+  /* The Mac's system bar went too (2026-10-21): its three lights sit in this
+     bar's left end, centred in its height (windowFactory.js
+     trafficLightPosition). So here too the bar is what the window is moved
+     by, and it starts after the lights. */
+  :root[data-platform="darwin"] .topbar { -webkit-app-region: drag; padding-left: 80px; }
+  :root[data-platform="darwin"] .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }
+  /* One bar, two layouts (2026-10-21), the name centred in both. The Mac's
+     right end reads Export, Settings, the pane buttons; Windows starts with
+     the pane buttons and Settings at the left, so Export is the last thing
+     before its window buttons. */
+  :root[data-platform="darwin"] .topbar :is(#settingsBtn, .panes) { order: 1; }
+  :root[data-platform="win32"] .topbar .panes { order: -2; }
+  :root[data-platform="win32"] .topbar #settingsBtn { order: -1; }
+  /* Home's bar holds only what comes and goes -- the download chip, the way
+     back into the job just left -- beside the window's buttons: no Settings
+     (Home's sidebar has it) and no pane buttons (2026-10-21). */
+  body[data-screen="home"] .topbar :is(#settingsBtn, .panes) { display: none; }
   /* The mockup's Export: 22px high, capitals 8px tall (11px words). */
   #exportBtn { height: 22px; min-width: 67px; padding: 0 10px; border-radius: 5px;
     font-size: 11px; font-weight: 600; }
@@ -987,6 +1027,9 @@
   .home-agent-card { cursor: pointer; background: linear-gradient(160deg, #1b3470, #15223f);
     border: 1px solid #2a4b9a; }
   .home-agent-head { display: flex; align-items: center; gap: 7px; color: #9cc2ff; font-weight: 600; }
+  /* The mascot in place of the speech bubble (2026-10-21), as tall as the
+     bubble was; its own width follows from the picture's 4:3. */
+  .home-agent-head img { height: 18px; width: auto; display: block; }
   .home-agent-q { font-size: 15px; font-weight: 600; color: #ffffff; }
   .home-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .home-chip { border: none; border-radius: 99px; padding: 3px 9px; font: inherit; font-size: 11px;
@@ -2473,12 +2516,14 @@
   #keyField .settings-link { margin: 0; }
   #keySpaceRow label { display: block; margin: 0 0 4px; }
 
-  /* The update icon (mockup 2): grey, or blue with a red dot while an update
-     is on offer. */
-  #updateBtn { position: relative; }
-  #updateBtn.live { color: var(--primary-ink); }
-  #updateBtn.live::after { content: ""; position: absolute; top: 2px; right: 5px; width: 7px; height: 7px;
-    border-radius: 50%; background: #ef5b5b; border: 1.5px solid var(--desk); }
+  /* The update's red dot (mockup 2), on the Home sidebar's What's new card
+     since the top bar lost its update icon (2026-10-21): there while an
+     update downloads or waits (ui/src/updateWindow.mjs). On the corner, not
+     inside it: "0.8.6 업데이트 준비 완료" runs to the card's edge and the dot sat on
+     its last letter. Ringed in white, the card's own letters. */
+  #homeWhatsNew { position: relative; }
+  #homeWhatsNew.live::after { content: ""; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
+    border-radius: 50%; background: #ef5b5b; border: 1.5px solid #ffffff; }
 
   /* The update window: two columns on the inner panel -- the versions on
      the left with the restart as their one big button, the release's list on

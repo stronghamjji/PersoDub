@@ -602,9 +602,10 @@ test("the update window's restart is the big button in its left column, and the 
   assert.match(foot, /id="updClose" type="button">Close</);
 });
 
-test("the update icon sits left of Settings and opens the update window; the key window ends in a foot", () => {
+test("the update's dot is on the What's new card, not in the top bar; the key window ends in a foot", () => {
   const html = readPage();
-  assert.ok(html.indexOf('id="updateBtn"') < html.indexOf('id="settingsBtn"'));
+  assert.ok(!html.includes('id="updateBtn"'), "the top bar's update icon is gone (2026-10-21)");
+  assert.match(html, /#homeWhatsNew\.live::after \{ content: ""; position: absolute;/);
   assert.match(html, /wireUpdates\(\{ \$, shell: window\.persodubShell \|\| null, releases: `\$\{REPO_URL\}\/releases` \}\);/);
   for (const id of ["updateOverlay", "updClose", "updTitle", "updCurrent", "updNext", "updGo", "updRunning", "updNotesBox", "updNotes", "updNotesLink"]) {
     assert.match(html, new RegExp(`id="${id}"`), id);
@@ -1257,4 +1258,71 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
   // The links open the repo's docs and stay off the page's own "#".
   assert.match(html, /\[\["helpGuide", "usage"\], \["helpFaq", "faq"\]\]/);
   assert.match(html, /e\.preventDefault\(\);\n    window\.open\(`\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
+});
+
+// Windows drew Chromium's stock scrollbar wherever a pane scrolls -- a 17px grey
+// trough with arrow buttons at both ends -- and the system's white title bar over
+// the dark app; the Mac floats a thin bar that goes away and its title bar is
+// left alone (W26, 2026-10-14). Everything here hangs off the data-platform the
+// preload stamps on the page, so the Mac's scrollbars are never styled: styling
+// ::-webkit-scrollbar at all pins them on screen.
+test("on Windows the page draws its own scrollbars and is moved by its top bar; the Mac's stay the system's", () => {
+  const html = readPage();
+  // A rule pinned word for word, the stylesheet's own characters escaped.
+  const rule = (css) => new RegExp(css.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const win = ':root[data-platform="win32"]';
+  assert.match(html, rule(`${win} ::-webkit-scrollbar { width: 8px; height: 8px; }`));
+  assert.match(html, rule(`${win} ::-webkit-scrollbar-track { background: transparent; }`));
+  assert.match(html, rule(`${win} ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }`));
+  assert.match(html, rule(`${win} ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }`));
+  assert.doesNotMatch(html, /^\s*::-webkit-scrollbar/m, "the Mac's scrollbars are never styled");
+  // The bar is what the window is moved by; what is pressed in it still takes
+  // the click; and it stops short of the window buttons the shell lays over it.
+  assert.match(html, rule(`${win} .topbar { -webkit-app-region: drag;\n    padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 12px); }`));
+  assert.match(html, rule(`${win} .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }`));
+  // No system says PersoDub over Home any more (one-line title bar, 2026-10-21).
+  assert.ok(!html.includes(`${win} body[data-screen="home"] .topbar-titles`), "Home's bar names nothing on Windows either");
+  assert.match(html, rule('body[data-screen="home"] .topbar-titles { visibility: hidden; }'));
+});
+
+// One 36px bar on both systems (2026-10-21): the window's own buttons sit in
+// it -- the Mac's lights at the left, Windows' three at the right -- and the
+// stylesheet orders one row of buttons two ways. Home's bar holds neither
+// Settings nor the pane buttons.
+test("the Mac's bar starts after its lights and ends Export, Settings, panes; Windows' starts panes, Settings", () => {
+  const html = readPage();
+  const rule = (css) => new RegExp(css.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const mac = ':root[data-platform="darwin"]';
+  const win = ':root[data-platform="win32"]';
+  assert.match(html, rule(`${mac} .topbar { -webkit-app-region: drag; padding-left: 80px; }`));
+  assert.match(html, rule(`${mac} .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }`));
+  // The bar's row, as written: Settings, the panes, then Export last.
+  const bar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('<div class="shell">'));
+  assert.ok(bar.indexOf('id="settingsBtn"') < bar.indexOf('class="panes"') && bar.indexOf('class="panes"') < bar.indexOf('id="exportBtn"'));
+  // Mac: Settings and the panes after everything at order 0, Export included.
+  assert.match(html, rule(`${mac} .topbar :is(#settingsBtn, .panes) { order: 1; }`));
+  // Windows: the panes, then Settings, ahead of everything else.
+  assert.match(html, rule(`${win} .topbar .panes { order: -2; }`));
+  assert.match(html, rule(`${win} .topbar #settingsBtn { order: -1; }`));
+  assert.match(html, rule('body[data-screen="home"] .topbar :is(#settingsBtn, .panes) { display: none; }'));
+  // The download chip and the way back into a job stay in the bar for Home.
+  assert.ok(bar.includes('id="topbarDl"') && bar.includes('id="topbarForward"'));
+});
+
+// The Dub Agent card heads with the mascot in place of the speech bubble
+// (2026-10-21), as tall as the bubble was; app/api/misc.py serves the picture.
+test("the Dub Agent card heads with the mascot, the bubble's height", () => {
+  const html = readPage();
+  assert.match(html, /<div class="home-agent-head"><img src="\/mascot\.png" alt="">Dub Agent<\/div>/);
+  assert.match(html, /\.home-agent-head img \{ height: 18px; width: auto; display: block; \}/);
+});
+
+// Projects left the Home sidebar's Management group (2026-10-21).
+test("Home's Management group holds Settings alone", () => {
+  const html = readPage();
+  const side = html.slice(html.indexOf('<aside class="home-side"'), html.indexOf('class="home-grow"'));
+  const group = side.slice(side.lastIndexOf('class="home-grp"'));
+  assert.match(group, />Management</);
+  assert.deepEqual([...group.matchAll(/id="(homeNav\w+)"/g)].map((m) => m[1]), ["homeNavSettings"]);
+  assert.ok(!html.includes("homeNavProjects"), "nothing is left of the Projects item");
 });

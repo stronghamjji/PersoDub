@@ -1,14 +1,18 @@
-// The update icon in the top bar and the "Version update" window it opens
-// (mockup key-update-mockup.html sections 2 and 3). The shell downloads a new
+// The update's mark on the Home sidebar's What's new card and the "Version
+// update" window the card opens (mockup key-update-mockup.html sections 2 and
+// 3). The top bar's update icon is gone (one-line title bar, 2026-10-21): the
+// card carries its red dot and, once the update is on disk, says so in its
+// title. The shell downloads a new
 // version in the background and announces {version, phase: "downloading" |
 // "ready", pct, releaseDate?, releaseNotes?} as it goes (desktop/src/updater.js
-// nextUpdateState); this file turns that into what the icon and the window
+// nextUpdateState); this file turns that into what the card and the window
 // show. A shell built before releaseDate/releaseNotes existed sends only the
 // first three -- the window then leaves out the date and links to the release
-// page. Outside the desktop shell nothing is announced and the icon stays grey.
+// page. Outside the desktop shell nothing is announced and the card stays
+// What's new.
 //
-// Everything this file touches is #updateBtn and #updateOverlay.
-import { lucide } from "./icons.mjs";
+// Everything this file touches is #homeWhatsNew (its class and tip, and
+// #homeWhatsNewTitle once the update is ready) and #updateOverlay.
 import { t } from "./i18n.mjs";
 
 // An update exists (found and downloading, or on disk).
@@ -16,10 +20,12 @@ export function updateLive(state) {
   return !!state?.version && (state.phase === "downloading" || state.phase === "ready");
 }
 
-export function updateIconView(state) {
-  return updateLive(state)
-    ? { live: true, title: t("Update available") }
-    : { live: false, title: t("Updates") };
+// The card's dot while an update downloads or waits, and the title it takes
+// once the update is on disk ("" keeps the card's own What's new).
+export function updateCardView(state) {
+  if (!updateLive(state)) return { live: false, tip: "", title: "" };
+  return { live: true, tip: t("Update available"),
+    title: state.phase === "ready" ? t("Update {version} is ready", { version: state.version }) : "" };
 }
 
 // "2026-09-30" in the viewer's own time zone, or "" for a date it cannot read.
@@ -102,11 +108,11 @@ export function updateWindowView(state, { current = "", currentNotes = [], dubRu
 }
 
 /**
- * Wire the icon and the window. `shell` is window.persodubShell or null, and
- * `releases` the releases page the window links to when an update has no notes.
- * The window opens by itself once per session, the first time an update is
- * announced while no other dialog is open; after that only from the icon,
- * or from the `persodub:open-update` event (the Home sidebar's card).
+ * Wire the card's mark and the window. `shell` is window.persodubShell or
+ * null, and `releases` the releases page the window links to when an update
+ * has no notes. The window opens by itself once per session, the first time
+ * an update is announced while no other dialog is open; after that from the
+ * `persodub:open-update` event (the card's click, ui/src/homeSidebar.mjs).
  */
 export function wireUpdates({ $, shell, releases }) {
   let state = null;
@@ -114,15 +120,17 @@ export function wireUpdates({ $, shell, releases }) {
   let currentNotes = [];
   let dubRunning = false;
   let autoShown = false;
-  const btn = $("updateBtn");
+  const card = $("homeWhatsNew");
   const overlay = $("updateOverlay");
-  btn.innerHTML = lucide("circle-arrow-up", 16);
 
-  function paintIcon() {
-    const v = updateIconView(state);
-    btn.classList.toggle("live", v.live);
-    btn.title = v.title;
-    btn.setAttribute("aria-label", v.title);
+  // The "ready" class also tells the sidebar not to put What's new back over
+  // this title when its own answer comes in later (ui/src/homeSidebar.mjs).
+  function paintCard() {
+    const v = updateCardView(state);
+    card.classList.toggle("live", v.live);
+    card.classList.toggle("ready", !!v.title);
+    card.title = v.tip;
+    if (v.title) $("homeWhatsNewTitle").textContent = v.title;
   }
   function paint() {
     const v = updateWindowView(state, { current, currentNotes, dubRunning, releases });
@@ -173,7 +181,6 @@ export function wireUpdates({ $, shell, releases }) {
   }
   function close() { overlay.classList.remove("open"); }
 
-  btn.addEventListener("click", open);
   window.addEventListener("persodub:open-update", open);
   $("updClose").addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
@@ -182,10 +189,10 @@ export function wireUpdates({ $, shell, releases }) {
   });
   $("updGo").addEventListener("click", () => shell?.restartToUpdate?.());
 
-  paintIcon();
+  paintCard();
   const onState = (s) => {
     state = s;
-    paintIcon();
+    paintCard();
     if (overlay.classList.contains("open")) paint();
     else if (!autoShown && updateLive(s) && !document.querySelector(".modal-overlay.open")) {
       autoShown = true;

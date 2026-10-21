@@ -65,10 +65,12 @@
   <!-- ============ TOPBAR ============ -->
   <!-- The window's one bar, 36px across the whole width (new-layout mockup,
        user 2026-09-29): the job's name in the middle, and on the right
-       Settings, the three pane buttons and Export. Home and New project live
-       in the left panel's tab row (owner, 2026-09-30); while that panel is
-       hidden they stand here as two icon buttons, so there is always a way
-       out (placeWaysOut moves them). -->
+       Settings, the three pane buttons and Export. On the Mac and Windows the
+       system's title bar is gone and the window's own buttons sit in this bar;
+       the stylesheet orders the buttons for each (2026-10-21). Home and New
+       project live in the left panel's tab row (owner, 2026-09-30); while that
+       panel is hidden they stand here as two icon buttons, so there is always
+       a way out (placeWaysOut moves them). -->
   <div class="topbar" id="topbar">
     <span class="topbar-ways" id="topbarWays"></span>
     <div class="topbar-titles">
@@ -92,9 +94,6 @@
             aria-label="Back to the project you left" hidden>
       <svg class="lu" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
     </button>
-    <!-- Lit, with a red dot, while an update downloads or waits; opens the
-         update window (ui/src/updateWindow.mjs draws the icon). -->
-    <button class="topbar-icon" id="updateBtn" type="button" title="Updates" aria-label="Updates"></button>
     <button class="topbar-icon" id="settingsBtn" type="button" title="Settings" aria-label="Open settings" data-i18n-title="Settings" data-i18n-aria-label="Open settings">
       <svg class="lu" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
@@ -160,7 +159,6 @@
           <button class="home-nav" id="homeNavSave" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span data-i18n>Save video</span></button>
           <div class="home-sep"></div>
           <div data-i18n class="home-grp">Management</div>
-          <button class="home-nav" id="homeNavProjects" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></svg><span data-i18n>Projects</span></button>
           <button class="home-nav" id="homeNavSettings" type="button"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg><span data-i18n>Settings</span></button>
           <div class="home-grow"></div>
           <button class="home-fb" id="homeHelp" type="button"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>Help</button>
@@ -196,7 +194,7 @@
                sentence in the agent's box without sending it. -->
           <div class="home-cards">
             <div class="home-card home-agent-card" id="homeAgentCard">
-              <div class="home-agent-head"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Dub Agent</div>
+              <div class="home-agent-head"><img src="/mascot.png" alt="">Dub Agent</div>
               <div data-i18n class="home-agent-q">Let the agent do it</div>
               <div class="home-chips">
                 <button data-i18n class="home-chip" type="button" data-prompt="Korean dubbing for this link">Korean dubbing for this link</button>

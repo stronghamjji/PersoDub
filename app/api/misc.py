@@ -140,6 +140,13 @@ def perso_logo():
                         media_type="image/svg+xml")
 
 
+@router.get("/mascot.png")
+def mascot():
+    """The mascot (static/mascot.png), at the head of the Home screen's Dub Agent card."""
+    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "static", "mascot.png"),
+                        media_type="image/png")
+
+
 # The interface's own fonts (static/fonts: fonts.css and its woff2 files), so
 # the page looks the same with no network. A name only, never a path.
 _FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "static", "fonts")

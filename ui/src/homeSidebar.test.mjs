@@ -4,14 +4,15 @@ import assert from "node:assert/strict";
 import { homeAgentHidden, initHomeSidebar, openHomeAgent, whatsNewTitle } from "./homeSidebar.mjs";
 
 function makeEl(id) {
+  const classes = new Set();
   return {
-    id, value: "", textContent: "", dataset: {}, listeners: {}, focused: false, events: [], scrolled: null,
+    id, value: "", textContent: "", dataset: {}, listeners: {}, focused: false, events: [],
+    classList: { add: (c) => classes.add(c), contains: (c) => classes.has(c) },
     addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); },
     fire(ev, arg) { for (const fn of this.listeners[ev] || []) fn(arg); },
     click() { this.fire("click"); },
     dispatchEvent(e) { this.events.push(e.type); },
     focus() { this.focused = true; },
-    scrollIntoView(opts) { this.scrolled = opts; },
   };
 }
 
@@ -83,13 +84,13 @@ test("the tool items and the four tool cards open the same four ways in", (t) =>
   assert.deepEqual(h.log.calls, ["dub", "audio", "erase", "save", "dub", "audio", "erase", "save"]);
 });
 
-test("Settings opens the dialog with no section named, and Projects scrolls to the grid", (t) => {
+// Projects left the Management group (2026-10-21); Settings is its one item.
+test("Settings opens the dialog with no section named, and Projects is not wired", (t) => {
   const h = harness();
   t.after(h.log.restore);
   h.$("homeNavSettings").fire("click", { type: "click" });
-  h.$("homeNavProjects").fire("click");
   assert.deepEqual(h.log.calls, ["settings(0)"]);
-  assert.equal(h.$("projectsHead").scrolled.block, "start");
+  assert.equal(h.$("homeNavProjects").listeners.click, undefined);
 });
 
 test("Help opens the Help dialog and nothing else", (t) => {
@@ -107,6 +108,23 @@ test("the What's new card asks the update window to open, and names the version"
   assert.deepEqual(h.log.events, ["persodub:open-update"]);
   await new Promise((r) => setImmediate(r));
   assert.equal(h.$("homeWhatsNewTitle").textContent, "What’s new in 0.7.1");
+});
+
+// The update module may have named a downloaded update on the card before
+// the running version's answer came in; that answer does not write over it.
+test("the What's new card keeps an update's ready title", async (t) => {
+  const els = new Map();
+  const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
+  $("homeWhatsNew").classList.add("ready");
+  $("homeWhatsNewTitle").textContent = "Update 0.8.6 is ready";
+  const realWindow = globalThis.window;
+  globalThis.window = { dispatchEvent() {} };
+  t.after(() => { globalThis.window = realWindow; });
+  const none = () => {};
+  initHomeSidebar({ $, body: makeBody("home"), repoUrl: "", persoUrl: () => "", openUrl: none, onDubbing: none,
+    onErase: none, onSaveVideo: none, onSettings: none, onHelp: none, loadWhatsNew: async () => ({ version: "0.8.5" }) });
+  await new Promise((r) => setImmediate(r));
+  assert.equal($("homeWhatsNewTitle").textContent, "Update 0.8.6 is ready");
 });
 
 test("a build with no version number says just What's new", () => {
