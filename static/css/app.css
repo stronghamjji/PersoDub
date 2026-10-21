@@ -375,8 +375,8 @@
      clicked, and the field it becomes is the same size in the same place so
      the bar does not move (user, 2026-09-10). 12px and dim, the way a window
      names itself. */
-  /* Home has no project to name, and the window's own title bar already says
-     PersoDub: saying it twice, one above the other, read as a mistake. */
+  /* Home has no project to name, and the bar says PersoDub on no system
+     (one-line title bar, 2026-10-21). */
   body[data-screen="home"] .topbar-titles { visibility: hidden; }
   .topbar-title { font-size: 11px; font-weight: 400; color: var(--muted-foreground);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -411,12 +411,27 @@
      is what the window is moved by; what is pressed in it -- its buttons, the
      name while it is being renamed -- still takes the click; and it stops
      short of the window buttons by the width Chromium reports for the bar it
-     left free. And with no system bar saying PersoDub over Home, Home's bar
-     says it (W26, 2026-10-14). */
+     left free (W26, 2026-10-14). */
   :root[data-platform="win32"] .topbar { -webkit-app-region: drag;
     padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 12px); }
   :root[data-platform="win32"] .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }
-  :root[data-platform="win32"] body[data-screen="home"] .topbar-titles { visibility: visible; }
+  /* The Mac's system bar went too (2026-10-21): its three lights sit in this
+     bar's left end, centred in its height (windowFactory.js
+     trafficLightPosition). So here too the bar is what the window is moved
+     by, and it starts after the lights. */
+  :root[data-platform="darwin"] .topbar { -webkit-app-region: drag; padding-left: 80px; }
+  :root[data-platform="darwin"] .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }
+  /* One bar, two layouts (2026-10-21), the name centred in both. The Mac's
+     right end reads Export, Settings, the pane buttons; Windows starts with
+     the pane buttons and Settings at the left, so Export is the last thing
+     before its window buttons. */
+  :root[data-platform="darwin"] .topbar :is(#settingsBtn, .panes) { order: 1; }
+  :root[data-platform="win32"] .topbar .panes { order: -2; }
+  :root[data-platform="win32"] .topbar #settingsBtn { order: -1; }
+  /* Home's bar holds only what comes and goes -- the download chip, the way
+     back into the job just left -- beside the window's buttons: no Settings
+     (Home's sidebar has it) and no pane buttons (2026-10-21). */
+  body[data-screen="home"] .topbar :is(#settingsBtn, .panes) { display: none; }
   /* The mockup's Export: 22px high, capitals 8px tall (11px words). */
   #exportBtn { height: 22px; min-width: 67px; padding: 0 10px; border-radius: 5px;
     font-size: 11px; font-weight: 600; }

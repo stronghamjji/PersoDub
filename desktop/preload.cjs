@@ -9,8 +9,9 @@ const REPO_ARG = "--persodub-repo=";
 const LOCALE_ARG = "--persodub-locale=";
 // And which system the window is on ("win32", "darwin"), the same way. Stamped
 // on the page as data-platform before its stylesheet is read, so Windows gets
-// its own scrollbars and title bar drawn (static/css/app.css) and the Mac keeps
-// the system's. The preload runs before the page has an element to stamp when
+// its own scrollbars drawn (static/css/app.css) and the Mac keeps the system's,
+// and the page's top bar makes room for each one's window buttons (2026-10-21).
+// The preload runs before the page has an element to stamp when
 // the document is still empty; then it waits for one.
 const PLATFORM_ARG = "--persodub-platform=";
 const platform = process.argv.find((a) => a.startsWith(PLATFORM_ARG))?.slice(PLATFORM_ARG.length) || "";

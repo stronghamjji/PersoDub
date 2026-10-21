@@ -1280,8 +1280,33 @@ test("on Windows the page draws its own scrollbars and is moved by its top bar; 
   // the click; and it stops short of the window buttons the shell lays over it.
   assert.match(html, rule(`${win} .topbar { -webkit-app-region: drag;\n    padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 12px); }`));
   assert.match(html, rule(`${win} .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }`));
-  // Home hides the name because the system's bar says PersoDub; on Windows nothing else does.
-  assert.match(html, rule(`${win} body[data-screen="home"] .topbar-titles { visibility: visible; }`));
+  // No system says PersoDub over Home any more (one-line title bar, 2026-10-21).
+  assert.ok(!html.includes(`${win} body[data-screen="home"] .topbar-titles`), "Home's bar names nothing on Windows either");
+  assert.match(html, rule('body[data-screen="home"] .topbar-titles { visibility: hidden; }'));
+});
+
+// One 36px bar on both systems (2026-10-21): the window's own buttons sit in
+// it -- the Mac's lights at the left, Windows' three at the right -- and the
+// stylesheet orders one row of buttons two ways. Home's bar holds neither
+// Settings nor the pane buttons.
+test("the Mac's bar starts after its lights and ends Export, Settings, panes; Windows' starts panes, Settings", () => {
+  const html = readPage();
+  const rule = (css) => new RegExp(css.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const mac = ':root[data-platform="darwin"]';
+  const win = ':root[data-platform="win32"]';
+  assert.match(html, rule(`${mac} .topbar { -webkit-app-region: drag; padding-left: 80px; }`));
+  assert.match(html, rule(`${mac} .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }`));
+  // The bar's row, as written: Settings, the panes, then Export last.
+  const bar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('<div class="shell">'));
+  assert.ok(bar.indexOf('id="settingsBtn"') < bar.indexOf('class="panes"') && bar.indexOf('class="panes"') < bar.indexOf('id="exportBtn"'));
+  // Mac: Settings and the panes after everything at order 0, Export included.
+  assert.match(html, rule(`${mac} .topbar :is(#settingsBtn, .panes) { order: 1; }`));
+  // Windows: the panes, then Settings, ahead of everything else.
+  assert.match(html, rule(`${win} .topbar .panes { order: -2; }`));
+  assert.match(html, rule(`${win} .topbar #settingsBtn { order: -1; }`));
+  assert.match(html, rule('body[data-screen="home"] .topbar :is(#settingsBtn, .panes) { display: none; }'));
+  // The download chip and the way back into a job stay in the bar for Home.
+  assert.ok(bar.includes('id="topbarDl"') && bar.includes('id="topbarForward"'));
 });
 
 // The Dub Agent card heads with the mascot in place of the speech bubble

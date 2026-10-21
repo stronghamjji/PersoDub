@@ -59,21 +59,27 @@ test("the window opens at 1280 by 800, or at the screen's size when that is smal
 
 // Windows hung its white system title bar over the dark app, with the app's own
 // 36px bar right under it (W26, 2026-10-14). There the system bar is hidden and
-// the window's three buttons are drawn over the page's bar in the app's colours;
-// the Mac's bar is the system's and stays as it is.
-test("on Windows the window draws its own title bar in the app's colours; the Mac keeps the system's", () => {
+// the window's three buttons are drawn over the page's bar in the app's colours.
+// The Mac's system bar went too (2026-10-21): its lights sit in the page's 36px
+// bar, centred in its height. Linux keeps the system's.
+test("Windows draws its buttons over the page's bar, the Mac's lights sit centred in it, Linux keeps the system's", () => {
   const win = setup({ platform: "win32" }).win.options;
   assert.equal(win.titleBarStyle, "hidden");
   assert.deepEqual(win.titleBarOverlay, { color: "#0e131b", symbolColor: "#eaf0fd", height: 36 });
+  assert.equal(win.trafficLightPosition, undefined);
   assert.ok(win.webPreferences.additionalArguments.includes("--persodub-platform=win32"));
   const mac = setup({ platform: "darwin" }).win.options;
-  assert.equal(mac.titleBarStyle, undefined);
+  assert.equal(mac.titleBarStyle, "hiddenInset");
+  assert.deepEqual(mac.trafficLightPosition, { x: 12, y: 10 });
   assert.equal(mac.titleBarOverlay, undefined);
   assert.ok(mac.webPreferences.additionalArguments.includes("--persodub-platform=darwin"));
+  const linux = setup({ platform: "linux" }).win.options;
+  assert.equal(linux.titleBarStyle, undefined);
+  assert.equal(linux.trafficLightPosition, undefined);
 });
 
-// With the system bar gone on Windows, the page has to say what the window is
-// moved by. The app's page marks its top bar (static/css/app.css, by the
+// With the system bar gone on Windows and the Mac, the page has to say what the
+// window is moved by. The app's page marks its top bar (static/css/app.css, by the
 // data-platform the preload stamps on the page); the bundled screens, which
 // have no bar, take a strip along their top edge.
 test("the preload stamps the system on the page, and the bundled screens can be dragged by their top edge", () => {

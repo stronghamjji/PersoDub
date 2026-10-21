@@ -41,9 +41,17 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
     // hidden and the window's three buttons are drawn over the page's bar in
     // the desk's colours (static/css/app.css --desk, --foreground), the bar's
     // height; the page marks its bar as what the window is moved by (the
-    // data-platform below). The Mac's bar is the system's and stays.
+    // data-platform below).
     ...(platform === "win32"
       ? { titleBarStyle: "hidden", titleBarOverlay: { color: "#0e131b", symbolColor: "#eaf0fd", height: 36 } }
+      : {}),
+    // The Mac's system bar goes too, so both systems show one 36px bar
+    // (2026-10-21): the three lights sit in the page's bar, which starts
+    // after them (static/css/app.css). trafficLightPosition is where their
+    // 16px-tall row starts, so y = (36 - 16) / 2 = 10 centres them in it,
+    // and x = 12 matches the bar's own 12px left edge.
+    ...(platform === "darwin"
+      ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 12, y: (36 - 16) / 2 } }
       : {}),
     width: Math.min(1280, room.width),
     height: Math.min(800, room.height),
@@ -59,7 +67,8 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
       // page reads as persodubShell.locale for a language setting of Auto.
       // And which system this is ("win32", "darwin"), which preload.cjs stamps
       // on the page as data-platform: the stylesheet draws Windows' scrollbars
-      // and title bar itself and leaves the Mac's to the system.
+      // itself and leaves the Mac's to the system, and makes its top bar what
+      // the window is moved by on both.
       additionalArguments: [`--persodub-repo=${repo}`, `--persodub-locale=${locale}`, `--persodub-platform=${platform}`],
     },
   });

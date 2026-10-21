@@ -1,7 +1,9 @@
 <!doctype html><meta charset="utf-8"><title>PersoDub</title>
 <style>
-  /* On Windows the shell hides the system title bar (src/windowFactory.js), so a
-     strip along the top edge is what this screen is moved by. */
+  /* On Windows and the Mac the shell hides the system title bar
+     (src/windowFactory.js), so a strip along the top edge is what this screen
+     is moved by. The Mac's lights sit in its left end, 12px in, well clear of
+     the mark 60px down in the centred column (2026-10-21). */
   .drag { position: fixed; top: 0; left: 0; right: 0; height: 36px; -webkit-app-region: drag; }
   /* The same shape as installing.html and not-installed.html: the mark and the
      name centred at the top, everything the screen has to say ranged left in a
