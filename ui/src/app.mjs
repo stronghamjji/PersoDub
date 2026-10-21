@@ -653,6 +653,10 @@ const eraseScreen = initEraseScreenUi({
     projects.renderHistory().catch(() => {});
     projects.renderQueueCard().catch(() => {});
   },
+  // From the start of its erase a video's card on Home is that erase's own
+  // ("Erasing", then "Erased" or "Failed"): its Draft card goes, and the
+  // video is not kept as a draft again.
+  onEraseStarted: (downloadId) => { erasing.add(downloadId); forgetDraft(downloadId); },
   // The way on from an erased video: a new project on the cleaned file rather
   // than the one with the writing still on it, on its Dubbing tab.
   onDub: (held) => openDraftHere({ downloadId: held.downloadId, name: held.title,
@@ -1323,11 +1327,19 @@ const home = initHomeScreen({
 // and Home shows it as a "Draft" card that opens it again with its cuts. It
 // is let go when it is dubbed, deleted, or its video is no longer there.
 let keptDrafts = readKept(localStorage);
+// The videos an erase was started on in this run: that erase's own card
+// stands for each on Home, so none is kept as a draft again (2026-10-21).
+const erasing = new Set();
 function rememberDraft() {
   const d = getDraft();
   // A video held beside an open project (its Erase tab's) is not a draft.
-  if (!d || !d.downloadId || state.jobId) return;
-  keptDrafts = keepDraft(localStorage, d, keptDrafts);
+  if (!d || !d.downloadId || state.jobId || erasing.has(d.downloadId)) return;
+  // The tab it is on, so its card says what it was being made into and
+  // opens there again. Home is a card being opened: it keeps the one it had.
+  const screen = document.body.dataset.screen;
+  const tab = screen === "erase" ? "erase" : screen === "home"
+    ? (keptDrafts.find((k) => k.downloadId === d.downloadId) || {}).tab : leftTabs.current();
+  keptDrafts = keepDraft(localStorage, { ...d, tab }, keptDrafts);
   home.renderDrafts(keptDrafts);
 }
 function forgetDraft(downloadId) {
@@ -1364,8 +1376,10 @@ async function reopenDraft(downloadId) {
     newProject.startOnDefaults().then(draftSetup.paint, () => {});
   }
   $("draftError").textContent = "";
+  // On the tab it was left on (2026-10-21): the Erase tab is a screen of its own.
+  if (kept.tab === "erase") { eraseScreen.openEraseTab(); return; }
   draftSetup.showDraftScreen();
-  leftTabs.show("dubbing");
+  leftTabs.show(kept.tab);
 }
 // At launch: each kept draft's video is held again, so its card has a picture
 // and opens at once; one whose file is gone is let go without a word.

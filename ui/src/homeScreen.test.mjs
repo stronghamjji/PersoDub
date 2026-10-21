@@ -337,6 +337,27 @@ test("a kept draft is the first card: marked Draft, with how much its cuts kept"
   assert.doesNotMatch(h.$("projectsGrid").innerHTML, /No projects yet/);
 });
 
+// A draft left on the Erase tab read "Not dubbed yet" (2026-10-21).
+test("a draft left on the Erase or Audio tab says what it was being made into, the erase one with the eraser", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const audio = { ...KEPT[0], downloadId: "0a1b2c3e", name: "talk.mp4", tab: "audio" };
+  h.api.renderDrafts([{ ...KEPT[0], tab: "erase" }, audio]);
+  const html = h.$("projectsGrid").innerHTML;
+  const erase = html.slice(html.indexOf('data-draft="0a1b2c3d"'), html.indexOf('data-draft="0a1b2c3e"'));
+  assert.match(erase, /<span class="proj-kind" title="Erase subtitles"><svg viewBox="0 0 24 24" width="12" height="12">/);
+  assert.match(erase, /<span class="proj-chip proj-chip-muted">Draft<\/span>/);
+  assert.match(erase, /<div class="proj-meta">Erase subtitles · Not finished<\/div>/);
+  const sep = html.slice(html.indexOf('data-draft="0a1b2c3e"'));
+  assert.doesNotMatch(sep, /proj-kind/);
+  assert.match(sep, /<div class="proj-meta">Separate audio · Not finished<\/div>/);
+  // The same draft moved to Dubbing is drawn again with its own words.
+  h.api.renderDrafts([{ ...KEPT[0], tab: "dubbing" }, audio]);
+  const again = h.$("projectsGrid").innerHTML;
+  assert.doesNotMatch(again.slice(0, again.indexOf('data-draft="0a1b2c3e"')), /proj-kind/);
+  assert.match(again, /data-draft="0a1b2c3d"[^]*?<div class="proj-meta">Not dubbed yet<\/div>/);
+});
+
 test("a press on a draft card opens that draft, and its menu has Delete alone", async (t) => {
   const h = harness();
   t.after(h.log.restore);

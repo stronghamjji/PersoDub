@@ -1122,8 +1122,13 @@ test("a draft is kept when it changes and when it is left, and let go when it is
   assert.match(html, /onDraftChange\(rememberDraft\);/);
   assert.match(html, /function resetForNewJob\(\) \{\n[^}]*?rememberDraft\(\);\n[^}]*?if \(state\.jobId && getDraft\(\)\) clearDraft\(\);/,
     "kept before the screen is left; a video held beside a project goes with that project");
-  // Not a draft: the video an open project's Erase tab holds.
-  assert.match(html, /if \(!d \|\| !d\.downloadId \|\| state\.jobId\) return;\n  keptDrafts = keepDraft\(localStorage, d, keptDrafts\);/);
+  // Not a draft: the video an open project's Erase tab holds, nor one whose
+  // erase was started this run (its erase's card stands for it, 2026-10-21).
+  assert.match(html, /if \(!d \|\| !d\.downloadId \|\| state\.jobId \|\| erasing\.has\(d\.downloadId\)\) return;/);
+  assert.match(html, /onEraseStarted: \(downloadId\) => \{ erasing\.add\(downloadId\); forgetDraft\(downloadId\); \},/);
+  // Kept with the tab it is on, and opened there again; Home keeps the one it had.
+  assert.match(html, /const tab = screen === "erase" \? "erase" : screen === "home"\n    \? \(keptDrafts\.find\(\(k\) => k\.downloadId === d\.downloadId\) \|\| \{\}\)\.tab : leftTabs\.current\(\);\n  keptDrafts = keepDraft\(localStorage, \{ \.\.\.d, tab \}, keptDrafts\);/);
+  assert.match(html, /if \(kept\.tab === "erase"\) \{ eraseScreen\.openEraseTab\(\); return; \}\n  draftSetup\.showDraftScreen\(\);\n  leftTabs\.show\(kept\.tab\);\n\}/);
   assert.match(html, /const started = await submitDubStart\(o\);\n    if \(started && d\) forgetDraft\(d\.downloadId\);/);
   // The delete question is ui/src/confirmDialogs.mjs's, written one level in.
   assert.match(readFileSync(CONFIRMS, "utf8"), /if \(job\.draftId\) \{\n      forgetDraft\(job\.draftId\);/);
