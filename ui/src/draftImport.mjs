@@ -40,7 +40,7 @@ const STATUS_IDS = ["dubbingImportStatus", "audioImportStatus"];
  * @param {(file: File) => string|null} [deps.checkFile]  the app's one rule
  *        about which files it takes: why not, or null
  * @returns {{ render: () => void, importSource: (source: {file?, link?,
- *   downloadId?, name?, duration?}) => Promise<void>, cancelImport: () => void,
+ *   onReady?, downloadId?, name?, duration?}) => Promise<void>, cancelImport: () => void,
  *   say: (text: string, isError?: boolean) => void }}
  */
 export function initDraftImport({ $, state = {}, getScreen = () => "done",
@@ -128,7 +128,9 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
     setDraft({ downloadId: rec.id, name: file.name, duration, videoUrl: downloadVideoUrl(rec.id) });
   }
 
-  async function holdLink(url) {
+  // `onReady` is told once this link's video is the draft: never when the
+  // link is let go first (another video brought in, the draft let go, Home).
+  async function holdLink(url, onReady = null) {
     // A paste starts the link by itself, and an Enter out of habit follows a
     // moment later: the same link already on its way is not fetched twice
     // (the erase screen's takeLink has the same check).
@@ -155,6 +157,7 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
         linkOnItsWay = "";
         setStatus("");
         setDraft({ downloadId: d.id, name: d.title || url, duration: d.duration_sec || 0, videoUrl: downloadVideoUrl(d.id) });
+        if (onReady) onReady();
         return;
       }
       setStatus(d.status === "probing" ? t("Reading the link…") : t("Downloading… {percent}%", { percent: d.percent || 0 }));
@@ -170,7 +173,7 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
       return;
     }
     if (source.file) return holdFile(source.file);
-    if (source.link) return holdLink(source.link);
+    if (source.link) return holdLink(source.link, source.onReady);
   }
 
   // ---- the confirm dialog: importing a second video replaces the first -----

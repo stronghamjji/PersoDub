@@ -26,7 +26,7 @@ import { initNewProjectUi } from "./newProject.mjs";
 import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "./eraseScreen.mjs";
 import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
-import { initHomeSidebar, homeAgentHidden, openHomeAgent } from "./homeSidebar.mjs";
+import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -560,6 +560,8 @@ function showHome() {
   // other dubbing's language.
   state.draftFromJob = null;
   state.draftProject = null;
+  // A Save video press is for the link pasted on that visit to Home only.
+  saveVideoNext = false;
   paintDraftBack();
   showScreen("home");
   setTopbar({ title: "PersoDub", subtitle: t("Local dubbing") });
@@ -965,6 +967,9 @@ wireUpdates({ $, shell: window.persodubShell || null, releases: `${REPO_URL}/rel
 // leaving Home, makes an answer still on its way nobody's.
 let probeTimer = null;
 let probeSeq = 0;
+// Save video was pressed: the link read next opens the Export dialog by
+// itself once its video is in (2026-10-21). Home clears it (showHome).
+let saveVideoNext = false;
 function clearLink() {
   clearTimeout(probeTimer);
   probeSeq += 1;
@@ -1036,8 +1041,12 @@ $("linkInput").addEventListener("input", () => {
       state.linkProbe = { url, ...info };
       renderLinkCard(info);
       // A read link opens straight into its own draft, already on the
-      // timeline -- the same shortcut a single dropped file gets.
-      draftSetup.openDraft({ link: url });
+      // timeline -- the same shortcut a single dropped file gets. After Save
+      // video, Export opens on its own, Video ticked, when this link's video
+      // is in (onReady is told by the importer for this link alone).
+      const save = saveVideoNext;
+      saveVideoNext = false;
+      draftSetup.openDraft({ link: url, onReady: save ? () => exportDialog.open(["video"]) : null });
     } catch (e) {
       if (probeIsStale(mySeq)) return;
       renderLinkError(errorText(e));
@@ -1366,8 +1375,9 @@ initHomeSidebar({
   onErase: () => eraseScreen.openErase(),
   // An empty new project, on its Audio tab.
   onAudio: () => draftSetup.openDraft(null, { tab: "audio" }),
-  // A link pasted into the banner is how a video gets saved.
-  onSaveVideo: () => { $("linkInput").scrollIntoView({ block: "nearest" }); $("linkInput").focus(); },
+  // A link pasted into the banner is how a video gets saved: the field is
+  // pointed at, and the link pasted next opens Export once it is in.
+  onSaveVideo: () => { pointAtLink($); saveVideoNext = true; },
   onSettings: () => settings.openSettings(),
   onHelp: () => openHelp(),
   loadWhatsNew: async () => (await fetch("/api/whats-new")).json(),

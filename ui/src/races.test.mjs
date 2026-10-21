@@ -52,7 +52,7 @@ test("Home's link, read after a project was opened or the field emptied, opens n
   assert.match(html, /const probeIsStale = \(mySeq\) => mySeq !== probeSeq \|\| document\.body\.dataset\.screen !== "home";/);
   const at = html.indexOf("const info = await probeSource(url);");
   const after = html.slice(at, html.indexOf("}, 400);", at));
-  before(after, "if (probeIsStale(mySeq)) return;", "draftSetup.openDraft({ link: url })", "asked before the draft is opened");
+  before(after, "if (probeIsStale(mySeq)) return;", "draftSetup.openDraft({ link: url", "asked before the draft is opened");
   assert.equal(after.split("probeIsStale(mySeq)").length - 1, 2, "and before the error card is drawn");
   assert.match(fn("clearLink"), /probeSeq \+= 1;/, "emptying the field makes a reading under way stale");
 });

@@ -1003,6 +1003,18 @@
   /* One focus ring, the field's own: none around the words. The icon stays
      beside the words, focused or not; a click anywhere in the field types. */
   .home-banner-linkin input:focus, .home-banner-linkin input:focus-visible { outline: none; box-shadow: none; }
+  /* Save video points at the field (2026-10-21): its ring blinks white twice,
+     then the caret is there. With less motion asked for, the ring stands
+     still for that second instead. ui/src/linkField.mjs askForLink puts the
+     mark on and takes it off. */
+  @keyframes link-ask {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(11, 18, 32, 0.5); }
+    50% { box-shadow: 0 0 0 2px rgba(11, 18, 32, 0.5), 0 0 0 5px #ffffff, 0 0 16px 6px rgba(255, 255, 255, 0.6); }
+  }
+  .home-banner-linkin.link-field.ask { animation: link-ask 0.5s ease-in-out 2; }
+  @media (prefers-reduced-motion: reduce) {
+    .home-banner-linkin.link-field.ask { animation: none; box-shadow: 0 0 0 2px rgba(11, 18, 32, 0.5), 0 0 0 5px #ffffff; }
+  }
 
   /* The row under the banner: the Dub Agent wider, then the three tools.
      Two by two when the column is narrow (the agent open beside it). */

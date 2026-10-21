@@ -1,18 +1,19 @@
 // Run with: node --test ui/src/homeSidebar.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { homeAgentHidden, initHomeSidebar, openHomeAgent, whatsNewTitle } from "./homeSidebar.mjs";
+import { homeAgentHidden, initHomeSidebar, openHomeAgent, pointAtLink, whatsNewTitle } from "./homeSidebar.mjs";
 
 function makeEl(id) {
   const classes = new Set();
   return {
     id, value: "", textContent: "", dataset: {}, listeners: {}, focused: false, events: [],
-    classList: { add: (c) => classes.add(c), contains: (c) => classes.has(c) },
+    classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
     addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); },
     fire(ev, arg) { for (const fn of this.listeners[ev] || []) fn(arg); },
     click() { this.fire("click"); },
     dispatchEvent(e) { this.events.push(e.type); },
     focus() { this.focused = true; },
+    scrollIntoView(opts) { this.scrolled = opts; },
   };
 }
 
@@ -82,6 +83,37 @@ test("the tool items and the four tool cards open the same four ways in", (t) =>
     h.$(id).fire("click", {});
   }
   assert.deepEqual(h.log.calls, ["dub", "audio", "erase", "save", "dub", "audio", "erase", "save"]);
+});
+
+// A caret alone in the banner's field read as nothing happening (2026-10-21).
+test("Save video blinks the banner's link field twice, puts the caret in it and says what a link becomes", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const els = new Map();
+  const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
+  // What the card said last time (a link that was not one) goes.
+  $("linkCard").hidden = true;
+  $("linkCard").classList.add("error");
+  pointAtLink($);
+  assert.equal($("linkInput").focused, true);
+  assert.deepEqual($("linkInput").scrolled, { block: "nearest" });
+  assert.equal($("homeBannerLink").classList.contains("ask"), true);
+  assert.equal($("linkCard").hidden, false);
+  assert.equal($("linkCard").classList.contains("error"), false);
+  assert.equal($("linkCard").innerHTML,
+    '<p class="lc-msg">Paste a link and the video is fetched to this computer. Then Export saves it.</p>');
+  // The mark is off once the two blinks are over...
+  t.mock.timers.tick(999);
+  assert.equal($("homeBannerLink").classList.contains("ask"), true);
+  t.mock.timers.tick(1);
+  assert.equal($("homeBannerLink").classList.contains("ask"), false);
+  // ...and a second press in the middle blinks a full second from then.
+  pointAtLink($);
+  t.mock.timers.tick(600);
+  pointAtLink($);
+  t.mock.timers.tick(600);
+  assert.equal($("homeBannerLink").classList.contains("ask"), true);
+  t.mock.timers.tick(400);
+  assert.equal($("homeBannerLink").classList.contains("ask"), false);
 });
 
 // Projects left the Management group (2026-10-21); Settings is its one item.

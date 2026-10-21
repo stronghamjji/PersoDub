@@ -324,6 +324,48 @@ test("a link still coming down when another project opens on a held video does n
   log.restore();
 });
 
+// Save video's Export opens on this (2026-10-21): only for the link it was
+// handed with, and only once that link's video is the draft.
+test("a link's onReady is told once, when its video is the draft", async () => {
+  const link = slowLink();
+  const { api, log } = harness({ responses: link.responses });
+  api.render();
+  let told = 0;
+  await api.importSource({ link: "https://example.com/a", onReady: () => { told += 1; } });
+  await log.tick();
+  assert.equal(told, 0, "not while it is coming down");
+  link.finish();
+  await log.tick();
+  assert.equal(getDraft().downloadId, "dlA");
+  assert.equal(told, 1);
+  await log.tick();
+  assert.equal(told, 1);
+  log.restore();
+});
+
+test("a link let go for another one never tells its onReady", async () => {
+  const link = slowLink();
+  const { api, log } = harness({ responses: {
+    ...link.responses,
+    // Link a is dlA, still coming down; link b is dlB, in at once.
+    "/api/downloads": (url, init) => ok({ id: JSON.parse(init.body).url.endsWith("/b") ? "dlB" : "dlA" }),
+    "/api/downloads/dlB": ok({ status: "ready", id: "dlB", title: "video B", duration_sec: 5 }),
+  } });
+  api.render();
+  let told = 0;
+  await api.importSource({ link: "https://example.com/a", onReady: () => { told += 1; } });
+  await log.tick();
+  // Another link pasted into the Dubbing tab's block while the first comes down.
+  await api.importSource({ link: "https://example.com/b" });
+  await log.tick();
+  assert.equal(getDraft().downloadId, "dlB");
+  link.finish();
+  await log.tick();
+  assert.equal(getDraft().downloadId, "dlB", "a's video never lands");
+  assert.equal(told, 0);
+  log.restore();
+});
+
 test("a link still coming down when the draft is let go makes no draft, and its progress line goes", async () => {
   const link = slowLink();
   const { $, api, log } = harness({ responses: link.responses });

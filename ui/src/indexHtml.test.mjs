@@ -1326,3 +1326,18 @@ test("Home's Management group holds Settings alone", () => {
   assert.deepEqual([...group.matchAll(/id="(homeNav\w+)"/g)].map((m) => m[1]), ["homeNavSettings"]);
   assert.ok(!html.includes("homeNavProjects"), "nothing is left of the Projects item");
 });
+
+// Save video read as doing nothing (2026-10-21): the banner's link field
+// blinks white twice (a still ring with less motion asked for), and the link
+// read next opens Export by itself, Video ticked, once that link's own video
+// is in. The press is for that visit to Home: Home clears it.
+test("Save video points at the banner's link field, and the link read next opens Export once its video is in", () => {
+  const html = readPage();
+  assert.match(html, /onSaveVideo: \(\) => \{ pointAtLink\(\$\); saveVideoNext = true; \},/);
+  assert.equal(html.match(/saveVideoNext = true/g).length, 1, "nothing else raises it");
+  assert.match(html, /const save = saveVideoNext;\n\s*saveVideoNext = false;\n\s*draftSetup\.openDraft\(\{ link: url, onReady: save \? \(\) => exportDialog\.open\(\["video"\]\) : null \}\);/);
+  const home = html.slice(html.indexOf("function showHome() {"), html.indexOf("async function openLastScreen()"));
+  assert.match(home, /\n  saveVideoNext = false;\n/);
+  assert.match(html, /\.home-banner-linkin\.link-field\.ask \{ animation: link-ask 0\.5s ease-in-out 2; \}/);
+  assert.match(html, /@media \(prefers-reduced-motion: reduce\) \{\n    \.home-banner-linkin\.link-field\.ask \{ animation: none; box-shadow: 0 0 0 2px rgba\(11, 18, 32, 0\.5\), 0 0 0 5px #ffffff; \}/);
+});
