@@ -11,14 +11,27 @@ function storage(initial = {}) {
 const DRAFT = { downloadId: "0a1b2c3d", name: "street-food.mp4", duration: 52.6, videoUrl: "/v",
                 onTimeline: true, ranges: [[0, 20], [31.6, 52.6]], ratio: "9:16" };
 
-test("a kept draft is its video, its name, its length, its cuts and its shape", () => {
+test("a kept draft is its video, its name, its length, its cuts, its shape and its tab", () => {
   const s = storage();
   assert.deepEqual(readKept(s), []);
-  const kept = keepDraft(s, DRAFT);
+  const kept = keepDraft(s, { ...DRAFT, tab: "erase" });
   assert.deepEqual(kept, [{ downloadId: "0a1b2c3d", name: "street-food.mp4", duration: 52.6,
-                            ranges: [[0, 20], [31.6, 52.6]], ratio: "9:16" }]);
+                            ranges: [[0, 20], [31.6, 52.6]], ratio: "9:16", tab: "erase" }]);
   // Read back the same from storage, as the next launch reads it.
   assert.deepEqual(readKept(s), kept);
+});
+
+// The tab says what the draft was being made into (2026-10-21). One kept
+// before there was a tab, or with any other, was on Dubbing.
+test("a draft's tab is Dubbing, Audio or Erase; none or any other is Dubbing", () => {
+  const tabOf = (tab) => keepDraft(storage(), { ...DRAFT, tab })[0].tab;
+  assert.equal(tabOf("audio"), "audio");
+  assert.equal(tabOf("erase"), "erase");
+  assert.equal(tabOf(undefined), "dubbing");
+  assert.equal(tabOf("captions"), "dubbing");
+  const old = readKept(storage({ "persodub.drafts": JSON.stringify([{ downloadId: "0a1b2c3d", name: "x", duration: 10 }]) }));
+  assert.equal(old[0].tab, "dubbing");
+  assert.equal(draftMark({ ...DRAFT, tab: "erase" }), draftMark(DRAFT), "a tab is not a change to the cuts");
 });
 
 test("keeping the same draft again moves it to the front with its new cuts; another is added", () => {

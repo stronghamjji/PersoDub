@@ -94,6 +94,9 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
   const thumbImg = (job) => `<img class="proj-img" src="/api/dub/jobs/${encodeURIComponent(job.id)}/thumb" loading="lazy" alt=""
              onerror="this.remove()">`;
 
+  // The eraser on an erase's card, and on a draft's left on the Erase tab.
+  const eraseKind = () => `<span class="proj-kind" title="${t("Erase subtitles")}"><svg viewBox="0 0 24 24" width="12" height="12"><rect x="2.5" y="5" width="15" height="11" rx="2"/><path d="M13.5 21l6.8-6.8a1.6 1.6 0 0 0 0-2.3l-1.7-1.7a1.6 1.6 0 0 0-2.3 0L9.5 17z"/></svg></span>`;
+
   function cardHtml(members) {
     const job = members[0];
     const chip = cardChip(job);
@@ -105,7 +108,7 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
     return `<div class="proj-card" data-job="${escapeHtml(job.id)}" tabindex="0" role="button" aria-label="${t("Open {name}", { name: escapeHtml(name) })}">
       <div class="proj-thumb">
         ${thumbImg(job)}
-        ${isErase(job) ? `<span class="proj-kind" title="${t("Erase subtitles")}"><svg viewBox="0 0 24 24" width="12" height="12"><rect x="2.5" y="5" width="15" height="11" rx="2"/><path d="M13.5 21l6.8-6.8a1.6 1.6 0 0 0 0-2.3l-1.7-1.7a1.6 1.6 0 0 0-2.3 0L9.5 17z"/></svg></span>` : ""}
+        ${isErase(job) ? eraseKind() : ""}
         ${isSeparate(job) ? `<span class="proj-kind" title="${t("Separate audio")}"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></span>` : ""}
         ${chip ? `<span id="projChip-${escapeHtml(job.id)}" class="proj-chip proj-chip-${chip[1]}">${escapeHtml(chip[0])}</span>` : ""}
         ${dur ? `<span class="proj-dur">${escapeHtml(dur)}</span>` : ""}
@@ -121,6 +124,11 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
   // How many seconds of a draft its cuts keep.
   const keptOf = (d) => d.ranges.reduce((s, [a, b]) => s + (b - a), 0);
 
+  // What a draft was being made into (2026-10-21): one left on the Erase or
+  // Audio tab says so; one left on Dubbing is not dubbed yet.
+  const draftMeta = (d) => (d.tab === "erase" ? `${t("Erase subtitles")} · ${t("Not finished")}`
+    : d.tab === "audio" ? `${t("Separate audio")} · ${t("Not finished")}` : t("Not dubbed yet"));
+
   // A kept draft: a frame of its video (the held file itself, stopped near
   // its start -- a draft has no thumbnail made for it), how much of it the
   // cuts kept, and "Draft" where a project says what state it is in.
@@ -131,11 +139,12 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
       <div class="proj-thumb">
         <video class="proj-img" src="/api/downloads/${encodeURIComponent(d.downloadId)}/video#t=0.5" preload="metadata"
                muted playsinline tabindex="-1" onerror="this.remove()"></video>
+        ${d.tab === "erase" ? eraseKind() : ""}
         <span class="proj-chip proj-chip-muted">${t("Draft")}</span>
         <span class="proj-dur">${escapeHtml(fmtLength(kept))}</span>
       </div>
       <div class="proj-row">
-        <div class="proj-info"><div class="proj-name">${escapeHtml(name)}</div><div class="proj-meta">${t("Not dubbed yet")}</div></div>
+        <div class="proj-info"><div class="proj-name">${escapeHtml(name)}</div><div class="proj-meta">${escapeHtml(draftMeta(d))}</div></div>
         <button class="proj-more" type="button" data-more-draft="${escapeHtml(d.downloadId)}"
                 aria-haspopup="menu" aria-label="${t("More for {name}", { name: escapeHtml(name) })}">${lucide("ellipsis", 14)}</button>
       </div>
@@ -256,7 +265,8 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
     const all = projects.length + drafts.length;
     if ($("projectsCount")) $("projectsCount").textContent = !all ? ""
       : q ? t("{shown} of {all}", { shown: shown.length + shownDrafts.length, all }) : String(all);
-    const layout = JSON.stringify([q, renamingId, shownDrafts.map((d) => d.downloadId), shown.map((m) => m[0].id)]);
+    // A draft's tab is in it: the card's eraser and words change with it.
+    const layout = JSON.stringify([q, renamingId, shownDrafts.map((d) => [d.downloadId, d.tab]), shown.map((m) => m[0].id)]);
     // Patched, not drawn again: a redraw loaded every draft's <video> again (it flickered) and lost clicks.
     if (layout === drawn && (shown.length || shownDrafts.length)) {
       for (const card of grid.querySelectorAll(".proj-card")) {

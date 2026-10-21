@@ -12,6 +12,7 @@
 // stylesheet hides .agent while body[data-screen="home"] lacks the
 // "home-agent" class, and showHome() takes that class off again.
 import { t } from "./i18n.mjs";
+import { askForLink } from "./linkField.mjs";
 
 /** True while the Dub Agent column is held back on the Home screen. */
 export function homeAgentHidden(body) {
@@ -32,6 +33,20 @@ export function openHomeAgent($, body, text) {
     input.dispatchEvent(new Event("input"));
   }
   input.focus();
+}
+
+/**
+ * Save video: the banner's link field blinks and takes the caret, and the
+ * line under the cards says what a link pasted there becomes. A caret alone
+ * read as nothing happening (2026-10-21).
+ */
+export function pointAtLink($) {
+  const card = $("linkCard");
+  card.hidden = false;
+  card.classList.remove("error");
+  card.innerHTML = `<p class="lc-msg">${t("Paste a link and the video is fetched to this computer. Then Export saves it.")}</p>`;
+  $("linkInput").scrollIntoView({ block: "nearest" });
+  askForLink($("homeBannerLink"), $("linkInput"));
 }
 
 /** "What's new in 0.7.1"; a build with no real version number says less. */

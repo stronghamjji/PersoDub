@@ -26,7 +26,7 @@ import { initNewProjectUi } from "./newProject.mjs";
 import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "./eraseScreen.mjs";
 import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
-import { initHomeSidebar, homeAgentHidden, openHomeAgent } from "./homeSidebar.mjs";
+import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -543,7 +543,9 @@ function paintForward() {
   // Only on the first screen: inside a job the back arrow is the way out, and
   // an arrow pointing the other way would have nowhere to go.
   btn.hidden = !lastJobId || document.body.dataset.screen !== "home";
-  const what = lastJobName ? t("Back to {name}", { name: lastJobName }) : t("Back to the project you left");
+  // The job's name on the button, so it reads as that job and not as "next".
+  $("topbarForwardName").textContent = lastJobName || t("Last project");
+  const what = lastJobName ? t("Reopen {name}", { name: lastJobName }) : t("Reopen the last project");
   btn.setAttribute("aria-label", what);
   btn.title = what;
 }
@@ -560,6 +562,8 @@ function showHome() {
   // other dubbing's language.
   state.draftFromJob = null;
   state.draftProject = null;
+  // A Save video press is for the link pasted on that visit to Home only.
+  saveVideoNext = false;
   paintDraftBack();
   showScreen("home");
   setTopbar({ title: "PersoDub", subtitle: t("Local dubbing") });
@@ -649,6 +653,8 @@ const eraseScreen = initEraseScreenUi({
     projects.renderHistory().catch(() => {});
     projects.renderQueueCard().catch(() => {});
   },
+  // From its erase's start a video's card on Home is that erase's own.
+  onEraseStarted: draftBecameJob,
   // The way on from an erased video: a new project on the cleaned file rather
   // than the one with the writing still on it, on its Dubbing tab.
   onDub: (held) => openDraftHere({ downloadId: held.downloadId, name: held.title,
@@ -792,6 +798,8 @@ const audioTab = initAudioTab({
   openExport: () => exportDialog.open(),
   // The timeline is wired further down; until then there is none to tell.
   showTimeline: (info) => showAudioLanes(info),
+  // From its separation's start a video's card on Home is that separation's own.
+  onSeparateStarted: draftBecameJob,
 });
 // The tab is repainted when it is come to: whether a job owns the screen is
 // read then.
@@ -819,7 +827,21 @@ initNewProjectWindow({
   leaveJob: () => resetForNewJob(),
   openDraft: (source) => draftSetup.openDraft(source),
   openNewProject: (source) => newProject.openNewProject(source),
+  emptyImport: emptyImportLink,
 });
+// An empty new project already shows the Import block New project would
+// open again in a window (2026-10-21): the link id of the one on screen, or
+// null. Each tab shows its block only while it has no video -- the Erase tab
+// even with an older draft still held, which Home's Erase card keeps -- so
+// the block being on screen is the test; under a hidden left panel, tab or
+// face it is not. The erase screen is known by its name, since its tab can
+// stand under another.
+function emptyImportLink() {
+  if (state.jobId) return null;
+  const tab = document.body.dataset.screen === "erase" ? "erase" : leftTabs.current();
+  const id = { dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink" }[tab];
+  return id && $(`${id}Input`).offsetParent ? id : null;
+}
 // A new draft opened from wherever the person stands -- a dubbing's
 // + Add language, a finished erase's Dub this video: the job on screen is let
 // go first, the way Home lets it go, and stays behind the top bar's forward
@@ -965,6 +987,9 @@ wireUpdates({ $, shell: window.persodubShell || null, releases: `${REPO_URL}/rel
 // leaving Home, makes an answer still on its way nobody's.
 let probeTimer = null;
 let probeSeq = 0;
+// Save video was pressed: the link read next opens the Export dialog by
+// itself once its video is in (2026-10-21). Home clears it (showHome).
+let saveVideoNext = false;
 function clearLink() {
   clearTimeout(probeTimer);
   probeSeq += 1;
@@ -1036,8 +1061,12 @@ $("linkInput").addEventListener("input", () => {
       state.linkProbe = { url, ...info };
       renderLinkCard(info);
       // A read link opens straight into its own draft, already on the
-      // timeline -- the same shortcut a single dropped file gets.
-      draftSetup.openDraft({ link: url });
+      // timeline -- the same shortcut a single dropped file gets. After Save
+      // video, Export opens on its own, Video ticked, when this link's video
+      // is in (onReady is told by the importer for this link alone).
+      const save = saveVideoNext;
+      saveVideoNext = false;
+      draftSetup.openDraft({ link: url, onReady: save ? () => exportDialog.open(["video"]) : null });
     } catch (e) {
       if (probeIsStale(mySeq)) return;
       renderLinkError(errorText(e));
@@ -1298,11 +1327,24 @@ const home = initHomeScreen({
 // and Home shows it as a "Draft" card that opens it again with its cuts. It
 // is let go when it is dubbed, deleted, or its video is no longer there.
 let keptDrafts = readKept(localStorage);
+// The videos an erase or a separation was started on in this run: that job's
+// own card ("Erasing", then "Erased" or "Failed"; the same for separating)
+// stands for each on Home, so none is kept as a draft again (2026-10-21).
+const startedOn = new Set();
+function draftBecameJob(downloadId) {
+  startedOn.add(downloadId);
+  forgetDraft(downloadId);
+}
 function rememberDraft() {
   const d = getDraft();
   // A video held beside an open project (its Erase tab's) is not a draft.
-  if (!d || !d.downloadId || state.jobId) return;
-  keptDrafts = keepDraft(localStorage, d, keptDrafts);
+  if (!d || !d.downloadId || state.jobId || startedOn.has(d.downloadId)) return;
+  // The tab it is on, so its card says what it was being made into and
+  // opens there again. Home is a card being opened: it keeps the one it had.
+  const screen = document.body.dataset.screen;
+  const tab = screen === "erase" ? "erase" : screen === "home"
+    ? (keptDrafts.find((k) => k.downloadId === d.downloadId) || {}).tab : leftTabs.current();
+  keptDrafts = keepDraft(localStorage, { ...d, tab }, keptDrafts);
   home.renderDrafts(keptDrafts);
 }
 function forgetDraft(downloadId) {
@@ -1339,8 +1381,10 @@ async function reopenDraft(downloadId) {
     newProject.startOnDefaults().then(draftSetup.paint, () => {});
   }
   $("draftError").textContent = "";
+  // On the tab it was left on (2026-10-21): the Erase tab is a screen of its own.
+  if (kept.tab === "erase") { eraseScreen.openEraseTab(); return; }
   draftSetup.showDraftScreen();
-  leftTabs.show("dubbing");
+  leftTabs.show(kept.tab);
 }
 // At launch: each kept draft's video is held again, so its card has a picture
 // and opens at once; one whose file is gone is let go without a word.
@@ -1366,8 +1410,9 @@ initHomeSidebar({
   onErase: () => eraseScreen.openErase(),
   // An empty new project, on its Audio tab.
   onAudio: () => draftSetup.openDraft(null, { tab: "audio" }),
-  // A link pasted into the banner is how a video gets saved.
-  onSaveVideo: () => { $("linkInput").scrollIntoView({ block: "nearest" }); $("linkInput").focus(); },
+  // A link pasted into the banner is how a video gets saved: the field is
+  // pointed at, and the link pasted next opens Export once it is in.
+  onSaveVideo: () => { pointAtLink($); saveVideoNext = true; },
   onSettings: () => settings.openSettings(),
   onHelp: () => openHelp(),
   loadWhatsNew: async () => (await fetch("/api/whats-new")).json(),

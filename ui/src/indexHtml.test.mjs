@@ -27,6 +27,7 @@ import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { readPage } from "../testlib/readPage.mjs";
+import { lucide } from "./icons.mjs";
 
 // The timeline draws its own head and lane, so their ids live in the module.
 const TIMELINE = fileURLToPath(new URL("./timeline.mjs", import.meta.url));
@@ -1121,8 +1122,16 @@ test("a draft is kept when it changes and when it is left, and let go when it is
   assert.match(html, /onDraftChange\(rememberDraft\);/);
   assert.match(html, /function resetForNewJob\(\) \{\n[^}]*?rememberDraft\(\);\n[^}]*?if \(state\.jobId && getDraft\(\)\) clearDraft\(\);/,
     "kept before the screen is left; a video held beside a project goes with that project");
-  // Not a draft: the video an open project's Erase tab holds.
-  assert.match(html, /if \(!d \|\| !d\.downloadId \|\| state\.jobId\) return;\n  keptDrafts = keepDraft\(localStorage, d, keptDrafts\);/);
+  // Not a draft: the video an open project's Erase tab holds, nor one whose
+  // erase or separation was started this run (that job's card stands for it,
+  // 2026-10-21).
+  assert.match(html, /if \(!d \|\| !d\.downloadId \|\| state\.jobId \|\| startedOn\.has\(d\.downloadId\)\) return;/);
+  assert.match(html, /function draftBecameJob\(downloadId\) \{\n  startedOn\.add\(downloadId\);\n  forgetDraft\(downloadId\);\n\}/);
+  assert.match(html, /onEraseStarted: draftBecameJob,/);
+  assert.match(html, /onSeparateStarted: draftBecameJob,/);
+  // Kept with the tab it is on, and opened there again; Home keeps the one it had.
+  assert.match(html, /const tab = screen === "erase" \? "erase" : screen === "home"\n    \? \(keptDrafts\.find\(\(k\) => k\.downloadId === d\.downloadId\) \|\| \{\}\)\.tab : leftTabs\.current\(\);\n  keptDrafts = keepDraft\(localStorage, \{ \.\.\.d, tab \}, keptDrafts\);/);
+  assert.match(html, /if \(kept\.tab === "erase"\) \{ eraseScreen\.openEraseTab\(\); return; \}\n  draftSetup\.showDraftScreen\(\);\n  leftTabs\.show\(kept\.tab\);\n\}/);
   assert.match(html, /const started = await submitDubStart\(o\);\n    if \(started && d\) forgetDraft\(d\.downloadId\);/);
   // The delete question is ui/src/confirmDialogs.mjs's, written one level in.
   assert.match(readFileSync(CONFIRMS, "utf8"), /if \(job\.draftId\) \{\n      forgetDraft\(job\.draftId\);/);
@@ -1309,6 +1318,31 @@ test("the Mac's bar starts after its lights and ends Export, Settings, panes; Wi
   assert.ok(bar.includes('id="topbarDl"') && bar.includes('id="topbarForward"'));
 });
 
+// A bare arrow on Home read as "next" (2026-10-21). The same button now wears
+// the arrow that curls back and the name of the job it reopens.
+test("the way back into a job is the curled-back arrow and the job's name, cut short at 200px", () => {
+  const html = readPage();
+  const at = html.indexOf('<button class="topbar-back" id="topbarForward"');
+  const btn = html.slice(at, html.indexOf("</button>", at));
+  assert.ok(btn.includes(`${lucide("undo-2", 16)}<span id="topbarForwardName"></span>`));
+  assert.ok(!btn.includes('d="m12 5 7 7-7 7"'), "the bare arrow is gone");
+  assert.equal(html.match(/id="topbarForward"/g).length, 1, "the same button, not a second one");
+  assert.match(html, /\.topbar-back \{ border: none; cursor: pointer; padding: 0 8px; max-width: 200px; height: 26px;\n    flex: 0 0 auto; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px;\n    background: var\(--secondary\);/);
+  assert.match(html, /#topbarForwardName \{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
+});
+
+test("the way back names the job on the button and 'Reopen <name>' on its tip", () => {
+  const html = readPage();
+  const at = html.indexOf("function paintForward() {");
+  const body = html.slice(at, html.indexOf("\n}\n", at));
+  assert.match(body, /\$\("topbarForwardName"\)\.textContent = lastJobName \|\| t\("Last project"\);/);
+  assert.match(body, /const what = lastJobName \? t\("Reopen \{name\}", \{ name: lastJobName \}\) : t\("Reopen the last project"\);\n  btn\.setAttribute\("aria-label", what\);\n  btn\.title = what;/);
+  // The owner's words (2026-10-21).
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Reopen {name}"], "{name} 다시 열기");
+  assert.equal(ko["Last project"], "보던 프로젝트");
+});
+
 // The Dub Agent card heads with the mascot in place of the speech bubble
 // (2026-10-21), as tall as the bubble was; app/api/misc.py serves the picture.
 test("the Dub Agent card heads with the mascot, the bubble's height", () => {
@@ -1325,4 +1359,39 @@ test("Home's Management group holds Settings alone", () => {
   assert.match(group, />Management</);
   assert.deepEqual([...group.matchAll(/id="(homeNav\w+)"/g)].map((m) => m[1]), ["homeNavSettings"]);
   assert.ok(!html.includes("homeNavProjects"), "nothing is left of the Projects item");
+});
+
+// Save video read as doing nothing (2026-10-21): the banner's link field
+// blinks white twice (a still ring with less motion asked for), and the link
+// read next opens Export by itself, Video ticked, once that link's own video
+// is in. The press is for that visit to Home: Home clears it.
+test("Save video points at the banner's link field, and the link read next opens Export once its video is in", () => {
+  const html = readPage();
+  assert.match(html, /onSaveVideo: \(\) => \{ pointAtLink\(\$\); saveVideoNext = true; \},/);
+  assert.equal(html.match(/saveVideoNext = true/g).length, 1, "nothing else raises it");
+  assert.match(html, /const save = saveVideoNext;\n\s*saveVideoNext = false;\n\s*draftSetup\.openDraft\(\{ link: url, onReady: save \? \(\) => exportDialog\.open\(\["video"\]\) : null \}\);/);
+  const home = html.slice(html.indexOf("function showHome() {"), html.indexOf("async function openLastScreen()"));
+  assert.match(home, /\n  saveVideoNext = false;\n/);
+  // The same blink for an empty project's Import block (New project, below).
+  assert.match(html, /\.home-banner-linkin\.link-field\.ask, \.import-link\.ask \{ animation: link-ask 0\.5s ease-in-out 2; \}/);
+  assert.match(html, /@media \(prefers-reduced-motion: reduce\) \{\n    \.home-banner-linkin\.link-field\.ask, \.import-link\.ask \{ animation: none; box-shadow: 0 0 0 2px rgba\(11, 18, 32, 0\.5\), 0 0 0 5px #ffffff; \}/);
+});
+
+// New project on an empty project opened the same Import block again in a
+// window over it (2026-10-21). The block on screen is pointed at instead: the
+// erase screen by its name, and none under a hidden panel, tab or face.
+test("New project on an empty project points at the Import block on screen", () => {
+  const html = readPage();
+  assert.match(html, /openNewProject: \(source\) => newProject\.openNewProject\(source\),\n  emptyImport: emptyImportLink,\n\}\);/);
+  const at = html.indexOf("function emptyImportLink() {");
+  const body = html.slice(at, html.indexOf("\n}\n", at));
+  assert.match(body, /if \(state\.jobId\) return null;/);
+  assert.doesNotMatch(body, /getDraft\(\)/, "an empty Erase tab can stand beside an older draft still held");
+  assert.match(body, /const tab = document\.body\.dataset\.screen === "erase" \? "erase" : leftTabs\.current\(\);/);
+  assert.match(body, /\{ dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink" \}\[tab\]/);
+  assert.match(body, /return id && \$\(`\$\{id\}Input`\)\.offsetParent \? id : null;/);
+  // Each of those is a link field the shared block draws, under that name.
+  assert.match(readFileSync(DRAFT_IMPORT, "utf8"), /emptyTabHtml\("dubbing", "dubbingZone", "dubbingLink"\)/);
+  assert.match(readFileSync(AUDIO, "utf8"), /emptyTabHtml\("audio", "audioZone", "audioLink"\)/);
+  assert.match(readFileSync(ERASE, "utf8"), /emptyTabHtml\("erase", "eraseZone", "eraseLink"\)/);
 });

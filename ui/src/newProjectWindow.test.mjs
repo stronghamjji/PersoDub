@@ -19,7 +19,7 @@ function makeEl(id) {
   };
 }
 
-function harness() {
+function harness({ emptyImport } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -40,6 +40,7 @@ function harness() {
       if (s.file) got.files.push([s.file.name]); else got.links.push(s.link);
     },
     openNewProject: (s) => { got.calls.push("openNewProject"); got.files.push(s.files.map((f) => f.name)); },
+    emptyImport,
   });
   const isOpen = () => $("newProjOverlay").classList.contains("open");
   const esc = () => docKeys.forEach((fn) => fn({ key: "Escape" }));
@@ -64,6 +65,28 @@ test("New project opens the window over the screen, with the link field inside t
   assert.notEqual(h.$("newProjDrop").focused, true);
   h.esc();
   assert.equal(h.isOpen(), false);
+});
+
+// The same block twice, one over the other, on an empty project (2026-10-21).
+test("on an empty project New project blinks the link field already on screen and opens no window", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = harness({ emptyImport: () => "dubbingLink" });
+  t.after(h.restore);
+  h.$("newProjectBtn").fire("click");
+  assert.equal(h.isOpen(), false);
+  assert.equal(h.$("dubbingLinkInput").focused, true);
+  assert.equal(h.$("dubbingLinkRow").classList.contains("ask"), true);
+  t.mock.timers.tick(1000);
+  assert.equal(h.$("dubbingLinkRow").classList.contains("ask"), false, "two blinks, then the caret alone");
+  assert.deepEqual(h.got.calls, [], "the project is not left");
+});
+
+// A video in the project, a job open, or the left panel hidden.
+test("with no empty block on screen New project opens the window, as before", (t) => {
+  const h = harness({ emptyImport: () => null });
+  t.after(h.restore);
+  h.$("newProjectBtn").fire("click");
+  assert.equal(h.isOpen(), true);
 });
 
 test("a click on the drop area chooses files; a good one closes the window and is handed on", (t) => {

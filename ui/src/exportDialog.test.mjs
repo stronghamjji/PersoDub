@@ -179,6 +179,17 @@ test("the dialog opens with the first row ticked; ticks are toggled, remembered 
   assert.deepEqual(again.ticked(), ["voice"]);
 });
 
+// Save video opens the dialog by itself once the link's video is in
+// (2026-10-21): on Video, whatever a draft was last exported as.
+test("an opening that names its rows ticks those, and what was remembered stays for next time", async () => {
+  const h = harness({ ctx: { kind: "draft" }, stored: { [TICKS_KEY]: '{"draft":["audio"]}' } });
+  await h.api.open(["video"]);
+  assert.deepEqual(h.ticked(), ["video"]);
+  assert.equal(h.store.get(TICKS_KEY), '{"draft":["audio"]}', "nothing is remembered for it");
+  await h.api.open();
+  assert.deepEqual(h.ticked(), ["audio"]);
+});
+
 test("Export saves a draft's ticked rows in turn and says where they went", async () => {
   const asked = [];
   let release = null;

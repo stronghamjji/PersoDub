@@ -2,9 +2,10 @@
 // project, with the parts its cuts kept, remembered so that Home shows a
 // "Draft" card that opens it again (owner, 2026-09-30). Kept in the browser's
 // own storage, newest first: what a draft is (ui/src/draft.mjs) less the
-// address its video plays from, which is made again from the id. The video
-// itself stays in the app's holding folder; the app holds it again under the
-// same id when the draft is reopened (POST /api/downloads/{id}/hold).
+// address its video plays from, which is made again from the id, plus the
+// tab it was left on. The video itself stays in the app's holding folder; the
+// app holds it again under the same id when the draft is reopened
+// (POST /api/downloads/{id}/hold).
 //
 // Nothing here touches the page or the network.
 import { normalizeRanges } from "./draft.mjs";
@@ -12,6 +13,10 @@ import { normalizeRanges } from "./draft.mjs";
 const KEY = "persodub.drafts";
 // More than a screen of cards is a pile nobody goes back to: the oldest go.
 const MAX_KEPT = 12;
+// The tabs a draft can be left on (2026-10-21): its card says what it was
+// being made into, and opens there again. A draft kept before then, or with
+// anything else, was on Dubbing.
+const TABS = ["dubbing", "audio", "erase"];
 
 function clean(row) {
   if (!row || typeof row.downloadId !== "string" || !/^[0-9a-f]{8}$/.test(row.downloadId)) return null;
@@ -20,7 +25,8 @@ function clean(row) {
   const ranges = normalizeRanges(given.map(([a, b]) => [Number(a) || 0, Number(b) || 0]), duration);
   return { downloadId: row.downloadId, name: String(row.name || ""), duration,
            ranges: ranges.length ? ranges : [[0, duration]],
-           ratio: typeof row.ratio === "string" ? row.ratio : "original" };
+           ratio: typeof row.ratio === "string" ? row.ratio : "original",
+           tab: TABS.includes(row.tab) ? row.tab : "dubbing" };
 }
 
 /** The drafts that were kept, newest first. [] when there are none, or the

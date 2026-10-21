@@ -58,11 +58,14 @@ export const PACK_ID = "subtitle-eraser";
  *        while this screen is up (ui/src/timeline.mjs showErase)
  * @param {() => boolean} [deps.projectOpen]  a dubbing project is open on the
  *        page, so this screen is its Erase tab
+ * @param {(downloadId: string) => void} [deps.onEraseStarted]  an erase was
+ *        started on this held video: its job is the video's card from now on
  * @returns the operations the rest of the page calls.
  */
 export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFile,
                                     installPack, packRow, onPackProgress, onJobsChanged,
-                                    onDub, reveal, showTimeline, projectOpen = () => false }) {
+                                    onDub, reveal, showTimeline, projectOpen = () => false,
+                                    onEraseStarted = () => {} }) {
   // No video yet: the shared Import block (ui/src/importBlock.mjs), wired at
   // the end of this function.
   $("eraseImportSlot").outerHTML = emptyTabHtml("erase", "eraseZone", "eraseLink");
@@ -747,6 +750,7 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
     if (!source || !area || packMissing) return;
     $("eraseRunBtn").disabled = true;
     $("eraseError").textContent = "";
+    const held = source.downloadId;
     let jid;
     try {
       // One kept part is a trim; several are joined first, as a dub's are.
@@ -767,6 +771,7 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
     job = { id: jid, status: "queued", percent: 0, done: false };
     paint();
     onJobsChanged();
+    onEraseStarted(held);
     watch(jid);
   });
 

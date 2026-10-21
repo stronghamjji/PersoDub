@@ -135,10 +135,12 @@ const stripExt = (name) => String(name || "").replace(/\.[A-Za-z0-9]{2,4}$/, "")
  * @param {(info: object|null) => void} deps.showTimeline  what the timeline
  *        adds to the draft (ui/src/timeline.mjs showAudio)
  * @param {() => number} [deps.now]
+ * @param {(downloadId: string) => void} [deps.onSeparateStarted]  a separation
+ *        was started on this held video: its job is the video's card from now on
  */
 export function initAudioTab({ $, state, getVideo, goToTab, importSource, say,
                                askStop, onStartRefused, onJobsChanged, openExport,
-                               showTimeline, now = () => Date.now() }) {
+                               showTimeline, now = () => Date.now(), onSeparateStarted = () => {} }) {
   $("audioImportSlot").outerHTML = emptyTabHtml("audio", "audioZone", "audioLink");
 
   // The separation this tab knows about: {id, status, elapsed, done, error,
@@ -385,6 +387,7 @@ export function initAudioTab({ $, state, getVideo, goToTab, importSource, say,
       job = { id: jid, status: "queued", elapsed: 0, done: false, error: "", logs: [],
               downloadId: d.downloadId, key: partsKey(parts), engine: where };
       onJobsChanged();
+      onSeparateStarted(d.downloadId);
       watch(jid);
     } catch (e) {
       if (!onStartRefused(e, () => start(true))) $("audioError").textContent = errorText(e);

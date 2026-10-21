@@ -68,7 +68,7 @@ function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1
     if (!els.has(id)) els.set(id, makeEl(id));
     return els.get(id);
   };
-  const log = { screen: "home", topbar: null, posts: [], bodies: [], dub: [], jobs: 0, timeline: null };
+  const log = { screen: "home", topbar: null, posts: [], bodies: [], dub: [], jobs: 0, timeline: null, started: [] };
   const app = { suggest, erase };
 
   globalThis.ResizeObserver = class { observe() {} };
@@ -106,6 +106,7 @@ function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1
     reveal: null,
     showTimeline: (info) => { log.timeline = info; },
     projectOpen: () => projectOpen,
+    onEraseStarted: (downloadId) => log.started.push(downloadId),
   });
   return { $, api, log, app };
 }
@@ -400,6 +401,27 @@ test("the tab opens on a new project's video, with the part its cuts kept", asyn
   assert.equal(one.get("trim_end"), "12");
   assert.equal(one.get("ranges"), null);
   h.api.openErase();   // stop the watch
+});
+
+// An erase is a card of its own on Home from its start, so the draft card
+// for the same video goes (2026-10-21): the page is told which video.
+test("an erase started tells the page the video it was started on, and a refused one does not", async () => {
+  clearDraft();
+  const h = harness();
+  setDraft({ downloadId: "D7", name: "Cat Talk", duration: 20, videoUrl: "/api/downloads/D7/video" });
+  h.api.openEraseTab();
+  await settle();
+  // The app refuses the first start (no room on the disk, say).
+  const answers = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => (url === "/api/erase"
+    ? { ok: false, status: 507, json: async () => ({ detail: "No room" }) } : answers(url, opts));
+  await h.$("eraseRunBtn").fire("click");
+  assert.deepEqual(h.log.started, []);
+  globalThis.fetch = answers;
+  await h.$("eraseRunBtn").fire("click");
+  assert.deepEqual(h.log.started, ["D7"]);
+  h.api.openErase();   // stop the watch
+  clearDraft();
 });
 
 test("several kept parts are erased as they were cut, and a cut made here counts", async () => {

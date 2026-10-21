@@ -46,7 +46,7 @@ function harness({ job = { status: "running", elapsed: 12 }, start = { job_id: "
   };
   $("audioEngine").value = "local";
   const log = { posts: [], bodies: [], tabs: [], imported: [], jobs: 0, exports: 0, asked: 0,
-                refused: [], said: [], timeline: undefined, now: 1000 };
+                refused: [], said: [], timeline: undefined, now: 1000, started: [] };
   const app = { job, start, startStatus: 200, stop: true, takeRefusal: false };
   const state = { jobId: null };
 
@@ -83,6 +83,7 @@ function harness({ job = { status: "running", elapsed: 12 }, start = { job_id: "
     openExport: () => { log.exports += 1; },
     showTimeline: (info) => { log.timeline = info; },
     now: () => log.now,
+    onSeparateStarted: (downloadId) => log.started.push(downloadId),
   });
   const shown = (...ids) => ids.filter((id) => !$(id).hidden);
   const BUTTONS = ["audioRunBtn", "audioStopBtn", "audioBackBtn", "audioRetryBtn", "audioDubBtn", "audioExportBtn"];
@@ -270,6 +271,22 @@ test("a start the page can fix is handed to the page; anything else is said on t
   await g.$("audioRunBtn").click();
   assert.equal(g.$("audioError").textContent, "This video has no sound.");
   g.log.restore();
+});
+
+// A separation is a card of its own on Home from its start, so the draft
+// card for the same video goes (2026-10-21): the page is told which video.
+test("a separation started tells the page the video it was started on, and a refused one does not", async (t) => {
+  const h = harness({ start: { detail: "This video has no sound." } });
+  t.after(h.log.restore);
+  draft();
+  h.app.startStatus = 422;
+  await h.$("audioRunBtn").click();
+  assert.deepEqual(h.log.started, []);
+  h.app.start = { job_id: "S1" };
+  h.app.startStatus = 200;
+  await h.$("audioRunBtn").click();
+  assert.deepEqual(h.log.posts, ["/api/separate", "/api/separate"]);
+  assert.deepEqual(h.log.started, ["D1"]);
 });
 
 // ---- running -----------------------------------------------------------------

@@ -199,7 +199,7 @@ function followLink(href, name) {
  * @param {(href: string, init?: object) => Promise<Response>} [deps.fetchFn]
  * @param {(href: string, name: string) => void} [deps.follow]  hand a link to
  *        the browser to download
- * @returns {{ open: () => Promise<void>, close: () => void }}
+ * @returns {{ open: (tick?: string[]) => Promise<void>, close: () => void }}
  */
 export function initExportDialog({ $, getContext, storage = null, shell = null,
                                    fetchFn = (...a) => fetch(...a), follow = followLink }) {
@@ -329,14 +329,17 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
     if (e.target === $("exportOverlay")) close();
   });
 
-  async function open() {
+  // `tick`: the rows to tick this time in place of the remembered ones (Save
+  // video's own opening ticks Video), remembering nothing.
+  async function open(tick = null) {
     const next = await getContext();
     if (!next) return;
     ctx = next;
     saved = [];
     let kept = null;
     try { kept = storage && storage.getItem(TICKS_KEY); } catch { /* private window */ }
-    ticked = ticksFor(kept, ctx.kind, rows().map((r) => r.id));
+    const ids = rows().map((r) => r.id);
+    ticked = tick ? ids.filter((id) => tick.includes(id)) : ticksFor(kept, ctx.kind, ids);
     paint();
     where.textContent = ctx.where || "";
     $("exportOverlay").classList.add("open");
