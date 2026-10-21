@@ -987,6 +987,22 @@ test("each API key and the ChatGPT sign-in say which step uses them", () => {
   assert.ok(!html.includes('t("Needs an API key.")'));
 });
 
+// "Use the API" said which API to nobody: separation and speech-to-text point
+// at the Perso API, the translator at the Gemini API (owner, 2026-10-21).
+test("Audio separation and Speech-to-text on this computer point at the Perso API", () => {
+  const html = readPage();
+  assert.match(html, /sep: \{ get local\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Perso API\."\)\]; \},/);
+  assert.match(html, /stt: \{ get local\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Perso API\."\)\]; \},/);
+});
+
+test("the sentence that named no API is gone from the page and from both tables", () => {
+  assert.ok(!readPage().includes("For accuracy, use the API."));
+  for (const code of ["en", "ko"]) {
+    const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
+    assert.ok(!Object.hasOwn(table, "For accuracy, use the API."), `ui.${code}.json still has it`);
+  }
+});
+
 // The dialogs finished to the mockup (2026-09-29). What is pinned is what
 // other files lean on: the ids, the box the options block goes home to, and
 // the classes the block carries with it when a draft borrows it.

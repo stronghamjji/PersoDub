@@ -398,9 +398,9 @@ for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
 const ENGINE_HINTS = {
   dubMode: { get local() { return [t("Runs on this computer, free."), t("You can edit the script after.")]; },
              get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that.")]; } },
-  sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
+  sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
-  stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
+  stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
   translate: { get hunyuan() { return [t("Runs on this computer, free and fastest."), t("For accuracy, use the Gemini API.")]; },
                get gemma() { return [t("Runs on this computer, free."), t("For accuracy, use the Gemini API.")]; },
