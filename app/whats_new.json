@@ -1,16 +1,16 @@
 {
   "notes": [
-    "Installs on company computers whose security software inspects HTTPS: the app now trusts what the computer trusts.",
-    "Logs that read as a timeline: every install step, engine start and dubbing stage with its seconds, inputs, memory, and why a step failed.",
-    "A failure report carries the engines' own logs and opens with where, after how long and why.",
-    "No ChatGPT account? Choose \"Translate with a local model\" right in the sign-in window.",
-    "The update button shows even when the update finished downloading before the window opened."
+    "When something fails, the screen says in one sentence why it stopped and what to do next: a broken model file, a Gemini key Google refused, a computer out of memory, a video with no speech.",
+    "The title bar is one line, with the computer's own window buttons. Home is lighter: Settings lives under Management, and the update notice on the What's new card at the bottom left.",
+    "The script table's length column reads the original and translated seconds with a red, orange or green dot, and the timeline uses the same colours.",
+    "Home has a Perso workspace button, and choosing the Perso API says the first minute after signing up is free.",
+    "A download says Getting ready… instead of 0%, Home no longer flickers, and Stop during transcription stops at once."
   ],
   "notes_ko": [
-    "회사 보안 프로그램이 인터넷 통신을 검사하는 PC에서도 설치돼요. 앱이 컴퓨터가 믿는 인증서를 함께 믿어요.",
-    "로그가 흐름대로 남아요. 설치 단계, 엔진 켜기, 더빙 단계마다 걸린 시간과 입력값, 메모리, 실패한 이유까지요.",
-    "오류 보고에 엔진 로그가 함께 실리고, 어디서 얼마 만에 왜 멈췄는지 요약이 맨 위에 붙어요.",
-    "ChatGPT 계정이 없어도 로그인 창에서 바로 '로컬 모델로 번역'을 고를 수 있어요.",
-    "업데이트를 빨리 받아도 '다시 시작해서 업데이트' 버튼이 떠요."
+    "실패하면 왜 멈췄는지 한 문장과 다음에 할 일이 떠요. 깨진 모델 파일, 거절된 Gemini 키, 메모리 부족, 말 없는 영상까지요.",
+    "창 위 제목 줄이 한 줄로 합쳐졌어요. 홈은 가벼워지고 설정은 관리 메뉴에, 업데이트 알림은 왼쪽 아래 카드에 있어요.",
+    "대본 표 길이 칸에 원본·번역 초와 빨강·주황·초록 점이 있고, 타임라인도 같은 색이에요.",
+    "홈에 Perso 작업공간 버튼이 생겼고, Perso API를 고르면 가입 뒤 1분 무료 안내가 떠요.",
+    "받기 창의 0% 대신 \"준비 중…\", 홈이 깜빡이지 않고, 받아쓰기 중 중지가 바로 먹어요."
   ]
 }
