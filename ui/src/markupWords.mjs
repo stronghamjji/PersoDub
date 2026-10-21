@@ -40,7 +40,7 @@ const words = () => [
   ["#helpTitle", t("What PersoDub does")],
   ["#helpOverlay .help-item:nth-child(1) b", t("Dubbing")],
   ["#helpOverlay .help-item:nth-child(1) p", t("Voices a video in another language, in each speaker’s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.")],
-  ["#helpOverlay .help-item:nth-child(1) .help-where", t("This computer (10 languages, free) or Perso API (100+ languages, credits).")],
+  ["#helpOverlay .help-item:nth-child(1) .help-where", t("This computer (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).")],
   ["#helpOverlay .help-item:nth-child(2) b", t("Separate audio")],
   ["#helpOverlay .help-item:nth-child(2) p", t("Splits the sound into Voice (only the speech) and Background (music, effects, noise). Save either one, or go on to Dubbing.")],
   ["#helpOverlay .help-item:nth-child(2) .help-where", t("This computer or Perso API.")],

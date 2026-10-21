@@ -4,8 +4,10 @@
 // Run with: node --test ui/src/persoModels.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DEFAULT_MODEL, isModelId, languagesFor, modelCaption, modelHint, modelInfo, modelLabel, modelsIn }
   from "./persoModels.mjs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 const ko = { id: "ko", models: ["NIGHTINGALE", "ORIOLE", "WREN"] };
 const gb = { id: "en-GB", models: ["ORIOLE", "NIGHTINGALE"] };
@@ -46,6 +48,20 @@ test("a model's name as the screen says it, a new one's made from its id", () =>
 test("the line under a model and under the choice", () => {
   assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "Default · 1 credits per second · 77 languages");
   assert.equal(modelCaption(modelInfo("NEW_ONE"), 3), "3 languages");
-  assert.equal(modelHint(modelInfo("NIGHTINGALE"), 102), "6 credits per second · 102 languages · Perso Pro plan and up");
-  assert.equal(modelHint(modelInfo("WREN"), 32), "1 credits per second · 32 languages");
+  assert.equal(modelHint(modelInfo("NIGHTINGALE"), 102), "6 credits per second · 102 languages with this model · Perso Pro plan and up");
+  assert.equal(modelHint(modelInfo("WREN"), 32), "1 credits per second · 32 languages with this model");
+});
+
+// Help says "100+" for every model together; the line under the choice says
+// the chosen one's own count, so the two are not read as one number (owner, 2026-10-21).
+test("in Korean the line under the choice says the count is this model's", async (t) => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true,
+    json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+  assert.equal(modelHint(modelInfo("ORIOLE"), 77), "1초 1크레딧 · 이 모델은 언어 77개");
+  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "기본 · 1초 1크레딧 · 언어 77개", "the list's own lines stay as they were");
 });

@@ -1260,6 +1260,16 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
   assert.match(html, /e\.preventDefault\(\);\n    window\.open\(`\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
 });
 
+// Help's "100+" is every dubbing model's languages together, and the line under
+// the Dubbing model choice says the chosen one's own count (owner, 2026-10-21):
+// the markup and the words it is painted with say the same sentence.
+test("Help says the Perso API's 100+ languages depend on the dubbing model", () => {
+  const where = "This computer (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).";
+  assert.ok(readPage().includes(`<div class="help-where">${where}</div>`));
+  const words = readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8");
+  assert.ok(words.includes(`["#helpOverlay .help-item:nth-child(1) .help-where", t("${where}")]`));
+});
+
 // Windows drew Chromium's stock scrollbar wherever a pane scrolls -- a 17px grey
 // trough with arrow buttons at both ends -- and the system's white title bar over
 // the dark app; the Mac floats a thin bar that goes away and its title bar is

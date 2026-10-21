@@ -71,8 +71,10 @@ export function modelCaption(info, languages) {
     .filter(Boolean).join(" · ");
 }
 
-/** The line under the choice: price, languages, and the plan it needs. */
+/** The line under the choice: price, languages, and the plan it needs. The
+    count is this model's own, and says so: Help's "100+" is every model's
+    together, and the two were read as contradicting each other (owner, 2026-10-21). */
 export function modelHint(info, languages) {
-  return [rateText(info), t("{n} languages", { n: languages }), info.pro ? t("Perso Pro plan and up") : ""]
+  return [rateText(info), t("{n} languages with this model", { n: languages }), info.pro ? t("Perso Pro plan and up") : ""]
     .filter(Boolean).join(" · ");
 }

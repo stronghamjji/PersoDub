@@ -1,8 +1,8 @@
 """The languages a dub can be made in, per path.
 
 Local dubbing knows the ten Qwen3-TTS speaks (config.LANGUAGE_NAMES). Perso's
-cloud dubbing knows what Perso says it knows: 111 entries on 2026-10-02,
-some of them regional variants told apart by a tag (en-GB, es-ES, pt-PT).
+cloud dubbing knows what Perso says it knows: 116 entries (106 languages) on
+2026-10-19, some of them regional variants told apart by a tag (en-GB, es-ES, pt-PT).
 The screen sends one id per language -- the tag when there is one, else the
 code -- and this module turns it back into what each path needs. A Perso
 entry also names the voice models that language can be dubbed with
