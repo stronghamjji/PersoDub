@@ -21,7 +21,7 @@ test("modelStatusLine covers the four states with the mockup's words", () => {
     modelStatusLine({ state: "downloading", name: "Whisper", progress: 41 }),
     { cls: "model-busy", text: "Downloading Whisper… 41%", button: "cancel" });
   assert.deepEqual(
-    modelStatusLine({ state: "downloading", name: "Whisper", progress: null }),
+    modelStatusLine({ state: "downloading", name: "Whisper", progress: null, queued: true }),
     { cls: "model-busy", text: "Waiting to download Whisper…", button: "cancel" });
   // A pack is never queued: no figure yet is its set-up (Windows C2).
   assert.deepEqual(
@@ -35,6 +35,16 @@ test("modelStatusLine covers the four states with the mockup's words", () => {
   assert.deepEqual(
     modelStatusLine({ state: "not_downloaded", bytes: 7.6e9 }),
     { cls: "", text: "7.6 GB", button: "download" });
+});
+
+test("a download says Getting ready… until its first byte, then its percent, 0 included", () => {
+  // "Downloading… 0%" from the press on, held 4 s before the first percent,
+  // read as stuck (Windows C2, 2026-10-21).
+  const row = { state: "downloading", name: "Mel-Band RoFormer", queued: false };
+  assert.deepEqual(modelStatusLine({ ...row, progress: null }),
+    { cls: "model-busy", text: "Getting ready…", button: "cancel" });
+  assert.deepEqual(modelStatusLine({ ...row, progress: 0 }),
+    { cls: "model-busy", text: "Downloading Mel-Band RoFormer… 0%", button: "cancel" });
 });
 
 test("dubStartDialog says only the size and what it is for", () => {
@@ -109,6 +119,16 @@ test("overallProgress has no number while nothing on its way has a figure yet", 
   // A queued model beside one with a figure: the figure.
   assert.equal(overallProgress([{ ...whisper, state: "downloading", progress: 50 }, { ...pack, role: "tts" }],
                                ["engine", "whisper"]), 5);
+});
+
+test("overallProgress holds what is in while the next download gets ready", () => {
+  // The next one has no figure before its first byte: the bar keeps the share
+  // already in, never back to Getting ready… and 0 between two downloads.
+  const rows = [
+    { id: "engine", role: "pack", bytes: 900, state: "ready" },
+    { id: "whisper", bytes: 100, state: "downloading", progress: null },
+  ];
+  assert.equal(overallProgress(rows, ["engine", "whisper"]), 90);
 });
 
 test("allReady flips only when every needed model is ready", () => {
