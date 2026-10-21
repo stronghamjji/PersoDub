@@ -942,8 +942,8 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
   };
   const home = {
     models: ["modelsFold", "modelsSummary", "modelsList", "modelsError"],
-    keys: ["persoKeyInput", "persoSignupLink", "persoSpaceSelect", "persoSpaceWarning", "geminiKeyInput",
-           "chatgptState", "chatgptSignInBtn", "showKeysToggle"],
+    keys: ["persoKeyInput", "persoKeyHint", "persoSignupLink", "persoSpaceSelect", "persoSpaceWarning", "geminiKeyInput",
+           "geminiKeyHint", "chatgptState", "chatgptSignInBtn", "chatgptHint", "showKeysToggle"],
     storage: ["revealOutputBtn", "storageHint"],
     privacy: ["analyticsToggle", "analyticsHint", "reportsToggle", "reportsHint"],
     about: ["brandBtn", "aboutVersion", "ackToggle", "ackList"],
@@ -968,6 +968,40 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
   // The ways in that know what they came for say which tab.
   assert.match(html, /onOpenSettings: \(\) => settings\.openSettings\("models"\)/);
   assert.match(html, /onOpenSettings: \(\) => settings\.openSettings\("keys"\)/);
+});
+
+// Which step each key and the ChatGPT sign-in is for, a small grey line under
+// each like the Privacy tab's (owner, 2026-10-21). And the translator's own
+// lines point the local ones at the Gemini API, which says where its key goes.
+test("each API key and the ChatGPT sign-in say which step uses them", () => {
+  const html = readPage();
+  const keys = html.slice(html.indexOf('id="settingsPanel-keys"'), html.indexOf('id="settingsPanel-storage"'));
+  assert.match(keys, /id="persoKeyInput"[^>]*>\s*<!--[^]*?-->\s*<div data-i18n class="settings-hint" id="persoKeyHint">Used when Dubbing, Audio separation or Speech-to-text is set to Perso API\. Uses Perso credits\.<\/div>/);
+  assert.match(keys, /id="geminiKeyInput"[^>]*>\s*<div data-i18n class="settings-hint" id="geminiKeyHint">Used only when Translation is set to Gemini API\. Uses your own Google API quota\.<\/div>/);
+  // ChatGPT's state and button stay on one line, and its line goes under them.
+  assert.match(keys, /<span>ChatGPT<\/span>\s*<div class="set-ctl">\s*<div class="set-ctl set-inline">\s*<span class="settings-hint" id="chatgptState"[^]*?id="chatgptSignInBtn"[^]*?<\/button>\s*<\/div>\s*<div data-i18n class="settings-hint" id="chatgptHint">Used when Translation is ChatGPT \(the default on a new install\)\. The Dub Agent's Codex uses this sign-in too\.<\/div>\s*<\/div>/);
+  assert.match(html, /get hunyuan\(\) \{ return \[t\("Runs on this computer, free and fastest\."\), t\("For accuracy, use the Gemini API\."\)\]; \}/);
+  assert.match(html, /get gemma\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Gemini API\."\)\]; \}/);
+  assert.match(html, /get gemini\(\) \{ return \[t\("Most accurate\."\), t\("Needs a Google \(Gemini\) key in Settings > API keys\."\)\]; \}/);
+  assert.match(html, /get chatgpt\(\) \{ return \[t\("Free within a ChatGPT account's limit\. Sign in once, no download\."\)\]; \}/,
+    "ChatGPT's line is as it was");
+  assert.ok(!html.includes('t("Needs an API key.")'));
+});
+
+// "Use the API" said which API to nobody: separation and speech-to-text point
+// at the Perso API, the translator at the Gemini API (owner, 2026-10-21).
+test("Audio separation and Speech-to-text on this computer point at the Perso API", () => {
+  const html = readPage();
+  assert.match(html, /sep: \{ get local\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Perso API\."\)\]; \},/);
+  assert.match(html, /stt: \{ get local\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Perso API\."\)\]; \},/);
+});
+
+test("the sentence that named no API is gone from the page and from both tables", () => {
+  assert.ok(!readPage().includes("For accuracy, use the API."));
+  for (const code of ["en", "ko"]) {
+    const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
+    assert.ok(!Object.hasOwn(table, "For accuracy, use the API."), `ui.${code}.json still has it`);
+  }
 });
 
 // The dialogs finished to the mockup (2026-09-29). What is pinned is what
@@ -1246,6 +1280,15 @@ test("the Script pane's head has Translate again, Remake voices and All at once,
   }
 });
 
+// A line pressed in the script table (owner, 2026-10-21): the video stops just
+// inside its start, the clock, row and playhead follow, the strip scrolls to
+// it; the line wears a bar down its left edge.
+test("a script line pressed stops the video at its start and the strip is brought to it", () => {
+  const html = readPage();
+  assert.match(html, /onSeekLine: \(start\) => \{\n    cancelRange\(doneVideo\);\n    doneVideo\.currentTime = start \+ 0\.001;\n    donePlayer\.paintPlayhead\(\);\n    timeline\.revealTime\(start\);\n  \},/);
+  assert.match(html, /\.sc-row\.sc-sel \{ box-shadow: inset 3px 0 0 var\(--primary\); \}/);
+});
+
 // Help (owner, 2026-10-09): one button above Send feedback, and one dialog
 // that says what each tool does and where it runs, in the sidebar's order,
 // with the guide and the FAQ under them and OK as its only way out.
@@ -1267,6 +1310,16 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
   // The links open the repo's docs and stay off the page's own "#".
   assert.match(html, /\[\["helpGuide", "usage"\], \["helpFaq", "faq"\]\]/);
   assert.match(html, /e\.preventDefault\(\);\n    window\.open\(`\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
+});
+
+// Help's "100+" is every dubbing model's languages together, and the line under
+// the Dubbing model choice says the chosen one's own count (owner, 2026-10-21):
+// the markup and the words it is painted with say the same sentence.
+test("Help says the Perso API's 100+ languages depend on the dubbing model", () => {
+  const where = "This computer (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).";
+  assert.ok(readPage().includes(`<div class="help-where">${where}</div>`));
+  const words = readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8");
+  assert.ok(words.includes(`["#helpOverlay .help-item:nth-child(1) .help-where", t("${where}")]`));
 });
 
 // Windows drew Chromium's stock scrollbar wherever a pane scrolls -- a 17px grey

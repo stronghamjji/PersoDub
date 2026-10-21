@@ -2,7 +2,8 @@
 // the shell announces -- including an older shell that sends no date or notes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { updateLive, updateCardView, updateWindowView, noteLines, releaseDay, wireUpdates } from "./updateWindow.mjs";
+import { updateLive, updateCardView, updateWindowView, noteLines, releaseDay, wireUpdates, whatsNewLines } from "./updateWindow.mjs";
+import { setLanguage } from "./i18n.mjs";
 
 const DOWNLOADING = { version: "0.7.1", phase: "downloading", pct: 42 };
 const READY = { version: "0.7.1", phase: "ready", pct: 100,
@@ -98,6 +99,34 @@ test("release notes: nothing gives no lines", () => {
   assert.deepEqual(noteLines(null, "1"), []);
   assert.deepEqual(noteLines("", "1"), []);
   assert.deepEqual(noteLines(undefined, "1"), []);
+});
+
+// The GitHub release's description stays in English (owner, 2026-10-21): the
+// window shows the new version's own list (its app/whats_new.json, which the
+// shell reads) in the page's language, and the description only without it.
+const WHATS_NEW = { notes: ["Faster dubbing.", "A clearer Help."], notes_ko: ["더빙이 빨라졌어요.", "도움말이 쉬워졌어요."] };
+
+test("the new version's own list: the Korean one on a Korean page, the English one otherwise", (t) => {
+  t.after(() => setLanguage("en"));
+  setLanguage("ko");
+  assert.deepEqual(updateWindowView({ ...READY, whatsNew: WHATS_NEW }).notes, ["더빙이 빨라졌어요.", "도움말이 쉬워졌어요."]);
+  setLanguage("en");
+  assert.deepEqual(updateWindowView({ ...READY, whatsNew: WHATS_NEW }).notes, ["Faster dubbing.", "A clearer Help."]);
+  assert.deepEqual(whatsNewLines(WHATS_NEW, "fr"), WHATS_NEW.notes, "any other language reads the English");
+  // A file with no Korean list gives its English one, as the app's own What's new does.
+  assert.deepEqual(whatsNewLines({ notes: ["Faster dubbing."], notes_ko: [] }, "ko"), ["Faster dubbing."]);
+});
+
+test("without the new version's list -- not read, no file at that tag, an older shell -- the release's notes show", (t) => {
+  t.after(() => setLanguage("en"));
+  setLanguage("ko");
+  assert.deepEqual(updateWindowView(READY).notes, ["ElevenLabs voices.", "Erase box fits"]);
+  assert.deepEqual(updateWindowView({ ...READY, whatsNew: { notes: [], notes_ko: [] } }).notes, ["ElevenLabs voices.", "Erase box fits"]);
+  assert.deepEqual(whatsNewLines(undefined, "ko"), []);
+  // And with neither, the link to the release page, as before.
+  const v = updateWindowView({ version: "0.7.1", phase: "ready", pct: 100 }, { releases: "https://example.test/o/r/releases" });
+  assert.deepEqual(v.notes, []);
+  assert.equal(v.notesLink, "https://example.test/o/r/releases/tag/v0.7.1");
 });
 
 test("release day reads an ISO date and gives up on anything else", () => {

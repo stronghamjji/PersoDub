@@ -174,7 +174,7 @@ test("an erase job wears the eraser mark and says what it did, not which languag
   const html = h.$("projectsGrid").innerHTML;
   const card = html.slice(html.indexOf('data-job="f"'));
   assert.match(card, /proj-kind/);
-  assert.match(card, />Erased</);
+  assert.match(card, />Subtitles erased</);
 });
 
 test("clicking a card opens it, and the \"...\" button opens the menu without opening the card", (t) => {
@@ -498,7 +498,7 @@ test("a job whose state changed has its chip, length and words changed on the ca
   assert.equal(onAir.querySelector(".proj-dur").textContent, "01:15");
   assert.equal(next.querySelector(".proj-chip").className, "proj-chip proj-chip-run");
   assert.equal(next.querySelector(".proj-chip").textContent, "Dubbing…");
-  assert.equal(erase.querySelector(".proj-meta").textContent, "Erasing");
+  assert.equal(erase.querySelector(".proj-meta").textContent, "Erasing subtitles");
   // A chip put back goes ahead of the length, under the id the percent finds it by.
   const labels = finished.querySelector(".proj-thumb").kids;
   assert.deepEqual(labels.map((k) => k.className), ["proj-img", "proj-chip proj-chip-queued", "proj-dur"]);

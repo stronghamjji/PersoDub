@@ -111,6 +111,74 @@ test("the update check names its feed, and the download the release file's full 
   assert.equal(updateFileUrl(local, info), "http://127.0.0.1:8099/PersoDub-0.8.6-arm64-mac.zip");
 });
 
+// The update window shows the new version's own list of changes in the app's
+// language, read from its app/whats_new.json at the release tag: the GitHub
+// release's description stays English only (owner, 2026-10-21).
+import { whatsNewUrl, readWhatsNew } from "./updater.js";
+
+const NOTES_URL = "https://raw.githubusercontent.com/stronghamjji/PersoDub/v0.8.7/app/whats_new.json";
+// shell.log as a list, each line with its level.
+const shellLines = () => {
+  const lines = [];
+  return { lines, log: (line, level = "INFO") => lines.push(`${level} ${line}`) };
+};
+
+test("the list is the new version's own whats_new.json, at its release tag in the edition's repository", () => {
+  const github = { provider: "github", owner: "stronghamjji", repo: "PersoDub" };
+  assert.equal(whatsNewUrl(github, { version: "0.8.7", tag: "v0.8.7" }), NOTES_URL);
+  assert.equal(whatsNewUrl(github, { version: "0.8.7" }), NOTES_URL, "no tag in the info: v<version>");
+  assert.equal(whatsNewUrl({ provider: "generic", url: "http://127.0.0.1:8099" }, { version: "0.8.7" }), null,
+    "a test feed has no repository to read it from");
+});
+
+test("the list is read with a time limit, both languages kept for the page to pick from, each step in shell.log", async () => {
+  const { lines, log } = shellLines();
+  const asked = [];
+  const body = JSON.stringify({ notes: ["Faster dubbing.", "", 7], notes_ko: ["더빙이 빨라졌어요."] });
+  const fetch = async (url, init) => {
+    asked.push([url, init.signal instanceof AbortSignal]);
+    return { ok: true, status: 200, text: async () => body };
+  };
+  assert.deepEqual(await readWhatsNew(NOTES_URL, { fetch, log }),
+    { notes: ["Faster dubbing."], notes_ko: ["더빙이 빨라졌어요."] });
+  assert.deepEqual(asked, [[NOTES_URL, true]]);
+  assert.equal(lines[0], `INFO DOWNLOAD START update notes from ${NOTES_URL}`);
+  assert.equal(lines[1], `INFO CONNECTED update notes: HTTP 200 from ${NOTES_URL}`);
+  assert.match(lines[2], /^INFO DOWNLOAD DONE update notes: \d+ B in \d+\.\ds, 1 English and 1 Korean lines$/);
+});
+
+test("a list that cannot be read is none, and the window keeps the release's own notes", async () => {
+  const { lines, log } = shellLines();
+  // No answer: the limit ends the wait (five seconds in the app, a moment here).
+  const silent = (url, { signal }) => new Promise((ok, no) => signal.addEventListener("abort", () => no(signal.reason)));
+  assert.equal(await readWhatsNew(NOTES_URL, { fetch: silent, log, timeoutMs: 20 }), null);
+  const answers = [
+    async () => ({ ok: false, status: 404, text: async () => "404: Not Found" }),    // no such file at that tag
+    async () => { throw new Error("net::ERR_INTERNET_DISCONNECTED"); },
+    async () => ({ ok: true, status: 200, text: async () => "<html>" }),            // not the file
+    async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ notes: [], notes_ko: [" "] }) }),
+  ];
+  for (const fetch of answers) assert.equal(await readWhatsNew(NOTES_URL, { fetch, log }), null);
+  const failed = lines.filter((l) => l.startsWith(`WARNING DOWNLOAD FAILED update notes from ${NOTES_URL} after `));
+  assert.equal(failed.length, 5);
+  assert.match(failed[0], /timeout/);
+  assert.match(failed[1], /: HTTP 404; the update window shows the release's own notes$/);
+  assert.match(failed[2], /net::ERR_INTERNET_DISCONNECTED/);
+  assert.match(failed[4], /the file has no lines/);
+});
+
+test("the list rides along with the update, and an update already on disk stays ready when the list comes", () => {
+  const whatsNew = { notes: ["Faster dubbing."], notes_ko: ["더빙이 빨라졌어요."] };
+  const found = nextUpdateState(null, "update-available", { version: "0.8.7", whatsNew });
+  assert.deepEqual(found, { version: "0.8.7", phase: "downloading", pct: 0, whatsNew });
+  assert.equal(nextUpdateState(found, "update-downloaded", { version: "0.8.7" }).whatsNew, whatsNew);
+  // The update is announced once its list is read, which a download already
+  // on disk can beat: what that said stands.
+  const ready = nextUpdateState(null, "update-downloaded", { version: "0.8.7" });
+  assert.deepEqual(nextUpdateState(ready, "update-available", { version: "0.8.7", whatsNew }),
+    { version: "0.8.7", phase: "ready", pct: 100, whatsNew });
+});
+
 test("a downloaded update waits for Restart to update on every platform, quitting does not install it", () => {
   // The owner's rule (2026-10-06): the user chooses when the app changes. Mac
   // used to install on a plain quit while Windows waited for the button.

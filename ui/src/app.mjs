@@ -398,13 +398,13 @@ for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
 const ENGINE_HINTS = {
   dubMode: { get local() { return [t("Runs on this computer, free."), t("You can edit the script after.")]; },
              get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that.")]; } },
-  sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
+  sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
-  stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
+  stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
-  translate: { get hunyuan() { return [t("Runs on this computer, free and fastest."), t("For accuracy, use the API.")]; },
-               get gemma() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
-               get gemini() { return [t("Most accurate."), t("Needs an API key.")]; },
+  translate: { get hunyuan() { return [t("Runs on this computer, free and fastest."), t("For accuracy, use the Gemini API.")]; },
+               get gemma() { return [t("Runs on this computer, free."), t("For accuracy, use the Gemini API.")]; },
+               get gemini() { return [t("Most accurate."), t("Needs a Google (Gemini) key in Settings > API keys.")]; },
                get chatgpt() { return [t("Free within a ChatGPT account's limit. Sign in once, no download.")]; } },
   voice: { get qwen3() { return [t("Runs on this computer, free."), t("Clones each speaker\u2019s voice.")]; } },
 };
@@ -2100,6 +2100,15 @@ const scriptTable = initScriptTableUi({
   needModels: (detail, retry) => {
     dubRestart = retry;
     models.refreshModels().then(() => models.showModelsDialog(detail));
+  },
+  // A line pressed: the video stops just inside its start (exactly on it, the
+  // line before, which ends there, is the one lit: donePlayer isNowLine), the
+  // clock, the row and the playhead follow, and the strip scrolls to it.
+  onSeekLine: (start) => {
+    cancelRange(doneVideo);
+    doneVideo.currentTime = start + 0.001;
+    donePlayer.paintPlayhead();
+    timeline.revealTime(start);
   },
 });
 

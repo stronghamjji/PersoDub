@@ -1,7 +1,7 @@
 // Auto-update decision logic. Pure functions -- the Electron wiring lives in
 // updateFlow.js; everything testable without Electron lives here.
 import { editionFeed } from "./edition.js";
-import { urlText } from "./logLine.js";
+import { secondsSince, sizeText, urlText } from "./logLine.js";
 
 /**
  * Should this run check for updates at all?
@@ -60,21 +60,61 @@ export function updateFileUrl(feed, info) {
   return new URL(file, feed.url.endsWith("/") ? feed.url : `${feed.url}/`).href;
 }
 
+// The new version's own list of changes, for the update window in the app's
+// language: the GitHub release's description stays in English only (owner,
+// 2026-10-21). It is that version's app/whats_new.json, the file its What's
+// new shows, in the repository at its release tag. A test feed (generic) has
+// no repository: null.
+export function whatsNewUrl(feed, info) {
+  if (feed.provider !== "github" || !info?.version) return null;
+  return `https://raw.githubusercontent.com/${feed.owner}/${feed.repo}/${info.tag ?? `v${info.version}`}/app/whats_new.json`;
+}
+
+/**
+ * Read that file: its English and Korean lists as app/whats_new.json names
+ * them, {notes, notes_ko}, for the page to pick from in its own language -- or
+ * null when it has no line, or no answer came in `timeoutMs`; the window then
+ * shows the release's own notes, as before. Each step is a line of shell.log.
+ */
+export async function readWhatsNew(url, { fetch, log, timeoutMs = 5000 }) {
+  const from = Date.now();
+  log(`DOWNLOAD START update notes from ${urlText(url)}`);
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    log(`CONNECTED update notes: HTTP ${r.status} from ${urlText(url)}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const text = await r.text();
+    const data = JSON.parse(text);
+    const lines = (list) => (Array.isArray(list) ? list.filter((l) => typeof l === "string" && l.trim()) : []);
+    const lists = { notes: lines(data?.notes), notes_ko: lines(data?.notes_ko) };
+    if (!lists.notes.length && !lists.notes_ko.length) throw new Error("the file has no lines");
+    log(`DOWNLOAD DONE update notes: ${sizeText(Buffer.byteLength(text))} in ${secondsSince(from)}s, `
+      + `${lists.notes.length} English and ${lists.notes_ko.length} Korean lines`);
+    return lists;
+  } catch (err) {
+    log(`DOWNLOAD FAILED update notes from ${urlText(url)} after ${secondsSince(from)}s: ${updateErrorText(err)}; `
+      + "the update window shows the release's own notes", "WARNING");
+    return null;
+  }
+}
+
 // What the page's update window shows beside the version: the release's
 // date and notes, as electron-updater's UpdateInfo carries them (the notes
-// may be HTML, plain text or a list; the page reduces them to text lines).
+// may be HTML, plain text or a list; the page reduces them to text lines),
+// and the new version's own list when it was read (readWhatsNew).
 // Only what is present, so a state without them stays as small as before.
 function about(info) {
   return {
     ...(info?.releaseDate ? { releaseDate: info.releaseDate } : {}),
     ...(info?.releaseNotes ? { releaseNotes: info.releaseNotes } : {}),
+    ...(info?.whatsNew ? { whatsNew: info.whatsNew } : {}),
   };
 }
 
 /**
  * The update as the page should see it, folded from electron-updater's
  * events: {version, phase: "downloading" | "ready", pct, releaseDate?,
- * releaseNotes?}, or {phase: "check-failed"} when the check itself found no
+ * releaseNotes?, whatsNew?}, or {phase: "check-failed"} when the check itself found no
  * answer -- the window said "up to date" then, which nobody knew. Kept outside
  * updateFlow.js so the two-step announcement ("found, downloading" first, "ready"
  * once the file is on disk) is testable. Returns `prev` unchanged for events
@@ -83,6 +123,9 @@ function about(info) {
  */
 export function nextUpdateState(prev, event, info) {
   if (event === "update-available" && info?.version) {
+    // Announced once the version's list is read, which a download already on
+    // disk can beat: what that announced stands, with the list added.
+    if (prev?.version === info.version) return { ...prev, ...about(info) };
     return { version: info.version, phase: "downloading", pct: 0, ...about(info) };
   }
   if (event === "download-progress" && prev?.version) {

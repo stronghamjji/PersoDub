@@ -30,7 +30,8 @@ application name, version, and operating system family so the vendor can attribu
 usage.
 
 The desktop app checks GitHub Releases once at launch to learn whether a newer
-version exists, and downloads it in the background when there is one. The request
+version exists, and downloads it in the background when there is one, with that
+version's list of changes from the repository for the update window. The request
 carries no personal data — it is the same anonymous read anyone makes opening the
 releases page. Set `PERSODUB_DISABLE_UPDATE_CHECK=1` in the kit's `kit.env` to turn
 the check off entirely.

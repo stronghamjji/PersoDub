@@ -115,13 +115,15 @@ const UNDO_ICON = lucide("undo-2", 14);
  *        dubbing's own popup, whose translator buttons call pick
  * @param {(detail: object, retry: () => any) => void} [deps.needModels]  the
  *        translator's model is not downloaded: the download dialog, then retry
+ * @param {(start: number) => void} [deps.onSeekLine]  a line was pressed: put
+ *        the video at the start of it, still
  * @returns the operations the rest of the page calls.
  */
 export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeline,
                                     paintPlayhead, getVideo, showVideoSource,
                                     playRange, reloadVideo, getJob = () => null,
                                     persoPollMs = 5000, askTranslator = () => {},
-                                    needModels = () => {} }) {
+                                    needModels = () => {}, onSeekLine = () => {} }) {
   // Which job's script is on screen. The page reads it back (getJobId) because
   // the assistant's events arrive with no job attached to them.
   let scriptJobId = null;
@@ -145,6 +147,9 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   let nightingale = null;
   // The lines on screen, as the script last gave them.
   let shown = [];
+  // The line last pressed (its number), marked through every redraw of the
+  // same project's table; another project's table starts with none.
+  let selectedLine = null;
   // The script's stamp when it was last drawn: ui/src/scriptWatch.mjs draws
   // again when the server's moves on (the agent or another window).
   let drawnStamp = null;
@@ -231,7 +236,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const reworded = l.reworded
       ? ` data-note="${t("Perso reworded this line.")}" title="${t("You wrote: {words}", { words: escapeHtml(l.reworded) })}"` : "";
     const tick = picked.has(l.line);
-    return `<div class="sc-row${tick ? " sc-picked" : ""}" data-line="${l.line}" data-start="${l.start}" data-end="${l.end}">
+    return `<div class="sc-row${tick ? " sc-picked" : ""}${l.line === selectedLine ? " sc-sel" : ""}" data-line="${l.line}" data-start="${l.start}" data-end="${l.end}">
     <label class="sc-n"><input class="sc-pick" type="checkbox" data-pick="${l.line}"${tick ? " checked" : ""}
       aria-label="${t("Choose line {n}", { n: l.line })}"><span>${l.line}</span></label>
     <div>${chip}</div>
@@ -258,6 +263,21 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   // here covers the press that slid off the button and never became a click.
   document.addEventListener("mouseup", () => { revertPressedLine = null; });
 
+  // A press on a line's time, its words, its length or an empty part of its
+  // row marks the line and puts the video at its start, still (owner,
+  // 2026-10-21). Its buttons, tick box and translation keep their own press,
+  // and a drag that selects words is a selection, not a press. On the box,
+  // once: the rows are drawn again and again, the box is not.
+  $("scriptBox").addEventListener("click", (e) => {
+    const row = e.target.closest(".sc-row[data-start]");
+    if (!row || e.target.closest("button, input, label, a, [contenteditable]")) return;
+    if (document.getSelection?.()?.isCollapsed === false) return;
+    for (const was of $("scriptBox").querySelectorAll(".sc-row.sc-sel")) was.classList.remove("sc-sel");
+    row.classList.add("sc-sel");
+    selectedLine = +row.dataset.line;
+    onSeekLine(+row.dataset.start);
+  });
+
   // An answer that lands after another project was opened (or this one was
   // left for Home) is not this screen's to draw: every late writer asks first.
   const left = (jobId) => scriptJobId !== jobId;
@@ -267,6 +287,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     if (!box) return;
     if (scriptJobId !== jobId) {
       picked.clear();
+      selectedLine = null;
       // The project left may still be waiting on its Translate again; this
       // one's button is its own.
       $("retranslateBtn").disabled = false;

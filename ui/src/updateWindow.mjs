@@ -4,7 +4,7 @@
 // card carries its red dot and, once the update is on disk, says so in its
 // title. The shell downloads a new
 // version in the background and announces {version, phase: "downloading" |
-// "ready", pct, releaseDate?, releaseNotes?} as it goes (desktop/src/updater.js
+// "ready", pct, releaseDate?, releaseNotes?, whatsNew?} as it goes (desktop/src/updater.js
 // nextUpdateState); this file turns that into what the card and the window
 // show. A shell built before releaseDate/releaseNotes existed sends only the
 // first three -- the window then leaves out the date and links to the release
@@ -13,7 +13,7 @@
 //
 // Everything this file touches is #homeWhatsNew (its class and tip, and
 // #homeWhatsNewTitle once the update is ready) and #updateOverlay.
-import { t } from "./i18n.mjs";
+import { t, currentLanguage } from "./i18n.mjs";
 
 // An update exists (found and downloading, or on disk).
 export function updateLive(state) {
@@ -65,6 +65,17 @@ export function noteLines(notes, version) {
     .filter((l) => l && !/^what.?s new$/i.test(l));
 }
 
+// The new version's own list of changes, which the shell reads from that
+// version's app/whats_new.json (desktop/src/updater.js readWhatsNew), in the
+// page's language: the Korean list on a Korean page, else the English one --
+// also when the file has no Korean list, as GET /api/whats-new picks. [] when
+// the shell read none; the window then shows the release's notes, which stay
+// in English on GitHub (owner, 2026-10-21).
+export function whatsNewLines(whatsNew, language) {
+  const own = language === "ko" ? whatsNew?.notes_ko : null;
+  return (own?.length ? own : whatsNew?.notes) || [];
+}
+
 /**
  * What the window shows for one state.
  * @param state      the shell's latest announcement, or null
@@ -89,7 +100,8 @@ export function updateWindowView(state, { current = "", currentNotes = [], dubRu
       running: "", notes: currentNotes, notesLink: null };
   }
   const day = releaseDay(state.releaseDate);
-  const notes = noteLines(state.releaseNotes, state.version);
+  const own = whatsNewLines(state.whatsNew, currentLanguage());
+  const notes = own.length ? own : noteLines(state.releaseNotes, state.version);
   const ready = state.phase === "ready";
   return {
     title: t("You can update to the latest version"),
