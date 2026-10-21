@@ -901,7 +901,7 @@ test("every model Perso names is offered, a new one under a name made from its i
   const rows = await openModels(h);
   assert.deepEqual(rows.map(nameOf), ["Oriole", "Finch", "Nightingale", "New One"]);
   const caption = (o) => o.children[0].children[1].textContent;
-  assert.equal(caption(rows[0]), "Default · 1 credits per second · 1 languages");
+  assert.equal(caption(rows[0]), "Default · 1 credit per second · 1 languages");
   assert.equal(caption(rows[1]), "Lowest-cost basic dubbing · 0.2 credits per second · 1 languages");
   assert.equal(caption(rows[3]), "1 languages");                    // nothing known of it but its languages
   assert.equal(rows[1].children[1].textContent, "Pro and up");       // the Pro badge

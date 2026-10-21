@@ -726,6 +726,7 @@
   "{name} stopped: {reason} Resume it from the line under its dropdown.": "{name} 다운로드가 멈췄어요: {reason} 선택 칸 아래 줄에서 '이어 하기'를 눌러 주세요.",
   "{name}: Installed by PersoDub.": "{name}: PersoDub 앱에서 설치해요.",
   "{n} changes": "변경 {n}개",
+  "{n} credit per second": "1초 {n}크레딧",
   "{n} credits left": "크레딧 {n} 남음",
   "{n} credits per second": "1초 {n}크레딧",
   "{n} edited lines are replaced. Press again.": "직접 고친 {n}줄을 새 번역으로 바꿔요. 한 번 더 눌러 주세요.",

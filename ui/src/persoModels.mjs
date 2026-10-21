@@ -61,8 +61,10 @@ export function languagesFor(list, model) {
   return list.filter((l) => !l.models || l.models.includes(model));
 }
 
+// One credit is singular in English: the line read "1 credits per second" (2026-10-22).
 function rateText(info) {
-  return info.rate == null ? "" : t("{n} credits per second", { n: info.rate });
+  if (info.rate == null) return "";
+  return info.rate === 1 ? t("{n} credit per second", { n: info.rate }) : t("{n} credits per second", { n: info.rate });
 }
 
 /** The line under a model in the list: "Default · 1 credit a second · 77 languages". */

@@ -46,10 +46,12 @@ test("a model's name as the screen says it, a new one's made from its id", () =>
 });
 
 test("the line under a model and under the choice", () => {
-  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "Default · 1 credits per second · 77 languages");
+  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "Default · 1 credit per second · 77 languages");
   assert.equal(modelCaption(modelInfo("NEW_ONE"), 3), "3 languages");
   assert.equal(modelHint(modelInfo("NIGHTINGALE"), 102), "6 credits per second · 102 languages with this model · Perso Pro plan and up");
-  assert.equal(modelHint(modelInfo("WREN"), 32), "1 credits per second · 32 languages with this model");
+  assert.equal(modelHint(modelInfo("WREN"), 32), "1 credit per second · 32 languages with this model");
+  // One credit is singular; a part of one is not (2026-10-22).
+  assert.equal(modelHint(modelInfo("FINCH"), 79), "0.2 credits per second · 79 languages with this model · Perso Pro plan and up");
 });
 
 // Help says "100+" for every model together; the line under the choice says
