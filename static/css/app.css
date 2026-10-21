@@ -1318,6 +1318,8 @@
     letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
   /* The line the video is on right now, so the eye can follow the script. */
   .sc-row.sc-now { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+  /* The line last pressed (ui/src/scriptTable.mjs), a bar down its left edge. */
+  .sc-row.sc-sel { box-shadow: inset 3px 0 0 var(--primary); }
   .sc-n { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
   /* Translate again: a tick box before each line's number, the count and the
      three buttons at the right of the pane's name. */

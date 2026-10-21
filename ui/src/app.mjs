@@ -2056,6 +2056,15 @@ const scriptTable = initScriptTableUi({
     dubRestart = retry;
     models.refreshModels().then(() => models.showModelsDialog(detail));
   },
+  // A line pressed: the video stops just inside its start (exactly on it, the
+  // line before, which ends there, is the one lit: donePlayer isNowLine), the
+  // clock, the row and the playhead follow, and the strip scrolls to it.
+  onSeekLine: (start) => {
+    cancelRange(doneVideo);
+    doneVideo.currentTime = start + 0.001;
+    donePlayer.paintPlayhead();
+    timeline.revealTime(start);
+  },
 });
 
 // ---------------- Subtitles on the player ----------------

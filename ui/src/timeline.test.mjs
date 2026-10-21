@@ -386,6 +386,34 @@ test("the strip follows the playhead while it plays, and lets go when the viewer
   assert.equal(track.scrollLeft, 50);
 });
 
+// A line pressed in the script table puts the still video at its start; the
+// strip is brought to it the way following would, playing or not (owner, 2026-10-21).
+test("a moment the page moved the still video to is brought into view, and only when it is off the strip", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  h.api.renderTimeline(LINES, 120);
+  const track = h.$("timelineTrack");
+  assert.equal(h.video.paused, true);
+
+  h.api.revealTime(100);
+  assert.equal(track.scrollLeft, 7500, "a third of the way in, as following puts it");
+  h.api.revealTime(101);
+  assert.equal(track.scrollLeft, 7500, "already on show: left where it is");
+
+  // Its scrolling is not the viewer's: once the video plays, following goes on.
+  h.box.fire("scroll", { target: track });
+  h.video.paused = false;
+  h.api.paintTimeline(110, 120, "clock");
+  assert.equal(track.scrollLeft, 8270);
+
+  // A press wins over a strip just scrolled by hand.
+  h.video.paused = true;
+  track.scrollLeft = 0;
+  h.box.fire("scroll", { target: track });
+  h.api.revealTime(100);
+  assert.equal(track.scrollLeft, 7500);
+});
+
 test("no lines, or no length yet, leaves the strip blank and forgets where it was scrolled", (t) => {
   const h = harness();
   t.after(h.log.restore);

@@ -1044,6 +1044,19 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     paintPlayhead();
   }
 
+  // The strip brought to a moment the page moved the video to from outside it
+  // (a line pressed in the script table): the video is still, so following
+  // would not move it, and the playhead could sit off the part on show. Off
+  // it, it scrolls there a third of the way in, as following does.
+  function revealTime(t) {
+    const track = $("timelineTrack");
+    if (!track || !timelinePps) return;
+    const x = timeOnStrip(t) * timelinePps;
+    if (x >= track.scrollLeft && x <= track.scrollLeft + track.clientWidth) return;
+    track.scrollLeft = Math.max(0, x - track.clientWidth / 3);
+    followedTo = track.scrollLeft;   // ours, so the scroll listener does not take it for the viewer's
+  }
+
   $("timeline").addEventListener("pointerdown", (e) => {
     const onHead = e.target.closest(".tl-playhead");
     // Before dubbing a press on a lane goes there too, the way an editor's
@@ -1274,6 +1287,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   function resetView() { timelineAt = 0; timelineZoom = 1; }
 
   return { renderTimeline, redraw, drawTimelineTrack, paintTimeline, getLines,
+           revealTime,
            resetView, fitLayout, attach, showDraft, showErase, showAudio };
 }
 

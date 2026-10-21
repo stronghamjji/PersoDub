@@ -1271,6 +1271,15 @@ test("the Script pane's head has Translate again, Remake voices and All at once,
   }
 });
 
+// A line pressed in the script table (owner, 2026-10-21): the video stops just
+// inside its start, the clock, row and playhead follow, the strip scrolls to
+// it; the line wears a bar down its left edge.
+test("a script line pressed stops the video at its start and the strip is brought to it", () => {
+  const html = readPage();
+  assert.match(html, /onSeekLine: \(start\) => \{\n    cancelRange\(doneVideo\);\n    doneVideo\.currentTime = start \+ 0\.001;\n    donePlayer\.paintPlayhead\(\);\n    timeline\.revealTime\(start\);\n  \},/);
+  assert.match(html, /\.sc-row\.sc-sel \{ box-shadow: inset 3px 0 0 var\(--primary\); \}/);
+});
+
 // Help (owner, 2026-10-09): one button above Send feedback, and one dialog
 // that says what each tool does and where it runs, in the sidebar's order,
 // with the guide and the FAQ under them and OK as its only way out.

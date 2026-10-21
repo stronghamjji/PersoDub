@@ -87,7 +87,7 @@ function harness({ responses = {}, perso = false, duration = 30, job = null } = 
     return els.get(id);
   };
   const log = { calls: [], timeline: [], playhead: 0, played: [], shown: [],
-                reloads: 0, timers: [] };
+                reloads: 0, timers: [], seeks: [] };
 
   const real = { fetch: globalThis.fetch, document: globalThis.document,
                  setTimeout: globalThis.setTimeout };
@@ -133,6 +133,7 @@ function harness({ responses = {}, perso = false, duration = 30, job = null } = 
     getJob: () => job,
     askTranslator: (notice, pick) => { log.asked = { notice, pick }; },
     needModels: (detail, retry) => { log.needed = { detail, retry }; },
+    onSeekLine: (start) => { log.seeks.push(start); },
   });
   return { $, api, log, video };
 }
@@ -680,6 +681,72 @@ test("the play button always plays the line in the dub, not the original", async
 
   assert.deepEqual(h.log.shown, ["dubbed"]);
   assert.deepEqual(h.log.played, [["doneVideo", 4, 5]]);
+});
+
+// -- pressing a line (owner, 2026-10-21) --------------------------------------
+
+/** A line's row as the browser built it, and a press on it: the press's target
+    answers closest() from `hits`, as the node under the pointer would. */
+function lineRow(n) {
+  const row = bindClassList(makeEl(`row${n}`));
+  Object.assign(row.dataset, { line: String(n), start: String(n), end: String(n + 1) });
+  return row;
+}
+const pressOn = (row, hits = {}) => ({ target: { closest: (sel) => ({ ".sc-row[data-start]": row, ...hits })[sel] || null } });
+const CONTROLS = "button, input, label, a, [contenteditable]";
+
+test("pressing a line's time, words or an empty part marks the line and puts the video at its start", async (t) => {
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [line(1), line(2)] }) } });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+  const box = h.$("scriptBox");
+  const one = lineRow(1), two = lineRow(2);
+
+  await box.fire("click", pressOn(two));
+  assert.ok(two.classes.has("sc-sel"));
+  assert.deepEqual(h.log.seeks, [2]);
+  // Another line pressed takes the mark from the one before.
+  box.qs[".sc-row.sc-sel"] = [two];
+  await box.fire("click", pressOn(one));
+  assert.ok(one.classes.has("sc-sel"));
+  assert.ok(!two.classes.has("sc-sel"));
+  assert.deepEqual(h.log.seeks, [2, 1]);
+  assert.deepEqual(h.log.played, [], "nothing plays");
+});
+
+test("a press on play, the tick box or the translation is theirs, and a drag that selects words is no press", async (t) => {
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [line(1)] }) } });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+  const box = h.$("scriptBox");
+  const row = lineRow(1);
+  for (const control of ["play button", "tick box", "translation"]) {
+    await box.fire("click", pressOn(row, { [CONTROLS]: { control } }));
+  }
+  // The header row and the notices above the table are no line.
+  await box.fire("click", { target: { closest: () => null } });
+  globalThis.document.getSelection = () => ({ isCollapsed: false });
+  await box.fire("click", pressOn(row));
+  assert.ok(!row.classes.has("sc-sel"));
+  assert.deepEqual(h.log.seeks, []);
+});
+
+test("the pressed line stays marked when the table is drawn again, and another project's starts with none", async (t) => {
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [line(1), line(2)] }),
+                                   "/api/dub/jobs/j2/script": ok({ lines: [line(1), line(2)] }) } });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+  await h.$("scriptBox").fire("click", pressOn(lineRow(2)));
+
+  await h.api.renderScript("j1");   // an edit saved, a voice remade: the table again
+  const html = h.$("scriptBox").innerHTML;
+  assert.match(html, /<div class="sc-row sc-sel" data-line="2"/);
+  assert.equal((html.match(/sc-sel/g) || []).length, 1);
+
+  await h.api.renderScript("j2");
+  assert.doesNotMatch(h.$("scriptBox").innerHTML, /sc-sel/);
+  await h.api.renderScript("j1");
+  assert.doesNotMatch(h.$("scriptBox").innerHTML, /sc-sel/, "and coming back is a fresh start");
 });
 
 // -- what the page still asks of the table ------------------------------------
