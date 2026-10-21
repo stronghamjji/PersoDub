@@ -95,7 +95,8 @@ test("Save video blinks the banner's link field twice, puts the caret in it and 
   $("linkCard").classList.add("error");
   pointAtLink($);
   assert.equal($("linkInput").focused, true);
-  assert.deepEqual($("linkInput").scrolled, { block: "nearest" });
+  assert.deepEqual($("uploadZone").scrolled, { block: "center" }, "the whole banner is brought into view");
+  assert.equal($("linkInput").scrolled, undefined, "not the field alone");
   assert.equal($("homeBannerLink").classList.contains("ask"), true);
   assert.equal($("linkCard").hidden, false);
   assert.equal($("linkCard").classList.contains("error"), false);
