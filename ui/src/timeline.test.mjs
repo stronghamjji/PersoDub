@@ -830,6 +830,23 @@ test("before a video is imported, one row says what to do; an imported one is on
   assert.ok(h.$("timelineTrack").innerHTML.includes('class="tl-vclip tl-cut" data-i="0"\n      style="left:0.0px;width:768.0px"'));
 });
 
+// A draft left with Home, then an empty new project: the player went on
+// saying the last draft's kept length, 00:01:10.7, over no video (2026-10-21).
+test("an empty new project's player says the clock handed in, not the last draft's kept time", (t) => {
+  const h = drafting();
+  t.after(h.log.restore);
+  h.video.currentTime = 6;
+  h.box.fire("click", evt({ "#tlDelRight": {} }));
+  assert.deepEqual(getDraft().ranges, [[0, 6]]);
+  h.api.paintTimeline(0, 10, "00:00:00.0 / 00:00:10.0");
+  assert.equal(h.$("videoTime").textContent, "00:00:00.0 / 00:00:06.0", "a draft counts kept time");
+  clearDraft();
+  h.api.showDraft();
+  // The clock the player last painted (the harness's getClock), on both clocks.
+  assert.equal(h.$("videoTime").textContent, "00:00:00.0 / 00:00:30.0");
+  assert.equal(h.$("timelineClock").textContent, "00:00:00.0 / 00:00:30.0");
+});
+
 test("split, select, delete, undo and redo -- and the draft is told every time", async (t) => {
   const h = drafting();
   t.after(h.log.restore);

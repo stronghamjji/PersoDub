@@ -785,12 +785,14 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   function paintTimeline(t, total, clock) {
     if (!mode) return;   // nothing drawn
     if (mode === "draft") {
-      // The kept time, on the timeline's clock and the player's alike.
+      // The kept time, on the timeline's clock and the player's alike. With
+      // no video the player's says the clock handed in: the last draft's
+      // kept time stayed on an empty new project's player (2026-10-21).
       if (clips) {
         clock = `${fmtClockTenths(sourceToKept(clips, t))} / ${fmtClockTenths(totalOf(clips))}`;
-        const player = getPlayerClock();
-        if (player) player.textContent = clock;
       }
+      const player = getPlayerClock();
+      if (player) player.textContent = clock;
     } else if (total > 0 && Math.abs(total - timelineDuration) > 0.05) {
       // The video's real length only arrives with its metadata; the strip was
       // drawn to the last line's end until then, so draw it again for the true one.
