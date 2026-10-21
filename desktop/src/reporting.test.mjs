@@ -214,3 +214,49 @@ test("debug prints what would leave and sends nothing", async () => {
   assert.match(s.logged[1], /^\[persodub-report\] would attach \d+ bytes of logs$/);
   assert.equal(existsSync(join(s.userData, "reports.json")), false, "no id on disk for a run that sends nothing");
 });
+
+// The usage counts' id is the dashboard's name for a computer. A report carries
+// its first twelve characters while the counts are on, read from their own
+// file and never minted for a computer that has none.
+const COUNTS_ID = "0123456789abcdef0123456789abcdef";
+
+test("with the counts on a report carries the first twelve characters of their saved id, and mints none", async () => {
+  const s = setup();
+  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
+  assert.equal(JSON.parse(s.calls[0].body).device, "", "no saved id, no device");
+  assert.equal(existsSync(join(s.userData, "analytics.json")), false, "nothing minted for it");
+
+  writeFileSync(join(s.userData, "analytics.json"), JSON.stringify({ device: COUNTS_ID, lastDay: null }));
+  s.calls.length = 0;
+  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
+  assert.equal(JSON.parse(s.calls[0].body).device, "0123456789ab");
+
+  const d = setup({ kitEnv: "PERSODUB_REPORTS_DEBUG=1\n" });
+  writeFileSync(join(d.userData, "analytics.json"), JSON.stringify({ device: COUNTS_ID, lastDay: null }));
+  await d.reporter.sendReport({ kind: "dub", kitDir: d.kitDir, code: "unknown", message: "boom" });
+  assert.match(d.logged[0], /"device":"0123456789ab"/, "the debug print shows it");
+});
+
+test("with the counts off a report carries no device, and one queued while they were on leaves without it", async () => {
+  let up = false;
+  const s = setup({
+    relay: (url) => {
+      if (!up) throw new TypeError("fetch failed");
+      return url.endsWith("/report") ? ok({ id: "r5", issue: 3 }) : { ok: true, status: 200 };
+    },
+  });
+  writeFileSync(join(s.userData, "analytics.json"), JSON.stringify({ device: COUNTS_ID, lastDay: null }));
+  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
+  assert.equal(s.readQueued(s.queued()[0]).report.device, "0123456789ab", "queued while the counts were on");
+
+  writeFileSync(join(s.kitDir, "kit.env"), "PERSODUB_NO_ANALYTICS=1\n");
+  up = true;
+  s.calls.length = 0;
+  await s.reporter.flushReports(s.kitDir);
+  assert.equal(s.calls[0].url, `${REPORT_ENDPOINT}/report`);
+  assert.equal(JSON.parse(s.calls[0].body).device, "");
+
+  s.calls.length = 0;
+  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
+  assert.equal(JSON.parse(s.calls[0].body).device, "");
+});

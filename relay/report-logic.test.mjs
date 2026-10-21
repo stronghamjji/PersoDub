@@ -599,3 +599,36 @@ test("the edition is kept when it is one of the two, dropped otherwise, and show
   assert.equal(validateReport({ ...GOOD, env: { ...GOOD.env, edition: "<b>x</b>" } }).report.env.edition, "");
   assert.ok(issueBody(validateReport(GOOD).report).includes("| Edition | ? |"));
 });
+
+// ---- the device ------------------------------------------------------------
+// The first twelve characters of the app's usage id (0.8.7) are for the private
+// dashboard: the archive's summary carries them, and nothing the public issue is
+// made of does (owner decision, 2026-10-21).
+const DEVICE = "fedcba987654";
+
+test("a device of twelve hex characters is kept, anything else is dropped and the report still goes", () => {
+  assert.equal(validateReport({ ...GOOD, device: DEVICE }).report.device, DEVICE);
+  for (const bad of ["fedcba9876543210fedcba9876543210", "FEDCBA987654", "fedcba98765", "<b>x</b>", 123456789012, null]) {
+    const { ok, report } = validateReport({ ...GOOD, device: bad });
+    assert.ok(ok, String(bad));
+    assert.equal(report.device, "", String(bad));
+  }
+  assert.equal(validateReport(GOOD).report.device, "", "an app before 0.8.7 sends none");
+});
+
+test("the device reaches the archive's summary and nothing the public issue is made of", () => {
+  const { report } = validateReport({ ...GOOD, device: DEVICE });
+  assert.equal(logSummary(report, 72).device, DEVICE);
+  assert.equal(logSummary(validateReport(GOOD).report, 72).device, "");
+  const pub = [issueTitle(report), issueBody(report, { logsRef: "a".repeat(32) }), ...summaryLines(report),
+               commentText(report), ...labelsFor(report), tallyLine(countSighting(null, report))].join("\n");
+  assert.ok(!pub.includes(DEVICE), pub);
+});
+
+test("a device field the app's debug print left in a log tail is masked on the way past", () => {
+  const shell = `[persodub-report] would send: {"kind":"dub","device":"${DEVICE}","code":"unknown"}`;
+  const { report } = validateReport({ ...GOOD, device: DEVICE, logTails: { ...GOOD.logTails, shell } });
+  assert.match(report.logTails.shell, /"device":"\[REDACTED\]"/);
+  assert.ok(!issueBody(report).includes(DEVICE));
+  assert.equal(logSummary(report, 72).device, DEVICE, "the summary keeps its own copy");
+});

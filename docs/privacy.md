@@ -98,6 +98,10 @@ the install folder can be written. An engine that would not start: which Visual 
 files are missing, and the NVIDIA driver line. An out-of-memory error: the memory free.
 Product names, yes-or-no answers, error codes and numbers only.
 
+From 0.8.7, while the usage counts above are on, a report also carries the first 12
+characters of their random install ID, so a failure can be matched with that computer's
+counts. It goes to the private dashboard only and never into the public issue.
+
 Before anything leaves your machine, every line of it is put through three rules: a
 path under your home folder is cut down to `~/…/*.mp4` — the name of the folder and the
 name of the file both go, and so does yours; anything shaped like an API key becomes

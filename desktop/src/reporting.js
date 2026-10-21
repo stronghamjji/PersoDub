@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { freeSpaceAt } from "./config.js";
 import { readKitVersion } from "./engineCheck.js";
 import { packInstalled, torchVariantFor, PACKS } from "./installSpec.js";
-import { loadState, saveState } from "./analytics.js";
+import { loadState, resolveAnalyticsMode, savedDevice, saveState } from "./analytics.js";
 import { probesFor, runProbes } from "./diagnostics.js";
 import { buildReport, collectEnvironment, maskText, resolveReportMode, withoutEncodedNames, worthReporting } from "./report.js";
 import { buildLogArchive } from "./reportLogs.js";
@@ -55,6 +55,13 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
 
   function reportMode(kitDir) {
     return resolveReportMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
+  }
+
+  // Whether the usage counts are on, asked the way usageIpc.js asks it. Only
+  // then does a report carry the first twelve characters of their id, so the
+  // private dashboard can put a failure beside that computer's counts.
+  function usageOn(kitDir) {
+    return resolveAnalyticsMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) }) === "on";
   }
 
   // The backend's half: the failed job's stage and engines, and the two logs
@@ -144,6 +151,8 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
       kit: kitDir,
       version: app.getVersion(),
       installId: loadState(REPORT_STATE()).device,
+      // The counts' own id, read and never minted (usageIpc.js writes it).
+      device: usageOn(kitDir) ? savedDevice(join(app.getPath("userData"), "analytics.json")).slice(0, 12) : "",
       env: collectEnvironment({
         appVersion: app.getVersion(),
         kitVersion: readKitVersion(kitDir) || "",
@@ -257,7 +266,10 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
       if (work === "done") { remove(base); continue; }
       const archive = hasArchive ? readFileSync(archivePath) : null;
       if (work === "send") {
-        const { sent, id, logsSent } = await deliver(entry.report, archive);
+        // The counts' switch is asked again: a report queued while they were
+        // on goes without their id once they have been turned off.
+        const report = usageOn(kitDir) ? entry.report : { ...entry.report, device: "" };
+        const { sent, id, logsSent } = await deliver(report, archive);
         if (sent && logsSent) remove(base);
         // Sent, but its logs did not follow: keep the pair under the same name
         // (so the week it has to try in keeps running) with the id written in,

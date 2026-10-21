@@ -103,6 +103,9 @@ export function maskAgain(text) {
     .replace(/\bAIza[A-Za-z0-9_-]{10,}/g, "[REDACTED]")
     .replace(/\bghp_[A-Za-z0-9_-]{8,}/g, "[REDACTED]")
     .replace(/\bhf_[A-Za-z0-9_-]{8,}/g, "[REDACTED]")
+    // A report's device field inside a log tail, where the app's debug print
+    // of a report leaves it: that field is for the private dashboard only.
+    .replace(/("device":")[0-9a-f]{12}"/g, '$1[REDACTED]"')
     .replace(HOME_RE, "~")
     // Only outside a path, the same guard the app uses: the app deliberately
     // keeps the kit's own paths readable (which model, which venv), and a
@@ -202,6 +205,10 @@ export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
     kind: oneOf(raw.kind, KINDS, "unknown"),
     version: raw.version,
     installId: raw.installId,
+    // The first twelve characters of the app's usage id (0.8.7), sent while
+    // its counts are on. logSummary carries it to the private dashboard; the
+    // issue, its title, labels and tally never read it.
+    device: typeof raw.device === "string" && /^[0-9a-f]{12}$/.test(raw.device) ? raw.device : "",
     fingerprint: raw.fingerprint,
     step: SAFE_ID_RE.test(raw.step || "") ? raw.step : "",
     stage: SAFE_ID_RE.test(raw.stage || "") ? raw.stage : "",
@@ -303,6 +310,7 @@ export function logSummary(report, issue) {
     ram: report.env.ramGb == null ? "" : String(report.env.ramGb),
     disk: report.env.freeDiskGb == null ? "" : String(report.env.freeDiskGb),
     version: report.version || "",
+    device: report.device || "",
   };
 }
 

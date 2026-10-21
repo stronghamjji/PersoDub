@@ -218,6 +218,20 @@ export function saveState(file, { device, lastDay = null }) {
 }
 
 /**
+ * The install id the counts have already saved, or "" -- never a new one. A
+ * failure report names the computer by it (reporting.js), and that path must
+ * not mint an id for a computer whose counts never ran.
+ */
+export function savedDevice(file) {
+  try {
+    const { device } = JSON.parse(readFileSync(file, "utf8"));
+    return /^[0-9a-f]{32}$/.test(device) ? device : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * The single call the app makes. Everything a caller could get wrong -- the off
  * switches, the once-a-day rule, persistence, timeouts, failure -- is settled
  * here so a call site is one line that cannot misbehave.

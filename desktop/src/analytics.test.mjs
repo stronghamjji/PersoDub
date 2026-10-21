@@ -219,7 +219,7 @@ test("a server error is not treated as delivery", async () => {
 import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadState, saveState } from "./analytics.js";
+import { loadState, savedDevice, saveState } from "./analytics.js";
 
 function tempStateFile() {
   return join(mkdtempSync(join(tmpdir(), "persodub-analytics-")), "analytics.json");
@@ -263,6 +263,21 @@ test("reading state does not create a file -- silence leaves no trace", () => {
   const file = tempStateFile();
   loadState(file);
   assert.equal(existsSync(file), false);
+});
+
+// A failure report reads the counts' id this way (reporting.js): what is
+// saved, as it is, and for a computer with none, none.
+test("the saved id is read as it is, and a computer without one is given none", () => {
+  const file = tempStateFile();
+  assert.equal(savedDevice(file), "");
+  assert.equal(existsSync(file), false, "reading it mints nothing and writes nothing");
+  const { device } = loadState(file);
+  saveState(file, { device });
+  assert.equal(savedDevice(file), device);
+  writeFileSync(file, JSON.stringify({ device: "not-an-id" }));
+  assert.equal(savedDevice(file), "");
+  writeFileSync(file, "{ this is not json");
+  assert.equal(savedDevice(file), "");
 });
 
 // ---- countEvent: the one call the app makes, and the switches it must obey ----

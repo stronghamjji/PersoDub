@@ -95,6 +95,11 @@ const LONG_TOKEN = /(?<![A-Za-z0-9_\-/\\.])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9_\-/\\
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s"'<>)\]}]+/gi;
 
+// A report's own device field, as its debug print (PERSODUB_REPORTS_DEBUG=1)
+// writes it into shell.log, whose tail a later report sends. That field is for
+// the private dashboard, and a log tail goes into the public issue.
+const DEVICE_FIELD = /("device":")[0-9a-f]{12}"/g;
+
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -213,6 +218,7 @@ export function maskText(text, { home = "", kit = "" } = {}) {
   for (const p of KEY_PATTERNS) out = out.replace(p, "[REDACTED]");
   // A sign-in token and an e-mail address (review 2026-09-23).
   out = out.replace(JWT, "[REDACTED]").replace(EMAIL, "[REDACTED]");
+  out = out.replace(DEVICE_FIELD, '$1[REDACTED]"');
   return out.replace(LONG_TOKEN, "[REDACTED]");
 }
 
@@ -423,6 +429,7 @@ export function buildReport({
   diagnostics = {},
   version = "",
   installId = "",
+  device = "",
   home = "",
   kit = "",
 } = {}, { maxBytes = MAX_BYTES } = {}) {
@@ -432,6 +439,9 @@ export function buildReport({
     kind: REPORT_KINDS.has(kind) ? kind : "unknown",
     version: String(version || ""),
     installId: String(installId || ""),
+    // The usage counts' id, its first twelve characters and nothing longer,
+    // for the private dashboard (reporting.js decides whether it goes at all).
+    device: /^[0-9a-f]{12}$/.test(String(device || "")) ? String(device) : "",
     // Install failures name a step out of installSpec's twelve; everything
     // else names a stage out of app/stages.py. Both are held to the published
     // shape for the same reason error codes are (analytics.js).
