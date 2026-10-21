@@ -8,7 +8,9 @@
 // Run with: node --test ui/src/projects.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { initProjectsUi, jobMark, shownName, projectMeta, doingWord } from "./projects.mjs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 function makeEl(id) {
   return {
@@ -266,8 +268,8 @@ test("an erase row wears the eraser and says what it did, not which languages", 
   await h.api.renderHistory();
   const rows = h.$("historyList").children.map((l) => l.children[0]);
   assert.match(rows[0].innerHTML, /class="job-kind"/, "an erase row has no eraser on it");
-  assert.match(rows[0].innerHTML, />Erased</);
-  assert.match(rows[1].innerHTML, />Erasing</);
+  assert.match(rows[0].innerHTML, />Subtitles erased</);
+  assert.match(rows[1].innerHTML, />Erasing subtitles</);
   // A job that stopped says what it was; the dot beside it says how it ended.
   assert.match(rows[2].innerHTML, />Erase subtitles</);
   assert.match(rows[2].innerHTML, /class="job-dot dot-error"/);
@@ -469,11 +471,30 @@ test("a renamed project shows the name it was given", () => {
 test("a separation says Separated once it is done, and what it is while it is not", () => {
   const meta = (status) => projectMeta({ kind: "separate", status }, () => "");
   assert.equal(meta("done"), "Separated");
-  assert.equal(meta("running"), "Separating");
-  assert.equal(meta("queued"), "Separating");
+  assert.equal(meta("running"), "Separating the audio");
+  assert.equal(meta("queued"), "Separating the audio");
   assert.equal(meta("error"), "Separate audio");
   assert.equal(meta("cancelled"), "Separate audio");
   assert.equal(doingWord({ kind: "separate" }), "Separating");
   assert.equal(doingWord({ kind: "erase" }), "Erasing");
   assert.equal(doingWord({}), "Dubbing");
+});
+
+// The words under a card's name say which tool as well (owner, 2026-10-21);
+// the chip's percent keeps its short word.
+test("in Korean the words under an erase or a separation name the tool", async (t) => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true,
+    json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+  const meta = (kind, status) => projectMeta({ kind, status }, () => "");
+  assert.equal(meta("separate", "done"), "오디오 분리 완료");
+  assert.equal(meta("separate", "running"), "오디오 분리 중");
+  assert.equal(meta("erase", "done"), "자막 지우기 완료");
+  assert.equal(meta("erase", "running"), "자막 지우는 중");
+  assert.equal(doingWord({ kind: "separate" }), "분리 중");
+  assert.equal(doingWord({ kind: "erase" }), "지우는 중");
 });
