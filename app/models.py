@@ -507,7 +507,12 @@ def _hf_download(entry, kit, progress, cancelled, what, began):
         if force or now - last_report >= 1.0:
             last_report = now
             got = _dir_bytes(dest)
-            progress(min(99, int(100 * got / total_bytes)) if got else None)   # None: no byte yet (_drain)
+            # Less the tool's own .gitignore, one byte it writes before it asks
+            # the server for anything: counted, the row would read 0% before a
+            # byte of the model had come.
+            with contextlib.suppress(OSError):
+                got -= os.path.getsize(os.path.join(dest, ".cache", "huggingface", ".gitignore"))
+            progress(min(99, int(100 * got / total_bytes)) if got > 0 else None)   # None: no byte yet (_drain)
 
     recent = []   # the tool's last words, for the error a failure carries
     for attempt in range(1, HF_ATTEMPTS + 1):

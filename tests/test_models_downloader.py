@@ -125,12 +125,16 @@ def test_pull_hf_reports_what_is_on_disk_not_the_tools_file_count(monkeypatch, t
 
 def test_pull_hf_has_no_figure_before_the_first_byte(monkeypatch, tmp_path):
     # "Downloading… 0%" from the press on, held 4 s before the first percent,
-    # read as stuck (Windows C2, 2026-10-21): no figure while nothing is on
-    # disk, and under 1% is 0 once something is.
+    # read as stuck (Windows C2, 2026-10-21): no figure while nothing of the
+    # model is on disk, and under 1% is 0 once something is.
     pieces = tmp_path / "models" / "melband-roformer" / ".cache" / "huggingface" / "download"
 
     class FakeProc:
-        stdout = iter([])
+        def __init__(self):
+            # The tool's own first byte, there before it asks the server for anything.
+            pieces.parent.mkdir(parents=True, exist_ok=True)
+            (pieces.parent / ".gitignore").write_text("*")
+            self.stdout = iter([])
 
         def wait(self):
             return 0
