@@ -68,7 +68,9 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
   on("homeHelp", onHelp);
   // The app has no feedback form of its own; the issues page is where it goes.
   on("homeFeedback", () => openUrl(`${repoUrl}/issues`));
-  // The update module listens for this event and opens its window.
+  // The update module listens for this event and opens its window: the
+  // running version's list, or the update on offer (ui/src/updateWindow.mjs,
+  // which also marks this card while one downloads or waits).
   on("homeWhatsNew", () => window.dispatchEvent(new CustomEvent("persodub:open-update")));
 
   on("homeDubCard", onDubbing);
@@ -83,7 +85,10 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
     openHomeAgent($, body, chip ? t(chip.dataset.prompt) : "");
   });
 
+  // Not over an update's "ready" title, should that have come in first.
   loadWhatsNew()
-    .then((info) => { $("homeWhatsNewTitle").textContent = whatsNewTitle(info && info.version); })
+    .then((info) => {
+      if (!$("homeWhatsNew").classList.contains("ready")) $("homeWhatsNewTitle").textContent = whatsNewTitle(info && info.version);
+    })
     .catch(() => { /* the card keeps its plain title */ });
 }

@@ -602,9 +602,10 @@ test("the update window's restart is the big button in its left column, and the 
   assert.match(foot, /id="updClose" type="button">Close</);
 });
 
-test("the update icon sits left of Settings and opens the update window; the key window ends in a foot", () => {
+test("the update's dot is on the What's new card, not in the top bar; the key window ends in a foot", () => {
   const html = readPage();
-  assert.ok(html.indexOf('id="updateBtn"') < html.indexOf('id="settingsBtn"'));
+  assert.ok(!html.includes('id="updateBtn"'), "the top bar's update icon is gone (2026-10-21)");
+  assert.match(html, /#homeWhatsNew\.live::after \{ content: ""; position: absolute;/);
   assert.match(html, /wireUpdates\(\{ \$, shell: window\.persodubShell \|\| null, releases: `\$\{REPO_URL\}\/releases` \}\);/);
   for (const id of ["updateOverlay", "updClose", "updTitle", "updCurrent", "updNext", "updGo", "updRunning", "updNotesBox", "updNotes", "updNotesLink"]) {
     assert.match(html, new RegExp(`id="${id}"`), id);

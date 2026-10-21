@@ -2501,12 +2501,13 @@
   #keyField .settings-link { margin: 0; }
   #keySpaceRow label { display: block; margin: 0 0 4px; }
 
-  /* The update icon (mockup 2): grey, or blue with a red dot while an update
-     is on offer. */
-  #updateBtn { position: relative; }
-  #updateBtn.live { color: var(--primary-ink); }
-  #updateBtn.live::after { content: ""; position: absolute; top: 2px; right: 5px; width: 7px; height: 7px;
-    border-radius: 50%; background: #ef5b5b; border: 1.5px solid var(--desk); }
+  /* The update's red dot (mockup 2), on the Home sidebar's What's new card
+     since the top bar lost its update icon (2026-10-21): there while an
+     update downloads or waits (ui/src/updateWindow.mjs). Ringed in white, the
+     card's own letters, to stand off its blue. */
+  #homeWhatsNew { position: relative; }
+  #homeWhatsNew.live::after { content: ""; position: absolute; top: 8px; right: 8px; width: 8px; height: 8px;
+    border-radius: 50%; background: #ef5b5b; border: 1.5px solid #ffffff; }
 
   /* The update window: two columns on the inner panel -- the versions on
      the left with the restart as their one big button, the release's list on
