@@ -87,6 +87,8 @@ Six steps: Home; Settings > Models; a new dubbing of the video into Korean on th
 computer; the finished script table and timeline; Export; Home again with the new
 project's card. Leave the app on Home. A dub already in the queue makes step 4 wait
 (30 minutes at most). Each run leaves its project, named `e2e-click-<time>`, on Home.
+Dubbing, audio separation and speech-to-text are all set to this computer, so a run
+never spends Perso credits; step 3 fails at once if the dub it started uses Perso for any of them.
 
 It needs an app whose translator is ready: an installed build with ChatGPT signed in, a real Gemini key, or the local pack (a dev build cannot install packs, so Start stops at the download dialog); `--translator hunyuan` picks the local one in Advanced options, and without the flag the dub keeps the translator the app starts a new project on.
 

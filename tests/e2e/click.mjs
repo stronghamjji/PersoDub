@@ -170,7 +170,9 @@ const words = page.lang === "en" ? {}
   : await (await fetch(`${origin}/i18n/ui.${page.lang}.json`, { signal: AbortSignal.timeout(10000) })).json();
 const tr = (key) => (Object.hasOwn(words, key) ? words[key] : key);
 // Step 3's picks are remembered for the person's next project; the run puts
-// back what was there before it.
+// back what was there before it. Every pick that can spend Perso credits
+// (dubbing, audio separation, speech-to-text) is set to this computer, so a run
+// spends none; the translator is the app's own unless --translator names one.
 const savedChoices = await js(`localStorage.getItem(${JSON.stringify(CHOICES_KEY)})`);
 const run = { jobId: "", job: null };
 
@@ -226,8 +228,12 @@ async function newProjectStep(snap, base) {
     return !document.querySelector("#draftSetup").hidden && !document.querySelector("#draftStartBtn").disabled ? "ready" : "";
   });
   if (ready !== "ready") throw new Error(`the import was ${ready}`);
-  // The mode first: changing it refills the target list.
+  // The mode first: changing it refills the target list. Then separation and
+  // speech-to-text, which keep whatever the person last chose: Perso there
+  // spends credits (5 on one run's separation, 2026-10-21).
   await choose("#dubModeSelect", "local");
+  await choose("#sepSelect", "local");
+  await choose("#sttSelect", "local");
   await choose("#targetLangSelect", "ko");
   // Without --translator the dub keeps the one the app starts a new project
   // on, which hangs on whoever used the app last; with it, Advanced options
@@ -254,6 +260,10 @@ async function newProjectStep(snap, base) {
   const j = run.job;
   if (j.language_code !== "ko" || j.dub_mode !== "local" || (opt.translator && j.translator !== opt.translator)) {
     throw new Error(`the dub went to ${j.language_code} via ${j.dub_mode} with ${j.translator}`);
+  }
+  if (j.separation === "perso" || j.stt_engine === "perso") {
+    throw new Error(`PERSO CREDITS ARE BEING SPENT: job ${run.jobId} separates with ${j.separation} and transcribes `
+      + `with ${j.stt_engine}, though both were set to this computer. Stop it in the app now`);
   }
   await snap();
   return { note: `${PROJECT}.mp4 → ko on this computer; job ${run.jobId} ${j.status}; `
