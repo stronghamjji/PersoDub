@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
-import { resolveUpdateMode, resolveFeed, nextUpdateState, INSTALL_ON_QUIT, feedText, updateFileUrl, updateErrorText } from "./updater.js";
+import { resolveUpdateMode, resolveFeed, nextUpdateState, INSTALL_ON_QUIT, feedText, updateFileUrl, updateErrorText,
+  whatsNewUrl, readWhatsNew } from "./updater.js";
 import { findForeignLockers } from "./lockCheck.js";
 import { markCleanExit } from "./cleanExit.js";
 import { envWithKit } from "./kitEnv.js";
@@ -52,7 +53,7 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
       // cuts), or why there was no answer. They run on a session of their own
       // (electron-updater's NET_SESSION_NAME); an abort is electron-updater
       // dropping a request it no longer needs, not a failure.
-      const { session } = await import("electron");
+      const { session, net } = await import("electron");
       const said = new Set();
       const once = (line, level) => { if (!said.has(line)) { said.add(line); shellLog(line, level); } };
       const web = session.fromPartition("electron-updater", { cache: false }).webRequest;
@@ -72,7 +73,7 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
       // file's sha512, which it does before it announces the download.
       let downloadFrom = null;
       let checkFrom = null;
-      autoUpdater.on("update-available", (info) => {
+      autoUpdater.on("update-available", async (info) => {
         shellLog(`PERSODUB_UPDATE available ${info?.version ?? ""}`);
         const file = info?.files?.[0];
         if (file) {
@@ -81,7 +82,14 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
           downloadFrom = Date.now();
         }
         checkFrom = null;
-        announce("update-available", info);
+        // The new version's own list for the window, read first so the window
+        // opens on it rather than on the release's English notes that it then
+        // replaces; five seconds at most (updater.js readWhatsNew). Electron's
+        // own fetch, so the computer's proxy and certificates apply, as they do
+        // to electron-updater's requests.
+        const url = whatsNewUrl(feed, info);
+        const whatsNew = url ? await readWhatsNew(url, { fetch: (u, o) => net.fetch(u, o), log: shellLog }) : null;
+        announce("update-available", whatsNew ? { ...info, whatsNew } : info);
       });
       autoUpdater.on("update-not-available", (info) => {
         shellLog(`UPDATE CHECK DONE (${secondsSince(checkFrom)}s): up to date, the latest release is ${info?.version ?? "unknown"}`);

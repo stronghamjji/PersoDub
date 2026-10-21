@@ -47,7 +47,7 @@ contextBridge.exposeInMainWorld("persodubShell", {
   removePack: (id) => ipcRenderer.invoke("shell:remove-pack", id),
   packStatus: () => ipcRenderer.invoke("shell:pack-status"),
   // Auto-update: the shell announces the update's state -- {version, phase:
-  // "downloading" | "ready", pct, releaseDate?, releaseNotes?} -- as it
+  // "downloading" | "ready", pct, releaseDate?, releaseNotes?, whatsNew?} -- as it
   // changes and again whenever the page loads, so the top bar's update icon
   // lights within seconds of launch and the update window's button turns
   // into "Restart to update" when the file is on disk.
