@@ -123,6 +123,34 @@ def test_pull_hf_reports_what_is_on_disk_not_the_tools_file_count(monkeypatch, t
     assert 92 not in pcts
 
 
+def test_pull_hf_has_no_figure_before_the_first_byte(monkeypatch, tmp_path):
+    # "Downloading… 0%" from the press on, held 4 s before the first percent,
+    # read as stuck (Windows C2, 2026-10-21): no figure while nothing of the
+    # model is on disk, and under 1% is 0 once something is.
+    pieces = tmp_path / "models" / "melband-roformer" / ".cache" / "huggingface" / "download"
+
+    class FakeProc:
+        def __init__(self):
+            # The tool's own first byte, there before it asks the server for anything.
+            pieces.parent.mkdir(parents=True, exist_ok=True)
+            (pieces.parent / ".gitignore").write_text("*")
+            self.stdout = iter([])
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(models_module._subprocess, "Popen", lambda argv, **kw: FakeProc())
+    entry = {"id": "vocal-separator", "dir": "models/melband-roformer", "bytes": 1000,
+             "source": {"kind": "hf", "repo": "KimberleyJSN/melbandroformer", "rev": "abc"}}
+    pcts = []
+    models_module._pull_hf(entry, str(tmp_path), pcts.append, lambda: False)
+    assert pcts[-1] is None and 0 not in pcts, pcts
+    pieces.mkdir(parents=True)
+    (pieces / "a1b2c3.etag.incomplete").write_bytes(b"x" * 5)
+    models_module._pull_hf(entry, str(tmp_path), pcts.append, lambda: False)
+    assert pcts[-1] == 0, pcts
+
+
 def test_pull_hf_tries_again_after_a_failed_run_and_ends_the_tool_on_our_own_error(monkeypatch, tmp_path):
     runs = {"n": 0}
     ended = []
@@ -332,6 +360,21 @@ def test_an_ollama_pull_names_its_registry_each_layer_once_and_ollamas_own_check
     assert re.fullmatch(r"DOWNLOAD DONE ollama gemma3:12b: 2 files, 8\.1 GB in \d+\.\ds( \(.+/s\))?, "
                         r"sha256 checked by ollama", lines[-1])
     assert posted == ["http://127.0.0.1:11434/api/pull"]
+
+
+def test_an_ollama_pull_has_no_figure_before_the_first_byte(monkeypatch):
+    # No 0% while nothing has come (Windows C2, 2026-10-21); under 1% is 0 once it has.
+    layer = "sha256:" + "a" * 64
+    _ollama(monkeypatch, _Pull(
+        {"status": "pulling manifest"},
+        {"status": "pulling aaaaaaaaaaaa", "digest": layer, "total": 1000},
+        {"status": "pulling aaaaaaaaaaaa", "digest": layer, "total": 1000, "completed": 0},
+        {"status": "pulling aaaaaaaaaaaa", "digest": layer, "total": 1000, "completed": 5},
+        {"status": "pulling aaaaaaaaaaaa", "digest": layer, "total": 1000, "completed": 500}))
+    pcts = []
+    models_module._pull_ollama({"id": "gemma", "source": {"kind": "ollama", "tag": "gemma3:12b"}},
+                               pcts.append, lambda: False)
+    assert pcts == [None, 0, 50]
 
 
 def test_ollama_fetches_a_name_from_the_host_it_begins_with():

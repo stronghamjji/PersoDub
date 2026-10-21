@@ -73,7 +73,7 @@ def test_download_reports_progress_and_double_post_is_200(monkeypatch):
     _install_fake_downloader(monkeypatch, gate=gate)
     assert client.post("/api/models/whisper/download").status_code == 202
     # The state flips to downloading a moment before the fake reports 50%:
-    # wait for the number too, or a slow runner reads it as 0 (Windows CI).
+    # wait for the number too, or a slow runner reads the row before it has one (Windows CI).
     deadline = time.time() + 5.0
     row = _wait_state("whisper", ("downloading",))
     while row["progress"] != 50 and time.time() < deadline:
@@ -96,6 +96,25 @@ def test_one_at_a_time_queue(monkeypatch):
     assert row["state"] == "downloading" and row.get("progress") is None
     gate.set()
     _wait_state("qwen3-tts", ("ready",))
+
+
+def test_a_started_download_has_no_figure_before_its_first_byte_and_a_queued_one_says_queued(monkeypatch):
+    # Both read downloading with no figure: queued tells "Waiting to download"
+    # from "Getting ready", and 0% is never shown before a byte (Windows C2, 2026-10-21).
+    gate, began = threading.Event(), threading.Event()
+
+    def fake(entry, kit, progress, cancelled):
+        began.set()
+        gate.wait(5)
+    monkeypatch.setattr(models_module, "_run_download", fake)
+    client.post("/api/models/whisper/download")
+    assert began.wait(5)
+    client.post("/api/models/qwen3-tts/download")
+    rows = {m["id"]: m for m in client.get("/api/models").json()["models"]}
+    assert [rows["whisper"].get(k) for k in ("state", "progress", "queued")] == ["downloading", None, False]
+    assert [rows["qwen3-tts"].get(k) for k in ("state", "progress", "queued")] == ["downloading", None, True]
+    gate.set()
+    _wait_state("qwen3-tts", ("not_downloaded",))
 
 
 def test_cancel_leaves_a_paused_model(monkeypatch):

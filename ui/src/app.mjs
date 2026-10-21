@@ -371,7 +371,10 @@ function paintModelStatusLines(rows) {
     const needsAnything = !cloud && (neededPackIds(role, value).length || neededModelId(role, value));
     paintHint($(hint), cloud ? [] : hintNeeds(role, value), !!needsAnything);
   }
+  // The one under way, not one queued behind it: before its first byte it
+  // has no figure either (Windows C2, 2026-10-21).
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
+          || rows.find((m) => m.state === "downloading" && !m.queued)
           || rows.find((m) => m.state === "downloading");
   // The chip stands in for the download dialog, not beside it: it shows only
   // once Hide closed the dialog (the dialog itself carries the percent). Same

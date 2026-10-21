@@ -236,9 +236,12 @@ def status_rows():
         with _lock:
             rt = dict(_downloads.get(m["id"]) or {})
         if rt.get("state") in ("queued", "downloading"):
-            # Queued shows as downloading-with-no-percent; the screen says "waiting".
+            # Queued shows as downloading-with-no-percent, and so does one started
+            # before its first byte: queued tells the screen to say "waiting", not
+            # "getting ready" (Windows C2, 2026-10-21).
             row["state"] = "downloading"
             row["progress"] = rt.get("pct")
+            row["queued"] = rt.get("state") == "queued"
         else:
             row["state"] = model_state(m, kit)
             if row["state"] == "downloading":
@@ -321,7 +324,9 @@ def _drain():
             if not _queue:
                 return
             mid = _queue.pop(0)
-            _downloads[mid].update(state="downloading", pct=0)
+            # No figure before the first byte: "Downloading… 0%" from the press
+            # on, held 4 s before the first percent, read as stuck (Windows C2, 2026-10-21).
+            _downloads[mid].update(state="downloading", pct=None)
         entry = find(mid)
         cancelled = _cancel[mid].is_set
 
@@ -501,7 +506,13 @@ def _hf_download(entry, kit, progress, cancelled, what, began):
         now = time.monotonic()
         if force or now - last_report >= 1.0:
             last_report = now
-            progress(min(99, int(100 * _dir_bytes(dest) / total_bytes)))
+            got = _dir_bytes(dest)
+            # Less the tool's own .gitignore, one byte it writes before it asks
+            # the server for anything: counted, the row would read 0% before a
+            # byte of the model had come.
+            with contextlib.suppress(OSError):
+                got -= os.path.getsize(os.path.join(dest, ".cache", "huggingface", ".gitignore"))
+            progress(min(99, int(100 * got / total_bytes)) if got > 0 else None)   # None: no byte yet (_drain)
 
     recent = []   # the tool's last words, for the error a failure carries
     for attempt in range(1, HF_ATTEMPTS + 1):
@@ -613,7 +624,8 @@ def _pull_ollama(entry, progress, cancelled):
                     said.add(d["status"])
                     log.info(f"DOWNLOAD {what}: {d['status']}")
             if d.get("total") and d.get("completed") is not None:
-                progress(int(100 * d["completed"] / d["total"]))
+                # None: no byte yet (_drain).
+                progress(int(100 * d["completed"] / d["total"]) if d["completed"] else None)
     except Exception as e:
         # A cancel that broke the stream on its way out is a cancel, as
         # _run_download counts it.
