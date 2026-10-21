@@ -11,9 +11,12 @@ from app.perso_client import PersoCreditExhaustedError
 
 
 def _wait(store, jid):
-    for _ in range(100):
+    # Through queued as well as running: a job started while the one before
+    # it is still on air waits in line first, and a slow runner (CI's Windows,
+    # 2026-10-21) handed back "queued" where the test expected its ending.
+    for _ in range(300):
         j = store.get(jid)
-        if j and j["status"] != "running":
+        if j and j["status"] not in ("running", "queued"):
             return j
         time.sleep(0.02)
     return store.get(jid)
