@@ -7,7 +7,12 @@
 // where the Home banner sends it: one file or a link to its own draft,
 // several to the New project dialog. A dub started while another one runs
 // waits its turn (the server queues it).
+//
+// An empty new project has the same block on screen already, so there the
+// button points at that block's link field instead of opening a second one
+// over it (2026-10-21).
 import { importBlockHtml, wireImportBlock, wireImportInput } from "./importBlock.mjs";
+import { askForLink } from "./linkField.mjs";
 
 /**
  * @param {object} deps
@@ -16,15 +21,20 @@ import { importBlockHtml, wireImportBlock, wireImportInput } from "./importBlock
  * @param {() => void} deps.leaveJob  clear the open job, as Home does
  * @param {(source: {file?: File, link?: string}) => void} deps.openDraft
  * @param {(source: {files: File[]}) => void} deps.openNewProject
+ * @param {() => string|null} [deps.emptyImport]  the link id of an empty
+ *        project's Import block on screen ("dubbingLink"), or null
  * @returns {{ open: () => void, close: () => void }}
  */
-export function initNewProjectWindow({ $, checkFile, leaveJob, openDraft, openNewProject }) {
+export function initNewProjectWindow({ $, checkFile, leaveJob, openDraft, openNewProject,
+                                       emptyImport = () => null }) {
   const overlay = $("newProjOverlay");
   const input = $("newProjFileInput");
   // The shared Import block, drawn into the window's inner panel.
   $("newProjImportSlot").outerHTML = importBlockHtml("newProjDrop", "newProjLink");
 
   function open() {
+    const here = emptyImport();
+    if (here) { askForLink($(`${here}Row`), $(`${here}Input`)); return; }
     $("newProjError").textContent = "";
     $("newProjLinkInput").value = "";
     overlay.classList.add("open");

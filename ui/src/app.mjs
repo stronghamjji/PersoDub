@@ -823,7 +823,21 @@ initNewProjectWindow({
   leaveJob: () => resetForNewJob(),
   openDraft: (source) => draftSetup.openDraft(source),
   openNewProject: (source) => newProject.openNewProject(source),
+  emptyImport: emptyImportLink,
 });
+// An empty new project already shows the Import block New project would
+// open again in a window (2026-10-21): the link id of the one on screen, or
+// null. Each tab shows its block only while it has no video -- the Erase tab
+// even with an older draft still held, which Home's Erase card keeps -- so
+// the block being on screen is the test; under a hidden left panel, tab or
+// face it is not. The erase screen is known by its name, since its tab can
+// stand under another.
+function emptyImportLink() {
+  if (state.jobId) return null;
+  const tab = document.body.dataset.screen === "erase" ? "erase" : leftTabs.current();
+  const id = { dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink" }[tab];
+  return id && $(`${id}Input`).offsetParent ? id : null;
+}
 // A new draft opened from wherever the person stands -- a dubbing's
 // + Add language, a finished erase's Dub this video: the job on screen is let
 // go first, the way Home lets it go, and stays behind the top bar's forward

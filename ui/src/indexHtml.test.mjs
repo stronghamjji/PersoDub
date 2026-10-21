@@ -1364,6 +1364,26 @@ test("Save video points at the banner's link field, and the link read next opens
   assert.match(html, /const save = saveVideoNext;\n\s*saveVideoNext = false;\n\s*draftSetup\.openDraft\(\{ link: url, onReady: save \? \(\) => exportDialog\.open\(\["video"\]\) : null \}\);/);
   const home = html.slice(html.indexOf("function showHome() {"), html.indexOf("async function openLastScreen()"));
   assert.match(home, /\n  saveVideoNext = false;\n/);
-  assert.match(html, /\.home-banner-linkin\.link-field\.ask \{ animation: link-ask 0\.5s ease-in-out 2; \}/);
-  assert.match(html, /@media \(prefers-reduced-motion: reduce\) \{\n    \.home-banner-linkin\.link-field\.ask \{ animation: none; box-shadow: 0 0 0 2px rgba\(11, 18, 32, 0\.5\), 0 0 0 5px #ffffff; \}/);
+  // The same blink for an empty project's Import block (New project, below).
+  assert.match(html, /\.home-banner-linkin\.link-field\.ask, \.import-link\.ask \{ animation: link-ask 0\.5s ease-in-out 2; \}/);
+  assert.match(html, /@media \(prefers-reduced-motion: reduce\) \{\n    \.home-banner-linkin\.link-field\.ask, \.import-link\.ask \{ animation: none; box-shadow: 0 0 0 2px rgba\(11, 18, 32, 0\.5\), 0 0 0 5px #ffffff; \}/);
+});
+
+// New project on an empty project opened the same Import block again in a
+// window over it (2026-10-21). The block on screen is pointed at instead: the
+// erase screen by its name, and none under a hidden panel, tab or face.
+test("New project on an empty project points at the Import block on screen", () => {
+  const html = readPage();
+  assert.match(html, /openNewProject: \(source\) => newProject\.openNewProject\(source\),\n  emptyImport: emptyImportLink,\n\}\);/);
+  const at = html.indexOf("function emptyImportLink() {");
+  const body = html.slice(at, html.indexOf("\n}\n", at));
+  assert.match(body, /if \(state\.jobId\) return null;/);
+  assert.doesNotMatch(body, /getDraft\(\)/, "an empty Erase tab can stand beside an older draft still held");
+  assert.match(body, /const tab = document\.body\.dataset\.screen === "erase" \? "erase" : leftTabs\.current\(\);/);
+  assert.match(body, /\{ dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink" \}\[tab\]/);
+  assert.match(body, /return id && \$\(`\$\{id\}Input`\)\.offsetParent \? id : null;/);
+  // Each of those is a link field the shared block draws, under that name.
+  assert.match(readFileSync(DRAFT_IMPORT, "utf8"), /emptyTabHtml\("dubbing", "dubbingZone", "dubbingLink"\)/);
+  assert.match(readFileSync(AUDIO, "utf8"), /emptyTabHtml\("audio", "audioZone", "audioLink"\)/);
+  assert.match(readFileSync(ERASE, "utf8"), /emptyTabHtml\("erase", "eraseZone", "eraseLink"\)/);
 });
