@@ -2503,10 +2503,11 @@
 
   /* The update's red dot (mockup 2), on the Home sidebar's What's new card
      since the top bar lost its update icon (2026-10-21): there while an
-     update downloads or waits (ui/src/updateWindow.mjs). Ringed in white, the
-     card's own letters, to stand off its blue. */
+     update downloads or waits (ui/src/updateWindow.mjs). On the corner, not
+     inside it: "0.8.6 업데이트 준비 완료" runs to the card's edge and the dot sat on
+     its last letter. Ringed in white, the card's own letters. */
   #homeWhatsNew { position: relative; }
-  #homeWhatsNew.live::after { content: ""; position: absolute; top: 8px; right: 8px; width: 8px; height: 8px;
+  #homeWhatsNew.live::after { content: ""; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
     border-radius: 50%; background: #ef5b5b; border: 1.5px solid #ffffff; }
 
   /* The update window: two columns on the inner panel -- the versions on
