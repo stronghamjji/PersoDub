@@ -402,9 +402,9 @@ const ENGINE_HINTS = {
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
   stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
-  translate: { get hunyuan() { return [t("Runs on this computer, free and fastest."), t("For accuracy, use the API.")]; },
-               get gemma() { return [t("Runs on this computer, free."), t("For accuracy, use the API.")]; },
-               get gemini() { return [t("Most accurate."), t("Needs an API key.")]; },
+  translate: { get hunyuan() { return [t("Runs on this computer, free and fastest."), t("For accuracy, use the Gemini API.")]; },
+               get gemma() { return [t("Runs on this computer, free."), t("For accuracy, use the Gemini API.")]; },
+               get gemini() { return [t("Most accurate."), t("Needs a Google (Gemini) key in Settings > API keys.")]; },
                get chatgpt() { return [t("Free within a ChatGPT account's limit. Sign in once, no download.")]; } },
   voice: { get qwen3() { return [t("Runs on this computer, free."), t("Clones each speaker\u2019s voice.")]; } },
 };

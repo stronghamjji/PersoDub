@@ -941,8 +941,8 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
   };
   const home = {
     models: ["modelsFold", "modelsSummary", "modelsList", "modelsError"],
-    keys: ["persoKeyInput", "persoSignupLink", "persoSpaceSelect", "persoSpaceWarning", "geminiKeyInput",
-           "chatgptState", "chatgptSignInBtn", "showKeysToggle"],
+    keys: ["persoKeyInput", "persoKeyHint", "persoSignupLink", "persoSpaceSelect", "persoSpaceWarning", "geminiKeyInput",
+           "geminiKeyHint", "chatgptState", "chatgptSignInBtn", "chatgptHint", "showKeysToggle"],
     storage: ["revealOutputBtn", "storageHint"],
     privacy: ["analyticsToggle", "analyticsHint", "reportsToggle", "reportsHint"],
     about: ["brandBtn", "aboutVersion", "ackToggle", "ackList"],
@@ -967,6 +967,24 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
   // The ways in that know what they came for say which tab.
   assert.match(html, /onOpenSettings: \(\) => settings\.openSettings\("models"\)/);
   assert.match(html, /onOpenSettings: \(\) => settings\.openSettings\("keys"\)/);
+});
+
+// Which step each key and the ChatGPT sign-in is for, a small grey line under
+// each like the Privacy tab's (owner, 2026-10-21). And the translator's own
+// lines point the local ones at the Gemini API, which says where its key goes.
+test("each API key and the ChatGPT sign-in say which step uses them", () => {
+  const html = readPage();
+  const keys = html.slice(html.indexOf('id="settingsPanel-keys"'), html.indexOf('id="settingsPanel-storage"'));
+  assert.match(keys, /id="persoKeyInput"[^>]*>\s*<!--[^]*?-->\s*<div data-i18n class="settings-hint" id="persoKeyHint">Used when Dubbing, Audio separation or Speech-to-text is set to Perso API\. Uses Perso credits\.<\/div>/);
+  assert.match(keys, /id="geminiKeyInput"[^>]*>\s*<div data-i18n class="settings-hint" id="geminiKeyHint">Used only when Translation is set to Gemini API\. Uses your own Google API quota\.<\/div>/);
+  // ChatGPT's state and button stay on one line, and its line goes under them.
+  assert.match(keys, /<span>ChatGPT<\/span>\s*<div class="set-ctl">\s*<div class="set-ctl set-inline">\s*<span class="settings-hint" id="chatgptState"[^]*?id="chatgptSignInBtn"[^]*?<\/button>\s*<\/div>\s*<div data-i18n class="settings-hint" id="chatgptHint">Used when Translation is ChatGPT \(the default on a new install\)\. The Dub Agent's Codex uses this sign-in too\.<\/div>\s*<\/div>/);
+  assert.match(html, /get hunyuan\(\) \{ return \[t\("Runs on this computer, free and fastest\."\), t\("For accuracy, use the Gemini API\."\)\]; \}/);
+  assert.match(html, /get gemma\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Gemini API\."\)\]; \}/);
+  assert.match(html, /get gemini\(\) \{ return \[t\("Most accurate\."\), t\("Needs a Google \(Gemini\) key in Settings > API keys\."\)\]; \}/);
+  assert.match(html, /get chatgpt\(\) \{ return \[t\("Free within a ChatGPT account's limit\. Sign in once, no download\."\)\]; \}/,
+    "ChatGPT's line is as it was");
+  assert.ok(!html.includes('t("Needs an API key.")'));
 });
 
 // The dialogs finished to the mockup (2026-09-29). What is pinned is what
