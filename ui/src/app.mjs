@@ -543,7 +543,9 @@ function paintForward() {
   // Only on the first screen: inside a job the back arrow is the way out, and
   // an arrow pointing the other way would have nowhere to go.
   btn.hidden = !lastJobId || document.body.dataset.screen !== "home";
-  const what = lastJobName ? t("Back to {name}", { name: lastJobName }) : t("Back to the project you left");
+  // The job's name on the button, so it reads as that job and not as "next".
+  $("topbarForwardName").textContent = lastJobName || t("Last project");
+  const what = lastJobName ? t("Reopen {name}", { name: lastJobName }) : t("Reopen the last project");
   btn.setAttribute("aria-label", what);
   btn.title = what;
 }

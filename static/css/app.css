@@ -353,12 +353,18 @@
     display: flex; align-items: center; gap: 10px;
     margin: 0 -9px; padding: 0 12px;
   }
-  /* The bar's icon buttons (Settings, the way back into a job): a 16px line
-     icon in a 28x26 target. */
-  .topbar-icon, .topbar-back { border: none; background: none; cursor: pointer; padding: 0;
+  /* The bar's icon buttons (Settings): a 16px line icon in a 28x26 target. */
+  .topbar-icon { border: none; background: none; cursor: pointer; padding: 0;
     width: 28px; height: 26px; flex: 0 0 auto; border-radius: 6px;
     display: inline-grid; place-items: center; color: var(--icon); }
-  .topbar-icon:hover, .topbar-back:hover { background: var(--secondary); }
+  .topbar-icon:hover { background: var(--secondary); }
+  /* The way back into a job: a pill with the curled-back arrow and the job's
+     name, a long one cut short at 200px (2026-10-21). */
+  .topbar-back { border: none; cursor: pointer; padding: 0 8px; max-width: 200px; height: 26px;
+    flex: 0 0 auto; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px;
+    background: var(--secondary); color: var(--icon); font: inherit; font-size: 11px; font-weight: 500; }
+  .topbar-back:hover { background: var(--divider); }
+  #topbarForwardName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Home and New project while the left panel is hidden: the same two
      buttons the tab row holds, moved here and drawn as the bar's icon
      buttons, their words on the tip instead. */

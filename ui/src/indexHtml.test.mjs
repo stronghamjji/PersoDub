@@ -27,6 +27,7 @@ import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { readPage } from "../testlib/readPage.mjs";
+import { lucide } from "./icons.mjs";
 
 // The timeline draws its own head and lane, so their ids live in the module.
 const TIMELINE = fileURLToPath(new URL("./timeline.mjs", import.meta.url));
@@ -1307,6 +1308,31 @@ test("the Mac's bar starts after its lights and ends Export, Settings, panes; Wi
   assert.match(html, rule('body[data-screen="home"] .topbar :is(#settingsBtn, .panes) { display: none; }'));
   // The download chip and the way back into a job stay in the bar for Home.
   assert.ok(bar.includes('id="topbarDl"') && bar.includes('id="topbarForward"'));
+});
+
+// A bare arrow on Home read as "next" (2026-10-21). The same button now wears
+// the arrow that curls back and the name of the job it reopens.
+test("the way back into a job is the curled-back arrow and the job's name, cut short at 200px", () => {
+  const html = readPage();
+  const at = html.indexOf('<button class="topbar-back" id="topbarForward"');
+  const btn = html.slice(at, html.indexOf("</button>", at));
+  assert.ok(btn.includes(`${lucide("undo-2", 16)}<span id="topbarForwardName"></span>`));
+  assert.ok(!btn.includes('d="m12 5 7 7-7 7"'), "the bare arrow is gone");
+  assert.equal(html.match(/id="topbarForward"/g).length, 1, "the same button, not a second one");
+  assert.match(html, /\.topbar-back \{ border: none; cursor: pointer; padding: 0 8px; max-width: 200px; height: 26px;\n    flex: 0 0 auto; border-radius: 999px; display: inline-flex; align-items: center; gap: 5px;\n    background: var\(--secondary\);/);
+  assert.match(html, /#topbarForwardName \{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
+});
+
+test("the way back names the job on the button and 'Reopen <name>' on its tip", () => {
+  const html = readPage();
+  const at = html.indexOf("function paintForward() {");
+  const body = html.slice(at, html.indexOf("\n}\n", at));
+  assert.match(body, /\$\("topbarForwardName"\)\.textContent = lastJobName \|\| t\("Last project"\);/);
+  assert.match(body, /const what = lastJobName \? t\("Reopen \{name\}", \{ name: lastJobName \}\) : t\("Reopen the last project"\);\n  btn\.setAttribute\("aria-label", what\);\n  btn\.title = what;/);
+  // The owner's words (2026-10-21).
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Reopen {name}"], "{name} 다시 열기");
+  assert.equal(ko["Last project"], "보던 프로젝트");
 });
 
 // The Dub Agent card heads with the mascot in place of the speech bubble
