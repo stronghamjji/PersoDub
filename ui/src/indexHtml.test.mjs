@@ -1290,3 +1290,13 @@ test("the Dub Agent card heads with the mascot, the bubble's height", () => {
   assert.match(html, /<div class="home-agent-head"><img src="\/mascot\.png" alt="">Dub Agent<\/div>/);
   assert.match(html, /\.home-agent-head img \{ height: 18px; width: auto; display: block; \}/);
 });
+
+// Projects left the Home sidebar's Management group (2026-10-21).
+test("Home's Management group holds Settings alone", () => {
+  const html = readPage();
+  const side = html.slice(html.indexOf('<aside class="home-side"'), html.indexOf('class="home-grow"'));
+  const group = side.slice(side.lastIndexOf('class="home-grp"'));
+  assert.match(group, />Management</);
+  assert.deepEqual([...group.matchAll(/id="(homeNav\w+)"/g)].map((m) => m[1]), ["homeNavSettings"]);
+  assert.ok(!html.includes("homeNavProjects"), "nothing is left of the Projects item");
+});

@@ -2,7 +2,7 @@
 // (the mockup's first screen, user 2026-09-30).
 //
 // Owns the sidebar's buttons (#homeGhName, #homePerso, #homeNavDub,
-// #homeNavAudio, #homeNavErase, #homeNavSave, #homeNavProjects, #homeNavSettings,
+// #homeNavAudio, #homeNavErase, #homeNavSave, #homeNavSettings,
 // #homeHelp, #homeFeedback, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
 // the banner (#homeAgentCard with its [data-prompt] chips, #homeDubCard,
 // #homeAudioCard, #homeEraseCard, #homeSaveCard). Every one of them opens something the page
@@ -64,7 +64,6 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
   on("homeNavAudio", onAudio);
   on("homeNavErase", onErase);
   on("homeNavSave", onSaveVideo);
-  on("homeNavProjects", () => $("projectsHead").scrollIntoView({ behavior: "smooth", block: "start" }));
   on("homeNavSettings", () => onSettings());
   on("homeHelp", onHelp);
   // The app has no feedback form of its own; the issues page is where it goes.

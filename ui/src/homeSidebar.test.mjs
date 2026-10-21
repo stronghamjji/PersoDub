@@ -5,13 +5,12 @@ import { homeAgentHidden, initHomeSidebar, openHomeAgent, whatsNewTitle } from "
 
 function makeEl(id) {
   return {
-    id, value: "", textContent: "", dataset: {}, listeners: {}, focused: false, events: [], scrolled: null,
+    id, value: "", textContent: "", dataset: {}, listeners: {}, focused: false, events: [],
     addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); },
     fire(ev, arg) { for (const fn of this.listeners[ev] || []) fn(arg); },
     click() { this.fire("click"); },
     dispatchEvent(e) { this.events.push(e.type); },
     focus() { this.focused = true; },
-    scrollIntoView(opts) { this.scrolled = opts; },
   };
 }
 
@@ -83,13 +82,13 @@ test("the tool items and the four tool cards open the same four ways in", (t) =>
   assert.deepEqual(h.log.calls, ["dub", "audio", "erase", "save", "dub", "audio", "erase", "save"]);
 });
 
-test("Settings opens the dialog with no section named, and Projects scrolls to the grid", (t) => {
+// Projects left the Management group (2026-10-21); Settings is its one item.
+test("Settings opens the dialog with no section named, and Projects is not wired", (t) => {
   const h = harness();
   t.after(h.log.restore);
   h.$("homeNavSettings").fire("click", { type: "click" });
-  h.$("homeNavProjects").fire("click");
   assert.deepEqual(h.log.calls, ["settings(0)"]);
-  assert.equal(h.$("projectsHead").scrolled.block, "start");
+  assert.equal(h.$("homeNavProjects").listeners.click, undefined);
 });
 
 test("Help opens the Help dialog and nothing else", (t) => {
