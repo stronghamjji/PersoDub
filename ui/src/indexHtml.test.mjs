@@ -1021,6 +1021,9 @@ test("the dubbing step is Voice separation, and the tool tab keeps its own name"
   assert.equal(ko["Separating audio"], "목소리 분리");
   assert.equal(ko.Separation, "목소리 분리");
   assert.equal(ko["Separate audio"], "오디오 분리");
+  // And the failure card of a dubbing that stopped on that step.
+  assert.ok(ko["It stopped while separating the audio. Press Resume to go on from where it stopped. "
+    + "If it stops again, you can try the Perso API."].startsWith("목소리를 분리하다가 멈췄어요."));
 });
 
 test("the sentence that named no API is gone from the page and from both tables", () => {
@@ -1461,7 +1464,7 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
 // approved.
 test("Help's Erase subtitles item says why, how and how long", () => {
   const lines = ["Why: Original subtitles left in the video overlap the translated ones.",
-                 "How: Fit the box → Erase subtitles → Dubbing → burn in a Captions style.",
+                 "How: Fit the box → Erase subtitles → Dubbing → burn in a Subtitle style.",
                  "Time: About 10 min for a 10-second video (Local model)."];
   assert.ok(readPage().includes(`<div class="help-item"><b>Erase subtitles</b><p>${lines[0]}</p><p>${lines[1]}</p><div class="help-where">${lines[2]}</div></div>`));
   const words = readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8");

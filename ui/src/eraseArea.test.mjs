@@ -4,11 +4,13 @@
 // Run with: node --test ui/src/eraseArea.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { MIN_H, MIN_W, RATE, SETUP_SECONDS, clampArea, toScreen, toVideo,
          videoPerScreen, dragArea, defaultArea, isWhole, estimateSeconds,
          estimateLabel, progressLine, erasePercent, isPackMissing,
          packNeededLine, eraseView, workLength, trimNote, partRange, NO_GPU_SLOWER, noGpuNote, bigBoxNote, CHECK_SHARE_EXTRA,
          rangeLine, cropView } from "./eraseArea.mjs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 // A portrait clip in a stage wider and shorter than it is: the picture is
 // letterboxed down both sides, which is what the conversions have to allow for.
@@ -174,6 +176,20 @@ test("the part is the one kept part's two ends, or the whole video", () => {
   assert.equal(partRange(cut), "00:00:02.0 – 00:00:08.0");
   const whole = { duration: 22.08, ranges: null };
   assert.equal(partRange(whole), "00:00:00.0 – 00:00:22.1");
+});
+
+// Korean writes a range with a tilde, as the trim bar's does (2026-10-22).
+test("in Korean the part's two ends are joined with a tilde", async (t) => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true,
+    json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+  assert.equal(partRange({ duration: 10, ranges: [[2, 8]] }), "00:00:02.0~00:00:08.0");
+  assert.equal(rangeLine({ duration: 10, ranges: [[0, 3.4], [7, 10]] }),
+    "지울 구간 · 00:00:00.0~00:00:03.4, 00:00:07.0~00:00:10.0");
 });
 
 test("several kept parts are counted, and measured all together", () => {

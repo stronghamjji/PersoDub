@@ -93,7 +93,7 @@ for the local model comes back when you choose it again.
 
 | Field | Default | Notes |
 |---|---|---|
-| **Voice separation** | Demucs | Splits the voice from the music and effects. Runs Mel-Band RoFormer instead once its model is downloaded in **Settings > Models**. *Perso API* needs a Perso key. |
+| **Voice separation** | Demucs | Splits the voice from the music and effects. *Mel-Band RoFormer* is a choice in this list too: a cleaner background, slower, and a 0.9 GB download. *Perso API* needs a Perso key. |
 | **Speech-to-text** | Whisper; Perso API when you choose it | Turns the speech in your video into text. *Perso API* uploads the video. |
 | **Translation** | ChatGPT (Hunyuan on a computer that already has the Hunyuan model) | *ChatGPT* uses your own free ChatGPT account; you sign in on your first dub. *Hunyuan* and *Gemma 3* translate locally. *Gemini API* needs a Google key. |
 | **Text-to-speech** | Qwen3-TTS | Speaks the translated lines in the cloned voice. |
@@ -154,7 +154,7 @@ row gets a check, and the line under the rows says where it went.
 subtitles that are burned into the picture back out of it.
 
 - **Why:** Original subtitles left in the video overlap the translated ones.
-- **How:** Fit the box → Erase subtitles → Dubbing → burn in a Captions style.
+- **How:** Fit the box → Erase subtitles → Dubbing → burn in a Subtitle style.
 - **Time:** About 10 min for a 10-second video (Local model).
 
 Drop a video or paste a link, the same two ways in the dubbing screen offers. The app

@@ -195,8 +195,9 @@ export function trimNote(source) {
   return t("{kept} of {total}", { kept: fmtLength(workLength(source)), total: fmtLength(source.duration) });
 }
 
-// One kept part, from its start to its end: "00:00:02.0 – 00:00:08.0".
-const span = ([a, b]) => `${fmtClockTenths(a)} – ${fmtClockTenths(b)}`;
+// One kept part, from its start to its end: "00:00:02.0 – 00:00:08.0", and
+// in Korean "00:00:02.0~00:00:08.0", as Korean writes a range.
+const span = ([a, b]) => t("{from} – {to}", { from: fmtClockTenths(a), to: fmtClockTenths(b) });
 
 /**
  * The Erase tab's first card: "00:00:02.0 – 00:00:08.0" for one part, "2

@@ -47,7 +47,7 @@ const words = () => [
   ["#helpOverlay .help-item:nth-child(3) b", t("Erase subtitles")],
   // Erase subtitles says why, how and how long, a line each (owner, 2026-10-22).
   ["#helpOverlay .help-item:nth-child(3) p:nth-of-type(1)", t("Why: Original subtitles left in the video overlap the translated ones.")],
-  ["#helpOverlay .help-item:nth-child(3) p:nth-of-type(2)", t("How: Fit the box → Erase subtitles → Dubbing → burn in a Captions style.")],
+  ["#helpOverlay .help-item:nth-child(3) p:nth-of-type(2)", t("How: Fit the box → Erase subtitles → Dubbing → burn in a Subtitle style.")],
   ["#helpOverlay .help-item:nth-child(3) .help-where", t("Time: About 10 min for a 10-second video (Local model).")],
   ["#helpOverlay .help-item:nth-child(4) b", t("Save video")],
   ["#helpOverlay .help-item:nth-child(4) p", t("Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Download saves it, or dub it, separate it or erase it from there.")],
