@@ -319,6 +319,28 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     refillTargetLanguages();
   });
   if ($("dubModeSelect")) $("dubModeSelect").addEventListener("change", refillTargetLanguages);
+
+  // Processing: the two halves above the languages (owner, 2026-10-22) set
+  // #dubModeSelect, kept hidden, and fire its change, so everything that
+  // follows the choice -- the languages, the model row, the hints, the
+  // greying, what is remembered -- follows it as it always has.
+  // paintModeSwitch lights the half the select is on, whoever set it.
+  const MODE_HALVES = { dubModeLocal: "local", dubModePerso: "perso" };
+  function paintModeSwitch() {
+    for (const [id, mode] of Object.entries(MODE_HALVES)) {
+      $(id).setAttribute("aria-checked", String($("dubModeSelect").value === mode));
+    }
+  }
+  for (const [id, mode] of Object.entries(MODE_HALVES)) {
+    $(id).addEventListener("click", () => {
+      const sel = $("dubModeSelect");
+      if (sel.value === mode) return;
+      sel.value = mode;
+      sel.dispatchEvent(new Event("change"));
+    });
+  }
+  $("dubModeSelect").addEventListener("change", paintModeSwitch);
+  paintModeSwitch();
   // A new target language changes which models can be pressed.
   if ($("targetLangSelect")) $("targetLangSelect").addEventListener("change", paintPersoModel);
 
@@ -349,6 +371,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       if (sel && value && sel.querySelector(`option[value="${value}"]`)) sel.value = value;
     };
     pick("dubModeSelect", c.dubMode);
+    paintModeSwitch();
     // The Perso voice model has no saved default: without one handed in, the
     // row starts on Oriole again.
     persoModel = c.persoModel || DEFAULT_MODEL;

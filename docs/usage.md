@@ -55,11 +55,17 @@ you do not want, with **Undo** and **Redo**. Leave it alone to take the whole vi
 cut video is re-encoded before the work starts, which takes a moment but cuts
 exactly where you asked.
 
+**Processing**, first, is how the dub is made: **Local model**, the free path on this
+computer and the one a first project starts on, or **Perso API**, where Perso makes the
+whole dub, which needs a Perso API key and uses Perso credits. With **Perso API** the
+**Dubbing model** row under it picks Perso's voice model: *Oriole* to begin with,
+*Nightingale*, *Wren* and the others. Later projects start on the choices you made last.
+
 **Original language** can stay on *Auto-detect* unless detection gets it wrong.
 
 **Target language** is the language to dub into: ten on this computer (English, Korean,
 Chinese, Japanese, French, German, Italian, Portuguese, Russian and Spanish), 100+ with
-the Perso API, depending on the **Dubbing model** below ([full list](languages.md)).
+the Perso API, depending on the **Dubbing model** above ([full list](languages.md)).
 
 From here:
 
@@ -70,16 +76,11 @@ From here:
 
 ### Advanced options
 
-Collapsed by default. A first project starts with **Dubbing** set to **On this
-computer**, the free path. Set it to **Perso API** and Perso makes the whole dub, which
-needs a Perso API key and uses Perso credits; later projects start on the choices you
-made last. The rows from **Voice separation** to **Voice quality** apply only on
-this computer, and are greyed out while Perso dubs.
+Collapsed by default. The rows from **Voice separation** to **Voice quality** apply only
+with **Local model**, and are greyed out while Perso dubs.
 
 | Field | Default | Notes |
 |---|---|---|
-| **Dubbing** | On this computer | *On this computer* runs the steps below, free. *Perso API* uploads the video and Perso does every step. |
-| **Dubbing model** | Oriole | Shown while Perso dubs: Perso's voice model, *Nightingale*, *Oriole* or *Wren*. The target languages follow it. |
 | **Voice separation** | Demucs | Splits the voice from the music and effects. Runs Mel-Band RoFormer instead once its model is downloaded in **Settings > Models**. *Perso API* needs a Perso key. |
 | **Speech-to-text** | Whisper; Perso API when you choose it | Turns the speech in your video into text. *Perso API* uploads the video. |
 | **Translation** | ChatGPT (Hunyuan on a computer that already has the Hunyuan model) | *ChatGPT* uses your own free ChatGPT account; you sign in on your first dub. *Hunyuan* and *Gemma 3* translate locally. *Gemini API* needs a Google key. |

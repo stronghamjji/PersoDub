@@ -982,7 +982,7 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
 test("each API key and the ChatGPT sign-in say which step uses them", () => {
   const html = readPage();
   const keys = html.slice(html.indexOf('id="settingsPanel-keys"'), html.indexOf('id="settingsPanel-storage"'));
-  assert.match(keys, /id="persoKeyInput"[^>]*>\s*<!--[^]*?-->\s*<div data-i18n class="settings-hint" id="persoKeyHint">Used when Dubbing, Audio separation or Speech-to-text is set to Perso API\. Uses Perso credits\.<\/div>/);
+  assert.match(keys, /id="persoKeyInput"[^>]*>\s*<!--[^]*?-->\s*<div data-i18n class="settings-hint" id="persoKeyHint">Used when Processing, Voice separation or Speech-to-text is set to Perso API\. Uses Perso credits\.<\/div>/);
   assert.match(keys, /id="geminiKeyInput"[^>]*>\s*<div data-i18n class="settings-hint" id="geminiKeyHint">Used only when Translation is set to Gemini API\. Uses your own Google API quota\.<\/div>/);
   // ChatGPT's state and button stay on one line, and its line goes under them.
   assert.match(keys, /<span>ChatGPT<\/span>\s*<div class="set-ctl">\s*<div class="set-ctl set-inline">\s*<span class="settings-hint" id="chatgptState"[^]*?id="chatgptSignInBtn"[^]*?<\/button>\s*<\/div>\s*<div data-i18n class="settings-hint" id="chatgptHint">Used when Translation is ChatGPT \(the default on a new install\)\. The Dub Agent's Codex uses this sign-in too\.<\/div>\s*<\/div>/);
@@ -1051,7 +1051,7 @@ test("the New project dialog is two columns, and its options carry their own loo
   // The look travels on the moved nodes themselves.
   assert.match(dlg, /<div class="opt-panel" id="langGrid">/);
   assert.match(dlg, /<div class="opt-panel advanced-body" id="advancedBody" hidden>/);
-  assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "two languages and seven options, each a row");
+  assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "Processing, two languages and six options, each a row");
   for (const id of ["sourceLangSelect", "targetLangSelect", "dubModeSelect", "sepSelect", "sttSelect",
                     "translateSelect", "voiceSelect", "qualitySelect", "numSpeakers",
                     "dubModeHint", "sepHint", "sttHint", "sttModelHint", "translateHint", "translateModelHint",
@@ -1061,6 +1061,26 @@ test("the New project dialog is two columns, and its options carry their own loo
   assert.match(html, /grid-template-columns: 320px minmax\(0, 1fr\); gap: 16px; padding: 16px; \}/);
   // Scrolling, the dialog keeps its stuck 55 foot clear the way the draft card does (H29).
   assert.match(html, /@media \(max-width: 759px\) \{\n    \.project-modal \{ overflow-y: auto; scroll-padding-bottom: 55px; \}/);
+});
+
+// Processing and the Dubbing model sit above the languages, outside Advanced
+// options, because the languages follow both (owner, 2026-10-22). Processing
+// is two halves, Local model and Perso API, over the hidden #dubModeSelect.
+test("Processing and the Dubbing model come first in the options block, above the languages", () => {
+  const html = readPage();
+  const grid = html.slice(html.indexOf('<div class="opt-panel" id="langGrid">'), html.indexOf('id="engineWarning"'));
+  const order = ['id="dubModeLabel"', 'id="dubModeSeg"', 'id="dubModeSelect"', 'id="persoModelRow"',
+                 'id="sourceLangSelect"', 'id="targetLangSelect"'].map((s) => grid.indexOf(s));
+  assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), "Processing, the model, then the two languages");
+  assert.match(grid, /<label data-i18n id="dubModeLabel">Processing<\/label><div class="mode-seg" id="dubModeSeg" role="radiogroup" aria-labelledby="dubModeLabel"><button type="button" role="radio" id="dubModeLocal" aria-checked="true" data-i18n>Local model<\/button><button type="button" role="radio" id="dubModePerso" aria-checked="false">Perso API<\/button><\/div><select id="dubModeSelect" hidden>/);
+  const advanced = html.slice(html.indexOf('id="advancedBody"'), html.indexOf('id="projectError"'));
+  assert.ok(!advanced.includes("dubModeSelect") && !advanced.includes("persoModelRow"), "neither is under Advanced options");
+  assert.ok(!html.includes(">On this computer<"), "the old name of the choice is gone");
+  assert.match(html, /\.opt-row > \.mode-seg \{ grid-column: 2; grid-row: 1; display: flex; height: 24px;/);
+  assert.match(html, /\.mode-seg button\[aria-checked="true"\] \{ background: var\(--primary\); color: var\(--primary-foreground\); \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.deepEqual([ko.Processing, ko["Local model"]], ["처리 방식", "로컬 모델"]);
+  assert.ok(!Object.hasOwn(ko, "On this computer"));
 });
 
 test("the confirms keep their corner X for its listeners, but hidden", () => {

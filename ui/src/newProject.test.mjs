@@ -49,6 +49,8 @@ function makeEl(id) {
       this.listeners[ev] = (this.listeners[ev] || []).filter((f) => f !== fn);
     },
     fire: async function (ev, arg) { for (const fn of [...(this.listeners[ev] || [])]) await fn(arg); },
+    // What the page's own code fires (the Processing halves fire the select's change).
+    dispatchEvent: function (ev) { for (const fn of [...(this.listeners[ev.type] || [])]) fn(ev); return true; },
   };
 }
 
@@ -968,6 +970,67 @@ test("Perso API with Wren is what the next project starts on, after a restart to
   assert.equal(h2.$("persoModelRow").hidden, false);
   assert.equal(h2.$("numSpeakers").value, "2");
   assert.equal(h2.api.readOptions().persoModel, "WREN");
+});
+
+// Processing (owner, 2026-10-22): Local model | Perso API above the languages,
+// two halves over the hidden #dubModeSelect that everything else reads.
+const litHalf = (h) => ["dubModeLocal", "dubModePerso"].filter((id) => h.$(id).attrs["aria-checked"] === "true");
+
+test("Processing's two halves set the dubbing mode, and the half it is on is lit", async (t) => {
+  const h = await persoHarness();
+  t.after(h.log.restore);
+  let changes = 0;
+  h.$("dubModeSelect").addEventListener("change", () => { changes += 1; });
+  await h.$("dubModePerso").fire("click");
+  assert.equal(h.$("dubModeSelect").value, "perso");
+  assert.deepEqual(litHalf(h), ["dubModePerso"]);
+  assert.equal(h.$("persoModelRow").hidden, false, "the Dubbing model row comes with it");
+  assert.deepEqual(targets(h), ["en", "en-GB"], "and the languages follow it");
+  assert.equal(h.api.readOptions().dubMode, "perso");
+  await h.$("dubModePerso").fire("click");
+  assert.equal(changes, 1, "pressing the lit half again changes nothing");
+  await h.$("dubModeLocal").fire("click");
+  assert.equal(h.$("dubModeSelect").value, "local");
+  assert.deepEqual(litHalf(h), ["dubModeLocal"]);
+  assert.equal(h.$("persoModelRow").hidden, true);
+  assert.equal(h.api.readOptions().dubMode, "local");
+});
+
+test("the lit half follows the select whoever sets it: a project's start, the key window's Cancel", async (t) => {
+  const h = await persoHarness(setupWith({ defaults: { ...SETUP.defaults, dub_mode: "perso" } }));
+  t.after(h.log.restore);
+  h.api.openNewProject({ downloadId: "d1", title: "First" });
+  await tick();
+  assert.equal(h.$("dubModeSelect").value, "perso");
+  assert.deepEqual(litHalf(h), ["dubModePerso"], "put back by the saved default, which fires no change");
+  // The key window's Cancel sets the select back and fires its change (ui/src/keyWindow.mjs).
+  h.$("dubModeSelect").value = "local";
+  h.$("dubModeSelect").dispatchEvent(new Event("change"));
+  assert.deepEqual(litHalf(h), ["dubModeLocal"]);
+});
+
+test("Perso API pressed on Processing is what the next project starts on, and so is Local model", async (t) => {
+  const store = memoryStorage();
+  const h = await persoHarness(setupWith(), store);
+  h.api.openNewProject({ downloadId: "d1", title: "First" });
+  await tick();
+  await h.$("dubModePerso").fire("click");
+  h.log.restore();
+
+  const h2 = await persoHarness(setupWith(), store);
+  h2.api.openNewProject({ downloadId: "d2", title: "Next" });
+  await tick();
+  assert.equal(h2.$("dubModeSelect").value, "perso");
+  assert.deepEqual(litHalf(h2), ["dubModePerso"]);
+  await h2.$("dubModeLocal").fire("click");
+  h2.log.restore();
+
+  const h3 = await persoHarness(setupWith(), store);
+  t.after(h3.log.restore);
+  h3.api.openNewProject({ downloadId: "d3", title: "Later" });
+  await tick();
+  assert.equal(h3.$("dubModeSelect").value, "local");
+  assert.deepEqual(litHalf(h3), ["dubModeLocal"]);
 });
 
 test("every Advanced option and the target language are remembered", async (t) => {

@@ -840,6 +840,15 @@
              styled by where they happen to sit. Only this box scrolls. -->
         <div class="project-options" id="projectOptions">
           <div class="opt-panel" id="langGrid">
+            <!-- How the dubbing is made, then Perso's voice model when Perso
+                 makes it: above the languages, which follow both (owner,
+                 2026-10-22). The two halves set #dubModeSelect, kept hidden,
+                 which everything that reads the choice goes by
+                 (ui/src/newProject.mjs paintModeSwitch). -->
+            <div class="field opt-row"><label data-i18n id="dubModeLabel">Processing</label><div class="mode-seg" id="dubModeSeg" role="radiogroup" aria-labelledby="dubModeLabel"><button type="button" role="radio" id="dubModeLocal" aria-checked="true" data-i18n>Local model</button><button type="button" role="radio" id="dubModePerso" aria-checked="false">Perso API</button></div><select id="dubModeSelect" hidden><option value="local" selected>Local model</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint"></div></div>
+            <!-- Perso's voice models, when Perso does the dubbing; the target
+                 languages follow the one chosen (ui/src/newProject.mjs paintPersoModel). -->
+            <div class="field opt-row" id="persoModelRow" hidden><label data-i18n id="persoModelLabel">Dubbing model</label><div class="model-pick" id="persoModelPick"></div><div class="settings-hint" id="persoModelHint"></div></div>
             <div class="field opt-row"><label data-i18n for="sourceLangSelect">Original language</label><select id="sourceLangSelect"><option value="" selected data-i18n>Auto-detect</option></select></div>
             <div class="field opt-row"><label data-i18n for="targetLangSelect">Target language</label><select id="targetLangSelect"></select></div>
           </div>
@@ -851,10 +860,6 @@
             <span class="chev"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span data-i18n>Advanced options</span>
           </button>
           <div class="opt-panel advanced-body" id="advancedBody" hidden>
-            <div class="field opt-row"><label data-i18n for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected data-i18n>On this computer</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint"></div></div>
-            <!-- Perso's voice models, when Perso does the dubbing; the target
-                 languages follow the one chosen (ui/src/newProject.mjs paintPersoModel). -->
-            <div class="field opt-row" id="persoModelRow" hidden><label data-i18n id="persoModelLabel">Dubbing model</label><div class="model-pick" id="persoModelPick"></div><div class="settings-hint" id="persoModelHint"></div></div>
             <div class="field opt-row"><label data-i18n for="sepSelect">Voice separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sepHint"></div></div>
             <div class="field opt-row"><label data-i18n for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sttHint"></div><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
             <div class="field opt-row"><label data-i18n for="translateSelect">Translation</label><select id="translateSelect"><option value="chatgpt" selected>ChatGPT</option><option value="hunyuan">Hunyuan (1.8B)</option><option value="gemma">Gemma 3 (12B)</option><option value="gemini">Gemini API</option></select><div class="settings-hint" id="translateHint"></div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
@@ -1084,7 +1089,7 @@
           <div class="set-ctl">
             <input type="password" id="persoKeyInput" placeholder="Not set" data-i18n-placeholder="Not set" spellcheck="false">
             <!-- Which steps each key and sign-in is for (owner, 2026-10-21). -->
-            <div data-i18n class="settings-hint" id="persoKeyHint">Used when Dubbing, Audio separation or Speech-to-text is set to Perso API. Uses Perso credits.</div>
+            <div data-i18n class="settings-hint" id="persoKeyHint">Used when Processing, Voice separation or Speech-to-text is set to Perso API. Uses Perso credits.</div>
             <!-- The only path from this app to a Perso account. href is replaced with the
                  UTM-tagged link from /api/settings on open; this plain URL is the fallback
                  so the link still works if that request fails. -->
