@@ -47,9 +47,9 @@ you can play it, cut it, and save a copy. See
 
 As soon as one video is ready it opens as a new project: the work screen, with the
 **Dubbing** tab on the left showing **Before dubbing**. Its **Video** card has
-**Replace**, which opens the file picker and puts the video you choose in its place,
-and **Remove**, which asks first, deletes this draft and leaves the project empty for
-another video. Several videos at once open the **New project** dialog instead, where
+**Replace**, which opens the file picker and puts the video you choose in its place
+(the old one's Draft card leaves Home), and **Remove**, which asks first, deletes this
+draft and leaves the project empty for another video. Several videos at once open the **New project** dialog instead, where
 one set of choices starts them all.
 
 **Cutting** happens on the timeline under the video: **Split at playhead**, **Delete

@@ -43,7 +43,7 @@ function harness({ responses = {}, state, checkFile } = {}) {
   const real = { fetch: globalThis.fetch, document: globalThis.document, URL: globalThis.URL,
                  setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval,
                  setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
-  const log = { calls: [], docClicks: [] };
+  const log = { calls: [], docClicks: [], replaced: [] };
 
   let ticks = new Map(), nextTick = 1;
   globalThis.setInterval = (fn) => { ticks.set(nextTick, fn); return nextTick++; };
@@ -81,7 +81,7 @@ function harness({ responses = {}, state, checkFile } = {}) {
   };
 
   clearDraft();
-  const api = initDraftImport({ $, state, checkFile });
+  const api = initDraftImport({ $, state, checkFile, onReplaced: (id) => log.replaced.push(id) });
   return { $, api, log };
 }
 
@@ -288,6 +288,7 @@ test("a video file dropped on the empty timeline row comes in with no question, 
   await p;
   await settle();
   assert.equal(getDraft().downloadId, "d3");
+  assert.deepEqual(log.replaced, [], "a first video replaces nothing");
   log.restore();
 });
 
@@ -312,6 +313,8 @@ test("a file chosen in the picker while the card has a video replaces it with no
   assert.equal(getDraft().downloadId, "d2");
   assert.equal(getDraft().name, "second.mp4");
   assert.equal($("draftImportStatus").textContent, "");
+  // The video it replaced is let go: its Draft card leaves Home (app.mjs forgetDraft).
+  assert.deepEqual(log.replaced, ["d1"]);
   log.restore();
 });
 
@@ -324,6 +327,7 @@ test("a file the app does not take says why under the card, until another video 
   assert.equal($("draftImportStatus").textContent, "Please choose an MP4 or MOV video file.");
   assert.equal($("draftImportStatus").classList.contains("error"), true);
   assert.equal(getDraft().downloadId, "d1", "the video stays");
+  assert.deepEqual(log.replaced, [], "and so does its card");
   // A cut is still this video: what was said stays said.
   setRanges([[0, 5]]);
   assert.equal($("draftImportStatus").textContent, "Please choose an MP4 or MOV video file.");

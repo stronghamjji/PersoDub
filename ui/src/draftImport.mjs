@@ -42,12 +42,15 @@ const STATUS_IDS = ["dubbingImportStatus", "audioImportStatus", "draftImportStat
  *        is taken only while the draft's own screen ("done") is up
  * @param {(file: File) => string|null} [deps.checkFile]  the app's one rule
  *        about which files it takes: why not, or null
+ * @param {(downloadId: string) => void} [deps.onReplaced]  told the id of the
+ *        draft a file took the place of (Replace on the card, or a drop on the
+ *        timeline answered Replace), so Home lets its Draft card go
  * @returns {{ render: () => void, importSource: (source: {file?, link?,
  *   onReady?, downloadId?, name?, duration?}) => Promise<void>, cancelImport: () => void,
  *   say: (text: string, isError?: boolean) => void }}
  */
 export function initDraftImport({ $, state = {}, getScreen = () => "done",
-                                  checkFile = () => null }) {
+                                  checkFile = () => null, onReplaced = () => {} }) {
   const slot = $("dubbingImportSlot");
   if (slot) slot.outerHTML = emptyTabHtml("dubbing", "dubbingZone", "dubbingLink");
 
@@ -104,6 +107,9 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
     const bad = checkFile(file);
     if (bad) { setStatus(bad, true); return; }
     const seq = ++importSeq;
+    // The video this one takes the place of, if any: replacing is not keeping
+    // both, so its Draft card goes once this one is in (owner, 2026-10-22).
+    const replacing = getDraft();
     // A link still coming down is let go for this file; pasted again later
     // it must be fetched again.
     linkOnItsWay = "";
@@ -129,6 +135,7 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
     if (seq !== importSeq) return;
     setStatus("");
     setDraft({ downloadId: rec.id, name: file.name, duration, videoUrl: downloadVideoUrl(rec.id) });
+    if (replacing) onReplaced(replacing.downloadId);
   }
 
   // `onReady` is told once this link's video is the draft: never when the

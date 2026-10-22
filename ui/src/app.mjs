@@ -747,6 +747,9 @@ const draftImport = initDraftImport({
   $, state,
   getScreen: () => document.body.dataset.screen,
   checkFile: (file) => videoProblem(file),
+  // A video replaced on the draft is let go the way one an erase was started
+  // on is: its Draft card leaves Home, so drafts do not pile up (owner, 2026-10-22).
+  onReplaced: (downloadId) => forgetDraft(downloadId),
 });
 const draftSetup = initDraftSetup({
   $, state, showScreen, setTopbar,

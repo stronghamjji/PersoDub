@@ -1111,6 +1111,8 @@ test("the Video card has Replace · Remove at its top right, and a line under it
   assert.match(html, /\.draft-part \.vc-acts \{ position: absolute; right: 13px; top: 11px;/);
   assert.match(html, /\.draft-part \.vc-del \{ color: var\(--destructive\); \}/);
   assert.match(html, /\.draft-import-status:empty \{ display: none; \}/);
+  // A replaced video's Draft card leaves Home, as one an erase started on does.
+  assert.match(html, /onReplaced: \(downloadId\) => forgetDraft\(downloadId\),/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.equal(ko.Replace, "바꾸기");
   assert.equal(ko.Remove, "삭제");
