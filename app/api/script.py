@@ -242,7 +242,7 @@ def dub_job_script_xlsx(jid: str):
                             line.get("source") or "", line.get("text") or "") for line in lines]
     langs = "%sto%s" % ((job.get("source_lang") or "auto").upper(), (job.get("language_code") or "out").upper())
     # Perso adds a timestamp before .xlsx; the dated Downloads folder already says when.
-    name = "%s_%s_Original+TranslatedScript.xlsx" % (
+    name = "%s_%s_OriginalTranslatedScript.xlsx" % (
         file_stem((job.get("title") or "").strip() or job.get("project") or ""), langs)
     return Response(content=_xlsx(rows),
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

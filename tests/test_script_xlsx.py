@@ -114,12 +114,12 @@ def test_the_file_is_named_after_the_project_as_shown_and_both_languages_the_way
     # code keeps its region. No timestamp after it, unlike Perso's.
     jid = _job(tmp_path / "a", translated=lines, title=" 안녕히계세요: 츄 퇴사짤 ", language_code="es-MX")
     assert _saved_as(client.get(f"/api/dub/jobs/{jid}/script.xlsx")) \
-        == "안녕히계세요 - 츄 퇴사짤_KOtoES-MX_Original+TranslatedScript.xlsx"
+        == "안녕히계세요 - 츄 퇴사짤_KOtoES-MX_OriginalTranslatedScript.xlsx"
     # Never renamed: the folder's name. A source left on auto-detect that
     # never learned its language says so.
     jid = _job(tmp_path / "b", translated=lines, source_lang=None)
     assert _saved_as(client.get(f"/api/dub/jobs/{jid}/script.xlsx")) \
-        == "clip_en_AUTOtoEN_Original+TranslatedScript.xlsx"
+        == "clip_en_AUTOtoEN_OriginalTranslatedScript.xlsx"
 
 
 def test_a_perso_dubbing_s_sheet_is_its_script_read_back_from_perso(tmp_path, monkeypatch):

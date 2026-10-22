@@ -110,7 +110,7 @@ test("in Korean the three headings read 영상, 자막·대본 and 오디오", a
 // 2026-10-22): a row under the subtitles file, in Perso's name for the file
 // without the timestamp Perso adds.
 const SCRIPTED = { ...STEMS, hasScript: true, title: "안녕히계세요 여러분", source: "ko", target: "es-MX" };
-const SCRIPT_NAME = "안녕히계세요 여러분_KOtoES-MX_Original+TranslatedScript.xlsx";
+const SCRIPT_NAME = "안녕히계세요 여러분_KOtoES-MX_OriginalTranslatedScript.xlsx";
 
 test("the script is a row under Subtitles & script whenever the job has one, in Perso's name for the file", () => {
   const rows = exportRows(SCRIPTED, "mp3");
@@ -130,14 +130,14 @@ test("the script is a row under Subtitles & script whenever the job has one, in 
   // language is named so, as the route names it.
   assert.ok(!exportRows({ ...SCRIPTED, hasScript: false }, "mp3").some((r) => r.id === "script"));
   assert.equal(exportRows({ ...SCRIPTED, source: null }, "mp3").find((r) => r.id === "script").name,
-               "안녕히계세요 여러분_AUTOtoES-MX_Original+TranslatedScript.xlsx");
+               "안녕히계세요 여러분_AUTOtoES-MX_OriginalTranslatedScript.xlsx");
 });
 
 test("in Korean the script row reads 대본 (원문·번역, .xlsx) under 자막·대본", async (t) => {
   await inKorean(t);
   const html = rowsHtml(exportRows(SCRIPTED, "mp3"), "mp3");
   assert.match(html, /<div class="export-group">자막·대본<\/div><a [^>]*data-row="srt"/);
-  assert.match(html, /data-row="script" data-name="안녕히계세요 여러분_KOtoES-MX_Original\+TranslatedScript\.xlsx">[^]*?<\/svg>대본 \(원문·번역, \.xlsx\)<span class="export-state"><\/span><\/a>/);
+  assert.match(html, /data-row="script" data-name="안녕히계세요 여러분_KOtoES-MX_OriginalTranslatedScript\.xlsx">[^]*?<\/svg>대본 \(원문·번역, \.xlsx\)<span class="export-state"><\/span><\/a>/);
 });
 
 // Under the title 다운로드, "다운로드 / 2026-10-22 / paris_steps에 저장해요"

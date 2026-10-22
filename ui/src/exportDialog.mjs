@@ -157,7 +157,7 @@ export function exportRows(ctx, fmt) {
     ctx.hasScript && { id: "script", group: "subtitles", icon: "subs", label: t("Script (original + translation, .xlsx)"),
                        href: `/api/dub/jobs/${ctx.jobId}/script.xlsx`,
                        name: `${ctx.title}_${(ctx.source || "auto").toUpperCase()}to${ctx.target.toUpperCase()}`
-                         + "_Original+TranslatedScript.xlsx" },
+                         + "_OriginalTranslatedScript.xlsx" },
     { ...audio, group: "audio", label: t("Dubbed audio"),
       href: `${base}/audio?format=${fmt}&download=1${mark}`, name: `dub_${ctx.target}.${fmt}` },
     ...[["voice", t("Original voice")], ["background", t("Background")]].map(([which, label]) =>
