@@ -12,6 +12,8 @@
 //   an erased video    Video, Audio only
 //   separated audio    Voice, Background (the Audio tab's two sounds), both
 //                      ticked until the user says otherwise
+//   a video and its    Video with subtitles (the look picked burned in),
+//   own subtitles      Subtitles (.srt) -- the Subtitle style tab on its own
 //
 // Every row has a checkbox; the foot's Download saves each ticked row in turn
 // (owner, 2026-09-30). The ticks are remembered for each of the three kinds,
@@ -99,7 +101,7 @@ const GROUPS = {
  * The rows for what is on screen.
  *
  * @param {object} ctx
- * @param {"draft"|"dub"|"erase"|"separate"} ctx.kind
+ * @param {"draft"|"dub"|"erase"|"separate"|"captions"} ctx.kind
  * @param {string} [ctx.jobId]      a dub or a separation: the job
  * @param {string} [ctx.target]     a dub: its language code, in the file names
  * @param {string} [ctx.videoHref]  a dub: the URL the player is on
@@ -133,6 +135,12 @@ export function exportRows(ctx, fmt) {
       ({ id: which, icon: "audio", label, audio: true, tip: STEM_TIPS[which],
          href: `/api/dub/result/${ctx.jobId}/stem/${which}?format=${fmt}`,
          name: `${ctx.project || "project"}_${which}.${fmt}` }));
+  }
+  if (ctx.kind === "captions") {
+    return [{ id: "subtitled", icon: "film", label: t("Video with subtitles"),
+              href: withRatio(ctx.subtitled.href, ctx.ratio), name: ctx.subtitled.name },
+            { id: "srt", icon: "subs", label: t("Subtitles (.srt)"),
+              href: `/api/dub/result/${ctx.jobId}/srt?download=1`, name: "video.srt" }];
   }
   if (ctx.kind !== "dub") {
     return [{ id: "video", icon: "film", label: t("Video") }, audio];

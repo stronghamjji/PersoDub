@@ -520,3 +520,22 @@ test("separated audio hands back its two sounds as links, both ticked to begin w
   assert.deepEqual(h.followed.map((f) => f[1]), ["clip_voice.mp3", "clip_background.mp3"]);
   assert.deepEqual(h.saved(), ["voice", "background"]);
 });
+
+// The Subtitle style tab on its own (owner, 2026-10-22): the video in the
+// look picked, and the subtitle file -- nothing a dubbing would add.
+test("a video with its own subtitles hands back two rows: the subtitled video and the .srt", () => {
+  const ctx = { kind: "captions", jobId: "C1", ratio: "original",
+                subtitled: { href: "/api/dub/result/C1/subtitled?preset=sticker&download=1",
+                             name: "video-sub-sticker.mp4" } };
+  const rows = exportRows(ctx, "mp3");
+  assert.deepEqual(rows.map((r) => r.id), ["subtitled", "srt"]);
+  assert.deepEqual(rows.map((r) => r.label), ["Video with subtitles", "Subtitles (.srt)"]);
+  assert.equal(rows[0].href, "/api/dub/result/C1/subtitled?preset=sticker&download=1");
+  assert.equal(rows[0].name, "video-sub-sticker.mp4");
+  assert.equal(rows[1].href, "/api/dub/result/C1/srt?download=1");
+  assert.equal(rows[1].name, "video.srt");
+  // The player's shape goes on the video, as on a dubbing's.
+  assert.match(exportRows({ ...ctx, ratio: "9:16" }, "mp3")[0].href, /ratio=9(%3A|:)16/);
+  // The first row ticked when nothing was remembered.
+  assert.deepEqual(ticksFor(null, "captions", ["subtitled", "srt"]), ["subtitled"]);
+});
