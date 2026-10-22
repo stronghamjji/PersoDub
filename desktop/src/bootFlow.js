@@ -267,6 +267,11 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
           // The folder shell.log is in: the kit holds no log of its install.
           logDir: join(app.getPath("userData"), "logs"),
         });
+        // The queue again, now the screen is up: an install can run for an
+        // hour, and a network that was not there as the launch started may be
+        // by now. Not awaited -- a person who closes the screen at once loses
+        // nothing, since every report is on disk before it goes (reporting.js).
+        void flushReports(cfg.kitDir).catch(() => {});
         return false;
       }
       shellLog(`INSTALL ALL DONE (${secondsSince(from)}s)`);
@@ -319,9 +324,10 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       }
       ctx.bootedKitDir = cfg.kitDir;
       countUsage("app_launch", cfg.kitDir, undefined, undefined, { persoKey: hasPersoKey(cfg.kitDir) });
-      // Reports from earlier launches that had no network. Deliberately not
-      // awaited, and after the page is up: the queue is never the reason a
-      // launch is slow.
+      // Reports from earlier launches that had no network -- what the flush as
+      // the launch started could not send, and the failures that name a job,
+      // which wait for the engines (reporting.js). Deliberately not awaited,
+      // and after the page is up: the queue is never the reason a launch is slow.
       void flushReports(cfg.kitDir).catch(() => {});
     } catch (err) {
       // The kit installed fine and the app still cannot run. Such a machine fires
@@ -368,6 +374,12 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       // ...and every page load after this reads it again (windowFactory.js),
       // so a language saved in Settings reaches the shell's dialogs at once.
       ctx.kitDir = cfg.kitDir;
+      // Reports earlier launches left in the kit's queue, before the install
+      // starts: the flush after the page is up (startApp) is never reached by
+      // a computer whose install keeps failing, so its reports -- the ones
+      // most worth reading -- used to wait there until they expired. Not
+      // awaited: the queue is never the reason a launch is slow.
+      void flushReports(cfg.kitDir).catch(() => {});
       if (!(await prepareKit(win, cfg, payload, kitVersion))) return;
       shellLog(`PERSODUB_KIT kitDir=${cfg.kitDir} version=${kitVersion ?? "unknown"}`);
     }
