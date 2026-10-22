@@ -1,0 +1,36 @@
+// What every pick list of Advanced options does the same way -- the Dubbing
+// model's (ui/src/newProject.mjs) and the four stages' (ui/src/stagePicker.mjs):
+// where the list sits, and how the keys move through it.
+
+/** Under the button, as wide as it (300 to 420 pixels), or over it when the
+    screen has no room below. The list is fixed to the screen (app.css
+    .model-pick-list), so the options panel's scrolling cannot clip it. */
+export function placeList(list, btn) {
+  const r = btn.getBoundingClientRect();
+  list.style.left = `${r.left}px`;
+  list.style.width = `${Math.min(Math.max(r.width, 300), 420)}px`;
+  const below = r.bottom + 5;
+  const screen = globalThis.innerHeight ?? Infinity;   // none in the tests' stand-in page
+  list.style.top = below + list.offsetHeight > screen && r.top > list.offsetHeight + 5
+    ? `${r.top - 5 - list.offsetHeight}px` : `${below}px`;
+}
+
+/** Up and down move between the options that can be chosen; Escape closes
+    the list (`close`) and not the dialog under it. The chosen option has the
+    focus first. */
+export function listKeys(list, close) {
+  list.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      close();
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const opts = [...list.querySelectorAll(".model-opt:not([disabled])")];
+    const at = opts.indexOf(document.activeElement);
+    const next = opts[(at + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length];
+    if (next) next.focus();
+  });
+  setTimeout(() => { list.querySelector(".model-opt.on")?.focus?.(); }, 0);
+}

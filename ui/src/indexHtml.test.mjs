@@ -1034,9 +1034,11 @@ test("the New project dialog is two columns, and its options carry their own loo
   assert.match(dlg, /<div class="opt-panel" id="langGrid">/);
   assert.match(dlg, /<div class="opt-panel advanced-body" id="advancedBody" hidden>/);
   assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "two languages and seven options, each a row");
+  // Audio separation offers Demucs, Mel-Band RoFormer and Perso API, the RoFormer before it is downloaded too.
+  assert.match(dlg, /<select id="sepSelect"><option value="local" selected>Demucs<\/option><option value="roformer">Mel-Band RoFormer<\/option><option value="perso">Perso API<\/option><\/select>/);
   for (const id of ["sourceLangSelect", "targetLangSelect", "dubModeSelect", "sepSelect", "sttSelect",
                     "translateSelect", "voiceSelect", "qualitySelect", "numSpeakers",
-                    "dubModeHint", "sepHint", "sttHint", "sttModelHint", "translateHint", "translateModelHint",
+                    "dubModeHint", "sepHint", "sepModelHint", "sttHint", "sttModelHint", "translateHint", "translateModelHint",
                     "voiceHint", "voiceModelHint", "qualityHint"]) at(`id="${id}"`);
   assert.doesNotMatch(html, /\.project-(modal|right|options) \.opt-/, "no option rule depends on the dialog around it");
   assert.match(html, /\.project-modal \{ width: min\(720px, 92vw\);/);

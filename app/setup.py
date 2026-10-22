@@ -20,7 +20,9 @@ from app.settings_env import current_value, write_values
 # the ones app/engines_status.py's TRANSLATORS offers, in its order.
 STAGES = {
     "dub_mode": ("DUB_MODE", ("local", "perso"), None),
-    "separation": ("SEP_ENGINE", ("local", "perso"), "local"),
+    # "local" is Demucs and "roformer" Mel-Band RoFormer, both on this
+    # computer; the screen lists each with its own download state.
+    "separation": ("SEP_ENGINE", ("local", "roformer", "perso"), None),
     # Local Whisper even with a Perso key saved: every stage starts on the free
     # local choice, and Perso speech-to-text runs only when chosen
     # (owner, 2026-10-20).
@@ -42,6 +44,13 @@ def _hunyuan_installed() -> bool:
     return bool(entry and kit) and model_store.model_state(entry, kit) == "ready"
 
 
+def _roformer_installed() -> bool:
+    from app import models as model_store
+    entry = model_store.find("vocal-separator")
+    kit = model_store.kit_dir()
+    return bool(entry and kit) and model_store.model_state(entry, kit) == "ready"
+
+
 def _fallback(stage: str) -> str:
     if stage == "dub_mode":
         # One build, two defaults. The production edition, the company's
@@ -57,6 +66,10 @@ def _fallback(stage: str) -> str:
         # script starts going to OpenAI without anyone choosing it
         # (user, 2026-09-24).
         return "hunyuan" if _hunyuan_installed() else config.TRANSLATE_ENGINE_DEFAULT
+    if stage == "separation":
+        # A machine with the RoFormer downloaded keeps separating with it, the
+        # way "local" did while it meant "the RoFormer when it is here".
+        return "roformer" if _roformer_installed() else "local"
     return STAGES[stage][2]
 
 

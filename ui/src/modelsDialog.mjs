@@ -352,7 +352,11 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn btn-outline model-btn";
-        if (m.role === "pack") {
+        if (m.comes_with) {
+          // Part of a pack (Demucs, in Python + PyTorch): listed with its
+          // stage, with nothing of its own to download or remove.
+          if (m.state !== "ready") status.textContent = "";
+        } else if (m.role === "pack") {
           // The desktop app installs and removes packs; a plain browser can only look.
           if (packBusy && packBusy.id === m.id) {
             status.textContent = packBusy.retry ? packBusy.line : st.text + (packBusy.line ? ` · ${packBusy.line}` : "");
@@ -374,16 +378,17 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
         else if (m.state === "downloading") { btn.textContent = t("Cancel"); btn.onclick = () => cancelModel(m.id); }
         else if (m.state === "paused") { btn.textContent = t("Resume"); btn.onclick = () => downloadModel(m.id); }
         else { btn.textContent = t("Download"); btn.onclick = () => downloadModel(m.id); }
-        if (m.state === "ready" && m.hint) {
+        if ((m.state === "ready" || m.comes_with) && m.hint) {
           // What it is for, after "Ready", where the group's title does not
-          // say it all. A row on its way keeps the cell for its own line. Added
-          // last: a textContent set above would wipe it.
+          // say it all, and where a pack's part comes from. A row on its way
+          // keeps the cell for its own line. Added last: a textContent set
+          // above would wipe it.
           const note = document.createElement("span");
           note.className = "model-note";
           note.textContent = m.hint;
           status.append(note);
         }
-        row.append(name, size, status, btn);
+        row.append(name, size, status, m.comes_with ? document.createElement("span") : btn);
         list.append(row);
       }
     }

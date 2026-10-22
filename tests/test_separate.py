@@ -255,6 +255,28 @@ def test_demucs_separates_while_the_roformer_is_not_downloaded(monkeypatch, tmp_
     assert "model_path" not in seen["payload"]
 
 
+def test_a_dub_that_chose_demucs_gets_demucs_with_the_roformer_downloaded(monkeypatch, tmp_path):
+    # Advanced options offers the two apart: the one picked is the one that runs.
+    import sys
+    _kit_with_roformer(tmp_path / "kit", monkeypatch)
+    seen = {}
+    monkeypatch.setattr(sep.subprocess, "run", _capture_run(tmp_path, seen))
+    engine = sep.SeparationEngine(python_path=sys.executable, roformer=False)
+    engine.separate("/fake/video.mp4", str(tmp_path))
+    assert engine.name == "Demucs"
+    assert seen["script"] == sep.SCRIPT_PATH
+
+
+def test_a_dub_that_chose_the_roformer_never_gets_demucs_in_its_place(monkeypatch, tmp_path):
+    import sys
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path / "kit"))
+    monkeypatch.setattr(sep.subprocess, "run", lambda *a, **k: pytest.fail("nothing may run"))
+    engine = sep.SeparationEngine(python_path=sys.executable, roformer=True)
+    assert engine.name == "RoFormer"
+    with pytest.raises(sep.PartsMissing):
+        engine.separate("/fake/video.mp4", str(tmp_path))
+
+
 def test_half_downloaded_roformer_weights_are_not_used(monkeypatch, tmp_path):
     weights = _kit_with_roformer(tmp_path / "kit", monkeypatch)
     weights.write_bytes(b"")   # a cancelled download leaves the file empty

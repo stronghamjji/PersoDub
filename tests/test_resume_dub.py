@@ -389,6 +389,19 @@ def test_a_remade_voices_job_resumes_voices_only():
     assert seen["stt_engine"] is None and seen["sep_engine"] is None and seen["translate_engine"] is None
 
 
+def test_a_job_runs_again_with_the_separation_it_recorded():
+    # Demucs and the RoFormer are two choices: "Try again" or Resume separates
+    # with the one the job was started with, not with whichever is on disk.
+    from app import dub_launch
+
+    for recorded in ("demucs", "roformer", "perso"):
+        seen = {}
+        job = {"id": "j", "work_dir": "/w", "separation": recorded, "language_code": "es"}
+        dub_launch.work_for(job, cancel_check=lambda: False, on_notice=None, resume=True,
+                            run_dub=lambda **k: seen.update(k))(lambda m: None)
+        assert seen["sep_engine"] == recorded
+
+
 def test_high_quality_resume_keeps_the_takes_already_made(tmp_path, monkeypatch):
     from app import qwen_pipeline
     from app.qwen_pipeline import synth_lines

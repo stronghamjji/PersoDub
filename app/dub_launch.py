@@ -156,8 +156,8 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
 
     The engine arguments are the record's own words read back through the
     mapping that wrote them (app/api/dub.py's _engines_used): the record says
-    "whisper"/"perso" and "demucs"/"perso", run_dub asks only whether it is
-    "perso".
+    "whisper"/"perso", and run_dub asks only whether it is "perso"; it says
+    "demucs"/"roformer"/"perso", and run_dub separates with that one.
     """
     jid = job["id"]
     work = job["work_dir"]
@@ -208,7 +208,7 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
             language_code=language_code,
             num_speakers=None if voices_only else job.get("num_speakers"),
             stt_engine=None if voices_only or job.get("stt_engine") != "perso" else "perso",
-            sep_engine=None if voices_only or job.get("separation") != "perso" else "perso",
+            sep_engine=None if voices_only else job.get("separation"),
             translate_engine=None if voices_only else job.get("translator"),
             # The one engine choice a redub still answers to: how many takes
             # per line the voice engine scores before picking a winner.

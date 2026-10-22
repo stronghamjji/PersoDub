@@ -5,6 +5,9 @@ import { readFileSync } from "node:fs";
 import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText, dubStartDialog, overallProgress, downloadStopped, allReady, groupModels } from "./modelsUi.mjs";
 
 test("neededModelId maps each dropdown choice to its catalog model", () => {
+  assert.equal(neededModelId("sep", "roformer"), "vocal-separator");
+  assert.equal(neededModelId("sep", "local"), null, "Demucs comes with Python + PyTorch");
+  assert.equal(neededModelId("sep", "perso"), null);
   assert.equal(neededModelId("stt", "local"), "whisper");
   assert.equal(neededModelId("stt", "perso"), null);
   assert.equal(neededModelId("translate", "gemma"), "gemma");
@@ -76,6 +79,8 @@ test("dubStartDialog splits packs from models and keeps the 409's order", () => 
 });
 
 test("neededPackIds names the pack behind each dropdown choice", () => {
+  assert.deepEqual(neededPackIds("sep", "roformer"), ["engine"]);
+  assert.deepEqual(neededPackIds("sep", "local"), []);
   assert.deepEqual(neededPackIds("stt", "local"), ["engine"]);
   assert.deepEqual(neededPackIds("stt", "perso"), []);
   assert.deepEqual(neededPackIds("translate", "hunyuan"), ["ollama-runtime"]);

@@ -13,6 +13,7 @@
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, parseProgress, applyEngineAvailability, probeSource, engineChips, engineLine, voiceLabel, dubAgainSource, holdDownload, downloadVideoUrl } from "./dubApi.mjs";
 import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText } from "./modelsUi.mjs";
 import { initModelsUi } from "./modelsDialog.mjs";
+import { initStagePickers } from "./stagePicker.mjs";
 import { initSubtitleOverlay } from "./subtitleOverlay.mjs";
 import { initEscapeKey } from "./escapeKey.mjs";
 // Escape closes what is on top, and one menu is open at a time
@@ -303,6 +304,10 @@ const models = initModelsUi({
   keepPolling: () => $("settingsOverlay").classList.contains("open"),
   ramOk: () => ramOk,
 });
+// The four stage dropdowns as buttons whose lists hold every choice, the
+// models not downloaded yet included (ui/src/stagePicker.mjs); painted with
+// the lines under them.
+const stagePickers = initStagePickers({ $, rowOf: (id) => models.modelRow(id) });
 
 // Everything a dropdown choice needs, in the order it downloads: the pack it
 // runs in first (as in the dub's own 409), then its model. Only the rows
@@ -364,13 +369,15 @@ function paintModelStatusLines(rows) {
   // Cloud dubbing needs no local models -- their download lines would only
   // confuse; the per-stage dropdowns are greyed by paintDubMode below.
   const cloud = $("dubModeSelect").value === "perso";
-  for (const [role, sel, hint] of [["stt", "sttSelect", "sttModelHint"],
+  for (const [role, sel, hint] of [["sep", "sepSelect", "sepModelHint"],
+                                    ["stt", "sttSelect", "sttModelHint"],
                                     ["translate", "translateSelect", "translateModelHint"],
                                     ["voice", "voiceSelect", "voiceModelHint"]]) {
     const value = $(sel).value;
     const needsAnything = !cloud && (neededPackIds(role, value).length || neededModelId(role, value));
     paintHint($(hint), cloud ? [] : hintNeeds(role, value), !!needsAnything);
   }
+  stagePickers.paint();
   // The one under way, not one queued behind it: before its first byte it
   // has no figure either (Windows C2, 2026-10-21).
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
@@ -388,7 +395,7 @@ function paintModelStatusLines(rows) {
 }
 
 $("topbarDl").addEventListener("click", () => models.reopenDialogOrSettings());
-for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
+for (const id of ["sepSelect", "sttSelect", "translateSelect", "voiceSelect"]) {
   $(id).addEventListener("change", () => models.repaint());
 }
 // One sentence per line (they read as a wall when joined -- user feedback):
@@ -399,6 +406,7 @@ const ENGINE_HINTS = {
   dubMode: { get local() { return [t("Runs on this computer, free."), t("You can edit the script after.")]; },
              get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that.")]; } },
   sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
+         get roformer() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
   stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },

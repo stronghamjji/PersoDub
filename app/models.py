@@ -211,6 +211,7 @@ def shown_words(text: str) -> str:
         "Subtitle eraser": t("Subtitle eraser"),
         "More careful": t("More careful"),
         "Small and quick": t("Small and quick"),
+        "Default · Comes with Python + PyTorch": t("Default · Comes with Python + PyTorch"),
     }.get(text, text)
 
 
@@ -223,7 +224,9 @@ def find(mid):
 
 def status_rows():
     """What GET /api/models serves: catalog entries (minus always-installed)
-    with live download state layered over the on-disk state."""
+    with live download state layered over the on-disk state. One that comes
+    with a pack (Demucs, in Python + PyTorch) says which: the screen lists it
+    with its stage but offers no download or removal of its own."""
     kit = kit_dir()
     rows = []
     for m in load_catalog():
@@ -233,6 +236,8 @@ def status_rows():
                # A short note after "Ready" in Settings, only where the row's
                # group title does not say what it is for; "" when it does.
                "hint": shown_words(m.get("hint", ""))}
+        if m.get("comes_with"):
+            row["comes_with"] = m["comes_with"]
         with _lock:
             rt = dict(_downloads.get(m["id"]) or {})
         if rt.get("state") in ("queued", "downloading"):

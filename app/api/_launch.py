@@ -117,7 +117,7 @@ def engine_hint(separation_local: bool, stt_local: bool) -> str:
 
 def missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = True, *,
                    need_engine: bool = False, need_ollama: bool = False,
-                   separation_local: bool = True):
+                   separation_local: bool = True, need_roformer: bool = False):
     """Catalog entries this job still needs: the packs first (the desktop app
     installs those, kind "pack"), then the models in catalog order (kind
     "model", downloaded by this process).
@@ -138,6 +138,8 @@ def missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = Tr
         wanted.append("whisper")
     if need_tts:
         wanted.append("qwen3-tts")
+    if need_roformer:
+        wanted.append("vocal-separator")
     packs, models = [], []
     for m in model_store.load_catalog():
         if m["role"] == "pack":

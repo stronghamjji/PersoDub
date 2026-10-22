@@ -15,8 +15,9 @@ export function gb(bytes) {
 }
 
 /** Which catalog model a dropdown choice needs, or null when it needs none
- * (API engines, and separation's always-installed local Demucs). */
+ * (API engines, and separation's Demucs, which comes with Python + PyTorch). */
 export function neededModelId(role, value) {
+  if (role === "sep") return value === "roformer" ? "vocal-separator" : null;
   if (role === "stt") return value === "perso" ? null : "whisper";
   if (role === "translate") return value === "gemma" ? "gemma" : value === "hunyuan" ? "hunyuan" : null;
   if (role === "voice") return "qwen3-tts";
@@ -103,9 +104,10 @@ function downloadLine(purpose) {
 }
 
 /** The packs a dropdown choice needs, alongside the model neededModelId
- * names: local STT and the voice run in the engine pack; Gemma and Hunyuan
- * run in the translation runtime. */
+ * names: the RoFormer, local STT and the voice run in the engine pack; Gemma
+ * and Hunyuan run in the translation runtime. */
 export function neededPackIds(role, value) {
+  if (role === "sep") return value === "roformer" ? ["engine"] : [];
   if (role === "stt") return value === "perso" ? [] : ["engine"];
   if (role === "translate") return value === "gemma" || value === "hunyuan" ? ["ollama-runtime"] : [];
   if (role === "voice") return ["engine"];

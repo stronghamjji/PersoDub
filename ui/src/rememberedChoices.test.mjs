@@ -69,6 +69,16 @@ test("a local translator no longer downloaded gives way; one that is here, or co
   assert.equal(choicesToPutBack(readRemembered(s), setup(rows("downloading"))).translator, "hunyuan");
 });
 
+test("the RoFormer gives way once it is no longer downloaded, like a local translator", () => {
+  const s = storage();
+  rememberChoice(s, "sep", "roformer", DEFAULTS);
+  const rows = (state) => ({ models: [{ id: "engine", state: "ready" }, { id: "vocal-separator", state }] });
+  assert.equal(choicesToPutBack(readRemembered(s), setup(rows("not_downloaded"))).sep, undefined);
+  assert.equal(choicesToPutBack(readRemembered(s), setup(rows("ready"))).sep, "roformer");
+  rememberChoice(s, "sep", "local", DEFAULTS);
+  assert.equal(choicesToPutBack(readRemembered(s), setup(rows("not_downloaded"))).sep, "local", "Demucs needs no download");
+});
+
 test("a saved default changed since the choice was made (the Dub Agent's set_default) wins", () => {
   const s = storage();
   rememberChoice(s, "dubMode", "local", DEFAULTS);

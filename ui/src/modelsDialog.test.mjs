@@ -685,6 +685,28 @@ test("a ready row says what it is for after its status, and a row on its way say
   assert.deepEqual(hunyuan.children[2].children, [], "no note beside a download's line");
 });
 
+test("Demucs is listed under Audio separation as part of Python + PyTorch, with no button of its own", async (t) => {
+  const demucs = { id: "demucs", role: "sep", name: "Demucs", bytes: 0.081e9, comes_with: "engine",
+                   hint: "Default · Comes with Python + PyTorch" };
+  const h = harness({ rows: [{ ...demucs, state: "ready" },
+                             { id: "vocal-separator", role: "sep", name: "Mel-Band RoFormer", bytes: 0.9e9, state: "not_downloaded" },
+                             { ...ENGINE, state: "ready" }] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const [row, roformer] = listRows(h);
+  assert.deepEqual(row.children.map((c) => c.textContent), ["Demucs", "0.1 GB", "Ready", ""]);
+  assert.equal(row.children[2].children[0].textContent, "Default · Comes with Python + PyTorch");
+  assert.notEqual(row.children[3].className, "btn btn-outline model-btn", "nothing to press");
+  assert.equal(roformer.children[3].textContent, "Download");
+  assert.equal(h.$("modelsSummary").textContent, "3 models · 2.1 GB on this computer");
+  // Before Python + PyTorch is here: no state of its own, only where it comes from.
+  h.state.rows = [{ ...demucs, state: "not_downloaded" }];
+  await h.api.refreshModels();
+  const [missing] = listRows(h);
+  assert.equal(missing.children[2].children[0].textContent, "Default · Comes with Python + PyTorch");
+  assert.equal(missing.children[3].className, "", "still nothing to press");
+});
+
 test("the rows sit under a heading for each purpose, each with what its ready rows take", async (t) => {
   const h = harness({ rows: [
     { ...ENGINE, state: "ready" },

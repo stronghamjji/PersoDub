@@ -45,9 +45,10 @@ export function rememberChoice(storage, name, value, defaults) {
  * puts choices back ({dubMode, sep, stt, translator, quality, voice,
  * persoModel, speakers, target}). One that cannot is left out, so its control
  * keeps the saved default: its default changed since, it needs a key that is
- * not saved any more, it is a local translator no longer downloaded, or it is
- * a Perso model or speaker count this build does not know. A target language
- * the list does not have is the dialog's to settle (it falls back to English).
+ * not saved any more, it is a local translator or the RoFormer no longer
+ * downloaded, or it is a Perso model or speaker count this build does not
+ * know. A target language the list does not have is the dialog's to settle
+ * (it falls back to English).
  *
  * @param {object} all    readRemembered()
  * @param {object|null} setup  GET /api/setup: {defaults, keys, models}; null
@@ -65,6 +66,7 @@ export function choicesToPutBack(all, setup) {
     const key = (KEYED[name] || {})[value];
     if (key && !keys[key]) continue;
     if (name === "translator" && gone([...neededPackIds("translate", value), neededModelId("translate", value)].filter(Boolean))) continue;
+    if (name === "sep" && gone([neededModelId("sep", value)].filter(Boolean))) continue;
     if (name === "persoModel" && !isModelId(value)) continue;
     if (name === "speakers" && !/^\d*$/.test(value)) continue;
     out[name] = value;

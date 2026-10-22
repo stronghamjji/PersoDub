@@ -119,6 +119,30 @@ def test_gemma_model_missing_joins_the_409_list(monkeypatch, _kit):
     assert [m["id"] for m in r.json()["detail"]["missing"]] == ["gemma"]
 
 
+def test_the_roformer_chosen_and_not_downloaded_joins_the_409_list(monkeypatch, _kit):
+    # Advanced options lists Mel-Band RoFormer before it is downloaded
+    # (feedback 2, 2026-10-20); starting with it asks for it like any model.
+    _put_whisper(_kit)
+    _put_tts(_kit)
+    r = _start({"sep_engine": "roformer"})
+    assert r.status_code == 409
+    assert [m["id"] for m in r.json()["detail"]["missing"]] == ["vocal-separator"]
+    _mk(_kit, "models", "melband-roformer", "MelBandRoformer.ckpt")
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
+    r = _start({"sep_engine": "roformer"})
+    assert r.status_code == 200
+    assert client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()["separation"] == "roformer"
+
+
+def test_demucs_asks_for_no_roformer(monkeypatch, _kit):
+    _put_whisper(_kit)
+    _put_tts(_kit)
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
+    r = _start({"sep_engine": "local"})
+    assert r.status_code == 200
+    assert client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()["separation"] == "demucs"
+
+
 def test_gemma_unreachable_is_still_a_422(monkeypatch, _kit):
     # A down Ollama is not a missing download -- no dialog can fix it.
     _put_whisper(_kit)

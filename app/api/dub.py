@@ -151,7 +151,7 @@ def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engi
         "translator": (translate_engine or dub_setup.default_for("translator")).lower() or None,
         "tts": tts_engine or dub_setup.default_for("voice"),
         "quality": n_takes if n_takes is not None else (dub_setup.default_n_takes() or QWEN_N_TAKES),
-        "separation": "perso" if resolved_sep == "perso" else "demucs",
+        "separation": resolved_sep if resolved_sep in ("perso", "roformer") else "demucs",
     }
 
 
@@ -296,7 +296,8 @@ def _require_local_models(engines: dict, translator) -> None:
         translate_missing_id = dub_launch.translate_model_missing(translator)
     missing = launch_api.missing_models(engines.get("stt_engine") != "perso", translate_missing_id,
                                         need_engine=True, need_ollama=need_ollama,
-                                        separation_local=engines.get("separation") != "perso")
+                                        separation_local=engines.get("separation") != "perso",
+                                        need_roformer=engines.get("separation") == "roformer")
     if missing:
         launch_api.raise_models_needed(missing)
     _require_voice_engine_running()
@@ -855,7 +856,7 @@ def _start_plan(*, video, source_url, download_id, language, language_code, num_
     # Blanks take the app's saved defaults (app/setup.py): what the Settings
     # screen or the Dub Agent's set_default chose, in force without a restart.
     sep_engine = (sep_engine or "").strip().lower() or dub_setup.default_for("separation")
-    if sep_engine not in ("local", "demucs", "perso"):
+    if sep_engine not in ("local", "demucs", "roformer", "perso"):
         raise HTTPException(422, t("Unknown sep_engine: {name}", name=sep_engine))
     dub_mode = (dub_mode or "").strip().lower() or dub_setup.default_for("dub_mode")
     if dub_mode not in ("local", "perso"):
@@ -969,7 +970,8 @@ def _start_preflight(plan: _StartPlan, has_script: bool) -> Optional[str]:
         # voices run in it too).
         missing = launch_api.missing_models(need_whisper, translate_missing_id,
                                   need_engine=True, need_ollama=need_ollama,
-                                  separation_local=plan.sep_engine != "perso")
+                                  separation_local=plan.sep_engine != "perso",
+                                  need_roformer=plan.sep_engine == "roformer")
         if missing:
             launch_api.raise_models_needed(missing)
         _require_voice_engine_running()

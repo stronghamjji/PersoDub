@@ -2668,6 +2668,15 @@
   .model-caption { font-size: 10.5px; color: var(--muted-foreground); }
   .model-pro { flex: none; padding: 1px 7px; border: 1px solid var(--border); border-radius: 999px;
     font-size: 10px; color: var(--muted-foreground); white-space: nowrap; }
+  /* A stage's button says Ready at its right once all the choice needs is on
+     this computer, and each line of its list ends in the model's state
+     (ui/src/stagePicker.mjs). Greyed with the dropdowns for a Perso dubbing. */
+  .model-pick-btn .model-state { margin-left: auto; font-size: 10.5px; white-space: nowrap; }
+  .model-pick-btn:has(.model-state)::after { margin-left: 8px; }
+  .model-pick-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .model-state.st-ok, .model-caption .st-ok { color: var(--success-ink); font-weight: 600; }
+  .model-caption .st-busy { color: var(--destructive); font-weight: 600; }
+  .model-caption .st-before { color: var(--foreground); font-weight: 500; }
   .opt-row > .settings-hint { grid-column: 2; margin: 5px 0 0; font-size: 11px; color: var(--muted-foreground); }
   .opt-row > .settings-hint:empty { display: none; }
   .opt-row > .settings-hint.model-busy { color: var(--destructive); }

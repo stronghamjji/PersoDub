@@ -135,7 +135,7 @@ export function buildDubFormData(opts) {
   // a blank no longer means "local" on the server -- it means "the saved
   // default" (app/setup.py), which the user may have set to Perso. The
   // dialog's own choice must never be overridden by that (2026-09-04).
-  fd.append("sep_engine", opts.sepEngine === "perso" ? "perso" : "local");
+  fd.append("sep_engine", ["perso", "roformer"].includes(opts.sepEngine) ? opts.sepEngine : "local");
   fd.append("dub_mode", opts.dubMode === "perso" ? "perso" : "local");
   // The Perso voice model of a Perso dubbing; a blank lets the server pick.
   if (opts.dubMode === "perso" && opts.persoModel) fd.append("perso_model", opts.persoModel);

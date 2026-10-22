@@ -16,6 +16,10 @@
   {"id": "whisper", "role": "stt", "name": "Whisper", "bytes": 3091000000,
    "source": {"kind": "hf", "repo": "Systran/faster-whisper-large-v3", "rev": "edaa852ec7e145841d8ffdb056a99866b5f0a478"},
    "dir": "models/whisper/faster-whisper-large-v3", "markers": ["model.bin"]},
+  {"id": "demucs", "role": "sep", "name": "Demucs", "bytes": 81000000,
+   "hint": "Default · Comes with Python + PyTorch", "comes_with": "engine",
+   "source": {"kind": "hf", "repo": "adefossez/HTDemucs", "rev": "bf35a81b663819a8255c8fefee17f9d812b786b5", "files": ["htdemucs.yaml", "955717e8.safetensors"]},
+   "dir": "models/demucs/HTDemucs", "markers": ["955717e8.safetensors"]},
   {"id": "vocal-separator", "role": "sep", "name": "Mel-Band RoFormer", "bytes": 913106900,
    "source": {"kind": "hf", "repo": "KimberleyJSN/melbandroformer", "rev": "ac9b0614ab3cd7f77219e18ba494dfd93956c348", "files": ["MelBandRoformer.ckpt"]},
    "dir": "models/melband-roformer", "markers": ["MelBandRoformer.ckpt"]},
@@ -26,8 +30,5 @@
   {"id": "hunyuan", "role": "translate", "name": "Hunyuan", "bytes": 1100000000,
    "hint": "Small and quick",
    "source": {"kind": "ollama", "pull": "hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M", "tag": "hy-mt2:1.8b", "needs_template": true},
-   "dir": "models/ollama", "markers": ["manifests/registry.ollama.ai/library/hy-mt2/1.8b"]},
-  {"id": "demucs", "role": "always", "name": "Sound separation", "bytes": 81000000,
-   "source": {"kind": "hf", "repo": "adefossez/HTDemucs", "rev": "bf35a81b663819a8255c8fefee17f9d812b786b5", "files": ["htdemucs.yaml", "955717e8.safetensors"]},
-   "dir": "models/demucs/HTDemucs", "markers": ["955717e8.safetensors"]}
+   "dir": "models/ollama", "markers": ["manifests/registry.ollama.ai/library/hy-mt2/1.8b"]}
 ]

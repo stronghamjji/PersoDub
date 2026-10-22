@@ -486,6 +486,9 @@ test("buildDubFormData always names the separation, local included", () => {
   assert.equal(fd2.get("sep_engine"), "local");
   const fd3 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko" });
   assert.equal(fd3.get("sep_engine"), "local");
+  // Mel-Band RoFormer is a choice of its own now (Advanced options lists it).
+  const fd4 = buildDubFormData({ video: new Blob(["x"]), targetLang: "ko", sepEngine: "roformer" });
+  assert.equal(fd4.get("sep_engine"), "roformer");
 });
 
 test("applyEngineAvailability: a missing Hunyuan keeps the selection (picking it starts the download)", () => {
