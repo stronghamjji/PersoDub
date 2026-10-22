@@ -23,6 +23,12 @@ export function fileSha256(path) {
 // ERROR with the reason and that host. No RETRY line comes from here: this
 // tries once, and installer.js tries a failed step again whole, which logs
 // its own RETRY and then a new START.
+//
+// What an earlier try left in dest.part is picked up where it stopped (an
+// HTTP Range request) instead of fetched again from the first byte: a cut
+// line at 1.4 GB of Ollama's 1.5 GB Windows archive started it over (owner,
+// 2026-10-22, 1-3). Only for a file with a sha256, which proves the joined
+// whole; a server that sends the whole file again (200) starts it over.
 export async function download(url, dest, { sha256, onProgress = () => {}, what, log = () => {} } = {}) {
   const from = Date.now();
   const check = sha256 ? "sha256 ok" : "not checked";
@@ -38,16 +44,27 @@ export async function download(url, dest, { sha256, onProgress = () => {}, what,
       rmSync(dest);
     }
     mkdirSync(dirname(dest), { recursive: true });
-    const res = await fetch(url, { redirect: "follow" });
+    const part = dest + ".part";
+    let had = sha256 && existsSync(part) ? statSync(part).size : 0;
+    let res = await fetch(url, { redirect: "follow", ...(had ? { headers: { Range: `bytes=${had}-` } } : {}) });
+    if (res.status === 416) {
+      // Nothing after what is there: the piece is not this file. From the start.
+      await res.body?.cancel();
+      rmSync(part, { force: true });
+      had = 0;
+      res = await fetch(url, { redirect: "follow" });
+    }
     host = new URL(res.url).host;
     if (!res.ok) {
       why = `HTTP ${res.status} ${res.statusText}`.trim();
       throw new Error(`download failed ${res.status}: ${url}`);
     }
-    const total = Number(res.headers.get("content-length")) || null;
-    log(`DOWNLOAD CONNECTED ${what}: HTTP ${res.status} from ${host}, ${total ? sizeText(total) : "size unknown"}`);
-    let received = 0;
-    const part = dest + ".part";
+    const offset = res.status === 206 ? had : 0;
+    const rest = Number(res.headers.get("content-length")) || null;
+    const total = rest && offset + rest;
+    log(`DOWNLOAD CONNECTED ${what}: HTTP ${res.status} from ${host}, ${total ? sizeText(total) : "size unknown"}`
+      + (offset ? `, resuming at ${sizeText(offset)}` : ""));
+    let received = offset;
     const counter = async function* (src) {
       for await (const chunk of src) {
         received += chunk.length;
@@ -55,7 +72,7 @@ export async function download(url, dest, { sha256, onProgress = () => {}, what,
         yield chunk;
       }
     };
-    await pipeline(Readable.fromWeb(res.body), counter, createWriteStream(part));
+    await pipeline(Readable.fromWeb(res.body), counter, createWriteStream(part, { flags: offset ? "a" : "w" }));
     if (sha256) {
       const got = await fileSha256(part);
       if (got !== sha256) {
@@ -65,7 +82,7 @@ export async function download(url, dest, { sha256, onProgress = () => {}, what,
     }
     renameSync(part, dest);
     const secs = (Date.now() - from) / 1000;
-    log(`DOWNLOAD DONE ${what}: ${sizeText(received)} in ${secs.toFixed(1)}s (${(received / 1e6 / Math.max(secs, 0.001)).toFixed(1)} MB/s), ${check}`);
+    log(`DOWNLOAD DONE ${what}: ${sizeText(received)} in ${secs.toFixed(1)}s (${((received - offset) / 1e6 / Math.max(secs, 0.001)).toFixed(1)} MB/s), ${check}`);
   } catch (err) {
     // fetch's own words are only "fetch failed"; the reason is its cause.
     why ??= [errorText(err), err?.cause?.message].filter(Boolean).join(": ");

@@ -233,7 +233,8 @@ test("venv-app runs venv + pip installs and marks done", async () => {
   await step.run(() => {});
   assert.ok(argvs.some((a) => a.includes("-m venv") && a.includes("app_venv")));
   // --progress-bar raw for a byte-based percent, --retries/--timeout for a flaky line (2026-09-07).
-  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir --progress-bar raw --retries 10 --timeout 60 -r") && a.includes("requirements.txt")));
+  const cache = join(ctx.kitDir, "downloads", "pip-app_venv");
+  assert.ok(argvs.some((a) => a.includes(`install --cache-dir ${cache} --progress-bar raw --retries 10 --timeout 60 -r`) && a.includes("requirements.txt")));
   assert.equal(await step.isDone(), true);
 });
 
@@ -248,7 +249,7 @@ test("venv-app falls back to no progress bar when an old pip refuses raw (issue 
   } });
   const step = byId(ctx).venvApp ?? byId(ctx)["venv-app"];
   await step.run(() => {});
-  assert.ok(argvs.some((a) => a.includes("install --no-cache-dir --progress-bar off --retries 10")));
+  assert.ok(argvs.some((a) => a.includes(`--cache-dir ${join(ctx.kitDir, "downloads", "pip-app_venv")} --progress-bar off --retries 10`)));
   assert.equal(await step.isDone(), true);
 });
 
@@ -334,16 +335,35 @@ test("a changed trust hook re-opens a venv step that was done", async () => {
   assert.equal(await step.isDone(), false);
 });
 
-test("every pip install runs without the pip cache", async () => {
+test("every pip install of a list keeps what it fetched in the kit until its step is done, never in pip's own cache", async () => {
   // Windows kept a second copy of the 3 GB CUDA torch wheel in %LOCALAPPDATA%\pip
-  // -- outside the kit, so no size report ever showed it.
-  for (const id of ["venv-app", "venv-engines"]) {
+  // -- outside the kit, so no size report ever showed it. And with no cache at
+  // all, a Resume after a cut line fetched every wheel again, the 2 GB of
+  // Python + PyTorch from the first byte (owner, 2026-10-22, 1-3).
+  for (const [id, venvName] of [["venv-app", "app_venv"], ["venv-engines", "engines_venv"], ["venv-eraser", "venv-eraser"]]) {
     const argvs = [];
-    const ctx = freshCtx({ run: async (argv) => { argvs.push(argv); } });
-    await byId(ctx)[id].run(() => {});
-    const installs = argvs.filter((a) => a.includes("install") && !a.includes("--upgrade"));
-    assert.ok(installs.length > 0, id);
-    for (const a of installs) assert.ok(a.includes("--no-cache-dir"), `${id}: ${a.join(" ")}`);
+    let cut = true;
+    const ctx = freshCtx({ run: async (argv) => {
+      argvs.push(argv);
+      const at = argv.indexOf("--cache-dir");
+      if (at < 0) return;
+      // pip leaves each wheel it finished in the cache; the line is cut after the first.
+      mkdirSync(join(argv[at + 1], "http-v2"), { recursive: true });
+      writeFileSync(join(argv[at + 1], "http-v2", "wheel.body"), "torch");
+      if (cut) { cut = false; throw new Error("ReadTimeoutError: HTTPSConnectionPool: Read timed out."); }
+    } });
+    const cache = join(ctx.kitDir, "downloads", `pip-${venvName}`);
+    const step = byId(ctx)[id];
+    await assert.rejects(step.run(() => {}), /Read timed out/);
+    assert.ok(existsSync(join(cache, "http-v2", "wheel.body")), `${id}: the cut install keeps what came`);
+    await step.run(() => {});
+    const installs = argvs.filter((a) => a.includes("install") && !a.includes("--upgrade") && !a.includes("--no-index"));
+    assert.ok(installs.length > 1, id);
+    for (const a of installs) assert.equal(a[a.indexOf("--cache-dir") + 1], cache, `${id}: ${a.join(" ")}`);
+    assert.ok(!argvs.some((a) => a.includes("install") && !a.includes("--cache-dir") && !a.includes("--no-cache-dir")
+                                 && !a.includes("--upgrade")), `${id}: nothing goes to pip's own cache`);
+    assert.equal(await step.isDone(), true);
+    assert.equal(existsSync(cache), false, `${id}: installed, the second copy goes`);
   }
 });
 
