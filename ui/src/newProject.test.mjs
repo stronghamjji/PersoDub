@@ -892,6 +892,29 @@ test("a model that lacks the chosen language cannot be chosen, so the language n
   assert.equal(h.api.readOptions().persoModel, "ORIOLE");
 });
 
+// A press on a greyed model left the focus on the page, out of the list's
+// reach, and Escape no longer closed it (Mac check, 2026-10-22, remark 6):
+// the list takes the focus itself now (ui/src/pickList.mjs).
+test("after a press on a greyed model the list stays open, and Escape closes it", async (t) => {
+  const h = await persoDialog();
+  t.after(h.log.restore);
+  await chooseModel(h, "Nightingale");
+  h.$("targetLangSelect").value = "en-GB";
+  await h.$("targetLangSelect").fire("change");
+  const wren = (await openModels(h)).find((o) => nameOf(o) === "Wren");
+  assert.equal(wren.disabled, true);
+  await wren.fire("click");
+  const list = pick(h).children[1];
+  assert.ok(list, "still open");
+  assert.equal(list.tabIndex, -1, "the list takes the focus the greyed row cannot");
+  let stopped = false;
+  await list.fire("keydown", { key: "Escape", stopPropagation: () => { stopped = true; } });
+  assert.equal(pick(h).children.length, 1, "Escape closed it");
+  assert.equal(pick(h).children[0].attrs["aria-expanded"], "false");
+  assert.ok(stopped, "and the dialog under it stays open");
+  assert.equal(h.api.readOptions().persoModel, "NIGHTINGALE");
+});
+
 test("a remembered model Perso no longer names gives way to Oriole", async (t) => {
   const storage = memoryStorage();
   storage.setItem("persodub.lastChoices", JSON.stringify({ persoModel: { value: "DODO", over: null } }));

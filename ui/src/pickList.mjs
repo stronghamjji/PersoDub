@@ -22,6 +22,10 @@ export function placeList(list, btn) {
     the list (`close`) and not the dialog under it. The chosen option has the
     focus first. */
 export function listKeys(list, close) {
+  // A press on what cannot take the focus -- a greyed option, the gap
+  // between two -- hands it to the list itself, so Escape still reaches it:
+  // the page took it, and the list stayed open (Mac check, 2026-10-22, remark 6).
+  list.tabIndex = -1;
   list.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.stopPropagation();
@@ -31,7 +35,9 @@ export function listKeys(list, close) {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
     const opts = [...list.querySelectorAll(".model-opt:not([disabled])")];
-    const at = opts.indexOf(document.activeElement);
+    let at = opts.indexOf(document.activeElement);
+    // From the list itself Up goes to the last option, as Down goes to the first.
+    if (at < 0 && e.key === "ArrowUp") at = 0;
     const next = opts[(at + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length];
     if (next) next.focus();
   });

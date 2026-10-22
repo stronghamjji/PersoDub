@@ -152,6 +152,7 @@ test("a button takes the select's place, and a pick sets the select and fires it
   btn.click();
   const list = btn.parent.children[1];
   assert.equal(btn.getAttribute("aria-expanded"), "true");
+  assert.equal(list.tabIndex, -1, "the list can take the focus itself (ui/src/pickList.mjs)");
   assert.deepEqual(list.children.map((o) => o.dataset.value), ["local", "roformer", "perso"]);
   const roformer = list.children[1];
   assert.equal(roformer.children[0].children[1].children[0].textContent, "Not downloaded");
