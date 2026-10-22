@@ -232,8 +232,7 @@ test("the erase screen says only what the mockup says", () => {
   const erase = readFileSync(ERASE, "utf8");
   assert.match(erase, /"Finding subtitles…" : "Subtitles"/);
   for (const words of ["Part to erase", "Erasing", "Erased", "Locked while erasing",
-                       "Compare in the Original and Erased tabs",
-                       "on this computer"]) {
+                       "Compare in the Original and Erased tabs"]) {
     assert.ok(erase.includes(words), `the Erase tab no longer says "${words}"`);
   }
   // The Area card's two tips (owner, 2026-09-30), kept in ui/src/eraseArea.mjs.

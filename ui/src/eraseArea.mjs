@@ -116,6 +116,31 @@ export function defaultArea(videoW, videoH) {
   return clampArea([bottom - boxH, bottom, x0, x0 + boxW], videoW, videoH);
 }
 
+// The margin round the box in the Area card's enlargement: 20 px on a 720-line
+// frame, enough to show writing that sticks out of the box.
+const CROP_MARGIN = 1 / 36;
+
+/**
+ * The part of the frame the Area card enlarges (design 5, owner 2026-10-22):
+ * the box and a margin round it, widened or heightened to `aspect` (the
+ * picture's width over its height) so it fills the picture, and kept inside
+ * the frame wherever the frame is big enough. `box` is where the box sits in
+ * that part, in fractions of it, for the dotted edge drawn over it.
+ */
+export function cropView(area, videoW, videoH, aspect) {
+  const [y0, y1, x0, x1] = area;
+  const pad = Math.round(videoH * CROP_MARGIN);
+  let w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
+  if (w / h < aspect) w = h * aspect; else h = w / aspect;
+  // Centred on the box, then moved back inside; a part bigger than the frame
+  // stays centred and the picture has a band of nothing down its sides.
+  const place = (mid, size, total) => (size >= total ? (total - size) / 2
+    : Math.max(0, Math.min(mid - size / 2, total - size)));
+  const x = place((x0 + x1) / 2, w, videoW), y = place((y0 + y1) / 2, h, videoH);
+  return { x, y, w, h,
+           box: { left: (x0 - x) / w, top: (y0 - y) / h, width: (x1 - x0) / w, height: (y1 - y0) / h } };
+}
+
 // What the Area card says before the erase starts, always (owner,
 // 2026-09-30): people drew a huge box and waited without knowing why, and did
 // not know the box has to be placed on a frame that shows subtitles.
@@ -170,6 +195,9 @@ export function trimNote(source) {
   return t("{kept} of {total}", { kept: fmtLength(workLength(source)), total: fmtLength(source.duration) });
 }
 
+// One kept part, from its start to its end: "00:00:02.0 – 00:00:08.0".
+const span = ([a, b]) => `${fmtClockTenths(a)} – ${fmtClockTenths(b)}`;
+
 /**
  * The Erase tab's first card: "00:00:02.0 – 00:00:08.0" for one part, "2
  * parts" for several. "" when the length is not known -- a job opened out of
@@ -179,7 +207,21 @@ export function partRange(source) {
   if (!source || !(source.duration >= 1)) return "";
   const kept = source.ranges || [[0, source.duration]];
   if (kept.length > 1) return t("{n} parts", { n: kept.length });
-  return `${fmtClockTenths(kept[0][0])} – ${fmtClockTenths(kept[0][1])}`;
+  return span(kept[0]);
+}
+
+/**
+ * The video card's third line before an erase (design 5, owner 2026-10-22):
+ * "Part to erase · 00:00:00.0 – 00:00:10.0 · Whole video" when nothing was
+ * cut, and every part the timeline kept when something was. "" when the
+ * length is not known.
+ */
+export function rangeLine(source) {
+  if (!source || !(source.duration >= 1)) return "";
+  const kept = source.ranges || [[0, source.duration]];
+  const words = [t("Part to erase"), kept.map(span).join(", ")];
+  if (!source.ranges) words.push(t("Whole video"));
+  return words.join(" · ");
 }
 
 /** How long this erase will take, in seconds. 0 when the length is unknown. */
@@ -200,10 +242,10 @@ export function noGpuNote(platformKey) {
     ? t("No graphics card found. Erasing will take about 5x longer.") : "";
 }
 
-/** "About 9 min" for the top bar, or "" when there is nothing to promise. */
+/** "Local model · about 9 min" for the tab's foot, or "" when there is nothing to promise. */
 export function estimateLabel(seconds) {
   if (!seconds) return "";
-  return t("About {n} min", { n: Math.max(1, Math.ceil(seconds / 60)) });
+  return t("Local model · about {n} min", { n: Math.max(1, Math.ceil(seconds / 60)) });
 }
 
 /**
