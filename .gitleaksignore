@@ -3,3 +3,5 @@
 # the fixture now reads as words, but the commit that carried the old value
 # stays in history and the scan reads history (2026-09-07).
 07d483214defc8c5839061c0ccd37f5ab383bd16:ui/src/settingsDialog.test.mjs:generic-api-key:94
+# A test fixture (a queue entry id next to the word key), not a secret.
+f34c7e64dd57bcca0f811893c9e3e98b4d19811b:desktop/src/reportQueue.test.mjs:generic-api-key:14
