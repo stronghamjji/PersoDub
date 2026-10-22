@@ -2677,6 +2677,13 @@
   .model-caption { font-size: 10.5px; color: var(--muted-foreground); }
   .model-pro { flex: none; padding: 1px 7px; border: 1px solid var(--border); border-radius: 999px;
     font-size: 10px; color: var(--muted-foreground); white-space: nowrap; }
+  /* A Perso API dubbing's stage rows, greyed (ui/src/app.mjs paintDubMode):
+     each reads "Perso" over the choice made for this computer, which stays
+     the dropdown's value for when Local model is chosen again (owner,
+     2026-10-22). The word sits where the dropdown's own would, as dim. */
+  .advanced-body.by-perso .opt-row > select { -webkit-text-fill-color: transparent; }
+  .advanced-body.by-perso .opt-row:has(> select)::after { content: "Perso"; grid-column: 2; grid-row: 1;
+    padding: 0 9px; font-size: 11.5px; color: var(--foreground); opacity: 0.45; pointer-events: none; }
   .opt-row > .settings-hint { grid-column: 2; margin: 5px 0 0; font-size: 11px; color: var(--muted-foreground); }
   .opt-row > .settings-hint:empty { display: none; }
   .opt-row > .settings-hint.model-busy { color: var(--destructive); }

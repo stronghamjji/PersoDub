@@ -1083,6 +1083,19 @@ test("Processing and the Dubbing model come first in the options block, above th
   assert.ok(!Object.hasOwn(ko, "On this computer"));
 });
 
+// With Perso API the stage rows read "Perso" over the dropdowns' own words,
+// which stay their values; only the words are hidden, so the arrow stays
+// (owner, 2026-10-22, the 2-1 picture). ui/src/dubbingPrep.test.mjs runs it.
+test("a Perso dubbing's greyed stage rows read Perso, and say Perso handles them", () => {
+  const html = readPage();
+  assert.match(html, /\.advanced-body\.by-perso \.opt-row > select \{ -webkit-text-fill-color: transparent; \}/);
+  assert.match(html, /\.advanced-body\.by-perso \.opt-row:has\(> select\)::after \{ content: "Perso"; grid-column: 2; grid-row: 1;/);
+  assert.match(html, /\$\("advancedBody"\)\.classList\.toggle\("by-perso", cloud\);/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Perso handles this."], "Perso가 처리해요.");
+  assert.equal(ko["The video is uploaded to Perso."], "영상이 Perso로 올라가요.");
+});
+
 test("the confirms keep their corner X for its listeners, but hidden", () => {
   const html = readPage();
   for (const id of ["creditCloseX", "cancelDubCloseX", "deleteCloseX", "spaceCloseX"]) {

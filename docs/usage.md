@@ -56,8 +56,9 @@ cut video is re-encoded before the work starts, which takes a moment but cuts
 exactly where you asked.
 
 **Processing**, first, is how the dub is made: **Local model**, the free path on this
-computer and the one a first project starts on, or **Perso API**, where Perso makes the
-whole dub, which needs a Perso API key and uses Perso credits. With **Perso API** the
+computer and the one a first project starts on, or **Perso API**, where the video is
+uploaded to Perso and Perso makes the whole dub, which needs a Perso API key and uses
+Perso credits. With **Perso API** the
 **Dubbing model** row under it picks Perso's voice model: *Oriole* to begin with,
 *Nightingale*, *Wren* and the others. Later projects start on the choices you made last.
 
@@ -77,7 +78,8 @@ From here:
 ### Advanced options
 
 Collapsed by default. The rows from **Voice separation** to **Voice quality** apply only
-with **Local model**, and are greyed out while Perso dubs.
+with **Local model**. While Perso dubs they are greyed out and read *Perso*; what you chose
+for the local model comes back when you choose it again.
 
 | Field | Default | Notes |
 |---|---|---|
