@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // The kit's single settings file. It was mac.env while macOS was the only
@@ -56,4 +56,36 @@ export function envWithKit(kitDir) {
     }
   } catch { /* unreadable kit.env: fall back to process.env */ }
   return process.env;
+}
+
+/** kit.env text with KEY=value in force, written the way the engine's own
+ * writer does it (app/settings_env.py update_env_text): every line for the
+ * key, commented out or not, becomes that line, and a key that has none is
+ * added at the end. Every other line stays as it is -- the file holds the
+ * user's API keys. An empty value is a line too ("KEY="): the engine started
+ * with the old value in its environment, and only kit.env saying otherwise
+ * outranks it (app/settings_env.py current_value). */
+export function withKitEnvValue(text, key, value) {
+  let seen = false;
+  const lines = text.split(/\r?\n/);
+  if (lines[lines.length - 1] === "") lines.pop();
+  const out = lines.map((line) => {
+    if (!line.trim().replace(/^#+/, "").trim().startsWith(`${key}=`)) return line;
+    seen = true;
+    return `${key}=${value}`;
+  });
+  if (!seen) out.push(`${key}=${value}`);
+  return `${out.join("\n")}\n`;
+}
+
+/** Set KEY=value in the kit's kit.env, the file as it was kept beside it as
+ * kit.env.bak, as the engine's writer keeps it. Throws without a kit.env, and
+ * for a value that is not one line of text: a line break in it would write
+ * lines of its own into the engine's settings. */
+export function setKitEnvValue(kitDir, key, value) {
+  if (/[\u0000-\u001f\u007f]/.test(value)) throw new Error(`${key} must be one line of text`);
+  const path = join(kitDir, KIT_ENV);
+  const text = readFileSync(path, "utf8");
+  copyFileSync(path, `${path}.bak`);
+  writeFileSync(path, withKitEnvValue(text, key, value));
 }

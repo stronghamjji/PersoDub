@@ -3,12 +3,13 @@
 // "Saved to Downloads · Show" is the only reason this door exists, and a door
 // that opens on any path a page names is a door onto the whole disk. So the
 // page names a path and this decides: it is shown only if it lies inside the
-// user's Downloads folder or inside the app's own kit -- the two places this
-// app ever writes a file the user is told about. Everything else is refused,
-// and the shell says so in its log rather than to the page.
+// user's Downloads folder, the folder the user picked for downloads in the
+// computer's own folder picker, or the app's own kit -- the places this app
+// ever writes a file the user is told about. Everything else is refused, and
+// the shell says so in its log rather than to the page.
 //
 // Free of fs and electron so the node:test unit tests run with nothing else
-// present -- the caller passes the two folders (see downloadsIpc.js).
+// present -- the caller passes the folders (see downloadsIpc.js).
 import { resolve, sep } from "node:path";
 
 /** Is `target` that folder, or something inside it? */
@@ -21,7 +22,7 @@ export function isInside(target, folder) {
 
 /**
  * May this path be shown? `folders` are the ones the app writes into --
- * Downloads and the kit.
+ * Downloads, the folder picked for downloads, and the kit.
  *
  * A path is compared as it is written, not as the disk would resolve it: a
  * symbolic link inside Downloads that points elsewhere would still be shown,

@@ -81,9 +81,10 @@ const boot = createBoot({
   sendReport: reporter.sendReport, flushReports: reporter.flushReports, startUpdater: updater.startUpdater,
 });
 
-// The page's remember-job and reveal are answered from the first moment; the
-// download naming they feed is attached once the app is ready, below.
-const downloads = registerDownloadIpc({ app, ipcMain, shell, ctx, shellLog });
+// The page's remember-job, reveal and download folder are answered from the
+// first moment; the download naming they feed is attached once the app is
+// ready, below.
+const downloads = registerDownloadIpc({ app, ipcMain, shell, dialog, ctx, shellLog });
 
 app.whenReady().then(() => {
   // A second launch already quit above; nothing here may run for it -- there

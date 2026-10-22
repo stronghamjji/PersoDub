@@ -83,3 +83,35 @@ test("the user's switches are kit.env laid over the process's environment, read 
   mkdirSync(join(unreadable, KIT_ENV));
   assert.equal(envWithKit(unreadable), process.env);
 });
+
+import { setKitEnvValue, withKitEnvValue } from "./kitEnv.js";
+
+// The engine writes this file too (app/settings_env.py update_env_text), so the
+// shell's one writer -- the folder the Download dialog's Change picks -- does it
+// the same way: one line in force, every other line as it was.
+test("withKitEnvValue sets the key's line, commented out or not, and leaves every other line", () => {
+  const text = "PERSODUB_KIT_DIR=/k\n# PERSODUB_DOWNLOAD_DIR=/old\nPERSO_API_KEY=secret-value\n";
+  assert.equal(withKitEnvValue(text, "PERSODUB_DOWNLOAD_DIR", "/Volumes/Work SSD"),
+    "PERSODUB_KIT_DIR=/k\nPERSODUB_DOWNLOAD_DIR=/Volumes/Work SSD\nPERSO_API_KEY=secret-value\n");
+  // Not there yet: added at the end. Emptied: a line of its own, not no line.
+  assert.equal(withKitEnvValue("A=1", "PERSODUB_DOWNLOAD_DIR", "D:\\Work"), "A=1\nPERSODUB_DOWNLOAD_DIR=D:\\Work\n");
+  assert.equal(withKitEnvValue("PERSODUB_DOWNLOAD_DIR=D:\\Work\n", "PERSODUB_DOWNLOAD_DIR", ""), "PERSODUB_DOWNLOAD_DIR=\n");
+  // A key that only starts the same is another key; Windows line ends read as lines.
+  assert.equal(withKitEnvValue("PERSODUB_DOWNLOAD_DIRS=x\r\nB=2\r\n", "PERSODUB_DOWNLOAD_DIR", "/a"),
+    "PERSODUB_DOWNLOAD_DIRS=x\nB=2\nPERSODUB_DOWNLOAD_DIR=/a\n");
+  assert.equal(parseEnvFile(withKitEnvValue("", "K", "/a=b")).K, "/a=b");
+});
+
+test("setKitEnvValue writes kit.env, keeps the file as it was beside it, and takes one line of text only", () => {
+  const d = kit();
+  writeFileSync(join(d, KIT_ENV), "PERSO_API_KEY=secret-value\n");
+  setKitEnvValue(d, "PERSODUB_DOWNLOAD_DIR", "/Volumes/작업용 SSD");
+  assert.equal(readFileSync(join(d, KIT_ENV), "utf8"), "PERSO_API_KEY=secret-value\nPERSODUB_DOWNLOAD_DIR=/Volumes/작업용 SSD\n");
+  assert.equal(readFileSync(join(d, `${KIT_ENV}.bak`), "utf8"), "PERSO_API_KEY=secret-value\n");
+  assert.equal(envWithKit(d).PERSODUB_DOWNLOAD_DIR, "/Volumes/작업용 SSD");
+  // A line break would write a line of its own into the engine's settings.
+  assert.throws(() => setKitEnvValue(d, "PERSODUB_DOWNLOAD_DIR", "/a\nPERSO_API_KEY=stolen"), /one line of text/);
+  assert.equal(envWithKit(d).PERSO_API_KEY, "secret-value");
+  // No kit.env: nothing is made, and the caller hears so.
+  assert.throws(() => setKitEnvValue(kit(), "PERSODUB_DOWNLOAD_DIR", "/a"), { code: "ENOENT" });
+});
