@@ -285,8 +285,8 @@ next dub, no restart needed.
 **Show in Explorer** on Windows).
 
 **Privacy** has two switches, both on to begin with: *Anonymous usage counts* and
-*Automatic failure reports*. Keys and folder names are removed from a report before
-it leaves.
+*Send job logs*. Keys and folder names are removed from a job's logs before they
+leave.
 
 **About** has the version (press it to see what is new) and, under
 **Acknowledgements**, the licences of the open-source components. The full text

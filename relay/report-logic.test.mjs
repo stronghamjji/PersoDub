@@ -652,3 +652,52 @@ test("a device field the app's debug print left in a log tail is masked on the w
   assert.ok(!issueBody(report).includes(DEVICE));
   assert.equal(logSummary(report, 72).device, DEVICE, "the summary keeps its own copy");
 });
+
+// ---- a finished job's record (POST /record, 0.8.8) -----------------------
+
+import { RECORD_KINDS, TIMING_KEYS, validateRecord } from "./report-logic.js";
+import { RECORD_KINDS as APP_RECORD_KINDS } from "../desktop/src/report.js";
+import { timingSeconds } from "../desktop/src/analytics.js";
+
+test("a record's kinds and timing names are the app's, word for word", () => {
+  assert.deepEqual([...RECORD_KINDS].sort(), [...APP_RECORD_KINDS].sort());
+  const every = timingSeconds({ elapsed_seconds: 1, stage_seconds: { separate: 1, transcribe: 1, translate: 1, synthesize: 1 } });
+  assert.deepEqual(Object.keys(TIMING_KEYS).sort(), Object.keys(every).sort());
+});
+
+// What the app sends for a finished dub (desktop/src/report.js, code "ok").
+const APP_RECORD = buildReport({
+  kind: "dub", code: "ok", version: "0.8.8", installId: "0123456789abcdef0123456789abcdef", device: DEVICE,
+  env: collectEnvironment({ appVersion: "0.8.8", freeDiskBytes: 180 * 1024 ** 3,
+    sys: { platform: "darwin", release: "24.6.0", arch: "arm64", cpuModel: "Apple M4", cores: 10, totalMemBytes: 24 * 1024 ** 3 } }),
+  timing: { started_hour: 9, elapsed_seconds: 80, stage_seconds: { separate: 10, transcribe: 20, translate: 5, synthesize: 40, build: 3 } },
+});
+
+// The dashboard knows a finished job by "ok/" in its key or outcome "ok", and
+// reads its times under the short names (its contract, 2026-10-22).
+test("the app's record passes the relay's check and becomes the summary the dashboard reads", () => {
+  const { ok, record } = validateRecord(JSON.stringify(APP_RECORD));
+  assert.ok(ok);
+  assert.deepEqual(logSummary(record, ""), {
+    issue: "", kind: "dub", stage: "done", marker: "", code: "ok", platform: "mac", os: "mac 24.6.0",
+    cpu: "Apple M4", ram: "24", disk: "180", version: "0.8.8", device: DEVICE, priorState: "", reopened: "",
+    outcome: "ok", elapsed: "80", sep: "10", stt: "20", translate: "5", voice: "40",
+  });
+});
+
+test("a record is held to the three kinds and to whole seconds, and a step that did not run is empty", () => {
+  const { record } = validateRecord({ ...APP_RECORD, kind: "install", device: "",
+    timing: { elapsed_seconds: 41, sep_seconds: -1, stt_seconds: 2.5, translate_seconds: "5", voice_seconds: null, title: 7 } });
+  assert.deepEqual([record.kind, record.stage, record.code, record.timing], ["unknown", "done", "ok", { elapsed_seconds: 41 }]);
+  const summary = logSummary(record, "");
+  assert.deepEqual([summary.elapsed, summary.sep, summary.stt, summary.translate, summary.voice, summary.device],
+    ["41", "", "", "", "", ""]);
+  for (const v of Object.values(summary)) assert.equal(typeof v, "string");
+  assert.equal(validateRecord({ ...APP_RECORD, installId: "" }).ok, false, "an install id to limit by, as a report needs");
+});
+
+test("a failure's summary says it failed and carries no times", () => {
+  const s = logSummary(validateReport(GOOD).report, 72);
+  assert.equal(s.outcome, "failed");
+  for (const key of Object.values(TIMING_KEYS)) assert.equal(key in s, false, key);
+});

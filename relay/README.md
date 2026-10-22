@@ -7,6 +7,9 @@ way as the usage-count worker `persodub-count`.
 - App → here: the failure (JSON, 64 KB at most) and the full logs (gzip tar, 5 MB at most)
 - Here → GitHub: a new issue, or one "+1" comment on the existing issue for the same failure
 - The GitHub token lives **only here**. The app does not carry it.
+- From 0.8.8 the app also sends the record of a job that finished (`POST /record`, then its
+  logs the same way). Its logs go into the bucket under `<yyyy-mm>/ok/<id>.tar.gz` for the
+  private dashboard, and GitHub never hears of it.
 
 ## Files
 
@@ -73,6 +76,8 @@ Worker → **Settings** → **Variables and Secrets**
 | Variable | `GITHUB_REPO` | `owner/repository` (for example `stronghamjji/PersoDub`) |
 | Variable | `MAX_PER_DAY` | `5`: reports one machine (and one address) may file per day |
 | Variable | `MAX_TOTAL_PER_DAY` | `200`: the day's total |
+| Variable | `MAX_RECORDS_PER_DAY` | `50`: finished jobs one machine (and one address) may send per day, counted apart from the reports |
+| Variable | `MAX_RECORDS_TOTAL_PER_DAY` | `500`: the day's total of finished jobs |
 
 Changing `LOG_SIGNING_KEY` breaks every log link handed out before it (including the
 links left in issues). Keep that in mind if it ever has to change.

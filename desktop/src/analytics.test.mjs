@@ -219,7 +219,7 @@ test("a server error is not treated as delivery", async () => {
 import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadState, savedDevice, saveState } from "./analytics.js";
+import { keepDevice, loadState, savedDevice, saveState } from "./analytics.js";
 
 function tempStateFile() {
   return join(mkdtempSync(join(tmpdir(), "persodub-analytics-")), "analytics.json");
@@ -304,7 +304,7 @@ test("reporting off sends nothing and leaves no file behind", async () => {
   await countEvent("app_launch", { ...BASE, mode: "off", stateFile: file, fetchImpl });
 
   assert.deepEqual(sent, []);
-  assert.equal(existsSync(file), false, "an install that reports nothing should not get an id file");
+  assert.equal(existsSync(file), false, "a count that is off writes nothing; the id is the launch's to make");
 });
 
 test("debug mode shows the payload and still sends nothing", async () => {
@@ -374,6 +374,28 @@ test("the install id survives a failed send, so one machine stays one machine", 
   await countEvent("app_launch", { ...BASE, mode: "on", stateFile: file, fetchImpl: offline });
 
   assert.equal(loadState(file).device, first);
+});
+
+// The id is the launch's to make (main.js), counts on or off: every report and
+// job record names the computer by it (owner, 2026-10-22).
+test("the computer's id is made on the first launch and is the same on the next, counts on or off", async () => {
+  const file = tempStateFile();
+  const first = keepDevice(file);
+  assert.match(first, /^[0-9a-f]{32}$/);
+  assert.equal(savedDevice(file), first, "on disk from the first launch");
+  const { sent, fetchImpl } = recorder();
+  await countEvent("app_launch", { ...BASE, mode: "off", stateFile: file, fetchImpl });
+  assert.deepEqual(sent, [], "with the counts off nothing is sent");
+  assert.equal(keepDevice(file), first, "the next launch keeps it");
+  await countEvent("app_launch", { ...BASE, mode: "on", stateFile: file, fetchImpl });
+  assert.equal(sent[0].device, first, "and the counts, once on, send the same id");
+});
+
+test("making the id keeps the day a launch was last counted", () => {
+  const file = tempStateFile();
+  writeFileSync(file, JSON.stringify({ lastDay: "2026-10-21" }));
+  const device = keepDevice(file);
+  assert.deepEqual(loadState(file), { device, lastDay: "2026-10-21" });
 });
 
 test("countEvent never throws, whatever the network does", async () => {

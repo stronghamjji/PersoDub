@@ -11,7 +11,9 @@
 //   <base>.json     {failure, at} -- the failure alone (kind, code, step,
 //                                    message, job), written before anything
 //                                    is gathered: a launch that ends first
-//                                    leaves it for the next to build and send
+//                                    leaves it for the next to build and send;
+//                                    a finished job's record (code "ok") the
+//                                    same, with its timing
 //                   {report, id}  -- id is null until the relay has taken it
 //   <base>.tar.gz   the full logs, when there are any
 // The pair is deleted once both halves have landed. Keeping the id in the

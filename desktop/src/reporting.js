@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { freeSpaceAt } from "./config.js";
 import { readKitVersion } from "./engineCheck.js";
 import { packInstalled, torchVariantFor, PACKS } from "./installSpec.js";
-import { loadState, resolveAnalyticsMode, savedDevice, saveState } from "./analytics.js";
+import { analyticsFile, loadState, savedDevice, saveState } from "./analytics.js";
 import { probesFor, runProbes } from "./diagnostics.js";
 import { buildReport, collectEnvironment, maskText, resolveReportMode, withoutEncodedNames, worthReporting } from "./report.js";
 import { buildLogArchive } from "./reportLogs.js";
@@ -19,6 +19,11 @@ import { readFileEnd } from "./fileEnd.js";
 // an issue is. What may leave is decided in report.js (an allow-list,
 // masked); this is the wiring: write the failure down, gather, send, and keep
 // whatever did not land for the next launch.
+//
+// A job that finished goes the same way under the same switch, as a record
+// (code "ok", report.js): its logs and how long it took, to the relay's
+// /record, which keeps them for the private dashboard and never opens an
+// issue (owner, 2026-10-22).
 export const REPORT_ENDPOINT = "https://persodub-report.persodub.workers.dev";
 // Reports wait here rather than in userData: a report belongs to the kit that
 // produced it, and a user who deletes a kit is done with its failures too.
@@ -51,9 +56,10 @@ function unqueue(kitDir, base) {
  * `probeImpl` the real probes, everywhere but the tests.
  */
 export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = fetch, probeImpl = runProbes }) {
-  // The install id lives in its own file, not analytics.json: the two switches
-  // are independent, so a user who turned the counts off must not get an id
-  // minted for them by the report path, or a file that says otherwise.
+  // The report's install id, which the relay's daily limit counts by, lives in
+  // its own file and is minted only by a run that really reports. The id the
+  // dashboard knows a computer by is analytics.json's, which the launch makes
+  // (analytics.js keepDevice).
   const REPORT_STATE = () => join(app.getPath("userData"), "reports.json");
   // What the page shows once a report has gone out ("Report sent - #142").
   let lastReport = null;
@@ -66,13 +72,6 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
 
   function reportMode(kitDir) {
     return resolveReportMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
-  }
-
-  // Whether the usage counts are on, asked the way usageIpc.js asks it. Only
-  // then does a report carry the first twelve characters of their id, so the
-  // private dashboard can put a failure beside that computer's counts.
-  function usageOn(kitDir) {
-    return resolveAnalyticsMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) }) === "on";
   }
 
   // The backend's half: the failed job's stage and engines, and the two logs
@@ -130,7 +129,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
   }
 
   /** Everything about one failure, masked, in the shape the relay accepts. */
-  async function collectReport({ kind, kitDir, step, code, message, jobId }) {
+  async function collectReport({ kind, kitDir, step, code, message, jobId, timing }) {
     const home = app.getPath("home");
     const bundle = await fetchBundle(jobId);
     const job = (bundle && bundle.job) || {};
@@ -162,8 +161,10 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
       kit: kitDir,
       version: app.getVersion(),
       installId: loadState(REPORT_STATE()).device,
-      // The counts' own id, read and never minted (usageIpc.js writes it).
-      device: usageOn(kitDir) ? savedDevice(join(app.getPath("userData"), "analytics.json")).slice(0, 12) : "",
+      // The computer's id, read and never minted (the launch makes it), counts
+      // on or off: the one number the dashboard tells computers apart by
+      // (owner, 2026-10-22).
+      device: savedDevice(analyticsFile(app)).slice(0, 12),
       env: collectEnvironment({
         appVersion: app.getVersion(),
         kitVersion: readKitVersion(kitDir) || "",
@@ -172,6 +173,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
         freeDiskBytes: await freeSpaceAt(kitDir),
         edition: kitEdition(kitDir) || "",
       }),
+      timing,
       logTails: {
         shell: shellLogText,
         app: (bundle && bundle.logTails && bundle.logTails.app) || "",
@@ -210,10 +212,13 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
    * keep trying for.
    */
   async function deliver(report, archive) {
-    const answer = await postJson(REPORT_ENDPOINT + "/report", report);
+    // A finished job's record has a door of its own, which never reaches
+    // GitHub, and nothing to announce: nothing broke.
+    const record = report.outcome === "ok";
+    const answer = await postJson(REPORT_ENDPOINT + (record ? "/record" : "/report"), report);
     if (!answer || !answer.id) return { sent: false, id: null, logsSent: false };
     const logs = archive ? await postLogs(answer.id, archive) : "ok";
-    announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
+    if (!record) announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
     return { sent: true, id: answer.id, logsSent: logs !== "retry" };
   }
 
@@ -252,8 +257,10 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
           const at = Date.now();
           base = queueBase(randomBytes(6).toString("hex"), at);
           inHand.add(base);
-          const { kind, code, step, message, jobId } = opts;
-          queueReport(kitDir, base, { failure: { kind, code, step, message, jobId }, at });
+          // A finished job's record is written down the same way, its timing
+          // with it: the job's record forgets it at the next restart.
+          const { kind, code, step, message, jobId, timing } = opts;
+          queueReport(kitDir, base, { failure: { kind, code, step, message, jobId, timing }, at });
         }
         const { report, archive } = await collectReport(opts);
         if (mode === "debug") {
@@ -324,10 +331,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
         work = "send";
       }
       if (work === "send") {
-        // The counts' switch is asked again: a report queued while they were
-        // on goes without their id once they have been turned off.
-        const report = usageOn(kitDir) ? entry.report : { ...entry.report, device: "" };
-        const { sent, id, logsSent } = await deliver(report, archive);
+        const { sent, id, logsSent } = await deliver(entry.report, archive);
         if (sent && logsSent) remove(base);
         // Sent, but its logs did not follow: keep the pair under the same name
         // (so the week it has to try in keeps running) with the id written in,

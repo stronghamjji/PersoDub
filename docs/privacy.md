@@ -75,12 +75,22 @@ workspace or balance; no IP address is stored.
 A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or
 with `PERSODUB_NO_ANALYTICS=1` in the kit's `kit.env`; it applies to the next event, no
 restart. `PERSODUB_ANALYTICS_DEBUG=1` prints what would be sent instead of sending it.
+The random install ID is made the first time the app starts, whether the counts are on
+or off, and kept on this computer. With the counts off it is not sent here; its first 12
+characters still go with the job logs below while they are on.
 
-## Failure reports
+## Job logs
 
-When an install, a dub or a subtitle erase fails, the app sends one report so the failure can be fixed.
-It becomes a public issue in this repository — a hundred machines that broke the same
-way land on one issue rather than a hundred.
+With this switch on, the full logs of every job, finished or failed, are kept for 30 days
+on a private dashboard and never put in a public issue. When a dub, a subtitle erase or
+an audio separation finishes, its logs go there with a short record: which kind of job it
+was, the machine and the app version as a report below carries them, and how many whole
+seconds it took, in all and for each of separation, transcription, translation and
+voices. A job that finished never becomes an issue.
+
+When an install, a dub or a subtitle erase fails, the app also sends one report so the
+failure can be fixed. It becomes a public issue in this repository, so that a hundred
+machines that broke the same way land on one issue rather than a hundred.
 
 A report carries the machine (operating system and version, CPU, memory, free disk,
 which torch build, which packs are installed), where it stopped, one error code off a
@@ -99,9 +109,10 @@ the install folder can be written. An engine that would not start: which Visual 
 files are missing, and the NVIDIA driver line. An out-of-memory error: the memory free.
 Product names, yes-or-no answers, error codes and numbers only.
 
-From 0.8.7, while the usage counts above are on, a report also carries the first 12
-characters of their random install ID, so a failure can be matched with that computer's
-counts. It goes to the private dashboard only and never into the public issue.
+From 0.8.8 every report and every finished job's record also carries the first 12
+characters of the usage counts' random install ID, so the logs of one computer can be read
+together (0.8.7 sent them only while the counts were on). It is a random number, never
+anything personal, and it goes to the private dashboard only, never into a public issue.
 
 Before anything leaves your machine, every line of it is put through three rules: a
 path under your home folder is cut down to `~/…/*.mp4` — the name of the folder and the
@@ -119,8 +130,8 @@ not its words, and a Perso job by the credits it used, never your balance (from 
 earlier versions could quote a translation in an error sentence). The relay that posts the
 issue does not store your IP address, and applies the same rules a second time.
 
-Turn it off in **Settings → Privacy** or with `PERSODUB_NO_REPORTS=1` in the kit's
-`kit.env`; it applies to the next failure, no restart. This is a separate switch from
+Turn it off in **Settings → Privacy** (**Send job logs**) or with `PERSODUB_NO_REPORTS=1`
+in the kit's `kit.env`; it applies to the next job, no restart. This is a separate switch from
 the usage counts above — turning one off leaves the other alone.
 `PERSODUB_REPORTS_DEBUG=1` prints what would be sent instead of sending it, and a
 PersoDub run from source never reports at all.
