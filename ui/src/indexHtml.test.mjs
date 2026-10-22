@@ -1311,6 +1311,16 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
   assert.match(html, /e\.preventDefault\(\);\n    window\.open\(`\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
 });
 
+// Home's Erase subtitles card says what erasing is for, in its small line
+// (owner, 2026-10-22), and the Korean reads as approved.
+test("Home's Erase subtitles card says what erasing is for", () => {
+  const html = readPage();
+  const line = "Erases burned-in subtitles. Dub the erased video for clean subtitles in the new language.";
+  assert.ok(html.includes(`<div data-i18n class="home-card-title">Erase subtitles</div>\n              <div data-i18n class="home-card-desc">${line}</div>`));
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko[line], "영상에 새겨진 자막을 지워요. 지운 영상으로 더빙하면 새 언어 자막을 깨끗하게 입힐 수 있어요.");
+});
+
 // Help's "100+" is every dubbing model's languages together, and the line under
 // the Dubbing model choice says the chosen one's own count (owner, 2026-10-21):
 // the markup and the words it is painted with say the same sentence.
