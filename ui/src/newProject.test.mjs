@@ -1204,6 +1204,22 @@ test("the Target language opens as a list with a search: 스페 leaves the two S
   assert.equal(opts.children.length, 77);
 });
 
+test("the search also finds a language by its English name and its code, so eng finds English in Korean", async (t) => {
+  await inKorean(t);
+  const h = await bundledPerso();
+  t.after(h.log.restore);
+  const { opts, field, count } = await openLanguages(h);
+  field.value = "eng";
+  await field.fire("input");
+  // Bengali too: its English name has "eng" in it.
+  assert.deepEqual(rowNames(opts), ["🇺🇸 영어(미국)", "🇧🇩 벵골어", "🇬🇧 영어(영국)"]);
+  assert.equal(count.textContent, "77개 중 3개");
+  // "zh" is in no name: Chinese is found by its code.
+  field.value = "ZH";
+  await field.fire("input");
+  assert.deepEqual(rowNames(opts), ["🇨🇳 중국어"]);
+});
+
 test("a language chosen in the list is the hidden dropdown's, so it is what is started with and remembered", async (t) => {
   const store = memoryStorage();
   const h = await bundledPerso(store);

@@ -167,6 +167,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       const flag = (local && LOCAL_FLAGS[l.code]) || LANG_FLAGS[l.id] || (!l.tag && LANG_FLAGS[l.code]);
       const name = languageName(l.id, l.name);
       o.textContent = flag ? `${flag} ${name}` : name;
+      o.dataset.name = l.name;   // English, for the list's search
       sel.appendChild(o);
     }
     sel.value = list.some((l) => l.id === keep) ? keep : "en";
@@ -356,8 +357,11 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       placeList(list, btn);
     }
   }
-  // The search narrows the list to the names with the typed words in them,
-  // and says how many of how many are left ("77개 중 2개").
+  // The search narrows the list to the languages with the typed words in
+  // the name shown, the English name or the code -- "eng" finds English in a
+  // Korean window (owner, 2026-10-22) -- and says how many of how many are
+  // left ("77개 중 2개").
+  const searched = (o) => `${o.textContent} ${o.dataset.name || ""} ${o.value}`.toLowerCase();
   function languageList() {
     const list = document.createElement("div");
     list.id = "targetLangList";
@@ -380,7 +384,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     function fill() {
       const all = [...$("targetLangSelect").options];
       const words = langQuery.trim().toLowerCase();
-      const found = words ? all.filter((o) => o.textContent.toLowerCase().includes(words)) : all;
+      const found = words ? all.filter((o) => searched(o).includes(words)) : all;
       opts.innerHTML = "";
       for (const o of found) opts.appendChild(languageRow(o));
       count.textContent = words ? t("{shown} of {all}", { shown: found.length, all: all.length }) : "";
