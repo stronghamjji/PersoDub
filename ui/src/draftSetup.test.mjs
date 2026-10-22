@@ -25,7 +25,7 @@ function makeEl(id) {
   };
 }
 
-function harness() {
+function harness({ firstDownloadBytes = () => 0 } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -68,6 +68,7 @@ function harness() {
     setDubRestart: (fn) => { restart = fn; },
     getScreen: () => log.screen,
     removeDraft: (d) => log.removed.push(d.downloadId),
+    firstDownloadBytes,
   });
   log.screen = "done";
   return { $, api, log, state, setSubmitResult: (v) => { submitResult = v; }, restart: () => restart };
@@ -324,6 +325,46 @@ test("the foot leaves out what is left when the workspace cannot be told", async
     await $("dubModeSelect").fire("change");
     await new Promise((r) => setTimeout(r, 0));
     assert.equal($("draftFootLabel").textContent, "Dubbing 00:10 · Perso API · 10 credits");
+  } finally {
+    globalThis.fetch = real;
+    clearDraft();
+  }
+});
+
+// What the choices still download, said before Start once and in total
+// (owner, 2026-10-22, 1-3): the dialog asked 9.6 GB out of nowhere.
+test("the foot says the first download's size while the choices need one, and paints it again on its own", () => {
+  clearDraft();
+  let bytes = 9.6e9;
+  const { $, api, log } = harness({ firstDownloadBytes: () => bytes });
+  setDraft({ downloadId: "d1", name: "a.mp4", duration: 24, videoUrl: "/v" });
+  assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Fast mode · 9.6 GB the first time");
+  const moved = log.moved;
+  bytes = 0;   // downloaded from the line under a field
+  api.paintFoot();
+  assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Fast mode");
+  assert.equal(log.moved, moved, "the foot alone: Advanced options stay where they are");
+});
+
+// Both feet in one (2-1 and 1-3, 2026-10-22): a Perso API dubbing says what it
+// costs, a local one what it downloads the first time, never the two together.
+test("the foot says the credits for a Perso dubbing and the first download's size for a local one", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url) => ({ ok: true, json: async () => (url === "/api/perso/spaces"
+    ? { spaces: [{ seq: 7, credits: 1280 }] } : { perso_space_seq: "7" }) });
+  try {
+    const { $, log } = harness({ firstDownloadBytes: () => 9.6e9 });
+    log.model = "ORIOLE";
+    setDraft({ downloadId: "d1", name: "a.mp4", duration: 24.7, videoUrl: "/v" });
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Fast mode · 9.6 GB the first time");
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Perso API · 25 credits · 1,280 left");
+    $("dubModeSelect").value = "local";
+    await $("dubModeSelect").fire("change");
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Fast mode · 9.6 GB the first time");
   } finally {
     globalThis.fetch = real;
     clearDraft();

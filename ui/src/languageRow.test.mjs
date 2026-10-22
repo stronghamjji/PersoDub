@@ -38,6 +38,8 @@ test("Add language starts on the open dubbing's own choices", () => {
                                stt_engine: "whisper", translator: "chatgpt", quality: 4, tts: "qwen3" }),
                    { dubMode: "local", source: "ko", speakers: "2", sep: "local", stt: "local",
                      translator: "chatgpt", quality: "high", voice: "qwen3" });
+  // Separated with the RoFormer: Add language starts on the RoFormer too.
+  assert.equal(choicesOf({ dub_mode: "local", separation: "roformer" }).sep, "roformer");
   // A Perso dubbing records its mode alone; the rest stays on the saved defaults.
   assert.deepEqual(choicesOf({ dub_mode: "perso" }), { dubMode: "perso", source: "", speakers: "" });
   // ...and, since it was kept, the Perso voice model it was made with.

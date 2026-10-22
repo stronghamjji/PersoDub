@@ -32,11 +32,14 @@ export function retryLine(detail) {
  * @param {() => void} deps.onUsePerso          set Dubbing to Perso API, the way round the download
  * @param {(rows: object[]) => void} deps.onRowsChanged  repaint the page's own
  *        model-dependent chrome (the dropdown hints and the topbar chip)
+ * @param {(q: {title: string, line: string}) => Promise<boolean>} deps.askToDelete
+ *        the page's Delete dialog (ui/src/confirmDialogs.mjs), for a base program
  * @returns the operations the page calls, and the one the tests do -- grouped
  *        and labelled in the returned object, so pruning this surface later
  *        does not have to guess which member has a caller off the page.
  */
-export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = () => {}, onRowsChanged, shell = null, keepPolling = () => false, ramOk = () => true }) {
+export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = () => {}, onRowsChanged, shell = null, keepPolling = () => false, ramOk = () => true,
+                              askToDelete = async () => false }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
   // ui/src/settingsDialog.mjs. A missing id is a broken page, and a crash on
@@ -56,9 +59,18 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
 
   const modelRow = (id) => modelRows.find((m) => m.id === id) || null;
 
-  // Remove takes two presses: the first turns the button into the question
-  // with the size, the second (within REMOVE_ARM_MS) removes. One press used
-  // to delete 1.9 GB on the spot (Windows G2, 2026-10-07).
+  // A base program asks in the Delete dialog first, saying what stops
+  // working without it: a second press said nothing of the kind (owner,
+  // 2026-10-22, 1-2 가). Read when asked, in the language of the moment.
+  const BASE_PROGRAMS = {
+    engine: () => ({ title: t("Delete Python + PyTorch?"),
+                     line: t("Without it, local models cannot separate audio, transcribe or make voices.") }),
+    "ollama-runtime": () => ({ title: t("Delete Ollama?"), line: t("Without it, local models cannot translate.") }),
+  };
+
+  // Any other Remove takes two presses: the first turns the button into the
+  // question with the size, the second (within REMOVE_ARM_MS) removes. One
+  // press used to delete 1.9 GB on the spot (Windows G2, 2026-10-07).
   const REMOVE_ARM_MS = 10000;
   let removeArmed = null;   // { id, until }
   function armRemove(btn, m, remove) {
@@ -354,7 +366,11 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn btn-outline model-btn";
-        if (m.role === "pack") {
+        if (m.comes_with) {
+          // Part of a pack (Demucs, in Python + PyTorch): listed with its
+          // stage, with nothing of its own to download or remove.
+          if (m.state !== "ready") status.textContent = "";
+        } else if (m.role === "pack") {
           // The desktop app installs and removes packs; a plain browser can only look.
           if (packBusy && packBusy.id === m.id) {
             status.textContent = packBusy.retry ? packBusy.line : st.text + (packBusy.line ? ` · ${packBusy.line}` : "");
@@ -370,22 +386,26 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
             // Another pack is installing: this one waits its turn.
             btn.textContent = m.state === "ready" ? t("Remove") : t("Download");
             btn.disabled = true; btn.title = t("{name} is still installing", { name: packBusy.name });
+          } else if (m.state === "ready" && BASE_PROGRAMS[m.id]) {
+            btn.textContent = t("Remove");
+            btn.onclick = async () => { if (await askToDelete(BASE_PROGRAMS[m.id]())) await removePack(m.id); };
           } else if (m.state === "ready") { armRemove(btn, m, () => removePack(m.id)); }
           else { btn.textContent = m.state === "paused" ? t("Resume") : t("Download"); btn.onclick = () => installPack(m.id); }
         } else if (m.state === "ready") { armRemove(btn, m, () => removeModel(m.id)); }
         else if (m.state === "downloading") { btn.textContent = t("Cancel"); btn.onclick = () => cancelModel(m.id); }
         else if (m.state === "paused") { btn.textContent = t("Resume"); btn.onclick = () => downloadModel(m.id); }
         else { btn.textContent = t("Download"); btn.onclick = () => downloadModel(m.id); }
-        if (m.state === "ready" && m.hint) {
+        if ((m.state === "ready" || m.comes_with) && m.hint) {
           // What it is for, after "Ready", where the group's title does not
-          // say it all. A row on its way keeps the cell for its own line. Added
-          // last: a textContent set above would wipe it.
+          // say it all, and where a pack's part comes from. A row on its way
+          // keeps the cell for its own line. Added last: a textContent set
+          // above would wipe it.
           const note = document.createElement("span");
           note.className = "model-note";
           note.textContent = m.hint;
           status.append(note);
         }
-        row.append(name, size, status, btn);
+        row.append(name, size, status, m.comes_with ? document.createElement("span") : btn);
         list.append(row);
       }
     }
@@ -407,10 +427,12 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
   // -- the dub-start dialog (dub_start's 409) ------------------------------
   function showModelsDialog(detail) {
     const d = dubStartDialog(detail, ramOk());
-    // The memory note rides on the one line a small confirm has; a computer
-    // short of memory gets its sentence in red, as the dialog's error
-    // instead: the download could not end in a dub here, so its button is off.
-    const line = d.ram && !d.ramLow ? `${d.line} ${d.ram}` : d.line;
+    // The room left and the memory note ride on the one line a small confirm
+    // has; a computer short of memory gets its sentence in red, as the
+    // dialog's error instead: the download could not end in a dub here, so
+    // its button is off.
+    const facts = [d.free, d.ram && !d.ramLow ? d.ram : ""].filter(Boolean).join(" · ");
+    const line = facts ? `${d.line} ${facts}` : d.line;
     // The opening words are kept: a download that stops puts them back.
     pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false, title: d.title, line };
     $("mnTitle").textContent = d.title;

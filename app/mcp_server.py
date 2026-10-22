@@ -721,7 +721,9 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
 
     stt and separation pick, FOR THIS DUB ONLY, where a local dub's
     transcription and background separation run: "local" (free, this machine)
-    or "perso" (paid); empty keeps the app's default. Use these when the user
+    or "perso" (paid); separation also takes "roformer" (free, this machine,
+    a cleaner background, slower, its own download); empty keeps the app's
+    default. Use these when the user
     wants one dub done differently -- never set_default, which changes every
     dub from then on.
 
@@ -775,7 +777,7 @@ def _check_dub_choices(target_language, dub_mode, translator, stt, separation, v
         raise Refusal('translator must be "chatgpt", "gemma", "hunyuan", "gemini" or empty')
     for name, value in (("stt", stt), ("separation", separation)):
         if value not in ("", *STAGES[name][1]):
-            raise Refusal('%s must be "local", "perso" or empty' % name)
+            raise Refusal('%s must be %s or empty' % (name, ", ".join('"%s"' % c for c in STAGES[name][1])))
     if voice not in ("", *STAGES["voice"][1]):
         raise Refusal('voice must be "qwen3" or empty')
     code = (target_language or "").strip()
@@ -930,7 +932,7 @@ def set_default(stage: str, choice: str, confirm: bool = False) -> dict:
     put its message to the user and call again with confirm=true only after
     they clearly agree -- the assistant once switched transcription to Perso
     before asking, the user declined the dub, and the paid default stayed. stage is one of dub_mode (local |
-    perso), separation (local | perso), stt (local | perso), translator
+    perso), separation (local | roformer | perso), stt (local | perso), translator
     (chatgpt | hunyuan | gemma | gemini), voice_quality (fast | high),
     voice (qwen3). Cloud choices
     need the matching key saved (see get_setup); a local model that is not

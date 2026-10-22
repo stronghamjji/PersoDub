@@ -40,7 +40,7 @@ logger = logging.getLogger("persodub.jobs")
 # "already cut", which is what every job saved until now was.
 # The engine choices a job was started with (stt_engine "whisper"/"perso",
 # translator "gemma"/"gemini"/..., tts "qwen3", quality = how many takes per line,
-# separation "demucs"/"perso") are saved too, so a finished job can say what made it and "Try again" can
+# separation "demucs"/"roformer"/"perso") are saved too, so a finished job can say what made it and "Try again" can
 # repeat the same choices instead of falling back to today's defaults. A job.json
 # written before they existed simply has no such keys -- every reader treats them
 # as unknown and shows nothing.
@@ -82,7 +82,7 @@ SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lan
                 "perso_credits", "duration",
                 # What separated the voice from the background: "RoFormer",
                 # "Demucs" or "Perso". "separation" above is the choice made
-                # (local or perso); this is what ran.
+                # (demucs, roformer or perso); this is what ran.
                 "separation_model",
                 # A redub: Resume must stay voices-only, never replay the
                 # original's (possibly paid) transcription.

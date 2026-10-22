@@ -23,6 +23,7 @@ import { downloadsLabel, errorText } from "./format.mjs";
 import { DEFAULT_MODEL, languagesFor, modelCaption, modelHint, modelInfo, modelsIn } from "./persoModels.mjs";
 import { readRemembered, rememberChoice, choicesToPutBack } from "./rememberedChoices.mjs";
 import { lucide } from "./icons.mjs";
+import { placeList, listKeys } from "./pickList.mjs";
 import { languageName, t } from "./i18n.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
@@ -271,37 +272,12 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       });
       list.appendChild(opt);
     }
-    // Up and down move between the models that can be chosen; Escape closes
-    // the list and not the dialog under it.
-    list.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        pickOpen = false;
-        paintPersoModel();
-        pickBtn?.focus?.();
-        return;
-      }
-      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      e.preventDefault();
-      const opts = [...list.querySelectorAll(".model-opt:not([disabled])")];
-      const at = opts.indexOf(document.activeElement);
-      const next = opts[(at + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length];
-      if (next) next.focus();
+    listKeys(list, () => {
+      pickOpen = false;
+      paintPersoModel();
+      pickBtn?.focus?.();
     });
-    setTimeout(() => { list.querySelector(".model-opt.on")?.focus?.(); }, 0);
     return list;
-  }
-  // Under the button, as wide as it (300 to 420 pixels), or over it when the
-  // screen has no room below -- held there by its bottom edge, so a search
-  // that shortens the language list leaves it against the button.
-  function placeList(list, btn) {
-    const r = btn.getBoundingClientRect();
-    list.style.left = `${r.left}px`;
-    list.style.width = `${Math.min(Math.max(r.width, 300), 420)}px`;
-    const below = r.bottom + 5;
-    const screen = globalThis.innerHeight ?? Infinity;   // none in the tests' stand-in page
-    if (below + list.offsetHeight > screen && r.top > list.offsetHeight + 5) list.style.bottom = `${screen - r.top + 5}px`;
-    else list.style.top = `${below}px`;
   }
   function closePick() {
     if (!pickOpen) return;

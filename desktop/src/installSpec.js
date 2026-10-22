@@ -621,6 +621,13 @@ export function buildSteps(ctx) {
   // --report arrived in 22.2, and without it only the FILE lines are lost.
   // pip's own tries of a request again are RETRY lines (pipRetryLine),
   // counted out of the --retries the command names, else pip's default.
+  // The files pip fetches are kept in the kit (pipCache) until the venv step
+  // is done, so a Resume after a cut line or a Cancel takes the wheels that
+  // were already in from there: with --no-cache-dir every one of them came
+  // down again, PyTorch's 3.5 GB Windows wheel too (owner, 2026-10-22, 1-3).
+  // Not pip's own cache: that one kept a 3 GB torch wheel outside the kit
+  // for good (Windows, %LOCALAPPDATA%\pip).
+  const pipCache = (venvName) => k("downloads", `pip-${venvName}`);
   const pipInstall = async (venvPy, venvName, args, report, progress = null) => {
     const what = `pip ${venvName}`;
     const reportFile = k("downloads", `pip-report-${venvName}.json`);
@@ -632,7 +639,7 @@ export function buildSteps(ctx) {
     const from = Date.now();
     try {
       for (;;) {
-        const flags = bar ? ["--no-cache-dir", "--progress-bar", bar, "--retries", "10", "--timeout", "60"] : [];
+        const flags = bar ? ["--cache-dir", pipCache(venvName), "--progress-bar", bar, "--retries", "10", "--timeout", "60"] : [];
         const argv = [venvPy, "-m", "pip", "install", ...flags, ...args, ...(listed ? ["--report", reportFile] : [])];
         const retries = argv.includes("--retries") ? Number(argv[argv.indexOf("--retries") + 1]) : PIP_DEFAULT_RETRIES;
         try {
@@ -702,6 +709,13 @@ export function buildSteps(ctx) {
       for (const args of pipInstalls) await pipInstall(venvPy, venvName, args, report, progress);
       if (proveItWorks) await proveItWorks(venvPy, report);
       markOk(id, pipFingerprint(pipInstalls));
+      // Installed: the kept wheels are a second copy now. Best-effort, as the
+      // archives below: a file Windows will not let go of fails no install.
+      try {
+        rmSync(pipCache(venvName), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch {
+        console.warn(`PERSODUB_INSTALL could not remove ${pipCache(venvName)}`);
+      }
     },
   });
 

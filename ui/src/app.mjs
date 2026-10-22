@@ -11,8 +11,9 @@
 // with the launch token, so an update never runs this file against a module a
 // browser kept from the version before.
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, parseProgress, applyEngineAvailability, probeSource, engineChips, engineLine, voiceLabel, dubAgainSource, holdDownload, downloadVideoUrl } from "./dubApi.mjs";
-import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText } from "./modelsUi.mjs";
+import { gb, stageNeeds, modelStatusLine, downloadChipText } from "./modelsUi.mjs";
 import { initModelsUi } from "./modelsDialog.mjs";
+import { initStagePickers } from "./stagePicker.mjs";
 import { initSubtitleOverlay } from "./subtitleOverlay.mjs";
 import { initEscapeKey } from "./escapeKey.mjs";
 // Escape closes what is on top, and one menu is open at a time
@@ -302,15 +303,13 @@ const models = initModelsUi({
   // Keep the catalog fresh while Settings shows it.
   keepPolling: () => $("settingsOverlay").classList.contains("open"),
   ramOk: () => ramOk,
+  // The Delete dialog is made further down; it is asked only on a press.
+  askToDelete: (q) => confirmDialogs.askToDelete(q),
 });
-
-// Everything a dropdown choice needs, in the order it downloads: the pack it
-// runs in first (as in the dub's own 409), then its model. Only the rows
-// that are not ready -- an empty list means the choice is good to go.
-function hintNeeds(role, value) {
-  const ids = [...neededPackIds(role, value), neededModelId(role, value)].filter(Boolean);
-  return ids.map((id) => models.modelRow(id)).filter((r) => r && r.state !== "ready");
-}
+// The four stage dropdowns as buttons whose lists hold every choice, the
+// models not downloaded yet included (ui/src/stagePicker.mjs); painted with
+// the lines under them.
+const stagePickers = initStagePickers({ $, rowOf: (id) => models.modelRow(id) });
 
 // One line under the dropdown, one button. Nothing missing: hidden (or Ready,
 // once this session saw it busy). Something downloading or stopped: that
@@ -358,19 +357,30 @@ function paintHint(el, needs, ready) {
   el.append(span, btn);
 }
 
+// Each field's line: what its choice still needs, each thing counted once
+// (ui/src/modelsUi.mjs stageNeeds). Cloud dubbing needs no local models --
+// their download lines would only confuse; the per-stage dropdowns are
+// greyed by paintDubMode below.
+const STAGE_FIELDS = [["sep", "sepSelect", "sepModelHint"], ["stt", "sttSelect", "sttModelHint"],
+                      ["translate", "translateSelect", "translateModelHint"], ["voice", "voiceSelect", "voiceModelHint"]];
+function stageLines() {
+  if ($("dubModeSelect").value === "perso") return STAGE_FIELDS.map(() => ({ needs: [], ready: false }));
+  return stageNeeds(STAGE_FIELDS.map(([role, sel]) => [role, $(sel).value]), models.modelRow);
+}
+/** What a dubbing on the form's choices downloads first, in bytes (0: nothing). */
+function firstDownloadBytes() {
+  return stageLines().reduce((n, line) => n + line.needs.reduce((m, r) => m + r.bytes, 0), 0);
+}
+// The draft's foot says that size too (ui/src/draftSetup.mjs); wired below,
+// once the draft screen is.
+let paintDraftFoot = () => {};
+
 // The parts of the model UI this page owns: the three dropdown hints and the
 // topbar download chip.
 function paintModelStatusLines(rows) {
-  // Cloud dubbing needs no local models -- their download lines would only
-  // confuse; the per-stage dropdowns are greyed by paintDubMode below.
-  const cloud = $("dubModeSelect").value === "perso";
-  for (const [role, sel, hint] of [["stt", "sttSelect", "sttModelHint"],
-                                    ["translate", "translateSelect", "translateModelHint"],
-                                    ["voice", "voiceSelect", "voiceModelHint"]]) {
-    const value = $(sel).value;
-    const needsAnything = !cloud && (neededPackIds(role, value).length || neededModelId(role, value));
-    paintHint($(hint), cloud ? [] : hintNeeds(role, value), !!needsAnything);
-  }
+  stageLines().forEach((line, i) => paintHint($(STAGE_FIELDS[i][2]), line.needs, line.ready));
+  stagePickers.paint();
+  paintDraftFoot();
   // The one under way, not one queued behind it: before its first byte it
   // has no figure either (Windows C2, 2026-10-21).
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
@@ -388,7 +398,7 @@ function paintModelStatusLines(rows) {
 }
 
 $("topbarDl").addEventListener("click", () => models.reopenDialogOrSettings());
-for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
+for (const id of ["sepSelect", "sttSelect", "translateSelect", "voiceSelect"]) {
   $(id).addEventListener("change", () => models.repaint());
 }
 // The translator decides two of the warnings over the options: its runtime
@@ -405,6 +415,7 @@ const ENGINE_HINTS = {
              get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that."),
                                    t("The video is uploaded to Perso.")]; } },
   sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
+         get roformer() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
   stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
@@ -778,7 +789,9 @@ const draftSetup = initDraftSetup({
   // and then the empty project, top bar and all (owner, 2026-10-22).
   removeDraft: (d) => confirmDialogs.askDelete({ draftId: d.downloadId, project: d.name || "this draft",
                                                 onGone: () => draftSetup.showDraftScreen() }),
+  firstDownloadBytes,
 });
+paintDraftFoot = draftSetup.paintFoot;
 // ---------------- Separate audio ----------------
 let showAudioLanes = () => {};
 // The Audio tab (#tabAudio) belongs to ui/src/audioTab.mjs: the draft's kept

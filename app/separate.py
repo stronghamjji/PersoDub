@@ -48,16 +48,20 @@ class SeparationEngine:
 
     def __init__(self, python_path: Optional[str] = None, model_dir: Optional[str] = None,
                 timeout: int = 900, video_duration: Optional[float] = None,
-                roformer_path: Optional[str] = None):
+                roformer_path: Optional[str] = None, roformer: Optional[bool] = None):
         self.python_path = python_path or SEP_PYTHON
         self.model_dir = model_dir or SEP_MODEL_DIR
-        # The RoFormer when its weights are here (cleaner: no original voice
-        # left in the background), else Demucs.
-        self.roformer_path = roformer_path or roformer_model_path()
-        self.name = "RoFormer" if self.roformer_path else "Demucs"
+        # roformer is the choice a dub was started with: True the RoFormer
+        # (cleaner: no original voice left in the background), False Demucs.
+        # None, nobody chose (the Separate audio tool): the RoFormer when its
+        # weights are here, else Demucs.
+        self.roformer_wanted = roformer is True
+        self.roformer_path = None if roformer is False else (roformer_path or roformer_model_path())
+        self.name = "RoFormer" if self.roformer_path or self.roformer_wanted else "Demucs"
         # The weights file, for the log: which RoFormer checkpoint ran, or
         # Demucs's one model.
-        self.model_file = os.path.basename(self.roformer_path) if self.roformer_path else "htdemucs"
+        self.model_file = (os.path.basename(self.roformer_path) if self.roformer_path
+                           else "MelBandRoformer.ckpt (missing)" if self.roformer_wanted else "htdemucs")
         # video_duration, when known, scales `timeout` up for long videos
         # (see app.timeouts.scaled_timeout); omitted, it's today's fixed value.
         if self.roformer_path:
@@ -74,6 +78,9 @@ class SeparationEngine:
         separator itself reporting ok=false) -- never returns a partial
         result, so the caller's fallback logic can rely on all-or-nothing.
         """
+        if self.roformer_wanted and not self.roformer_path:
+            # Chosen, and gone since the start was checked: never Demucs in its place.
+            raise PartsMissing("Mel-Band RoFormer weights not found")
         py = self.python_path
         if os.sep not in py:
             # bare command name (e.g. the "python3" default) -- resolve via PATH

@@ -2,9 +2,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText, dubStartDialog, overallProgress, downloadStopped, allReady, groupModels } from "./modelsUi.mjs";
+import { gb, neededModelId, neededPackIds, stageNeeds, modelStatusLine, downloadChipText, dubStartDialog, overallProgress, downloadStopped, allReady, groupModels } from "./modelsUi.mjs";
 
 test("neededModelId maps each dropdown choice to its catalog model", () => {
+  assert.equal(neededModelId("sep", "roformer"), "vocal-separator");
+  assert.equal(neededModelId("sep", "local"), null, "Demucs comes with Python + PyTorch");
+  assert.equal(neededModelId("sep", "perso"), null);
   assert.equal(neededModelId("stt", "local"), "whisper");
   assert.equal(neededModelId("stt", "perso"), null);
   assert.equal(neededModelId("translate", "gemma"), "gemma");
@@ -52,21 +55,53 @@ test("a download says Getting ready… until its first byte, then its percent, 0
     { cls: "model-busy", text: "Downloading Mel-Band RoFormer… 0%", button: "cancel" });
 });
 
-test("dubStartDialog says only the size and what it is for", () => {
+test("dubStartDialog says the size, that it is a download apart from the app install, and the room left", () => {
   const voice = dubStartDialog({ missing: [
     { id: "engine", kind: "pack", name: "Python + PyTorch", bytes: 2.0e9 },
-  ] });
+  ], free_bytes: 112.4e9 });
   assert.equal(voice.title, "Download 2.0 GB?");
-  assert.equal(voice.line, "One-time download for making voices.");
+  assert.equal(voice.line, "A one-time download, separate from the app install.");
+  assert.equal(voice.free, "112.4 GB free");
   assert.equal(voice.perso, true, "the voice parts point to Perso dubbing");
 
   const stt = dubStartDialog({ missing: [{ id: "whisper", kind: "model", name: "Whisper", bytes: 2.9e9 }] });
-  assert.equal(stt.line, "One-time download for transcribing.");
+  assert.equal(stt.line, "A one-time download, separate from the app install.");
+  assert.equal(stt.free, "", "no free_bytes (the engine could not tell): nothing said");
   assert.equal(stt.perso, false);
 
-  const tr = dubStartDialog({ missing: [{ id: "gemma", name: "Gemma 3", bytes: 7.6e9 }] });
+  const tr = dubStartDialog({ missing: [{ id: "gemma", name: "Gemma 3", bytes: 7.6e9 }], free_bytes: 0 });
   assert.equal(tr.title, "Download 7.6 GB?");
-  assert.equal(tr.line, "One-time download for translating.");
+  assert.equal(tr.free, "");
+});
+
+test("the size before a download counts Python + PyTorch once, under the first field that needs it", () => {
+  const rows = { engine: { id: "engine", name: "Python + PyTorch", bytes: 2.0e9, state: "not_downloaded" },
+                 whisper: { id: "whisper", name: "Whisper", bytes: 3.1e9, state: "not_downloaded" },
+                 "qwen3-tts": { id: "qwen3-tts", name: "Qwen3-TTS", bytes: 4.5e9, state: "not_downloaded" },
+                 demucs: { id: "demucs", bytes: 0.081e9, state: "not_downloaded", comes_with: "engine" } };
+  const rowOf = (id) => rows[id] || null;
+  const stages = [["sep", "local"], ["stt", "local"], ["translate", "chatgpt"], ["voice", "qwen3"]];
+  const lines = stageNeeds(stages, rowOf);
+  assert.deepEqual(lines.map((l) => l.needs.map((r) => r.id)), [[], ["engine", "whisper"], [], ["qwen3-tts"]],
+                   "5.1 GB and 4.5 GB, not 5.1 and 6.5");
+  const total = lines.reduce((n, l) => n + l.needs.reduce((m, r) => m + r.bytes, 0), 0);
+  assert.equal(gb(total), "9.6", "the 409's total: each thing once");
+  assert.deepEqual(lines.map((l) => l.ready), [false, false, false, false],
+                   "a line whose part is listed above is not Ready: its choice still needs that part");
+
+  // Mel-Band RoFormer first in the form: Python + PyTorch goes with it.
+  const roformer = stageNeeds([["sep", "roformer"], ...stages.slice(1)],
+                              (id) => (id === "vocal-separator" ? { id, bytes: 0.9e9, state: "not_downloaded" } : rowOf(id)));
+  assert.deepEqual(roformer.map((l) => l.needs.map((r) => r.id)),
+                   [["engine", "vocal-separator"], ["whisper"], [], ["qwen3-tts"]]);
+
+  // Python + PyTorch here: each line lists only its own model, and once all
+  // is here the line is Ready.
+  rows.engine.state = "ready";
+  rows.whisper.state = "ready";
+  const later = stageNeeds(stages, rowOf);
+  assert.deepEqual(later.map((l) => l.needs.map((r) => r.id)), [[], [], [], ["qwen3-tts"]]);
+  assert.deepEqual(later.map((l) => l.ready), [false, true, false, false], "Demucs and ChatGPT need nothing to download");
 });
 
 test("dubStartDialog splits packs from models and keeps the 409's order", () => {
@@ -81,6 +116,8 @@ test("dubStartDialog splits packs from models and keeps the 409's order", () => 
 });
 
 test("neededPackIds names the pack behind each dropdown choice", () => {
+  assert.deepEqual(neededPackIds("sep", "roformer"), ["engine"]);
+  assert.deepEqual(neededPackIds("sep", "local"), []);
   assert.deepEqual(neededPackIds("stt", "local"), ["engine"]);
   assert.deepEqual(neededPackIds("stt", "perso"), []);
   assert.deepEqual(neededPackIds("translate", "hunyuan"), ["ollama-runtime"]);
@@ -142,9 +179,10 @@ test("allReady flips only when every needed model is ready", () => {
   assert.equal(allReady(rows, ["a", "b"]), false);
 });
 
-test("a start that is not a dubbing's names its own purpose and offers no Perso dubbing", () => {
+test("a start that is not a dubbing's says the same line and offers no Perso dubbing", () => {
   const d = dubStartDialog({ missing: [{ id: "engine", kind: "pack", bytes: 2e9 }], purpose: "separating audio" });
-  assert.equal(d.line, "One-time download for separating audio.");
+  assert.equal(d.line, "A one-time download, separate from the app install.");
+  assert.equal(d.ram, "", "Separate audio is not held to the dub's memory");
   assert.equal(d.perso, false);
   assert.deepEqual(d.packs, ["engine"]);
 });

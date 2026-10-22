@@ -152,6 +152,8 @@ _PARTS_MISSING = {
                             "Open Settings > Models and download Whisper again."),
     "Demucs": lambda: both("The Demucs files for audio separation are missing or damaged. "
                            "Open Settings > Models and download Demucs again."),
+    "RoFormer": lambda: both("The Mel-Band RoFormer files for audio separation are missing or damaged. "
+                             "Open Settings > Models and download Mel-Band RoFormer again."),
 }
 
 
@@ -648,7 +650,9 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
                     cancel_check, on_notice, log, video_duration=None, title=None):
     """Stage 1/6 -- voice/background separation.
 
-    Local Demucs (default) or Perso cloud. Either way a failure fails the whole
+    Local Demucs (default), Mel-Band RoFormer ("roformer") or Perso cloud.
+    No choice at all (the Separate audio tool) is the RoFormer when its
+    weights are here, else Demucs. Either way a failure fails the whole
     job: no silent engine substitution (2026-08-06 rule), and no container
     fallback. Returns (vocals_path, background_path, perso_client, model); the
     client comes back because the Perso path may have created one, and the STT
@@ -669,7 +673,9 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
         sep_paths, perso_client = _separate_with_perso(
             video_path, work_dir, perso_client, cancel_check, on_notice, log, title=title)
     else:
-        engine = SeparationEngine(video_duration=video_duration)
+        chosen = (sep_engine or "").lower()
+        engine = SeparationEngine(video_duration=video_duration,
+                                  roformer=(chosen == "roformer") if chosen else None)
         # getattr: test fakes may not carry them.
         model = getattr(engine, "name", "Demucs")
         _log_stage(log, "separate",
@@ -681,7 +687,7 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
             # ask -- but which thing to look at depends on what stopped it. A
             # timeout and a full disk are not a broken file, and saying so
             # sent people to check the one thing that was fine (2026-09-15).
-            advice = _advice(e, "Demucs")
+            advice = _advice(e, "RoFormer" if model == "RoFormer" else "Demucs")
             failed = both("Voice separation failed on this computer.")
             raise shown_error(f"{failed[0]} {advice[0]} ({str(e)[:400]})",
                              f"{failed[1]} {advice[1]} ({str(e)[:400]})")

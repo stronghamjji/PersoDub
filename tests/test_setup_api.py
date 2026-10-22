@@ -39,6 +39,21 @@ def test_get_reports_chatgpt_and_local_as_the_untouched_defaults(tmp_path, monke
     assert "translator" in r.json()["choices"]
 
 
+def test_separation_offers_the_roformer_and_a_kit_that_has_it_keeps_separating_with_it(tmp_path, monkeypatch):
+    # Demucs and Mel-Band RoFormer are two choices on the screen now. A kit
+    # with the RoFormer downloaded separated with it while "local" meant "the
+    # RoFormer when it is here"; with nothing saved it still does.
+    kit = _kit(tmp_path, monkeypatch)
+    assert client.get("/api/setup").json()["choices"]["separation"] == ["local", "roformer", "perso"]
+    assert dub_setup.default_for("separation") == "local"
+    weights = kit / "models" / "melband-roformer" / "MelBandRoformer.ckpt"
+    weights.parent.mkdir(parents=True)
+    weights.write_bytes(b"w")
+    assert dub_setup.default_for("separation") == "roformer"
+    client.post("/api/setup", json={"separation": "local"})
+    assert dub_setup.default_for("separation") == "local"
+
+
 def test_the_keys_and_the_stt_default_read_the_same_source(tmp_path, monkeypatch):
     # A key that lives in the process env only (a server deployment, or a kit
     # that never mentions the key): the report sees it as saved, and the stt

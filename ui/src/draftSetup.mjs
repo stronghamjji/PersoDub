@@ -20,6 +20,7 @@ import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
 import { getDraft, clearDraft, setRanges, keptSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { modelInfo } from "./persoModels.mjs";
 import { t } from "./i18n.mjs";
+import { gb } from "./modelsUi.mjs";
 
 function stripExt(name) {
   return String(name || "").replace(/\.[^./\\]+$/, "");
@@ -51,14 +52,16 @@ function stripExt(name) {
  *        job of the draft as it is cut now, or ""
  * @param {(d: object) => void} [deps.removeDraft]  the Video card's Remove:
  *        asks, as the Home card's Delete does, and deletes this draft
+ * @param {() => number} [deps.firstDownloadBytes]  what a dubbing on the
+ *        form's choices downloads first, in bytes; 0 for nothing
  * @returns {{ openDraft: (source?: {file?, link?, downloadId?, name?, duration?}) => Promise<void>,
- *             showDraftScreen: () => void, paint: () => void, canExport: () => boolean,
+ *             showDraftScreen: () => void, paint: () => void, paintFoot: () => void, canExport: () => boolean,
  *             saveDraft: (what?: {audio?: string, ratio?: string}) => Promise<string> }}
  */
 export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, sizeVideoPane,
                                   leftTabsShow, importer, newProject, submitDubStart, setDubRestart,
                                   showDraftTimeline = () => {}, getScreen = () => "done",
-                                  stemsFrom = () => "", removeDraft = () => {} }) {
+                                  stemsFrom = () => "", removeDraft = () => {}, firstDownloadBytes = () => 0 }) {
   // What a Perso API dubbing of the kept part costs and what the workspace
   // has left, beside Start (owner, 2026-10-22): the model's credits a second
   // times the seconds kept, whole seconds as Perso counts them, and what
@@ -71,7 +74,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
   function persoCost(seconds) {
     if (Date.now() - leftAskedAt >= LEFT_FRESH_MS) {
       leftAskedAt = Date.now();
-      fetchCreditsLeft().then((n) => { creditsLeft = n; paintDubbingTab(); });
+      fetchCreditsLeft().then((n) => { creditsLeft = n; paintFoot(); });
     }
     const { rate } = modelInfo(newProject.persoModel());
     const cost = rate == null || !(seconds > 0) ? null : Math.round(Math.ceil(seconds) * rate * 10) / 10;
@@ -100,14 +103,24 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     // way out (cut into parts). The old New project dialog said it; this card
     // took its place and said nothing (Windows B11, 2026-10-07).
     $("draftLongHint").hidden = !(keptSeconds(d) > LONG_VIDEO_SECONDS);
+    paintFoot();
+    $("draftStartBtn").disabled = !d.downloadId;
+    $("draftStartBtn").title = d.downloadId ? "" : t("The video is still coming in");
+  }
+  // The foot: the length, the mode and then, for a Perso API dubbing, its
+  // credits (persoCost above), or, while the local choices still need a
+  // download, its size the first time (owner, 2026-10-22, 1-3). Painted by
+  // itself as well whenever the model rows change (ui/src/app.mjs).
+  function paintFoot() {
+    const d = getDraft();
+    if (!d || state.jobId) return;
     // Perso does the whole job, so the voice-quality choice is not in force.
     const cloud = $("dubModeSelect").value === "perso";
     const quality = cloud ? "Perso API"
       : $("qualitySelect").value === "high" ? t("High quality mode") : t("Fast mode");
+    const first = firstDownloadBytes();
     $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality }),
-      ...(cloud ? persoCost(keptSeconds(d)) : [])].join(" · ");
-    $("draftStartBtn").disabled = !d.downloadId;
-    $("draftStartBtn").title = d.downloadId ? "" : t("The video is still coming in");
+      ...(cloud ? persoCost(keptSeconds(d)) : first ? [t("{size} GB the first time", { size: gb(first) })] : [])].join(" · ");
   }
   // The foot names the mode, so it has to follow the two choices that set it:
   // it went on saying "Fast mode" after High quality was picked (2026-09-30).
@@ -237,5 +250,5 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     }
   }
 
-  return { openDraft, showDraftScreen, paint: paintDubbingTab, canExport, saveDraft };
+  return { openDraft, showDraftScreen, paint: paintDubbingTab, paintFoot, canExport, saveDraft };
 }

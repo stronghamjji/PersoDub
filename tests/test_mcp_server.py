@@ -412,6 +412,21 @@ def test_queue_dub_refuses_a_language_the_voices_cannot_speak(tmp_path):
         mcp_server.queue_dub(str(video), "sw", confirm=True)
 
 
+def test_queue_dub_names_every_separation_it_takes_and_passes_the_roformer_through(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    with pytest.raises(ValueError, match='separation must be "local", "roformer", "perso" or empty'):
+        mcp_server.queue_dub(str(video), "en", separation="mdx", confirm=True)
+    calls = {}
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        calls["data"] = data
+        return _Response(200, {"job_id": "j2", "status": "queued"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    mcp_server.queue_dub(str(video), "en", separation="roformer", confirm=True)
+    assert calls["data"]["sep_engine"] == "roformer"
+
+
 def test_queue_dub_passes_the_named_translator_through(monkeypatch, tmp_path):
     video = _tmp_video(tmp_path)
     calls = {}

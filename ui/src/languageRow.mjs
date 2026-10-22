@@ -62,7 +62,7 @@ export function choicesOf(job) {
   const c = { dubMode: job.dub_mode === "perso" ? "perso" : "local",
               source: job.source_lang || "",
               speakers: job.num_speakers ? String(job.num_speakers) : "" };
-  if (job.separation) c.sep = job.separation === "perso" ? "perso" : "local";
+  if (job.separation) c.sep = ["perso", "roformer"].includes(job.separation) ? job.separation : "local";
   if (job.stt_engine) c.stt = job.stt_engine === "perso" ? "perso" : "local";
   if (job.translator) c.translator = job.translator;
   if (job.quality != null) c.quality = Number(job.quality) > 1 ? "high" : "fast";

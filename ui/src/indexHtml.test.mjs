@@ -582,9 +582,11 @@ test("every small confirm wears the warning sign, a question and at most one sho
   const confirms = readFileSync(CONFIRMS, "utf8");
   assert.match(confirms, /\$\("deleteTitle"\)\.textContent = job\.draftId \? t\("Delete this draft\?"\) : t\("Delete this project\?"\);/);
   // Its one line says how many languages go with a project of several
-  // (ui/src/languageRow.mjs deleteLine), and nothing else.
-  assert.equal((html.match(/\$\("deleteMessage"\)\.textContent/g) || []).length, 1);
+  // (ui/src/languageRow.mjs deleteLine), and nothing else; asked about a base
+  // program in Settings > Models, the one line the asker hands it.
+  assert.equal((html.match(/\$\("deleteMessage"\)\.textContent/g) || []).length, 2);
   assert.match(confirms, /\$\("deleteMessage"\)\.textContent = deleteLine\(job\.draftId \? 1 : projectLanguages\(members\)\.length\);/);
+  assert.match(confirms, /\$\("deleteMessage"\)\.textContent = line;/);
   assert.match(html, /<h2>Replace this video\?<\/h2>\s*<p>Cuts are reset\.<\/p>/);
   assert.match(html, /id="cancelDubKeepBtn" type="button">Keep going<[^]*?id="cancelDubConfirmBtn" type="button">Stop</);
   assert.match(html, /\.modal\.modal-alert \{ width: 280px;/);
@@ -654,11 +656,12 @@ test("the player draws subtitles in the burn's font at its natural line height",
 test("the page hands the desktop bridge to the models controller and hints name packs first", () => {
   const html = readPage();
   assert.match(html, /shell: window\.persodubShell \|\| null/);
-  assert.match(html, /function hintNeeds\(role, value\)/);
+  // What each line lists, pack first and each thing once, is
+  // ui/src/modelsUi.mjs stageNeeds (its own tests hold the order).
+  assert.match(html, /stageNeeds\(STAGE_FIELDS\.map\(\(\[role, sel\]\) => \[role, \$\(sel\)\.value\]\), models\.modelRow\)/);
   // One line names everything the choice needs, one button fetches it all.
   assert.match(html, /t\("Needs \{names\} · \{size\} GB", \{ names: needs\.map\(\(r\) => r\.name\)\.join\(" \+ "\)/);
   assert.match(html, /models\.downloadAll\(ids\)/);
-  assert.match(html, /neededPackIds/);
 });
 
 // The voice engine's pack on disk but its process down: the page asks the
@@ -1058,9 +1061,11 @@ test("the New project dialog is two columns, and its options carry their own loo
   assert.match(dlg, /<div class="opt-panel" id="langGrid">/);
   assert.match(dlg, /<div class="opt-panel advanced-body" id="advancedBody" hidden>/);
   assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "Processing, two languages and six options, each a row");
+  // Voice separation offers Demucs, Mel-Band RoFormer and Perso API, the RoFormer before it is downloaded too.
+  assert.match(dlg, /<select id="sepSelect"><option value="local" selected>Demucs<\/option><option value="roformer">Mel-Band RoFormer<\/option><option value="perso">Perso API<\/option><\/select>/);
   for (const id of ["sourceLangSelect", "targetLangSelect", "dubModeSelect", "sepSelect", "sttSelect",
                     "translateSelect", "voiceSelect", "qualitySelect", "numSpeakers",
-                    "dubModeHint", "sepHint", "sttHint", "sttModelHint", "translateHint", "translateModelHint",
+                    "dubModeHint", "sepHint", "sepModelHint", "sttHint", "sttModelHint", "translateHint", "translateModelHint",
                     "voiceHint", "voiceModelHint", "qualityHint"]) at(`id="${id}"`);
   assert.doesNotMatch(html, /\.project-(modal|right|options) \.opt-/, "no option rule depends on the dialog around it");
   assert.match(html, /\.project-modal \{ width: min\(720px, 92vw\);/);
@@ -1123,10 +1128,12 @@ test("the Video card has Replace · Remove at its top right, and a line under it
 // With Perso API the stage rows read "Perso" over the dropdowns' own words,
 // which stay their values; only the words are hidden, so the arrow stays
 // (owner, 2026-10-22, the 2-1 picture). ui/src/dubbingPrep.test.mjs runs it.
+// The four stages are buttons that say Perso themselves (ui/src/stagePicker.test.mjs);
+// the word is painted only over a dropdown still on screen, so never twice.
 test("a Perso dubbing's greyed stage rows read Perso, and say Perso handles them", () => {
   const html = readPage();
   assert.match(html, /\.advanced-body\.by-perso \.opt-row > select \{ -webkit-text-fill-color: transparent; \}/);
-  assert.match(html, /\.advanced-body\.by-perso \.opt-row:has\(> select\)::after \{ content: "Perso"; grid-column: 2; grid-row: 1;/);
+  assert.match(html, /\.advanced-body\.by-perso \.opt-row:has\(> select:not\(\[hidden\]\)\)::after \{ content: "Perso"; grid-column: 2; grid-row: 1;/);
   assert.match(html, /\$\("advancedBody"\)\.classList\.toggle\("by-perso", cloud\);/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.equal(ko["Perso handles this."], "Perso가 처리해요.");

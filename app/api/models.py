@@ -72,7 +72,8 @@ def models_list():
     """The model catalog with each model's download state -- what the
     Settings catalog, the advanced-options status lines and the dub-start
     warning dialog all render from. Always-installed models stay out: the
-    install itself guarantees them and there is nothing to manage.
+    install itself guarantees them and there is nothing to manage. Demucs,
+    which comes with Python + PyTorch, is listed with its stage and that pack.
 
     platform is the key the sizes were picked by ("mac", "win-gpu",
     "win-cpu") -- the erase screen reads it to warn a machine with no GPU
@@ -82,7 +83,9 @@ def models_list():
 
 def _model_or_404(mid: str):
     entry = model_store.find(mid)
-    if entry is None or entry["role"] == "always":
+    # One that comes with a pack (Demucs) is the pack's: listed, never fetched
+    # or removed on its own.
+    if entry is None or entry["role"] == "always" or entry.get("comes_with"):
         raise HTTPException(404, t("Unknown model: {model}", model=mid))
     return entry
 

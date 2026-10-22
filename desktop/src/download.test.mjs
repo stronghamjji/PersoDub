@@ -124,3 +124,77 @@ test("fileSha256 computes the digest", async () => {
   writeFileSync(dest, BODY);
   assert.equal(await fileSha256(dest), SHA);
 });
+
+// A cut line part-way through an archive used to start it over from the first
+// byte: the .part was opened fresh on every try (owner, 2026-10-22, 1-3).
+// This server answers a Range request the way GitHub's file host does.
+async function serveRanges(body = BODY) {
+  const port = await getFreePort();
+  const asked = [];
+  const srv = createServer((req, res) => {
+    asked.push(req.headers.range || "");
+    const m = /^bytes=(\d+)-$/.exec(req.headers.range || "");
+    if (!m) { res.writeHead(200, { "content-length": body.length }); res.end(body); return; }
+    const from = Number(m[1]);
+    if (from >= body.length) { res.writeHead(416, { "content-range": `bytes */${body.length}` }); res.end(); return; }
+    res.writeHead(206, { "content-length": body.length - from, "content-range": `bytes ${from}-${body.length - 1}/${body.length}` });
+    res.end(body.subarray(from));
+  });
+  await new Promise((r) => srv.listen(port, "127.0.0.1", r));
+  return { srv, url: `http://127.0.0.1:${port}/f`, asked };
+}
+
+test("a download cut off part-way asks only for the rest, and the joined file passes its sha256", async () => {
+  const { srv, url, asked } = await serveRanges();
+  const dest = join(mkdtempSync(join(tmpdir(), "oddl-")), "f.bin");
+  writeFileSync(dest + ".part", BODY.subarray(0, 6));
+  const lines = [];
+  const seen = [];
+  await download(url, dest, { sha256: SHA, what: "ollama-runtime", log: logInto(lines),
+                              onProgress: (p) => seen.push([p.received, p.total]) });
+  assert.deepEqual(asked, ["bytes=6-"]);
+  assert.equal(readFileSync(dest).toString(), "hello-persodub");
+  assert.ok(!existsSync(dest + ".part"));
+  assert.deepEqual(seen.at(-1), [BODY.length, BODY.length], "the percent counts what was already there");
+  assert.match(lines[1], /^INFO DOWNLOAD CONNECTED ollama-runtime: HTTP 206 from .*, 14 B, resuming at 6 B$/);
+  srv.close();
+});
+
+test("a piece that is not this file fails its sha256 once, and the next try fetches the whole file", async () => {
+  const { srv, url, asked } = await serveRanges();
+  const dest = join(mkdtempSync(join(tmpdir(), "oddl-")), "f.bin");
+  writeFileSync(dest + ".part", "WRONG!");
+  await assert.rejects(download(url, dest, { sha256: SHA }), /sha256/i);
+  assert.ok(!existsSync(dest + ".part"), "the bad piece goes");
+  await download(url, dest, { sha256: SHA });
+  assert.deepEqual(asked, ["bytes=6-", ""]);
+  assert.equal(readFileSync(dest).toString(), "hello-persodub");
+  srv.close();
+});
+
+test("a piece longer than the file, or a server that sends it all again, starts the file over", async () => {
+  const ranges = await serveRanges();
+  const dest = join(mkdtempSync(join(tmpdir(), "oddl-")), "f.bin");
+  writeFileSync(dest + ".part", "x".repeat(40));
+  await download(ranges.url, dest, { sha256: SHA });
+  assert.deepEqual(ranges.asked, ["bytes=40-", ""], "416, then the whole file");
+  assert.equal(readFileSync(dest).toString(), "hello-persodub");
+  ranges.srv.close();
+
+  const { srv, url } = await serve();   // no Range: always 200 and the whole body
+  const dest2 = join(mkdtempSync(join(tmpdir(), "oddl-")), "f.bin");
+  writeFileSync(dest2 + ".part", "hello");
+  await download(url, dest2, { sha256: SHA });
+  assert.equal(readFileSync(dest2).toString(), "hello-persodub", "written over, not added to");
+  srv.close();
+});
+
+test("without a sha256 to prove it by, a piece is never picked up", async () => {
+  const { srv, url, asked } = await serveRanges();
+  const dest = join(mkdtempSync(join(tmpdir(), "oddl-")), "f.bin");
+  writeFileSync(dest + ".part", "hello");
+  await download(url, dest);
+  assert.deepEqual(asked, [""]);
+  assert.equal(readFileSync(dest).toString(), "hello-persodub");
+  srv.close();
+});

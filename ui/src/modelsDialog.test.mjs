@@ -68,6 +68,8 @@ function harness({ rows = [], shell = null, ramOk = true } = {}) {
     shell,
     keepPolling: () => state.keepPolling === true,
     ramOk: () => ramOk,
+    // The Delete dialog: records the question, answers Delete unless a test says No.
+    askToDelete: async (q) => { (state.askedToDelete ||= []).push(q); return state.deleteAnswer ?? true; },
   });
   return { $, api, state };
 }
@@ -142,7 +144,7 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
 
   assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB?");
   assert.equal(h.$("mnLine").textContent,
-    "One-time download for making voices. Needs 8 GB of memory (16 GB recommended).");
+    "A one-time download, separate from the app install. Needs 8 GB of memory (16 GB recommended).");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnProgress").hidden, true);
   assert.equal(h.$("mnDownload").hidden, false);
@@ -150,12 +152,12 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
   assert.equal(h.$("modelsNeededOverlay").classList.contains("open"), true);
 });
 
-test("the dub's download says the memory it needs, and Download and Start is on", (t) => {
+test("the dub's download says the room left and the memory it needs, and Download and Start is on", (t) => {
   const h = harness();
   t.after(h.state.restore);
-  h.api.showModelsDialog(DETAIL_TWO);
+  h.api.showModelsDialog({ ...DETAIL_TWO, free_bytes: 112.4e9 });
   assert.equal(h.$("mnLine").textContent,
-    "One-time download for making voices. Needs 8 GB of memory (16 GB recommended).");
+    "A one-time download, separate from the app install. 112.4 GB free · Needs 8 GB of memory (16 GB recommended).");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnDownload").disabled, false);
 });
@@ -163,8 +165,8 @@ test("the dub's download says the memory it needs, and Download and Start is on"
 test("a computer short of memory gets the red line instead, and no download", (t) => {
   const h = harness({ ramOk: false });
   t.after(h.state.restore);
-  h.api.showModelsDialog(DETAIL_TWO);
-  assert.equal(h.$("mnLine").textContent, "One-time download for making voices.");
+  h.api.showModelsDialog({ ...DETAIL_TWO, free_bytes: 112.4e9 });
+  assert.equal(h.$("mnLine").textContent, "A one-time download, separate from the app install. 112.4 GB free");
   assert.equal(h.$("mnError").textContent,
     "This computer does not have enough memory to dub on this computer. Try the Perso API.");
   assert.equal(h.$("mnDownload").disabled, true);
@@ -175,7 +177,7 @@ test("a download that is not a dub's (Separate audio) says nothing about memory"
   const h = harness({ ramOk: false });
   t.after(h.state.restore);
   h.api.showModelsDialog({ ...PACK_409, purpose: "separating audio" });
-  assert.equal(h.$("mnLine").textContent, "One-time download for separating audio.");
+  assert.equal(h.$("mnLine").textContent, "A one-time download, separate from the app install.");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnDownload").disabled, false);
 });
@@ -623,17 +625,13 @@ test("the Settings catalog's pack rows ask the desktop app to install or remove,
   // Remove asks the engine first (it knows whether a dub is running); its
   // "packs are the desktop app's" refusal is the all-clear.
   h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "PersoDub installs this itself." }) } };
-  btn(runtimeRow).onclick();   // asks first
-  await settle();
-  btn(runtimeRow).onclick();   // then removes
+  btn(runtimeRow).onclick();   // the Delete dialog asks, and Delete is pressed
   await settle(); await settle(); await settle();
   assert.deepEqual(shell.asked, ["install engine", "remove ollama-runtime"]);
   assert.ok(h.state.calls.includes("DELETE /api/models/ollama-runtime"));
 
   // A dub in progress: the engine's sentence is shown and the desktop app is not asked.
   h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "Dubbing is running right now. Wait for it to finish, then remove the model." }) } };
-  btn(runtimeRow).onclick();
-  await settle();
   btn(runtimeRow).onclick();
   await settle(); await settle(); await settle();
   assert.deepEqual(shell.asked, ["install engine", "remove ollama-runtime"], "not asked again");
@@ -645,6 +643,44 @@ test("the Settings catalog's pack rows ask the desktop app to install or remove,
   const row = listRows(bare)[0];
   assert.equal(btn(row).disabled, true);
   assert.equal(row.children[2].textContent, "Installed by PersoDub");
+});
+
+test("removing Python + PyTorch or Ollama asks in the Delete dialog what stops working, and No keeps it", async (t) => {
+  const shell = fakeShell();
+  const h = harness({ rows: [{ ...ENGINE, state: "ready" },
+                             { ...ENGINE, id: "ollama-runtime", name: "Ollama", bytes: 0.46e9, state: "ready" },
+                             { ...ENGINE, id: "subtitle-eraser", name: "Subtitle eraser", bytes: 1.0e9, state: "ready" }], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const btn = (name) => listRows(h).find((r) => r.children[0].textContent === name).children[3];
+
+  h.state.deleteAnswer = false;   // Keep it
+  btn("Python + PyTorch").onclick();
+  await settle(); await settle(); await settle();
+  assert.deepEqual(h.state.askedToDelete, [{
+    title: "Delete Python + PyTorch?",
+    line: "Without it, local models cannot separate audio, transcribe or make voices.",
+  }]);
+  assert.equal(btn("Python + PyTorch").textContent, "Remove", "no second-press question on the button");
+  assert.ok(!h.state.calls.some((c) => c.startsWith("DELETE")), "kept: the engine is not even asked");
+  assert.deepEqual(shell.asked, []);
+
+  h.state.deleteAnswer = true;    // Delete
+  btn("Python + PyTorch").onclick();
+  await settle(); await settle(); await settle();
+  assert.ok(h.state.calls.includes("DELETE /api/models/engine"), "one press and a yes goes on to remove it");
+
+  btn("Ollama").onclick();
+  await settle();
+  assert.deepEqual(h.state.askedToDelete.at(-1),
+                   { title: "Delete Ollama?", line: "Without it, local models cannot translate." });
+
+  // Anything else keeps its two presses and asks nothing in a dialog.
+  const asked = h.state.askedToDelete.length;
+  btn("Subtitle eraser").onclick();
+  await settle();
+  assert.equal(btn("Subtitle eraser").textContent, "Remove 1.0 GB?");
+  assert.equal(h.state.askedToDelete.length, asked);
 });
 
 test("an Ollama pull that failed before it began is told in the dialog, not polled at 0% forever", async (t) => {
@@ -683,6 +719,28 @@ test("a ready row says what it is for after its status, and a row on its way say
   assert.equal(note.textContent, "More careful");
   assert.equal(hunyuan.children[2].textContent, "Downloading Hunyuan… 10%");
   assert.deepEqual(hunyuan.children[2].children, [], "no note beside a download's line");
+});
+
+test("Demucs is listed under Audio separation as part of Python + PyTorch, with no button of its own", async (t) => {
+  const demucs = { id: "demucs", role: "sep", name: "Demucs", bytes: 0.081e9, comes_with: "engine",
+                   hint: "Default · Comes with Python + PyTorch" };
+  const h = harness({ rows: [{ ...demucs, state: "ready" },
+                             { id: "vocal-separator", role: "sep", name: "Mel-Band RoFormer", bytes: 0.9e9, state: "not_downloaded" },
+                             { ...ENGINE, state: "ready" }] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const [row, roformer] = listRows(h);
+  assert.deepEqual(row.children.map((c) => c.textContent), ["Demucs", "0.1 GB", "Ready", ""]);
+  assert.equal(row.children[2].children[0].textContent, "Default · Comes with Python + PyTorch");
+  assert.notEqual(row.children[3].className, "btn btn-outline model-btn", "nothing to press");
+  assert.equal(roformer.children[3].textContent, "Download");
+  assert.equal(h.$("modelsSummary").textContent, "3 models · 2.1 GB on this computer");
+  // Before Python + PyTorch is here: no state of its own, only where it comes from.
+  h.state.rows = [{ ...demucs, state: "not_downloaded" }];
+  await h.api.refreshModels();
+  const [missing] = listRows(h);
+  assert.equal(missing.children[2].children[0].textContent, "Default · Comes with Python + PyTorch");
+  assert.equal(missing.children[3].className, "", "still nothing to press");
 });
 
 test("the rows sit under a heading for each purpose, each with what its ready rows take", async (t) => {
