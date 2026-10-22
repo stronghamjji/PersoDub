@@ -45,8 +45,9 @@ router = APIRouter()
 
 AGENTS = {
     # `login` is what the user types in a terminal to sign this CLI in. It is
-    # here rather than in the screen so one place names it: the failure message
-    # and the strip's status line both say the same command.
+    # here rather than in the screen so one place names it: the strip's status
+    # line says it, and a failure message that it is set sends the user to the
+    # panel's own Sign in (app/agents/base.py explain_exit).
     # "login" is what to type in a terminal; "login_args" is how the app
     # starts the same sign-in itself (`claude auth login` opens the browser).
     "claude": {"binary": "claude", "name": "Claude", "vendor": "Anthropic",

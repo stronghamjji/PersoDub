@@ -24,19 +24,20 @@ def test_a_killed_turn_says_it_stopped_and_to_try_again():
         assert str(code) not in out["message"]
 
 
-def test_a_signed_out_cli_says_which_command_signs_it_in():
+def test_a_signed_out_cli_says_to_press_the_panels_sign_in():
     for said in ("Error: 401 Unauthorized", "You are not logged in.",
                  "authentication_error: invalid api key"):
         out = base.explain_exit(1, said, agent_name="Codex", login_command="codex login")
-        assert "is not signed in" in out["message"]
-        assert "Codex" in out["message"]
-        assert "codex login" in out["message"]
+        assert out["message"] == "Codex is not signed in. Press Sign in above."
+        assert "codex login" not in out["message"]
 
 
 def test_the_sign_in_line_names_the_cli_that_was_asked():
+    # The same sentence as the CLI's own signed-out answer, which the page
+    # has in both languages: no terminal command.
     out = base.explain_exit(1, "not logged in", agent_name="Claude", login_command="claude")
-    assert out["message"].startswith("Claude is not signed in")
-    assert "`claude`" in out["message"]
+    assert out["message"] == base.SIGNED_OUT_LINE["claude"] == "Claude is not signed in. Press Sign in above."
+    assert "Terminal" not in out["message"]
 
 
 def test_running_out_of_allowance_says_to_wait_or_pick_another():
