@@ -43,6 +43,7 @@ ROUTES = [
     ('GET', '/api/dub/jobs/{jid}'),
     ('GET', '/api/dub/jobs/{jid}/perso/edit'),
     ('GET', '/api/dub/jobs/{jid}/script'),
+    ('GET', '/api/dub/jobs/{jid}/script.xlsx'),   # the script as Perso's spreadsheet (app/api/script.py)
     ('GET', '/api/dub/jobs/{jid}/script/stamp'),
     ('GET', '/api/dub/jobs/{jid}/script/{line}/audio'),
     ('GET', '/api/dub/jobs/{jid}/subtitle_style'),
