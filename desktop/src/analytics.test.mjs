@@ -99,8 +99,8 @@ test("an install step that merely exited nonzero is not called an engine crash",
 test("a dub-time engine death keeps the name it was made for", () => {
   assert.equal(classifyError("worker exit 1"), "engine-crash");
   // A video longer than the Perso plan allows (F4008): its own word.
-  assert.equal(classifyError("This video is longer than your Perso plan allows. Upgrade your plan, or set "
-    + "Dubbing to This computer. Perso said: 영상 길이가 60000ms를 초과했습니다 (F4008)"), "perso-length");
+  assert.equal(classifyError("This video is longer than your Perso plan allows. Upgrade your plan, or switch "
+    + "Dubbing to Local model. Perso said: 영상 길이가 60000ms를 초과했습니다 (F4008)"), "perso-length");
   // A voice model the plan does not cover (VT40314): its own word too.
   assert.equal(classifyError("This dubbing model needs a higher Perso plan. Upgrade your plan, or choose "
     + "another dubbing model. Perso said: Pro plan required (VT40314)"), "perso-plan");
