@@ -16,7 +16,7 @@ import {
   maskAgain,
   newId,
   rateDecision,
-  reopenText,
+  seenAgainText,
   tallyLine,
   validateReport,
   withLogsLine,
@@ -391,12 +391,12 @@ test("an archive's summary says what state its issue was in and whether the repo
   for (const v of Object.values(again)) assert.equal(typeof v, "string");
 });
 
-test("the reopening comment names the version and the system, and nobody can be mentioned through it", () => {
+test("the seen-again comment names the version and the system, and nobody can be mentioned through it", () => {
   const { report } = validateReport({ ...GOOD, version: "0.7.0" });
-  assert.equal(reopenText(report), "Seen again on 0.7.0, windows 10.0.26100, after the issue was closed.");
-  assert.equal(reopenText({ ...report, env: { ...report.env, os: "" } }), "Seen again on 0.7.0, after the issue was closed.");
+  assert.equal(seenAgainText(report), "Seen again on 0.7.0, windows 10.0.26100, after the issue was closed.");
+  assert.equal(seenAgainText({ ...report, env: { ...report.env, os: "" } }), "Seen again on 0.7.0, after the issue was closed.");
   const forged = validateReport({ ...GOOD, env: { ...GOOD.env, os: "@someone #12 <img src=x>" } }).report;
-  assert.doesNotMatch(reopenText(forged), /[@#<>]/);
+  assert.doesNotMatch(seenAgainText(forged), /[@#<>]/);
 });
 
 test("diagnostics survive validation only in the published shape", () => {
@@ -641,7 +641,7 @@ test("the device reaches the archive's summary and nothing the public issue is m
   assert.equal(logSummary(report, 72).device, DEVICE);
   assert.equal(logSummary(validateReport(GOOD).report, 72).device, "");
   const pub = [issueTitle(report), issueBody(report, { logsRef: "a".repeat(32) }), ...summaryLines(report),
-               commentText(report), reopenText(report), ...labelsFor(report), tallyLine(countSighting(null, report))].join("\n");
+               commentText(report), seenAgainText(report), ...labelsFor(report), tallyLine(countSighting(null, report))].join("\n");
   assert.ok(!pub.includes(DEVICE), pub);
 });
 

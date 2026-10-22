@@ -58,8 +58,8 @@ async function send(REPORTS) {
 
 // #106 was closed as fixed in 0.8.1, and a 0.7.0 app reported it again; only
 // the count in its body changed, and nobody saw it (2026-10-22).
-test("a sighting on a closed issue reopens it with one comment, counts it, and tells the dashboard", async (t) => {
-  const issue = { number: 106, state: "closed", body: "An install failed.\n\nMore." };
+test("a sighting on an issue closed as fixed reopens it with one comment, counts it, and tells the dashboard", async (t) => {
+  const issue = { number: 106, state: "closed", state_reason: "completed", labels: [], body: "An install failed.\n\nMore." };
   const calls = github(t, issue);
   const REPORTS = reports();
   const answer = await send(REPORTS);
@@ -80,6 +80,32 @@ test("a sighting on a closed issue reopens it with one comment, counts it, and t
   const { summary } = JSON.parse(REPORTS.map.get(`id:${answer.id}`));
   assert.deepEqual([summary.priorState, summary.reopened, summary.device], ["closed", "true", DEVICE]);
 });
+
+// Closed as not planned, or labelled a duplicate, was a decision rather than a
+// fix: it stays closed, and the comment alone says it was seen again.
+async function staysClosed(t, issue) {
+  const calls = github(t, issue);
+  const REPORTS = reports();
+  const answer = await send(REPORTS);
+
+  assert.deepEqual(calls.map((c) => `${c.method} ${c.path}`), [
+    "GET /repos/o/r/issues/106",
+    "POST /repos/o/r/issues/106/comments",
+    "PATCH /repos/o/r/issues/106",
+  ]);
+  assert.deepEqual(calls[1].body, { body: "Seen again on 0.7.0, windows 10.0.26100, after the issue was closed." });
+  assert.deepEqual(Object.keys(calls[2].body), ["body"], "the count, and no state");
+  assert.match(calls[2].body.body, /^Seen 4 times/m);
+  assert.equal(issue.state, "closed");
+  const { summary } = JSON.parse(REPORTS.map.get(`id:${answer.id}`));
+  assert.deepEqual([summary.priorState, summary.reopened], ["closed", ""]);
+}
+
+test("a sighting on an issue closed as not planned comments and counts, and leaves it closed", (t) =>
+  staysClosed(t, { number: 106, state: "closed", state_reason: "not_planned", labels: [], body: "An install failed." }));
+
+test("a sighting on an issue labelled a duplicate comments and counts, and leaves it closed", (t) =>
+  staysClosed(t, { number: 106, state: "closed", state_reason: "completed", labels: [{ name: "duplicate" }], body: "An install failed." }));
 
 test("a sighting on an open issue only counts it", async (t) => {
   const issue = { number: 106, state: "open", body: "An install failed." };

@@ -299,7 +299,7 @@ function details(title, body) {
  *  strings only: this rides along as R2 metadata, which is capped.
  *  `priorState` is the state GitHub gave the issue a repeat was counted on
  *  ("open" or "closed"; empty for a new issue), and `reopened` whether this
- *  report reopened it (report-worker.js). */
+ *  report reopened it (report-worker.js: only one closed as fixed). */
 export function logSummary(report, issue, { priorState = "", reopened = false } = {}) {
   return {
     issue: String(issue ?? ""),
@@ -539,13 +539,14 @@ export function commentText(report, { logsRef = "" } = {}) {
   return logsRef ? `${line}\n\n${logsLine(logsRef)}` : line;
 }
 
-/** The one comment a sighting on a closed issue adds as it reopens it:
+/** The one comment a sighting on a closed issue adds, reopened or not
+ *  (report-worker.js decides):
  *  "Seen again on 0.7.0, windows 10.0.26100, after the issue was closed."
  *  The version and the system and nothing else: the device number belongs to
  *  the private dashboard (2026-10-21). The system is kept to the characters a
  *  system's name has, because it comes from the request and a new comment
  *  that says "@someone" notifies them. */
-export function reopenText(report) {
+export function seenAgainText(report) {
   const os = String(report.env.os || "").replace(/[^\w .()-]/g, "").trim();
   return `Seen again on ${[report.version, os].filter(Boolean).join(", ")}, after the issue was closed.`;
 }

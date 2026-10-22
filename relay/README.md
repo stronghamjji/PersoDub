@@ -107,8 +107,9 @@ curl -s -X POST https://persodub-report.persodub.workers.dev/report \
 
 # 2) The same fingerprint again -> dedup:true, a comment and no new issue
 
-# 3) Close the issue, then the same fingerprint once more -> the issue is open again,
-#    with one comment "Seen again on 0.5.5, mac 24.6.0, after the issue was closed."
+# 3) Close the issue (as completed), then the same fingerprint once more -> the issue is
+#    open again, with one comment "Seen again on 0.5.5, mac 24.6.0, after the issue was closed."
+#    Closed as not planned, or labelled duplicate, it stays closed and gets only the comment.
 ```
 
 Close the test issue once you have checked it.
