@@ -22,6 +22,9 @@
   "vars": {
     "GITHUB_REPO": "stronghamjji/PersoDub",
     "MAX_PER_DAY": "5",
-    "MAX_TOTAL_PER_DAY": "200"
+    "MAX_TOTAL_PER_DAY": "200",
+    // Finished jobs' records (POST /record), counted apart from the reports.
+    "MAX_RECORDS_PER_DAY": "50",
+    "MAX_RECORDS_TOTAL_PER_DAY": "500"
   }
 }

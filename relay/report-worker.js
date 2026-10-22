@@ -11,6 +11,7 @@ import {
   newId,
   rateDecision,
   seenAgainText,
+  validateRecord,
   validateReport,
   withLogsLine,
   withTally,
@@ -22,11 +23,14 @@ import {
 // account, and asking for one loses nine reports in ten. So the app posts here
 // and this posts to GitHub with a token the app never sees.
 //
-// Two ways in, both of them inward:
+// Three ways in, all of them inward:
 //   POST /report            a failure -> a new issue, or "+1" on the one that
 //                           already describes it (same fingerprint), reopened
 //                           when it had been closed as fixed
-//   POST /report/<id>/logs  the full logs (gzipped tar) for a report just made
+//   POST /record            a job that finished (0.8.8) -> kept for the private
+//                           dashboard, never an issue
+//   POST /report/<id>/logs  the full logs (gzipped tar) for a report or a
+//                           record just made
 //
 // What it never does: log an IP (only a salted daily hash of one, for the rate
 // limit), trust the report it was given (report-logic.js rebuilds it field by
@@ -96,6 +100,30 @@ async function bump(kv, key) {
   await kv.put(key, String((await count(kv, key)) + 1), { expirationTtl: 2 * 24 * 60 * 60 });
 }
 
+// Whether this sender may send one more today, counted if so: its install id,
+// its address (hashed with the day) and the day's total, each against its cap
+// (report-logic.js rateDecision). `prefix` keeps a finished job's counts
+// ("ok:") apart from a failure's (""), so records never spend the failure
+// reports' allowance.
+async function withinLimits(request, env, ctx, installId, { prefix, perDay, totalPerDay }) {
+  const day = dayKey();
+  const ip = request.headers.get("cf-connecting-ip") || "";
+  const ipk = await ipKey(ip, day, env.LOG_SIGNING_KEY || env.GITHUB_REPO || "");
+  const keys = {
+    install: `rl:${prefix}i:${installId}:${day}`,
+    ip: `rl:${prefix}a:${ipk}:${day}`,
+    total: `rl:${prefix}t:${day}`,
+  };
+  const decision = rateDecision({
+    installCount: await count(env.REPORTS, keys.install),
+    ipCount: await count(env.REPORTS, keys.ip),
+    totalCount: await count(env.REPORTS, keys.total),
+  }, { perDay, totalPerDay });
+  if (!decision.ok) return false;
+  for (const k of Object.values(keys)) ctx.waitUntil(bump(env.REPORTS, k));
+  return true;
+}
+
 async function handleReport(request, env, ctx) {
   const text = await request.text();
   if (text.length > MAX_REPORT_BYTES) return json({ error: "too large" }, 413);
@@ -103,24 +131,11 @@ async function handleReport(request, env, ctx) {
   if (!checked.ok) return json({ error: checked.reason }, 400);
   const report = checked.report;
 
-  const day = dayKey();
-  const perDay = Number(env.MAX_PER_DAY || 5);
-  const ip = request.headers.get("cf-connecting-ip") || "";
-  const ipk = await ipKey(ip, day, env.LOG_SIGNING_KEY || env.GITHUB_REPO || "");
-  const keys = {
-    install: `rl:i:${report.installId}:${day}`,
-    ip: `rl:a:${ipk}:${day}`,
-    total: `rl:t:${day}`,
-  };
-  const decision = rateDecision({
-    installCount: await count(env.REPORTS, keys.install),
-    ipCount: await count(env.REPORTS, keys.ip),
-    totalCount: await count(env.REPORTS, keys.total),
-  }, { perDay, totalPerDay: Number(env.MAX_TOTAL_PER_DAY || 200) });
   // Over the limit is answered, not explained: the app keeps its copy and
   // stops, and nobody learns how close they were to the line.
-  if (!decision.ok) return json({ error: "rate limited" }, 429);
-  for (const k of Object.values(keys)) ctx.waitUntil(bump(env.REPORTS, k));
+  if (!await withinLimits(request, env, ctx, report.installId, {
+    prefix: "", perDay: Number(env.MAX_PER_DAY || 5), totalPerDay: Number(env.MAX_TOTAL_PER_DAY || 200),
+  })) return json({ error: "rate limited" }, 429);
 
   const id = newId();
   const known = await env.REPORTS.get(`fp:${report.fingerprint}`, "json");
@@ -213,6 +228,26 @@ async function handleReport(request, env, ctx) {
   return json({ id, issue, url, dedup: !!(known && known.issue) });
 }
 
+// A job that finished (0.8.8): checked like a report and limited per machine
+// like one, on counts and caps of its own, and kept for the private dashboard
+// only -- no issue, no tally, nothing GitHub ever sees. Its summary is held
+// for the archive that follows on the same upload route as a report's
+// (handleLogs), for the same week.
+async function handleRecord(request, env, ctx) {
+  const text = await request.text();
+  if (text.length > MAX_REPORT_BYTES) return json({ error: "too large" }, 413);
+  const checked = validateRecord(text);
+  if (!checked.ok) return json({ error: checked.reason }, 400);
+  const { record } = checked;
+  if (!await withinLimits(request, env, ctx, record.installId, {
+    prefix: "ok:", perDay: Number(env.MAX_RECORDS_PER_DAY || 50), totalPerDay: Number(env.MAX_RECORDS_TOTAL_PER_DAY || 500),
+  })) return json({ error: "rate limited" }, 429);
+
+  const id = newId();
+  await env.REPORTS.put(`id:${id}`, JSON.stringify({ summary: logSummary(record, "") }), { expirationTtl: 7 * 24 * 60 * 60 });
+  return json({ id });
+}
+
 async function handleLogs(request, env, id) {
   const pending = await env.REPORTS.get(`id:${id}`, "json");
   if (!pending) return json({ error: "unknown report" }, 404);
@@ -224,11 +259,16 @@ async function handleLogs(request, env, id) {
   if (!env.LOGS) return json({ error: "no log store" }, 501);
 
   const now = Date.now();
-  const key = logObjectKey({ fingerprint: pending.fingerprint, id, now });
+  // A finished job's archive files under "ok" where a failure's fingerprint
+  // would be, "<yyyy-mm>/ok/<id>.tar.gz", and that is all it does: there is no
+  // issue to name it in.
+  const record = !!pending.summary && pending.summary.outcome === "ok";
+  const key = logObjectKey({ fingerprint: record ? "ok" : pending.fingerprint, id, now });
   await env.LOGS.put(key, body, {
     httpMetadata: { contentType: "application/gzip" },
     customMetadata: pending.summary || {},
   });
+  if (record) return json({ ok: true });
   await env.REPORTS.put(`log:${id}`, key, { expirationTtl: 40 * 24 * 60 * 60 });
 
   // The issue was written before the archive arrived, so the line is added to
@@ -250,6 +290,7 @@ export default {
     const { pathname } = new URL(request.url);
     try {
       if (request.method === "POST" && pathname === "/report") return await handleReport(request, env, ctx);
+      if (request.method === "POST" && pathname === "/record") return await handleRecord(request, env, ctx);
       const upload = /^\/report\/([0-9a-f]{32})\/logs$/.exec(pathname);
       if (request.method === "POST" && upload) return await handleLogs(request, env, upload[1]);
       // No way out for an archive: the relay only takes logs in. Reading one
