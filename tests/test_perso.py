@@ -943,6 +943,60 @@ def test_dub_video_names_the_project_on_perso_by_its_title(monkeypatch, tmp_path
     assert "title" not in bodies[1]
 
 
+def test_transcribe_and_separate_name_the_project_on_perso_by_its_title(monkeypatch, tmp_path):
+    # Speech-to-text and separation alone named their projects after the
+    # upload, input.mp4, too (owner, 2026-10-22); the official plugin's
+    # requestStt and requestAudioSeparation send a title as requestTranslation does.
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "input.mp4"
+    video.write_bytes(b"v")
+    bodies = []
+
+    def keeping(post):
+        def f(url, json=None, headers=None, timeout=None):
+            bodies.append((url, json))
+            return post(url, json=json, headers=headers, timeout=timeout)
+        return f
+
+    done = {"progressReason": "Completed", "hasFailed": False}
+    _install_fake_perso_http(monkeypatch, _load_script(), progress_sequence=[done, done])
+    monkeypatch.setattr(perso_client_module.httpx, "post", keeping(perso_client_module.httpx.post))
+    PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0).transcribe(str(video), title="Paris steps")
+    PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0).transcribe(str(video))
+    _install_fake_perso_sep_http(monkeypatch, progress_sequence=[done, done])
+    monkeypatch.setattr(perso_client_module.httpx, "post", keeping(perso_client_module.httpx.post))
+    PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0).separate(
+        str(video), str(tmp_path / "w1"), title="Paris steps")
+    PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0).separate(str(video), str(tmp_path / "w2"))
+    for tail in ("/stt", "/audio-separation"):
+        named, unnamed = [body for url, body in bodies if url.endswith(tail)]
+        assert named["title"] == "Paris steps", tail
+        assert "title" not in unnamed, tail
+
+
+def test_the_pipeline_names_what_it_sends_to_perso_by_the_title_it_is_given():
+    from app import pipeline as pipeline_module
+
+    class FakeClient:
+        def __init__(self):
+            self.titles = []
+
+        def separate(self, video_path, out_dir, title=None):
+            self.titles.append(("separate", title))
+            return {"vocals": "/w/vocals.wav", "background": "/w/background.wav"}
+
+        def transcribe(self, video_path, title=None):
+            self.titles.append(("transcribe", title))
+            return _load_script()
+
+    fake = FakeClient()
+    pipeline_module._separate_with_perso("/v/in.mp4", "/w", perso_client=fake, cancel_check=lambda: False,
+                                         on_notice=None, log=lambda m: None, title="Paris steps")
+    pipeline_module._stage_transcribe_perso("/v/in.mp4", fake, lambda: False, None, lambda m: None,
+                                            title="Paris steps")
+    assert fake.titles == [("separate", "Paris steps"), ("transcribe", "Paris steps")]
+
+
 def test_dub_video_sends_the_region_tag_when_the_language_has_one(monkeypatch, tmp_path):
     # Perso tells English (UK) from English (US) by languageTag, not by code
     # (app/languages.py); a plain code carries no tag at all.

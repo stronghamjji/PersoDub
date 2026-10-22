@@ -203,6 +203,10 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
                                  language_code, job.get("num_speakers"), log,
                                  tts_model=job.get("perso_model"),
                                  title=job.get("title") or job.get("project"))
+        # A stage sent to Perso is named on its workspace as the cloud dub is
+        # (owner, 2026-10-22); said only then, for the same fakes.
+        to_perso = not voices_only and "perso" in (job.get("stt_engine"), job.get("separation"))
+        perso_name = (job.get("title") or job.get("project")) if to_perso else None
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,
@@ -223,6 +227,7 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
             log=log,
             # Only said when it is true: the run_dub fakes in tests predate it.
             **({"resume": True} if resume else {}),
+            **({"title": perso_name} if perso_name else {}),
         )
 
     return work_now

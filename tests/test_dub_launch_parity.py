@@ -145,6 +145,10 @@ def _as_the_pipeline_reads_it(kw, work):
     # beside the recording.
     if out.get("resume") is False:
         out.pop("resume")
+    # The project's name likewise (2026-10-22): said only when a stage goes to
+    # Perso, which names the upload by it, so the rest have none.
+    if out.get("title") is None:
+        out.pop("title")
     return out
 
 
@@ -226,6 +230,8 @@ RETRY = {
     "log": "wired",
     "cancel_check": "wired",
     "on_notice": "wired",
+    # What Perso's workspace calls the upload: the project's name.
+    "title": "saved",
 }
 
 # A redub: the script goes back in, only the voices are made again.
@@ -264,6 +270,7 @@ REARM = {
     "log": "wired",
     "cancel_check": "wired",
     "on_notice": "wired",
+    "title": "queued",
 }
 
 
@@ -660,6 +667,22 @@ def test_a_cloud_dub_is_named_on_perso_as_the_project_is_on_the_screen(recorder,
                         dub_mode="perso", title="Renamed on the screen")
     dub_api._dub_target_for(state.job_store.get(jid))(lambda msg: None)
     assert recorder["cloud"][-1]["title"] == "Renamed on the screen"
+
+
+def test_a_local_dub_names_what_it_sends_to_perso_as_the_project(recorder, tmp_path):
+    """Perso's speech-to-text and separation alone named their uploads input
+    too (owner, 2026-10-22). A local dub with either on Perso passes the name
+    down; one that sends Perso nothing has no name to give."""
+    jid, _ = _saved_job(tmp_path, name="made-as", language="Korean", language_code="ko",
+                        stt_engine="perso", title="Paris steps")
+    dub_api._dub_target_for(state.job_store.get(jid))(lambda msg: None)
+    assert recorder["run_dub"][-1]["title"] == "Paris steps"
+    jid, _ = _saved_job(tmp_path, name="half", language="Korean", language_code="ko", separation="perso")
+    dub_api._dub_target_for(state.job_store.get(jid))(lambda msg: None)
+    assert recorder["run_dub"][-1]["title"] == "half"
+    jid, _ = _saved_job(tmp_path, name="all-here", language="Korean", language_code="ko")
+    dub_api._dub_target_for(state.job_store.get(jid))(lambda msg: None)
+    assert "title" not in recorder["run_dub"][-1]
 
 
 # ---------------------------------------------------------------------------

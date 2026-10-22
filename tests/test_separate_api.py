@@ -52,8 +52,8 @@ def separated(monkeypatch):
     calls it was given."""
     calls = []
 
-    def fake(video_path, work, engine, *, cancel_check, on_notice, log, seconds=None):
-        calls.append({"video": video_path, "engine": engine, "seconds": seconds})
+    def fake(video_path, work, engine, *, cancel_check, on_notice, log, seconds=None, title=None):
+        calls.append({"video": video_path, "engine": engine, "seconds": seconds, "title": title})
         log("1/6 Separating background audio…")
         paths = [os.path.join(work, name) for name in ("vocals.wav", "background.wav")]
         for p in paths:
@@ -171,6 +171,8 @@ def test_perso_needs_its_key_and_a_workspace_and_runs_beside_the_line(separated,
     job = _wait(_start(engine="perso").json()["job_id"])
     assert job["status"] == "done" and job["separation"] == "perso"
     assert separated[-1]["engine"] == "perso"
+    # Named on Perso's workspace as the project is here, not input (owner, 2026-10-22).
+    assert separated[-1]["title"] == job["project"]
 
 
 # --- following it -----------------------------------------------------------

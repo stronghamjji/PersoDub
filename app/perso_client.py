@@ -677,8 +677,11 @@ class PersoClient:
         return media_seq
 
     def separate(self, video_path: str, out_dir: str,
-                 space_seq: Optional[int] = None) -> dict:
+                 space_seq: Optional[int] = None, title: Optional[str] = None) -> dict:
         """Voice/background separation through Perso -> {"vocals", "background"}.
+
+        `title` names the project on Perso's workspace, as dub_video's does
+        (the plugin's requestAudioSeparation sends it the same way).
 
         Mirrors the official plugin's flow (api_adapter.mjs): upload -> POST
         audio-separation -> poll -> read the project detail's downloadPathInfo.
@@ -692,7 +695,7 @@ class PersoClient:
 
         r = httpx.post(
             f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/audio-separation",
-            json={"mediaSeq": media_seq, "isVideoProject": True},
+            json={"mediaSeq": media_seq, "isVideoProject": True, **({"title": title} if title else {})},
             headers=self._headers, timeout=120,
         )
         _raise_for_status(r)
@@ -1073,11 +1076,14 @@ class PersoClient:
             raise RuntimeError(f"Perso served no download link for {target}")
         return self.download_media(link, out_path, what=f"perso {target}")
 
-    def transcribe(self, video_path: str, space_seq: Optional[int] = None) -> list:
+    def transcribe(self, video_path: str, space_seq: Optional[int] = None,
+                   title: Optional[str] = None) -> list:
         """Upload one video to Perso STT and return scriptTimestamps (JSON).
 
         The return value is a list of segments (each: order/speaker_name/text_original/words).
-        Use perso_to_cues() to convert it into our cue format.
+        Use perso_to_cues() to convert it into our cue format. `title` names
+        the project on Perso's workspace, as dub_video's does (the plugin's
+        requestStt sends it the same way).
         """
         space = int(space_seq) if space_seq is not None else self.space_seq
         media_seq = self._upload_media(video_path, space)
@@ -1085,7 +1091,7 @@ class PersoClient:
         # (4) Create the STT project -> projectSeq
         r = httpx.post(
             f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/stt",
-            json={"mediaSeq": media_seq, "isVideoProject": True},
+            json={"mediaSeq": media_seq, "isVideoProject": True, **({"title": title} if title else {})},
             headers=self._headers, timeout=120,
         )
         _raise_for_status(r)
