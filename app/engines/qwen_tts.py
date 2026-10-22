@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 import httpx
 
-from app import runtime
+from app import i18n, runtime
 from app.config import QWEN_TEMPERATURE, QWEN_TOP_P, QWEN_VOICE_MODE
 from app.engines.base import (
     SynthesisCut,
@@ -70,6 +70,18 @@ def wait_seconds(slot: Optional[float]) -> float:
     """How long to wait for one line's answer before giving up on it."""
     base = TTS_WAIT_UNKNOWN if not slot or slot <= 0 else slot * TTS_WAIT_FACTOR + TTS_WAIT_EXTRA
     return round(base * PERSODUB_TTS_WAIT_SCALE, 2)
+
+
+def _no_words_to_clone_with() -> ValueError:
+    """An ICL clone without the words its reference says, which the model
+    refuses. The English names the cause for the log; the screen says it in
+    the user's language (a failed job's error_shown, app/jobs.py), with the
+    button that runs the dub again."""
+    e = ValueError("Qwen3-TTS ICL voice clone requires ref_text (the transcript of the "
+                   "reference audio); empty ref_text is rejected by the model.")
+    e.shown = i18n.t("Could not find where this speaker talks, so their voice could not be copied. "
+                     "Press Start over.")
+    return e
 
 
 class QwenTTSEngine(TTSEngine):
@@ -187,9 +199,7 @@ class QwenTTSEngine(TTSEngine):
         """
         resolved_mode = mode or (QWEN_VOICE_MODE if ref_text and ref_text.strip() else "timbre")
         if resolved_mode == "icl" and (not ref_text or not ref_text.strip()):
-            raise ValueError(
-                "Qwen3-TTS ICL voice clone requires ref_text (the transcript of the "
-                "reference audio); empty ref_text is rejected by the model.")
+            raise _no_words_to_clone_with()
         data = {"mode": resolved_mode}
         if ref_text:
             data["ref_text"] = ref_text
@@ -214,9 +224,7 @@ class QwenTTSEngine(TTSEngine):
         # never needs ref_text.)
         resolved_mode = req.mode or QWEN_VOICE_MODE
         if req.ref_audio and not req.ref_text and resolved_mode == "icl":
-            raise ValueError(
-                "Qwen3-TTS ICL voice clone requires ref_text (the transcript of the "
-                "reference audio); empty ref_text is rejected by the model.")
+            raise _no_words_to_clone_with()
         form = self._build_form(req)
         files = None
         ref_file = None

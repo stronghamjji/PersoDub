@@ -521,7 +521,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       if (d.status === "failed") {
         stopWatching();
         $("dlRow").hidden = true;
-        $("projectError").textContent = d.error || t("Could not fetch the video.");
+        $("projectError").textContent = d.error || t("Could not fetch the video from this link. Paste it again in a moment, or drag the video file in.");
         return;
       }
       if (d.status === "ready") { stopWatching(); playHeldVideo(d); return; }

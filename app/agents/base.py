@@ -201,7 +201,10 @@ def explain_exit(code: int, output: str, agent_name: str = "The assistant",
                 "message": "The assistant stopped partway. Please try again."}
 
     if _says(_NOT_LOGGED_IN, text):
-        how = (" Run `%s` in Terminal." % login_command) if login_command else ""
+        # The panel's own Sign in above its box, as SIGNED_OUT_LINE says it,
+        # never a terminal command: an assistant with a sign-in (login_command)
+        # is signed in from there.
+        how = " Press Sign in above." if login_command else ""
         return {"kind": "error", "detail": tail,
                 "message": "%s is not signed in.%s" % (agent_name, how)}
 
@@ -245,12 +248,13 @@ _SIGNED_OUT = {
     "claude": re.compile(r"not\s+logged\s+in|please\s+run\s*/login", re.I),
 }
 
-# What to say instead. Each names the one command that fixes it, because
-# "sign in" on its own leaves the reader looking for a button that is not there.
+# What to say instead. Each names the button that fixes it, the Sign in the
+# panel shows above its box for an assistant that is signed out
+# (ui/src/agentStrip.mjs) -- no terminal command.
 SIGNED_OUT_LINE = {
     # Codex signs in through the app's own window now (one ChatGPT sign-in).
     "codex": "Codex is not signed in. Press Sign in above.",
-    "claude": "Claude is not signed in. Run claude in Terminal, then /login.",
+    "claude": "Claude is not signed in. Press Sign in above.",
 }
 
 

@@ -122,6 +122,8 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
         if (downloadFrom) {
           shellLog(`DOWNLOAD FAILED update after ${secondsSince(downloadFrom)}s: ${updateErrorText(err)}`, "ERROR");
           downloadFrom = null;
+          // The window says it, not a button left at its last percent.
+          announce("download-failed");
         } else if (checkFrom) {
           shellLog(`UPDATE CHECK FAILED (${secondsSince(checkFrom)}s): ${updateErrorText(err)}`, "ERROR");
           checkFrom = null;

@@ -41,6 +41,16 @@ test("a check that found no answer says so, not that PersoDub is up to date", ()
   assert.equal(updateCardView({ phase: "check-failed" }).live, false);
 });
 
+test("a download that broke shows no button and says what to do, and the card still has its dot", () => {
+  const v = updateWindowView({ ...DOWNLOADING, phase: "download-failed" }, { current: "0.7.0", dubRunning: true });
+  assert.equal(v.title, "You can update to the latest version");
+  assert.equal(v.next, "New version: 0.7.1");
+  assert.equal(v.button, null);
+  assert.equal(v.running,
+    "Could not download the update. Check your internet connection, then open PersoDub again and it downloads anew.");
+  assert.deepEqual(updateCardView({ ...DOWNLOADING, phase: "download-failed" }), { live: true, tip: "Update available", title: "" });
+});
+
 test("a from-source run's 0.0.0 is not shown as a version", () => {
   assert.equal(updateWindowView(null, { current: "0.0.0" }).current, "");
 });

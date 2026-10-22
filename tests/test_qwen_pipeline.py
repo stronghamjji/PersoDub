@@ -728,7 +728,8 @@ def test_synth_lines_scoring_unavailable_raises_loud_notice(tmp_path, monkeypatc
                    on_notice=notices.append)
     assert len(notices) == 1
     assert notices[0]["type"] == "take_scoring_unavailable"
-    assert "take 0" in notices[0]["message"]
+    assert "first take" in notices[0]["message"]
+    assert "QWEN_SCORER_PYTHON" not in notices[0]["message"]
 
 
 def test_synth_lines_scoring_ok_fires_no_notice(tmp_path, monkeypatch):

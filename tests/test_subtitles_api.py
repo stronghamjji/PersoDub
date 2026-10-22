@@ -123,6 +123,8 @@ def test_extract_relays_perso_being_out_of_credits(monkeypatch, tmp_path):
     fake.transcribe = broke
     r = client.post("/api/subtitles/extract", json={"video_path": str(video)})
     assert r.status_code == 409
+    # The sentence a dub says for it, not Perso's own English.
+    assert r.json()["detail"] == "Perso credits are used up. Recharge to continue."
     assert "credit" in r.json()["detail"].lower()
 
 

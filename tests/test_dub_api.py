@@ -1219,6 +1219,9 @@ def test_dub_start_records_the_engines_the_job_was_made_with(monkeypatch, tmp_pa
     job = client.get(f"/api/dub/jobs/{jid}").json()
     assert job["stt_engine"] == "perso"
     assert job["translator"] == "gemini"
+    # ...and the model it translates with, which the screen names (B16).
+    from app.config import GEMINI_MODEL
+    assert job["translator_model"] == GEMINI_MODEL
     assert job["tts"] == "qwen3"
     assert job["quality"] == 4
 
@@ -1236,6 +1239,7 @@ def test_dub_start_records_the_engines_the_job_was_made_with(monkeypatch, tmp_pa
     else:
         raise AssertionError("job.json never became readable")
     assert saved["stt_engine"] == "perso" and saved["translator"] == "gemini"
+    assert saved["translator_model"] == GEMINI_MODEL
     assert saved["tts"] == "qwen3" and saved["quality"] == 4
 
 
@@ -1273,7 +1277,7 @@ def test_dub_retry_repeats_the_first_runs_engines(monkeypatch, tmp_path):
     monkeypatch.setattr(dub_api, "run_dub", lambda **kw: calls.append(kw))
     monkeypatch.setattr(dub_api, "default_stt_engine", lambda: "")
     jid = _restored_job(tmp_path, language_code="ko", stt_engine="perso",
-                        translator="gemini", tts="qwen3", quality=4)
+                        translator="gemini", translator_model="gemini-1.5-pro", tts="qwen3", quality=4)
 
     r = client.post(f"/api/dub/jobs/{jid}/retry")
     assert r.status_code == 200
@@ -1284,6 +1288,9 @@ def test_dub_retry_repeats_the_first_runs_engines(monkeypatch, tmp_path):
     # ...and the new job carries them, so its own finished screen says the same.
     new = client.get(f"/api/dub/jobs/{r.json()['job_id']}").json()
     assert new["stt_engine"] == "perso" and new["translator"] == "gemini" and new["quality"] == 4
+    # Translated again today, so with today's model of that translator.
+    from app.config import GEMINI_MODEL
+    assert new["translator_model"] == GEMINI_MODEL
 
 
 def test_dub_retry_of_a_job_saved_before_the_engines_were_kept(monkeypatch, tmp_path):

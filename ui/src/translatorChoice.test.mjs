@@ -3,7 +3,7 @@
 // Run with: node --test ui/src/translatorChoice.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { translatorChoices, resetsSentence, translatorName } from "./translatorChoice.mjs";
+import { translatorChoices, resetsSentence, withTranslator } from "./translatorChoice.mjs";
 
 const READY_ROWS = [
   { id: "ollama-runtime", state: "ready", bytes: 300000000 },
@@ -68,7 +68,8 @@ test("the reset time comes out of the notice, or nothing", () => {
 });
 
 test("a translator's name for the screen, or nothing for one it does not know", () => {
-  assert.equal(translatorName("chatgpt"), "ChatGPT");
-  assert.equal(translatorName("hunyuan"), "Hunyuan");
-  assert.equal(translatorName(undefined), "");
+  assert.equal(withTranslator("chatgpt"), "with ChatGPT");
+  assert.equal(withTranslator("hunyuan"), "with Hunyuan");
+  assert.equal(withTranslator("perso"), "with Perso");
+  assert.equal(withTranslator(undefined), "");
 });

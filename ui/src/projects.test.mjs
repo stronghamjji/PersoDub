@@ -170,7 +170,7 @@ test("an empty list invites a video; an unreachable engine says so instead", asy
   t.after(down.log.restore);
   await down.api.renderHistory();
   assert.equal(down.$("historyList").innerHTML,
-    '<div class="history-empty">PersoDub is not running. Restart the app.</div>');
+    '<div class="history-empty">The connection to PersoDub dropped for a moment. If it stays this way, quit and reopen PersoDub.</div>');
 });
 
 test("folded away, the sidebar's list is left as it is, and the Home grid still gets the list", async (t) => {

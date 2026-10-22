@@ -668,8 +668,9 @@ test("a dub refused because the voice engine is not running is retried after the
   assert.match(html, /async function restartVoiceEngine\(errorEl\)/);
   // serverText: the engine's English, which the refusal is known by (ui/src/format.mjs).
   assert.match(html, /voice engine is not running\/\.test\(serverText\(e\)\)\) \{\n\s*const restart = await restartVoiceEngine\(errorEl\);/);
-  // When it does not come back, why is said under the refusal, not thrown away.
-  assert.match(html, /errorEl\.textContent = \[errorText\(e\), restart\.why\]\.filter\(Boolean\)\.join\("\\n"\);/);
+  // When it does not come back, why is said under the refusal, not thrown away
+  // -- or alone, when the memory ran out again and it says all of it (A37).
+  assert.match(html, /errorEl\.textContent = restart\.alone \? restart\.why : \[errorText\(e\), restart\.why\]\.filter\(Boolean\)\.join\("\\n"\);/);
   // And it is scrolled into view: under the advanced options it was below the fold.
   const start = html.slice(html.indexOf("async function submitDubStart"));
   const refused = start.slice(start.indexOf("} catch (e) {"), start.indexOf("return false;"));
@@ -1314,11 +1315,14 @@ test("with no video there is no play sign over the panel and the foot's play is 
 });
 
 // The script's three buttons (mockup script-one-ui): always in one place, in
-// one order, each with its hover text; no menu, and no "Proofread" on screen.
+// one order, each with its hover text (scriptTable.mjs writes it: what each
+// does depends on the lines); no menu, and no "Proofread" on screen. Beside
+// the line count, what translated the script (B15).
 test("the Script pane's head has Translate again, Remake voices and All at once, and no menu", () => {
   const html = readPage();
   const head = html.slice(html.indexOf('id="dubbingPaneHead"'), html.indexOf('id="doneNotice"'));
-  assert.match(head, /id="retranslateBtn"[^>]*title="Translation only\."[^]*Translate again<\/button>[^]*id="remakeVoicesBtn"[^>]*title="Changed lines only\." disabled[^]*Remake voices<span id="remakeVoicesCount"><\/span><\/button>[^]*id="allAtOnceBtn"[^>]*title="Translation and voices\."[^]*All at once<\/button>/);
+  assert.match(head, /<span class="m" id="scriptCount"><\/span>\s*<span class="sc-model" id="scriptModel"><\/span>/);
+  assert.match(head, /id="retranslateBtn" type="button">[^]*Translate again<\/button>[^]*id="remakeVoicesBtn" type="button" disabled>[^]*Remake voices<span id="remakeVoicesCount"><\/span><\/button>[^]*id="allAtOnceBtn" type="button">[^]*All at once<\/button>/);
   assert.match(head, /id="scriptChanged" hidden/, "the strip under the head");
   assert.ok(!html.includes("retranslateMenu") && !html.includes("retr-menu"), "no menu");
   const table = readFileSync(new URL("./scriptTable.mjs", import.meta.url), "utf8");

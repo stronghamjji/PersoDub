@@ -58,7 +58,8 @@ class FetchError(RuntimeError):
             "geo": t("This video isn't available in your region."),
             "gone": t("This video is private or has been deleted."),
             "unsupported": t("This site isn't supported yet."),
-        }.get(self.reason, t("Could not fetch the video."))
+        }.get(self.reason, t("Could not fetch the video from this link. "
+                             "Paste it again in a moment, or drag the video file in."))
 
 
 # Ordered: the first group whose needle appears in stderr wins. "network" is
@@ -91,7 +92,7 @@ _PATTERNS: List[Tuple[str, Tuple[str, ...], str]] = [
         "unsupported url", "is not a valid url",
     ), "This site isn't supported yet."),
 ]
-_UNKNOWN = ("unknown", "Could not fetch the video.")
+_UNKNOWN = ("unknown", "Could not fetch the video from this link. Paste it again in a moment, or drag the video file in.")
 
 
 def classify(stderr: str) -> Tuple[str, str]:

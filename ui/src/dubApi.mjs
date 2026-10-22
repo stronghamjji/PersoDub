@@ -172,6 +172,10 @@ export function buildDubFormData(opts) {
   return fd;
 }
 
+// The translators that run in the translation runtime (Ollama) on this
+// computer, by the names the warning gives them.
+const RUNTIME_TRANSLATORS = { hunyuan: "Hunyuan", gemma: "Gemma 3" };
+
 /**
  * Progressive-enhancement decision logic for GET /api/engines: given the
  * engine-availability payload and the Upload form's current translate/STT
@@ -184,8 +188,11 @@ export function buildDubFormData(opts) {
  * The warning is the voice engine's, when it failed to start and the dub is
  * to run on this computer: said before Start dubbing, not only after it
  * (issue #187: the reason came at the very end, after every choice was made).
+ * The translation runtime's the same way when Hunyuan or Gemma 3 is to
+ * translate, and a computer whose memory makes the dub slow (app/room.py
+ * ram_warning, GET /api/engines ram_slow): one line each.
  *
- * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available, local_engines}
+ * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available, local_engines, ram_gb, ram_slow}
  * @param {Object} current - {translate, stt, dubMode} the Upload form's current select values
  * @returns {{disable: {gemma: boolean, gemini: boolean, perso: boolean}, translate: string, warning: (string|null)}}
  */
@@ -198,12 +205,21 @@ export function applyEngineAvailability(av, current) {
     gemini: !av.gemini_available,
     perso: !av.perso_available,
   };
-  // Its message is the engine's sentence of why (app/engines_status.py),
-  // kept in English there and said in the page's language here.
+  const local = current.dubMode !== "perso";
+  // Its message is the engine's sentence of why and what to do
+  // (app/engines_status.py), kept in English there and said in the page's
+  // language here, on its own: a line above it said the same thing again.
   const voice = (av.local_engines || {}).voice || {};
-  const warning = current.dubMode !== "perso" && voice.state === "failed"
-    ? `${t("The voice engine is off. This computer cannot dub until it starts.")}\n${t(voice.message || "")}`.trim()
+  const voiceOff = local && voice.state === "failed" ? t(voice.message) : null;
+  const runtime = (av.local_engines || {}).translation || {};
+  const name = RUNTIME_TRANSLATORS[current.translate];
+  const translatorOff = local && name && runtime.state === "failed"
+    ? t("The translation engine could not start, so {name} cannot translate. Choose another translator, or quit and reopen PersoDub.", { name })
     : null;
+  const slow = local && av.ram_gb && (av.ram_slow || []).includes(current.translate)
+    ? t("This computer has {n} GB of memory, so dubbing may take a while. Dubbing with the Perso API uses almost no memory.", { n: av.ram_gb })
+    : null;
+  const warning = [voiceOff, translatorOff, slow].filter(Boolean).join("\n") || null;
   return { disable, translate: current.translate, warning };
 }
 
@@ -259,7 +275,7 @@ export async function probeSource(url, { baseUrl = "" } = {}) {
   });
   if (!res.ok) {
     const detail = (await res.json().catch(() => ({}))).detail || {};
-    const err = new Error(detail.message || t("Could not fetch the video."));
+    const err = new Error(detail.message || t("Could not fetch the video from this link. Paste it again in a moment, or drag the video file in."));
     err.reason = detail.reason || "unknown";
     throw err;
   }
@@ -293,7 +309,7 @@ export async function startDownload(url, { baseUrl = "" } = {}) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
-  if (!res.ok) throw await downloadError(res, t("Could not fetch the video."));
+  if (!res.ok) throw await downloadError(res, t("Could not fetch the video from this link. Paste it again in a moment, or drag the video file in."));
   return (await res.json()).id;
 }
 
@@ -770,11 +786,30 @@ const ENGINE_LABELS = {
   gemma: { label: "Gemma 3", api: false },
   qwen: { label: "Qwen", api: false },
   hunyuan: { label: "Hunyuan 1.8B", api: false },
-  gemini: { label: "Gemini", api: true },
+  gemini: { label: "Gemini API", api: true },
   chatgpt: { label: "ChatGPT", api: false },
   vertex: { label: "Vertex", api: true },
   qwen3: { label: "Qwen3-TTS", api: false },
 };
+
+/**
+ * What translated a job's script, as the screens name it: "ChatGPT
+ * (gpt-5.6-luna)", "Gemini API (Flash)", "Hunyuan 1.8B", "Gemma 3", "Perso".
+ * The model in brackets is the one the job kept (translator_model, app/api/dub.py)
+ * for a translator whose name does not say it; a job from before it was kept
+ * names the translator alone, since today's model may not be the one that
+ * made it. "" when the job names none.
+ */
+export function translatorLabel(job) {
+  const j = job || {};
+  if (j.dub_mode === "perso") return ENGINE_LABELS.perso.label;
+  const id = String(j.translator || "").toLowerCase();
+  const known = ENGINE_LABELS[id];
+  if (!known) return "";
+  const model = String(j.translator_model || "");
+  const words = !model ? "" : id === "chatgpt" ? model : id === "gemini" ? (/flash/i.test(model) ? "Flash" : model) : "";
+  return words ? `${known.label} (${words})` : known.label;
+}
 
 /**
  * A voice engine's name with the model behind it, from GET /api/engines'
@@ -829,6 +864,8 @@ export function engineChips(job, { withQuality = true, withTts = true, voiceMode
   }
   const tts = chips.find((c) => c.role === "TTS");
   if (tts) tts.label = voiceLabel(String(j.tts).toLowerCase(), voiceModels, true);
+  const translation = chips.find((c) => c.role === "Translation");
+  if (translation) translation.label = translatorLabel(j);
   // A Perso dubbing names the voice model it was made with: "Perso Oriole".
   const dubbing = chips.find((c) => c.role === "Dubbing");
   if (dubbing && modelLabel(j.perso_model)) dubbing.label += ` ${modelLabel(j.perso_model)}`;

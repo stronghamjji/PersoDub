@@ -29,7 +29,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import config, dub_launch, engines_status, perso_client, perso_edit, perso_materialize, state
+from app import config, dub_launch, engines_status, netlog, perso_client, perso_edit, perso_materialize, state
 from app import setup as dub_setup
 from app.api._launch import check_space
 from app.api._shared import script_work_dir
@@ -572,17 +572,28 @@ def _perso_says(e: Exception) -> tuple:
         return 409, t("This dubbing's Perso voice cannot remake one line at a time. "
                       "Use All at once to remake every line.")
     if isinstance(e, PersoProjectFailedError):
-        return 502, str(e)
+        # Ours, with what to press, and on a line under it Perso's own words
+        # and code -- as a failed dub shows them (app/pipeline.py raise_notice).
+        said = t("Perso said: {said}", said=e.reason) if e.reason else t("Perso said: no reason given")
+        return 502, "%s\n%s" % (t("Perso could not finish this job. Press it again in a moment."),
+                                 "%s (%s)" % (said, e.code) if e.code else said)
     if isinstance(e, (httpx.TimeoutException, TimeoutError)):
         return 504, t("Perso did not answer in time. The change may still have been "
                       "made: wait a minute, then press again.")
     if isinstance(e, httpx.HTTPStatusError):
         return 409, t("Perso did not accept the change ({reason}).", reason=short_reason(e))
     if isinstance(e, httpx.HTTPError):
+        # A company network or security program refusing Perso's certificate:
+        # checking the connection on the same network changes nothing.
+        if netlog.certificate_refused(str(e)):
+            return 503, t("A company network or security program blocked the connection. "
+                          "Connect to another Wi-Fi or a hotspot, then press it again.")
         return 503, t("Could not reach Perso. Check the connection, then try again.")
     if isinstance(e, FileNotFoundError):
         return 409, short_reason(e)
-    return 500, t("Editing through Perso failed ({kind}).", kind=type(e).__name__)
+    # The type name for the log only: on screen it is a program's word.
+    logger.warning("Editing through Perso failed (%s)", type(e).__name__)
+    return 500, t("Perso could not make the change. Press it again in a moment.")
 
 
 def _perso_error(e: Exception) -> HTTPException:

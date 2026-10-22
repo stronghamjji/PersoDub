@@ -42,7 +42,8 @@ def test_unplanned_failure_returns_the_generic_500(monkeypatch):
     monkeypatch.setattr(engines_status, "gemma_available", boom)
     r = quiet_client.get("/api/engines")
     assert r.status_code == 500
-    assert r.json() == {"detail": "An internal error occurred. Details are in the app log."}
+    assert r.json() == {"detail": "Something went wrong in PersoDub. Try again, and if it happens again, "
+                                  "quit and reopen PersoDub."}
     assert SECRET not in r.text
     assert "KeyError" not in r.text
 
@@ -54,7 +55,7 @@ def test_http_exceptions_are_left_alone():
     assert r.json()["detail"] == "Unknown job: no-such-job"
 
 
-def test_translate_failure_names_the_type_not_the_message(monkeypatch):
+def test_translate_failure_says_what_to_do_and_logs_the_type_not_the_message(monkeypatch, caplog):
     class Broken:
         def translate(self, *a, **kw):
             raise RuntimeError("upstream said: " + SECRET)
@@ -63,7 +64,11 @@ def test_translate_failure_names_the_type_not_the_message(monkeypatch):
     r = client.post("/api/translate", json={"texts": ["hi"], "target_lang": "Korean"})
     assert r.status_code == 500
     assert SECRET not in r.text
-    assert "RuntimeError" in r.json()["detail"]
+    # A program's word for the failure stays in the log, off the screen.
+    assert r.json()["detail"] == ("Could not translate it. Try again, and if it still fails, "
+                                  "choose another translator in Settings.")
+    assert "RuntimeError" in caplog.text
+    assert SECRET not in caplog.text
 
 
 # --- /api/tts/say: the three ways speaking one line is known to fail --------

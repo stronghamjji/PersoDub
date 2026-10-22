@@ -131,14 +131,15 @@ def test_an_unknown_assistant_is_refused():
     assert r.status_code == 422
 
 
-def test_an_assistant_without_a_driver_is_refused_with_the_pickers_reason(monkeypatch):
+def test_an_assistant_without_a_driver_is_refused_with_what_to_do(monkeypatch):
     monkeypatch.setitem(agent_api.AGENTS, "someday", {
         "binary": "someday", "name": "Someday", "vendor": "Nobody",
         "driver": None, "reason": "this one is not wired up yet",
     })
     r = client.post("/api/agent/chat", json={"message": "안녕", "agent": "someday"})
     assert r.status_code == 501
-    assert _rows()["someday"]["reason"] in r.json()["detail"]
+    # What to do, in words; its own reason is under its name in the picker.
+    assert r.json()["detail"] == "This assistant cannot be used in Dub Agent yet. Pick another assistant."
 
 
 def _capture(monkeypatch, tmp_path):

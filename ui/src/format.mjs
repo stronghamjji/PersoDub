@@ -89,11 +89,11 @@ export function escapeHtml(s) {
 // Safari and Firefox, "network error" for an answer cut off halfway). None of
 // them tells a person what to do, so the screen says this instead, in the
 // page's language.
-const notRunning = () => t("PersoDub is not running. Restart the app.");
+const notRunning = () => t("The connection to PersoDub dropped for a moment. If it stays this way, quit and reopen PersoDub.");
 const NETWORK_FAILURE = /^(TypeError: )?(Failed to fetch|Load failed|NetworkError when attempting to fetch resource\.?|network error)$/i;
 // An answer the screen has no sentence for: a list of field errors, or a page
 // of HTML where a sentence was expected.
-const noSentence = () => t("That did not work. Try again.");
+const noSentence = () => t("Something went wrong in PersoDub. Try again, and if it happens again, quit and reopen PersoDub.");
 
 // Server errors arrive as the raw response body, so a FastAPI detail shows up
 // as JSON unless it is unwrapped here. Every error line on screen goes through
@@ -171,12 +171,18 @@ export function plainFailure(text) {
  */
 export function restartFailure(reason) {
   const text = String(reason ?? "").trim();
-  if (/os error 1455|paging file|out of memory|not enough memory|MemoryError|DefaultCPUAllocator/i.test(text)) {
-    return t("Starting it again did not work: this computer ran out of memory.");
+  if (restartRanOutOfMemory(text)) {
+    return t("Starting it again did not work because there is still not enough memory. Close more programs or restart your computer. Dubbing with the Perso API uses almost no memory.");
   }
   if (/timed out/i.test(text)) return t("Starting it again did not work: it took too long to start.");
   const plain = plainFailure(text);
   return plain && plain === text ? `${t("Starting it again did not work.")} ${plain}` : t("Starting it again did not work.");
+}
+
+/** Whether restartFailure's reason is the memory running out: its line then
+ * says all of it, what to close and the Perso API, and is said on its own. */
+export function restartRanOutOfMemory(reason) {
+  return /os error 1455|paging file|out of memory|not enough memory|MemoryError|DefaultCPUAllocator/i.test(String(reason ?? ""));
 }
 
 /** A job's log lines for Raw log, with its failure text added at the end when

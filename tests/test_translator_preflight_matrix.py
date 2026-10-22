@@ -19,7 +19,7 @@ from typing import NamedTuple, Optional
 import pytest
 from fastapi import HTTPException
 
-from app import config, engines_status
+from app import engines_status
 from app.api import dub as dub_api
 
 
@@ -104,9 +104,8 @@ def _runtime_not_running(engine):
             "running. Quit and reopen PersoDub, or choose Gemini in the Translation dropdown.")
 
 
-def _not_pulled(engine, tag):
-    return (f"Local {engine} translation is not available on this machine (the model is not pulled). "
-            f"Choose Gemini in the Translation dropdown, or run: ollama pull {tag}")
+def _not_pulled(engine):
+    return f"The {engine} translation model is not downloaded yet. Choose another translator."
 
 
 # ── the table ───────────────────────────────────────────────────────────────
@@ -137,7 +136,7 @@ def _local_model_rows(t, engine):
     ]
 
 
-QWEN_NOT_PULLED = Refused(422, _not_pulled("Qwen", config.OLLAMA_QWEN_MODEL))
+QWEN_NOT_PULLED = Refused(422, _not_pulled("Qwen"))
 
 CASES = [
     # ChatGPT: the sign-in, unless a ready-made script means nothing is translated.

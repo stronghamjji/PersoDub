@@ -67,6 +67,19 @@ def described(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {said}" if said else type(exc).__name__
 
 
+# A certificate this computer would not trust: a company network or a security
+# program reading encrypted traffic answers with its own. The words Python's
+# ssl, urllib3, httpx and node print for it -- the same the shell's failure
+# reports sort by (desktop/src/analytics.js, "certificate").
+_CERT_REFUSED = re.compile(r"CERTIFICATE_VERIFY_FAILED|SSLCertVerificationError|self.signed certificate"
+                           r"|unable to get local issuer certificate", re.I)
+
+
+def certificate_refused(text: str) -> bool:
+    """Whether a failure's own words say a certificate was refused."""
+    return bool(_CERT_REFUSED.search(str(text or "")))
+
+
 def size_text(n: int) -> str:
     """Bytes in decimal units, cut as the shell's sizeText cuts them: "358 B",
     "1.2 kB", "94 kB", "17.2 MB", "1.3 GB"."""

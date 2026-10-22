@@ -330,23 +330,26 @@
               <!-- The pane's name, the way the video pane has its tabs and the
                    timeline its heading row: three named boxes with a 6px gap
                    between them (layout G, user 2026-09-08). #scriptCount is
-                   filled by scriptTable.mjs with how many lines there are. -->
+                   filled by scriptTable.mjs with how many lines there are,
+                   and #scriptModel beside it with what translated them. -->
               <div class="pane-head" id="dubbingPaneHead"><span data-i18n>Script</span> <span class="m" id="scriptCount"></span>
+                <span class="sc-model" id="scriptModel"></span>
                 <!-- "N selected": the lines ticked in the table, which
                      Translate again then keeps to. -->
                 <span class="sc-pick-n" id="scriptPickCount"></span>
                 <!-- The script's three buttons, always in this place (mockup
                      script-one-ui). scriptTable.mjs shows them for a script
                      that can be edited, counts the changed lines into the
-                     second and rests the third on a project Perso did not dub. -->
+                     second and rests the third on a project Perso did not dub,
+                     and writes what each one does on it. -->
                 <div class="sc-acts" id="scriptActs" hidden>
-                  <button class="btn btn-outline btn-sm" id="retranslateBtn" type="button" title="Translation only." data-i18n-title="Translation only.">
+                  <button class="btn btn-outline btn-sm" id="retranslateBtn" type="button">
                     <svg class="lu" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
                     Translate again</button>
-                  <button class="btn btn-outline btn-sm" id="remakeVoicesBtn" type="button" title="Changed lines only." disabled data-i18n-title="Changed lines only.">
+                  <button class="btn btn-outline btn-sm" id="remakeVoicesBtn" type="button" disabled>
                     <svg class="lu" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
                     Remake voices<span id="remakeVoicesCount"></span></button>
-                  <button class="btn btn-outline btn-sm" id="allAtOnceBtn" type="button" title="Translation and voices.">
+                  <button class="btn btn-outline btn-sm" id="allAtOnceBtn" type="button">
                     <svg class="lu" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
                     All at once</button>
                 </div>

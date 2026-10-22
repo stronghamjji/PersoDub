@@ -37,6 +37,19 @@ const ERROR_SENTENCES = {
   get interrupted() { return t("The app was closed before dubbing finished."); },
 };
 
+// A dub on this computer that stopped with no sentence of its own, by the
+// stage it was on (dubApi.mjs STAGES, 1-based; the voices' check is part of
+// making them): what it was doing, the button that goes on from there, and
+// the way round when it stops again. The person cannot read the job's log.
+const STOPPED_AT = {
+  1: () => t("It stopped while separating the audio. Press Resume to go on from where it stopped. If it stops again, you can try the Perso API."),
+  2: () => t("It stopped while transcribing. Press Resume to go on from where it stopped. If it stops again, you can try the Perso API."),
+  3: () => t("It stopped while translating. Press Resume to go on from where it stopped. If it stops again, you can try the Perso API."),
+  4: () => t("It stopped while making the voices. Press Resume to go on from where it stopped. If it stops again, you can try the Perso API."),
+  5: () => t("It stopped while making the voices. Press Resume to go on from where it stopped. If it stops again, you can try the Perso API."),
+  6: () => t("It stopped while making the video. Press Resume to go on from where it stopped. If it stops again, you can try the Perso API."),
+};
+
 // The mark above that sentence on a job that stopped. Two states share the one
 // screen and only the words told them apart, so a stopped job read the same as
 // a finished one until it was read: a stop square when someone cancelled it, an
@@ -78,9 +91,9 @@ const CREDIT_MODALS = {
   perso_duration_limit: {
     get title() { return t("Video too long"); },
     message: (notice) => (notice && notice.limit_seconds
-      ? t("Your Perso plan dubs videos up to {limit}. Upgrade your plan, or set Dubbing to This computer.",
+      ? t("Your Perso plan dubs videos up to {limit}. Upgrade your plan, or switch Dubbing to Local model.",
         { limit: limitText(notice.limit_seconds) })
-      : t("Your Perso plan does not take a video this long. Upgrade your plan, or set Dubbing to This computer.")),
+      : t("Your Perso plan does not take a video this long. Upgrade your plan, or switch Dubbing to Local model.")),
     get button() { return t("See plans"); },
   },
   // A voice model the plan does not cover (VT40314: FINCH and NIGHTINGALE
@@ -311,13 +324,16 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     maybeShowCreditModal(job);
   }
 
-  // The sentence for a failure that has none of its own: which stage it was
-  // on, and where the rest is.
+  // The sentence for a failure that has none of its own: the stage it stopped
+  // on and the button to press. A Perso API dub has no Resume (the page hides
+  // it), so it says Start over; so does one that stopped before any stage.
   function failedAt(job) {
     const progress = parseProgress(job.logs);
-    return progress.stage > 0
-      ? t('Dubbing stopped at "{stage}". Raw log has the details.', { stage: t(progress.label) })
-      : t("Something went wrong. Try again, or use a shorter clip.");
+    if (!progress.stage) {
+      return t("It stopped while getting the dubbing ready. Press Start over. If it stops again, quit and reopen PersoDub, then try again.");
+    }
+    if (job.dub_mode === "perso") return t("It stopped while dubbing with the Perso API. Press Start over.");
+    return (STOPPED_AT[progress.raw] || STOPPED_AT[4])();
   }
 
   // The poll loop's own failure: the server went quiet, or said this job is

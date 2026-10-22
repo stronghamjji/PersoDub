@@ -6,6 +6,7 @@ shared with the rest of the app; it lives in app/state.py and is read as
 state.WORKSPACE at CALL time, never copied into a name of our own -- the tests
 reassign it (tests/conftest.py) and a copy would never see that.
 """
+import logging
 import os
 import subprocess
 import sys
@@ -31,6 +32,7 @@ from app.settings_env import (
 )
 
 router = APIRouter()
+logger = logging.getLogger("persodub.api.settings")
 
 
 class SettingsRequest(BaseModel):
@@ -167,7 +169,10 @@ def perso_spaces():
         spaces = list_dubbing_spaces(key)
     except Exception as e:
         # Never interpolate str(e): an httpx error can echo request details.
-        raise HTTPException(502, t("Could not list Perso workspaces ({kind})", kind=type(e).__name__))
+        # The type name goes to the log; on screen it is a program's word.
+        logger.warning("Could not list Perso workspaces (%s)", type(e).__name__)
+        raise HTTPException(502, t("Could not load the Perso workspace list. "
+                                   "Check your internet connection and the API key."))
     return {"spaces": spaces}
 
 
@@ -204,6 +209,8 @@ def perso_spaces_preview(body: PersoSpacesPreviewRequest):
     except Exception as e:
         # Same rule as above: the type name only, never str(e) -- an httpx
         # error message can carry the request, and the request carries the key.
-        raise HTTPException(502, t("Could not list Perso workspaces ({kind})", kind=type(e).__name__))
+        logger.warning("Could not list Perso workspaces (%s)", type(e).__name__)
+        raise HTTPException(502, t("Could not load the Perso workspace list. "
+                                   "Check your internet connection and the API key."))
     _preview_last.update(key=key, at=now, spaces=spaces)
     return {"spaces": spaces}

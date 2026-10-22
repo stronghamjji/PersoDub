@@ -19,7 +19,7 @@ import requests
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import service_account
 
-from app import runtime
+from app import i18n, runtime
 from app.config import (
     GEMINI_MODEL,
     OLLAMA_GEMMA_MODEL,
@@ -239,6 +239,24 @@ CHATGPT_NO_TOOLS = ("shell_tool", "unified_exec", "browser_use", "computer_use",
 CHATGPT_DEFAULT_MODEL = "gpt-5.6-luna"
 
 
+def chatgpt_model() -> str:
+    """The model ChatGPT translates with: the one ChatGPT itself answers a
+    free account with -- never the one the user's own Codex setup names (a
+    coding model, and on this Mac the top-tier one; user, 2026-09-23).
+    PERSODUB_CHATGPT_MODEL in kit.env is the one way to pick another."""
+    wanted = os.environ.get("PERSODUB_CHATGPT_MODEL", "")
+    return wanted if re.match(r"^[A-Za-z0-9._:-]{1,64}$", wanted) else CHATGPT_DEFAULT_MODEL
+
+
+def translator_model(translator: Optional[str]) -> Optional[str]:
+    """The model `translator` translates with today, kept on a job beside the
+    translator's name (app/api/dub.py) so its screen names the model that
+    made it after the default has moved on. None for one with no model of
+    its own to name (Perso)."""
+    return {"chatgpt": chatgpt_model, "gemini": lambda: GEMINI_MODEL, "gemma": lambda: OLLAMA_GEMMA_MODEL,
+            "hunyuan": lambda: OLLAMA_HUNYUAN_MODEL}.get(translator or "", lambda: None)()
+
+
 class ChatGptNotSignedInError(RuntimeError):
     """The ChatGPT sign-in is missing or expired. The pipeline turns it into
     the notice that sends the user to Settings."""
@@ -256,17 +274,42 @@ class ChatGptLimitError(RuntimeError):
 
 # OpenAI's own words when a free account is out: "... or try again at Oct
 # 24th, 2026 1:07 PM." -- a lockout that can last weeks, so the time is worth
-# repeating on the screen.
+# repeating on the screen. Codex writes it in this computer's own time zone,
+# and only the time when that is later today ("try again at 1:07 PM.").
 _RESET_TIME = re.compile(
-    r"try again at\s+([A-Z][a-z]{2,8})\.? (\d{1,2})(?:st|nd|rd|th)?,?(?: \d{4})?,? "
+    r"try again at\s+(?:([A-Z][a-z]{2,8})\.? (\d{1,2})(?:st|nd|rd|th)?,?(?: \d{4})?,? )?"
     r"(\d{1,2}:\d{2}\s?[AP]M)", re.IGNORECASE)
 
 
 def reset_time_in(text: str) -> Optional[str]:
-    """The reset time in OpenAI's limit message, short ("Oct 24, 1:07 PM"),
-    or None when the message names none."""
+    """The reset time in OpenAI's limit message, short ("Oct 24, 1:07 PM", or
+    "1:07 PM" later today), or None when the message names none."""
     m = _RESET_TIME.search(text)
-    return f"{m.group(1)} {m.group(2)}, {m.group(3).upper()}" if m else None
+    if not m:
+        return None
+    return f"{m.group(1)} {m.group(2)}, {m.group(3).upper()}" if m.group(1) else m.group(3).upper()
+
+
+_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+_SHORT_TIME = re.compile(r"(?:([a-z]{3})[a-z]*\.? (\d{1,2}), )?(\d{1,2}):(\d{2}) ?([ap]m)", re.IGNORECASE)
+
+
+def reset_time_shown(resets: str) -> str:
+    """reset_time_in's time as the screen writes a time in the user's
+    language: "10월 24일 오후 1:07" in Korean, "오후 1:07" for later today.
+    English, or a time it cannot read, stays as it came. The same as the
+    page's resetTime (ui/src/translatorChoice.mjs), which reads it back out
+    of the English notice."""
+    m = _SHORT_TIME.fullmatch((resets or "").strip())
+    month = m and m.group(1) and m.group(1).lower()
+    if not m or i18n.current_language() == "en" or (month and month not in _MONTHS):
+        return resets
+    hour, minute = int(m.group(3)), m.group(4)
+    clock = (i18n.t("{hour}:{minute} AM", hour=hour, minute=minute) if m.group(5).upper() == "AM"
+             else i18n.t("{hour}:{minute} PM", hour=hour, minute=minute))
+    if not month:
+        return clock
+    return i18n.t("{month}/{day} {clock}", month=_MONTHS.index(month) + 1, day=int(m.group(2)), clock=clock)
 
 
 class ChatGptTranslator(TranslationEngine):
@@ -299,14 +342,7 @@ class ChatGptTranslator(TranslationEngine):
         from app.agents import base as agent_base
 
         self.binary = binary if binary is not None else agent_base.find_cli("codex")
-        # The model ChatGPT itself answers a free account with -- never the
-        # one the user's own Codex setup names (a coding model, and on this
-        # Mac the top-tier one; user, 2026-09-23). PERSODUB_CHATGPT_MODEL in
-        # kit.env is the one way to pick another.
-        wanted = os.environ.get("PERSODUB_CHATGPT_MODEL", "")
-        if not re.match(r"^[A-Za-z0-9._:-]{1,64}$", wanted):
-            wanted = CHATGPT_DEFAULT_MODEL
-        self.model = model if model is not None else wanted
+        self.model = model if model is not None else chatgpt_model()
         self.timeout = timeout
 
     def _command(self, workdir: str, out_path: str) -> List[str]:

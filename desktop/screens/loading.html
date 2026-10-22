@@ -35,7 +35,13 @@
 <h2 data-i18n>Starting engines…</h2>
 <div id="bar"><i></i></div>
 <p data-i18n>First launch can take a minute or two while the voice model loads.</p>
+<!-- Thirty seconds with nothing changing reads as stuck, and the app gets
+     closed in the middle of starting: a second line says it is still going. -->
+<p id="slow" hidden data-i18n>This is taking longer than usual. It can take a few minutes.</p>
 
+<script>
+  setTimeout(() => { document.getElementById("slow").hidden = false; }, 30000);
+</script>
 <script>
   // The version comes in on the query string (desktop/src/bootFlow.js), so every launch
   // screen names the build the user is on without asking anyone.

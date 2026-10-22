@@ -7,6 +7,7 @@ import { notEnoughSpace, notEnoughMemory, freeSpaceAt } from "./config.js";
 import { cancelCurrent } from "./exec.js";
 import { readRuntime } from "./runtimeFile.js";
 import { errorText } from "./errorText.js";
+import { classifyError } from "./analytics.js";
 import { openExternally } from "./windowFactory.js";
 import { t } from "./i18n.js";
 
@@ -88,7 +89,14 @@ export function registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog }) {
         const full = errorText(err);
         shellLog(`PERSODUB_PACK install ${id} failed: ${full}`);
         if (!packCancelled && vcRuntimeFailure(full)) return offerVcRuntime();
-        return { ok: false, reason: packCancelled ? t("Cancelled.") : downloadInterrupted(full) ? downloadInterruptedReason() : lastReason(full) };
+        if (packCancelled) return { ok: false, reason: t("Cancelled.") };
+        // A refused certificate reads as a dropped download too, but pressing
+        // Resume on the same network only fails again: it says to change it.
+        // A download's fetch names it only in its cause ("fetch failed").
+        if (classifyError([full, err?.cause?.message].filter(Boolean).join(": ")) === "certificate") {
+          return { ok: false, reason: t("A company network or security program blocked the connection. Connect to another Wi-Fi or a hotspot, then press Resume.") };
+        }
+        return { ok: false, reason: downloadInterrupted(full) ? downloadInterruptedReason() : lastReason(full) };
       }
       if (ctx.engines && ctx.engines.startPack) {
         // The last step's line would sit in the dialog for the ~40 s the

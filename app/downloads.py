@@ -159,11 +159,14 @@ class DownloadStore:
             except error_type as e:
                 d.reason = getattr(e, "reason", "unknown")
                 # `shown`: FetchError's message in the user's language.
-                d.error = getattr(e, "shown", None) or str(e) or t("Could not fetch the video.")
+                d.error = getattr(e, "shown", None) or str(e) or t(
+                    "Could not fetch the video from this link. "
+                    "Paste it again in a moment, or drag the video file in.")
                 d.status = "failed"
             except Exception:  # noqa: BLE001 -- the record must never hang
                 d.reason = "unknown"
-                d.error = t("Could not fetch the video.")
+                d.error = t("Could not fetch the video from this link. "
+                            "Paste it again in a moment, or drag the video file in.")
                 d.status = "failed"
 
         threading.Thread(target=run, daemon=True).start()

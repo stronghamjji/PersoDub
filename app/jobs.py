@@ -69,6 +69,10 @@ SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lan
                 # screen writes it as a smaller line under the sentence, whole.
                 "error_detail",
                 "stt_engine", "translator", "tts", "quality", "separation",
+                # The model the translator answered with ("gpt-5.6-luna"): the
+                # screen names it beside the translator, after the default
+                # has moved on (app/translate.py translator_model).
+                "translator_model",
                 "dub_mode", "perso_project_seq", "perso_space_seq",
                 # The Perso voice model a cloud dubbing was started with.
                 "perso_model",

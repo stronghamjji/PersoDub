@@ -21,7 +21,7 @@ from app.config import QWEN_N_TAKES
 from app.diar_campplus_client import diarize
 from app.engines.base import VoiceEngineDown
 from app.engines.qwen_tts import QwenTTSEngine
-from app.i18n import both
+from app.i18n import both, t
 from app.jobs import JobCancelled, raise_if_cancelled, shown_error, timed_step
 from app.perso_client import (
     PersoClient,
@@ -38,7 +38,7 @@ from app.perso_client import (
     short_reason,
 )
 from app.qwen_pipeline import cleanup_takes, run_qwen_dub
-from app.run_errors import PartsMissing, advice_both
+from app.run_errors import PartsMissing, advice_both, ran_out_of_memory
 from app.scripts.check_leakage import _validate_manifest_spans, measure_leakage
 from app.scripts.suppress_vocal_echo import suppress_vocal_echo
 from app.separate import SeparationEngine
@@ -68,6 +68,7 @@ from app.translate import (
     GeminiUnavailableError,
     TranslationEngine,
     get_translator,
+    reset_time_shown,
     script_ok,
 )
 
@@ -157,6 +158,11 @@ _PARTS_MISSING = {
 def _advice(e, part):
     if isinstance(e, PartsMissing):
         return _PARTS_MISSING[part]()
+    # A dub that stopped has Resume, which picks up where it stopped (the
+    # eraser says its own, app/eraser.py).
+    if ran_out_of_memory(str(e)):
+        return both("Dubbing stopped because this computer ran out of memory. "
+                    "Close other programs and press Resume to go on from where it stopped.")
     return advice_both(str(e), _check_file())
 
 
@@ -171,7 +177,7 @@ _NOTICE_ERRORS = {
     # popup says the limit and links to the plans; nothing to retry.
     PersoDurationLimitError: (
         "perso_duration_limit",
-        lambda: both("This video is longer than your Perso plan allows. Upgrade your plan, or set Dubbing to This computer."),
+        lambda: both("This video is longer than your Perso plan allows. Upgrade your plan, or switch Dubbing to Local model."),
         "link",
         None,
     ),
@@ -306,8 +312,13 @@ def raise_notice(e, log, on_notice) -> NoReturn:
     # in the order the popup says it: when, then the two ways on.
     resets = getattr(e, "resets", None)
     if isinstance(e, ChatGptLimitError) and resets:
-        msg, shown = both("ChatGPT usage limit reached. Resets {resets}. Resume then, or continue with "
-                          "another translator.", resets=resets)
+        # The English keeps the time as Codex wrote it (the page reads it back
+        # out, ui/src/translatorChoice.mjs); the screen's says it the way the
+        # user's language writes a time ("10월 24일 오후 1:07").
+        msg = both("ChatGPT usage limit reached. Resets {resets}. Resume then, or continue with "
+                   "another translator.", resets=resets)[0]
+        shown = t("ChatGPT usage limit reached. Resets {resets}. Resume then, or continue with "
+                  "another translator.", resets=reset_time_shown(resets))
     notice = {"type": notice_type, "message": msg, "message_shown": shown}
     # The plan's limit, for the popup that names it ("up to 1 min").
     if getattr(e, "limit_seconds", None):
@@ -785,7 +796,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, 
     return src_cues, detected["code"], diar_engine or "campplus"
 
 
-def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=None):
+def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=None, on_notice=None):
     """Stage 2/6 -- local CAM++ diarization (opt-in). Relabels src_cues in place.
 
     pyannote-era labels could collapse everyone to a single speaker; CAM++
@@ -796,6 +807,9 @@ def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_
 
     video_duration, when known, scales the subprocess timeout for long videos
     (see app.timeouts.scaled_timeout).
+
+    A failure is told on the screen too (on_notice): every line then keeps
+    one voice, and the finished dub alone did not say why.
     """
     if diar_engine != "campplus" or not src_cues:
         return
@@ -813,6 +827,10 @@ def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_
         log(f"   CAM++ labeled {len(src_cues)} lines across {n_spk} speakers")
     except Exception as e:
         log(f"   Warning: CAM++ diarization failed ({str(e)[:80]}) — keeping existing labels")
+        if on_notice:
+            msg, shown = both("Could not tell the speakers apart, so every line was made in one voice. "
+                              "Dub it again to try telling them apart once more.")
+            on_notice({"type": "diarization_failed", "message": msg, "message_shown": shown})
 
 
 def _pick_source_cues(source_srt_path, perso_cues, src_cues):
@@ -1100,7 +1118,8 @@ def _transcribe_or_reuse(video_path, work_dir, reuse, vocals_path, stt_engine, s
     moved = snap_starts(src_cues, vocals_path)
     if moved:
         log("   %d line start(s) moved to where the speech begins" % moved)
-    _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=video_duration)
+    _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=video_duration,
+                   on_notice=on_notice)
     _save_json(work_dir, TRANSCRIPT_NAME,
                {"cues": src_cues, "perso": perso_cues is not None, "detected": detected_code})
     return src_cues, perso_cues, detected_code, perso_client, False

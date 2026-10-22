@@ -32,7 +32,8 @@
 import { escapeHtml, fmtClockTenths, errorText } from "./format.mjs";
 import { lucide } from "./icons.mjs";
 import { numberSpeakers, speakerLetter } from "./speakers.mjs";
-import { translatorName } from "./translatorChoice.mjs";
+import { withTranslator } from "./translatorChoice.mjs";
+import { translatorLabel } from "./dubApi.mjs";
 import { t } from "./i18n.mjs";
 
 // A hair over the slot is not "too long" -- the assembly step lets a line spill
@@ -147,6 +148,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   let nightingale = null;
   // The lines on screen, as the script last gave them.
   let shown = [];
+  // Whether the job on screen kept a voice for its lines (a dub made on this
+  // computer): only then is a written line with none one whose voice could
+  // not be made -- the dub skips it and the video is silent there.
+  let voicedJob = false;
   // The line last pressed (its number), marked through every redraw of the
   // same project's table; another project's table starts with none.
   let selectedLine = null;
@@ -205,12 +210,15 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // line is written: there is nothing to hear, and a remake of nothing was
     // refused (user decision 2026-09-18).
     const untr = !!l.untranslated;
+    // Written, and no voice in a dub that has voices: said under the words,
+    // the way Words changed is; its voice button makes it.
+    const mute = voicedJob && !untr && l.audio_sec == null;
     const lengthCell = untr ? ""
       : `<span class="sc-dot"></span><span class="sc-num">${l.slot.toFixed(1)} / ${t("{s}s", { s: `<b>${lineLength(l).toFixed(1)}</b>` })}${diff ? " · " : ""}</span>${diff}`;
     const verdictClass = untr ? "" : ` sc-v-${verdict.kind}`;
     const off = untr ? " sc-off" : "";
     const offAttr = untr ? " disabled" : "";
-    const WRITE_FIRST = t("Write the translation first");
+    const WRITE_FIRST = t("You can press it once the translation is written");
     // Filled means "the voice does not say these words". The app decides that
     // per line now (app/dub_script.py), so it is taken as said: a line edited,
     // remade and put back is NOT edited, and its voice still says the edit.
@@ -229,7 +237,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // A Perso project has no voice button on its lines: revert takes its place
     // at the row's end, and Remake voices in the pane's head does them all.
     const wave = `<button class="sc-wave${stale ? " stale" : fresh ? " fresh" : ""}${off}" data-voice="${l.line}"
-        type="button"${offAttr} title="${untr ? WRITE_FIRST : stale ? t("The words changed - make the voice again") : fresh ? t("Voice made - press to make it again") : t("Make this line's voice again")}">${WAVE_ICON}</button>`;
+        type="button"${offAttr} title="${untr ? WRITE_FIRST : stale ? t("The words changed - press to make this line's voice again") : fresh ? t("New voice - press to make it once more") : t("Make this line's voice again")}">${WAVE_ICON}</button>`;
     // Perso put its own words in place of the user's when it made the voice
     // (app/perso_edit.py mark_reworded): said under the line, with the
     // user's words on hover. Revert is the way back.
@@ -246,7 +254,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     <button class="sc-listen${off}" data-play="${l.line}" type="button"${offAttr}
       title="${untr ? WRITE_FIRST : t("Play this line in the video")}">${PLAY_ICON}</button>
     <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-      data-line="${l.line}"${untr ? ` data-empty="${t("Not translated")}"` : ""}${stale && !untr ? ` data-note="${t("Words changed")}"` : reworded}>${escapeHtml(l.text)}</div>
+      data-line="${l.line}"${untr ? ` data-empty="${t("Not translated")}"` : ""}${stale && !untr ? ` data-note="${t("Words changed")}"` : mute ? ` data-note="${t("No sound")}"` : reworded}>${escapeHtml(l.text)}</div>
     <div class="sc-tools"><span class="sc-len${verdictClass}">${lengthCell}</span>${viaPerso() ? `<span></span>${undo}` : `${undo}${wave}`}</div>
   </div>`;
   }
@@ -310,6 +318,15 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const count = $("scriptCount");
     if (count) count.textContent = data && data.lines && data.lines.length
       ? t("{n} lines", { n: data.lines.length }) : "";
+    // Beside it, in grey: what translated these lines ("Translation ChatGPT
+    // (gpt-5.6-luna)"), in sight of Translate again.
+    const by = $("scriptModel");
+    if (by) {
+      const open = getJob();
+      const label = data && data.lines && data.lines.length && open && open.id === jobId ? translatorLabel(open) : "";
+      by.textContent = label ? `${t("Translation")} ${label}` : "";
+      by.title = by.textContent;
+    }
     if (!data || !data.lines || !data.lines.length) {
       const perso = isPersoJob();
       box.innerHTML = `<div class="script-empty">${perso
@@ -332,6 +349,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const clipped = data.clipped
       || (job && job.id === jobId && job.result && job.result.clipped) || [];
     const clippedMap = new Map(clipped.map((c) => [c.line, c.cut_s]));
+    voicedJob = !isPersoJob() && data.lines.some((l) => l.audio_sec != null);
     // Same rule as scriptRow: what follows the backtick is output, so it keeps
     // the column it had inline rather than stepping in with this file.
     box.innerHTML = `
@@ -374,6 +392,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     } else {
       paintActs(jobId);
     }
+    // The lines whose voice could not be made, under the cut-off notice: a
+    // line of words, the No sound under each such row being the per-line mark.
+    const mute = voicedJob ? data.lines.filter((l) => !l.untranslated && l.audio_sec == null).length : 0;
+    if (mute) silentNotice(box, mute);
     // Above everything else (prepended last, so it lands first): the lines cut
     // short by assembly, point 3. One line, not one per row -- the red pill on
     // each row's own verdict is already the per-line mark.
@@ -477,6 +499,18 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     box.prepend(bar);
   }
 
+  // One line above the table: how many lines have no voice, so are silent in
+  // the video, and that each one's own voice button makes it. Words only.
+  function silentNotice(box, n) {
+    const bar = document.createElement("div");
+    bar.className = "sc-clipped sc-silent";
+    bar.style.gridColumn = "1 / -1";
+    bar.innerHTML = `${lucide("volume-x", 14)}<span>${n === 1
+      ? t("1 line has no sound because its voice could not be made. Press that line's voice button to make it again.")
+      : t("{n} lines have no sound because their voices could not be made. Press each line's voice button to make it again.", { n })}</span>`;
+    box.prepend(bar);
+  }
+
   // Lines whose words were rewritten and not voiced since: the ones Remake
   // voices does. Except on a NIGHTINGALE dub (whose new words ride along with
   // All at once), Perso does not know those words yet, so All at once would
@@ -494,17 +528,21 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const perso = viaPerso();
     const remake = $("remakeVoicesBtn");
     remake.disabled = !n;
+    remake.title = n
+      ? t("Makes new voices for the lines whose words changed and puts them in the video. The other lines stay as they are.")
+      : t("You can press it after you change a line's words or translate again.");
     remake.classList.remove(n ? "btn-outline" : "btn-primary");
     remake.classList.add(n ? "btn-primary" : "btn-outline");
     $("remakeVoicesCount").textContent = n ? ` (${n})` : "";
     const all = $("allAtOnceBtn");
     all.disabled = !perso || !!persoEdit.working;
-    all.title = perso ? t("Translation and voices.") : t("Perso dubbing only.");
+    all.title = perso ? t("Perso makes the translation and voice of every line again.")
+      : t("Only for projects dubbed with the Perso API.");
     const strip = $("scriptChanged");
     strip.hidden = !n;
     strip.innerHTML = !n ? "" : `<b>${n === 1 ? t("1 line changed.") : t("{n} lines changed.", { n })}</b> ${perso
       ? t("Remake voices when you are done.")
-      : n === 1 ? t("Remake its voice to hear it.") : t("Remake their voices to hear them.")}`;
+      : n === 1 ? t("Press Remake voices to hear it in the video.") : t("Press Remake voices to hear them in the video.")}`;
     if (!perso) return;
     if (persoEdit.working === "proofread") watchAll(jobId);
     else if (persoEdit.unfetched) scriptSaving(persoEdit.reason);
@@ -527,7 +565,8 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       return;
     }
     if (perso && !pressedTwice(`voices:${jobId}`)) {
-      scriptSaving(n === 1 ? t("Perso remakes 1 line. Press again.") : t("Perso remakes {n} lines. Press again.", { n }));
+      scriptSaving(n === 1 ? t("Perso makes a new voice for 1 line. It may use credits. Press again to go ahead.")
+        : t("Perso makes new voices for {n} lines. It may use credits. Press again to go ahead.", { n }));
       return;
     }
     const btn = $("remakeVoicesBtn");
@@ -702,6 +741,11 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   function paintPicks() {
     const n = picked.size;
     $("scriptPickCount").textContent = n ? t("{n} selected", { n }) : "";
+    // What it does, and to which lines, before it is pressed.
+    $("retranslateBtn").title = `${t("Translates again with the same translator, so each line fits the time it has. The voices stay as they are.")} ${
+      !n ? t("With no line selected, every line is translated again.")
+        : n === 1 ? t("Only the selected line is translated again.")
+        : t("Only the {n} selected lines are translated again.", { n })}`;
     const all = $("scriptBox").querySelector('[data-pick="all"]');
     if (all) all.checked = n > 0 && n === lineCount;
   }
@@ -740,19 +784,18 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const byHand = shown.filter((l) => l.edited && (!lines || lines.includes(l.line))
       && !translated.has(`${jobId}:${l.line}`)).length;
     if (byHand && !asked && !pressedTwice(`retranslate:${jobId}`)) {
-      scriptSaving(byHand === 1 ? t("1 edited line is replaced. Press again.")
-        : t("{n} edited lines are replaced. Press again.", { n: byHand }));
+      scriptSaving(byHand === 1 ? t("1 line you edited will be replaced by the new translation too. Press again to go ahead.")
+        : t("{n} lines you edited will be replaced by the new translation too. Press again to go ahead.", { n: byHand }));
       return;
     }
     const btn = $("retranslateBtn");
     btn.disabled = true;
     const job = getJob();
-    const name = viaPerso() ? t("Perso")
-      : translatorName(translator || (job && job.id === jobId && job.translator));
+    const by = withTranslator(viaPerso() ? "perso" : (translator || (job && job.id === jobId && job.translator)));
     const many = lines ? lines.length : 0;
-    scriptSaving(name
-      ? (!lines ? t("Translating all lines with {name}…", { name }) : many === 1 ? t("Translating 1 line with {name}…", { name })
-        : t("Translating {n} lines with {name}…", { n: many, name }))
+    scriptSaving(by
+      ? (!lines ? t("Translating all lines {with}…", { with: by }) : many === 1 ? t("Translating 1 line {with}…", { with: by })
+        : t("Translating {n} lines {with}…", { n: many, with: by }))
       : (!lines ? t("Translating all lines…") : many === 1 ? t("Translating 1 line…") : t("Translating {n} lines…", { n: many })));
     try {
       const r = await fetch(`/api/dub/jobs/${jobId}/retranslate`, {
@@ -784,8 +827,8 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       changed.forEach((c) => translated.add(`${jobId}:${c.line}`));
       picked.clear();
       scriptSaving(!changed.length ? t("Same words. Nothing changed.")
-        : changed.length === 1 ? t("1 line translated again")
-        : t("{n} lines translated again", { n: changed.length }));
+        : changed.length === 1 ? t("1 line translated again. Press Remake voices to hear it.")
+        : t("{n} lines translated again. Press Remake voices to hear them.", { n: changed.length }));
       forgetLive(jobId);
       await renderScript(jobId);
       setTimeout(() => scriptSaving(""), 4000);
@@ -918,6 +961,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     picked.clear();
     $("scriptPickCount").textContent = "";
     if ($("scriptCount")) $("scriptCount").textContent = "";
+    if ($("scriptModel")) $("scriptModel").textContent = "";
     $("scriptActs").hidden = true;
     $("scriptChanged").hidden = true;
   }

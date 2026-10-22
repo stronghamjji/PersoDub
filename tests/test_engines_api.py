@@ -245,6 +245,8 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
         "local_engines": {"voice": {"state": "running", "message": ""},
                           "translation": {"state": "running", "message": ""}},
         "ram_ok": True,
+        "ram_gb": 16,
+        "ram_slow": [],
     }
 
 
@@ -273,6 +275,8 @@ def test_engines_endpoint_all_available(monkeypatch):
         "local_engines": {"voice": {"state": "running", "message": ""},
                           "translation": {"state": "running", "message": ""}},
         "ram_ok": True,
+        "ram_gb": 16,
+        "ram_slow": [],
     }
 
 
@@ -284,6 +288,20 @@ def test_engines_endpoint_all_available(monkeypatch):
 def test_engines_endpoint_says_whether_this_computer_has_the_memory(monkeypatch, total, expected):
     monkeypatch.setattr(room, "total_ram_bytes", lambda: total)
     assert client.get("/api/engines").json()["ram_ok"] is expected
+
+
+@pytest.mark.parametrize("total, slow", [
+    (10 * room.GB, ["chatgpt", "gemini", "gemma", "hunyuan", "qwen"]),   # slow whatever translates
+    (14 * room.GB, ["gemma"]),   # Gemma translates on this computer beside the voice
+    (32 * room.GB, []),
+])
+def test_engines_endpoint_says_how_much_memory_and_with_which_translator_a_dub_is_slow(monkeypatch, total, slow):
+    """The start's own "may be slow" rule (app/room.py ram_warning), said
+    before Start: the Dubbing tab names the memory beside it."""
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: total)
+    body = client.get("/api/engines").json()
+    assert body["ram_gb"] == total // room.GB
+    assert body["ram_slow"] == slow
 
 
 def test_dub_start_gemma_unreachable_422_message(monkeypatch):
@@ -325,7 +343,8 @@ def test_dub_start_qwen_model_missing_422(monkeypatch):
         data={"language": "Korean", "language_code": "ko", "translate_engine": "qwen"},
     )
     assert r.status_code == 422
-    assert "ollama pull" in r.json()["detail"]
+    # Where to get it, not a terminal command (A41).
+    assert r.json()["detail"] == "The Qwen translation model is not downloaded yet. Choose another translator."
 
 
 def test_dub_start_qwen_unreachable_422_message(monkeypatch):
@@ -564,13 +583,14 @@ def test_local_engine_states_follow_what_the_shell_wrote(monkeypatch, tmp_path):
     rt(tts_state="failed")
     failed = engines_status.local_engine("voice")
     assert failed["state"] == "failed" and "could not start" in failed["message"]
-    assert failed["message"].endswith("or try the Perso API.")
+    assert failed["message"].endswith("or use the Perso API.")
     # The shell read "out of memory" in the engine's last lines (issue #187).
     rt(tts_state="failed", tts_failure="memory")
     assert engines_status.local_engine("voice") == {
         "state": "failed",
         "message": "The voice engine is not running: this computer ran out of memory. "
-                   "Close other apps and try again, or try the Perso API."}
+                   "Close other programs, then press Start dubbing and it will start again. "
+                   "Dubbing with the Perso API uses almost no memory."}
     # The reason belongs to "failed" only.
     rt(tts_state="starting", tts_failure="memory")
     assert "still starting" in engines_status.local_engine("voice")["message"]

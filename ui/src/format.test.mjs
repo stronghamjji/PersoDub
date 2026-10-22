@@ -5,7 +5,7 @@
 // Run with: node --test ui/src/format.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { modKey, plainFailure, rawLogLines, restartFailure, fmtLength, videoCard, videoCardHtml } from "./format.mjs";
+import { modKey, plainFailure, rawLogLines, restartFailure, restartRanOutOfMemory, fmtLength, videoCard, videoCardHtml } from "./format.mjs";
 import {
   fmtClock,
   fmtClockTenths,
@@ -168,7 +168,7 @@ test("statusParts cuts a top-bar status into the pieces its chips are made of", 
 });
 
 test("errorText turns a request that never reached the app into what to do about it", () => {
-  const told = "PersoDub is not running. Restart the app.";
+  const told = "The connection to PersoDub dropped for a moment. If it stays this way, quit and reopen PersoDub.";
   assert.equal(errorText(new TypeError("Failed to fetch")), told);
   assert.equal(errorText(new TypeError("Load failed")), told);
   assert.equal(errorText(new TypeError("NetworkError when attempting to fetch resource.")), told);
@@ -180,9 +180,10 @@ test("errorText turns a request that never reached the app into what to do about
 
 test("errorText never shows a list of field errors or a page of HTML", () => {
   const body = JSON.stringify({ detail: [{ loc: ["body", "file"], msg: "field required", type: "value_error.missing" }] });
-  assert.equal(errorText(new Error(body)), "That did not work. Try again.");
-  assert.equal(errorText(new Error('{"detail": {"code": 3}}')), "That did not work. Try again.");
-  assert.equal(errorText(new Error("<!DOCTYPE html><html><body>500</body></html>")), "That did not work. Try again.");
+  const told = "Something went wrong in PersoDub. Try again, and if it happens again, quit and reopen PersoDub.";
+  assert.equal(errorText(new Error(body)), told);
+  assert.equal(errorText(new Error('{"detail": {"code": 3}}')), told);
+  assert.equal(errorText(new Error("<!DOCTYPE html><html><body>500</body></html>")), told);
 });
 
 test("shortcut tips say Cmd on a Mac and Ctrl everywhere else", () => {
@@ -217,7 +218,11 @@ test("a failure's plain sentence is shown, and a program's own words are not", (
 test("why the voice engine did not start again is said in plain words, never the engine's own line", () => {
   // Issue #187's engine, as the shell hands it back (desktop/src/packIpc.js).
   assert.equal(restartFailure("Installed, but it could not start: OSError: �� �۾��� �Ϸ��ϱ� ���� ����¡ ������ �ʹ� �۽��ϴ�. (os error 1455)"),
-    "Starting it again did not work: this computer ran out of memory.");
+    "Starting it again did not work because there is still not enough memory. Close more programs or restart "
+    + "your computer. Dubbing with the Perso API uses almost no memory.");
+  // That one is said on its own, without the refusal above it (A37).
+  assert.ok(restartRanOutOfMemory("Installed, but it could not start: MemoryError"));
+  assert.ok(!restartRanOutOfMemory("Installed, but it could not start: RuntimeError: boom"));
   assert.equal(restartFailure("Installed, but it could not start: Health check timed out after 300000ms: http://127.0.0.1:5/health"),
     "Starting it again did not work: it took too long to start.");
   // The shell's own sentence is said as it is.

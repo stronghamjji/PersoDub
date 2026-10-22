@@ -622,7 +622,7 @@ test("the Settings catalog's pack rows ask the desktop app to install or remove,
   assert.equal(btn(runtimeRow).textContent, "Remove");
   // Remove asks the engine first (it knows whether a dub is running); its
   // "packs are the desktop app's" refusal is the all-clear.
-  h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "Packs are installed by the desktop app" }) } };
+  h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "PersoDub installs this itself." }) } };
   btn(runtimeRow).onclick();   // asks first
   await settle();
   btn(runtimeRow).onclick();   // then removes
@@ -664,9 +664,9 @@ test("a download the engine refuses shows its sentence instead of starting nothi
   const h = harness({ rows: [{ id: "hunyuan", role: "translate", name: "Hunyuan", bytes: 1.1e9, state: "not_downloaded" }] });
   t.after(h.state.restore);
   await h.api.refreshModels();
-  h.state.responses = { "/api/models/hunyuan/download": { ok: false, json: async () => ({ detail: "Install Ollama first, then download this model." }) } };
+  h.state.responses = { "/api/models/hunyuan/download": { ok: false, json: async () => ({ detail: "Local translation models (Hunyuan, Gemma 3) need a program called Ollama to run. Download it in Settings > Models." }) } };
   await h.api.downloadModel("hunyuan");
-  assert.equal(h.$("modelsError").textContent, "Hunyuan: Install Ollama first, then download this model.");
+  assert.equal(h.$("modelsError").textContent, "Hunyuan: Local translation models (Hunyuan, Gemma 3) need a program called Ollama to run. Download it in Settings > Models.");
 });
 
 test("a ready row says what it is for after its status, and a row on its way says only its status", async (t) => {

@@ -255,6 +255,9 @@ def test_the_two_clis_say_being_signed_out_in_quite_different_words():
     # An assistant this file has never heard of gets a sentence, not a crash.
     assert not base.is_signed_out("nobody", "401")
     assert base.signed_out_line("nobody") == "The assistant is not signed in."
+    # No terminal command: the panel has the Sign in button for both (A43).
+    assert base.signed_out_line("claude") == "Claude is not signed in. Press Sign in above."
+    assert base.signed_out_line("codex") == "Codex is not signed in. Press Sign in above."
 
 
 def test_the_instructions_say_the_assistant_cannot_wait_or_notify():

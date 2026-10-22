@@ -97,6 +97,41 @@ def test_the_limit_error_carries_the_reset_time_openai_named(monkeypatch):
     assert e.value.resets == "Oct 24, 1:07 PM"
 
 
+def test_a_job_keeps_the_model_each_translator_translates_with(monkeypatch):
+    """B16: the screen names it beside the translator, after the default has
+    moved on; ChatGPT's is the one kit.env picks, or the free plan's."""
+    monkeypatch.delenv("PERSODUB_CHATGPT_MODEL", raising=False)
+    assert translate.translator_model("chatgpt") == translate.CHATGPT_DEFAULT_MODEL
+    monkeypatch.setenv("PERSODUB_CHATGPT_MODEL", "gpt-5.5")
+    assert translate.translator_model("chatgpt") == "gpt-5.5"
+    assert ChatGptTranslator(binary="/x/codex").model == "gpt-5.5"
+    monkeypatch.setenv("PERSODUB_CHATGPT_MODEL", "no spaces allowed")
+    assert translate.translator_model("chatgpt") == translate.CHATGPT_DEFAULT_MODEL
+    assert translate.translator_model("hunyuan") == translate.OLLAMA_HUNYUAN_MODEL
+    assert translate.translator_model("perso") is None
+    assert translate.translator_model(None) is None
+
+
+def test_a_reset_later_today_is_its_time_alone():
+    """Codex writes only the time when it is later today, in this computer's
+    own time zone."""
+    assert translate.reset_time_in("ERROR: You've hit your usage limit. Try again at 1:07 PM.") == "1:07 PM"
+    assert translate.reset_time_in(OPENAI_LIMIT) == "Oct 24, 1:07 PM"
+
+
+def test_the_reset_time_is_written_as_the_users_language_writes_one(monkeypatch):
+    """Korean: 10월 24일 오후 1:07, the time alone for later today; English, or a
+    time it cannot read, as it came (A32)."""
+    from app import i18n
+    assert translate.reset_time_shown("Oct 24, 1:07 PM") == "Oct 24, 1:07 PM"   # the tests speak English
+    monkeypatch.setattr(i18n, "_language", "ko")
+    assert translate.reset_time_shown("Oct 24, 1:07 PM") == "10월 24일 오후 1:07"
+    assert translate.reset_time_shown("1:07 PM") == "오후 1:07"
+    assert translate.reset_time_shown("Jan 3, 9:05 AM") == "1월 3일 오전 9:05"
+    assert translate.reset_time_shown("Smarch 4, 1:07 PM") == "Smarch 4, 1:07 PM"
+    assert translate.reset_time_shown("tomorrow") == "tomorrow"
+
+
 def test_a_limit_message_without_a_date_names_no_reset_time(monkeypatch):
     run = _fake_run(None, code=1, stderr="ERROR: You've hit your usage limit.")
     monkeypatch.setattr(translate.subprocess, "Popen", run)

@@ -231,15 +231,16 @@ def _engine_words(which: str, state: str, failure: str = "") -> str:
     that phrase by asking the shell to start the engine again (ui/src/app.mjs).
     `failure` is why it failed, when the shell could tell (app/runtime.py)."""
     if which == "voice":
-        # Out of memory: closing other apps and pressing Start again (which
+        # Out of memory: closing other programs and pressing Start again (which
         # restarts the engine once) is what works (issue #187).
         if state == "failed" and failure == "memory":
             return ("The voice engine is not running: this computer ran out of memory. "
-                    "Close other apps and try again, or try the Perso API.")
+                    "Close other programs, then press Start dubbing and it will start again. "
+                    "Dubbing with the Perso API uses almost no memory.")
         return {
             "starting": i18n.t("The voice engine is still starting. Try again in a minute."),
-            "failed": "The voice engine is not running because it could not start. "
-                      "Quit and reopen PersoDub, then try again, or try the Perso API.",
+            "failed": "The voice engine is not running because it could not start, so this computer "
+                      "cannot dub. Quit and reopen PersoDub, or use the Perso API.",
             "stopped": "The voice engine is not running. Quit and reopen PersoDub.",
         }[state]
     return {

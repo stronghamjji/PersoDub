@@ -45,8 +45,9 @@ router = APIRouter()
 
 AGENTS = {
     # `login` is what the user types in a terminal to sign this CLI in. It is
-    # here rather than in the screen so one place names it: the failure message
-    # and the strip's status line both say the same command.
+    # here rather than in the screen so one place names it: the strip's status
+    # line says it, and a failure message that it is set sends the user to the
+    # panel's own Sign in (app/agents/base.py explain_exit).
     # "login" is what to type in a terminal; "login_args" is how the app
     # starts the same sign-in itself (`claude auth login` opens the browser).
     "claude": {"binary": "claude", "name": "Claude", "vendor": "Anthropic",
@@ -361,7 +362,10 @@ def agent_login(body: AgentLoginRequest):
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                        env=_env_of(meta))
     except OSError as e:
-        raise HTTPException(status_code=500, detail=t("Could not start the sign-in ({kind}).", kind=type(e).__name__))
+        # The type name for the log only: on screen it is a program's word.
+        logger.warning("Could not start the sign-in (%s)", type(e).__name__)
+        raise HTTPException(status_code=500, detail=t("Could not start the sign-in. "
+                                                      "Quit and reopen PersoDub, then press it again."))
     # Every assistant that reads this same sign-in is asked afresh.
     with _login_lock:
         for key, other in AGENTS.items():
@@ -401,8 +405,9 @@ async def agent_chat(body: AgentChatRequest, request: Request):
         raise HTTPException(status_code=422, detail=t("Unknown assistant: {agent}", agent=body.agent))
     driver = meta["driver"]
     if driver is None:
-        raise HTTPException(status_code=501, detail="%s: %s"
-                            % (meta["name"], meta.get("reason", "not wired up yet")))
+        # Its own reason is printed under its name in the picker already.
+        raise HTTPException(status_code=501, detail=t("This assistant cannot be used in Dub Agent yet. "
+                                                      "Pick another assistant."))
 
     binary = agent_base.find_cli(meta["binary"])
     if not binary and meta["binary"] == "codex" and codex_fetch.package():

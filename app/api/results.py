@@ -126,7 +126,14 @@ def subtitles_extract(body: SubtitleExtractRequest):
             if not cues:
                 raise RuntimeError(t("Perso heard no speech in this video."))
     except (PersoCreditExhaustedError, PersoInvalidKeyError, PersoUnavailableError) as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        # The sentences a dub says for the same three, in the user's language;
+        # Perso's own English, with its HTTP code, is for the log.
+        logger.warning("Subtitles through Perso refused: %s", e)
+        said = (t("Perso credits are used up. Recharge to continue.") if isinstance(e, PersoCreditExhaustedError)
+                else t("Perso rejected the API key. Open Settings and check the key.")
+                if isinstance(e, PersoInvalidKeyError)
+                else t("Perso's server is temporarily unavailable. Try again in a few minutes."))
+        raise HTTPException(status_code=409, detail=said)
     except Exception as e:
         raise HTTPException(status_code=503,
                             detail=t("Could not transcribe this video ({reason}).", reason=str(e)[:120]))

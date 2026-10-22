@@ -31,7 +31,12 @@ test("modelStatusLine covers the four states with the mockup's words", () => {
     { cls: "model-busy", text: "Paused", button: "resume" });
   // The server's reason, then what to do: never the exception (Windows H9/H10, 2026-10-06).
   assert.deepEqual(modelStatusLine({ state: "paused", error: "Connection lost." }),
-    { cls: "model-busy", text: "Connection lost. Press Resume to continue.", button: "resume" });
+    { cls: "model-busy", text: "Connection lost. Press Resume to pick up where it stopped.", button: "resume" });
+  // A reason that already says to press Resume is not told it twice.
+  const blocked = "A company network or security program blocked the connection. "
+    + "Connect to another Wi-Fi or a hotspot, then press Resume.";
+  assert.deepEqual(modelStatusLine({ state: "paused", error: blocked }),
+    { cls: "model-busy", text: blocked, button: "resume" });
   assert.deepEqual(
     modelStatusLine({ state: "not_downloaded", bytes: 7.6e9 }),
     { cls: "", text: "7.6 GB", button: "download" });

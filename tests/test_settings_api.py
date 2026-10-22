@@ -260,6 +260,9 @@ def test_perso_spaces_upstream_failure_is_502_without_key_leak(tmp_path, monkeyp
     r = client.get("/api/perso/spaces")
     assert r.status_code == 502
     assert "SECRETKEY" not in r.text
+    # What to check, not the program's name for the failure.
+    assert r.json()["detail"] == ("Could not load the Perso workspace list. "
+                                  "Check your internet connection and the API key.")
 
 
 def test_update_replaces_every_matching_line():

@@ -1313,7 +1313,9 @@
   .script-status { position: absolute; right: 16px; bottom: 14px; z-index: 2;
     padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px;
     background: var(--background); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-    font-size: var(--font-label); color: var(--primary); }
+    font-size: var(--font-label); color: var(--primary);
+    /* Perso's own words go on a line of their own under ours (app/api/script.py). */
+    white-space: pre-line; }
   .script-status:empty { display: none; }
   .script-empty { padding: 30px 14px; text-align: center;
     color: var(--muted-foreground); font-size: var(--font-ui); }
@@ -1364,6 +1366,11 @@
   .sc-pick { margin: 0; width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
   .sc-row.sc-picked { background: color-mix(in srgb, var(--primary) 10%, transparent); }
   .sc-pick-n { margin-left: auto; font-size: var(--font-label); font-weight: 400; color: var(--muted-foreground); }
+  /* What translated the script, grey beside its count: it takes the room left
+     on the row, and is the first thing to give way (an ellipsis, the whole
+     on hover) rather than push the row onto two lines. */
+  .sc-model { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: var(--font-label); font-weight: 400; color: var(--muted-foreground); }
   /* The script's three buttons. The panel is 430 to 490px wide on a laptop
      and the pane's name and the three together need more than that, so
      they have a row of their own under the name: three fixed columns, so a
@@ -1608,6 +1615,10 @@
     color: var(--destructive); cursor: pointer; }
   .sc-clipped svg { flex-shrink: 0; }
   .sc-clipped:hover, .sc-clipped:focus-visible { text-decoration: underline; outline: none; }
+  /* The lines with no voice (scriptTable.mjs silentNotice): the same line,
+     words only, nothing to press. */
+  .sc-clipped.sc-silent { cursor: default; }
+  .sc-clipped.sc-silent:hover { text-decoration: none; }
 
   /* ---------------- Done: the video pane ---------------- */
 

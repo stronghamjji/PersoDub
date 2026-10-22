@@ -14,6 +14,7 @@ import {
   applyEngineAvailability,
   engineChips,
   engineLine,
+  translatorLabel,
   voiceLabel,
   startedLabel,
   startErase,
@@ -355,8 +356,7 @@ test("applyEngineAvailability: a voice engine that failed to start is a warning 
   const failed = { state: "failed", message: "The voice engine is not running because it could not start." };
   const av = { ...ALL_AVAILABLE, local_engines: { voice: failed, translation: { state: "running", message: "" } } };
   assert.equal(applyEngineAvailability(av, { translate: "chatgpt", stt: "local", dubMode: "local" }).warning,
-    "The voice engine is off. This computer cannot dub until it starts.\n"
-    + "The voice engine is not running because it could not start.");
+    "The voice engine is not running because it could not start.");
   // Perso does the whole dub: it needs no voice engine here.
   assert.equal(applyEngineAvailability(av, { translate: "chatgpt", stt: "local", dubMode: "perso" }).warning, null);
   // Starting, running or not installed has its own way of being told.
@@ -364,6 +364,32 @@ test("applyEngineAvailability: a voice engine that failed to start is a warning 
     const other = { ...av, local_engines: { voice: { state, message: "" } } };
     assert.equal(applyEngineAvailability(other, { translate: "chatgpt", stt: "local", dubMode: "local" }).warning, null);
   }
+});
+
+// A28: the translation runtime that failed at start, said for the translators
+// that need it, the way the voice engine's is -- before Start dubbing.
+test("applyEngineAvailability: a translation runtime that failed to start is a warning for Hunyuan and Gemma 3", () => {
+  const av = { ...ALL_AVAILABLE, local_engines: { voice: { state: "running", message: "" },
+                                                   translation: { state: "failed", message: "x" } } };
+  assert.equal(applyEngineAvailability(av, { translate: "hunyuan", dubMode: "local" }).warning,
+    "The translation engine could not start, so Hunyuan cannot translate. Choose another translator, or quit and reopen PersoDub.");
+  assert.match(applyEngineAvailability(av, { translate: "gemma", dubMode: "local" }).warning, /so Gemma 3 cannot translate/);
+  // ChatGPT and Gemini need no runtime, and Perso translates on its side.
+  assert.equal(applyEngineAvailability(av, { translate: "chatgpt", dubMode: "local" }).warning, null);
+  assert.equal(applyEngineAvailability(av, { translate: "hunyuan", dubMode: "perso" }).warning, null);
+});
+
+// A26: the start's own "may be slow" (GET /api/engines ram_slow), said before
+// Start with the memory it is about.
+test("applyEngineAvailability: a computer whose memory makes this dub slow says so, with its size", () => {
+  const av = { ...ALL_AVAILABLE, ram_gb: 14, ram_slow: ["gemma"] };
+  assert.equal(applyEngineAvailability(av, { translate: "gemma", dubMode: "local" }).warning,
+    "This computer has 14 GB of memory, so dubbing may take a while. Dubbing with the Perso API uses almost no memory.");
+  assert.equal(applyEngineAvailability(av, { translate: "chatgpt", dubMode: "local" }).warning, null);
+  assert.equal(applyEngineAvailability(av, { translate: "gemma", dubMode: "perso" }).warning, null);
+  // Under a failed voice engine, one line each.
+  const both = { ...av, local_engines: { voice: { state: "failed", message: "Off." } } };
+  assert.equal(applyEngineAvailability(both, { translate: "gemma", dubMode: "local" }).warning.split("\n").length, 2);
 });
 
 test("applyEngineAvailability: a missing local Gemma is neither disabled nor switched away", () => {
@@ -423,7 +449,7 @@ test("engineChips: the local stack, quality first and every role named", () => {
 test("engineChips: the paid engines are marked, and 1 take is Fast mode", () => {
   const chips = engineChips({ stt_engine: "perso", translator: "gemini", tts: "qwen3", quality: 1 });
   assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`.trim()),
-    ["Fast mode", "STT Perso", "Translation Gemini", "TTS Qwen3-TTS"]);
+    ["Fast mode", "STT Perso", "Translation Gemini API", "TTS Qwen3-TTS"]);
   assert.deepEqual(chips.map((c) => c.api), [false, true, true, false]);
 });
 
@@ -459,6 +485,21 @@ test("engineLine names the role beside every engine", () => {
   assert.equal(engineLine({ separation: "demucs", stt_engine: "whisper", translator: "gemma", tts: "qwen3" }),
     "Transcription Whisper · Translation Gemma 3 · Voice Qwen3-TTS");
   assert.equal(engineLine({ project: "old" }), "");
+});
+
+// B14, B16: the translator by the name the company calls it, with the model
+// the job kept; a job from before it was kept names the translator alone.
+test("translatorLabel names the translator with the model the job kept", () => {
+  assert.equal(translatorLabel({ translator: "chatgpt", translator_model: "gpt-5.6-luna" }), "ChatGPT (gpt-5.6-luna)");
+  assert.equal(translatorLabel({ translator: "chatgpt" }), "ChatGPT");
+  assert.equal(translatorLabel({ translator: "gemini", translator_model: "gemini-flash-latest" }), "Gemini API (Flash)");
+  assert.equal(translatorLabel({ translator: "hunyuan", translator_model: "hy-mt2:1.8b" }), "Hunyuan 1.8B");
+  assert.equal(translatorLabel({ translator: "gemma", translator_model: "gemma3:12b" }), "Gemma 3");
+  assert.equal(translatorLabel({ dub_mode: "perso" }), "Perso");
+  assert.equal(translatorLabel({ translator: "made-up" }), "");
+  assert.equal(translatorLabel(null), "");
+  assert.equal(engineLine({ stt_engine: "whisper", translator: "chatgpt", translator_model: "gpt-5.6-luna" }),
+    "Transcription Whisper · Translation ChatGPT (gpt-5.6-luna)");
 });
 
 test("engineChips: a job saved before the fields existed shows nothing", () => {
