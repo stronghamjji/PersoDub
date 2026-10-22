@@ -12,7 +12,7 @@ its models installed. Python 3.8+ and ffprobe; nothing to install.
 
 ```
 python tests/e2e/regress.py --base http://127.0.0.1:52252 \
-    --clip speech-10s.mp4 --subs-clip subtitles-10s.mp4 --out ~/e2e-runs/today
+    --clip paris-en-subs-10s.mp4 --subs-clip paris-en-subs-10s.mp4 --out ~/e2e-runs/today
 ```
 
 - `--base`: the running app. Its port is the last `backend START (port N)`
@@ -20,6 +20,8 @@ python tests/e2e/regress.py --base http://127.0.0.1:52252 \
   `~/Library/Application Support/persodub-desktop-shell/logs`).
 - `--clip`: about 10 seconds of English speech.
 - `--subs-clip`: about 10 seconds with subtitles burned into the picture.
+  One clip may serve both when it has speech and burned-in subtitles; our
+  fixture `paris-en-subs-10s.mp4` (English speech, Korean captions) does.
 - `--translator`: the dub's translator, any name in `app/engines_status.py`
   `TRANSLATORS` (`hunyuan`, `chatgpt`, ...), sent in the dub's own request as
   the Translation dropdown sends it. Left out, the saved one translates.
@@ -37,7 +39,7 @@ kit's ffprobe, from the repository's folder:
 
 ```
 "%LOCALAPPDATA%\PersoDub\python\python.exe" tests\e2e\regress.py --base http://127.0.0.1:<port> ^
-    --clip "%USERPROFILE%\e2e-fixtures\obama-10s.mp4" --subs-clip "%USERPROFILE%\e2e-fixtures\paris-subs-10s.mp4" ^
+    --clip "%USERPROFILE%\e2e-fixtures\paris-en-subs-10s.mp4" --subs-clip "%USERPROFILE%\e2e-fixtures\paris-en-subs-10s.mp4" ^
     --out "%USERPROFILE%\e2e-runs\today" --translator hunyuan
 ```
 

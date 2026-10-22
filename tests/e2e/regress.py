@@ -3,7 +3,7 @@
 app's HTTP API, each one timed and checked with numbers.
 
     python tests/e2e/regress.py --base http://127.0.0.1:52252 \\
-        --clip speech-10s.mp4 --subs-clip subtitles-10s.mp4 --out runs/today \\
+        --clip paris-en-subs-10s.mp4 --subs-clip paris-en-subs-10s.mp4 --out runs/today \\
         [--translator hunyuan] [--perso]
 
 Every route is asked in the shape the page asks it (ui/src/dubApi.mjs,
