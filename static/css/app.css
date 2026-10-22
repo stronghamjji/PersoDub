@@ -650,6 +650,10 @@
     font-size: var(--font-label); color: var(--primary-ink); }
   .erase-link:hover { text-decoration: underline; }
   .erase-card .erase-link { position: absolute; right: 12px; top: 10px; }
+  /* What a tool makes: one card under its last choice, "What you get" over
+     the files (owner, 2026-10-22). */
+  .result-box { margin: 8px 0 4px; }
+  .result-box .m { line-height: 1.5; }
   /* The pack line and the no-graphics-card line. */
   .erase-notice { flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
     padding: 8px 10px; border-radius: 6px; background: var(--accent);
@@ -674,6 +678,9 @@
   /* The line for the state the screen is in, at the foot of the column. */
   .erase-tip { margin-top: auto; }
   .erase-tip .lu { color: var(--primary-ink); }
+  /* Placing the box, the result card stands in that line's room: the column
+     at 1280x800 has no more than that. */
+  #tabErase .result-box { margin: 0; }
   /* ---- Audio: the left panel's tab (ui/src/audioTab.mjs) ---- */
   /* The Erase tab's cards and foot, without its side list. */
   .audio-tab .erase-card select { margin-top: 6px; height: 28px; padding: 0 8px; font-size: 12px; }
@@ -687,10 +694,6 @@
     display: grid; place-items: center; cursor: pointer; background: var(--secondary); color: var(--foreground); }
   .audio-play:hover { background: var(--accent); }
   .audio-wave { flex: 1; min-width: 0; height: 26px; }
-  /* Before there is a separation: the same two rows, dim, each saying what
-     it will be. */
-  .audio-row.dim { color: var(--muted-foreground); }
-  .audio-row .audio-note { font-size: var(--font-label); font-weight: 400; color: var(--muted-foreground); }
   .audio-tab .erase-desc { flex: 0 0 auto; padding: 0 14px 8px; font-size: var(--font-label);
     color: var(--muted-foreground); }
   .audio-tab .erase-label { padding-bottom: 2px; }
@@ -1812,6 +1815,8 @@
   .cap-saved { margin-left: auto; color: var(--foreground); }
   .cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px;
     padding: 0 12px 12px; overflow-y: auto; min-height: 0; align-content: start; }
+  /* What the looks make, under the grid, which scrolls above it. */
+  .cap-content .result-box { margin: 0 12px 12px; }
   .cap-card { display: flex; flex-direction: column; gap: 5px; border: 0; background: none; padding: 0;
     font: inherit; font-size: var(--font-label); color: var(--muted-foreground); text-align: left;
     cursor: pointer; }

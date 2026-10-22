@@ -411,6 +411,11 @@
                          look is written to the job the moment it is changed. -->
                     <div class="cap-label"><span data-i18n>Styles · 12</span><span class="cap-saved" id="subSaved"></span></div>
                     <div class="cap-grid" id="subStyleMenu"></div>
+                    <!-- What the looks make (owner, 2026-10-22). -->
+                    <div class="erase-card result-box" id="capResult">
+                      <div data-i18n class="k">What you get</div>
+                      <div data-i18n class="m">The video with subtitles burned in, and the subtitle file</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -492,7 +497,7 @@
                   <div class="erase-body" id="audioBody" hidden>
                     <div class="erase-card video-card" id="audioPartCard"></div>
                     <div class="erase-card" id="audioEngineCard">
-                      <label data-i18n class="k" for="audioEngine">Runs on</label>
+                      <label data-i18n class="k" for="audioEngine">Choose a model</label>
                       <select id="audioEngine"><option value="local" selected data-i18n>Local model</option><option value="perso">Perso API</option></select>
                       <div class="s" id="audioEngineNote"></div>
                     </div>
@@ -501,13 +506,18 @@
                       <div class="progress-bar erase-bar" id="audioBarBox"><div id="audioFill"></div></div>
                       <div class="s erase-state" id="audioState"></div>
                     </div>
+                    <!-- What Separate makes, until it has made it (owner, 2026-10-22). -->
+                    <div class="erase-card result-box" id="audioResult" hidden>
+                      <div data-i18n class="k">What you get</div>
+                      <div data-i18n class="m">A voice file (speech only) · a background file (music and effects) · MP3 or WAV</div>
+                    </div>
                     <div class="audio-row" id="audioVoiceRow" hidden>
                       <button class="audio-play" id="audioVoicePlay" type="button"></button>
-                      <span data-i18n class="audio-name">Voice</span><span class="audio-note" data-i18n id="audioVoiceNote">Speech only</span><span class="audio-wave" id="audioVoiceWave"></span>
+                      <span data-i18n class="audio-name">Voice</span><span class="audio-wave" id="audioVoiceWave"></span>
                     </div>
                     <div class="audio-row" id="audioBackgroundRow" hidden>
                       <button class="audio-play" id="audioBackgroundPlay" type="button"></button>
-                      <span data-i18n class="audio-name">Background</span><span class="audio-note" data-i18n id="audioBackgroundNote">Music and effects</span><span class="audio-wave" id="audioBackgroundWave"></span>
+                      <span data-i18n class="audio-name">Background</span><span class="audio-wave" id="audioBackgroundWave"></span>
                     </div>
                     <div class="erase-error" id="audioError"></div>
                     <details class="raw-log erase-log" id="audioLogDetails" hidden>
@@ -592,8 +602,14 @@
                       <div class="s erase-big" id="eraseBigBox" hidden></div>
                       <button data-i18n class="erase-link" id="eraseResetBtn" type="button">Reset</button>
                     </div>
-                    <!-- One line for the state the screen is in: placing the
-                         box, erasing, or done (design 5, 2026-10-22). -->
+                    <!-- Placing the box: what the erase makes, in the room the
+                         line below had (owner, 2026-10-22). -->
+                    <div class="erase-card result-box" id="eraseResult" hidden>
+                      <div data-i18n class="k">What you get</div>
+                      <div data-i18n class="m">The video with its subtitles erased</div>
+                    </div>
+                    <!-- One line for the state the screen is in: erasing, or
+                         done (design 5, 2026-10-22). -->
                     <div class="erase-notice erase-tip" id="eraseTip" hidden><svg class="lu" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><span id="eraseTipText"></span></div>
                     <!-- Where Export answers. A line, not a dialog: the file
                          is already written by the time this appears. -->

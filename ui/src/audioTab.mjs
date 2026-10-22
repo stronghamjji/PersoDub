@@ -4,9 +4,9 @@
 // start from, and on the parts its timeline cuts kept.
 //
 // Three faces, by what is known about the draft on screen:
-//   before   the part, where it runs (this computer or Perso API), about how
-//            long, and Separate
-//   running  "Separating… 42%", a bar, and Stop
+//   before   the part, the model (this computer or Perso API), what it makes,
+//            about how long, and Separate
+//   running  "Separating… 42%", a bar, what it makes, and Stop
 //   done     Voice and Background, each with a play button and its picture,
 //            then Dubbing and Export
 // and two more at the edges: no video yet (the shared Import block), and a
@@ -198,16 +198,13 @@ export function initAudioTab({ $, state, getVideo, goToTab, importSource, say,
     show("audioLogDetails", view === "failed" && job.status === "error");
     if (view === "failed") $("audioLogBox").textContent = (job.logs || []).join("\n");
 
-    // The two sounds.
+    // The two sounds. Until they are there, one card says what they will be
+    // (owner, 2026-10-22).
+    show("audioResult", view === "before" || view === "running");
     const on = playing && !getVideo().paused;
     for (const which of STEMS) {
       const cap = which[0].toUpperCase() + which.slice(1);
-      // Before there is a separation the two rows are there already, dim,
-      // saying what each will be: no button and no picture yet.
-      show(`audio${cap}Row`, view !== "failed");
-      $(`audio${cap}Row`).classList.toggle("dim", view !== "done");
-      show(`audio${cap}Play`, view === "done");
-      show(`audio${cap}Note`, view !== "done");
+      show(`audio${cap}Row`, view === "done");
       const solo = on && !muted[which] && STEMS.every((w) => w === which || muted[w]);
       const btn = $(`audio${cap}Play`);
       btn.innerHTML = lucide(solo ? "pause" : "play", 12, true);

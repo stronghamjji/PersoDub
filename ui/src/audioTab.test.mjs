@@ -177,22 +177,18 @@ test("with a job on screen there is no draft to bring a video into", (t) => {
 
 // ---- before ------------------------------------------------------------------
 
-test("before: the video, where it runs, the two sounds to come, about how long, and Separate", (t) => {
+test("before: the video, the model, what it makes, about how long, and Separate", (t) => {
   const h = harness();
   t.after(h.log.restore);
   draft();
   setRanges([[10, 42]]);
-  assert.deepEqual(h.shown("audioPartCard", "audioEngineCard", "audioRunCard", "audioVoiceRow", "audioBackgroundRow"),
-    ["audioPartCard", "audioEngineCard", "audioVoiceRow", "audioBackgroundRow"]);
+  // What Separate makes is one card under the model; the two rows wait for
+  // the result (owner, 2026-10-22).
+  assert.deepEqual(h.shown("audioPartCard", "audioEngineCard", "audioRunCard", "audioResult", "audioVoiceRow", "audioBackgroundRow"),
+    ["audioPartCard", "audioEngineCard", "audioResult"]);
   assert.equal(h.$("audioPartCard").innerHTML,
     '<div class="k">Video</div><div class="m vc-name" title="street-food.mp4">street-food.mp4</div>'
     + '<div class="s vc-len">00:32<span class="vc-cut">00:20 cut</span></div>');
-  // The two results are there up front, dim: a note each, no button yet.
-  for (const which of ["Voice", "Background"]) {
-    assert.equal(h.$(`audio${which}Row`).classList.contains("dim"), true);
-    assert.equal(h.$(`audio${which}Play`).hidden, true);
-    assert.equal(h.$(`audio${which}Note`).hidden, false);
-  }
   assert.equal(h.$("audioEngineNote").textContent, "");
   assert.equal(h.$("audioFootLabel").textContent, "About 1 min");
   assert.deepEqual(h.buttons(), ["audioRunBtn"]);
@@ -298,8 +294,8 @@ test("running: the percentage, the bar, the length and Stop; the cuts are locked
   setRanges([[10, 42]]);
   await h.$("audioRunBtn").click();
   await h.log.tick();
-  assert.deepEqual(h.shown("audioPartCard", "audioEngineCard", "audioRunCard", "audioVoiceRow", "audioBackgroundRow"),
-    ["audioPartCard", "audioRunCard", "audioVoiceRow", "audioBackgroundRow"]);
+  assert.deepEqual(h.shown("audioPartCard", "audioEngineCard", "audioRunCard", "audioResult", "audioVoiceRow", "audioBackgroundRow"),
+    ["audioPartCard", "audioRunCard", "audioResult"]);
   assert.equal(h.$("audioRunLine").textContent, "Separating… 42%");
   assert.equal(h.$("audioBarBox").hidden, false);
   assert.equal(h.$("audioFill").style.width, "42%");
@@ -344,6 +340,7 @@ test("a separation that broke says why in one sentence, keeps its log, and can b
   await h.log.tick();
   assert.equal(h.$("audioState").textContent, "Voice separation failed on this computer. Check the video file.");
   assert.equal(h.$("audioState").classList.contains("bad"), true);
+  assert.deepEqual(h.shown("audioResult", "audioVoiceRow", "audioBackgroundRow"), []);
   assert.equal(h.$("audioLogDetails").hidden, false);
   assert.match(h.$("audioLogBox").textContent, /RuntimeError: boom/);
   assert.deepEqual(h.buttons(), ["audioBackBtn", "audioRetryBtn"]);
@@ -391,8 +388,9 @@ test("done: two rows with their pictures, how much was separated, Dubbing and Ex
   const h = harness();
   t.after(h.log.restore);
   await finished(h);
-  assert.deepEqual(h.shown("audioPartCard", "audioEngineCard", "audioRunCard", "audioVoiceRow", "audioBackgroundRow"),
+  assert.deepEqual(h.shown("audioPartCard", "audioEngineCard", "audioRunCard", "audioResult", "audioVoiceRow", "audioBackgroundRow"),
     ["audioPartCard", "audioVoiceRow", "audioBackgroundRow"]);
+  for (const id of ["audioVoicePlay", "audioBackgroundPlay"]) assert.equal(h.$(id).hidden, false);
   for (const id of ["audioVoiceWave", "audioBackgroundWave"]) assert.match(h.$(id).innerHTML, /^<svg viewBox="0 0 10 100"/);
   assert.equal(h.$("audioFootLabel").textContent, "00:32 separated");
   assert.deepEqual(h.buttons(), ["audioDubBtn", "audioExportBtn"]);
