@@ -996,6 +996,18 @@ test("Audio separation and Speech-to-text on this computer point at the Perso AP
   assert.match(html, /stt: \{ get local\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Perso API\."\)\]; \},/);
 });
 
+// The dubbing's own step that splits the voice from the background is Voice
+// separation, so it no longer reads as the Separate audio tab (owner, 2026-10-22).
+test("the dubbing step is Voice separation, and the tool tab keeps its own name", () => {
+  const html = readPage();
+  assert.match(html, /<label data-i18n for="sepSelect">Voice separation<\/label>/);
+  const tab = html.slice(html.indexOf('data-tab="audio"'));
+  assert.ok(tab.slice(0, tab.indexOf("</button>")).endsWith("</svg>Separate audio"));
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Voice separation"], "목소리 분리");
+  assert.equal(ko["Separate audio"], "오디오 분리");
+});
+
 test("the sentence that named no API is gone from the page and from both tables", () => {
   assert.ok(!readPage().includes("For accuracy, use the API."));
   for (const code of ["en", "ko"]) {

@@ -19,7 +19,7 @@ What each dubbing service receives, precisely:
 
 | If you add | What is sent | Where |
 |---|---|---|
-| **Perso API key** | **The video file itself** (the part you kept) is uploaded. With Perso API dubbing, Perso transcribes, translates and voices it and sends back the finished video. Dubbing on this computer, the default, can set **Speech-to-text** and **Audio separation** to Perso; each of those uploads the video too. | Perso |
+| **Perso API key** | **The video file itself** (the part you kept) is uploaded. With Perso API dubbing, Perso transcribes, translates and voices it and sends back the finished video. Dubbing on this computer, the default, can set **Speech-to-text** and **Voice separation** to Perso; each of those uploads the video too. | Perso |
 | **Google Gemini key** | **The transcript text only** — not the video, not the audio. | Google |
 | **ChatGPT sign-in** (the default translator) | **The transcript text**, with the translation instructions, sent through your own ChatGPT account, under that account's own data settings. The program that carries it (OpenAI's Codex) runs in a folder of PersoDub's own with every tool switched off, so it reads nothing else on your computer and none of your own Codex settings go along; OpenAI's program may send its own usage statistics. The sign-in is OpenAI's own flow and stays on your computer; PersoDub never sees the password or token. | OpenAI |
 
