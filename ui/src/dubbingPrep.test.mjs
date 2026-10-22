@@ -100,10 +100,10 @@ test("Before dubbing shows the six stage rows under Dubbing step settings withou
   for (const id of ["sepSelect", "sttSelect", "translateSelect", "voiceSelect"]) assert.equal($(id).hidden, true, id);
 });
 
-// The top row is Model selection, 모델 선택 (owner, 2026-10-22, remark 2 나),
+// The top row is Choose a model, 모델 선택 (owner, 2026-10-22, remark 2 나),
 // and under Perso's model the count reads N supported languages, one unit.
-test("the top row is Model selection, and the line under Perso's model says its supported languages", () => {
-  assert.equal($("dubModeLabel").textContent, "Model selection");
+test("the top row is Choose a model, and the line under Perso's model says its supported languages", () => {
+  assert.equal($("dubModeLabel").textContent, "Choose a model");
   $("dubModePerso").click();
   assert.equal($("persoModelRow").hidden, false);
   // Linnet 4 until Perso's list answers, with the ten languages shown till then.
