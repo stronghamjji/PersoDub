@@ -139,6 +139,10 @@ row gets a check, and the line under the rows says where it went.
 **Erase subtitles** on the Home screen, or the **Erase** tab of a project, takes
 subtitles that are burned into the picture back out of it.
 
+- **Why:** Original subtitles left in the video overlap the translated ones.
+- **How:** Fit the box → Erase subtitles → Dubbing → burn in a Captions style.
+- **Time:** About 10 min for a 10-second video (Local model).
+
 Drop a video or paste a link, the same two ways in the dubbing screen offers. The app
 looks for the writing and draws a box where it thinks it is: red while it is looking,
 green once it has found something. Drag the box if it missed, and cut the video on
