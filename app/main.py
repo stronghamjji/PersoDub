@@ -114,7 +114,8 @@ async def unhandled_exception(request, exc):
     log.exception("Unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
     return JSONResponse(
         status_code=500,
-        content={"detail": t("An internal error occurred. Details are in the app log.")},
+        content={"detail": t("Something went wrong in PersoDub. Try again, and if it happens again, "
+                             "quit and reopen PersoDub.")},
     )
 
 

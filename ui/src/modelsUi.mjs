@@ -38,8 +38,12 @@ export function modelStatusLine(row) {
     return { cls: "model-busy", text, button: "cancel" };
   }
   if (row.state === "paused") {
-    // The server's reason in plain words ("Connection lost."), then what to do.
-    const text = row.error ? t("{reason} Press Resume to continue.", { reason: row.error }) : t("Paused");
+    // The server's reason in plain words ("Connection lost."), then what to do
+    // -- unless the reason already says to press Resume (a blocked connection,
+    // the desktop app's interrupted pack), which said it twice.
+    const text = !row.error ? t("Paused")
+      : row.error.includes(t("Resume")) ? row.error
+        : t("{reason} Press Resume to pick up where it stopped.", { reason: row.error });
     return { cls: "model-busy", text, button: "resume" };
   }
   return { cls: "", text: `${gb(row.bytes)} GB`, button: "download" };

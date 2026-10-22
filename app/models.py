@@ -367,6 +367,11 @@ def _stopped_reason(exc) -> str:
     text = ("%s %s" % (type(exc).__name__, exc)).lower()
     if any(w in text for w in _NO_ROOM):
         return t("Not enough space on this computer.")
+    # Ahead of the dropped connection it also reads as: pressing Resume on the
+    # same network only fails again.
+    if netlog.certificate_refused(text):
+        return t("A company network or security program blocked the connection. "
+                 "Connect to another Wi-Fi or a hotspot, then press Resume.")
     if any(w in text for w in _NO_NETWORK):
         return t("Connection lost.")
     return t("The download stopped.")

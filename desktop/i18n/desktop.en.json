@@ -1,6 +1,7 @@
 {
   "  Needs:  {needed} GB\n  Free:   {free} GB\n\nFree up about {more} GB and start again.": "  Needs:  {needed} GB\n  Free:   {free} GB\n\nFree up about {more} GB and start again.",
   "(unknown)": "(unknown)",
+  "A company network or security program blocked the connection. Connect to another Wi-Fi or a hotspot, then press Resume.": "A company network or security program blocked the connection. Connect to another Wi-Fi or a hotspot, then press Resume.",
   "A company network or security program blocked the download. Connect to another Wi-Fi or a hotspot, then press Try again.": "A company network or security program blocked the download. Connect to another Wi-Fi or a hotspot, then press Try again.",
   "Another program is using PersoDub's files. Restart your computer, then press Try again.": "Another program is using PersoDub's files. Restart your computer, then press Try again.",
   "Cancelled.": "Cancelled.",

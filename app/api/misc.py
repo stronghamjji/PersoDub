@@ -265,7 +265,7 @@ def translate_api(body: TranslateRequest):
         logger.warning("Translation failed (%s)", type(e).__name__)
         raise HTTPException(
             status_code=500,
-            detail=t("Translation failed ({kind}). Check the translation "
-                     "engine in Settings, or the app log for the details.", kind=type(e).__name__),
+            detail=t("Could not translate it. Try again, and if it still fails, "
+                     "choose another translator in Settings."),
         ) from e
     return {"translations": out}

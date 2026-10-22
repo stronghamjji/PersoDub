@@ -125,6 +125,15 @@ test("a cancelled install answers Cancelled, and a failed download names its own
   fail(new Error("download failed 404: https://example.com/ollama.tgz"));
   assert.deepEqual(await broken, { ok: false, reason: "download failed 404: https://example.com/ollama.tgz" });
   assert.equal(existsSync(join(s.kitDir, ".install", "ollama-runtime.installing")), false);
+
+  // A certificate the network swapped in, named in the error's cause as fetch
+  // names it: the answer is another network, not Resume on this one.
+  fail = null;
+  const blocked = s.ask("shell:install-pack", "ollama-runtime");
+  await until(() => fail);
+  fail(new Error("download stopped", { cause: new Error("self-signed certificate in certificate chain") }));
+  assert.deepEqual(await blocked, { ok: false, reason: "A company network or security program blocked the connection. "
+    + "Connect to another Wi-Fi or a hotspot, then press Resume." });
 });
 
 test("the pack's percent is none until a byte counts, then the bytes' own", async (t) => {

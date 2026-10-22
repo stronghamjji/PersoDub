@@ -152,7 +152,7 @@ test("statusParts cuts a top-bar status into the pieces its chips are made of", 
 });
 
 test("errorText turns a request that never reached the app into what to do about it", () => {
-  const told = "PersoDub is not running. Restart the app.";
+  const told = "The connection to PersoDub dropped for a moment. If it stays this way, quit and reopen PersoDub.";
   assert.equal(errorText(new TypeError("Failed to fetch")), told);
   assert.equal(errorText(new TypeError("Load failed")), told);
   assert.equal(errorText(new TypeError("NetworkError when attempting to fetch resource.")), told);
@@ -164,9 +164,10 @@ test("errorText turns a request that never reached the app into what to do about
 
 test("errorText never shows a list of field errors or a page of HTML", () => {
   const body = JSON.stringify({ detail: [{ loc: ["body", "file"], msg: "field required", type: "value_error.missing" }] });
-  assert.equal(errorText(new Error(body)), "That did not work. Try again.");
-  assert.equal(errorText(new Error('{"detail": {"code": 3}}')), "That did not work. Try again.");
-  assert.equal(errorText(new Error("<!DOCTYPE html><html><body>500</body></html>")), "That did not work. Try again.");
+  const told = "Something went wrong in PersoDub. Try again, and if it happens again, quit and reopen PersoDub.";
+  assert.equal(errorText(new Error(body)), told);
+  assert.equal(errorText(new Error('{"detail": {"code": 3}}')), told);
+  assert.equal(errorText(new Error("<!DOCTYPE html><html><body>500</body></html>")), told);
 });
 
 test("shortcut tips say Cmd on a Mac and Ctrl everywhere else", () => {

@@ -284,7 +284,7 @@ test("Start says why it is dim while the video is still coming in, and a new dra
   assert.equal($("draftStartBtn").title, "The video is still coming in");
   setDraft({ downloadId: "d1", name: "a.mp4", duration: 10, videoUrl: "/v" });
   assert.equal($("draftStartBtn").title, "");
-  $("draftError").textContent = "PersoDub is not running. Restart the app.";
+  $("draftError").textContent = "The connection to PersoDub dropped for a moment. If it stays this way, quit and reopen PersoDub.";
   await api.openDraft(null);
   assert.equal($("draftError").textContent, "");
 });

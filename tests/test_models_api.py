@@ -146,6 +146,12 @@ def test_failed_download_reports_error_then_paused_state(monkeypatch):
      "IncompleteRead(0 bytes read)')", "Connection lost."),
     ("hf download exited 1: httpx.ReadTimeout: The read operation timed out", "Connection lost."),
     (OSError(28, "No space left on device"), "Not enough space on this computer."),
+    # A certificate a company network swapped in: Resume on the same network
+    # only fails again, so it says to change networks.
+    ("hf download exited 1: httpx.ConnectError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: "
+     "self-signed certificate in certificate chain (_ssl.c:1006)",
+     "A company network or security program blocked the connection. "
+     "Connect to another Wi-Fi or a hotspot, then press Resume."),
     ("hf download exited 1: Traceback (most recent call last): KeyError: 'sha'", "The download stopped."),
 ])
 def test_a_stopped_download_says_why_in_plain_words(monkeypatch, fail, said):

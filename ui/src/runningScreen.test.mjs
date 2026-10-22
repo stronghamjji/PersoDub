@@ -611,13 +611,33 @@ test("a stop the server could not do says so; one that came too late does not", 
   assert.notEqual(late.$("jobNotice").textContent, "Could not stop the dubbing. Try again.");
 });
 
+test("a failure with no sentence of its own says the stage it stopped on and the button to press", (t) => {
+  const h = harness({ status: "error" });
+  t.after(h.log.restore);
+  const stopped = (logs, extra = {}) => {
+    h.api.paintNotices({ id: "j1", status: "error", error: "KeyError: 'segments'", logs, ...extra });
+    return h.$("doneNotice").innerHTML;
+  };
+  const resume = "Press Resume to go on from where it stopped. If it stops again, you can try the Perso API.";
+  assert.equal(stopped(["1/6 separating"]), `It stopped while separating the audio. ${resume}`);
+  assert.equal(stopped(TRANSLATING.logs.slice(0, 2)), `It stopped while transcribing. ${resume}`);
+  assert.equal(stopped(TRANSLATING.logs), `It stopped while translating. ${resume}`);
+  assert.equal(stopped([...TRANSLATING.logs, "4/6 voices"]), `It stopped while making the voices. ${resume}`);
+  assert.equal(stopped([...TRANSLATING.logs, "4/6 voices", "5/6 check"]), `It stopped while making the voices. ${resume}`);
+  assert.equal(stopped([...TRANSLATING.logs, "4/6 voices", "5/6 check", "6/6 build"]), `It stopped while making the video. ${resume}`);
+  // A Perso API dub has no Resume: Start over.
+  assert.equal(stopped(["Uploading the video to Perso"], { dub_mode: "perso" }),
+    "It stopped while dubbing with the Perso API. Press Start over.");
+});
+
 test("a failed dub shows a plain sentence, never what the program said when it broke", (t) => {
   const h = harness({ status: "error" });
   t.after(h.log.restore);
   h.api.paintNotices({ id: "j1", status: "error", error: "No dialogue lines were found in this video." });
   assert.equal(h.$("doneNotice").innerHTML, "No dialogue lines were found in this video.");
   h.api.paintNotices({ id: "j1", status: "error", error: "KeyError: 'segments'", logs: [] });
-  assert.equal(h.$("doneNotice").innerHTML, "Something went wrong. Try again, or use a shorter clip.");
+  assert.equal(h.$("doneNotice").innerHTML,
+    "It stopped while getting the dubbing ready. Press Start over. If it stops again, quit and reopen PersoDub, then try again.");
   h.api.paintNotices({ id: "j1", status: "error", error: "local STT reported an error ([Errno 2] No such file)" });
   assert.equal(h.$("doneNotice").innerHTML, "Local STT reported an error.");
 });

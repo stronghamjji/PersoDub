@@ -29,7 +29,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import config, dub_launch, engines_status, perso_client, perso_edit, perso_materialize, state
+from app import config, dub_launch, engines_status, netlog, perso_client, perso_edit, perso_materialize, state
 from app import setup as dub_setup
 from app.api._launch import check_space
 from app.api._shared import script_work_dir
@@ -579,10 +579,17 @@ def _perso_says(e: Exception) -> tuple:
     if isinstance(e, httpx.HTTPStatusError):
         return 409, t("Perso did not accept the change ({reason}).", reason=short_reason(e))
     if isinstance(e, httpx.HTTPError):
+        # A company network or security program refusing Perso's certificate:
+        # checking the connection on the same network changes nothing.
+        if netlog.certificate_refused(str(e)):
+            return 503, t("A company network or security program blocked the connection. "
+                          "Connect to another Wi-Fi or a hotspot, then press it again.")
         return 503, t("Could not reach Perso. Check the connection, then try again.")
     if isinstance(e, FileNotFoundError):
         return 409, short_reason(e)
-    return 500, t("Editing through Perso failed ({kind}).", kind=type(e).__name__)
+    # The type name for the log only: on screen it is a program's word.
+    logger.warning("Editing through Perso failed (%s)", type(e).__name__)
+    return 500, t("Perso could not make the change. Press it again in a moment.")
 
 
 def _perso_error(e: Exception) -> HTTPException:

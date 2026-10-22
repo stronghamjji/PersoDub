@@ -666,6 +666,12 @@ REFUSALS = [
     ("voice", PersoModelRefusedError("VT40918"), 409, "Use All at once"),
     ("voice", httpx.ReadTimeout("timed out"), 504, "did not answer in time"),
     ("voice", httpx.ConnectError("no route"), 503, "Could not reach Perso"),
+    # A company network's own certificate: another network, not the same one again.
+    ("voice", httpx.ConnectError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: "
+                                 "self-signed certificate in certificate chain (_ssl.c:1006)"),
+     503, "A company network or security program blocked the connection"),
+    # Anything else is said in words; its type name is for the log.
+    ("voice", KeyError("sha"), 500, "Perso could not make the change. Press it again in a moment."),
     ("voice", PersoUnavailableError("HTTP 503"), 503, "temporarily unavailable"),
     ("voice", pcm.PersoInvalidKeyError("HTTP 401"), 409, "rejected the API key"),
     ("download", httpx.ReadTimeout("timed out"), 504, "did not answer in time"),

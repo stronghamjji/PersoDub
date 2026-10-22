@@ -259,7 +259,7 @@ export async function probeSource(url, { baseUrl = "" } = {}) {
   });
   if (!res.ok) {
     const detail = (await res.json().catch(() => ({}))).detail || {};
-    const err = new Error(detail.message || t("Could not fetch the video."));
+    const err = new Error(detail.message || t("Could not fetch the video from this link. Paste it again in a moment, or drag the video file in."));
     err.reason = detail.reason || "unknown";
     throw err;
   }
@@ -293,7 +293,7 @@ export async function startDownload(url, { baseUrl = "" } = {}) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
-  if (!res.ok) throw await downloadError(res, t("Could not fetch the video."));
+  if (!res.ok) throw await downloadError(res, t("Could not fetch the video from this link. Paste it again in a moment, or drag the video file in."));
   return (await res.json()).id;
 }
 

@@ -151,7 +151,7 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
       let d;
       try { d = await fetchDownload(id); } catch { return; }
       if (seq !== importSeq) { stopWatching(); return; }
-      if (d.status === "failed") { stopWatching(); linkOnItsWay = ""; setStatus(d.error || t("Could not fetch the video."), true); return; }
+      if (d.status === "failed") { stopWatching(); linkOnItsWay = ""; setStatus(d.error || t("Could not fetch the video from this link. Paste it again in a moment, or drag the video file in."), true); return; }
       if (d.status === "ready") {
         stopWatching();
         linkOnItsWay = "";
