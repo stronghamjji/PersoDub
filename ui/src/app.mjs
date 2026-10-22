@@ -2045,6 +2045,10 @@ async function exportContext() {
   // fetching it to find out downloaded the subtitles nobody had asked for yet.
   const hasSrt = await fetch(`/api/dub/result/${job.id}/srt`, { method: "HEAD" })
     .then((r) => r.ok).catch(() => false);
+  // The script goes out as Perso's spreadsheet whenever the job has one: a
+  // dubbing made here has it when it has that subtitles file, and one made on
+  // Perso keeps its lines there, where app/api/script.py reads them back.
+  const hasScript = hasSrt || (job.dub_mode === "perso" && !!job.perso_project_seq);
   // The original's voice and background, each only while the job's folder
   // still has it (a dubbing made wholly on Perso has neither).
   const stems = await fetch(`/api/dub/result/${job.id}/stems`)
@@ -2058,7 +2062,9 @@ async function exportContext() {
   const mark = doneVersion ? `&v=${doneVersion}` : "";
   const { preset: subPreset, query: posQ } = subtitles.exportParams();
   return {
-    kind: "dub", jobId: job.id, target, mark, hasSrt, stems, project: job.project, fromLink: !!job.from_link, ratio,
+    kind: "dub", jobId: job.id, target, mark, hasSrt, hasScript, stems, project: job.project, fromLink: !!job.from_link, ratio,
+    // The script's file name: the project as the screens show it, and both languages.
+    title: shownName(job), source: job.source_lang,
     // The same URL the player is on, remake mark and all: without it a download
     // taken straight after a remake can be served the old video from cache.
     videoHref: donePlayer.doneVideoSrc(job, "dubbed"),
