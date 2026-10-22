@@ -82,6 +82,22 @@ def test_the_limit_notice_says_when_it_resets_when_openai_said(tmp_path, monkeyp
                                      "Resume then, or continue with another translator.")
 
 
+def test_the_limit_notice_on_a_korean_screen_writes_the_time_the_korean_way(tmp_path, monkeypatch):
+    """The English keeps Codex's time for the page to read back; the line on
+    the screen says it as Korean writes a time (A32)."""
+    from app import i18n
+    _world(monkeypatch, tmp_path)
+    monkeypatch.setattr(i18n, "_language", "ko")
+    logs, notices = [], []
+    limited = _Limited()
+    limited.error = ChatGptLimitError("ChatGPT usage limit reached", "Oct 24, 1:07 PM")
+    with pytest.raises(RuntimeError):
+        _run(tmp_path, limited, logs, notices)
+    assert "Resets Oct 24, 1:07 PM." in notices[0]["message"]
+    assert "10월 24일 오후 1:07에" in notices[0]["message_shown"]
+    assert "Oct" not in notices[0]["message_shown"]
+
+
 def test_a_signed_out_chatgpt_stops_the_same_way(tmp_path, monkeypatch):
     gemma = _world(monkeypatch, tmp_path)
     logs, notices = [], []

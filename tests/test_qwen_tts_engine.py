@@ -127,8 +127,12 @@ def test_clone_posts_ref_audio_and_returns_voice_id(monkeypatch, tmp_path):
 
 
 def test_clone_requires_ref_text_in_icl_mode():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as refused:
         QwenTTSEngine().clone("/x/ref.wav", "  ", mode="icl")
+    # The log keeps the cause; a stopped dub says what happened and what to press.
+    assert "requires ref_text" in str(refused.value)
+    assert refused.value.shown == ("Could not find where this speaker talks, so their voice could not be "
+                                   "copied. Press Start over.")
 
 
 def test_clone_defaults_to_timbre_mode_no_ref_text_needed(monkeypatch, tmp_path):

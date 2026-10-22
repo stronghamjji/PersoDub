@@ -404,8 +404,9 @@ async def agent_chat(body: AgentChatRequest, request: Request):
         raise HTTPException(status_code=422, detail=t("Unknown assistant: {agent}", agent=body.agent))
     driver = meta["driver"]
     if driver is None:
-        raise HTTPException(status_code=501, detail="%s: %s"
-                            % (meta["name"], meta.get("reason", "not wired up yet")))
+        # Its own reason is printed under its name in the picker already.
+        raise HTTPException(status_code=501, detail=t("This assistant cannot be used in Dub Agent yet. "
+                                                      "Pick another assistant."))
 
     binary = agent_base.find_cli(meta["binary"])
     if not binary and meta["binary"] == "codex" and codex_fetch.package():

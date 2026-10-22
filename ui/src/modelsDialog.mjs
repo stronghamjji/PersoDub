@@ -164,13 +164,13 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
     $("modelsError").textContent = "";
     if (!shell || !shell.removePack) { $("modelsError").textContent = t("Installed by PersoDub."); return; }
     // The engine knows whether a dub is running; its DELETE refuses a pack
-    // either way, and the sentence tells which reason. Only "packs are the
-    // desktop app's" means the coast is clear.
+    // either way, and the sentence tells which reason. Only "PersoDub installs
+    // this itself" (app/models.py, in English on purpose) means the coast is clear.
     try {
       const r = await fetch(`/api/models/${id}`, { method: "DELETE" });
       const body = await r.json().catch(() => null);
       const why = String((body && body.detail) || "");
-      if (!why.startsWith("Packs are installed")) { $("modelsError").textContent = why || t("Could not remove it."); return; }
+      if (why !== "PersoDub installs this itself.") { $("modelsError").textContent = why || t("Could not remove it."); return; }
     } catch { $("modelsError").textContent = t("Could not remove it. Is PersoDub running?"); return; }
     const res = await shell.removePack(id).catch((e) => ({ ok: false, reason: String((e && e.message) || e) }));
     if (!res || !res.ok) $("modelsError").textContent = (res && res.reason) || t("Could not remove it.");
@@ -250,8 +250,10 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
       if (!r.ok) {
         // The engine's reason -- "install the Translation runtime first" --
         // in the dialog and in Settings, instead of a download that never starts.
+        // In the page's language: the one it keeps in English (a pack is the
+        // desktop app's to install) is said here.
         const body = await r.json().catch(() => null);
-        showPackError(`${(row && row.name) || id}: ${String((body && body.detail) || t("The download could not start."))}`);
+        showPackError(`${(row && row.name) || id}: ${t(String((body && body.detail) || t("The download could not start.")))}`);
       }
     } catch { /* poll shows it */ }
     startPolling();

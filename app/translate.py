@@ -19,7 +19,7 @@ import requests
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import service_account
 
-from app import runtime
+from app import i18n, runtime
 from app.config import (
     GEMINI_MODEL,
     OLLAMA_GEMMA_MODEL,
@@ -256,17 +256,42 @@ class ChatGptLimitError(RuntimeError):
 
 # OpenAI's own words when a free account is out: "... or try again at Oct
 # 24th, 2026 1:07 PM." -- a lockout that can last weeks, so the time is worth
-# repeating on the screen.
+# repeating on the screen. Codex writes it in this computer's own time zone,
+# and only the time when that is later today ("try again at 1:07 PM.").
 _RESET_TIME = re.compile(
-    r"try again at\s+([A-Z][a-z]{2,8})\.? (\d{1,2})(?:st|nd|rd|th)?,?(?: \d{4})?,? "
+    r"try again at\s+(?:([A-Z][a-z]{2,8})\.? (\d{1,2})(?:st|nd|rd|th)?,?(?: \d{4})?,? )?"
     r"(\d{1,2}:\d{2}\s?[AP]M)", re.IGNORECASE)
 
 
 def reset_time_in(text: str) -> Optional[str]:
-    """The reset time in OpenAI's limit message, short ("Oct 24, 1:07 PM"),
-    or None when the message names none."""
+    """The reset time in OpenAI's limit message, short ("Oct 24, 1:07 PM", or
+    "1:07 PM" later today), or None when the message names none."""
     m = _RESET_TIME.search(text)
-    return f"{m.group(1)} {m.group(2)}, {m.group(3).upper()}" if m else None
+    if not m:
+        return None
+    return f"{m.group(1)} {m.group(2)}, {m.group(3).upper()}" if m.group(1) else m.group(3).upper()
+
+
+_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+_SHORT_TIME = re.compile(r"(?:([a-z]{3})[a-z]*\.? (\d{1,2}), )?(\d{1,2}):(\d{2}) ?([ap]m)", re.IGNORECASE)
+
+
+def reset_time_shown(resets: str) -> str:
+    """reset_time_in's time as the screen writes a time in the user's
+    language: "10월 24일 오후 1:07" in Korean, "오후 1:07" for later today.
+    English, or a time it cannot read, stays as it came. The same as the
+    page's resetTime (ui/src/translatorChoice.mjs), which reads it back out
+    of the English notice."""
+    m = _SHORT_TIME.fullmatch((resets or "").strip())
+    month = m and m.group(1) and m.group(1).lower()
+    if not m or i18n.current_language() == "en" or (month and month not in _MONTHS):
+        return resets
+    hour, minute = int(m.group(3)), m.group(4)
+    clock = (i18n.t("{hour}:{minute} AM", hour=hour, minute=minute) if m.group(5).upper() == "AM"
+             else i18n.t("{hour}:{minute} PM", hour=hour, minute=minute))
+    if not month:
+        return clock
+    return i18n.t("{month}/{day} {clock}", month=_MONTHS.index(month) + 1, day=int(m.group(2)), clock=clock)
 
 
 class ChatGptTranslator(TranslationEngine):

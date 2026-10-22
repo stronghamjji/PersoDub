@@ -33,6 +33,8 @@ const ENGINE_SENTENCES = [
   "Perso separation needs an API key. Open Settings and save your Perso API key, or choose This computer.",
   "Sign in to ChatGPT first.",
   "ChatGPT usage limit reached for now. Try again after it resets.",
+  // The models dialog's refusal for a pack, which the desktop app installs (app/models.py).
+  "PersoDub installs this itself.",
   // The Dub Agent's step labels (app/agents/claude.py TOOL_LABELS, app/agents/codex.py).
   "Reading the script", "Rewriting a line", "Checking the timing", "Exporting the script",
   "Checking progress", "Remaking the changed voices", "Remaking this line", "Translating again",
@@ -94,7 +96,11 @@ test("errorText says the engine's English refusal in Korean; serverText keeps it
   assert.equal(chipText("Rewriting a line", [3]), "고쳐 쓰는 중 (3번 줄)");
   // Sentences with a value in them, read out of the English and said again.
   assert.equal(resetsSentence("ChatGPT usage limit reached. Resets Oct 24, 1:07 PM. Resume then."),
-    "Oct 24, 1:07 PM에 다시 쓸 수 있어요.");
+    "10월 24일 오후 1:07에 다시 쓸 수 있어요.");
+  assert.equal(resetsSentence("ChatGPT usage limit reached. Resets 9:05 AM. Resume then."),
+    "오전 9:05에 다시 쓸 수 있어요.");
+  assert.equal(resetsSentence("ChatGPT usage limit reached. Resets tomorrow. Resume then."),
+    "tomorrow에 다시 쓸 수 있어요.", "a time it cannot read is left as it came");
   assert.equal(retryLine("Connection problem, retrying (2/3)"), "연결이 끊겨 다시 시도하는 중 (2/3)");
   assert.equal(retryLine("Downloading"), "Downloading", "anything else is left as it came");
 });

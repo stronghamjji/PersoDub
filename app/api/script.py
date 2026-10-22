@@ -572,7 +572,11 @@ def _perso_says(e: Exception) -> tuple:
         return 409, t("This dubbing's Perso voice cannot remake one line at a time. "
                       "Use All at once to remake every line.")
     if isinstance(e, PersoProjectFailedError):
-        return 502, str(e)
+        # Ours, with what to press, and on a line under it Perso's own words
+        # and code -- as a failed dub shows them (app/pipeline.py raise_notice).
+        said = t("Perso said: {said}", said=e.reason) if e.reason else t("Perso said: no reason given")
+        return 502, "%s\n%s" % (t("Perso could not finish this job. Press it again in a moment."),
+                                 "%s (%s)" % (said, e.code) if e.code else said)
     if isinstance(e, (httpx.TimeoutException, TimeoutError)):
         return 504, t("Perso did not answer in time. The change may still have been "
                       "made: wait a minute, then press again.")

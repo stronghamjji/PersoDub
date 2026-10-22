@@ -21,7 +21,7 @@ from app.config import QWEN_N_TAKES
 from app.diar_campplus_client import diarize
 from app.engines.base import VoiceEngineDown
 from app.engines.qwen_tts import QwenTTSEngine
-from app.i18n import both
+from app.i18n import both, t
 from app.jobs import JobCancelled, raise_if_cancelled, shown_error, timed_step
 from app.perso_client import (
     PersoClient,
@@ -68,6 +68,7 @@ from app.translate import (
     GeminiUnavailableError,
     TranslationEngine,
     get_translator,
+    reset_time_shown,
     script_ok,
 )
 
@@ -306,8 +307,13 @@ def raise_notice(e, log, on_notice) -> NoReturn:
     # in the order the popup says it: when, then the two ways on.
     resets = getattr(e, "resets", None)
     if isinstance(e, ChatGptLimitError) and resets:
-        msg, shown = both("ChatGPT usage limit reached. Resets {resets}. Resume then, or continue with "
-                          "another translator.", resets=resets)
+        # The English keeps the time as Codex wrote it (the page reads it back
+        # out, ui/src/translatorChoice.mjs); the screen's says it the way the
+        # user's language writes a time ("10월 24일 오후 1:07").
+        msg = both("ChatGPT usage limit reached. Resets {resets}. Resume then, or continue with "
+                   "another translator.", resets=resets)[0]
+        shown = t("ChatGPT usage limit reached. Resets {resets}. Resume then, or continue with "
+                  "another translator.", resets=reset_time_shown(resets))
     notice = {"type": notice_type, "message": msg, "message_shown": shown}
     # The plan's limit, for the popup that names it ("up to 1 min").
     if getattr(e, "limit_seconds", None):

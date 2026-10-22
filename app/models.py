@@ -253,8 +253,9 @@ def status_rows():
 
 
 # In English on purpose: the page hands a pack's removal to the desktop app
-# when the refusal starts with these words (ui/src/modelsDialog.mjs).
-PACKS_ARE_THE_SHELLS = "Packs are installed by the desktop app"
+# when the refusal is this sentence (ui/src/modelsDialog.mjs), and says it in
+# its own language where it shows it.
+PACKS_ARE_THE_SHELLS = "PersoDub installs this itself."
 
 
 def request_download(entry) -> str:

@@ -223,9 +223,9 @@ def test_packs_are_not_downloaded_or_removed_through_the_backend(monkeypatch, tm
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
     monkeypatch.setattr(models_module, "dub_in_progress", lambda: False)   # other tests leave jobs behind
     r = client.post("/api/models/engine/download")
-    assert r.status_code == 409 and r.json()["detail"] == "Packs are installed by the desktop app"
+    assert r.status_code == 409 and r.json()["detail"] == "PersoDub installs this itself."
     r = client.delete("/api/models/ollama-runtime")
-    assert r.status_code == 409 and r.json()["detail"] == "Packs are installed by the desktop app"
+    assert r.status_code == 409 and r.json()["detail"] == "PersoDub installs this itself."
 
 
 def test_removing_an_ollama_model_without_its_runtime_is_refused_with_a_sentence(monkeypatch, tmp_path):

@@ -622,7 +622,7 @@ test("the Settings catalog's pack rows ask the desktop app to install or remove,
   assert.equal(btn(runtimeRow).textContent, "Remove");
   // Remove asks the engine first (it knows whether a dub is running); its
   // "packs are the desktop app's" refusal is the all-clear.
-  h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "Packs are installed by the desktop app" }) } };
+  h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "PersoDub installs this itself." }) } };
   btn(runtimeRow).onclick();   // asks first
   await settle();
   btn(runtimeRow).onclick();   // then removes
