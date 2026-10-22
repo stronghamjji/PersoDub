@@ -65,6 +65,7 @@
   "This build carries no bundled files to install from.": "This build carries no bundled files to install from.",
   "This computer needs 8 GB of memory to dub.": "This computer needs 8 GB of memory to dub.",
   "This folder's path is too long to install into ({length} characters). Windows cannot open files deeper than {limit} characters, and the kit needs about {more} more than the folder you pick. Choose somewhere shorter, such as C:\\PersoDub.": "This folder's path is too long to install into ({length} characters). Windows cannot open files deeper than {limit} characters, and the kit needs about {more} more than the folder you pick. Choose somewhere shorter, such as C:\\PersoDub.",
+  "This is taking longer than usual. It can take a few minutes.": "This is taking longer than usual. It can take a few minutes.",
   "Try again": "Try again",
   "Unknown pack: {id}": "Unknown pack: {id}",
   "Unpacking the subtitle eraser": "Unpacking the subtitle eraser",

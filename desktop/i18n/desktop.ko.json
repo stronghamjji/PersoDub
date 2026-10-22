@@ -65,6 +65,7 @@
   "This build carries no bundled files to install from.": "이 버전에는 설치할 파일이 들어 있지 않아요.",
   "This computer needs 8 GB of memory to dub.": "더빙하려면 내 컴퓨터에 메모리가 8 GB 있어야 해요.",
   "This folder's path is too long to install into ({length} characters). Windows cannot open files deeper than {limit} characters, and the kit needs about {more} more than the folder you pick. Choose somewhere shorter, such as C:\\PersoDub.": "이 폴더 경로가 너무 길어서 설치할 수 없어요({length}자). Windows는 {limit}자가 넘는 경로의 파일을 열지 못하는데, 설치하면 고른 폴더보다 {more}자쯤 더 길어져요. C:\\PersoDub처럼 더 짧은 곳을 골라 주세요.",
+  "This is taking longer than usual. It can take a few minutes.": "평소보다 오래 걸리고 있어요. 길면 몇 분 걸려요.",
   "Try again": "다시 시도",
   "Unknown pack: {id}": "알 수 없는 팩: {id}",
   "Unpacking the subtitle eraser": "자막 지우기 도구 압축 푸는 중",

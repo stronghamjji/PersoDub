@@ -4,7 +4,7 @@
 // card carries its red dot and, once the update is on disk, says so in its
 // title. The shell downloads a new
 // version in the background and announces {version, phase: "downloading" |
-// "ready", pct, releaseDate?, releaseNotes?, whatsNew?} as it goes (desktop/src/updater.js
+// "ready" | "download-failed", pct, releaseDate?, releaseNotes?, whatsNew?} as it goes (desktop/src/updater.js
 // nextUpdateState); this file turns that into what the card and the window
 // show. A shell built before releaseDate/releaseNotes existed sends only the
 // first three -- the window then leaves out the date and links to the release
@@ -15,9 +15,9 @@
 // #homeWhatsNewTitle once the update is ready) and #updateOverlay.
 import { t, currentLanguage } from "./i18n.mjs";
 
-// An update exists (found and downloading, or on disk).
+// An update exists (found and downloading, on disk, or its download broke).
 export function updateLive(state) {
-  return !!state?.version && (state.phase === "downloading" || state.phase === "ready");
+  return !!state?.version && ["downloading", "ready", "download-failed"].includes(state.phase);
 }
 
 // The card's dot while an update downloads or waits, and the title it takes
@@ -103,17 +103,22 @@ export function updateWindowView(state, { current = "", currentNotes = [], dubRu
   const own = whatsNewLines(state.whatsNew, currentLanguage());
   const notes = own.length ? own : noteLines(state.releaseNotes, state.version);
   const ready = state.phase === "ready";
+  // A download that broke: no button held at its last percent, and the line
+  // under it says what to do. electron-updater drops the broken file, so
+  // the next launch's check downloads it anew.
+  const failed = state.phase === "download-failed";
   return {
     title: t("You can update to the latest version"),
     current: shownCurrent,
     next: t("New version: {version}", { version: state.version }),
     released: day ? t("Released on {day}", { day }) : "",
     button: ready ? { label: t("Restart to update"), disabled: false }
-                  : { label: t("Downloading {pct}%", { pct: state.pct || 0 }), disabled: true },
+      : failed ? null : { label: t("Downloading {pct}%", { pct: state.pct || 0 }), disabled: true },
     // A restart stops the dub: the job comes back as interrupted, with Resume
     // for a local one (app/jobs.py, app/api/dub.py) -- it does not carry on
     // by itself, so the line says only what is true for every dub.
-    running: dubRunning ? t("Dubbing is running. Restarting stops it.") : "",
+    running: failed ? t("Could not download the update. Check your internet connection, then open PersoDub again and it downloads anew.")
+      : dubRunning ? t("Dubbing is running. Restarting stops it.") : "",
     notes,
     notesLink: notes.length ? null : `${releases}/tag/v${state.version}`,
   };

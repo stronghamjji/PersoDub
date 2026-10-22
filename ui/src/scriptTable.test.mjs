@@ -191,6 +191,44 @@ test("a row carries the line number, who said it, both languages and whether it 
   assert.equal(h.log.playhead, 1);
 });
 
+// A written line with no voice in a dub that made voices: the voice stage
+// skipped it, so the video is silent there. Said under the line, and once
+// above the table with the button that makes it -- words only.
+test("a line whose voice could not be made says No sound, and one line above the table counts them", async (t) => {
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [
+    line(1),
+    line(2, { audio_sec: null }),
+    line(3, { audio_sec: null, text: "", untranslated: true }),   // no words: Not translated, not this
+    line(4, { audio_sec: null }),
+  ] }) } });
+  t.after(h.log.restore);
+  const box = h.$("scriptBox");
+  await h.api.renderScript("j1");
+  const notes = [...box.innerHTML.matchAll(/data-line="(\d)" data-note="No sound"/g)].map((m) => m[1]);
+  assert.deepEqual(notes, ["2", "4"]);
+  const bar = box.children.find((c) => c.className === "sc-clipped sc-silent");
+  assert.match(bar.innerHTML, /2 lines have no sound because their voices could not be made\. Press each line's voice button to make it again\./);
+  assert.equal(bar.listeners.click, undefined, "words only, nothing to press");
+
+  // One such line is said in the singular.
+  const one = harness({ responses: { [SCRIPT]: ok({ lines: [line(1), line(2, { audio_sec: null })] }) } });
+  t.after(one.log.restore);
+  await one.api.renderScript("j1");
+  assert.match(one.$("scriptBox").children[0].innerHTML,
+    /1 line has no sound because its voice could not be made\. Press that line's voice button to make it again\./);
+
+  // A project with no voice files at all (made before they were kept), or one
+  // Perso dubbed, has nothing to say about it.
+  for (const [perso, lines] of [[false, [line(1, { audio_sec: null }), line(2, { audio_sec: null })]],
+                                [true, [line(1), line(2, { audio_sec: null })]]]) {
+    const other = harness({ perso, responses: { [SCRIPT]: ok({ lines }) } });
+    t.after(other.log.restore);
+    await other.api.renderScript("j1");
+    assert.doesNotMatch(other.$("scriptBox").innerHTML, /No sound/);
+    assert.equal(other.$("scriptBox").children.some((c) => c.className === "sc-clipped sc-silent"), false);
+  }
+});
+
 test("the script's own clipped list replaces the job's old one, so a remade line stops saying cut", async (t) => {
   const job = { id: "j1", result: { clipped: [{ line: 2, cut_s: 0.6 }], clipped_count: 1 } };
   const h = harness({ job, responses: { [SCRIPT]: ok({ lines: [line(1), line(2)], clipped: [] }) } });

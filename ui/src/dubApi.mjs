@@ -172,6 +172,10 @@ export function buildDubFormData(opts) {
   return fd;
 }
 
+// The translators that run in the translation runtime (Ollama) on this
+// computer, by the names the warning gives them.
+const RUNTIME_TRANSLATORS = { hunyuan: "Hunyuan", gemma: "Gemma 3" };
+
 /**
  * Progressive-enhancement decision logic for GET /api/engines: given the
  * engine-availability payload and the Upload form's current translate/STT
@@ -184,8 +188,11 @@ export function buildDubFormData(opts) {
  * The warning is the voice engine's, when it failed to start and the dub is
  * to run on this computer: said before Start dubbing, not only after it
  * (issue #187: the reason came at the very end, after every choice was made).
+ * The translation runtime's the same way when Hunyuan or Gemma 3 is to
+ * translate, and a computer whose memory makes the dub slow (app/room.py
+ * ram_warning, GET /api/engines ram_slow): one line each.
  *
- * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available, local_engines}
+ * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available, local_engines, ram_gb, ram_slow}
  * @param {Object} current - {translate, stt, dubMode} the Upload form's current select values
  * @returns {{disable: {gemma: boolean, gemini: boolean, perso: boolean}, translate: string, warning: (string|null)}}
  */
@@ -198,12 +205,22 @@ export function applyEngineAvailability(av, current) {
     gemini: !av.gemini_available,
     perso: !av.perso_available,
   };
+  const local = current.dubMode !== "perso";
   // Its message is the engine's sentence of why (app/engines_status.py),
   // kept in English there and said in the page's language here.
   const voice = (av.local_engines || {}).voice || {};
-  const warning = current.dubMode !== "perso" && voice.state === "failed"
+  const voiceOff = local && voice.state === "failed"
     ? `${t("The voice engine is off. This computer cannot dub until it starts.")}\n${t(voice.message || "")}`.trim()
     : null;
+  const runtime = (av.local_engines || {}).translation || {};
+  const name = RUNTIME_TRANSLATORS[current.translate];
+  const translatorOff = local && name && runtime.state === "failed"
+    ? t("The translation engine could not start, so {name} cannot translate. Choose another translator, or quit and reopen PersoDub.", { name })
+    : null;
+  const slow = local && av.ram_gb && (av.ram_slow || []).includes(current.translate)
+    ? t("This computer has {n} GB of memory, so dubbing may take a while. Dubbing with the Perso API uses almost no memory.", { n: av.ram_gb })
+    : null;
+  const warning = [voiceOff, translatorOff, slow].filter(Boolean).join("\n") || null;
   return { disable, translate: current.translate, warning };
 }
 

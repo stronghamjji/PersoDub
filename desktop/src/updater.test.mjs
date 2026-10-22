@@ -75,6 +75,15 @@ test("a check that found no answer is its own state; a download that failed afte
   assert.equal(nextUpdateState(downloading, "check-failed"), downloading);
 });
 
+test("a download that broke keeps its version and says so, but never undoes one on disk", () => {
+  // The button sat at its last percent with nothing said (A29).
+  const downloading = { version: "0.5.2", phase: "downloading", pct: 37 };
+  assert.deepEqual(nextUpdateState(downloading, "download-failed"), { version: "0.5.2", phase: "download-failed", pct: 37 });
+  const ready = { version: "0.5.2", phase: "ready", pct: 100 };
+  assert.equal(nextUpdateState(ready, "download-failed"), ready);
+  assert.equal(nextUpdateState(null, "download-failed"), null);
+});
+
 test("progress that rounds to the same percent is not a new state", () => {
   const prev = { version: "0.5.2", phase: "downloading", pct: 42 };
   assert.equal(nextUpdateState(prev, "download-progress", { percent: 42.4 }), prev);

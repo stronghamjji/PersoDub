@@ -35,6 +35,7 @@
   "Could not save the audio": "오디오를 저장하지 못했어요",
   "Could not set up the ChatGPT sign-in. Check free space and try again.": "ChatGPT 로그인 프로그램을 설치하지 못했어요. 남은 저장 공간을 확인하고 다시 시도해 주세요.",
   "Could not start the sign-in. Quit and reopen PersoDub, then press it again.": "로그인을 시작하지 못했어요. PersoDub을 껐다 켠 뒤 다시 누르면 돼요.",
+  "Could not tell the speakers apart, so every line was made in one voice. Dub it again to try telling them apart once more.": "화자를 나누지 못해서 모든 줄을 한 목소리로 만들었어요. 다시 더빙하면 다시 나눠 봐요.",
   "Could not transcribe this video ({reason}).": "이 영상을 받아쓰지 못했어요 ({reason}).",
   "Could not translate it. Try again, and if it still fails, choose another translator in Settings.": "번역하지 못했어요. 다시 해 보고, 안 되면 설정에서 다른 번역기를 고르면 돼요.",
   "Cross-origin requests are not allowed": "다른 곳에서 온 요청은 받지 않아요.",

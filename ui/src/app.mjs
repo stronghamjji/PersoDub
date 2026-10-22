@@ -391,6 +391,9 @@ $("topbarDl").addEventListener("click", () => models.reopenDialogOrSettings());
 for (const id of ["sttSelect", "translateSelect", "voiceSelect"]) {
   $(id).addEventListener("change", () => models.repaint());
 }
+// The translator decides two of the warnings over the options: its runtime
+// off, and a memory slow for it.
+$("translateSelect").addEventListener("change", () => applyEngineAvailabilityToForm());
 // One sentence per line (they read as a wall when joined -- user feedback):
 // the hint slots render these with pre-line whitespace. Getters, so each is
 // read in the language of the moment. The Perso API dubbing hint names the

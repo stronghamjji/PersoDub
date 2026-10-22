@@ -35,6 +35,7 @@
   "Could not save the audio": "Could not save the audio",
   "Could not set up the ChatGPT sign-in. Check free space and try again.": "Could not set up the ChatGPT sign-in. Check free space and try again.",
   "Could not start the sign-in. Quit and reopen PersoDub, then press it again.": "Could not start the sign-in. Quit and reopen PersoDub, then press it again.",
+  "Could not tell the speakers apart, so every line was made in one voice. Dub it again to try telling them apart once more.": "Could not tell the speakers apart, so every line was made in one voice. Dub it again to try telling them apart once more.",
   "Could not transcribe this video ({reason}).": "Could not transcribe this video ({reason}).",
   "Could not translate it. Try again, and if it still fails, choose another translator in Settings.": "Could not translate it. Try again, and if it still fails, choose another translator in Settings.",
   "Cross-origin requests are not allowed": "Cross-origin requests are not allowed",

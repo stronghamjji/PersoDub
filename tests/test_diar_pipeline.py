@@ -142,3 +142,26 @@ def test_source_srt_keeps_diarization_labels(monkeypatch, tmp_path):
         "diarization was discarded by the source-SRT branch: %r"
         % (captured["ref_labels"],)
     )
+
+
+def test_a_diarization_that_fails_says_so_on_the_screen(monkeypatch):
+    """Every line then keeps one voice: the job's notice says why, and what
+    to press, instead of the log alone."""
+    def boom(*a, **k):
+        raise RuntimeError("campplus exited 1")
+
+    monkeypatch.setattr(pipeline, "diarize", boom)
+    notices, logs = [], []
+    cues = [{"start": 0.0, "end": 1.0, "text": "line one"}]
+    pipeline._stage_diarize("campplus", "/local/vocals.wav", cues, None, logs.append, on_notice=notices.append)
+    assert [n["type"] for n in notices] == ["diarization_failed"]
+    assert notices[0]["message"] == ("Could not tell the speakers apart, so every line was made in one voice. "
+                                     "Dub it again to try telling them apart once more.")
+    assert notices[0]["message_shown"] == notices[0]["message"]   # the tests speak English
+    assert any("CAM++ diarization failed" in m for m in logs)
+
+    # A diarization that works says nothing.
+    monkeypatch.setattr(pipeline, "diarize", lambda v, c, **k: [dict(x, speaker="SPK0") for x in c])
+    notices.clear()
+    pipeline._stage_diarize("campplus", "/local/vocals.wav", cues, None, logs.append, on_notice=notices.append)
+    assert notices == []

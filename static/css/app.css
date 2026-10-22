@@ -1590,6 +1590,10 @@
     color: var(--destructive); cursor: pointer; }
   .sc-clipped svg { flex-shrink: 0; }
   .sc-clipped:hover, .sc-clipped:focus-visible { text-decoration: underline; outline: none; }
+  /* The lines with no voice (scriptTable.mjs silentNotice): the same line,
+     words only, nothing to press. */
+  .sc-clipped.sc-silent { cursor: default; }
+  .sc-clipped.sc-silent:hover { text-decoration: none; }
 
   /* ---------------- Done: the video pane ---------------- */
 

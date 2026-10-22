@@ -245,6 +245,8 @@ def test_engines_endpoint_all_unavailable(monkeypatch):
         "local_engines": {"voice": {"state": "running", "message": ""},
                           "translation": {"state": "running", "message": ""}},
         "ram_ok": True,
+        "ram_gb": 16,
+        "ram_slow": [],
     }
 
 
@@ -273,6 +275,8 @@ def test_engines_endpoint_all_available(monkeypatch):
         "local_engines": {"voice": {"state": "running", "message": ""},
                           "translation": {"state": "running", "message": ""}},
         "ram_ok": True,
+        "ram_gb": 16,
+        "ram_slow": [],
     }
 
 
@@ -284,6 +288,20 @@ def test_engines_endpoint_all_available(monkeypatch):
 def test_engines_endpoint_says_whether_this_computer_has_the_memory(monkeypatch, total, expected):
     monkeypatch.setattr(room, "total_ram_bytes", lambda: total)
     assert client.get("/api/engines").json()["ram_ok"] is expected
+
+
+@pytest.mark.parametrize("total, slow", [
+    (10 * room.GB, ["chatgpt", "gemini", "gemma", "hunyuan", "qwen"]),   # slow whatever translates
+    (14 * room.GB, ["gemma"]),   # Gemma translates on this computer beside the voice
+    (32 * room.GB, []),
+])
+def test_engines_endpoint_says_how_much_memory_and_with_which_translator_a_dub_is_slow(monkeypatch, total, slow):
+    """The start's own "may be slow" rule (app/room.py ram_warning), said
+    before Start: the Dubbing tab names the memory beside it."""
+    monkeypatch.setattr(room, "total_ram_bytes", lambda: total)
+    body = client.get("/api/engines").json()
+    assert body["ram_gb"] == total // room.GB
+    assert body["ram_slow"] == slow
 
 
 def test_dub_start_gemma_unreachable_422_message(monkeypatch):

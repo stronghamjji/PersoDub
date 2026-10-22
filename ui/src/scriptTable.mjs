@@ -147,6 +147,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   let nightingale = null;
   // The lines on screen, as the script last gave them.
   let shown = [];
+  // Whether the job on screen kept a voice for its lines (a dub made on this
+  // computer): only then is a written line with none one whose voice could
+  // not be made -- the dub skips it and the video is silent there.
+  let voicedJob = false;
   // The line last pressed (its number), marked through every redraw of the
   // same project's table; another project's table starts with none.
   let selectedLine = null;
@@ -205,6 +209,9 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // line is written: there is nothing to hear, and a remake of nothing was
     // refused (user decision 2026-09-18).
     const untr = !!l.untranslated;
+    // Written, and no voice in a dub that has voices: said under the words,
+    // the way Words changed is; its voice button makes it.
+    const mute = voicedJob && !untr && l.audio_sec == null;
     const lengthCell = untr ? ""
       : `<span class="sc-dot"></span><span class="sc-num">${l.slot.toFixed(1)} / ${t("{s}s", { s: `<b>${lineLength(l).toFixed(1)}</b>` })}${diff ? " · " : ""}</span>${diff}`;
     const verdictClass = untr ? "" : ` sc-v-${verdict.kind}`;
@@ -246,7 +253,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     <button class="sc-listen${off}" data-play="${l.line}" type="button"${offAttr}
       title="${untr ? WRITE_FIRST : t("Play this line in the video")}">${PLAY_ICON}</button>
     <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"
-      data-line="${l.line}"${untr ? ` data-empty="${t("Not translated")}"` : ""}${stale && !untr ? ` data-note="${t("Words changed")}"` : reworded}>${escapeHtml(l.text)}</div>
+      data-line="${l.line}"${untr ? ` data-empty="${t("Not translated")}"` : ""}${stale && !untr ? ` data-note="${t("Words changed")}"` : mute ? ` data-note="${t("No sound")}"` : reworded}>${escapeHtml(l.text)}</div>
     <div class="sc-tools"><span class="sc-len${verdictClass}">${lengthCell}</span>${viaPerso() ? `<span></span>${undo}` : `${undo}${wave}`}</div>
   </div>`;
   }
@@ -332,6 +339,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const clipped = data.clipped
       || (job && job.id === jobId && job.result && job.result.clipped) || [];
     const clippedMap = new Map(clipped.map((c) => [c.line, c.cut_s]));
+    voicedJob = !isPersoJob() && data.lines.some((l) => l.audio_sec != null);
     // Same rule as scriptRow: what follows the backtick is output, so it keeps
     // the column it had inline rather than stepping in with this file.
     box.innerHTML = `
@@ -374,6 +382,10 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     } else {
       paintActs(jobId);
     }
+    // The lines whose voice could not be made, under the cut-off notice: a
+    // line of words, the No sound under each such row being the per-line mark.
+    const mute = voicedJob ? data.lines.filter((l) => !l.untranslated && l.audio_sec == null).length : 0;
+    if (mute) silentNotice(box, mute);
     // Above everything else (prepended last, so it lands first): the lines cut
     // short by assembly, point 3. One line, not one per row -- the red pill on
     // each row's own verdict is already the per-line mark.
@@ -474,6 +486,18 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     };
     bar.addEventListener("click", jump);
     bar.addEventListener("keydown", (e) => { if (e.key === "Enter") jump(); });
+    box.prepend(bar);
+  }
+
+  // One line above the table: how many lines have no voice, so are silent in
+  // the video, and that each one's own voice button makes it. Words only.
+  function silentNotice(box, n) {
+    const bar = document.createElement("div");
+    bar.className = "sc-clipped sc-silent";
+    bar.style.gridColumn = "1 / -1";
+    bar.innerHTML = `${lucide("volume-x", 14)}<span>${n === 1
+      ? t("1 line has no sound because its voice could not be made. Press that line's voice button to make it again.")
+      : t("{n} lines have no sound because their voices could not be made. Press each line's voice button to make it again.", { n })}</span>`;
     box.prepend(bar);
   }
 

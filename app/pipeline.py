@@ -785,7 +785,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, 
     return src_cues, detected["code"], diar_engine or "campplus"
 
 
-def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=None):
+def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=None, on_notice=None):
     """Stage 2/6 -- local CAM++ diarization (opt-in). Relabels src_cues in place.
 
     pyannote-era labels could collapse everyone to a single speaker; CAM++
@@ -796,6 +796,9 @@ def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_
 
     video_duration, when known, scales the subprocess timeout for long videos
     (see app.timeouts.scaled_timeout).
+
+    A failure is told on the screen too (on_notice): every line then keeps
+    one voice, and the finished dub alone did not say why.
     """
     if diar_engine != "campplus" or not src_cues:
         return
@@ -813,6 +816,10 @@ def _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_
         log(f"   CAM++ labeled {len(src_cues)} lines across {n_spk} speakers")
     except Exception as e:
         log(f"   Warning: CAM++ diarization failed ({str(e)[:80]}) — keeping existing labels")
+        if on_notice:
+            msg, shown = both("Could not tell the speakers apart, so every line was made in one voice. "
+                              "Dub it again to try telling them apart once more.")
+            on_notice({"type": "diarization_failed", "message": msg, "message_shown": shown})
 
 
 def _pick_source_cues(source_srt_path, perso_cues, src_cues):
@@ -1100,7 +1107,8 @@ def _transcribe_or_reuse(video_path, work_dir, reuse, vocals_path, stt_engine, s
     moved = snap_starts(src_cues, vocals_path)
     if moved:
         log("   %d line start(s) moved to where the speech begins" % moved)
-    _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=video_duration)
+    _stage_diarize(diar_engine, vocals_path, src_cues, num_speakers, log, video_duration=video_duration,
+                   on_notice=on_notice)
     _save_json(work_dir, TRANSCRIPT_NAME,
                {"cues": src_cues, "perso": perso_cues is not None, "detected": detected_code})
     return src_cues, perso_cues, detected_code, perso_client, False
