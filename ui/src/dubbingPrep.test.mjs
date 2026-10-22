@@ -112,4 +112,16 @@ test("the top row is Model selection, and the line under Perso's model says its 
   assert.equal($("persoModelRow").hidden, true);
 });
 
+// What you get, under the last choice, for a dubbing on this computer and
+// one on Perso alike (owner, 2026-10-22, remarks 10+11).
+test("Before dubbing says what you get, the same under Local model and Perso API", () => {
+  setDraft({ downloadId: "fedcba21", name: "steps.mp4", duration: 24, videoUrl: "/v" });
+  assert.equal($("draftSetup").hidden, false);
+  for (const half of ["dubModePerso", "dubModeLocal"]) {
+    $(half).click();
+    assert.equal($("draftResult").hidden, false, `in sight after ${half}`);
+    assert.equal($("draftResult").innerHTML, "", "the markup's words, never written over");
+  }
+});
+
 test.after(() => page.restore());

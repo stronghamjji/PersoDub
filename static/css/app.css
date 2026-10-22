@@ -1306,6 +1306,10 @@
   .draft-part .vc-del { color: var(--destructive); }
   .draft-import-status { text-align: left; }
   .draft-import-status:empty { display: none; }
+  /* What the dubbing hands back, under the last choice (owner, 2026-10-22,
+     remarks 10+11): the erase card's label and line, set a little apart. */
+  .draft-result { margin: 12px 0 10px; }
+  .draft-result .m { line-height: 1.5; }
   /* Stuck to the foot of the card: with the six stage rows always in sight
      the card scrolls, and Start dubbing must not scroll away with it (QA 2026-09-29). */
   .draft-foot { margin-top: auto; padding: 10px 0 0; border-top: 1px solid var(--border);

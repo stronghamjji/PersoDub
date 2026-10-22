@@ -1157,6 +1157,23 @@ test("the Video card has Replace · Remove at its top right, and a line under it
   assert.equal(ko.Remove, "삭제");
 });
 
+// Under the last choice, what the dubbing hands back, in the erase card's
+// dress: a label and one line, the same for both ways of dubbing (owner,
+// 2026-10-22, remarks 10+11). ui/src/dubbingPrep.test.mjs runs it in the page.
+test("Before dubbing says what you get under the last choice: dubbed video, subtitles and audio files", () => {
+  const html = readPage();
+  const card = html.slice(html.indexOf('<div class="draft-setup" id="draftSetup" hidden>'), html.indexOf('id="dubbingPaneHead"'));
+  assert.match(card, /<div id="draftOptionsSlot"><\/div>\s*<!--[^]*?-->\s*<div class="erase-card draft-result" id="draftResult"><div data-i18n class="k">What you get<\/div><div class="m"><span data-i18n>Dubbed video, subtitles and audio files<\/span><\/div><\/div>\s*<div class="form-error" id="draftError"><\/div>\s*<div class="draft-foot">/);
+  assert.match(html, /\.draft-result \{ margin: 12px 0 10px; \}\n  \.draft-result \.m \{ line-height: 1\.5; \}/);
+  // Nothing in the page's code writes over it, in either mode.
+  assert.ok(!html.includes('$("draftResult")'));
+  const table = (code) => JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
+  assert.equal(table("ko")["What you get"], "이 작업을 하면 이렇게 나와요");
+  assert.equal(table("ko")["Dubbed video, subtitles and audio files"], "더빙 영상, 자막, 오디오 파일로 나와요");
+  assert.equal(table("en")["What you get"], "What you get");
+  assert.equal(table("en")["Dubbed video, subtitles and audio files"], "Dubbed video, subtitles and audio files");
+});
+
 // With Perso API the stage rows read "Perso" over the dropdowns' own words,
 // which stay their values; only the words are hidden, so the arrow stays
 // (owner, 2026-10-22, the 2-1 picture). ui/src/dubbingPrep.test.mjs runs it.
