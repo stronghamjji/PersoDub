@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initCaptionsTab, captionsEmpty, captionsLocked, sampleWord, styleCardsHtml,
-         AFTER_DUB, NO_SUBTITLES, PICK_A_LINE, LOCKED_TIP } from "./captionsTab.mjs";
+         AFTER_DUB, NO_SUBTITLES, PICK_A_LINE, LOCKED_TIP, SRT_SUB, NOT_SRT } from "./captionsTab.mjs";
 import { clearDraft, setDraft } from "./draft.mjs";
 
 const STYLES = [["clean", "Clean"], ["sticker", "Sticker"], ["black-box", "Black Box"]];
@@ -34,7 +34,7 @@ function makeEl(id) {
   return el;
 }
 
-function harness(view = {}) {
+function harness(view = {}, extra = {}) {
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const v = { screen: "done", lines: [{ text: "Hola amigos" }], jobId: "j1", preset: "clean",
@@ -45,7 +45,7 @@ function harness(view = {}) {
   // The page: a press anywhere on it, and its keys.
   const doc = makeEl("document");
   const tab = initCaptionsTab({ $, styles: STYLES, getView: () => v, doc,
-    onPick: (p) => picked.push(p), onShow: () => { shown++; }, setLocked: (on) => locks.push(on) });
+    onPick: (p) => picked.push(p), onShow: () => { shown++; }, setLocked: (on) => locks.push(on), ...extra });
   // A press on an element that stops it there, as the button and the panel do.
   const press = (id) => {
     const e = { stopped: false, stopPropagation() { this.stopped = true; } };
@@ -229,4 +229,124 @@ test("the video panel's looks shut on a press elsewhere, on Escape, and when the
   h.tab.paint();
   assert.equal(h.$("videoStyleBtn").disabled, true);
   assert.equal(h.$("videoStylePop").hidden, true);
+});
+
+// ---- The tab on its own (owner, 2026-10-22): a video and a subtitle file ----
+
+// The page's side of it: what was said on the line, sent, and opened.
+function aloneHarness(view = {}, { upload } = {}) {
+  const said = [];
+  const sent = [];
+  const opened = [];
+  const alone = {
+    importSource: () => Promise.resolve(),
+    say: (text, isError = false) => said.push([text, isError]),
+    upload: upload || ((id, file) => { sent.push([id, file.name]); return Promise.resolve("c1"); }),
+    openJob: (jid) => { opened.push(jid); return Promise.resolve(); },
+  };
+  const h = harness({ screen: "done", lines: [], jobId: null, dubbed: false, alone: true, files: null, ...view },
+                    { alone });
+  return { ...h, said, sent, opened };
+}
+
+test("with no project open the tab takes a video and a subtitle file, the looks dim under them", () => {
+  clearDraft();
+  const h = aloneHarness({ preset: "sticker" });
+  h.tab.paint();
+  assert.deepEqual(h.locks, [false], "open, not shut as it is beside a dub still running");
+  assert.equal(h.$("capAlone").hidden, false);
+  assert.equal(h.$("capZone").hidden, false, "the shared Import block for the video");
+  assert.equal(h.$("capVideoCard").hidden, true);
+  assert.equal(h.$("capSrtSub").textContent, SRT_SUB);
+  assert.equal(SRT_SUB, "Drop a subtitle file here or press to choose one");
+  // The twelve looks stay on show, but cannot be pressed until both are in.
+  assert.equal(h.$("capEmpty").hidden, true);
+  assert.equal(h.$("capMain").hidden, false);
+  assert.equal(h.$("capMain").inert, true);
+  assert.equal(h.$("capMain").classList.contains("cap-off"), true);
+  const grid = h.$("subStyleMenu");
+  assert.equal(grid.cards.length, 3);
+  assert.doesNotMatch(grid.innerHTML, /background-image/, "no project, so no frame behind them");
+  assert.match(grid.innerHTML, />Aa</);
+  assert.deepEqual(grid.cards.map((c) => c.classList.contains("on")), [false, false, false]);
+  assert.equal(h.$("capFiles").hidden, true);
+  assert.equal(h.$("videoStyleBtn").disabled, true);
+});
+
+test("a held video shows as its card in the Import block's place", () => {
+  setDraft({ downloadId: "d1", name: "paris_steps.mp4", duration: 24.7, videoUrl: "/v" });
+  const h = aloneHarness();
+  h.tab.paint();
+  assert.equal(h.$("capZone").hidden, true);
+  assert.equal(h.$("capVideoCard").hidden, false);
+  assert.match(h.$("capVideoCard").innerHTML, /paris_steps\.mp4/);
+  assert.match(h.$("capVideoCard").innerHTML, /00:24/);
+  clearDraft();
+});
+
+test("a subtitle file waits for its video, then the two are sent and opened", async () => {
+  clearDraft();
+  const h = aloneHarness();
+  h.tab.paint();
+  await h.tab.takeSrt({ name: "notes.txt" });
+  assert.deepEqual(h.said.at(-1), [NOT_SRT, true], "only an .srt");
+  assert.deepEqual(h.sent, []);
+  await h.tab.takeSrt({ name: "paris_ko.SRT" });
+  assert.deepEqual(h.sent, [], "no video yet: nothing to send");
+  assert.equal(h.$("capSrtSub").textContent, "paris_ko.SRT", "the file waits, by name");
+  // The video coming in sends the two.
+  setDraft({ downloadId: "d2", name: "paris.mp4", duration: 10, videoUrl: "/v" });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(h.sent, [["d2", "paris_ko.SRT"]]);
+  assert.deepEqual(h.opened, ["c1"]);
+  assert.equal(h.$("capSrtSub").textContent, SRT_SUB, "and it is let go");
+  clearDraft();
+});
+
+test("a subtitle file with a video already there is sent at once; a refusal is said and the file let go", async () => {
+  setDraft({ downloadId: "d3", name: "a.mp4", duration: 5, videoUrl: "/v" });
+  const err = Object.assign(new Error("This subtitle file has no lines PersoDub can read."), { status: 422 });
+  const h = aloneHarness({}, { upload: () => Promise.reject(err) });
+  await h.tab.takeSrt({ name: "empty.srt" });
+  assert.deepEqual(h.opened, []);
+  assert.deepEqual(h.said.at(-1), ["This subtitle file has no lines PersoDub can read.", true]);
+  assert.equal(h.$("capSrtSub").textContent, SRT_SUB);
+  clearDraft();
+});
+
+test("once the two are a project, its two files are named over the looks, which open", () => {
+  const h = aloneHarness({ alone: false, dubbed: true, jobId: "c1", preset: "sticker",
+                           lines: [{ text: "Bonjour" }, { text: "Salut" }, { text: "Ciao" }],
+                           files: { name: "paris_steps", duration: 24.7, srt: "paris_ko.srt" } });
+  h.tab.paint();
+  assert.deepEqual(h.locks, [false]);
+  assert.equal(h.$("capAlone").hidden, true);
+  assert.equal(h.$("capFiles").hidden, false);
+  assert.match(h.$("capFileVideo").innerHTML, /paris_steps/);
+  assert.match(h.$("capFileVideo").innerHTML, /00:24/);
+  assert.equal(h.$("capFileSrtName").textContent, "paris_ko.srt");
+  assert.equal(h.$("capFileSrtLines").textContent, "3 lines");
+  assert.equal(h.$("capMain").inert, false);
+  assert.equal(h.$("capMain").classList.contains("cap-off"), false);
+  const grid = h.$("subStyleMenu");
+  assert.match(grid.innerHTML, /\/api\/dub\/jobs\/c1\/thumb/);
+  assert.deepEqual(grid.cards.map((c) => c.classList.contains("on")), [false, true, false]);
+  assert.equal(h.$("videoStyleBtn").disabled, false);
+});
+
+test("beside a dub the tab is as it was: shut until it is finished, no files row", () => {
+  assert.equal(captionsLocked({ dubbed: false, alone: false }), true);
+  assert.equal(captionsLocked({ dubbed: false, alone: true }), false);
+  const h = aloneHarness({ alone: false, screen: "running", jobId: "j1" });
+  h.tab.paint();
+  assert.deepEqual(h.locks, [true]);
+  assert.equal(h.$("capEmpty").textContent, AFTER_DUB);
+  assert.equal(h.$("capAlone").hidden, true);
+  assert.equal(h.$("capFiles").hidden, true);
+  // A finished dub: the looks, and still no files row.
+  const d = aloneHarness({ alone: false, dubbed: true, jobId: "j1", lines: [{ text: "Hola" }] });
+  d.tab.paint();
+  assert.deepEqual(d.locks, [false]);
+  assert.equal(d.$("capFiles").hidden, true);
+  assert.equal(d.$("capMain").inert, false);
 });

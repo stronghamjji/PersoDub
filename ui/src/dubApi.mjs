@@ -538,6 +538,21 @@ async function separateError(res, fallback) {
   return err;
 }
 
+/**
+ * POST /api/captions/import -- a held video and the user's own .srt, made a
+ * finished project of kind "captions" for the Subtitle style tab; answers
+ * with its job id. A refusal is thrown with the server's sentence (a file
+ * with no lines, a video that is not held).
+ */
+export async function importCaptions({ downloadId, file }, { baseUrl = "" } = {}) {
+  const fd = new FormData();
+  fd.append("download_id", downloadId);
+  fd.append("srt", file);
+  const res = await fetch(`${baseUrl}/api/captions/import`, { method: "POST", body: fd });
+  if (!res.ok) throw await separateError(res, t("Could not import the subtitle file."));
+  return (await res.json()).job_id;
+}
+
 /** POST /api/separate/{jid}/retry -- the same cut, the same way, again. */
 export async function retrySeparate(jid, { baseUrl = "" } = {}) {
   const res = await fetch(`${baseUrl}/api/separate/${jid}/retry`, { method: "POST" });

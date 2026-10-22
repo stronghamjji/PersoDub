@@ -15,10 +15,22 @@
 // drawn and ringed with the tab's, a press on either is the same pick, and
 // the button is dim whenever the tab has no looks to show.
 //
+// With no project open the tab works on its own (owner, 2026-10-22): a video
+// (the shared Import block) and a subtitle file (.srt) brought in, then the
+// two made a finished project of kind "captions" (POST /api/captions/import)
+// that the page opens like a finished dub. The looks stay on show, dim, until
+// both are there; once open, a row above them names the two files.
+//
 // The elements this file touches: #capEmpty, #capMain, #capHint, #subSizeLv,
 // #subScopeSep, #subScopeSeg, #subScopeAll, #subScopeOne, #subShow, the grid
 // of looks, #subStyleMenu, and the video panel's #videoStyleBtn,
-// #videoStylePop and its grid, #videoStyleGrid.
+// #videoStylePop and its grid, #videoStyleGrid; on its own, #capAlone,
+// #capImportSlot, #capVideoInput, #capVideoCard, #capSrtZone, #capSrtSub,
+// #capSrtInput, #capImportStatus, #capFiles, #capFileVideo, #capFileSrtName
+// and #capFileSrtLines.
+import { getDraft, onDraftChange } from "./draft.mjs";
+import { errorText, videoCardHtml } from "./format.mjs";
+import { emptyTabHtml, wireImportBlock, wireImportInput } from "./importBlock.mjs";
 import { t } from "./i18n.mjs";
 
 // The English sentences, compared by the tests; each is drawn through t()
@@ -28,6 +40,10 @@ export const AFTER_DUB = "Captions come after dubbing";
 export const LOCKED_TIP = "After dubbing";
 export const NO_SUBTITLES = "No captions for this project";
 export const PICK_A_LINE = "Select a caption on the video";
+// The subtitle file's drop area, on its own.
+export const SRT_HEAD = "Subtitle file (.srt)";
+export const SRT_SUB = "Drop a subtitle file here or press to choose one";
+export const NOT_SRT = "Choose a subtitle file that ends in .srt";
 
 /**
  * Why the tab has nothing to show, or "" when it has. Only a finished dub on
@@ -49,10 +65,12 @@ export function captionsEmpty({ screen, lines }) {
  * job that is not finished has no dub; a draft on its own has none open
  * either (the page clears the job when a draft starts), so dubbed says it all.
  *
- * @param {{dubbed: boolean}} v
+ * With no project open at all it is the tab's own way in, so never shut.
+ *
+ * @param {{dubbed: boolean, alone?: boolean}} v
  */
-export function captionsLocked({ dubbed }) {
-  return !dubbed;
+export function captionsLocked({ dubbed, alone = false }) {
+  return !alone && !dubbed;
 }
 
 /** The word each tile shows: the first one the subtitles say, else "Aa". */
@@ -97,10 +115,21 @@ export function styleCardsHtml(styles, sample, thumb) {
  * @param {() => void} deps.onShow  the Show switch was pressed
  * @param {any} [deps.doc]  the page: a press anywhere else on it, or Escape,
  *   shuts the video panel's looks
- * @returns {{ paint: () => void }}
+ * @param {object} [deps.alone]  the tab on its own; the view then says
+ *   alone (no project open: the video is the draft, ui/src/draft.mjs) and
+ *   files ({name, duration, srt} of an open "captions" project, or null)
+ * @param {(source: object) => Promise<void>} deps.alone.importSource  bring a
+ *   video in as the draft (ui/src/draftImport.mjs)
+ * @param {(text: string, isError?: boolean) => void} deps.alone.say  the line
+ *   under the blocks
+ * @param {(downloadId: string, file: File) => Promise<string>} deps.alone.upload
+ *   make the two a project (ui/src/dubApi.mjs importCaptions); its job id
+ * @param {(jobId: string) => Promise<void>} deps.alone.openJob  open it
+ * @returns {{ paint: () => void, takeSrt: (file: File) => Promise<void> }}
+ *   takeSrt is what a subtitle file dropped on the tab's drop area does
  */
 export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked = () => {},
-                                  doc = globalThis.document }) {
+                                  doc = globalThis.document, alone = null }) {
   const grids = [$("subStyleMenu"), $("videoStyleGrid")];
   const styleBtn = $("videoStyleBtn");
   const pop = $("videoStylePop");
@@ -133,19 +162,104 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
   }
   $("subShow").addEventListener("click", () => onShow());
 
+  // ---- On its own: a video and a subtitle file ----
+  let srtFile = null;   // the .srt brought in before its video, waiting for it
+  let sending = false;
+  if (alone) {
+    $("capImportSlot").outerHTML = emptyTabHtml("captions", "capZone", "capLink");
+    const input = $("capVideoInput");
+    wireImportInput(input, (files) => alone.importSource({ file: files[0] }));
+    wireImportBlock($, { id: "capZone", linkId: "capLink", input,
+      onFiles: (files) => alone.importSource({ file: files[0] }),
+      onLink: (url) => alone.importSource({ link: url }),
+      onNotLink: (message) => alone.say(message, true) });
+    const zone = $("capSrtZone");
+    const srtInput = $("capSrtInput");
+    zone.addEventListener("click", () => srtInput.click());
+    zone.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); srtInput.click(); }
+    });
+    for (const ev of ["dragenter", "dragover"]) {
+      zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("drag-over"); });
+    }
+    zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      zone.classList.remove("drag-over");
+      const file = ((e.dataTransfer && e.dataTransfer.files) || [])[0];
+      if (file) takeSrt(file);
+    });
+    wireImportInput(srtInput, (files) => takeSrt(files[0]));
+    // The video coming in after its subtitle file sends the two.
+    onDraftChange(() => { send(); paint(); });
+  }
+
+  /** A subtitle file brought in: kept until there is a video, then the two sent. */
+  async function takeSrt(file) {
+    if (!/\.srt$/i.test(file.name || "")) { alone.say(t(NOT_SRT), true); return; }
+    srtFile = file;
+    alone.say("");
+    paint();
+    await send();
+  }
+
+  /** Both files here: make them a project and open it. Called again when the video arrives. */
+  async function send() {
+    const id = (getDraft() || {}).downloadId;
+    if (!srtFile || !id || sending) return;
+    sending = true;
+    alone.say(t("Importing…"));
+    try {
+      const jid = await alone.upload(id, srtFile);
+      srtFile = null;
+      alone.say("");
+      await alone.openJob(jid);
+    } catch (e) {
+      srtFile = null;
+      alone.say(errorText(e), true);
+    } finally {
+      sending = false;
+      paint();
+    }
+  }
+
+  function paintAlone(v, on) {
+    $("capAlone").hidden = !on;
+    // The looks stay on show, dim, until the two files are there.
+    $("capMain").inert = on;
+    $("capMain").classList.toggle("cap-off", on);
+    const files = !on && v.files;
+    $("capFiles").hidden = !files;
+    if (files) {
+      $("capFileVideo").innerHTML = videoCardHtml({ name: files.name, kept: files.duration, total: files.duration });
+      $("capFileSrtName").textContent = files.srt;
+      $("capFileSrtName").title = files.srt;
+      $("capFileSrtLines").textContent = t("{n} lines", { n: v.lines.length });
+    }
+    if (!on) return;
+    const d = getDraft();
+    $("capZone").hidden = !!d;
+    $("capVideoCard").hidden = !d;
+    $("capVideoCard").innerHTML = d ? videoCardHtml({ name: d.name, kept: d.duration, total: d.duration }) : "";
+    $("capSrtSub").textContent = srtFile ? srtFile.name : t(SRT_SUB);
+  }
+
   function paint() {
     const v = getView();
-    const locked = captionsLocked({ dubbed: !!v.dubbed });
+    // On its own only where the page wired it so.
+    const lone = !!alone && !!v.alone;
+    const locked = captionsLocked({ dubbed: !!v.dubbed, alone: lone });
     setLocked(locked);
-    const empty = captionsEmpty({ screen: v.screen, lines: v.lines.length });
+    const empty = lone ? "" : captionsEmpty({ screen: v.screen, lines: v.lines.length });
     // The video panel's button opens onto these same looks: dim whenever the
     // tab has none to show, with the tab's reason on its tip.
-    styleBtn.disabled = locked || !!empty;
-    styleBtn.title = locked ? t(LOCKED_TIP) : empty && t(empty);
+    styleBtn.disabled = locked || lone || !!empty;
+    styleBtn.title = locked || lone ? t(LOCKED_TIP) : empty && t(empty);
     if (styleBtn.disabled) shut();
     $("capEmpty").textContent = empty && t(empty);
     $("capEmpty").hidden = !empty;
     $("capMain").hidden = !!empty;
+    if (alone) paintAlone(v, lone);
     if (empty) return;
 
     $("subSizeLv").textContent = v.size + "%";
@@ -163,20 +277,23 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
     show.setAttribute("aria-checked", String(v.enabled));
 
     // The looks' names too: they change with the language.
-    const key = JSON.stringify([sampleWord(v.lines), v.jobId, styles.map((s) => s[1])]);
+    // On its own there is no project yet: plain tiles, none ringed.
+    const sample = lone ? "Aa" : sampleWord(v.lines);
+    const jobId = lone ? "" : v.jobId;
+    const key = JSON.stringify([sample, jobId, styles.map((s) => s[1])]);
     if (key !== drawn) {
       drawn = key;
-      const thumb = v.jobId ? `/api/dub/jobs/${encodeURIComponent(v.jobId)}/thumb` : "";
-      for (const grid of grids) grid.innerHTML = styleCardsHtml(styles, sampleWord(v.lines), thumb);
+      const thumb = jobId ? `/api/dub/jobs/${encodeURIComponent(jobId)}/thumb` : "";
+      for (const grid of grids) grid.innerHTML = styleCardsHtml(styles, sample, thumb);
     }
     for (const grid of grids) {
       for (const card of grid.querySelectorAll("[data-preset]")) {
-        const on = card.dataset.preset === v.preset;
+        const on = !lone && card.dataset.preset === v.preset;
         card.classList.toggle("on", on);
         card.setAttribute("aria-pressed", String(on));
       }
     }
   }
 
-  return { paint };
+  return { paint, takeSrt };
 }

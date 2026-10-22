@@ -1778,7 +1778,16 @@
   .cap-empty { flex: 1; display: flex; align-items: center; justify-content: center;
     padding: 16px; text-align: center; font-size: var(--font-label); color: var(--muted-foreground); }
   .cap-main { flex: 1; min-height: 0; display: flex; }
-  .cap-main[hidden], .cap-empty[hidden] { display: none; }
+  .cap-main[hidden], .cap-empty[hidden], .cap-files[hidden] { display: none; }
+  /* On its own (captionsTab.mjs): the video and the subtitle file at the
+     top, the looks dim under them until both are in; once they are, the two
+     files side by side over the looks. */
+  .cap-alone { flex: none; padding-bottom: 4px; }
+  .cap-alone .video-card { align-self: stretch; text-align: left; }
+  .cap-srt { margin-top: 10px; padding-block: 14px; }
+  .cap-alone .import-status { margin-top: 8px; }
+  .cap-main.cap-off { opacity: 0.45; }
+  .cap-files { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 10px 12px 0; }
   .cap-side { width: 120px; flex: 0 0 auto; box-sizing: border-box; border-right: 1px solid var(--border);
     padding: 15px 8px; display: flex; flex-direction: column; gap: 8px; }
   .cap-pill { height: 24px; border-radius: var(--radius-sm); background: var(--secondary);

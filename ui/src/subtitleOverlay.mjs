@@ -35,15 +35,17 @@ import { t } from "./i18n.mjs";
  *        "dubbed" or "original": the subtitles go over the dubbed one only
  * @param {(which: string) => Promise<void>} deps.showVideoSource  put the
  *        player on that file; answers once it is showing it
+ * @param {object} [deps.alone]  the Captions tab on its own, with no project
+ *        open (ui/src/captionsTab.mjs initCaptionsTab's alone)
  * @returns {{ getSubStyle: () => object, loadSubStyle: (jobId: string) => Promise<void>,
  *   saveSubStyle: () => void, subCueOf: (l: object, idx: number) => {start: number, end: number},
  *   updateSubtitleNow: () => void, subLinesChanged: () => void, syncVideoChrome: () => void,
- *   exportParams: () => {preset: string, query: string} }}
+ *   exportParams: () => {preset: string, query: string}, paintCaptions: () => void }}
  *   getSubStyle answers the style object itself, which the timeline changes in
  *   place; exportParams, what the Export dialog asks the subtitled video for.
  */
 export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, getDoneSource,
-                                      showVideoSource }) {
+                                      showVideoSource, alone = null }) {
   let subStyle = { enabled: true, preset: "clean", pos: null, size: null, cues: {},
                    boxWidth: null, widths: {}, layout: {} };
   let subStyleLoaded = false;   // a save before the load answers would wipe the file
@@ -307,7 +309,7 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
   // clean. ui/src/captionsTab.mjs draws the tab from getView; the work stays
   // here, next to the style object it changes.
   const captions = initCaptionsTab({
-    $,
+    $, alone,
     // [id, label] with the label read each time the tab draws its grid, not
     // once here: a language changed later still reaches the names.
     styles: Object.entries(SUB_META).map(([id, m]) => Object.defineProperty([id], 1, { get: () => m.label, enumerable: true })),
@@ -324,6 +326,12 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
       // A finished dub is open: the one thing the tab has anything for.
       dubbed: !!state.job && state.job.id === state.jobId && state.job.status === "done"
         && state.job.kind !== "erase",
+      // No project open: the tab takes a video and a subtitle file itself.
+      alone: !state.jobId,
+      // A project made of those two: their names over the looks.
+      files: state.job && state.job.id === state.jobId && state.job.kind === "captions"
+        ? { name: state.job.title || state.job.project, duration: state.job.duration || 0,
+            srt: state.job.srt_name || "" } : null,
     }),
     // Before a dub exists the tab itself is dimmed and cannot be opened.
     setLocked: (locked) => leftTabs.setLocked("captions", locked, t(CAPTIONS_LOCKED_TIP)),
@@ -452,5 +460,5 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
   }
 
   return { getSubStyle: () => subStyle, loadSubStyle, saveSubStyle, subCueOf, updateSubtitleNow,
-           subLinesChanged, syncVideoChrome, exportParams };
+           subLinesChanged, syncVideoChrome, exportParams, paintCaptions: paintSubToolbar };
 }

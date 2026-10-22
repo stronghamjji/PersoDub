@@ -27,7 +27,7 @@ import { t } from "./i18n.mjs";
 const DOWNLOAD_POLL_MS = 1000;
 // The line under each tab's Import block, and the one under the Before
 // dubbing card, where a video taking the card's place says how it is going.
-const STATUS_IDS = ["dubbingImportStatus", "audioImportStatus", "draftImportStatus"];
+const STATUS_IDS = ["dubbingImportStatus", "audioImportStatus", "draftImportStatus", "capImportStatus"];
 
 /**
  * Wire importing to a page. The page needs: #dubbingImport, the Dubbing tab's

@@ -41,7 +41,7 @@ import { initWorkFrame } from "./workFrame.mjs";
 import { initPlayerFoot, clockLine } from "./playerFoot.mjs";
 import { initDraftImport } from "./draftImport.mjs";
 import { initAudioTab } from "./audioTab.mjs";
-import { openSeparated } from "./dubApi.mjs";
+import { openSeparated, importCaptions } from "./dubApi.mjs";
 import { initNewProjectWindow } from "./newProjectWindow.mjs";
 import { initDraftSetup } from "./draftSetup.mjs";
 import { initLanguageRow } from "./languageRow.mjs";
@@ -874,7 +874,7 @@ initNewProjectWindow({
 function emptyImportLink() {
   if (state.jobId) return null;
   const tab = document.body.dataset.screen === "erase" ? "erase" : leftTabs.current();
-  const id = { dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink" }[tab];
+  const id = { dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink", captions: "capLink" }[tab];
   return id && $(`${id}Input`).offsetParent ? id : null;
 }
 // A new draft opened from wherever the person stands -- a dubbing's
@@ -1814,7 +1814,8 @@ async function handleJobUpdate(job, { opened = false } = {}) {
   // which is the case that produced the empty second report: a job's log is
   // not saved to disk, so after a restart there is nothing left to send and
   // the relay files the blank as a failure of its own (2026-09-18).
-  if (!countedOnce(job.id)) {
+  // A video with the user's own subtitles is not a dubbing to count.
+  if (job.kind !== "captions" && !countedOnce(job.id)) {
     window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(1).slice(-6).join("\n"), job.id);
   }
 
@@ -2040,6 +2041,13 @@ async function exportContext() {
   }
   const job = state.job;
   if (!job) return null;
+  // A video with the user's own subtitles: that video in the look picked, and the file.
+  if (job.kind === "captions") {
+    const { preset, query } = subtitles.exportParams();
+    return { kind: "captions", jobId: job.id, ratio, where: whereDownloadsGo(job),
+             subtitled: { href: `/api/dub/result/${job.id}/subtitled?preset=${preset}${query}&download=1`,
+                          name: `video-sub-${preset}.mp4` } };
+  }
   // The subtitles are only offered when there are some (an older job may have
   // none). Asked with HEAD: whether the file exists is the whole question, and
   // fetching it to find out downloaded the subtitles nobody had asked for yet.
@@ -2174,7 +2182,23 @@ const subtitles = initSubtitleOverlay({
   },
   getDoneSource: donePlayer.getDoneSource,
   showVideoSource: donePlayer.showVideoSource,
+  // The Captions tab with no project open: the video comes in as the draft,
+  // and the video with its subtitle file is opened as a finished project,
+  // the way Projects opens a dub, on this tab.
+  alone: {
+    importSource: (source) => draftImport.importSource(source),
+    say: (text, isError) => draftImport.say(text, isError),
+    upload: (downloadId, file) => importCaptions({ downloadId, file }),
+    openJob: async (jid) => {
+      draftBecameJob((getDraft() || {}).downloadId);
+      projects.renderHistory().catch(() => {});
+      await resumeJob(jid);
+      leftTabs.show("captions");
+    },
+  },
 });
+// Come to with no project open, the tab draws its own way in.
+$("leftTabs").addEventListener("click", () => subtitles.paintCaptions());
 
 // ---------------- Ratio and Preview ----------------
 // The two buttons at the right of the player's foot (ui/src/ratio.mjs): the

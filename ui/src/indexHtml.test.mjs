@@ -1589,12 +1589,15 @@ test("Dubbing, Audio and Erase with no video draw one empty state", async () => 
     dubbing: ["Dubbing", "Voice a video in another language."],
     audio: ["Separate audio", "Splits the sound into voice and background."],
     erase: ["Erase subtitles", "Takes burned-in subtitles out."],
+    // The Subtitle style tab on its own (owner, 2026-10-22).
+    captions: ["Subtitle style", "Burns subtitles into a video."],
   });
   // The same three pieces in the same order, whatever the tab.
   const shape = (tab) => emptyTabHtml(tab, "z", "l")
     .replace(EMPTY_TABS[tab][0], "H").replace(EMPTY_TABS[tab][1], "S");
   assert.equal(shape("audio"), shape("dubbing"));
   assert.equal(shape("erase"), shape("dubbing"));
+  assert.equal(shape("captions"), shape("dubbing"));
   assert.match(shape("dubbing"), /^<div class="tab-empty-title">H<\/div><div class="tab-empty-sub">S<\/div><div class="import-block" id="z"/);
   // Each tab's face is the one frame: the group, the slot the module fills,
   // and what an import says hung under it.
@@ -1607,7 +1610,8 @@ test("Dubbing, Audio and Erase with no video draw one empty state", async () => 
     assert.match(body, new RegExp(`<div class="tab-empty-group">\\s*(<!--[^]*?-->\\s*)?<div id="${slot}"></div>`));
     assert.ok(body.includes('<div class="tab-empty-under">'), `${face}'s status line is in the group's flow`);
   }
-  for (const [file, tab] of [[DRAFT_IMPORT, "dubbing"], [AUDIO, "audio"], [ERASE, "erase"]]) {
+  for (const [file, tab] of [[DRAFT_IMPORT, "dubbing"], [AUDIO, "audio"], [ERASE, "erase"],
+                             [fileURLToPath(new URL("./captionsTab.mjs", import.meta.url)), "captions"]]) {
     assert.match(readFileSync(file, "utf8"), new RegExp(`outerHTML = emptyTabHtml\\("${tab}", `));
   }
   // Centred both ways, and the tab's small top-left name gives way to it.
@@ -1841,7 +1845,7 @@ test("New project on an empty project points at the Import block on screen", () 
   assert.match(body, /if \(state\.jobId\) return null;/);
   assert.doesNotMatch(body, /getDraft\(\)/, "an empty Erase tab can stand beside an older draft still held");
   assert.match(body, /const tab = document\.body\.dataset\.screen === "erase" \? "erase" : leftTabs\.current\(\);/);
-  assert.match(body, /\{ dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink" \}\[tab\]/);
+  assert.match(body, /\{ dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink", captions: "capLink" \}\[tab\]/);
   assert.match(body, /return id && \$\(`\$\{id\}Input`\)\.offsetParent \? id : null;/);
   // Each of those is a link field the shared block draws, under that name.
   assert.match(readFileSync(DRAFT_IMPORT, "utf8"), /emptyTabHtml\("dubbing", "dubbingZone", "dubbingLink"\)/);

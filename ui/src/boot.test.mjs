@@ -34,6 +34,7 @@ const DRAWN_AT_LOAD = [
   "dubbingZone", "dubbingLinkRow", "dubbingLinkInput",   // draftImport.mjs
   "audioZone", "audioLinkRow", "audioLinkInput",         // audioTab.mjs
   "eraseZone", "eraseLinkRow", "eraseLinkInput",         // eraseScreen.mjs
+  "capZone", "capLinkRow", "capLinkInput",               // captionsTab.mjs
 ];
 
 // Each inline module with the line its <script> tag is on.
