@@ -326,7 +326,7 @@
   "Neon Yellow": "Neon Yellow",
   "New chat": "새 대화",
   "New conversation.": "새 대화를 시작했어요.",
-  "New default that follows the context. Honours audio tags": "맥락을 이해하는 새 기본 모델. 오디오 태그 반영",
+  "New model that follows the context. Honours audio tags": "맥락을 이해하는 새 모델. 오디오 태그 반영",
   "New project": "새 프로젝트",
   "New project · {n} videos": "새 프로젝트 · 영상 {n}개",
   "New version: {version}": "새 버전: {version}",

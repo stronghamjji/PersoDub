@@ -17,7 +17,7 @@ import { t } from "./i18n.mjs";
 // line cannot be remade on its own (app/perso_edit.py nightingale).
 const KNOWN = [
   { id: "ORIOLE", label: "Oriole", desc: "Natural local pronunciation, steady voice. Lectures and corporate video", rate: 1 },
-  { id: "LINNET_4", label: "Linnet 4", desc: "New default that follows the context. Honours audio tags", rate: 1 },
+  { id: "LINNET_4", label: "Linnet 4", desc: "New model that follows the context. Honours audio tags", rate: 1 },
   { id: "LINNET_3", label: "Linnet 3", desc: "The earlier expressive model", rate: 1 },
   { id: "WREN", label: "Wren", desc: "Steady narration. Lecture scripts, company intros, read-aloud; most even Korean voice", rate: 1 },
   { id: "FINCH", label: "Finch", desc: "Keeps your own voice, lowest cost. Interviews and whole channels", rate: 0.2, pro: true },

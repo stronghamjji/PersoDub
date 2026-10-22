@@ -65,7 +65,7 @@ test("a model's name as the screen says it, a new one's made from its id", () =>
 test("the line under a model and under the choice", () => {
   // What each is for, in the words the owner approved from Perso's page (2026-10-22).
   assert.equal(modelCaption(modelInfo("LINNET_4"), 80),
-    "Default · New default that follows the context. Honours audio tags · 1 credit per second · 80 languages");
+    "Default · New model that follows the context. Honours audio tags · 1 credit per second · 80 languages");
   assert.equal(modelCaption(modelInfo("ORIOLE"), 77),
     "Natural local pronunciation, steady voice. Lectures and corporate video · 1 credit per second · 77 languages");
   assert.equal(modelCaption(modelInfo("NIGHTINGALE"), 102),
@@ -93,7 +93,7 @@ test("in Korean the line under the choice says the count is this model's", async
   // Every model's line, as approved (owner, 2026-10-22).
   assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "자연스러운 억양, 일정한 목소리. 강의·기업 영상에 · 1초 1크레딧 · 언어 77개");
   assert.equal(modelCaption(modelInfo("LINNET_4"), 80),
-    "기본 · 맥락을 이해하는 새 기본 모델. 오디오 태그 반영 · 1초 1크레딧 · 언어 80개");
+    "기본 · 맥락을 이해하는 새 모델. 오디오 태그 반영 · 1초 1크레딧 · 언어 80개");
   assert.equal(modelCaption(modelInfo("LINNET_3"), 34), "이전 표현형 모델 · 1초 1크레딧 · 언어 34개");
   assert.equal(modelCaption(modelInfo("WREN"), 32),
     "안정적인 나레이션. 강의 대본·기업 소개·낭독에. 한국어 목소리가 가장 고르게 · 1초 1크레딧 · 언어 32개");
