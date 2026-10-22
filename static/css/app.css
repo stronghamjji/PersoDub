@@ -681,6 +681,8 @@
   /* Placing the box, the result card stands in that line's room: the column
      at 1280x800 has no more than that. */
   #tabErase .result-box { margin: 0; }
+  /* One pixel tighter: the column was 385.5px in 385, which drew a scrollbar (Mac check, 2026-10-22). */
+  #tabErase .result-box .m { margin-top: 2px; }
   /* ---- Audio: the left panel's tab (ui/src/audioTab.mjs) ---- */
   /* The Erase tab's cards and foot, without its side list. */
   .audio-tab .erase-card select { margin-top: 6px; height: 28px; padding: 0 8px; font-size: 12px; }

@@ -303,7 +303,7 @@ async function dubStep(snap, base) {
     }
     return { rows: rows.length, kinds, header: head ? head.textContent.trim() : "",
              narrow: !!head && head.classList.contains("sc-h-len-narrow"),
-             noDot: rows.filter((r) => !r.querySelector(".sc-dot")).map((r) => r.dataset.line),
+             noDot: rows.filter((r) => !r.querySelector(".sc-dot, .sc-tick")).map((r) => r.dataset.line),
              legend: (document.querySelector("#timeline .tl-legend")?.textContent || "").replace(/\s+/g, " ").trim(),
              empty: (document.querySelector("#scriptBox .script-empty")?.textContent || "").trim() };
   });
@@ -311,7 +311,7 @@ async function dubStep(snap, base) {
   if (!c.rows) throw new Error(`the script table has no rows${c.empty ? `: ${c.empty}` : ""}`);
   const want = c.narrow ? tr("Length") : tr("Original / Translated (s)");
   if (c.header !== want) throw new Error(`the length column is headed "${c.header}", not "${want}"`);
-  if (c.noDot.length) throw new Error(`line(s) ${c.noDot.join(", ")} have no .sc-dot`);
+  if (c.noDot.length) throw new Error(`line(s) ${c.noDot.join(", ")} have no length mark (.sc-dot or .sc-tick)`);
   if (!c.legend.includes(tr("Much shorter"))) throw new Error(`the timeline legend reads "${c.legend}", without "${tr("Much shorter")}"`);
   const secs = (ms) => Math.round(ms / 1000);
   const took = began ? `${secs(began - t0)} s in the queue, dubbed in ${secs(Date.now() - began)} s`
