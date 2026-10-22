@@ -495,6 +495,8 @@ test("in Korean the words under an erase or a separation name the tool", async (
   assert.equal(meta("separate", "running"), "오디오 분리 중");
   assert.equal(meta("erase", "done"), "자막 지우기 완료");
   assert.equal(meta("erase", "running"), "자막 지우는 중");
+  // A video with its own subtitles is named by its tool, not as a dubbing's "Auto → Script".
+  assert.equal(meta("captions", "done"), "자막 스타일");
   assert.equal(doingWord({ kind: "separate" }), "분리 중");
   assert.equal(doingWord({ kind: "erase" }), "지우는 중");
 });

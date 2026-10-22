@@ -1784,8 +1784,11 @@
      files side by side over the looks. */
   .cap-alone { flex: none; padding-bottom: 4px; }
   .cap-alone .video-card { align-self: stretch; text-align: left; }
-  .cap-srt { margin-top: 10px; padding-block: 14px; }
+  .cap-alone .cap-srt { margin-top: 10px; padding-block: 14px; }
   .cap-alone .import-status { margin-top: 8px; }
+  /* The tab scrolls as one then, so the dim looks show whole under the blocks. */
+  .cap-tab:has(> .cap-alone:not([hidden])) { overflow-y: auto; }
+  .cap-tab:has(> .cap-alone:not([hidden])) > .cap-main { flex: none; }
   .cap-main.cap-off { opacity: 0.45; }
   .cap-files { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 10px 12px 0; }
   .cap-side { width: 120px; flex: 0 0 auto; box-sizing: border-box; border-right: 1px solid var(--border);

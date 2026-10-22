@@ -235,7 +235,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     $("draftError").textContent = "";
     // Nor is its link: the Import blocks kept the last address in their
     // field, so an empty project opened from Home showed it (review, 2026-10-09).
-    for (const id of ["dubbingLinkInput", "audioLinkInput"]) {
+    for (const id of ["dubbingLinkInput", "audioLinkInput", "capLinkInput"]) {
       const f = $(id);
       if (f) f.value = "";
     }
