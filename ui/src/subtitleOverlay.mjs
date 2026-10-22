@@ -234,6 +234,9 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
   // The words changed (a job opened, a line edited or rewritten) or the video's
   // size just became known: measure again, and save when the answer moved.
   function subLinesChanged() {
+    // Whether there are lines at all opens the Captions tab and its button
+    // in the video panel; the overlay alone draws nothing for a wordless one.
+    paintSubToolbar();
     if (!subStyleJobId || !subStyleLoaded) return;
     const lay = subLayoutAll();
     if (!lay || JSON.stringify(lay) === JSON.stringify(subStyle.layout)) return;

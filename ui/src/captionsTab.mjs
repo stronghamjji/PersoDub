@@ -10,9 +10,15 @@
 // (onShow, which is the timeline's eye). A− / A＋ and the scope buttons are
 // wired by the page, as they were on the floating bar.
 //
+// The same looks open from the finished video panel too, at the dub's last
+// step: Subtitle style, left of Download (owner, 2026-10-22). Its grid is
+// drawn and ringed with the tab's, a press on either is the same pick, and
+// the button is dim whenever the tab has no looks to show.
+//
 // The elements this file touches: #capEmpty, #capMain, #capHint, #subSizeLv,
-// #subScopeSep, #subScopeSeg, #subScopeAll, #subScopeOne, #subShow and the
-// grid of looks, #subStyleMenu.
+// #subScopeSep, #subScopeSeg, #subScopeAll, #subScopeOne, #subShow, the grid
+// of looks, #subStyleMenu, and the video panel's #videoStyleBtn,
+// #videoStylePop and its grid, #videoStyleGrid.
 import { t } from "./i18n.mjs";
 
 // The English sentences, compared by the tests; each is drawn through t()
@@ -89,22 +95,54 @@ export function styleCardsHtml(styles, sample, thumb) {
  *   open it again (ui/src/leftTabs.mjs)
  * @param {(preset: string) => void} deps.onPick  a look was pressed
  * @param {() => void} deps.onShow  the Show switch was pressed
+ * @param {any} [deps.doc]  the page: a press anywhere else on it, or Escape,
+ *   shuts the video panel's looks
  * @returns {{ paint: () => void }}
  */
-export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked = () => {} }) {
-  const grid = $("subStyleMenu");
-  let drawn = null;   // the sample and frame the grid was last built with
+export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked = () => {},
+                                  doc = globalThis.document }) {
+  const grids = [$("subStyleMenu"), $("videoStyleGrid")];
+  const styleBtn = $("videoStyleBtn");
+  const pop = $("videoStylePop");
+  let drawn = null;   // the sample and frame the grids were last built with
 
-  grid.addEventListener("click", (e) => {
-    const card = e.target.closest?.("[data-preset]");
-    if (card) onPick(card.dataset.preset);
+  // The video panel's looks open and shut the way the Ratio menu beside them
+  // does (ui/src/ratio.mjs): their button, a press anywhere else, Escape. A
+  // pick shuts them as well, so the look is seen on the whole picture.
+  function shut() {
+    pop.hidden = true;
+    styleBtn.setAttribute("aria-expanded", "false");
+  }
+  styleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = pop.hidden;
+    pop.hidden = !open;
+    styleBtn.setAttribute("aria-expanded", String(open));
   });
+  pop.addEventListener("click", (e) => e.stopPropagation());
+  doc.addEventListener("click", shut);
+  doc.addEventListener("keydown", (e) => { if (e.key === "Escape") shut(); });
+
+  for (const grid of grids) {
+    grid.addEventListener("click", (e) => {
+      const card = e.target.closest?.("[data-preset]");
+      if (!card) return;
+      onPick(card.dataset.preset);
+      shut();
+    });
+  }
   $("subShow").addEventListener("click", () => onShow());
 
   function paint() {
     const v = getView();
-    setLocked(captionsLocked({ dubbed: !!v.dubbed }));
+    const locked = captionsLocked({ dubbed: !!v.dubbed });
+    setLocked(locked);
     const empty = captionsEmpty({ screen: v.screen, lines: v.lines.length });
+    // The video panel's button opens onto these same looks: dim whenever the
+    // tab has none to show, with the tab's reason on its tip.
+    styleBtn.disabled = locked || !!empty;
+    styleBtn.title = locked ? t(LOCKED_TIP) : empty && t(empty);
+    if (styleBtn.disabled) shut();
     $("capEmpty").textContent = empty && t(empty);
     $("capEmpty").hidden = !empty;
     $("capMain").hidden = !!empty;
@@ -129,12 +167,14 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
     if (key !== drawn) {
       drawn = key;
       const thumb = v.jobId ? `/api/dub/jobs/${encodeURIComponent(v.jobId)}/thumb` : "";
-      grid.innerHTML = styleCardsHtml(styles, sampleWord(v.lines), thumb);
+      for (const grid of grids) grid.innerHTML = styleCardsHtml(styles, sampleWord(v.lines), thumb);
     }
-    for (const card of grid.querySelectorAll("[data-preset]")) {
-      const on = card.dataset.preset === v.preset;
-      card.classList.toggle("on", on);
-      card.setAttribute("aria-pressed", String(on));
+    for (const grid of grids) {
+      for (const card of grid.querySelectorAll("[data-preset]")) {
+        const on = card.dataset.preset === v.preset;
+        card.classList.toggle("on", on);
+        card.setAttribute("aria-pressed", String(on));
+      }
     }
   }
 

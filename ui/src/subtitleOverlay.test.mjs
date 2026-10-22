@@ -59,14 +59,15 @@ const SAVED_STYLE = { enabled: true, preset: "sticker", pos: null, size: null, c
  * One page with the module on it. `answer` is what the app says to a save.
  * The browser's globals stay until restore().
  */
-function harness({ answer = async () => ({ ok: true }) } = {}) {
+function harness({ answer = async () => ({ ok: true }), state = { job: null, jobId: null },
+                   lines = [{ start: 0, end: 5, text: "Hello there" }] } = {}) {
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const body = makeEl("body");
   body.dataset.screen = "done";
   const calls = { puts: [], drawTimelineTrack: 0 };
   const globals = {
-    document: { body, createElement: (tag) => makeEl(tag) },
+    document: { body, createElement: (tag) => makeEl(tag), addEventListener() {} },
     window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
     getComputedStyle: () => ({}),
@@ -85,9 +86,9 @@ function harness({ answer = async () => ({ ok: true }) } = {}) {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 100 }),
   });
   const subs = initSubtitleOverlay({
-    $, state: { job: null, jobId: null }, doneVideo: video,
+    $, state, doneVideo: video,
     leftTabs: { show() {}, setLocked() {} },
-    timeline: { getLines: () => [{ start: 0, end: 5, text: "Hello there" }], redraw() {},
+    timeline: { getLines: () => lines, redraw() {},
                 drawTimelineTrack: () => { calls.drawTimelineTrack++; } },
     getDoneSource: () => "dubbed",
     showVideoSource: async () => {},
@@ -223,6 +224,54 @@ test("a refused style answer leaves the default look", async () => {
     await h.subs.loadSubStyle("gone");
     assert.equal(h.subs.getSubStyle().preset, "clean");
     assert.deepEqual(h.subs.getSubStyle().cues, {});
+  } finally {
+    h.restore();
+  }
+});
+
+// The looks also open from the finished video panel, left of Download (owner,
+// 2026-10-22). A look picked there is the subtitle style itself: it is saved
+// to the project, and the Download dialog's Dubbed video with subtitles asks
+// for it (ui/src/app.mjs builds that row's link from exportParams).
+test("a look picked over the video is saved and is the look the subtitled download asks for", async () => {
+  const h = harness();
+  const timers = holdTimers();
+  try {
+    await h.subs.loadSubStyle("j1");
+    assert.equal(h.subs.exportParams().preset, "sticker", "the project's own look to begin with");
+    const card = makeEl("card");
+    card.parent = h.$("videoStyleGrid");
+    card.dataset.preset = "white-box";
+    card.closest = (sel) => (sel === "[data-preset]" ? card : null);
+    send(card, "click");
+    assert.equal(h.subs.getSubStyle().preset, "white-box");
+    assert.equal(h.subs.exportParams().preset, "white-box");
+    await timers.run();
+    assert.equal(h.calls.puts.length, 1);
+    assert.equal(h.calls.puts[0].url, "/api/dub/jobs/j1/subtitle_style");
+    assert.equal(h.calls.puts[0].style.preset, "white-box");
+  } finally {
+    timers.restore();
+    h.restore();
+  }
+});
+
+// The video panel's Subtitle style is dim while the dub has no lines. The
+// lines arrive after the job opens, and the one under the playhead can have
+// no words ("Not translated"): the overlay draws nothing for it, and the
+// button stayed dim saying the project had no subtitles.
+test("Subtitle style in the video panel wakes when the lines arrive, even if the first has no words", async () => {
+  const lines = [];
+  const h = harness({ state: { job: { id: "j1", status: "done", kind: "dub" }, jobId: "j1" }, lines });
+  try {
+    await h.subs.loadSubStyle("j1");
+    assert.equal(h.$("videoStyleBtn").disabled, true, "no lines yet");
+    lines.push({ start: 0, end: 2, text: "" }, { start: 2, end: 5, text: "Hello there" });
+    // What the page does when the script lands (ui/src/app.mjs renderTimeline).
+    h.subs.subLinesChanged();
+    h.subs.updateSubtitleNow();
+    assert.equal(h.$("videoStyleBtn").disabled, false);
+    assert.equal(h.$("videoStyleBtn").title, "");
   } finally {
     h.restore();
   }
