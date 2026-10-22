@@ -230,7 +230,8 @@ test("with the eraser not installed the tab says so, offers the download, and ho
   assert.equal(h.$("eraseRunBtn").disabled, true);
   // The box can still be placed.
   assert.equal(h.$("eraseBox").hidden, false);
-  // The download is the line to read; the help line waits for the eraser.
+  // The download is the line to read; the result card waits for the eraser.
+  assert.equal(h.$("eraseResult").hidden, true);
   assert.equal(h.$("eraseTip").hidden, true);
 });
 
@@ -338,6 +339,7 @@ test("an erase that stopped says why, and offers Try again, Back and the log", a
   assert.equal(h.$("eraseCancelBtn").hidden, true);
   assert.equal(h.log.timeline.lane, null, "nothing was erased");
   assert.equal(h.$("eraseTip").hidden, true, "the reason is the line to read, not a tip");
+  assert.equal(h.$("eraseResult").hidden, true);
 
   // Back: the box, the video and the cuts, as they were.
   await h.$("eraseBackBtn").fire("click");
@@ -607,23 +609,27 @@ test("the video card names the part to erase before an erase, and leaves it to t
   clearDraft();
 });
 
-test("one line under the cards says what to do now: placing the box, erasing, done", async () => {
+// Placing the box, the card saying what the erase makes stands where the line
+// was: the column at 1280x800 has room for one of them (owner, 2026-10-22).
+test("under the cards: what the erase makes while placing the box, then what to do while erasing and when done", async () => {
   clearDraft();
   const h = harness();
   h.api.openErase();
   assert.equal(h.$("eraseTip").hidden, true, "nothing to say before there is a video");
+  assert.equal(h.$("eraseResult").hidden, true);
   h.api.openEraseWith(HELD);
   await settle();
-  assert.equal(h.$("eraseTip").hidden, false);
-  assert.equal(h.$("eraseTipText").textContent,
-    "Dub after erasing and the translated subtitles won't overlap. "
-    + "Fit the box, then play to check the subtitles stay in it from start to end.");
+  assert.equal(h.$("eraseResult").hidden, false);
+  assert.equal(h.$("eraseTip").hidden, true, "the card takes the line's place");
   await h.$("eraseRunBtn").fire("click");
+  assert.equal(h.$("eraseResult").hidden, true);
+  assert.equal(h.$("eraseTip").hidden, false);
   assert.equal(h.$("eraseTipText").textContent,
     "Erasing carries on if you go to another screen. The Home card shows the progress.");
   assert.equal(h.$("eraseDoneNote").textContent, "");
   h.app.erase = { status: "done", percent: 100 };
   await new Promise((r) => setTimeout(r, 1100));
+  assert.equal(h.$("eraseResult").hidden, true);
   assert.equal(h.$("eraseTip").hidden, false);
   assert.equal(h.$("eraseTipText").textContent, "Save it with Download, or carry on with Dubbing.");
   // The erased card says what the clean video is for.
@@ -631,6 +637,7 @@ test("one line under the cards says what to do now: placing the box, erasing, do
     "Send the erased video to Dubbing to add new subtitles in the dubbing language. The original subtitles are gone now.");
   h.api.openErase();
   assert.equal(h.$("eraseTip").hidden, true);
+  assert.equal(h.$("eraseResult").hidden, true);
   clearDraft();
 });
 
@@ -687,29 +694,32 @@ test("the Area card enlarges the box's part of the frame at the playhead, and fo
   clearDraft();
 });
 
-// The column at 1280x800 has room for the help line or a warning, not both.
-test("placing the box, the help line gives way to the no-graphics-card line and to the big box warning", async () => {
+// The column at 1280x800 has room for the result card or a warning, not both.
+test("placing the box, the result card gives way to the no-graphics-card line and to the big box warning", async () => {
   clearDraft();
   const h = harness({ platform: "win-cpu" });
   h.api.openEraseWith(HELD);
   await settle();
   assert.equal(h.$("eraseNoGpu").hidden, false);
+  assert.equal(h.$("eraseResult").hidden, true);
   assert.equal(h.$("eraseTip").hidden, true);
   clearDraft();
 
   const mac = harness();
   mac.api.openEraseWith(HELD);
   await settle();
-  assert.equal(mac.$("eraseTip").hidden, false);
-  // Dragged out over most of the frame: the warning, and no help line.
+  assert.equal(mac.$("eraseResult").hidden, false);
+  // Dragged out over most of the frame: the warning, and no card.
   const corner = { dataset: { handle: "nw" }, setPointerCapture() {}, hasPointerCapture: () => true, releasePointerCapture() {} };
   await mac.$("eraseBox").fire("pointerdown", { target: corner, pointerId: 1, clientX: 100, clientY: 300, preventDefault() {} });
   await mac.$("eraseBox").fire("pointermove", { pointerId: 1, clientX: 0, clientY: 0 });
   await mac.$("eraseBox").fire("pointerup", { pointerId: 1 });
   assert.equal(mac.$("eraseBigBox").hidden, false);
+  assert.equal(mac.$("eraseResult").hidden, true);
   assert.equal(mac.$("eraseTip").hidden, true);
-  // Reset: the line is back.
+  // Reset: the card is back.
   await mac.$("eraseResetBtn").fire("click");
-  assert.equal(mac.$("eraseTip").hidden, false);
+  assert.equal(mac.$("eraseResult").hidden, false);
+  assert.equal(mac.$("eraseTip").hidden, true);
   clearDraft();
 });

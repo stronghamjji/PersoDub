@@ -678,6 +678,9 @@
   /* The line for the state the screen is in, at the foot of the column. */
   .erase-tip { margin-top: auto; }
   .erase-tip .lu { color: var(--primary-ink); }
+  /* Placing the box, the result card stands in that line's room: the column
+     at 1280x800 has no more than that. */
+  #tabErase .result-box { margin: 0; }
   /* ---- Audio: the left panel's tab (ui/src/audioTab.mjs) ---- */
   /* The Erase tab's cards and foot, without its side list. */
   .audio-tab .erase-card select { margin-top: 6px; height: 28px; padding: 0 8px; font-size: 12px; }

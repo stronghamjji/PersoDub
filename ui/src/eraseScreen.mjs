@@ -272,14 +272,14 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
     $("eraseBigBox").hidden = !big;
     // One line under the cards for the state the screen is in (design 5,
     // owner 2026-10-22). A stopped erase says why in its own card instead.
-    // Placing the box, it gives way to a warning -- the eraser to download, no
+    // Placing the box, a card in its room says what the erase makes (owner,
+    // 2026-10-22), and gives way to a warning -- the eraser to download, no
     // graphics card, a box this big -- as the column at 1280x800 has no room
     // for both.
     const warned = packMissing || !!noGpuNote(platformKey) || !!big;
-    const tip = view === "area"
-      ? (warned ? "" : t("Dub after erasing and the translated subtitles won't overlap. Fit the box, then play to check the subtitles stay in it from start to end."))
-      : working ? t("Erasing carries on if you go to another screen. The Home card shows the progress.")
-        : done ? t("Save it with Download, or carry on with Dubbing.") : "";
+    $("eraseResult").hidden = view !== "area" || warned;
+    const tip = working ? t("Erasing carries on if you go to another screen. The Home card shows the progress.")
+      : done ? t("Save it with Download, or carry on with Dubbing.") : "";
     $("eraseTipText").textContent = tip;
     $("eraseTip").hidden = !tip;
 

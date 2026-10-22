@@ -240,6 +240,29 @@ test("the erase screen says only what the mockup says", () => {
   assert.match(erase, /AREA_TIPS\[1\]/);
 });
 
+// Placing the box, one card right under the Area card says what the erase
+// makes, in the room the line under the cards had: the column at 1280x800 has
+// none to spare (owner, 2026-10-22). ui/src/eraseScreen.mjs shows it.
+test("the Erase tab says what it makes in one card under the Area card, in the help line's room", () => {
+  const html = readPage();
+  const body = html.slice(html.indexOf('id="eraseBody"'), html.indexOf('id="eraseRow"'));
+  assert.match(body, new RegExp('id="eraseResetBtn" type="button">Reset</button>\\s*</div>\\s*(<!--[^]*?-->\\s*)?'
+    + '<div class="erase-card result-box" id="eraseResult" hidden>\\s*<div data-i18n class="k">What you get</div>\\s*'
+    + '<div data-i18n class="m">The video with its subtitles erased</div>\\s*</div>'), "the card is not right under the Area card");
+  assert.ok(body.indexOf('id="eraseResult"') < body.indexOf('id="eraseTip"'));
+  // No margins of its own here: the column has exactly its height left.
+  assert.match(html, /#tabErase \.result-box \{ margin: 0; \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["The video with its subtitles erased"], "자막을 지운 영상이 나와요");
+  // The line it replaced is said nowhere now.
+  const gone = "Dub after erasing and the translated subtitles won't overlap. Fit the box, then play to check the subtitles stay in it from start to end.";
+  assert.ok(!html.includes(gone) && !readFileSync(ERASE, "utf8").includes(gone), "the placing line is back");
+  for (const code of ["en", "ko"]) {
+    const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
+    assert.ok(!Object.hasOwn(table, gone), `ui.${code}.json still has the placing line`);
+  }
+});
+
 // The two controls of an erase belong beside the picture they are about --
 // first out of the top bar and into the screen's band (user, 2026-09-09), then
 // out of the band and into the row under the picture, where the trim bar is:

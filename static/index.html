@@ -598,8 +598,14 @@
                       <div class="s erase-big" id="eraseBigBox" hidden></div>
                       <button data-i18n class="erase-link" id="eraseResetBtn" type="button">Reset</button>
                     </div>
-                    <!-- One line for the state the screen is in: placing the
-                         box, erasing, or done (design 5, 2026-10-22). -->
+                    <!-- Placing the box: what the erase makes, in the room the
+                         line below had (owner, 2026-10-22). -->
+                    <div class="erase-card result-box" id="eraseResult" hidden>
+                      <div data-i18n class="k">What you get</div>
+                      <div data-i18n class="m">The video with its subtitles erased</div>
+                    </div>
+                    <!-- One line for the state the screen is in: erasing, or
+                         done (design 5, 2026-10-22). -->
                     <div class="erase-notice erase-tip" id="eraseTip" hidden><svg class="lu" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><span id="eraseTipText"></span></div>
                     <!-- Where Export answers. A line, not a dialog: the file
                          is already written by the time this appears. -->
