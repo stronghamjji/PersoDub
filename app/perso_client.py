@@ -730,13 +730,19 @@ class PersoClient:
                   num_speakers: Optional[int] = None,
                   space_seq: Optional[int] = None, log=None,
                   target_tag: Optional[str] = None,
-                  tts_model: str = DEFAULT_TTS_MODEL) -> str:
+                  tts_model: str = DEFAULT_TTS_MODEL,
+                  title: Optional[str] = None) -> str:
         """Full cloud dub: upload -> translate project -> poll -> download.
 
         The whole pipeline runs on Perso's side (translation, voices, mix);
         what comes back is the finished dubbed video, saved to out_path.
         Request contract mirrors the official plugin's api_adapter.mjs
         requestTranslation/download exactly (verified 2026-08-31).
+
+        `title` names the project on Perso's workspace, as the plugin's
+        requestTranslation does; without one Perso names it after the
+        uploaded file, which here is always input.mp4 (sheet feedback 4,
+        2026-10-21).
         """
         from app.jobs import timed_step  # late, as _wait_completed's JobCancelled
 
@@ -765,6 +771,7 @@ class PersoClient:
                                          **({"languageTag": target_tag} if target_tag else {})}],
                     "numberOfSpeakers": int(num_speakers) if num_speakers else 1,
                     "preferredSpeedType": "GREEN",
+                    **({"title": title} if title else {}),
                 },
                 headers=self._headers, timeout=120,
             )

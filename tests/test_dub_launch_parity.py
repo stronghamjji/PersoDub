@@ -74,11 +74,11 @@ def recorder(monkeypatch):
         return {"out_path": kw["out_path"], "num_segments": 0}
 
     def fake_cloud(jid, video_path, out_path, source_code, target_code, num_speakers, log,
-                   tts_model=None):
+                   tts_model=None, title=None):
         seen["cloud"].append({"jid_is_the_new_job": jid, "video_path": video_path,
                               "out_path": out_path, "source_code": source_code,
                               "target_code": target_code, "num_speakers": num_speakers,
-                              "tts_model": tts_model})
+                              "tts_model": tts_model, "title": title})
         return {"out_path": out_path}
 
     def fake_fetch(url, dest, log=None, cancel_check=None):
@@ -327,6 +327,9 @@ def test_start_a_perso_cloud_dub(recorder):
         "num_speakers": 2,
         # Nobody chose a Perso voice model: ORIOLE, which Korean has.
         "tts_model": "ORIOLE",
+        # The project's name, which Perso's workspace shows it under: here
+        # the uploaded file's, as the app names the project.
+        "title": "v",
     }
     assert recorder["run_dub"] == []
     assert state.job_store.get(jid)["perso_model"] == "ORIOLE"
@@ -480,6 +483,7 @@ def test_rearm_of_a_cloud_job(recorder, tmp_path):
         "target_code": "ko",
         "num_speakers": 3,
         "tts_model": "WREN",
+        "title": "queued-cloud",
     }]
 
 
@@ -636,11 +640,26 @@ def test_the_cloud_path_hands_perso_the_voice_model(monkeypatch, tmp_path):
     monkeypatch.setattr(pc_module, "PersoClient", FakeClient)
     monkeypatch.setattr(pc_module, "note_credits", lambda *a, **kw: None)
     args = (str(tmp_path / "in.mp4"), str(tmp_path / "out.mp4"), "ko", "en-AU", None, lambda m: None)
-    dub_api._run_cloud_dub(state.job_store.create(), *args, tts_model="NIGHTINGALE")
+    dub_api._run_cloud_dub(state.job_store.create(), *args, tts_model="NIGHTINGALE", title="Paris steps")
     # A record from before the model was kept: the language's own.
     dub_api._run_cloud_dub(state.job_store.create(), *args[:3], "ko", None, lambda m: None)
     assert [kw["tts_model"] for kw in sent] == ["NIGHTINGALE", "ORIOLE"]
     assert sent[0]["target_tag"] == "en-AU"
+    # The project's name goes with it, for Perso's workspace to show.
+    assert [kw["title"] for kw in sent] == ["Paris steps", None]
+
+
+def test_a_cloud_dub_is_named_on_perso_as_the_project_is_on_the_screen(recorder, tmp_path):
+    """Perso's workspace listed every project as "input", the file every dub
+    uploads (sheet feedback 4, 2026-10-21). The project's name goes instead:
+    the one the person gave it, else the one it was made with."""
+    r = _start_cloud(project="Paris steps")
+    assert r.status_code == 200
+    assert _wait(recorder["cloud"])[0]["title"] == "Paris steps"
+    jid, _ = _saved_job(tmp_path, name="made-as", language="Korean", language_code="ko",
+                        dub_mode="perso", title="Renamed on the screen")
+    dub_api._dub_target_for(state.job_store.get(jid))(lambda msg: None)
+    assert recorder["cloud"][-1]["title"] == "Renamed on the screen"
 
 
 # ---------------------------------------------------------------------------
@@ -690,6 +709,7 @@ def test_try_again_on_a_cloud_job_goes_back_to_the_cloud(recorder, tmp_path):
         # A record from before the model was kept names none; the cloud path
         # then takes the language's own (app/dub_launch.py run_cloud_dub).
         "tts_model": None,
+        "title": "cloud",
     }
     assert recorder["run_dub"] == []
     assert state.job_store.get(new_jid)["dub_mode"] == "perso"

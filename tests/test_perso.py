@@ -927,6 +927,22 @@ def test_download_media_gives_up_after_three_dropped_connections(monkeypatch, tm
         client.download_media("https://media.example.com/dub.mp4", str(tmp_path / "dub.mp4"))
 
 
+def test_dub_video_names_the_project_on_perso_by_its_title(monkeypatch, tmp_path):
+    # Without a title Perso named every project after the uploaded file,
+    # input.mp4 (sheet feedback 4, 2026-10-21); the official plugin sends one.
+    done = {"progressReason": "Completed", "hasFailed": False}
+    calls = _install_fake_perso_dub_http(monkeypatch, progress_sequence=[done, done])
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    src = tmp_path / "input.mp4"
+    src.write_bytes(b"v")
+    pc = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    pc.dub_video(str(src), str(tmp_path / "out.mp4"), "ko", "en", title="Paris steps")
+    pc.dub_video(str(src), str(tmp_path / "out2.mp4"), "ko", "en")
+    bodies = [body for url, body in calls["post"] if url.endswith("/translate")]
+    assert bodies[0]["title"] == "Paris steps"
+    assert "title" not in bodies[1]
+
+
 def test_dub_video_sends_the_region_tag_when_the_language_has_one(monkeypatch, tmp_path):
     # Perso tells English (UK) from English (US) by languageTag, not by code
     # (app/languages.py); a plain code carries no tag at all.

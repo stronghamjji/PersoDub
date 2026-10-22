@@ -209,7 +209,7 @@ def test_a_perso_cloud_dub_skips_the_local_line(slow_dub, monkeypatch):
     cloud = []
 
     def fake_cloud(jid, video_path, out_path, source, language_code, num_speakers, log,
-                   tts_model=None):
+                   tts_model=None, title=None):
         cloud.append(jid)
         return {"out_path": out_path}
 
