@@ -18,6 +18,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
+import { connect, isClosed, isOpen, onHome, shown, sleep } from "./lib/cdp.mjs";
 
 const { values: opt } = parseArgs({ options: {
   video: { type: "string" }, out: { type: "string" }, port: { type: "string", default: "9333" },
@@ -59,129 +60,10 @@ function seconds(path) {
 }
 
 // ---- the control port ------------------------------------------------------
-const START_IT = `start the app with --remote-debugging-port=${opt.port}`;
-const targets = await fetch(`http://127.0.0.1:${opt.port}/json`, { signal: AbortSignal.timeout(5000) })
-  .then((r) => r.json(), () => { throw new Error(`nothing answers on port ${opt.port}; ${START_IT}`); });
-const target = targets.find((t) => t.type === "page" && t.url.startsWith("http://127.0.0.1:"));
-if (!target) throw new Error(`no app page on port ${opt.port}; ${START_IT}`);
-const origin = new URL(target.url).origin;
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((ok, no) => { ws.onopen = ok; ws.onerror = () => no(new Error(`cannot open ${target.webSocketDebuggerUrl}`)); });
-let seq = 0;
-const pending = new Map();
-const handlers = new Map();
-ws.onmessage = ({ data }) => {
-  const m = JSON.parse(data);
-  if (!m.id) { for (const fn of handlers.get(m.method) || []) fn(m.params); return; }
-  const p = pending.get(m.id);
-  if (!p) return;
-  pending.delete(m.id);
-  if (m.error) p.no(new Error(`${p.method}: ${m.error.message}`)); else p.ok(m.result);
-};
-ws.onclose = () => { for (const p of pending.values()) p.no(new Error("the app closed its control port")); };
+// The connection and the presses are tests/e2e/lib/cdp.mjs's, shared with the other runs.
+const app = await connect({ port: opt.port, out });
+const { origin, page, send, js, inPage, waitFor, api, click, choose, feed, shot, snippet, tr } = app;
 
-// Every call has a limit: a page that stops answering ends the run instead of hanging it.
-function send(method, params = {}, ms = 30000) {
-  return new Promise((ok, no) => {
-    const id = ++seq;
-    const timer = setTimeout(() => { pending.delete(id); no(new Error(`${method}: no answer in ${ms / 1000} s`)); }, ms);
-    pending.set(id, { method, ok: (v) => { clearTimeout(timer); ok(v); }, no: (e) => { clearTimeout(timer); no(e); } });
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-}
-function nextEvent(method, ms) {
-  return new Promise((ok, no) => {
-    const set = handlers.get(method) || new Set();
-    handlers.set(method, set);
-    const fn = (params) => { set.delete(fn); clearTimeout(timer); ok(params); };
-    const timer = setTimeout(() => { set.delete(fn); no(new Error(`no ${method} in ${ms / 1000} s`)); }, ms);
-    set.add(fn);
-  });
-}
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function js(expression) {
-  const r = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
-  if (r.exceptionDetails) {
-    throw new Error(`in the page: ${(r.exceptionDetails.exception?.description || r.exceptionDetails.text).split("\n")[0]}`);
-  }
-  return r.result.value;
-}
-// fn goes to the page as source, so it may use only its arguments and the page's globals.
-const inPage = (fn, ...args) => js(`(${fn})(...${JSON.stringify(args)})`);
-async function waitFor(what, ms, fn, ...args) {
-  const end = Date.now() + ms;
-  for (;;) {
-    const v = await inPage(fn, ...args);
-    if (v) return v;
-    if (Date.now() > end) throw new Error(`waited ${ms / 1000} s for ${what}`);
-    await sleep(250);
-  }
-}
-async function api(path) {
-  const r = await fetch(origin + path, { signal: AbortSignal.timeout(10000) });
-  if (!r.ok) throw new Error(`GET ${path}: ${r.status}`);
-  return r.json();
-}
-
-const shown = (s) => { const el = document.querySelector(s); return !!el && el.getClientRects().length > 0; };
-const pressable = (s) => { const el = document.querySelector(s); return !!el && el.getClientRects().length > 0 && !el.disabled; };
-const isOpen = (s) => document.querySelector(s).classList.contains("open");
-const isClosed = (s) => !document.querySelector(s).classList.contains("open");
-const onHome = () => document.body.dataset.screen === "home" && !document.querySelector("#screen-home").hidden;
-// What a person would hit at (x, y): a dialog or a toast over the button takes the click instead.
-const HIT = function (x, y) {
-  const hit = document.elementFromPoint(x, y);
-  if (hit && (hit === this || this.contains(hit))) return "";
-  return hit ? hit.tagName.toLowerCase() + (hit.id ? `#${hit.id}` : "") + [...hit.classList].map((c) => `.${c}`).join("") : "nothing";
-}.toString();
-
-// A press and a release at the middle of the element's box. No mouse move
-// first: on a window that another one covers, the page takes a move only
-// with its next frame, which does not come (5 s a move, measured 2026-10-21),
-// while a press and a release are taken at once.
-async function click(sel, ms = 10000) {
-  await waitFor(`${sel} to be pressable`, ms, pressable, sel);
-  const { result } = await send("Runtime.evaluate", { expression: `document.querySelector(${JSON.stringify(sel)})`, objectGroup: "e2e" });
-  await send("DOM.scrollIntoViewIfNeeded", { objectId: result.objectId });
-  const b = (await send("DOM.getBoxModel", { objectId: result.objectId })).model.border;
-  const x = (b[0] + b[2] + b[4] + b[6]) / 4, y = (b[1] + b[3] + b[5] + b[7]) / 4;
-  const over = (await send("Runtime.callFunctionOn", { objectId: result.objectId, functionDeclaration: HIT,
-                                                       arguments: [{ value: x }, { value: y }], returnByValue: true })).result.value;
-  if (over) throw new Error(`${sel} is covered by ${over}`);
-  for (const type of ["mousePressed", "mouseReleased"]) {
-    await send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons: type === "mousePressed" ? 1 : 0, clickCount: 1 });
-  }
-}
-// A <select> opens a native menu on macOS that CDP cannot press, so the
-// option is picked the way that menu leaves it: the value, then the input
-// and change events the page listens for. Nothing fires when it is on it already.
-async function choose(sel, value) {
-  const ok = await inPage((s, v) => {
-    const el = document.querySelector(s);
-    if (!el || ![...el.options].some((o) => o.value === v)) return false;
-    if (el.value !== v) {
-      el.value = v;
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    return true;
-  }, sel, value);
-  if (!ok) throw new Error(`${sel} has no option ${value}`);
-}
-// A block whose press opens the file picker: intercepted, the picker is not
-// drawn; the page names its file input instead, and the file goes into it.
-async function feed(sel, file) {
-  await send("Page.setInterceptFileChooserDialog", { enabled: true });
-  try {
-    const chooser = nextEvent("Page.fileChooserOpened", 5000);
-    chooser.catch(() => {});
-    await click(sel);
-    const { backendNodeId } = await chooser;
-    await send("DOM.setFileInputFiles", { files: [file], backendNodeId });
-  } finally {
-    await send("Page.setInterceptFileChooserDialog", { enabled: false });
-  }
-}
 // The look a project has saved, once its debounced save lands: how long that took.
 async function savedLook(jid, preset) {
   const t0 = Date.now();
@@ -238,29 +120,7 @@ function moveOut(job, project, count, into) {
   }
   return moved;
 }
-async function shot(name) {
-  const { data } = await send("Page.captureScreenshot", { format: "png" });
-  writeFileSync(join(out, `${name}.png`), Buffer.from(data, "base64"));
-  return `${name}.png`;
-}
-// The first of a step's areas that is on screen: a failed dub shows its card,
-// not the table. Only areas named here, never the Settings dialog as a whole,
-// which can hold account details.
-const snippet = (looks) => inPage((sels) => {
-  const els = sels.map((s) => document.querySelector(s)).filter(Boolean);
-  const el = els.find((e) => e.getClientRects().length > 0) || els[0];
-  const html = el ? el.outerHTML.replace(/<!--[\s\S]*?-->/g, "").replace(/\s+/g, " ") : `(none of ${sels})`;
-  return `screen=${document.body.dataset.screen} ${html.slice(0, 1500)}`;
-}, looks);
-
 // ---- the app as it stands --------------------------------------------------
-await send("Page.enable");
-const page = await inPage(() => ({ lang: document.documentElement.lang || "en", width: innerWidth, height: innerHeight,
-                                   visibility: document.visibilityState }));
-// The page's words, looked up the way its own t() does: the English is the key.
-const words = page.lang === "en" ? {}
-  : await (await fetch(`${origin}/i18n/ui.${page.lang}.json`, { signal: AbortSignal.timeout(10000) })).json();
-const tr = (key) => (Object.hasOwn(words, key) ? words[key] : key);
 // Step 3's picks are remembered for the person's next project; the run puts
 // back what was there before it. Every pick that can spend Perso credits
 // (dubbing, audio separation, speech-to-text) is set to this computer, so a run
@@ -488,7 +348,7 @@ async function captionsStep(snap, base) {
   if (files.refused) throw new Error(`the subtitle file was refused: ${files.refused}`);
   run.capJobId = files.job;
   await shot(`${base}-files`);
-  const lines = tr("{n} lines").replace("{n}", CUES.length);
+  const lines = tr("{n} lines", { n: CUES.length });
   if (files.srt !== basename(capSrt) || files.lines !== lines) {
     throw new Error(`the files row names "${files.srt}", "${files.lines}", not "${basename(capSrt)}", "${lines}"`);
   }
@@ -600,7 +460,7 @@ try {
                  key, saved).catch((e) => console.error(`could not put back ${key}: ${e.message}`));
   }
   await send("Runtime.releaseObjectGroup", { objectGroup: "e2e" }).catch(() => {});
-  ws.close();
+  app.close();
 }
 
 // ---- the report ------------------------------------------------------------
