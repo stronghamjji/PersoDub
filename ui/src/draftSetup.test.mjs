@@ -24,7 +24,7 @@ function makeEl(id) {
   };
 }
 
-function harness() {
+function harness({ firstDownloadBytes = () => 0 } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -66,6 +66,7 @@ function harness() {
     importer, newProject, submitDubStart,
     setDubRestart: (fn) => { restart = fn; },
     getScreen: () => log.screen,
+    firstDownloadBytes,
   });
   log.screen = "done";
   return { $, api, log, state, setSubmitResult: (v) => { submitResult = v; }, restart: () => restart };
@@ -265,6 +266,21 @@ test("the foot's mode follows the quality and the Dubbing choice as they are cha
   $("dubModeSelect").value = "perso";
   await $("dubModeSelect").fire("change");
   assert.equal($("draftFootLabel").textContent, "Dubbing 00:10 · Perso API");
+});
+
+// What the choices still download, said before Start once and in total
+// (owner, 2026-10-22, 1-3): the dialog asked 9.6 GB out of nowhere.
+test("the foot says the first download's size while the choices need one, and paints it again on its own", () => {
+  clearDraft();
+  let bytes = 9.6e9;
+  const { $, api, log } = harness({ firstDownloadBytes: () => bytes });
+  setDraft({ downloadId: "d1", name: "a.mp4", duration: 24, videoUrl: "/v" });
+  assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Fast mode · 9.6 GB the first time");
+  const moved = log.moved;
+  bytes = 0;   // downloaded from the line under a field
+  api.paintFoot();
+  assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Fast mode");
+  assert.equal(log.moved, moved, "the foot alone: Advanced options stay where they are");
 });
 
 test("a draft's Perso dubbing starts with the Dubbing model its row has selected", async () => {

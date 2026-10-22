@@ -11,7 +11,7 @@
 // with the launch token, so an update never runs this file against a module a
 // browser kept from the version before.
 import { LANGUAGES, buildDubFormData, startDubJob, pollDubJob, cancelDubJob, parseProgress, applyEngineAvailability, probeSource, engineChips, engineLine, voiceLabel, dubAgainSource, holdDownload, downloadVideoUrl } from "./dubApi.mjs";
-import { gb, neededModelId, neededPackIds, modelStatusLine, downloadChipText } from "./modelsUi.mjs";
+import { gb, stageNeeds, modelStatusLine, downloadChipText } from "./modelsUi.mjs";
 import { initModelsUi } from "./modelsDialog.mjs";
 import { initStagePickers } from "./stagePicker.mjs";
 import { initSubtitleOverlay } from "./subtitleOverlay.mjs";
@@ -311,14 +311,6 @@ const models = initModelsUi({
 // the lines under them.
 const stagePickers = initStagePickers({ $, rowOf: (id) => models.modelRow(id) });
 
-// Everything a dropdown choice needs, in the order it downloads: the pack it
-// runs in first (as in the dub's own 409), then its model. Only the rows
-// that are not ready -- an empty list means the choice is good to go.
-function hintNeeds(role, value) {
-  const ids = [...neededPackIds(role, value), neededModelId(role, value)].filter(Boolean);
-  return ids.map((id) => models.modelRow(id)).filter((r) => r && r.state !== "ready");
-}
-
 // One line under the dropdown, one button. Nothing missing: hidden (or Ready,
 // once this session saw it busy). Something downloading or stopped: that
 // row's own status, with Cancel or Resume. Otherwise every missing thing by
@@ -365,21 +357,30 @@ function paintHint(el, needs, ready) {
   el.append(span, btn);
 }
 
+// Each field's line: what its choice still needs, each thing counted once
+// (ui/src/modelsUi.mjs stageNeeds). Cloud dubbing needs no local models --
+// their download lines would only confuse; the per-stage dropdowns are
+// greyed by paintDubMode below.
+const STAGE_FIELDS = [["sep", "sepSelect", "sepModelHint"], ["stt", "sttSelect", "sttModelHint"],
+                      ["translate", "translateSelect", "translateModelHint"], ["voice", "voiceSelect", "voiceModelHint"]];
+function stageLines() {
+  if ($("dubModeSelect").value === "perso") return STAGE_FIELDS.map(() => ({ needs: [], ready: false }));
+  return stageNeeds(STAGE_FIELDS.map(([role, sel]) => [role, $(sel).value]), models.modelRow);
+}
+/** What a dubbing on the form's choices downloads first, in bytes (0: nothing). */
+function firstDownloadBytes() {
+  return stageLines().reduce((n, line) => n + line.needs.reduce((m, r) => m + r.bytes, 0), 0);
+}
+// The draft's foot says that size too (ui/src/draftSetup.mjs); wired below,
+// once the draft screen is.
+let paintDraftFoot = () => {};
+
 // The parts of the model UI this page owns: the three dropdown hints and the
 // topbar download chip.
 function paintModelStatusLines(rows) {
-  // Cloud dubbing needs no local models -- their download lines would only
-  // confuse; the per-stage dropdowns are greyed by paintDubMode below.
-  const cloud = $("dubModeSelect").value === "perso";
-  for (const [role, sel, hint] of [["sep", "sepSelect", "sepModelHint"],
-                                    ["stt", "sttSelect", "sttModelHint"],
-                                    ["translate", "translateSelect", "translateModelHint"],
-                                    ["voice", "voiceSelect", "voiceModelHint"]]) {
-    const value = $(sel).value;
-    const needsAnything = !cloud && (neededPackIds(role, value).length || neededModelId(role, value));
-    paintHint($(hint), cloud ? [] : hintNeeds(role, value), !!needsAnything);
-  }
+  stageLines().forEach((line, i) => paintHint($(STAGE_FIELDS[i][2]), line.needs, line.ready));
   stagePickers.paint();
+  paintDraftFoot();
   // The one under way, not one queued behind it: before its first byte it
   // has no figure either (Windows C2, 2026-10-21).
   const dl = rows.find((m) => m.state === "downloading" && m.progress != null)
@@ -766,7 +767,9 @@ const draftSetup = initDraftSetup({
   getScreen: () => document.body.dataset.screen,
   // A dubbing of a cut the Audio tab already separated takes its two sounds.
   stemsFrom: () => (audioTab.separatedJob() || {}).id || "",
+  firstDownloadBytes,
 });
+paintDraftFoot = draftSetup.paintFoot;
 // ---------------- Separate audio ----------------
 let showAudioLanes = () => {};
 // The Audio tab (#tabAudio) belongs to ui/src/audioTab.mjs: the draft's kept

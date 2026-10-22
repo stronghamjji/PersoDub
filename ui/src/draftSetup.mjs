@@ -19,6 +19,7 @@ import { buildDubFormData, saveDownloadParts } from "./dubApi.mjs";
 import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
 import { getDraft, clearDraft, setRanges, keptSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { t } from "./i18n.mjs";
+import { gb } from "./modelsUi.mjs";
 
 function stripExt(name) {
   return String(name || "").replace(/\.[^./\\]+$/, "");
@@ -48,14 +49,16 @@ function stripExt(name) {
  *        edits the same draft and keeps its own top bar
  * @param {() => string} [deps.stemsFrom]  the id of a finished Separate audio
  *        job of the draft as it is cut now, or ""
+ * @param {() => number} [deps.firstDownloadBytes]  what a dubbing on the
+ *        form's choices downloads first, in bytes; 0 for nothing
  * @returns {{ openDraft: (source?: {file?, link?, downloadId?, name?, duration?}) => Promise<void>,
- *             showDraftScreen: () => void, paint: () => void, canExport: () => boolean,
+ *             showDraftScreen: () => void, paint: () => void, paintFoot: () => void, canExport: () => boolean,
  *             saveDraft: (what?: {audio?: string, ratio?: string}) => Promise<string> }}
  */
 export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, sizeVideoPane,
                                   leftTabsShow, importer, newProject, submitDubStart, setDubRestart,
                                   showDraftTimeline = () => {}, getScreen = () => "done",
-                                  stemsFrom = () => "" }) {
+                                  stemsFrom = () => "", firstDownloadBytes = () => 0 }) {
   // The Dubbing tab's three faces: the Import block with no video yet (the
   // importer shows it), this card once there is one, and the Script pane
   // (script engineer's own #dubbingPaneHead/#scriptBox) for a job.
@@ -77,12 +80,22 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     // way out (cut into parts). The old New project dialog said it; this card
     // took its place and said nothing (Windows B11, 2026-10-07).
     $("draftLongHint").hidden = !(keptSeconds(d) > LONG_VIDEO_SECONDS);
+    paintFoot();
+    $("draftStartBtn").disabled = !d.downloadId;
+    $("draftStartBtn").title = d.downloadId ? "" : t("The video is still coming in");
+  }
+  // The foot: the length, the mode and, while the choices still need a
+  // download, its size the first time (owner, 2026-10-22, 1-3). Painted by
+  // itself as well whenever the model rows change (ui/src/app.mjs).
+  function paintFoot() {
+    const d = getDraft();
+    if (!d || state.jobId) return;
     // Perso does the whole job, so the voice-quality choice is not in force.
     const quality = $("dubModeSelect").value === "perso" ? "Perso API"
       : $("qualitySelect").value === "high" ? t("High quality mode") : t("Fast mode");
-    $("draftFootLabel").textContent = t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality });
-    $("draftStartBtn").disabled = !d.downloadId;
-    $("draftStartBtn").title = d.downloadId ? "" : t("The video is still coming in");
+    const first = firstDownloadBytes();
+    $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality }),
+      ...(first ? [t("{size} GB the first time", { size: gb(first) })] : [])].join(" · ");
   }
   // The foot names the mode, so it has to follow the two choices that set it:
   // it went on saying "Fast mode" after High quality was picked (2026-09-30).
@@ -202,5 +215,5 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     }
   }
 
-  return { openDraft, showDraftScreen, paint: paintDubbingTab, canExport, saveDraft };
+  return { openDraft, showDraftScreen, paint: paintDubbingTab, paintFoot, canExport, saveDraft };
 }

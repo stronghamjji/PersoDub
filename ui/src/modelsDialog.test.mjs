@@ -144,7 +144,7 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
 
   assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB?");
   assert.equal(h.$("mnLine").textContent,
-    "One-time download for making voices. Needs 8 GB of memory (16 GB recommended).");
+    "A one-time download, separate from the app install. Needs 8 GB of memory (16 GB recommended).");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnProgress").hidden, true);
   assert.equal(h.$("mnDownload").hidden, false);
@@ -152,12 +152,12 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
   assert.equal(h.$("modelsNeededOverlay").classList.contains("open"), true);
 });
 
-test("the dub's download says the memory it needs, and Download and Start is on", (t) => {
+test("the dub's download says the room left and the memory it needs, and Download and Start is on", (t) => {
   const h = harness();
   t.after(h.state.restore);
-  h.api.showModelsDialog(DETAIL_TWO);
+  h.api.showModelsDialog({ ...DETAIL_TWO, free_bytes: 112.4e9 });
   assert.equal(h.$("mnLine").textContent,
-    "One-time download for making voices. Needs 8 GB of memory (16 GB recommended).");
+    "A one-time download, separate from the app install. 112.4 GB free · Needs 8 GB of memory (16 GB recommended).");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnDownload").disabled, false);
 });
@@ -165,8 +165,8 @@ test("the dub's download says the memory it needs, and Download and Start is on"
 test("a computer short of memory gets the red line instead, and no download", (t) => {
   const h = harness({ ramOk: false });
   t.after(h.state.restore);
-  h.api.showModelsDialog(DETAIL_TWO);
-  assert.equal(h.$("mnLine").textContent, "One-time download for making voices.");
+  h.api.showModelsDialog({ ...DETAIL_TWO, free_bytes: 112.4e9 });
+  assert.equal(h.$("mnLine").textContent, "A one-time download, separate from the app install. 112.4 GB free");
   assert.equal(h.$("mnError").textContent,
     "This computer does not have enough memory to dub on this computer. Try the Perso API.");
   assert.equal(h.$("mnDownload").disabled, true);
@@ -177,7 +177,7 @@ test("a download that is not a dub's (Separate audio) says nothing about memory"
   const h = harness({ ramOk: false });
   t.after(h.state.restore);
   h.api.showModelsDialog({ ...PACK_409, purpose: "separating audio" });
-  assert.equal(h.$("mnLine").textContent, "One-time download for separating audio.");
+  assert.equal(h.$("mnLine").textContent, "A one-time download, separate from the app install.");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnDownload").disabled, false);
 });

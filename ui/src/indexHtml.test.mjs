@@ -657,11 +657,12 @@ test("the player draws subtitles in the burn's font at its natural line height",
 test("the page hands the desktop bridge to the models controller and hints name packs first", () => {
   const html = readPage();
   assert.match(html, /shell: window\.persodubShell \|\| null/);
-  assert.match(html, /function hintNeeds\(role, value\)/);
+  // What each line lists, pack first and each thing once, is
+  // ui/src/modelsUi.mjs stageNeeds (its own tests hold the order).
+  assert.match(html, /stageNeeds\(STAGE_FIELDS\.map\(\(\[role, sel\]\) => \[role, \$\(sel\)\.value\]\), models\.modelRow\)/);
   // One line names everything the choice needs, one button fetches it all.
   assert.match(html, /t\("Needs \{names\} · \{size\} GB", \{ names: needs\.map\(\(r\) => r\.name\)\.join\(" \+ "\)/);
   assert.match(html, /models\.downloadAll\(ids\)/);
-  assert.match(html, /neededPackIds/);
 });
 
 // The voice engine's pack on disk but its process down: the page asks the

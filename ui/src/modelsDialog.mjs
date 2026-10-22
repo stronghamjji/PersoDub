@@ -425,10 +425,12 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
   // -- the dub-start dialog (dub_start's 409) ------------------------------
   function showModelsDialog(detail) {
     const d = dubStartDialog(detail, ramOk());
-    // The memory note rides on the one line a small confirm has; a computer
-    // short of memory gets its sentence in red, as the dialog's error
-    // instead: the download could not end in a dub here, so its button is off.
-    const line = d.ram && !d.ramLow ? `${d.line} ${d.ram}` : d.line;
+    // The room left and the memory note ride on the one line a small confirm
+    // has; a computer short of memory gets its sentence in red, as the
+    // dialog's error instead: the download could not end in a dub here, so
+    // its button is off.
+    const facts = [d.free, d.ram && !d.ramLow ? d.ram : ""].filter(Boolean).join(" · ");
+    const line = facts ? `${d.line} ${facts}` : d.line;
     // The opening words are kept: a download that stops puts them back.
     pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false, title: d.title, line };
     $("mnTitle").textContent = d.title;
