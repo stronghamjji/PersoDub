@@ -8,7 +8,9 @@
 // Run with: node --test ui/src/modelsDialog.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { initModelsUi } from "./modelsDialog.mjs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 function makeEl(id) {
   const classes = new Set();
@@ -144,7 +146,7 @@ test("showModelsDialog paints the 409's title and line and opens the overlay", a
 
   assert.equal(h.$("mnTitle").textContent, "Download 4.0 GB?");
   assert.equal(h.$("mnLine").textContent,
-    "A one-time download, separate from the app install. Needs 8 GB of memory (16 GB recommended).");
+    "A one-time download, separate from the app install.\nNeeds 8 GB of memory (16 GB recommended).");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnProgress").hidden, true);
   assert.equal(h.$("mnDownload").hidden, false);
@@ -157,16 +159,47 @@ test("the dub's download says the room left and the memory it needs, and Downloa
   t.after(h.state.restore);
   h.api.showModelsDialog({ ...DETAIL_TWO, free_bytes: 112.4e9 });
   assert.equal(h.$("mnLine").textContent,
-    "A one-time download, separate from the app install. 112.4 GB free · Needs 8 GB of memory (16 GB recommended).");
+    "A one-time download, separate from the app install.\n112.4 GB free · Needs 8 GB of memory (16 GB recommended).");
   assert.equal(h.$("mnError").textContent, "");
   assert.equal(h.$("mnDownload").disabled, false);
+});
+
+// Run on after the sentence, the room left broke as "남은 / 공간" in the
+// middle of the dialog (owner, 2026-10-22, 5): the sentence is one line, and
+// the room left with the memory note is the next, as the approved picture
+// draws them. The stylesheet keeps the break (indexHtml.test.mjs).
+async function inKorean(t) {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true,
+    json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+}
+test("in Korean the dialog says the sentence, then the room left and the memory on a line of their own", async (t) => {
+  await inKorean(t);
+  const h = harness();
+  t.after(h.state.restore);
+  // A first dubbing on this computer: the voice parts, 9.6 GB.
+  h.api.showModelsDialog({ missing: [{ id: "engine", kind: "pack", bytes: 2.0e9 }, { id: "whisper", kind: "model", bytes: 3.091e9 },
+                                     { id: "qwen3-tts", kind: "model", bytes: 4.544e9 }], free_bytes: 21.8e9 });
+  assert.equal(h.$("mnTitle").textContent, "9.6 GB를 다운로드할까요?");
+  assert.deepEqual(h.$("mnLine").textContent.split("\n"),
+    ["앱 설치와 따로, 처음 한 번만 다운로드해요.", "남은 공간 21.8 GB · 메모리 8 GB 이상 필요 (16 GB 권장)"]);
+  // No voice part (the owner's 2.5 GB): no memory note, and the room left alone on its line.
+  h.api.showModelsDialog({ missing: [{ id: "vocal-separator", kind: "model", bytes: 0.913e9 },
+                                     { id: "ollama-runtime", kind: "pack", bytes: 0.46e9 }, { id: "hunyuan", kind: "model", bytes: 1.1e9 }],
+                           free_bytes: 21.8e9 });
+  assert.equal(h.$("mnTitle").textContent, "2.5 GB를 다운로드할까요?");
+  assert.deepEqual(h.$("mnLine").textContent.split("\n"), ["앱 설치와 따로, 처음 한 번만 다운로드해요.", "남은 공간 21.8 GB"]);
 });
 
 test("a computer short of memory gets the red line instead, and no download", (t) => {
   const h = harness({ ramOk: false });
   t.after(h.state.restore);
   h.api.showModelsDialog({ ...DETAIL_TWO, free_bytes: 112.4e9 });
-  assert.equal(h.$("mnLine").textContent, "A one-time download, separate from the app install. 112.4 GB free");
+  assert.equal(h.$("mnLine").textContent, "A one-time download, separate from the app install.\n112.4 GB free");
   assert.equal(h.$("mnError").textContent,
     "This computer does not have enough memory to dub on this computer. Try the Perso API.");
   assert.equal(h.$("mnDownload").disabled, true);

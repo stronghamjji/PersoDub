@@ -1005,6 +1005,22 @@ test("a model group's band stands at least 10 points of lightness above its rows
   assert.ok(step >= 10, `the band is only ${step.toFixed(1)} points over the rows`);
 });
 
+// The models dialog's line is two lines, the sentence and then the room left
+// with the memory (ui/src/modelsDialog.mjs joins them with a line break). The
+// stylesheet keeps that break, and the dialog is wider than the other confirms
+// so the second line fits whole in either language (owner, 2026-10-22, 5).
+test("the models dialog keeps its line break, and is wider than the other confirms", () => {
+  const html = readPage();
+  assert.match(html.match(/#mnLine \{[^}]*\}/)[0], /white-space: pre-line/);
+  const confirm = Number(html.match(/\.modal\.modal-alert \{ width: (\d+)px;/)[1]);
+  const en = Number(html.match(/\n\s*#modelsNeededOverlay \.modal\.modal-alert \{ width: (\d+)px; \}/)[1]);
+  const ko = Number(html.match(/html:lang\(ko\) #modelsNeededOverlay \.modal\.modal-alert \{ width: (\d+)px; \}/)[1]);
+  assert.equal(confirm, 280);
+  // Measured in Chrome with the app's fonts: the second line with four figures
+  // of room left is 351px of English and 299 of Korean, and the sides take 34.
+  assert.ok(en >= 351 + 34 && ko >= 299 + 34, `${en} and ${ko} are too narrow`);
+});
+
 // Which step each key and the ChatGPT sign-in is for, a small grey line under
 // each like the Privacy tab's (owner, 2026-10-21). And the translator's own
 // lines point the local ones at the Gemini API, which says where its key goes.

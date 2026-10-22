@@ -2306,8 +2306,14 @@
   .modal-foot .btn-secondary, .modal-foot .btn-outline { background: #3a404a; }
   .modal-foot .btn-secondary:hover:not(:disabled), .modal-foot .btn-outline:hover:not(:disabled) { background: var(--divider); }
   /* The models dialog's line is the message of that dialog, not a hint under
-     something else, so it is the message size too. */
-  #mnLine { font-size: var(--font-ui); }
+     something else, so it is the message size too. It is two lines, the
+     sentence and then the room left and the memory (ui/src/modelsDialog.mjs),
+     in a dialog wider than the other confirms so the second one fits whole
+     (owner, 2026-10-22, 5): measured with four figures of room left
+     ("1834.2 GB"), 351px of English and 299 of Korean. */
+  #mnLine { font-size: var(--font-ui); line-height: 16px; white-space: pre-line; }
+  #modelsNeededOverlay .modal.modal-alert { width: 390px; }
+  html:lang(ko) #modelsNeededOverlay .modal.modal-alert { width: 340px; }
   /* One size for a settings row and everything inside it: the labels and the
      model names had no size of their own and were reading at the root's 16px,
      a size nothing else on screen wears any more. */
