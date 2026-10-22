@@ -35,7 +35,9 @@
 <div hidden>
   <span id="updating" data-i18n>Updating PersoDub</span>
   <span id="settingUp" data-i18n>Setting up PersoDub</span>
+  <span id="toDownload" data-i18n>{size} to download</span>
   <span id="ofTotal" data-i18n>{done} of {total}</span>
+  <span id="retrying" data-i18n>Connection problem, retrying ({n}/{m})</span>
   <span id="failed" data-i18n>failed</span>
 </div>
 <script>
@@ -55,7 +57,7 @@
   const counted = new Set();
   const setTitle = () => {
     title.textContent = say(q.get("mode") === "update" ? "updating" : "settingUp")
-      + (total ? " · " + gb(total) : "");
+      + (total ? " · " + say("toDownload").replace("{size}", gb(total)) : "");
   };
   setTitle();
 
@@ -92,10 +94,16 @@
     if (p.state === "progress") {
       li.className = "active";
       if (p.pct != null) fill.style.width = p.pct + "%";
-      detail.textContent = total
-        ? say("ofTotal").replace("{done}", gb(received + (p.pct || 0) / 100 * (p.bytes || 0))).replace("{total}", gb(total))
-          + (p.detail ? " · " + p.detail : "")
-        : (p.detail || "");
+      // Only the figures, or a retry in the user's language: the tool's own
+      // lines ("Collecting torch==2.5.1") are for shell.log, not this screen.
+      // installer.js sends the retry in English; the page's models dialog
+      // reads it by the same words (ui/src/modelsDialog.mjs retryLine).
+      const retry = /^Connection problem, retrying \((\d+)\/(\d+)\)/.exec(p.detail || "");
+      detail.textContent = retry
+        ? say("retrying").replace("{n}", retry[1]).replace("{m}", retry[2])
+        : total
+          ? say("ofTotal").replace("{done}", gb(received + (p.pct || 0) / 100 * (p.bytes || 0))).replace("{total}", gb(total))
+          : "";
     }
     if (p.state === "error") { li.className = "active"; detail.textContent = p.detail || say("failed"); }
   });

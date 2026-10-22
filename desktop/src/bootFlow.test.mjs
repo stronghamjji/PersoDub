@@ -14,7 +14,7 @@ for (const name of ["HOME", "USERPROFILE", "LOCALAPPDATA"]) process.env[name] = 
 process.env.PERSODUB_KIT_DIR = join(base, "kit");
 delete process.env.PERSODUB_FAKE;   // the fake engines skip the install entirely
 delete process.env.PERSODUB_LANG;   // the screens' words below are the English ones
-const { createBoot } = await import("./bootFlow.js");
+const { createBoot, installStopText, startStopText } = await import("./bootFlow.js");
 
 test("the install screen is handed the version, as every other screen is", async () => {
   // A first install: a bundled payload and an empty kit folder.
@@ -62,10 +62,12 @@ test("the install context hands the steps shell.log for their downloads", async 
   assert.equal(ctx.installCtx.log, shellLog);
 });
 
-// The first install step that fails names itself on the error screen, which
-// points at the folder shell.log is in; shell.log tells the run, numbered, from
-// what it was given to where it stopped. A payload with no kit-src fails the
-// payload step at once, before a byte is downloaded.
+// The first install step that fails names itself on the error screen, under
+// the title, with the sentence for its cause and the tool's own words folded
+// under Details; the screen points at the folder shell.log is in, and
+// shell.log tells the run, numbered, from what it was given to where it
+// stopped. A payload with no kit-src fails the payload step at once, before a
+// byte is downloaded.
 test("an install that stops names its step on the error screen, and shell.log tells the run", async (t) => {
   const appDir = join(base, "app-stops");
   mkdirSync(join(appDir, "resources", "payload", "app-repo"), { recursive: true });
@@ -85,7 +87,12 @@ test("an install that stops names its step on the error screen, and shell.log te
 
   const error = loads.find((l) => l.path.endsWith("error.html"));
   assert.ok(error, `boot showed ${loads.map((l) => l.path).join(", ")}`);
-  assert.equal(error.query.title, "The install stopped at Copying bundled files");
+  assert.equal(error.query.title, "The install stopped");
+  assert.equal(error.query.where, "Where it stopped · Copying bundled files");
+  assert.equal(error.query.message,
+    "Press Try again to go on from where it stopped. If it stops again, restart your computer, then open PersoDub.");
+  assert.equal(error.query.note, undefined, "a note only for a certificate");
+  assert.match(error.query.details, /^ENOENT: no such file or directory/);
   assert.equal(error.query.logDir, join(base, "userData", "logs"));
 
   const start = lines.find((l) => l.startsWith("INFO INSTALL START"));
@@ -106,4 +113,34 @@ test("an install that stops names its step on the error screen, and shell.log te
   // Under it, what the step's own error said, indented: here the missing folder.
   assert.match(lines[failed + 1], /^ERROR {3}ENOENT: no such file or directory, lstat '.*kit-src.sidecar'$/);
   assert.equal(failed + 2, lines.length, lines.join("\n"));
+});
+
+// An install that stopped says its cause in a sentence and what to press --
+// the cause as the report sorts it, never a guess -- and a start that failed
+// says whether it took too long or stopped on the way up.
+test("an install that stopped is told by its cause, and the unknown by what to press", () => {
+  const [cert, note] = installStopText("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed");
+  assert.match(cert, /^A company network or security program blocked the download\./);
+  assert.match(note, /open these addresses\.\npypi\.org · files\.pythonhosted\.org · download\.pytorch\.org · /);
+  // A download's fetch names the certificate only in its cause, which boot adds.
+  assert.equal(installStopText("fetch failed: self-signed certificate in certificate chain")[0], cert);
+  assert.match(installStopText("OSError: [Errno 28] No space left on device")[0], /^There is not enough storage space\./);
+  assert.match(installStopText("EPERM: operation not permitted, rename")[0], /^Another program is using PersoDub's files\./);
+  assert.match(installStopText("download failed 503: https://example.test/x")[0], /^The internet connection dropped\./);
+  // A dropped connection the report has no word for is still the internet.
+  assert.match(installStopText("ConnectionResetError: [Errno 54] Connection reset by peer")[0],
+    /^The internet connection dropped\./);
+  for (const said of ["Command failed: pip install ... exit 1", "MemoryError", ""]) {
+    const [sentence, other] = installStopText(said);
+    assert.match(sentence, /^Press Try again to go on from where it stopped\./, said);
+    assert.equal(other, "", said);
+  }
+});
+
+test("a start that failed is told by how it ended", () => {
+  assert.match(startStopText("Health check timed out after 60000ms: http://127.0.0.1:5/health (last error: x)"),
+    /^Getting ready took too long\./);
+  assert.match(startStopText("The process stopped before it answered: http://127.0.0.1:5/health"),
+    /^It stopped while starting\./);
+  assert.match(startStopText("ENOENT: no such file or directory, open 'kit.env'"), /^It stopped while starting\./);
 });

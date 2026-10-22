@@ -648,7 +648,7 @@ export function buildSteps(ctx) {
         } catch (e) {
           const said = String(e && e.message);
           if (bar === "raw" && RAW_BAR_REFUSED.test(said)) {
-            report(null, t("pip is older than expected; installing without the progress count"));
+            log(`${what}: pip is older than expected, installing without the progress count`);
             bar = "off";
           } else if (listed && REPORT_REFUSED.test(said)) {
             listed = false;
@@ -724,7 +724,7 @@ export function buildSteps(ctx) {
     if (!existsSync(path)) return;   // upstream moved it: the import check below is what judges
     const text = readFileSync(path, "utf8");
     if (!text.includes(PY312_FSTRING)) return;   // already plain 3.11 syntax
-    report(null, t("Making the eraser readable to Python 3.11"));
+    report(null, t("Preparing the subtitle eraser"));
     writeFileSync(path, text.replaceAll(PY312_FSTRING, '{frame_info["len"]}'));
   };
 
@@ -838,7 +838,7 @@ export function buildSteps(ctx) {
       bytes: 0.2 * GB,
       isDone: () => existsSync(k("bin", exeName("ffmpeg"))) && existsSync(k("bin", exeName("ffprobe"))),
       run: async (report) => {
-        report(null, t("Fetching ffmpeg binaries"));
+        report(null, t("Downloading the video-processing program"));
         const lines = [];
         // static-ffmpeg lives in app_venv (requirements.txt): the one venv a
         // light install always has, so ffmpeg no longer waits on the engines.
@@ -1094,14 +1094,14 @@ export function buildSteps(ctx) {
       run: async (report) => {
         const path = k(KIT_ENV);
         if (!existsSync(path)) {
-          report(null, t("Writing kit.env"));
+          report(null, t("Writing the settings file"));
           writeFileSync(path, writeKitEnv({ kitDir: ctx.kitDir, torchVariant }));
           return;
         }
         // Existing kit (installed before these keys existed): merge, never
         // clobber -- app/settings_env.py writes user API keys into this same
         // file and they must survive.
-        report(null, t("Updating kit.env"));
+        report(null, t("Updating the settings file"));
         writeFileSync(path, withMissingKitEnvKeys(readFileSync(path, "utf8")));
       },
     },

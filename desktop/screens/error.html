@@ -8,6 +8,14 @@
   body { font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; word-break: keep-all;
          padding: 80px 20px; background: #0e131b; color: #eaf0fd; }
   pre { background: #1c2129; color: #9ea5b0; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+  /* Where an install stopped, and the note under a sentence: the smaller grey
+     lines, as on the install screen. The note keeps its line breaks (a list
+     of addresses goes on a line of its own). */
+  .sub { color: #9ea5b0; font-size: 13px; white-space: pre-line; }
+  /* The sentence itself reads as text, not as a tool's output; a preflight's
+     own line breaks ("Needs: … / Free: …") still show. */
+  #message { white-space: pre-wrap; line-height: 1.5; }
+  summary { color: #9ea5b0; font-size: 13px; cursor: pointer; }
   button { font-size: 15px; padding: 8px 20px; border-radius: 6px; border: 1px solid #166CFB;
            background: #166CFB; color: #ffffff; cursor: pointer; }
   /* The mark and the name side by side, ranged left over the column they head --
@@ -21,25 +29,37 @@
 </style>
 <div class="drag"></div>
 <div class="brand"><img src="logo.png" alt=""><b>PersoDub</b><span class="ver" id="ver"></span></div>
-<h2 id="title" data-i18n>The engines failed to start</h2>
-<pre id="message" data-i18n>(no details)</pre>
-<p id="logs"><span data-i18n>Logs:</span> <code id="logDir"></code></p>
+<h2 id="title" data-i18n>PersoDub could not start</h2>
+<p id="where" class="sub"></p>
+<p id="message"></p>
+<p id="note" class="sub"></p>
+<details id="more"><summary data-i18n>Details</summary><pre id="raw"></pre></details>
+<p id="logs"><span data-i18n>Log folder:</span> <code id="logDir"></code></p>
 <button data-i18n onclick="window.persodubShell.retry()">Try again</button>
 <script>
   const q = new URLSearchParams(location.search);
   // Each failure names itself. One fixed heading meant a preflight that
   // stopped before anything started still announced that the engines had
   // failed to start, which contradicted the sentence right below it. The
-  // markup's own words (the heading, "(no details)") are the fallbacks, in
-  // the user's language (desktop/src/screenText.js).
+  // markup's own heading is the fallback, in the user's language
+  // (desktop/src/screenText.js).
   const title = document.getElementById("title");
   if (q.get("title")) title.textContent = q.get("title");
   const heading = title.textContent;
   document.title = `PersoDub: ${heading}`;  // the window title, which said
                                             // "Startup failed" either way
-  if (q.get("message")) document.getElementById("message").textContent = q.get("message");
+  // Each line only when there is something to say: where an install stopped,
+  // the sentence saying why and what to press, a note under it, and the
+  // tool's own words folded under Details -- an empty box read as missing.
+  for (const id of ["where", "message", "note"]) {
+    const el = document.getElementById(id);
+    if (q.get(id)) el.textContent = q.get(id);
+    else el.remove();
+  }
+  if (q.get("details")) document.getElementById("raw").textContent = q.get("details");
+  else document.getElementById("more").remove();
   // A preflight has no log to point at -- it stopped before a byte was written.
-  // An empty path under "Logs:" reads like something went missing.
+  // An empty path under "Log folder:" reads like something went missing.
   const dir = q.get("logDir");
   if (dir) document.getElementById("logDir").textContent = dir;
   else document.getElementById("logs").remove();
