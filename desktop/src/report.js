@@ -446,8 +446,8 @@ export function buildReport({
     kind: REPORT_KINDS.has(kind) ? kind : "unknown",
     version: String(version || ""),
     installId: String(installId || ""),
-    // The usage counts' id, its first twelve characters and nothing longer,
-    // for the private dashboard (reporting.js decides whether it goes at all).
+    // The computer's id (analytics.js keepDevice), its first twelve characters
+    // and nothing longer, for the private dashboard only.
     device: /^[0-9a-f]{12}$/.test(String(device || "")) ? String(device) : "",
     // Install failures name a step out of installSpec's twelve; everything
     // else names a stage out of app/stages.py. Both are held to the published

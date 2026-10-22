@@ -1,5 +1,4 @@
-import { join } from "node:path";
-import { classifyError, countEvent, dubFacts, resolveAnalyticsMode } from "./analytics.js";
+import { analyticsFile, classifyError, countEvent, dubFacts, resolveAnalyticsMode } from "./analytics.js";
 import { envWithKit } from "./kitEnv.js";
 import { IS_WIN } from "./platform.js";
 
@@ -29,7 +28,7 @@ export function usageCounter(app) {
       if (mode === "off") return;
       void countEvent(event, {
         mode,
-        stateFile: join(app.getPath("userData"), "analytics.json"),
+        stateFile: analyticsFile(app),
         url: COUNT_ENDPOINT,
         os: IS_WIN ? "windows" : "mac",
         version: app.getVersion(),

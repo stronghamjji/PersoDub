@@ -379,29 +379,35 @@ test("a finished job written down by a launch that died goes to /record from the
   assert.deepEqual(next.pushed, []);
 });
 
-// The usage counts' id is the dashboard's name for a computer. A report carries
-// its first twelve characters while the counts are on, read from their own
-// file and never minted for a computer that has none.
+// The computer's id (analytics.json, made by the launch: analytics.js
+// keepDevice) is the dashboard's name for a computer. Every report and job
+// record carries its first twelve characters, counts on or off, and the report
+// path never makes one (owner, 2026-10-22).
 const COUNTS_ID = "0123456789abcdef0123456789abcdef";
 
-test("with the counts on a report carries the first twelve characters of their saved id, and mints none", async () => {
-  const s = setup();
+test("a report and a record carry the first twelve characters of the computer's id, counts on or off, and mint none", async () => {
+  const s = setup({ relay: (url) => (url.endsWith("/report") ? ok(ISSUE) : url.endsWith("/record") ? ok({ id: "k3" }) : { ok: true, status: 200 }) });
   await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
   assert.equal(JSON.parse(s.calls[0].body).device, "", "no saved id, no device");
   assert.equal(existsSync(join(s.userData, "analytics.json")), false, "nothing minted for it");
 
   writeFileSync(join(s.userData, "analytics.json"), JSON.stringify({ device: COUNTS_ID, lastDay: null }));
-  s.calls.length = 0;
-  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
-  assert.equal(JSON.parse(s.calls[0].body).device, "0123456789ab");
+  for (const kitEnv of ["", "PERSODUB_NO_ANALYTICS=1\n"]) {
+    writeFileSync(join(s.kitDir, "kit.env"), kitEnv);
+    s.calls.length = 0;
+    await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
+    await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "ok", jobId: "abc123", timing: TIMING });
+    const sent = s.calls.filter((c) => /\/(report|record)$/.test(c.url)).map((c) => [c.url.split("/").pop(), JSON.parse(c.body).device]);
+    assert.deepEqual(sent, [["report", "0123456789ab"], ["record", "0123456789ab"]], kitEnv || "counts on");
+  }
 
-  const d = setup({ kitEnv: "PERSODUB_REPORTS_DEBUG=1\n" });
+  const d = setup({ kitEnv: "PERSODUB_REPORTS_DEBUG=1\nPERSODUB_NO_ANALYTICS=1\n" });
   writeFileSync(join(d.userData, "analytics.json"), JSON.stringify({ device: COUNTS_ID, lastDay: null }));
   await d.reporter.sendReport({ kind: "dub", kitDir: d.kitDir, code: "unknown", message: "boom" });
   assert.match(d.logged[0], /"device":"0123456789ab"/, "the debug print shows it");
 });
 
-test("with the counts off a report carries no device, and one queued while they were on leaves without it", async () => {
+test("a report queued while the counts were on still names the computer once they are off", async () => {
   let up = false;
   const s = setup({
     relay: (url) => {
@@ -411,16 +417,12 @@ test("with the counts off a report carries no device, and one queued while they 
   });
   writeFileSync(join(s.userData, "analytics.json"), JSON.stringify({ device: COUNTS_ID, lastDay: null }));
   await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
-  assert.equal(s.readQueued(s.queued()[0]).report.device, "0123456789ab", "queued while the counts were on");
+  assert.equal(s.readQueued(s.queued()[0]).report.device, "0123456789ab");
 
   writeFileSync(join(s.kitDir, "kit.env"), "PERSODUB_NO_ANALYTICS=1\n");
   up = true;
   s.calls.length = 0;
   await s.reporter.flushReports(s.kitDir);
   assert.equal(s.calls[0].url, `${REPORT_ENDPOINT}/report`);
-  assert.equal(JSON.parse(s.calls[0].body).device, "");
-
-  s.calls.length = 0;
-  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
-  assert.equal(JSON.parse(s.calls[0].body).device, "");
+  assert.equal(JSON.parse(s.calls[0].body).device, "0123456789ab");
 });

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { STEP_IDS } from "./installSpec.js";
 
 // Usage counts. The decisions live here as pure functions so they can be tested
@@ -196,9 +196,8 @@ export async function report(payload, { url, timeoutMs = 3000, fetchImpl = fetch
  * launch was last counted.
  *
  * A missing id is minted here but NOT written -- saveState is the only thing
- * that touches disk. That ordering is deliberate: a run with reporting off
- * never calls this, so a user who turned it off never has an id generated for
- * them, and no file appears to say otherwise.
+ * that touches disk, and the launch keeps one from the first run on
+ * (keepDevice), counts on or off.
  *
  * A state file that cannot be parsed is treated as absent rather than fatal.
  * Losing a count is nothing; refusing to launch over a corrupt counter file
@@ -229,9 +228,9 @@ export function saveState(file, { device, lastDay = null }) {
 }
 
 /**
- * The install id the counts have already saved, or "" -- never a new one. A
- * failure report names the computer by it (reporting.js), and that path must
- * not mint an id for a computer whose counts never ran.
+ * The computer's id as saved, or "" -- never a new one. Every report and job
+ * record names the computer by it (reporting.js), and only the launch makes
+ * one (keepDevice).
  */
 export function savedDevice(file) {
   try {
@@ -240,6 +239,25 @@ export function savedDevice(file) {
   } catch {
     return "";
   }
+}
+
+/** Where the id and the last counted day live: userData, which outlives every
+ *  kit and every update. */
+export const analyticsFile = (app) => join(app.getPath("userData"), "analytics.json");
+
+/**
+ * This computer's id, made on its first launch and kept from then on (main.js
+ * asks on every launch). It is the one number the private dashboard tells
+ * computers apart by, so every report and job record carries it, counts on or
+ * off (owner, 2026-10-22). Making it sends nothing: the counts still leave
+ * only while their switch is on.
+ */
+export function keepDevice(file) {
+  const saved = savedDevice(file);
+  if (saved) return saved;
+  const state = loadState(file);
+  saveState(file, state);
+  return state.device;
 }
 
 /**
@@ -256,8 +274,8 @@ export async function countEvent(event, {
   today = new Date().toISOString().slice(0, 10),
   timeoutMs, fetchImpl, log = console.log,
 }) {
-  // Before anything reads or writes disk: an install that reports nothing never
-  // gets an id minted for it, and no file appears claiming otherwise.
+  // Before anything reads or writes disk: off sends nothing and writes
+  // nothing. The id is the launch's to make (keepDevice), counts on or off.
   if (mode === "off") return false;
 
   const state = loadState(stateFile);
