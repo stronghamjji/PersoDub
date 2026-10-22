@@ -96,3 +96,13 @@ def test_the_subtitled_video_downloads_under_a_plain_name(monkeypatch):
     assert r.headers["content-disposition"] == 'attachment; filename="video-sub-sticker.mp4"'
     # Burned onto the job's own video.
     assert calls[0][calls[0].index("-i") + 1].endswith("input.mp4")
+
+
+def test_its_video_can_be_held_again_to_dub_it():
+    """The Dubbing tab's one button: the same video, held for a new project."""
+    held = _held()
+    jid = _import(held.id).json()["job_id"]
+    r = client.post("/api/dub/jobs/%s/again" % jid)
+    assert r.status_code == 200, r.text
+    assert r.json()["download_id"]
+    assert r.json()["title"] == "paris_steps"

@@ -338,6 +338,16 @@
                   <button data-i18n class="btn btn-primary" id="draftStartBtn" type="button">Start dubbing</button>
                 </div>
               </div>
+              <!-- A video with the user's own subtitles (the Subtitle style
+                   tab on its own): no script to show here, only the way to
+                   dub the same video in a new project (ui/src/draftSetup.mjs). -->
+              <div class="tab-empty" id="dubbingCaptions" hidden>
+                <div class="tab-empty-group">
+                  <div data-i18n class="tab-empty-sub">This project is a subtitle style job</div>
+                  <button data-i18n class="btn btn-primary btn-sm" id="dubbingCaptionsBtn" type="button">Prepare this video for dubbing</button>
+                  <div class="tab-empty-under"><div class="import-status error" id="dubbingCaptionsError"></div></div>
+                </div>
+              </div>
               <!-- The pane's name, the way the video pane has its tabs and the
                    timeline its heading row: three named boxes with a 6px gap
                    between them (layout G, user 2026-09-08). #scriptCount is

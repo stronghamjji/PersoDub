@@ -84,3 +84,37 @@ test("letting go of the player forgets the job it showed", () => {
     restore();
   }
 });
+
+// A video with the user's own subtitles is one file: Original only, lit,
+// and the player stays on the file the subtitles are drawn over.
+test("a video with its own subtitles shows only the Original tab and keeps the subtitled file", () => {
+  const els = new Map();
+  const $ = (id) => { if (!els.has(id)) els.set(id, makeEl()); return els.get(id); };
+  const lit = {};
+  const tab = (src) => ({ dataset: { src }, addEventListener() {},
+                          classList: { toggle: (c, on) => { if (c === "active") lit[src] = on; } } });
+  const tabs = [tab("original"), tab("dubbed")];
+  const saved = Object.getOwnPropertyDescriptor(globalThis, "document");
+  globalThis.document = { body: { dataset: { screen: "done" } }, querySelectorAll: () => tabs };
+  globalThis.ResizeObserver ??= class { observe() {} };
+  try {
+    const video = Object.assign(makeEl(), { paused: true, currentTime: 0, pause() {}, load() {}, play: async () => {} });
+    const state = { job: { id: "c", kind: "captions" }, jobId: "c" };
+    const player = initDonePlayer({ $, state, doneVideo: video, timeline: { paintTimeline() {} } });
+    player.openJob("c");
+    assert.equal($("vtabDubbed").hidden, true, "no Dubbed tab: there is one file");
+    assert.deepEqual(lit, { original: true, dubbed: false }, "Original is the one lit");
+    player.showVideoSource("original");
+    assert.equal(player.getDoneSource(), "dubbed", "the file the subtitles are drawn over");
+    // A dubbing: both tabs, Dubbed lit, and Original goes to the original.
+    state.job = { id: "d" };
+    state.jobId = "d";
+    player.openJob("d");
+    assert.equal($("vtabDubbed").hidden, false);
+    assert.deepEqual(lit, { original: false, dubbed: true });
+    player.showVideoSource("original");
+    assert.equal(player.getDoneSource(), "original");
+  } finally {
+    if (saved) Object.defineProperty(globalThis, "document", saved); else delete globalThis.document;
+  }
+});

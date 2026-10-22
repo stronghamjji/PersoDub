@@ -136,6 +136,10 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
                                  getPlayerClock = () => $("videoTime"),
                                  videos = () => [getVideo()],
                                  onStemMute = () => {},
+                                 // A video with the user's own subtitles (kind
+                                 // "captions"): no voices, so no voice lanes
+                                 // and no voice legend, only the video and captions.
+                                 ownSubtitles = () => false,
                                  loadImage = defaultLoadImage, fetchJson = defaultFetchJson }) {
   // There is no floor under the scale: Fit has to show the whole video at
   // once however long it is. A floor of 10px a second kept a 26-minute job
@@ -299,7 +303,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
       ? `<span class="tl-tools">${tool("tlUndo", "undo-2", 15, t("Undo"), `${modKey()}+Z`)}${tool("tlRedo", "redo-2", 15, t("Redo"), `Shift+${modKey()}+Z`)}<span class="tl-sep"></span>`
         + `${tool("tlSplit", "gap-horizontal", 13.8, t("Split at playhead"), `${modKey()}+B`)}${tool("tlDelLeft", "split-left", 13.8, t("Delete left of playhead"))}`
         + `${tool("tlDelRight", "split-right", 13.8, t("Delete right of playhead"))}${tool("tlDelete", "trash", 16.2, t("Delete selected"), "Delete")}</span>`
-      : `<span class="tl-legend">
+      : ownSubtitles() ? '<span class="tl-legend"></span>' : `<span class="tl-legend">
         <span><i class="tl-sw-voice"></i>${t("Voice length")}</span>
         <span><i class="tl-sw-slot"></i>${t("Time available")}</span>
         <span><i class="tl-sw-over"></i>${t("Over time")}</span>
@@ -344,8 +348,8 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     const eye = `<button class="tl-eye${on ? " on" : ""}" id="tlSubEye" type="button"
             title="${t("Captions on or off")}" aria-label="${t("Captions on or off")}">${lucide(on ? "eye" : "eye-off", 12)}</button>`;
     return name("tl-name-video", "square-play", 12.3, "Video")
-      + name("tl-name-org", "volume-2", 11, "Original")
-      + name("tl-name-dub", "volume-2", 11, "Translated")
+      + (ownSubtitles() ? "" : name("tl-name-org", "volume-2", 11, "Original")
+        + name("tl-name-dub", "volume-2", 11, "Translated"))
       + name(`tl-name-caps${on ? "" : " off"}`, "", 0, "Captions", eye);
   }
 
@@ -634,9 +638,10 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
       title="${words}"><span class="tl-hdl l"></span><span
       class="tl-cap-txt">${words}</span><span class="tl-hdl r"></span>${exdot}</div>`;
     });
-    return `<div class="tl-lanes">${video}
+    const voiceLanes = ownSubtitles() ? "" : `
     <div class="tl-lane tl-lane-org">${originals}</div>
-    <div class="tl-lane tl-lane-dub">${voices}</div>
+    <div class="tl-lane tl-lane-dub">${voices}</div>`;
+    return `<div class="tl-lanes">${video}${voiceLanes}
     <div class="tl-lane tl-lane-caps${getSubStyle().enabled ? "" : " off"}">${caps}</div></div>`;
   }
 

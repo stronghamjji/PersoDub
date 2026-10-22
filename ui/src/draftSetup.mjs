@@ -90,8 +90,12 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     importer.render();
     const d = getDraft();
     const active = !!d && !state.jobId;
-    const script = !!state.jobId;
+    // A video with the user's own subtitles has no script: one card instead,
+    // with the way to dub the same video.
+    const own = !!state.jobId && !!state.job && state.job.id === state.jobId && state.job.kind === "captions";
+    const script = !!state.jobId && !own;
     $("draftSetup").hidden = !active;
+    $("dubbingCaptions").hidden = !own;
     const head = $("dubbingPaneHead");
     if (head) head.hidden = !script;
     const box = $("scriptBox");

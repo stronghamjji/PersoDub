@@ -85,7 +85,7 @@ const WAVE = { rate: 25, duration: 10, peaks: Array.from({ length: 250 }, (_, i)
 
 /** A page, the calls the strip reaches out through, and the globals it reads. */
 function harness({ room = 600, innerHeight = 900, innerWidth = 1600,
-                   stored = {}, media = null } = {}) {
+                   stored = {}, media = null, own = false } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -165,6 +165,7 @@ function harness({ room = 600, innerHeight = 900, innerWidth = 1600,
     markClippedNames: () => { log.clipped += 1; },
     loadImage: async (url) => { log.fetched.push(url); return STRIP; },
     fetchJson: async (url) => { log.fetched.push(url); return WAVE; },
+    ownSubtitles: () => own,
   });
   return { $, api, log, video, subStyle, box: $("timeline") };
 }
@@ -1454,4 +1455,28 @@ test("a long video's film strip keeps every frame its own size and draws only th
   for (const frame of h.log.frames.splice(0)) frame();   // the queued animation frame
   assert.ok(film.innerHTML.startsWith('<i style="left:37881.0px;width:69.0px;'), film.innerHTML.slice(0, 60));
   assert.equal((film.innerHTML.match(/<i /g) || []).length, Math.ceil((38500 + 1200) / 69) - Math.floor((38500 - 600) / 69));
+});
+
+// A video with the user's own subtitles (kind "captions") has no voices: the
+// strip is the video and the captions, with no voice lanes and no legend.
+test("a video with its own subtitles shows the video and captions lanes only, and no voice legend", (t) => {
+  const h = harness({ own: true });
+  t.after(h.log.restore);
+  h.api.renderTimeline(LINES, 30);
+  const html = h.box.innerHTML + h.$("timelineTrack").innerHTML;
+  for (const gone of ["tl-sw-voice", "Voice length", "Much shorter", "<span>Original</span>", "<span>Translated</span>",
+                      "tl-lane-org", "tl-lane-dub", "tl-voice", "tl-org"]) {
+    assert.ok(!html.includes(gone), gone);
+  }
+  assert.ok(html.includes("<span>Video</span>") && html.includes("<span>Captions</span>"));
+  assert.equal((html.match(/class="tl-cap"/g) || []).length, 3, "the three lines on the captions lane");
+  assert.ok(html.includes('id="timelineClock"') && html.includes('id="tlSubEye"'));
+  // A dubbing's strip is as it was.
+  const d = harness();
+  t.after(d.log.restore);
+  d.api.renderTimeline(LINES, 30);
+  const dub = d.box.innerHTML + d.$("timelineTrack").innerHTML;
+  for (const kept of ["Voice length", "<span>Original</span>", "<span>Translated</span>", "tl-lane-org", "tl-lane-dub"]) {
+    assert.ok(dub.includes(kept), kept);
+  }
 });

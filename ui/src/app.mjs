@@ -886,8 +886,10 @@ function openDraftHere(source, opts, project = null) {
   // resetForNewJob passes through Home, which forgets the dub to go back
   // to: note it first and put it back after.
   const from = state.jobId || null;
-  // From an erased video the way back is to that erase, not to a dubbing.
-  const fromErase = document.body.dataset.screen === "erase";
+  // From an erased video the way back is to that erase, not to a dubbing;
+  // the same from a video with the user's own subtitles.
+  const fromErase = document.body.dataset.screen === "erase"
+    || (!!state.job && state.job.id === from && state.job.kind === "captions");
   resetForNewJob();
   state.draftFromJob = from;
   state.draftBackTip = fromErase ? "Back" : "Back to the dubbing";
@@ -2197,6 +2199,19 @@ const subtitles = initSubtitleOverlay({
     },
   },
 });
+// A video with the user's own subtitles, on its Dubbing tab: the same video
+// held again (POST /api/dub/jobs/{id}/again) and opened as a new project to dub.
+$("dubbingCaptionsBtn").addEventListener("click", async () => {
+  const jid = state.jobId;
+  $("dubbingCaptionsError").textContent = "";
+  try {
+    const src = await dubAgainSource(jid);
+    if (state.jobId !== jid) return;
+    openDraftHere({ downloadId: src.download_id, name: src.title, duration: src.duration_sec }, { tab: "dubbing" });
+  } catch (e) {
+    $("dubbingCaptionsError").textContent = errorText(e);
+  }
+});
 // Come to with no project open, the tab draws its own way in.
 $("leftTabs").addEventListener("click", () => subtitles.paintCaptions());
 
@@ -2277,6 +2292,7 @@ const timeline = initTimelineUi({
   paintPlayhead: () => (onEraseTab() ? paintErasePlayhead() : donePlayer.paintPlayhead()),
   toggleDonePlay: () => (onEraseTab() ? toggleErasePlay() : donePlayer.toggleDonePlay()),
   markClippedNames: projects.markClippedNames,
+  ownSubtitles: () => !!state.job && state.job.id === state.jobId && state.job.kind === "captions",
 });
 // The keyboard, the observer that re-measures the track and the window resize
 // that puts the remembered pane sizes back -- everything that listens outside
