@@ -206,9 +206,9 @@ test("groupModels puts each row under its purpose, in the order a dub uses them"
     ["Translation", ["gemma", "hunyuan"]],
     ["Text-to-speech", ["qwen3-tts"]],
     ["Erase subtitles", ["subtitle-eraser"]],
-    ["Base programs", ["engine", "ollama-runtime"]],
+    ["Required programs", ["engine", "ollama-runtime"]],
   ]);
-  // A role with no group of its own is still listed, with the base programs.
+  // A role with no group of its own is still listed, with the required programs.
   const later = groupModels([...CATALOG_ROWS, { id: "lipsync", role: "lipsync", bytes: 1e9, state: "ready" }]);
   assert.deepEqual(later.at(-1).rows.map((r) => r.id), ["engine", "ollama-runtime", "lipsync"]);
 });
@@ -217,7 +217,14 @@ test("a group's size counts only what is on this computer", () => {
   const bytes = Object.fromEntries(groupModels(CATALOG_ROWS).map((g) => [g.title, g.bytes]));
   assert.equal(bytes["Translation"], 1.1e9, "paused Gemma does not count, ready Hunyuan does");
   assert.equal(bytes["Text-to-speech"], 0, "a download under way does not count yet");
-  assert.equal(bytes["Base programs"], 2.0e9, "Ollama is not installed");
+  assert.equal(bytes["Required programs"], 2.0e9, "Ollama is not installed");
+});
+
+test("only the programs' group has a note, saying what they are there for", () => {
+  assert.deepEqual(groupModels(CATALOG_ROWS).map((g) => [g.key, g.note]), [
+    ["sep", ""], ["stt", ""], ["translate", ""], ["tts", ""], ["eraser", ""],
+    ["base", "Needed to run the models"],
+  ]);
 });
 
 test("a group with no rows is left out", () => {
@@ -226,10 +233,16 @@ test("a group with no rows is left out", () => {
   assert.deepEqual(one.map((g) => [g.title, g.bytes]), [["Speech-to-text", 0]]);
 });
 
-test("every group title is in the page's tables, so Korean shows it in Korean", () => {
-  const titles = groupModels(CATALOG_ROWS).map((g) => g.title);
+test("every group title and note is in the page's tables, so Korean shows it in Korean", () => {
+  const words = groupModels(CATALOG_ROWS).flatMap((g) => [g.title, g.note]).filter(Boolean);
   for (const code of ["en", "ko"]) {
     const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
-    assert.deepEqual(titles.filter((s) => !Object.hasOwn(table, s)), [], `missing from ui.${code}.json`);
+    assert.deepEqual(words.filter((s) => !Object.hasOwn(table, s)), [], `missing from ui.${code}.json`);
   }
+  // The programs' group in the owner's words (2026-10-22): "바탕 프로그램"
+  // said nothing to someone who did not already know.
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Required programs"], "필수 프로그램");
+  assert.equal(ko["Needed to run the models"], "모델을 돌리는 데 필요해요");
+  assert.equal(Object.hasOwn(ko, "Base programs"), false, "the old name is gone");
 });

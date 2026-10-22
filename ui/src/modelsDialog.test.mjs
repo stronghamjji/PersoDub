@@ -759,9 +759,62 @@ test("the rows sit under a heading for each purpose, each with what its ready ro
     ["model-group-head", "Translation", "1.1 GB"],
     ["settings-row model-row", "Gemma 3", "8.1 GB"],
     ["settings-row model-row", "Hunyuan", "1.1 GB"],
-    ["model-group-head", "Base programs", "2.0 GB"],
+    ["model-group-head", "Required programs", "2.0 GB"],
     ["settings-row model-row", "Python + PyTorch", "2.0 GB"],
   ]);
+});
+
+test("the programs' heading says under its name what they are there for, and no other heading does", async (t) => {
+  const h = harness({ rows: [
+    { id: "whisper", role: "stt", name: "Whisper", bytes: 3.1e9, state: "ready" },
+    { ...ENGINE, state: "ready" },
+  ] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const [stt, programs] = h.$("modelsList").children.filter((c) => c.className === "model-group-head");
+  assert.deepEqual(stt.children.map((c) => c.textContent), ["Speech-to-text", "3.1 GB"]);
+  // Name, size, then the note: the note's own line is the stylesheet's.
+  assert.deepEqual(programs.children.map((c) => [c.className, c.textContent]), [
+    ["", "Required programs"], ["model-size", "2.0 GB"], ["model-group-note", "Needed to run the models"],
+  ]);
+});
+
+test("a program not here yet says what it is for beside its size, and gives the place up to its download", async (t) => {
+  const OLLAMA = { id: "ollama-runtime", role: "pack", name: "Ollama", bytes: 0.46e9, state: "not_downloaded",
+                   hint: "Local translation (Hunyuan, Gemma 3)" };
+  const shell = fakeShell({ install: () => new Promise(() => {}) });
+  const h = harness({ rows: [
+    { ...ENGINE, state: "ready", hint: "Audio separation, speech-to-text, voices" },
+    OLLAMA,
+    { id: "gemma", role: "translate", name: "Gemma 3", bytes: 8.1e9, state: "not_downloaded", hint: "More careful" },
+  ], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const status = (id) => listRows(h).find((r) => r.children[0].textContent === id).children[2];
+  // Ready, then what it is for -- as before.
+  assert.equal(status("Python + PyTorch").className, "settings-hint model-ok");
+  assert.equal(status("Python + PyTorch").children[0].textContent, "Audio separation, speech-to-text, voices");
+  // Not here yet: only what it is for, where Ready would be (no line of its own).
+  assert.equal(status("Ollama").className, "settings-hint");
+  assert.deepEqual(status("Ollama").children.map((c) => [c.className, c.textContent]),
+    [["model-note", "Local translation (Hunyuan, Gemma 3)"]]);
+  // A model is not a program: one not downloaded keeps its cell empty, as before.
+  assert.deepEqual(status("Gemma 3").children, []);
+  // Installing, the line is the download's own.
+  h.api.installPack("ollama-runtime");
+  await settle();
+  assert.equal(status("Ollama").className, "settings-hint model-busy model-status-long");
+  assert.deepEqual(status("Ollama").children, [], "no note beside the download's line");
+});
+
+test("in a plain browser a program not here yet says who installs it, not what it is for", async (t) => {
+  const h = harness({ rows: [{ id: "ollama-runtime", role: "pack", name: "Ollama", bytes: 0.46e9, state: "not_downloaded",
+                               hint: "Local translation (Hunyuan, Gemma 3)" }] });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const [row] = listRows(h);
+  assert.equal(row.children[2].textContent, "Installed by PersoDub");
+  assert.deepEqual(row.children[2].children, []);
 });
 
 test("a busy model's status takes its own line, so the percent is never cut; Ready stays beside the name", async (t) => {

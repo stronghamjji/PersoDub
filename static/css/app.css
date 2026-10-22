@@ -2400,8 +2400,7 @@
   /* 158 + 10 puts every control at x=204 of the window, where the mockup's are. */
   .set-row { display: grid; grid-template-columns: 158px minmax(0, 1fr); column-gap: 10px;
     align-items: center; min-height: 46px; padding: 10px 0; font-size: 11.5px; }
-  .set-row + .set-row, .set-panel .model-row + .model-row,
-  .set-summary + #modelsList > .model-group-head:first-child { border-top: 1px solid var(--border); }
+  .set-row + .set-row, .set-panel .model-row + .model-row { border-top: 1px solid var(--border); }
   .set-row > label, .set-row > span:first-child { color: var(--foreground); }
   .set-ctl { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
   .set-ctl.set-inline { flex-direction: row; align-items: center; gap: 8px; }
@@ -2433,15 +2432,28 @@
   /* One line unless a busy status adds a second (below): spanning an empty
      second line set the name 4px above the button's middle. */
   .set-panel .model-row > .btn { grid-row: 1; grid-column: 4; min-width: 76px; }
-  /* A heading over each purpose's rows, in the summary's quiet grey, with what
-     the group takes on disk at the right; its line is a row's line. */
-  .set-panel .model-group-head { display: flex; justify-content: space-between; align-items: baseline;
-    padding: 14px 0 6px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted-foreground); }
-  /* What a ready row is for, after its "Ready", in plain grey. */
+  /* A band over each purpose's rows, with what the group takes on disk at the
+     right. A heading in the rows' own grey went unseen among them, and so did
+     a band one shade off the panel (owner, 2026-10-22, 12): this one is the
+     pill grey, 12 points of lightness over the rows, with a light rule on top
+     and room before it. It reaches the panel's edges (its 24px sides, below). */
+  .set-panel .model-group-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px;
+    align-items: baseline; margin: 12px -24px 0; padding: 9px 24px; background: var(--secondary);
+    border-top: 1px solid var(--divider); font-size: 13px; font-weight: 600; line-height: 18px; color: var(--foreground); }
+  .set-panel .model-group-head:first-child { margin-top: 0; }
+  .set-panel .model-group-head > .model-size { font-weight: 500; }
+  /* What the group is there for, under its name. */
+  .set-panel .model-group-note { grid-column: 1 / -1; font-size: 11px; font-weight: 400; line-height: 16px;
+    color: var(--muted-foreground); }
+  /* What a ready row is for, after its "Ready", in plain grey -- and a
+     program not here yet, with no "Ready" before it, in that place. */
   .set-panel .model-note { margin-left: 10px; color: var(--muted-foreground); font-weight: 400; }
+  .set-panel .model-row > .settings-hint:not(.model-ok):not(.model-status-long) > .model-note { margin-left: 0; }
   /* The 512px sheet leaves that cell about 100px: a note that does not fit
-     wraps under "Ready" rather than ending in an ellipsis. */
-  .set-panel .model-row > .settings-hint:has(> .model-note) { white-space: normal; overflow: visible; text-overflow: clip; }
+     wraps under "Ready" rather than ending in an ellipsis -- and never leaves
+     a word alone on its last line ("Gemma / 3)"). */
+  .set-panel .model-row > .settings-hint:has(> .model-note) { white-space: normal; overflow: visible; text-overflow: clip;
+    text-wrap: pretty; }
   .set-panel #modelsError { padding: 8px 0; }
   /* The count of what Save would write sits in the 16px between the panel and
      the buttons, and takes a little more only when it has something to say. */

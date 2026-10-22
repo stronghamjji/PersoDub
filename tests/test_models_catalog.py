@@ -4,6 +4,7 @@ The 4-state model (ready / downloading / paused / not_downloaded) is what
 keeps the 2026-08-14 "install died halfway = broken forever" bug from coming
 back: a half-downloaded model shows Resume instead of being skipped.
 """
+import json
 import os
 
 from fastapi.testclient import TestClient
@@ -291,7 +292,17 @@ def test_only_a_row_its_group_title_does_not_explain_carries_a_hint():
     assert hinted == {"engine", "ollama-runtime", "gemma", "hunyuan", "demucs"}
     rows = {m["id"]: m for m in models_module.status_rows()}
     assert rows["engine"]["hint"] == "Audio separation, speech-to-text, voices"
+    assert rows["ollama-runtime"]["hint"] == "Local translation (Hunyuan, Gemma 3)"
     assert rows["whisper"]["hint"] == ""
+
+
+def test_each_program_says_where_it_is_used_in_korean_in_the_owners_words():
+    # Under "Required programs" the group says they run the models, and each
+    # row what it is used for (owner, 2026-10-22): no "needed to run" twice.
+    with open(os.path.join(os.path.dirname(models_module.__file__), "i18n", "app.ko.json"), encoding="utf-8") as f:
+        ko = json.load(f)
+    assert ko["Audio separation, speech-to-text, voices"] == "오디오 분리·받아쓰기·목소리 만들기"
+    assert ko["Local translation (Hunyuan, Gemma 3)"] == "로컬 번역 (Hunyuan, Gemma 3)"
 
 
 def test_a_pack_the_desktop_app_is_installing_reads_as_downloading(tmp_path):

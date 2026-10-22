@@ -981,6 +981,30 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
   assert.match(html, /onOpenSettings: \(\) => settings\.openSettings\("keys"\)/);
 });
 
+// Settings > Models: each group is a band the eye finds among the rows. A
+// heading in the rows' grey, then a band one shade off the panel, both went
+// unseen (owner, 2026-10-22, 12), so the step is held to a number: the band
+// at least 10 points of lightness (CIELAB L*) over the panel the rows sit on.
+test("a model group's band stands at least 10 points of lightness above its rows", () => {
+  const html = readPage();
+  const band = html.match(/\.set-panel \.model-group-head \{[^}]*\}/)[0];
+  assert.match(band, /background: var\(--secondary\)/);
+  assert.match(band, /border-top: 1px solid var\(--divider\)/);
+  assert.match(band, /font-size: 13px; font-weight: 600/);
+  // Edge to edge: out by the panel's own 24px sides (the Settings test above).
+  assert.match(band, /margin: 12px -24px 0; padding: 9px 24px/);
+  assert.match(html, /\.set-panel \{ flex: 1;[^}]*background: var\(--field\); \}/);
+  const token = (name) => html.match(new RegExp(`--${name}: #([0-9a-f]{6});`))[1];
+  const lightness = (hex) => {
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return y > 216 / 24389 ? 116 * Math.cbrt(y) - 16 : (24389 / 27) * y;
+  };
+  const step = lightness(token("secondary")) - lightness(token("field"));
+  assert.ok(step >= 10, `the band is only ${step.toFixed(1)} points over the rows`);
+});
+
 // Which step each key and the ChatGPT sign-in is for, a small grey line under
 // each like the Privacy tab's (owner, 2026-10-21). And the translator's own
 // lines point the local ones at the Gemini API, which says where its key goes.

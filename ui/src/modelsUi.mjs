@@ -168,18 +168,21 @@ export function allReady(rows, ids) {
 // sentences, said in the page's language only where they are drawn
 // (ui/src/modelsDialog.mjs). The tables' check finds only sentences written
 // inside t() itself, so ui/src/modelsUi.test.mjs holds these to the tables.
+// The programs' group says what it is there for under its name: "Base
+// programs" alone told nobody why (owner, 2026-10-22).
 const MODEL_GROUPS = [
   { key: "sep", title: "Audio separation" },
   { key: "stt", title: "Speech-to-text" },
   { key: "translate", title: "Translation" },
   { key: "tts", title: "Text-to-speech" },
   { key: "eraser", title: "Erase subtitles" },
-  { key: "base", title: "Base programs" },
+  { key: "base", title: "Required programs", note: "Needed to run the models" },
 ];
 
 /** The /api/models rows under their purpose, in MODEL_GROUPS' order: each
- * group's rows as they came, and bytes as what its ready rows take on this
- * computer (the summary line's rule). A group with no rows is left out. */
+ * group's rows as they came, bytes as what its ready rows take on this
+ * computer (the summary line's rule), and its note ("" for none). A group
+ * with no rows is left out. */
 export function groupModels(rows) {
   const keyOf = (r) => {
     if (r.id === "subtitle-eraser") return "eraser";
@@ -193,7 +196,7 @@ export function groupModels(rows) {
     .map((g) => {
       const mine = rows.filter((r) => keyOf(r) === g.key);
       const bytes = mine.reduce((n, r) => n + (r.state === "ready" ? r.bytes : 0), 0);
-      return { key: g.key, title: g.title, rows: mine, bytes };
+      return { key: g.key, title: g.title, note: g.note || "", rows: mine, bytes };
     })
     .filter((g) => g.rows.length);
 }
