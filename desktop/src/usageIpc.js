@@ -43,7 +43,8 @@ export function usageCounter(app) {
   };
 }
 
-/** The page's word that a dub or an erase finished: counted, and a failure reported. */
+/** The page's word that a dub, an erase or a separation ended: counted, a
+ *  failure reported, and a finished job's record sent. */
 export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLog, lastRunClosedByUser }) {
   // A finished job's own record: which engines it ran, what it spent on Perso
   // and how long the video was, for the usage count -- which must not take the
@@ -57,6 +58,16 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
     } catch {
       return null;
     }
+  }
+
+  // A job that finished sends its record (src/reporting.js, code "ok"): the
+  // logs a failure would send, and how long the job took, off its own record
+  // (`job` when the caller already has it). A job the page could not name has
+  // no log to send, so it sends nothing.
+  async function sendRecord(kind, jobId, job) {
+    if (!jobId) return;
+    const timing = dubFacts(job || await fetchJob(jobId)).timing;
+    sendReport({ kind, kitDir: ctx.bootedKitDir, code: "ok", jobId, timing });
   }
 
   // A dub finished. The page cannot be trusted to name the outcome or the
@@ -97,6 +108,7 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
       ? (job && job.error === "interrupted" ? "interrupted" : classifyError(detail))
       : undefined;
     countUsage(status === "done" ? "dub_success" : "dub_failure", ctx.bootedKitDir, code, undefined, dubFacts(job));
+    if (status === "done") return sendRecord("dub", jobId, job);
     // The user closed the app on it: not a fault, so no issue (user,
     // 2026-09-28). Still counted above, as "interrupted".
     if (status === "error" && code === "interrupted" && lastRunClosedByUser) {
@@ -114,21 +126,25 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
     }
   });
 
-  // An erase that failed. Same rules as a dub's: only a failure travels, a
-  // cancel is not one, and the job id is checked against the shape an id has
-  // before it goes anywhere near a URL. Erasing subtitles is the new thing in
-  // 0.5.5 and so the likeliest of the three to fail on a machine nobody here
-  // has seen -- and it was the only kind that sent nothing at all
-  // (user, 2026-09-11).
+  // An erase that ended. Same rules as a dub's: a failure is reported and a
+  // finished one sends its record, a cancel is neither, and the job id is
+  // checked against the shape an id has before it goes anywhere near a URL.
+  // Erasing subtitles is the new thing in 0.5.5 and so the likeliest of the
+  // three to fail on a machine nobody here has seen -- and it was the only
+  // kind that sent nothing at all (user, 2026-09-11).
   ipcMain.on("shell:count-erase", (_e, msg) => {
     const status = msg && msg.status;
     if (status !== "done" && status !== "error") return;
     const detail = String((msg && msg.detail) || "");
     const code = status === "error" ? classifyError(detail) : undefined;
     countUsage(status === "done" ? "erase_success" : "erase_failure", ctx.bootedKitDir, code);
-    if (status === "error") {
-      const jobId = isJobId(msg && msg.job) ? msg.job : undefined;
-      sendReport({ kind: "erase", kitDir: ctx.bootedKitDir, code, message: detail, jobId });
-    }
+    const jobId = isJobId(msg && msg.job) ? msg.job : undefined;
+    if (status === "done") return sendRecord("erase", jobId);
+    sendReport({ kind: "erase", kitDir: ctx.bootedKitDir, code, message: detail, jobId });
   });
+
+  // A separation that finished, from the Audio tab (ui/src/audioTab.mjs),
+  // which follows its own job the way the erase screen does. Not counted --
+  // the counts have no word for one -- only its record sent.
+  ipcMain.on("shell:separate-done", (_e, msg) => sendRecord("separate", isJobId(msg && msg.job) ? msg.job : undefined));
 }

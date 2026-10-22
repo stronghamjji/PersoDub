@@ -304,6 +304,81 @@ test("debug prints what would leave and sends nothing", async () => {
   assert.deepEqual(s.queued(), [], "and no failure written down for a later launch to send");
 });
 
+// ---- a finished job's record (code "ok") ----
+
+// A finished dub as the backend tells it: the job's whole log, its first line
+// (the video's name) already replaced by the backend (app/api/report.py).
+const DONE_BUNDLE = { job: { kind: "dub", status: "done", stage: "build", stageMarker: "6/6", error: "" },
+                      logs: { job: "[video]\nJOB START (dub)\nJOB ALL DONE (80.2s)", app: "app log" } };
+const TIMING = { started_hour: 9, elapsed_seconds: 80,
+                 stage_seconds: { separate: 10, transcribe: 20, translate: 5, synthesize: 40, build: 3 } };
+
+test("a finished job sends its record to /record with its timings and its masked logs, and the page hears nothing", async () => {
+  const s = setup({
+    engines: { url: "http://backend" },
+    relay: (url) => (url === "http://backend/api/report/bundle?job=abc123" ? ok(DONE_BUNDLE)
+      : url.endsWith("/record") ? ok({ id: "k1" }) : { ok: true, status: 200 }),
+  });
+  const home = dirname(s.userData);   // what the stand-in app answers for "home"
+  writeFileSync(join(s.userData, "logs", "shell.log"),
+    `opened ${join(home, "Movies", "Secret Show.mp4")} from https://www.youtube.com/watch?v=abcdefghijk\n`);
+  await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "ok", jobId: "abc123", timing: TIMING });
+
+  assert.deepEqual(s.calls.map((c) => `${c.method} ${c.url}`), [
+    "GET http://backend/api/report/bundle?job=abc123",
+    `POST ${REPORT_ENDPOINT}/record`,
+    `POST ${REPORT_ENDPOINT}/report/k1/logs`,
+  ]);
+  const sent = JSON.parse(s.calls[1].body);
+  assert.deepEqual([sent.outcome, sent.kind, sent.code, sent.stage, sent.stageMarker, sent.message],
+    ["ok", "dub", "ok", "done", "", ""]);
+  assert.deepEqual(sent.timing, { elapsed_seconds: 80, sep_seconds: 10, stt_seconds: 20, translate_seconds: 5, voice_seconds: 40 });
+  assert.deepEqual(sent.logTails, {}, "no tails: a record never becomes an issue");
+  assert.equal(sent.installId, JSON.parse(readFileSync(join(s.userData, "reports.json"), "utf8")).device);
+  const archive = gunzipSync(Buffer.from(s.calls[2].body)).toString("utf8");
+  assert.ok(archive.includes("JOB ALL DONE (80.2s)"), "the job's own log is in the archive");
+  for (const name of ["Secret Show", "Movies", "watch?v", "abcdefghijk"]) assert.ok(!archive.includes(name), name);
+  assert.ok(archive.includes("~/…/*.mp4") && archive.includes("https://www.youtube.com/..."), "masked as a failure's logs are");
+  assert.deepEqual(s.pushed, [], "nothing broke, nothing to announce");
+  assert.equal(s.reporter.lastReport(), null);
+  assert.deepEqual(s.queued(), []);
+});
+
+test("with reports off a finished job sends nothing and writes nothing down; debug only prints it", async () => {
+  for (const s of [setup({ packaged: false }), setup({ kitEnv: "PERSODUB_NO_REPORTS=1\n" })]) {
+    await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "ok", jobId: "abc123", timing: TIMING });
+    assert.deepEqual([s.calls, s.logged, s.queued()], [[], [], []]);
+  }
+  const d = setup({ kitEnv: "PERSODUB_REPORTS_DEBUG=1\n" });
+  await d.reporter.sendReport({ kind: "erase", kitDir: d.kitDir, code: "ok", jobId: "abc123", timing: { elapsed_seconds: 41 } });
+  assert.deepEqual(d.calls, []);
+  assert.match(d.logged[0], /^\[persodub-report\] would send: .*"outcome":"ok","timing":\{"elapsed_seconds":41\}/);
+  assert.deepEqual(d.queued(), []);
+});
+
+// The same queue-first rule as a failure's: written down before anything is
+// gathered, so a launch that ends at once leaves it for the next to send.
+test("a finished job written down by a launch that died goes to /record from the next, timings and all", async () => {
+  const s = setup({ relay: () => new Promise(() => {}) });
+  void s.reporter.sendReport({ kind: "separate", kitDir: s.kitDir, code: "ok", jobId: "abc123", timing: { elapsed_seconds: 12 } });
+  const [json] = s.queued();
+  assert.deepEqual(s.readQueued(json).failure,
+    { kind: "separate", code: "ok", jobId: "abc123", timing: { elapsed_seconds: 12 } });
+
+  const next = setup({
+    base: s.base, engines: { url: "http://backend" },
+    relay: (url) => (url === "http://backend/api/report/bundle?job=abc123" ? ok(DONE_BUNDLE)
+      : url.endsWith("/record") ? ok({ id: "k2" }) : { ok: true, status: 200 }),
+  });
+  await next.reporter.flushReports(next.kitDir);
+  assert.deepEqual(next.calls.map((c) => c.url), ["http://backend/api/report/bundle?job=abc123",
+    `${REPORT_ENDPOINT}/record`, `${REPORT_ENDPOINT}/report/k2/logs`]);
+  const sent = JSON.parse(next.calls[1].body);
+  assert.deepEqual([sent.kind, sent.outcome, sent.timing], ["separate", "ok", { elapsed_seconds: 12 }]);
+  assert.deepEqual(next.queued(), []);
+  assert.deepEqual(next.pushed, []);
+});
+
 // The usage counts' id is the dashboard's name for a computer. A report carries
 // its first twelve characters while the counts are on, read from their own
 // file and never minted for a computer that has none.

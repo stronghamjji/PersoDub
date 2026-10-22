@@ -92,6 +92,21 @@ const isCount = (n) => Number.isInteger(n) && n >= 0;
 const STAGE_FIELDS = [["separate", "sep_seconds"], ["transcribe", "stt_seconds"],
                       ["translate", "translate_seconds"], ["synthesize", "voice_seconds"]];
 
+/** How long a job ran, off its record (dubFacts' timing), by the names the
+ *  count sends it under: its whole seconds and each of the four steps'. Whole
+ *  numbers only, and a step that did not run is left out rather than sent as
+ *  0. A finished job's record (report.js) carries the same. */
+export function timingSeconds(timing) {
+  const out = {};
+  if (!timing) return out;
+  if (isCount(timing.elapsed_seconds)) out.elapsed_seconds = timing.elapsed_seconds;
+  for (const [stage, field] of STAGE_FIELDS) {
+    const n = (timing.stage_seconds || {})[stage];
+    if (isCount(n)) out[field] = n;
+  }
+  return out;
+}
+
 /** The whole message. A field not named here cannot leave. */
 export function buildPayload({ event, os, version, device, errorCode, step,
                                engines, credits, seconds, timing, persoKey }) {
@@ -123,11 +138,7 @@ export function buildPayload({ event, os, version, device, errorCode, step,
     // is left out rather than sent as 0.
     if (timing) {
       if (isCount(timing.started_hour) && timing.started_hour < 24) payload.started_hour = timing.started_hour;
-      if (isCount(timing.elapsed_seconds)) payload.elapsed_seconds = timing.elapsed_seconds;
-      for (const [stage, field] of STAGE_FIELDS) {
-        const n = (timing.stage_seconds || {})[stage];
-        if (isCount(n)) payload[field] = n;
-      }
+      Object.assign(payload, timingSeconds(timing));
     }
   }
   // Whether a Perso key is set when the app starts -- yes or no, never the key.

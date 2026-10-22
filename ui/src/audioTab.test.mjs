@@ -367,6 +367,26 @@ async function finished(h) {
   await settle();
 }
 
+// The shell sends a finished separation's job record (desktop/src/usageIpc.js);
+// one that broke sends none from here.
+test("a finished separation tells the shell once, and one that broke does not", async (t) => {
+  const told = [];
+  globalThis.window = { persodubShell: { separateDone: (job) => told.push(job) } };
+  t.after(() => { delete globalThis.window; });
+  const h = harness();
+  t.after(h.log.restore);
+  await finished(h);
+  await h.log.tick();   // the watch has stopped: no second word
+  assert.deepEqual(told, ["S1"]);
+
+  const b = harness({ job: { status: "error", error: "boom" } });
+  draft();
+  await b.$("audioRunBtn").click();
+  await b.log.tick();
+  b.log.restore();
+  assert.deepEqual(told, ["S1"]);
+});
+
 test("done: two rows with their pictures, how much was separated, Dubbing and Export", async (t) => {
   const h = harness();
   t.after(h.log.restore);

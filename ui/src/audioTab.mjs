@@ -342,7 +342,13 @@ export function initAudioTab({ $, state, getVideo, goToTab, importSource, say,
       try { j = await fetchSeparate(jid); } catch { return; }
       if (!job || job.id !== jid) { stopWatching(); return; }
       job = record(jid, j);
-      if (!LIVE.includes(j.status)) { stopWatching(); onJobsChanged(); }
+      if (!LIVE.includes(j.status)) {
+        stopWatching();
+        onJobsChanged();
+        // A finished one tells the shell, which sends its job record. In a
+        // plain browser there is no shell, and nothing is sent.
+        if (j.status === "done") globalThis.window?.persodubShell?.separateDone?.(jid);
+      }
       paint();
     }, POLL_MS);
   }

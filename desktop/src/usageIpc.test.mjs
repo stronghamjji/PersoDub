@@ -51,17 +51,18 @@ test("a failed dub is counted and reported once, however often the page draws it
     [{ kind: "dub", kitDir: "/kit", code: "disk-full", message: "ENOSPC: no space left on device", jobId: "abc123" }]);
 });
 
-test("a cancel is neither counted nor reported; a success is counted with the job's own facts", async () => {
+test("a cancel is neither counted nor reported; a success is counted with the job's own facts and sends its record once", async () => {
   const be = await backend({ fedcba: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso", perso_credits: 3, duration: 12.4,
                                        started_hour: 9, elapsed_seconds: 80, stage_seconds: { transcribe: 20 } } });
   try {
     const s = setup({ engines: { url: be.url } });
     await s.on["shell:count-dub"]({}, { status: "cancelled", job: "0a0a0a" });
     await s.on["shell:count-dub"]({}, { status: "done", job: "fedcba" });
+    await s.on["shell:count-dub"]({}, { status: "done", job: "fedcba" });   // drawn again
+    const timing = { started_hour: 9, elapsed_seconds: 80, stage_seconds: { transcribe: 20 } };
     assert.deepEqual(s.counted, [["dub_success", "/kit", undefined, undefined,
-      { engines: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso" }, credits: 3, seconds: 12,
-        timing: { started_hour: 9, elapsed_seconds: 80, stage_seconds: { transcribe: 20 } } }]]);
-    assert.deepEqual(s.reported, []);
+      { engines: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso" }, credits: 3, seconds: 12, timing }]]);
+    assert.deepEqual(s.reported, [{ kind: "dub", kitDir: "/kit", code: "ok", jobId: "fedcba", timing }]);
   } finally {
     be.close();
   }
@@ -91,5 +92,26 @@ test("an erase is counted, and a failed one reported without a job id that is no
   s.on["shell:count-erase"]({}, { status: "done" });
   s.on["shell:count-erase"]({}, { status: "cancelled" });
   assert.deepEqual(s.counted, [["erase_failure", "/kit", "engine-crash"], ["erase_success", "/kit", undefined]]);
-  assert.deepEqual(s.reported, [{ kind: "erase", kitDir: "/kit", code: "engine-crash", message: "exit 1", jobId: undefined }]);
+  assert.deepEqual(s.reported, [{ kind: "erase", kitDir: "/kit", code: "engine-crash", message: "exit 1", jobId: undefined }],
+    "a finished erase the page could not name sends no record");
+});
+
+// An erase and a separation are timed as a whole only: their record carries
+// what the job's own record says, and nothing is counted for a separation.
+test("a finished erase or separation sends its record with the job's timing", async () => {
+  const be = await backend({ e1e1e1: { kind: "erase", elapsed_seconds: 41 }, a5a5a5: { kind: "separate", elapsed_seconds: 12 } });
+  try {
+    const s = setup({ engines: { url: be.url } });
+    await s.on["shell:count-erase"]({}, { status: "done", job: "e1e1e1" });
+    await s.on["shell:separate-done"]({}, { job: "a5a5a5" });
+    await s.on["shell:separate-done"]({}, { job: "../../etc" });
+    assert.deepEqual(s.counted, [["erase_success", "/kit", undefined]]);
+    const timing = (elapsed) => ({ started_hour: undefined, elapsed_seconds: elapsed, stage_seconds: undefined });
+    assert.deepEqual(s.reported, [
+      { kind: "erase", kitDir: "/kit", code: "ok", jobId: "e1e1e1", timing: timing(41) },
+      { kind: "separate", kitDir: "/kit", code: "ok", jobId: "a5a5a5", timing: timing(12) },
+    ]);
+  } finally {
+    be.close();
+  }
 });

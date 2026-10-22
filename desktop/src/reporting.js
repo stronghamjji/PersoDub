@@ -19,6 +19,11 @@ import { readFileEnd } from "./fileEnd.js";
 // an issue is. What may leave is decided in report.js (an allow-list,
 // masked); this is the wiring: write the failure down, gather, send, and keep
 // whatever did not land for the next launch.
+//
+// A job that finished goes the same way under the same switch, as a record
+// (code "ok", report.js): its logs and how long it took, to the relay's
+// /record, which keeps them for the private dashboard and never opens an
+// issue (owner, 2026-10-22).
 export const REPORT_ENDPOINT = "https://persodub-report.persodub.workers.dev";
 // Reports wait here rather than in userData: a report belongs to the kit that
 // produced it, and a user who deletes a kit is done with its failures too.
@@ -130,7 +135,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
   }
 
   /** Everything about one failure, masked, in the shape the relay accepts. */
-  async function collectReport({ kind, kitDir, step, code, message, jobId }) {
+  async function collectReport({ kind, kitDir, step, code, message, jobId, timing }) {
     const home = app.getPath("home");
     const bundle = await fetchBundle(jobId);
     const job = (bundle && bundle.job) || {};
@@ -172,6 +177,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
         freeDiskBytes: await freeSpaceAt(kitDir),
         edition: kitEdition(kitDir) || "",
       }),
+      timing,
       logTails: {
         shell: shellLogText,
         app: (bundle && bundle.logTails && bundle.logTails.app) || "",
@@ -210,10 +216,13 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
    * keep trying for.
    */
   async function deliver(report, archive) {
-    const answer = await postJson(REPORT_ENDPOINT + "/report", report);
+    // A finished job's record has a door of its own, which never reaches
+    // GitHub, and nothing to announce: nothing broke.
+    const record = report.outcome === "ok";
+    const answer = await postJson(REPORT_ENDPOINT + (record ? "/record" : "/report"), report);
     if (!answer || !answer.id) return { sent: false, id: null, logsSent: false };
     const logs = archive ? await postLogs(answer.id, archive) : "ok";
-    announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
+    if (!record) announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
     return { sent: true, id: answer.id, logsSent: logs !== "retry" };
   }
 
@@ -252,8 +261,10 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
           const at = Date.now();
           base = queueBase(randomBytes(6).toString("hex"), at);
           inHand.add(base);
-          const { kind, code, step, message, jobId } = opts;
-          queueReport(kitDir, base, { failure: { kind, code, step, message, jobId }, at });
+          // A finished job's record is written down the same way, its timing
+          // with it: the job's record forgets it at the next restart.
+          const { kind, code, step, message, jobId, timing } = opts;
+          queueReport(kitDir, base, { failure: { kind, code, step, message, jobId, timing }, at });
         }
         const { report, archive } = await collectReport(opts);
         if (mode === "debug") {
