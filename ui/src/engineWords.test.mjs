@@ -30,7 +30,7 @@ const ENGINE_SENTENCES = [
   "The voice engine is not running because it could not start. Quit and reopen PersoDub, then try again, or try the Perso API.",
   "The voice engine is not running: this computer ran out of memory. Close other apps and try again, or try the Perso API.",
   "The voice engine is not running. Quit and reopen PersoDub.",
-  "Perso separation needs an API key. Open Settings and save your Perso API key, or choose This computer.",
+  "Perso separation needs an API key. Open Settings and save your Perso API key, or choose Local model.",
   "Sign in to ChatGPT first.",
   "ChatGPT usage limit reached for now. Try again after it resets.",
   // The Dub Agent's step labels (app/agents/claude.py TOOL_LABELS, app/agents/codex.py).

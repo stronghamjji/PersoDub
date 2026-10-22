@@ -604,7 +604,7 @@ def test_the_cloud_path_names_the_plan_limit_when_perso_refuses_a_long_video(mon
     assert notice["limit_seconds"] == 60
     assert notice["link"] == pc_module.PRICING_LINK
     assert notice["message"] == ("This video is longer than your Perso plan allows. Upgrade your plan, "
-                                 "or set Dubbing to This computer. Perso said: 영상 길이가 60000ms를 초과했습니다 (F4008)")
+                                 "or set Processing to Local model. Perso said: 영상 길이가 60000ms를 초과했습니다 (F4008)")
 
 
 def test_the_cloud_path_says_a_higher_plan_is_needed_when_perso_refuses_the_model(monkeypatch, tmp_path):

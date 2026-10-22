@@ -171,7 +171,7 @@ _NOTICE_ERRORS = {
     # popup says the limit and links to the plans; nothing to retry.
     PersoDurationLimitError: (
         "perso_duration_limit",
-        lambda: both("This video is longer than your Perso plan allows. Upgrade your plan, or set Dubbing to This computer."),
+        lambda: both("This video is longer than your Perso plan allows. Upgrade your plan, or set Processing to Local model."),
         "link",
         None,
     ),

@@ -172,7 +172,7 @@ The **Separate audio** card on the home screen splits a video's sound into two
 files: the voice, and everything else. Drop a video or paste a link, the same two
 ways the Dubbing tab offers. A pasted link starts fetching by itself.
 
-The tab shows the video's name and length, then **Runs on**: *This computer* or *Perso
+The tab shows the video's name and length, then **Runs on**: *Local model* or *Perso
 API*. Perso spends credits, so its **Separate** button has to be pressed twice. A
 line under it estimates the time, for example "About 1 min". While it runs you see
 "Separating… 42%", a bar and **Stop**. On this computer the work is done by a

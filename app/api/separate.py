@@ -61,7 +61,7 @@ def _require_engine(engine: str) -> None:
             # refused start says "needs an API key" (ui/src/app.mjs onStartRefused).
             raise HTTPException(
                 422, "Perso separation needs an API key. Open Settings and save your "
-                     "Perso API key, or choose This computer.")
+                     "Perso API key, or choose Local model.")
         require_perso_workspace()
         return
     # The engine pack and nothing else: no transcription, no voices.
