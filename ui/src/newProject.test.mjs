@@ -1045,6 +1045,28 @@ test("Perso API pressed on Processing is what the next project starts on, and so
   assert.deepEqual(litHalf(h3), ["dubModeLocal"]);
 });
 
+// The Dubbing model is remembered as every other choice is (rememberedChoices'
+// "persoModel"); Settings keeps no default for it, so nothing newer can win
+// over it, while Processing keeps its own rule: a default changed since wins.
+test("the Dubbing model chosen under Perso API on Processing is what the next project starts on, after a restart too", async (t) => {
+  const store = memoryStorage();
+  const h = await persoHarness(setupWith(), store);
+  h.api.openNewProject({ downloadId: "d1", title: "First" });
+  await tick();
+  await h.$("dubModePerso").fire("click");
+  await chooseModel(h, "Nightingale");
+  h.log.restore();
+
+  const h2 = await persoHarness(setupWith(), store);
+  t.after(h2.log.restore);
+  h2.api.openNewProject({ downloadId: "d2", title: "Next" });
+  await tick();
+  assert.deepEqual(litHalf(h2), ["dubModePerso"]);
+  assert.equal(h2.$("persoModelRow").hidden, false);
+  assert.equal(h2.api.readOptions().persoModel, "NIGHTINGALE");
+  assert.deepEqual(await models(h2), ["Oriole", "Wren", "[Nightingale]"]);
+});
+
 test("every Advanced option and the target language are remembered", async (t) => {
   const store = memoryStorage();
   const h = await persoHarness(setupWith(), store);
