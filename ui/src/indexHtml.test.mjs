@@ -1021,6 +1021,36 @@ test("the models dialog keeps its line break, and is wider than the other confir
   assert.ok(en >= 351 + 34 && ko >= 299 + 34, `${en} and ${ko} are too narrow`);
 });
 
+// Settings > Privacy, Send job logs: what goes and where, for how long, what
+// never goes, and what it is for, a sentence a line (owner, 2026-10-22, 9).
+// It used to call the failed jobs stopped ones, and said nothing of where.
+test("Send job logs says what goes where, what never goes and why, a sentence a line", () => {
+  const html = readPage();
+  const hint = html.match(/<div class="settings-hint" id="reportsHint">([\s\S]*?)<\/div>/)[1];
+  const sentences = [...hint.matchAll(/<span data-i18n>([^<]*)<\/span>/g)].map((m) => m[1]);
+  assert.deepEqual(sentences, [
+    "Keeps a record of finished and failed jobs (masked logs, time per step, device ID) on a private dashboard for 30 days.",
+    "Only failed jobs go into a public GitHub issue, as a summary of the cause.",
+    "Titles, file names, links and dialogue are not sent.",
+    "What you send helps make PersoDub better.",
+  ]);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.deepEqual(sentences.map((s) => ko[s]), [
+    "끝난 작업과 실패한 작업의 기록(가린 로그, 단계별 시간, 기기 번호)을 비공개 대시보드에 30일 보관해요.",
+    "실패한 작업만 깃헙 공개 이슈에 원인 요약으로 올라가요.",
+    "제목·파일 이름·링크·대사는 안 보내요.",
+    "보내 주시면 PersoDub을 더 좋게 만드는 데 써요.",
+  ]);
+  // Each sentence starts a line of its own, and the label stays by the switch.
+  assert.match(html, /#reportsHint > span \{ display: block; \}/);
+  assert.match(html, /\.set-row:has\(> \.set-ctl > #reportsHint\) \{ align-items: start; \}/);
+  const old = "Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.";
+  for (const code of ["en", "ko"]) {
+    const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
+    assert.equal(Object.hasOwn(table, old), false, `the old sentence is still in ui.${code}.json`);
+  }
+});
+
 // Which step each key and the ChatGPT sign-in is for, a small grey line under
 // each like the Privacy tab's (owner, 2026-10-21). And the translator's own
 // lines point the local ones at the Gemini API, which says where its key goes.

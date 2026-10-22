@@ -2417,6 +2417,13 @@
   .set-panel input:focus, .set-panel select:focus { border-color: var(--primary); }
   .set-panel .settings-hint, .set-panel .job-notice, .set-panel .settings-link { margin-top: 0; font-size: 11px; }
   .set-panel .settings-hint:empty { display: none; }
+  /* Privacy's job logs: what goes, where, what never goes and why, a sentence
+     a line, with a little air between sentences. Five lines tall in Korean and
+     seven in English, the row keeps its label beside the switch rather than
+     halfway down the words. */
+  #reportsHint > span { display: block; }
+  #reportsHint > span + span { margin-top: 3px; }
+  .set-row:has(> .set-ctl > #reportsHint) { align-items: start; }
   .set-panel .settings-link { font-weight: 500; color: var(--primary-ink); }
   .set-panel .about-brand .settings-link { font-size: 11.5px; }
   .set-panel .btn { height: 24px; border: 0; border-radius: 6px; background: var(--secondary);
