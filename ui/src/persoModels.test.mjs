@@ -62,26 +62,29 @@ test("a model's name as the screen says it, a new one's made from its id", () =>
   assert.equal(isModelId("dodo"), false);
 });
 
+// The count reads "N supported languages", one unit that a wrapping line
+// never breaks: its spaces are no-break spaces (owner, 2026-10-22).
 test("the line under a model and under the choice", () => {
   // What each is for, in the words the owner approved from Perso's page (2026-10-22).
   assert.equal(modelCaption(modelInfo("LINNET_4"), 80),
-    "Default · New model that follows the context. Honours audio tags · 1 credit per second · 80 languages");
+    "Default · New model that follows the context. Honours audio tags · 1 credit per second · 80 supported languages");
   assert.equal(modelCaption(modelInfo("ORIOLE"), 77),
-    "Natural local pronunciation, steady voice. Lectures and corporate video · 1 credit per second · 77 languages");
+    "Natural local pronunciation, steady voice. Lectures and corporate video · 1 credit per second · 77 supported languages");
   assert.equal(modelCaption(modelInfo("NIGHTINGALE"), 102),
-    "Rich emotion for drama and shows. No per-line remake · 6 credits per second · 102 languages");
+    "Rich emotion for drama and shows. No per-line remake · 6 credits per second · 102 supported languages");
   assert.equal(modelCaption(modelInfo("WREN"), 32),
-    "Steady narration. Lecture scripts, company intros, read-aloud; most even Korean voice · 1 credit per second · 32 languages");
-  assert.equal(modelCaption(modelInfo("NEW_ONE"), 3), "3 languages");
-  assert.equal(modelHint(modelInfo("NIGHTINGALE"), 102), "6 credits per second · 102 languages with this model · Perso Pro plan and up");
-  assert.equal(modelHint(modelInfo("WREN"), 32), "1 credit per second · 32 languages with this model");
+    "Steady narration. Lecture scripts, company intros, read-aloud; most even Korean voice · 1 credit per second · 32 supported languages");
+  assert.equal(modelCaption(modelInfo("NEW_ONE"), 3), "3 supported languages");
+  assert.equal(modelHint(modelInfo("NIGHTINGALE"), 102), "6 credits per second · 102 supported languages · Perso Pro plan and up");
+  assert.equal(modelHint(modelInfo("WREN"), 32), "1 credit per second · 32 supported languages");
   // One credit is singular; a part of one is not (2026-10-22).
-  assert.equal(modelHint(modelInfo("FINCH"), 79), "0.2 credits per second · 79 languages with this model · Perso Pro plan and up");
+  assert.equal(modelHint(modelInfo("FINCH"), 79), "0.2 credits per second · 79 supported languages · Perso Pro plan and up");
 });
 
 // Help says "100+" for every model together; the line under the choice says
-// the chosen one's own count, so the two are not read as one number (owner, 2026-10-21).
-test("in Korean the line under the choice says the count is this model's", async (t) => {
+// the chosen one's own count (owner, 2026-10-21), as 지원 언어 N개 without
+// 이 모델은, the way each model's line in the list says it (owner, 2026-10-22).
+test("in Korean the line under the choice and each model's line say 지원 언어 N개, as one unit", async (t) => {
   const real = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: true,
     json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
@@ -89,15 +92,17 @@ test("in Korean the line under the choice says the count is this model's", async
   globalThis.fetch = real;
   setLanguage("ko");
   t.after(() => setLanguage("en"));
-  assert.equal(modelHint(modelInfo("ORIOLE"), 77), "1초 1크레딧 · 이 모델은 언어 77개");
+  assert.equal(modelHint(modelInfo("ORIOLE"), 77), "1초 1크레딧 · 지원 언어 77개");
+  assert.equal(modelHint(modelInfo("LINNET_4"), 80), "1초 1크레딧 · 지원 언어 80개");
   // Every model's line, as approved (owner, 2026-10-22).
-  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "자연스러운 억양, 일정한 목소리. 강의·기업 영상에 · 1초 1크레딧 · 언어 77개");
+  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "자연스러운 억양, 일정한 목소리. 강의·기업 영상에 · 1초 1크레딧 · 지원 언어 77개");
   assert.equal(modelCaption(modelInfo("LINNET_4"), 80),
-    "기본 · 맥락을 이해하는 새 모델. 오디오 태그 반영 · 1초 1크레딧 · 언어 80개");
-  assert.equal(modelCaption(modelInfo("LINNET_3"), 34), "이전 표현형 모델 · 1초 1크레딧 · 언어 34개");
+    "기본 · 맥락을 이해하는 새 모델. 오디오 태그 반영 · 1초 1크레딧 · 지원 언어 80개");
+  assert.equal(modelCaption(modelInfo("LINNET_3"), 34), "이전 표현형 모델 · 1초 1크레딧 · 지원 언어 34개");
   assert.equal(modelCaption(modelInfo("WREN"), 32),
-    "안정적인 나레이션. 강의 대본·기업 소개·낭독에. 한국어 목소리가 가장 고르게 · 1초 1크레딧 · 언어 32개");
-  assert.equal(modelCaption(modelInfo("FINCH"), 79), "내 목소리 유지, 가장 저렴. 인터뷰·채널 전체 더빙에 · 1초 0.2크레딧 · 언어 79개");
+    "안정적인 나레이션. 강의 대본·기업 소개·낭독에. 한국어 목소리가 가장 고르게 · 1초 1크레딧 · 지원 언어 32개");
+  assert.equal(modelCaption(modelInfo("FINCH"), 79), "내 목소리 유지, 가장 저렴. 인터뷰·채널 전체 더빙에 · 1초 0.2크레딧 · 지원 언어 79개");
   assert.equal(modelCaption(modelInfo("NIGHTINGALE"), 102),
-    "감정 표현이 풍부한 드라마·예능에. 한 줄씩 고치기는 안 돼요 · 1초 6크레딧 · 언어 102개");
+    "감정 표현이 풍부한 드라마·예능에. 한 줄씩 고치기는 안 돼요 · 1초 6크레딧 · 지원 언어 102개");
+  assert.ok(!/이 모델은/.test(modelHint(modelInfo("WREN"), 32)), "no 이 모델은");
 });

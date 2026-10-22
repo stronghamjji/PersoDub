@@ -86,17 +86,23 @@ function rateText(info) {
   return info.rate === 1 ? t("{n} credit per second", { n: info.rate }) : t("{n} credits per second", { n: info.rate });
 }
 
-/** The line under a model in the list: "Default · 1 credit per second · 80 languages". */
+// "80 supported languages", 지원 언어 80개, as one unit: a line too long for
+// its box wraps around it, never inside it (owner, 2026-10-22).
+function supportedLanguages(n) {
+  return t("{n} supported languages", { n }).replaceAll(" ", " ");
+}
+
+/** The line under a model in the list: "Default · 1 credit per second · 80 supported languages". */
 export function modelCaption(info, languages) {
   return [info.id === DEFAULT_MODEL ? t("Default") : "", info.desc ? t(info.desc) : "", rateText(info),
-          t("{n} languages", { n: languages })]
+          supportedLanguages(languages)]
     .filter(Boolean).join(" · ");
 }
 
 /** The line under the choice: price, languages, and the plan it needs. The
-    count is this model's own, and says so: Help's "100+" is every model's
-    together, and the two were read as contradicting each other (owner, 2026-10-21). */
+    count is this model's own (Help's "100+" is every model's together), said
+    as the list says it, without "with this model" (owner, 2026-10-22). */
 export function modelHint(info, languages) {
-  return [rateText(info), t("{n} languages with this model", { n: languages }), info.pro ? t("Perso Pro plan and up") : ""]
+  return [rateText(info), supportedLanguages(languages), info.pro ? t("Perso Pro plan and up") : ""]
     .filter(Boolean).join(" · ");
 }

@@ -1063,7 +1063,7 @@ test("the New project dialog is two columns, and its options carry their own loo
   // The look travels on the moved nodes themselves.
   assert.match(dlg, /<div class="opt-panel" id="langGrid">/);
   assert.match(dlg, /<div class="opt-panel advanced-body" id="advancedBody">/);
-  assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "Processing, two languages and six options, each a row");
+  assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "Model selection, two languages and six options, each a row");
   // Voice separation offers Demucs, Mel-Band RoFormer and Perso API, the RoFormer before it is downloaded too.
   assert.match(dlg, /<select id="sepSelect"><option value="local" selected>Demucs<\/option><option value="roformer">Mel-Band RoFormer<\/option><option value="perso">Perso API<\/option><\/select>/);
   for (const id of ["sourceLangSelect", "targetLangSelect", "dubModeSelect", "sepSelect", "sttSelect",
@@ -1102,24 +1102,28 @@ test("the six stage rows are always in sight under Dubbing step settings, with n
   assert.ok(!Object.hasOwn(table("ko"), "Advanced options"), "the fold's name is out of the table");
 });
 
-// Processing and the Dubbing model sit above the languages, outside Advanced
-// options, because the languages follow both (owner, 2026-10-22). Processing
-// is two halves, Local model and Perso API, over the hidden #dubModeSelect.
-test("Processing and the Dubbing model come first in the options block, above the languages", () => {
+// Model selection (처리 방식 until the owner named it 모델 선택, 2026-10-22,
+// remark 2 나) and the Dubbing model sit above the languages, outside the
+// stage rows, because the languages follow both (owner, 2026-10-22). Model
+// selection is two halves, Local model and Perso API, over the hidden #dubModeSelect.
+test("Model selection and the Dubbing model come first in the options block, above the languages", () => {
   const html = readPage();
   const grid = html.slice(html.indexOf('<div class="opt-panel" id="langGrid">'), html.indexOf('id="engineWarning"'));
   const order = ['id="dubModeLabel"', 'id="dubModeSeg"', 'id="dubModeSelect"', 'id="persoModelRow"',
                  'id="sourceLangSelect"', 'id="targetLangSelect"'].map((s) => grid.indexOf(s));
-  assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), "Processing, the model, then the two languages");
-  assert.match(grid, /<label data-i18n id="dubModeLabel">Processing<\/label><div class="mode-seg" id="dubModeSeg" role="radiogroup" aria-labelledby="dubModeLabel"><button type="button" role="radio" id="dubModeLocal" aria-checked="true" data-i18n>Local model<\/button><button type="button" role="radio" id="dubModePerso" aria-checked="false">Perso API<\/button><\/div><select id="dubModeSelect" hidden>/);
+  assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), "Model selection, the model, then the two languages");
+  assert.match(grid, /<label data-i18n id="dubModeLabel">Model selection<\/label><div class="mode-seg" id="dubModeSeg" role="radiogroup" aria-labelledby="dubModeLabel"><button type="button" role="radio" id="dubModeLocal" aria-checked="true" data-i18n>Local model<\/button><button type="button" role="radio" id="dubModePerso" aria-checked="false">Perso API<\/button><\/div><select id="dubModeSelect" hidden>/);
   const advanced = html.slice(html.indexOf('id="advancedBody"'), html.indexOf('id="projectError"'));
-  assert.ok(!advanced.includes("dubModeSelect") && !advanced.includes("persoModelRow"), "neither is under Advanced options");
+  assert.ok(!advanced.includes("dubModeSelect") && !advanced.includes("persoModelRow"), "neither is among the stage rows");
   assert.ok(!html.includes(">On this computer<"), "the old name of the choice is gone");
   assert.match(html, /\.opt-row > \.mode-seg \{ grid-column: 2; grid-row: 1; display: flex; height: 24px;/);
   assert.match(html, /\.mode-seg button\[aria-checked="true"\] \{ background: var\(--primary\); color: var\(--primary-foreground\); \}/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
-  assert.deepEqual([ko.Processing, ko["Local model"]], ["처리 방식", "로컬 모델"]);
+  assert.deepEqual([ko["Model selection"], ko["Local model"]], ["모델 선택", "로컬 모델"]);
+  // "Model" alone is the Dub Agent's picker, 모델 (ui/src/agentStrip.mjs).
+  assert.equal(ko.Model, "모델");
   assert.ok(!Object.hasOwn(ko, "On this computer"));
+  assert.ok(!Object.hasOwn(ko, "Processing"), "the old name is out of the table");
 });
 
 // The Target language is a list with a search field, in the Dubbing model's
