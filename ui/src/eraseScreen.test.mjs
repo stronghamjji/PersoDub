@@ -63,7 +63,8 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 /** A page, the app behind it, and what the screen reached out for. */
 function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1100] },
-                   erase = { status: "running", percent: 35 }, projectOpen = false, platform = "mac" } = {}) {
+                   erase = { status: "running", percent: 35 }, projectOpen = false, platform = "mac",
+                   pickedFolder, savedAt = "/Users/me/Downloads/2026-09-30/Street food/Street food.mp4" } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -87,7 +88,7 @@ function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1
     if (/^\/api\/erase\/E\d$/.test(url)) {
       return answer({ id: "E1", logs: [], done: app.erase.status === "done", ...app.erase });
     }
-    if (url === "/api/erase/E1/save") return answer({ path: "/Users/me/Downloads/2026-09-30/Street food/Street food.mp4" });
+    if (url === "/api/erase/E1/save") return answer({ path: savedAt });
     if (url === "/api/erase/E1/retry") return answer({ job_id: "E2" });
     if (url === "/api/erase/E1/dub") return answer({ download_id: "D2", title: "Street food", duration_sec: 6 });
     return answer({ detail: "stub" }, 404);
@@ -108,6 +109,7 @@ function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1
     showTimeline: (info) => { log.timeline = info; },
     projectOpen: () => projectOpen,
     onEraseStarted: (downloadId) => log.started.push(downloadId),
+    pickedFolder,
   });
   return { $, api, log, app };
 }
@@ -360,6 +362,19 @@ test("an erase that stopped says why in the page's language when the engine sent
   await h.$("eraseRunBtn").fire("click");
   await new Promise((r) => setTimeout(r, 1100));
   assert.equal(h.$("eraseState").textContent, "그 영역에서 자막을 찾지 못했어요. 상자를 옮긴 뒤 다시 시도해 주세요.");
+});
+
+// The folder the Download dialog's Change picked (owner, 2026-10-22): the
+// app saves the erased video there, and this line names it as it names Downloads.
+test("the saved line names the folder picked for downloads by its own name", async () => {
+  clearDraft();
+  const h = harness({ erase: { status: "done", percent: 100 }, pickedFolder: async () => "/Volumes/Work SSD",
+                      savedAt: "/Volumes/Work SSD/2026-09-30/Street food/Street food.mp4" });
+  h.api.openEraseJob({ id: "E1", status: "done", project: "Street food" });
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.equal(await h.api.exportErased(), "/Volumes/Work SSD/2026-09-30/Street food/Street food.mp4");
+  assert.equal(h.$("eraseSavedWhere").textContent, "Work SSD / 2026-09-30 / Street food");
+  h.api.openErase();
 });
 
 test("an erase opened from the projects list is followed without a held video", async () => {

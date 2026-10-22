@@ -30,9 +30,17 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // the page has no other way to know one landed -- the Export dialog's "where
   // it goes" line reads this and says where it went.
   onDownloadDone: (cb) => ipcRenderer.on("shell:download-done", (_e, info) => cb(info)),
+  // The folder downloads go into, for the Download dialog's line and Settings >
+  // Storage: {folder, chosen, missing}. pickDownloadFolder is the dialog's
+  // Change, the computer's own folder picker, kept for every download after
+  // it; resetDownloadFolder is Use default, Downloads again. Each answers with
+  // the folder as it is then.
+  downloadFolder: () => ipcRenderer.invoke("shell:download-folder"),
+  pickDownloadFolder: () => ipcRenderer.invoke("shell:pick-download-folder"),
+  resetDownloadFolder: () => ipcRenderer.invoke("shell:reset-download-folder"),
   // "Saved to Downloads · Show": show a file the app just wrote in Finder or
-  // Explorer. The shell opens only what is inside Downloads or the kit, so this
-  // is a request rather than a command.
+  // Explorer. The shell opens only what is inside Downloads, the folder picked
+  // for downloads or the kit, so this is a request rather than a command.
   revealPath: (path) => ipcRenderer.invoke("shell:reveal", path),
   // For a "Restart now" button: asking a non-technical user to quit and reopen
   // by hand was the step that silently didn't happen. No page calls it today

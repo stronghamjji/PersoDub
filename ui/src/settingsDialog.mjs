@@ -31,6 +31,8 @@
  *        if the rows a held-up dub was waiting for have all arrived -- starts
  *        that dub. Not awaited, here or before the move: the sheet opens
  *        without waiting on any of it.
+ * @param {object} [deps.shell]  the desktop shell (window.persodubShell), which
+ *        says where downloads go (downloadFolder); null in a browser
  * @returns the operations the rest of the page calls.
  */
 import { setupText, watchSetup } from "./chatgptSetup.mjs";
@@ -42,7 +44,8 @@ import { paintMarkupWords } from "./markupWords.mjs";
 // #settingsPanel-<name>.
 export const SETTINGS_TABS = ["models", "keys", "storage", "privacy", "about"];
 
-export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = () => window.location.reload() }) {
+export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = () => window.location.reload(),
+                                 shell = null }) {
   // The tab the user last chose, for this sitting only: a new launch starts
   // on Models again.
   let lastTab = "models";
@@ -332,6 +335,15 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     }
   });
 
+  // Storage's line on where downloads go, the folder they go into now (the
+  // one Change in the Download dialog picked, or Downloads). Said, not
+  // changed here. A browser saves where it is set to, so the row stays away.
+  async function paintDownloadFolder() {
+    const f = shell && shell.downloadFolder ? await shell.downloadFolder().catch(() => null) : null;
+    $("downloadFolderLine").textContent = f ? t("Download folder: {path}", { path: f.folder }) : "";
+    $("downloadFolderRow").hidden = !f;
+  }
+
   // `tab` is for a way in that knows what it came for ("keys" from the
   // out-of-credits popup, "models" from the download chip). The gear passes
   // its click event, which is no tab: then a model that needs attention
@@ -341,6 +353,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     chosenSinceOpen = false;
     showTab(asked || (modelsNeedAttention() ? "models" : lastTab));
     loadChatgpt(); // async on purpose -- the sheet opens without waiting on a child process
+    paintDownloadFolder(); // the same: the shell answers at once, and the sheet does not wait for it
     await loadSavedSetup();
     // Not waited for either; what it learns about the models may still move
     // the sheet to Models, unless the user has chosen a tab by then.

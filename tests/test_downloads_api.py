@@ -6,6 +6,7 @@ percent the way source_fetch.fetch does through its log callback, and the
 cut is a recorder. What these pin down is the record the screen polls, where
 the file lands, what it is called, and that nothing is written over."""
 import os
+import shutil
 import time
 
 from fastapi.testclient import TestClient
@@ -193,6 +194,35 @@ def test_save_with_no_folder_goes_under_downloads_by_day_and_title(monkeypatch, 
     stem = "Teach You a Lesson - es tu vida - vívela (17-17)"
     assert os.path.dirname(path) == os.path.join(str(tmp_path), "Downloads", time.strftime("%Y-%m-%d"), stem)
     assert os.path.basename(path) == stem + ".mp4"
+
+
+def test_save_with_no_folder_goes_into_the_download_folder_picked_while_it_is_there(monkeypatch, tmp_path):
+    # The Download dialog's Change writes the folder into kit.env (the desktop
+    # shell's downloadsIpc.js), and the day and title folders go inside it.
+    _wire(monkeypatch, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    did = client.post("/api/downloads", json={"url": "https://youtu.be/x"}).json()["id"]
+    _wait(did)
+    kit, picked = tmp_path / "kit", tmp_path / "Work SSD"
+    kit.mkdir()
+    picked.mkdir()
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    (kit / "kit.env").write_text("PERSODUB_DOWNLOAD_DIR=%s\n" % picked, encoding="utf-8")
+
+    def saved_in():
+        return os.path.dirname(client.post(f"/api/downloads/{did}/save", json={}).json()["path"])
+    day, stem = time.strftime("%Y-%m-%d"), "Teach You a Lesson - es tu vida - vívela (17-17)"
+    assert saved_in() == os.path.join(str(picked), day, stem)
+    # Gone, like a drive taken out: Downloads, as with none picked.
+    shutil.rmtree(picked)
+    assert saved_in() == os.path.join(str(tmp_path), "Downloads", day, stem)
+    # Default again (the line left empty) beats the folder the engine started
+    # with in its environment: kit.env is read at every save.
+    picked.mkdir()
+    monkeypatch.setenv("PERSODUB_DOWNLOAD_DIR", str(picked))
+    (kit / "kit.env").write_text("PERSODUB_DOWNLOAD_DIR=\n", encoding="utf-8")
+    assert saved_in() == os.path.join(str(tmp_path), "Downloads", day, stem)
 
 
 # --- Export on a draft: several kept parts joined, and the sound alone ------

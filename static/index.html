@@ -967,12 +967,18 @@
     </div>
     <div class="modal-body">
       <div class="modal-inner">
+      <!-- What comes out of the dialog, in one line under its title (owner,
+           2026-10-22: every screen says what its work makes). -->
+      <p class="export-headline" data-i18n>Each checked row becomes one file</p>
       <div class="export-list" id="exportList"></div>
       <!-- Where a download lands. The desktop shell saves without a save
            dialog, so nothing on screen moves when a link is clicked, and the
            user -- with no sign it worked -- clicks it again. Filled in by
-           ui/src/exportDialog.mjs. -->
-      <p class="export-where" id="exportWhere"></p>
+           ui/src/exportDialog.mjs. In the desktop shell the line ends in
+           Change and, once a folder is picked, Use default: words, not
+           buttons, and the two go to the next line together when a long
+           folder name wraps it (owner, 2026-10-22). -->
+      <p class="export-where"><span id="exportWhere"></span><span id="exportFolder" hidden> · <span class="export-links"><button type="button" class="erase-link" id="exportFolderPick" data-i18n>Change</button><span id="exportFolderResetWrap" hidden> · <button type="button" class="erase-link" id="exportFolderReset" data-i18n>Use default</button></span></span></span></p>
       </div>
     </div>
     <div class="modal-foot">
@@ -1224,6 +1230,12 @@
             <button class="btn btn-outline btn-sm" id="revealOutputBtn" type="button">Show in Finder</button>
             <div class="settings-hint" id="storageHint"></div>
           </div>
+        </div>
+        <!-- Where downloads go, said and nothing more: Change in the Download
+             dialog picks it (owner, 2026-10-22). Only the desktop shell knows
+             it; in a browser the row stays away. -->
+        <div class="set-row" id="downloadFolderRow" hidden>
+          <span class="set-line" id="downloadFolderLine"></span>
         </div>
       </div>
 

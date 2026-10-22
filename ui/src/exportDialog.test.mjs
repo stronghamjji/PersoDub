@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { initExportDialog, exportRows, rowsHtml, audioFormat, ticksFor, AUDIO_KEY, TICKS_KEY } from "./exportDialog.mjs";
+import { initExportDialog, exportRows, rowsHtml, audioFormat, ticksFor, whereLine, AUDIO_KEY, TICKS_KEY } from "./exportDialog.mjs";
 import { loadTable, setLanguage, t as say } from "./i18n.mjs";
 
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
@@ -519,4 +519,168 @@ test("separated audio hands back its two sounds as links, both ticked to begin w
   await settle();
   assert.deepEqual(h.followed.map((f) => f[1]), ["clip_voice.mp3", "clip_background.mp3"]);
   assert.deepEqual(h.saved(), ["voice", "background"]);
+});
+
+// ---- the folder the files go into (owner, 2026-10-22) ------------------------
+
+// The desktop shell's side of it (desktop/src/downloadsIpc.js): what it says
+// the folder is, what Change and Use default make it say, and the report of
+// each download it saved. `picked` is what the user picks in the picker.
+const DOWNLOADS = { folder: "/Users/me/Downloads", chosen: "", missing: false };
+const SSD = { folder: "/Volumes/Work SSD", chosen: "/Volumes/Work SSD", missing: false };
+const GONE = { folder: "/Users/me/Downloads", chosen: "/Volumes/Work SSD", missing: true };
+function folderShell(now) {
+  const said = { now, picked: SSD, asked: [], report: null };
+  return {
+    said,
+    onDownloadDone: (fn) => { said.report = fn; },
+    downloadFolder: async () => said.now,
+    pickDownloadFolder: async () => { said.asked.push("pick"); return (said.now = said.picked); },
+    resetDownloadFolder: async () => { said.asked.push("reset"); return (said.now = DOWNLOADS); },
+  };
+}
+const DATED = { ...STEMS, day: "2026-09-30" };
+const landedAt = async (shell, path) => { shell.said.report({ state: "completed", path }); await settle(); };
+
+test("in the desktop shell the line ends in Change, and in Use default once a folder is picked", async () => {
+  const shell = folderShell(DOWNLOADS);
+  const h = harness({ ctx: DATED, shell });
+  await h.api.open();
+  assert.equal(h.$("exportWhere").textContent, "Saved in Downloads / 2026-09-30 / clip");
+  assert.equal(h.$("exportFolder").hidden, false);
+  assert.equal(h.$("exportFolderResetWrap").hidden, true, "nothing picked, nothing to go back from");
+  await h.$("exportFolderPick").listeners.click();
+  assert.deepEqual(shell.said.asked, ["pick"]);
+  // The dated folder goes inside the picked one, as inside Downloads.
+  assert.equal(h.$("exportWhere").textContent, "Saved in Work SSD / 2026-09-30 / clip");
+  assert.equal(h.$("exportFolderResetWrap").hidden, false);
+  // The picker closed without a folder: the shell answers what it had.
+  shell.said.picked = SSD;
+  await h.$("exportFolderPick").listeners.click();
+  assert.equal(h.$("exportWhere").textContent, "Saved in Work SSD / 2026-09-30 / clip");
+  await h.$("exportFolderReset").listeners.click();
+  assert.deepEqual(shell.said.asked, ["pick", "pick", "reset"]);
+  assert.equal(h.$("exportWhere").textContent, "Saved in Downloads / 2026-09-30 / clip");
+  assert.equal(h.$("exportFolderResetWrap").hidden, true);
+  // Every opening asks again: the shell keeps the folder, the dialog does not.
+  shell.said.now = SSD;
+  await h.api.open();
+  assert.equal(h.$("exportWhere").textContent, "Saved in Work SSD / 2026-09-30 / clip");
+  // The kinds without a dated folder on their line name the folder alone.
+  const draft = harness({ ctx: { kind: "draft", where: "Saved in Downloads" }, shell: folderShell(SSD) });
+  await draft.api.open();
+  assert.equal(draft.$("exportWhere").textContent, "Saved in Work SSD");
+});
+
+test("in Korean the line reads as the approved mock, in all three states", async (t) => {
+  await inKorean(t);
+  const where = { day: "2026-10-22", project: "paris_steps" };
+  const ctx = { ...STEMS, ...where, where: say("Saved in Downloads / {day} / {project}", where) };
+  const ssd = { chosen: "/Volumes/작업용 SSD", missing: false };
+  assert.equal(whereLine(ctx, DOWNLOADS), "다운로드 폴더의 2026-10-22 / paris_steps에 저장해요");
+  assert.equal(whereLine(ctx, ssd), "작업용 SSD의 2026-10-22 / paris_steps에 저장해요");
+  assert.equal(whereLine(ctx, { ...ssd, missing: true }),
+    "작업용 SSD 폴더를 찾을 수 없어요. 다운로드 폴더의 2026-10-22 / paris_steps에 저장해요");
+  assert.equal(whereLine({ kind: "erase", where: say("Saved in Downloads") }, ssd), "작업용 SSD에 저장해요");
+  assert.equal(say("Change"), "바꾸기");
+  assert.equal(say("Use default"), "기본으로");
+  // And once a file is in: named from the picked folder's own name.
+  const shell = folderShell({ folder: ssd.chosen, ...ssd });
+  const h = harness({ ctx, shell });
+  await h.api.open();
+  h.go();
+  await settle();
+  await landedAt(shell, "/Volumes/작업용 SSD/2026-10-22/paris_steps/dub_ko.mp4");
+  assert.equal(h.$("exportWhere").textContent, "dub_ko.mp4 파일을 작업용 SSD의 2026-10-22 / paris_steps에 저장했어요");
+});
+
+test("files saved in the picked folder are named from it: a dubbing's, the app's own and loose sounds", async () => {
+  const shell = folderShell(SSD);
+  const h = harness({ ctx: DATED, shell, stored: { [TICKS_KEY]: '{"dub":["video","voice"]}' } });
+  await h.api.open();
+  h.go();
+  await settle();
+  await landedAt(shell, "/Volumes/Work SSD/2026-09-30/clip/dub_ko.mp4");
+  await landedAt(shell, "/Volumes/Work SSD/2026-09-30/clip/clip_voice.mp3");
+  assert.equal(h.$("exportWhere").textContent, "Saved 2 files to Work SSD / 2026-09-30 / clip");
+  // A draft's file, which the app writes itself (app/downloads.py save_folder).
+  const draft = harness({ ctx: { kind: "draft", where: "Saved in Downloads",
+    save: async () => "/Volumes/Work SSD/2026-09-30/clip/clip.mp4" }, shell: folderShell(SSD) });
+  await draft.api.open();
+  draft.go();
+  await settle();
+  assert.equal(draft.$("exportWhere").textContent, "Saved clip.mp4 to Work SSD / 2026-09-30 / clip");
+  // Separated sounds, loose in the folder.
+  const sep = folderShell(SSD);
+  const s = harness({ ctx: { kind: "separate", jobId: "S1", project: "clip", where: "Saved in Downloads" }, shell: sep });
+  await s.api.open();
+  assert.equal(s.$("exportWhere").textContent, "Saved in Work SSD");
+  s.go();
+  await settle();
+  await landedAt(sep, "/Volumes/Work SSD/clip_voice.mp3");
+  await landedAt(sep, "/Volumes/Work SSD/clip_background.mp3");
+  assert.equal(s.$("exportWhere").textContent, "Saved 2 files to Work SSD");
+});
+
+test("a picked folder that is gone is said once on the line, before and after the files go to Downloads", async () => {
+  const shell = folderShell(GONE);
+  const h = harness({ ctx: DATED, shell, stored: { [TICKS_KEY]: '{"dub":["video","audio"]}' } });
+  await h.api.open();
+  assert.equal(h.$("exportWhere").textContent, "Cannot find Work SSD. Saved in Downloads / 2026-09-30 / clip");
+  assert.equal(h.$("exportFolderResetWrap").hidden, false, "Use default is there to stop asking for it");
+  h.go();
+  await settle();
+  await landedAt(shell, "/Users/me/Downloads/2026-09-30/clip/dub_ko.mp4");
+  await landedAt(shell, "/Users/me/Downloads/2026-09-30/clip/dub_ko.mp3");
+  assert.equal(h.$("exportWhere").textContent, "Cannot find Work SSD. Saved 2 files to Downloads / 2026-09-30 / clip");
+  // Taken out after the dialog opened: the save is what finds it gone.
+  const later = folderShell(SSD);
+  const l = harness({ ctx: DATED, shell: later });
+  await l.api.open();
+  assert.equal(l.$("exportWhere").textContent, "Saved in Work SSD / 2026-09-30 / clip");
+  l.go();
+  await settle();
+  later.said.now = GONE;
+  await landedAt(later, "/Users/me/Downloads/2026-09-30/clip/dub_ko.mp4");
+  assert.equal(l.$("exportWhere").textContent, "Cannot find Work SSD. Saved dub_ko.mp4 to Downloads / 2026-09-30 / clip");
+  // Back in: the next save goes there and says nothing more about it.
+  later.said.now = SSD;
+  l.go();
+  await settle();
+  await landedAt(later, "/Volumes/Work SSD/2026-09-30/clip/dub_ko.mp4");
+  assert.equal(l.$("exportWhere").textContent, "Saved dub_ko.mp4 to Work SSD / 2026-09-30 / clip");
+});
+
+test("Change and Use default stand aside while files go out, and are not there without the shell's folder", async () => {
+  const shell = folderShell(SSD);
+  const h = harness({ ctx: DATED, shell });
+  await h.api.open();
+  h.go();
+  await settle();
+  assert.equal(h.$("exportFolder").hidden, true);
+  await h.$("exportFolderPick").listeners.click();
+  await h.$("exportFolderReset").listeners.click();
+  assert.deepEqual(shell.said.asked, [], "no picker while a file is on its way");
+  await landedAt(shell, "/Volumes/Work SSD/2026-09-30/clip/dub_ko.mp4");
+  assert.equal(h.$("exportFolder").hidden, false);
+  // A browser, or a shell from before the choice: the line as it was, and no words after it.
+  for (const without of [null, { onDownloadDone: () => {} }]) {
+    const plain = harness({ ctx: DATED, shell: without });
+    await plain.api.open();
+    assert.equal(plain.$("exportFolder").hidden, true);
+    assert.equal(plain.$("exportWhere").textContent, "Saved in Downloads / 2026-09-30 / clip");
+    await plain.$("exportFolderPick").listeners.click();
+  }
+});
+
+test("the dialog says what comes out under its title, and its two words are words that wrap together", async (t) => {
+  const page = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
+  const dialog = page.slice(page.indexOf('<div class="modal-overlay" id="exportOverlay">'));
+  assert.match(dialog, /<div class="modal-inner">\s*(<!--[^]*?-->\s*)?<p class="export-headline" data-i18n>Each checked row becomes one file<\/p>\s*<div class="export-list" id="exportList"><\/div>/);
+  assert.match(dialog, /<p class="export-where"><span id="exportWhere"><\/span><span id="exportFolder" hidden> · <span class="export-links"><button type="button" class="erase-link" id="exportFolderPick" data-i18n>Change<\/button><span id="exportFolderResetWrap" hidden> · <button type="button" class="erase-link" id="exportFolderReset" data-i18n>Use default<\/button><\/span><\/span><\/span><\/p>/);
+  const css = readFileSync(new URL("../../static/css/app.css", import.meta.url), "utf8");
+  assert.match(css, /\.export-where \.export-links \{ white-space: nowrap; \}/);
+  assert.match(css, /\.export-where \.erase-link \{ font-size: inherit; \}/);
+  await inKorean(t);
+  assert.equal(say("Each checked row becomes one file"), "체크한 줄마다 파일이 하나씩 나와요");
 });
