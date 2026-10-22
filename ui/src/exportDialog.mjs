@@ -1,6 +1,7 @@
-// The Export dialog: the one way to save anything out of a project. Export,
-// at the right end of the video panel's tab row, opens it on whatever is on
-// screen, and its rows are what that has to hand back:
+// The Export dialog, called Download on screen (owner, 2026-10-22; the ids
+// and names in the code kept "export"): the one way to save anything out of
+// a project. Download, at the right end of the video panel's tab row, opens
+// it on whatever is on screen, and its rows are what that has to hand back:
 //
 //   a draft            Video (the kept parts joined), Audio only
 //   a finished dubbing under three headings (owner, 2026-10-22): Video --
@@ -12,7 +13,7 @@
 //   separated audio    Voice, Background (the Audio tab's two sounds), both
 //                      ticked until the user says otherwise
 //
-// Every row has a checkbox; the foot's Export saves each ticked row in turn
+// Every row has a checkbox; the foot's Download saves each ticked row in turn
 // (owner, 2026-09-30). The ticks are remembered for each of the three kinds,
 // and the first row is ticked until the user says otherwise. A saved row shows
 // a check at its right end and the line under the rows says where it went.
@@ -33,7 +34,7 @@
 // original video are what they are, whatever the ratio.
 //
 // The elements this file touches: #exportOverlay, #exportList, #exportWhere,
-// #exportCloseX, #exportCloseBtn (Cancel), #exportGoBtn (Export).
+// #exportCloseX, #exportCloseBtn (Cancel), #exportGoBtn (Download).
 import { downloadsLabel, escapeHtml, errorText } from "./format.mjs";
 import { withRatio } from "./ratio.mjs";
 import { t } from "./i18n.mjs";
@@ -272,7 +273,7 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
     const r = await fetchFn(row.href, { signal: stop.signal });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
-      throw new Error(body.detail || t("Could not export this file"));
+      throw new Error(body.detail || t("Could not download this file"));
     }
     stop.abort();   // it is there; the download itself reads it
     const report = shell && shell.onDownloadDone
@@ -293,7 +294,7 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
     let last = "";
     try {
       for (const [i, row] of todo.entries()) {
-        where.textContent = t("Exporting {i} of {n}…", { i: i + 1, n: todo.length });
+        where.textContent = t("Downloading {i} of {n}…", { i: i + 1, n: todo.length });
         last = await saveOne(row);
         saved.push(row.id);
         paint();

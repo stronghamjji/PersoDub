@@ -29,7 +29,7 @@ A project opens on the work screen: tabs on the left (**Dubbing**, **Separate
 audio**, **Captions**, **Erase**, between **Home** and **New project**), the video in
 the middle, the **Dub Agent** panel on the right and the timeline under all three.
 Along the top is the bar with the project's name, **Settings** and the three pane
-buttons that show or hide the left panel, the timeline and the Dub Agent. **Export**
+buttons that show or hide the left panel, the timeline and the Dub Agent. **Download**
 is at the right end of the tabs above the video.
 
 ## Dubbing
@@ -64,7 +64,7 @@ the Perso API, depending on the **Dubbing model** below ([full list](languages.m
 
 From here:
 
-- **Export**, at the right end of the tabs above the video, saves the kept part as a
+- **Download**, at the right end of the tabs above the video, saves the kept part as a
   video, or as audio only, into Downloads.
 - The **Separate audio** and **Erase** tabs work on the same video.
 - **Start dubbing** begins the dub.
@@ -118,7 +118,7 @@ When the job finishes it opens on the screen the app is really about: the script
 - **The timeline** underneath has a lane for the video, one for the original, one
   for the translation and one for the captions. A bar that runs past its slot is
   marked.
-- **Export**, at the right of **Original** and **Dubbed**, saves the dubbed video, with
+- **Download**, at the right of **Original** and **Dubbed**, saves the dubbed video, with
   or without the subtitles burned in, the dubbed audio, the original voice and the
   background, the translated `.srt`, and, for a job that started from a link, the
   original video (each when the job has one).
@@ -128,11 +128,11 @@ When the job finishes it opens on the screen the app is really about: the script
 A narrow window folds columns away rather than cutting words in half. The end of each
 time slot goes first, then the original line, so the translation always stays whole.
 
-### Export
+### Download
 
-**Export** opens a dialog with a row per file, each with a tick box; a dubbing's rows
+**Download** opens a dialog with a row per file, each with a tick box; a dubbing's rows
 stand under three headings, **Video**, **Subtitles** and **Audio**. The dialog's own
-**Export** button saves the ticked rows. Sound rows can be MP3 or WAV. The app saves
+**Download** button saves the ticked rows. Sound rows can be MP3 or WAV. The app saves
 without asking, into `Downloads` / the day the job ran / the project's name; a saved
 row gets a check, and the line under the rows says where it went.
 
@@ -151,7 +151,7 @@ is slow work, minutes for every minute of video, because every frame in the band
 to be painted over. **Erase** starts it.
 
 When it finishes, **Original** and **Erased** above the picture swap between the two
-so you can see what changed. **Export**, at the right of the two, saves the clean video, and
+so you can see what changed. **Download**, at the right of the two, saves the clean video, and
 **Dubbing** opens it as a new project to dub. If something goes wrong, the panel says
 why it stopped, **Try again** runs it again on the same video and the same box, and
 **Raw log** has the detail.
@@ -175,7 +175,7 @@ When it is done there are two rows, **Voice** (only the speech) and **Background
 (music, effects and noise, everything except speech). Each has a play button and its
 waveform, and the timeline gets a lane for each, which can be muted. A short note
 beside each name says what it holds. **Dubbing** goes to the Dubbing tab, where a dub
-of the same cut reuses these two files instead of separating again. **Export** saves
+of the same cut reuses these two files instead of separating again. **Download** saves
 Voice and Background as MP3 or WAV into Downloads.
 The files stay in the project folder as `vocals.wav` and `background.wav`.
 
@@ -189,7 +189,7 @@ top ("Paste a YouTube, TikTok or Reels link"). Paste a link and it opens as a ne
 project on the Dubbing tab, where the video is fetched onto your computer with the
 percentage on screen.
 
-From there **Export** > **Video** saves the file, in the shape the **Ratio** button is
+From there **Download** > **Video** saves the file, in the shape the **Ratio** button is
 set to. The same video can also be dubbed, separated or have its subtitles erased
 without fetching it again.
 

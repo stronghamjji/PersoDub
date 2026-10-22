@@ -255,7 +255,7 @@ test("Export saves a draft's ticked rows in turn and says where they went", asyn
   await settle();
   // The video goes out in the project's ratio; the sound has no picture.
   assert.deepEqual(asked, [{ ratio: "9:16" }]);
-  assert.equal(h.$("exportWhere").textContent, "Exporting 1 of 2…");
+  assert.equal(h.$("exportWhere").textContent, "Downloading 1 of 2…");
   assert.equal(h.$("exportGoBtn").disabled, true);
   assert.equal(h.$("exportCloseBtn").disabled, true);
   // A second press, a tick or a way out while it works changes nothing.
@@ -267,7 +267,7 @@ test("Export saves a draft's ticked rows in turn and says where they went", asyn
   release();
   await settle();
   assert.deepEqual(asked, [{ ratio: "9:16" }, { audio: "mp3" }]);
-  assert.equal(h.$("exportWhere").textContent, "Exporting 2 of 2…");
+  assert.equal(h.$("exportWhere").textContent, "Downloading 2 of 2…");
   assert.deepEqual(h.saved(), ["video"]);
   release();
   await settle();
@@ -341,7 +341,7 @@ test("a dubbing's ticked rows are made, then downloaded one after another as the
   await settle();
   assert.deepEqual(h.asked, ["/api/dub/result/J1?v=2"], "asked for first, so it is there to download");
   assert.deepEqual(h.followed, [["/api/dub/result/J1?v=2", "dub_ko.mp4"]]);
-  assert.equal(h.$("exportWhere").textContent, "Exporting 1 of 3…");
+  assert.equal(h.$("exportWhere").textContent, "Downloading 1 of 3…");
   const dir = "/Users/me/Downloads/2026-09-30/clip/";
   report({ state: "completed", filename: "dub_ko_002.mp4", path: dir + "dub_ko_002.mp4" });
   await settle();
@@ -350,7 +350,7 @@ test("a dubbing's ticked rows are made, then downloaded one after another as the
   report({ state: "completed", filename: "clip_voice.wav", path: dir + "clip_voice.wav" });
   await settle();
   assert.deepEqual(h.followed[2], ["/api/dub/result/J1/stem/background?format=wav", "clip_background.wav"]);
-  assert.equal(h.$("exportWhere").textContent, "Exporting 3 of 3…");
+  assert.equal(h.$("exportWhere").textContent, "Downloading 3 of 3…");
   report({ state: "completed", filename: "clip_background.wav", path: dir + "clip_background.wav" });
   await settle();
   assert.deepEqual(h.saved(), ["video", "voice", "background"]);

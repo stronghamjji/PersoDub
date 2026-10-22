@@ -101,7 +101,7 @@ test("Save video blinks the banner's link field twice, puts the caret in it and 
   assert.equal($("linkCard").hidden, false);
   assert.equal($("linkCard").classList.contains("error"), false);
   assert.equal($("linkCard").innerHTML,
-    '<p class="lc-msg">Paste a link and the video is fetched to this computer. Then Export saves it.</p>');
+    '<p class="lc-msg">Paste a link and the video is fetched to this computer. Then Download saves it.</p>');
   // The mark is off once the two blinks are over...
   t.mock.timers.tick(999);
   assert.equal($("homeBannerLink").classList.contains("ask"), true);

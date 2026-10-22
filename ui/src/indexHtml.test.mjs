@@ -1069,13 +1069,13 @@ test("the confirms keep their corner X for its listeners, but hidden", () => {
 // button stands at the right end of the finished panel's tab row in the
 // markup, and each of the three video panels' rows has an id to move it to
 // (ui/src/workFrame.mjs, which is tested there).
-test("Export is one button, at the right end of the video panel's tab row", () => {
+test("Download is one button, at the right end of the video panel's tab row", () => {
   const html = readPage();
   assert.equal(html.match(/id="exportBtn"/g).length, 1, "one Export button on the page");
   const pane = (id, next) => html.slice(html.indexOf(`<div class="video-pane" id="${id}">`), html.indexOf(next));
   const done = pane("videoPane", 'id="runPane"');
   const row = done.slice(done.indexOf('<div class="video-tabs" id="videoTabsNormal">'), done.indexOf('<div class="video-body">'));
-  assert.match(row, /id="vtabDubbed">Dubbed<\/button>\s*<!--[^]*?-->\s*<button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Export<\/button>\s*<\/div>\s*$/,
+  assert.match(row, /id="vtabDubbed">Dubbed<\/button>\s*<!--[^]*?-->\s*<button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Download<\/button>\s*<\/div>\s*$/,
     "last in the finished panel's tab row, after Original and Dubbed");
   assert.match(pane("runPane", 'id="erasePane"'), /<div class="video-tabs" id="runTabs">\s*<button class="vtab active" type="button">Original<\/button>/);
   assert.match(pane("erasePane", "<!-- ============ AGENT PANEL"), /<div class="video-tabs erase-tabs" id="eraseTabs">/);
@@ -1084,13 +1084,39 @@ test("Export is one button, at the right end of the video panel's tab row", () =
   assert.match(html, /\.video-tabs \{ flex: 0 0 auto; box-sizing: border-box; height: 42px; display: flex;/);
 });
 
-test("the Export dialog is rows to tick and a foot with Cancel and Export", () => {
+test("the Download dialog is rows to tick and a foot with Cancel and Download", () => {
   const html = readPage();
   // The rows themselves are ui/src/exportDialog.mjs, tested there; the page
   // opens the one dialog from the one button.
   assert.match(html, /\$\("exportBtn"\)\.addEventListener\("click", \(\) => exportDialog\.open\(\)\);/);
   assert.match(html, /\/\* === export === \*\//);
-  assert.match(html, /<button class="btn btn-secondary" id="exportCloseBtn" type="button">Cancel<\/button>\s*<button class="btn btn-primary" id="exportGoBtn" type="button">Export<\/button>/);
+  assert.match(html, /<button class="btn btn-secondary" id="exportCloseBtn" type="button">Cancel<\/button>\s*<button class="btn btn-primary" id="exportGoBtn" type="button">Download<\/button>/);
+});
+
+// The feature is called Download on screen (owner, 2026-10-22), 다운로드 in
+// Korean: the button, the dialog's title and its own button, the Audio tab's
+// way into it, the sentences it says while it works, and Help. The ids and
+// the code's names kept "export".
+test("Download is the feature's name on screen: its buttons, its dialog, its sentences and Help", () => {
+  const html = readPage();
+  for (const id of ["exportBtn", "audioExportBtn", "exportGoBtn"]) {
+    assert.match(html, new RegExp(`id="${id}" type="button"(?: hidden)?>Download</button>`), id);
+  }
+  assert.match(html, /<div class="modal export-modal"[^>]*>\s*<div class="modal-head">\s*<h2 data-i18n>Download<\/h2>/);
+  assert.doesNotMatch(html, />\s*Export\s*</, "no element says Export");
+  const words = readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8");
+  assert.ok(words.includes('["#exportGoBtn", t("Download")]'));
+  const help = "Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Download saves it, or dub it, separate it or erase it from there.";
+  assert.ok(html.includes(`<p>${help}</p>`) && words.includes(`t("${help}")`), "Help says Download");
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko.Download, "다운로드");
+  for (const key of ["Downloading {i} of {n}…", "Could not download this file", "Nothing to download yet", help,
+                     "Paste a link and the video is fetched to this computer. Then Download saves it."]) {
+    assert.match(ko[key], /다운로드/, key);
+  }
+  for (const gone of ["Export", "Exporting {i} of {n}…", "Could not export this file", "Nothing to export yet"]) {
+    assert.ok(!Object.hasOwn(ko, gone), `"${gone}" is said nowhere any more`);
+  }
 });
 
 // qa-fixes 3: a 1280px window with the Dub Agent open left the script pane

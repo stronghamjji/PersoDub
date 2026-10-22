@@ -507,7 +507,7 @@
                     <button data-i18n class="btn btn-outline btn-sm" id="audioBackBtn" type="button" hidden>Back</button>
                     <button data-i18n class="btn btn-primary btn-sm" id="audioRetryBtn" type="button" hidden>Try again</button>
                     <button data-i18n class="btn btn-outline btn-sm" id="audioDubBtn" type="button" hidden>Dubbing</button>
-                    <button data-i18n class="btn btn-primary btn-sm" id="audioExportBtn" type="button" hidden>Export</button>
+                    <button data-i18n class="btn btn-primary btn-sm" id="audioExportBtn" type="button" hidden>Download</button>
                     <button data-i18n class="btn btn-primary btn-sm" id="audioRunBtn" type="button" hidden>Separate</button>
                   </div>
                   <!-- The two sounds, played under the draft's video in its place. -->
@@ -612,7 +612,7 @@
                      beside the video, not among the window's own buttons
                      (owner, 2026-10-22). One button: ui/src/workFrame.mjs
                      moves it to the running and erase panels' rows. -->
-                <button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Export</button>
+                <button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Download</button>
               </div>
               <div class="video-body">
                 <div class="video-wrap" id="videoWrap">
@@ -895,7 +895,7 @@
 <div class="modal-overlay" id="exportOverlay">
   <div class="modal export-modal" style="width: min(420px, 92vw)">
     <div class="modal-head">
-      <h2 data-i18n>Export</h2>
+      <h2 data-i18n>Download</h2>
       <button class="modal-close" id="exportCloseX" type="button" aria-label="Close" data-i18n-aria-label="Close" hidden>
         <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
       </button>
@@ -912,7 +912,7 @@
     </div>
     <div class="modal-foot">
       <button class="btn btn-secondary" id="exportCloseBtn" type="button">Cancel</button>
-      <button class="btn btn-primary" id="exportGoBtn" type="button">Export</button>
+      <button class="btn btn-primary" id="exportGoBtn" type="button">Download</button>
     </div>
   </div>
 </div>
@@ -944,7 +944,7 @@
         <div class="help-item"><b>Dubbing</b><p>Voices a video in another language, in each speaker&#8217;s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.</p><div class="help-where">This computer (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).</div></div>
         <div class="help-item"><b>Separate audio</b><p>Splits the sound into Voice (only the speech) and Background (music, effects, noise). Save either one, or go on to Dubbing.</p><div class="help-where">This computer or Perso API.</div></div>
         <div class="help-item"><b>Erase subtitles</b><p>Takes subtitles burned into the picture out. Box them, press Erase, and dub the clean video.</p><div class="help-where">This computer. The eraser downloads the first time.</div></div>
-        <div class="help-item"><b>Save video</b><p>Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Export saves it, or dub it, separate it or erase it from there.</p><div class="help-where">This computer.</div></div>
+        <div class="help-item"><b>Save video</b><p>Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Download saves it, or dub it, separate it or erase it from there.</p><div class="help-where">This computer.</div></div>
         <div class="help-item"><b>Dub Agent</b><p>Ask in plain words, such as &#8220;Korean dubbing for this link&#8221; or &#8220;make line 9 fit&#8221;. It works through the same tools and shows each step.</p><div class="help-where">Claude Code, installed and signed in, or Codex, which the app can download and sign in.</div></div>
         <p class="help-links"><a href="#" id="helpGuide">User guide</a> · <a href="#" id="helpFaq">FAQ</a></p>
       </div>

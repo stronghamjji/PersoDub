@@ -44,7 +44,7 @@ export function pointAtLink($) {
   const card = $("linkCard");
   card.hidden = false;
   card.classList.remove("error");
-  card.innerHTML = `<p class="lc-msg">${t("Paste a link and the video is fetched to this computer. Then Export saves it.")}</p>`;
+  card.innerHTML = `<p class="lc-msg">${t("Paste a link and the video is fetched to this computer. Then Download saves it.")}</p>`;
   // The whole banner in view, not the field alone: brought to the nearest
   // edge, the field sat right under the top bar and the banner was hidden
   // above it (Windows, 2026-10-22).

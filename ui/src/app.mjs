@@ -2037,7 +2037,7 @@ $("exportBtn").addEventListener("click", () => exportDialog.open());
 // Why Export is dim, on its tip. Three places switch it on and off, so the tip
 // follows the button itself rather than each of them.
 new MutationObserver(() => {
-  $("exportBtn").title = $("exportBtn").disabled ? t("Nothing to export yet") : "";
+  $("exportBtn").title = $("exportBtn").disabled ? t("Nothing to download yet") : "";
 }).observe($("exportBtn"), { attributes: true, attributeFilter: ["disabled"] });
 
 // A button keeps the keyboard after the mouse presses it, and the timeline's
