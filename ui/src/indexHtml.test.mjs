@@ -1019,6 +1019,76 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
   assert.match(html, /onOpenSettings: \(\) => settings\.openSettings\("keys"\)/);
 });
 
+// Settings > Models: each group is a band the eye finds among the rows. A
+// heading in the rows' grey, then a band one shade off the panel, both went
+// unseen (owner, 2026-10-22, 12), so the step is held to a number: the band
+// at least 10 points of lightness (CIELAB L*) over the panel the rows sit on.
+test("a model group's band stands at least 10 points of lightness above its rows", () => {
+  const html = readPage();
+  const band = html.match(/\.set-panel \.model-group-head \{[^}]*\}/)[0];
+  assert.match(band, /background: var\(--secondary\)/);
+  assert.match(band, /border-top: 1px solid var\(--divider\)/);
+  assert.match(band, /font-size: 13px; font-weight: 600/);
+  // Edge to edge: out by the panel's own 24px sides (the Settings test above).
+  assert.match(band, /margin: 12px -24px 0; padding: 9px 24px/);
+  assert.match(html, /\.set-panel \{ flex: 1;[^}]*background: var\(--field\); \}/);
+  const token = (name) => html.match(new RegExp(`--${name}: #([0-9a-f]{6});`))[1];
+  const lightness = (hex) => {
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return y > 216 / 24389 ? 116 * Math.cbrt(y) - 16 : (24389 / 27) * y;
+  };
+  const step = lightness(token("secondary")) - lightness(token("field"));
+  assert.ok(step >= 10, `the band is only ${step.toFixed(1)} points over the rows`);
+});
+
+// The models dialog's line is two lines, the sentence and then the room left
+// with the memory (ui/src/modelsDialog.mjs joins them with a line break). The
+// stylesheet keeps that break, and the dialog is wider than the other confirms
+// so the second line fits whole in either language (owner, 2026-10-22, 5).
+test("the models dialog keeps its line break, and is wider than the other confirms", () => {
+  const html = readPage();
+  assert.match(html.match(/#mnLine \{[^}]*\}/)[0], /white-space: pre-line/);
+  const confirm = Number(html.match(/\.modal\.modal-alert \{ width: (\d+)px;/)[1]);
+  const en = Number(html.match(/\n\s*#modelsNeededOverlay \.modal\.modal-alert \{ width: (\d+)px; \}/)[1]);
+  const ko = Number(html.match(/html:lang\(ko\) #modelsNeededOverlay \.modal\.modal-alert \{ width: (\d+)px; \}/)[1]);
+  assert.equal(confirm, 280);
+  // Measured in Chrome with the app's fonts: the second line with four figures
+  // of room left is 351px of English and 299 of Korean, and the sides take 34.
+  assert.ok(en >= 351 + 34 && ko >= 299 + 34, `${en} and ${ko} are too narrow`);
+});
+
+// Settings > Privacy, Send job logs: what goes and where, for how long, what
+// never goes, and what it is for, a sentence a line (owner, 2026-10-22, 9).
+// It used to call the failed jobs stopped ones, and said nothing of where.
+test("Send job logs says what goes where, what never goes and why, a sentence a line", () => {
+  const html = readPage();
+  const hint = html.match(/<div class="settings-hint" id="reportsHint">([\s\S]*?)<\/div>/)[1];
+  const sentences = [...hint.matchAll(/<span data-i18n>([^<]*)<\/span>/g)].map((m) => m[1]);
+  assert.deepEqual(sentences, [
+    "Keeps a record of finished and failed jobs (masked logs, time per step, device ID) on a private dashboard for 30 days.",
+    "Only failed jobs go into a public GitHub issue, as a summary of the cause.",
+    "Titles, file names, links and dialogue are not sent.",
+    "What you send helps make PersoDub better.",
+  ]);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.deepEqual(sentences.map((s) => ko[s]), [
+    "끝난 작업과 실패한 작업의 기록(가린 로그, 단계별 시간, 기기 번호)을 비공개 대시보드에 30일 보관해요.",
+    "실패한 작업만 깃헙 공개 이슈에 원인 요약으로 올라가요.",
+    "제목·파일 이름·링크·대사는 안 보내요.",
+    "보내 주시면 PersoDub을 더 좋게 만드는 데 써요.",
+  ]);
+  // Each sentence starts a line of its own, and the label stays by the switch.
+  assert.match(html, /#reportsHint > span \{ display: block; \}/);
+  assert.match(html, /\.set-row:has\(> \.set-ctl > #reportsHint\) \{ align-items: start; \}/);
+  const old = "Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.";
+  for (const code of ["en", "ko"]) {
+    const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
+    assert.equal(Object.hasOwn(table, old), false, `the old sentence is still in ui.${code}.json`);
+  }
+});
+
 // Which step each key and the ChatGPT sign-in is for, a small grey line under
 // each like the Privacy tab's (owner, 2026-10-21). And the translator's own
 // lines point the local ones at the Gemini API, which says where its key goes.

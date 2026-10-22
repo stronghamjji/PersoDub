@@ -346,6 +346,13 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
       total.className = "model-size";
       total.textContent = `${gb(group.bytes)} GB`;
       head.append(title, total);
+      if (group.note) {
+        // What the group is there for, on a line under its name.
+        const note = document.createElement("span");
+        note.className = "model-group-note";
+        note.textContent = t(group.note);
+        head.append(note);
+      }
       list.append(head);
       for (const m of group.rows) {
         if (m.state === "ready") onDisk += m.bytes;
@@ -395,7 +402,12 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
         else if (m.state === "downloading") { btn.textContent = t("Cancel"); btn.onclick = () => cancelModel(m.id); }
         else if (m.state === "paused") { btn.textContent = t("Resume"); btn.onclick = () => downloadModel(m.id); }
         else { btn.textContent = t("Download"); btn.onclick = () => downloadModel(m.id); }
-        if ((m.state === "ready" || m.comes_with) && m.hint) {
+        // A program not here yet, with nothing else to say, says what it is
+        // for where "Ready" would stand: a bare "Ollama" under Required
+        // programs said nothing of why to download it (owner, 2026-10-22).
+        const forWhat = m.role === "pack" && m.state === "not_downloaded" && !status.textContent && !!m.hint;
+        if (forWhat) status.className = "settings-hint";
+        if ((m.state === "ready" || m.comes_with || forWhat) && m.hint) {
           // What it is for, after "Ready", where the group's title does not
           // say it all, and where a pack's part comes from. A row on its way
           // keeps the cell for its own line. Added last: a textContent set
@@ -427,12 +439,13 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
   // -- the dub-start dialog (dub_start's 409) ------------------------------
   function showModelsDialog(detail) {
     const d = dubStartDialog(detail, ramOk());
-    // The room left and the memory note ride on the one line a small confirm
-    // has; a computer short of memory gets its sentence in red, as the
-    // dialog's error instead: the download could not end in a dub here, so
-    // its button is off.
+    // The room left and the memory note go on a line of their own under the
+    // sentence: run on after it, they broke as "남은 / 공간" (owner,
+    // 2026-10-22, 5). A computer short of memory gets its sentence in red,
+    // as the dialog's error instead: the download could not end in a dub
+    // here, so its button is off.
     const facts = [d.free, d.ram && !d.ramLow ? d.ram : ""].filter(Boolean).join(" · ");
-    const line = facts ? `${d.line} ${facts}` : d.line;
+    const line = facts ? `${d.line}\n${facts}` : d.line;
     // The opening words are kept: a download that stops puts them back.
     pendingDub = { ids: d.ids, packs: d.packs, models: d.models, downloading: false, title: d.title, line };
     $("mnTitle").textContent = d.title;

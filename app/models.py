@@ -207,8 +207,7 @@ def shown_words(text: str) -> str:
     as it is, and so does a line added to the catalog without one here."""
     return {
         "Audio separation, speech-to-text, voices": t("Audio separation, speech-to-text, voices"),
-        "Needed to run the local translation models (Hunyuan, Gemma 3)":
-            t("Needed to run the local translation models (Hunyuan, Gemma 3)"),
+        "Local translation (Hunyuan, Gemma 3)": t("Local translation (Hunyuan, Gemma 3)"),
         "Subtitle eraser": t("Subtitle eraser"),
         "More careful": t("More careful"),
         "Small and quick": t("Small and quick"),

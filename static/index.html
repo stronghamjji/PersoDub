@@ -1245,8 +1245,15 @@
             <!-- Separate from the counts: this one carries the logs of finished
                  and failed jobs, so it is its own choice. Nothing personal
                  leaves -- keys and folder names are taken out first
-                 (desktop/src/report.js). -->
-            <div data-i18n class="settings-hint" id="reportsHint">Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.</div>
+                 (desktop/src/report.js). What goes, where, for how long, what
+                 never goes and what it is for, a sentence a line (owner,
+                 2026-10-22, 9). -->
+            <div class="settings-hint" id="reportsHint">
+              <span data-i18n>Keeps a record of finished and failed jobs (masked logs, time per step, device ID) on a private dashboard for 30 days.</span>
+              <span data-i18n>Only failed jobs go into a public GitHub issue, as a summary of the cause.</span>
+              <span data-i18n>Titles, file names, links and dialogue are not sent.</span>
+              <span data-i18n>What you send helps make PersoDub better.</span>
+            </div>
           </div>
         </div>
       </div>
