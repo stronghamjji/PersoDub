@@ -26,6 +26,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import codex_fetch, config, state
 from app.api import agent as agent_api
+from app.api import captions as captions_api
 from app.api import clips as clips_api
 from app.api import downloads as downloads_api
 from app.api import dub as dub_api
@@ -153,6 +154,7 @@ app.include_router(downloads_api.router)
 app.include_router(dub_api.router)
 app.include_router(erase_api.router)
 app.include_router(separate_api.router)
+app.include_router(captions_api.router)
 app.include_router(media_api.router)
 app.include_router(misc_api.router)
 app.include_router(models_api.router)

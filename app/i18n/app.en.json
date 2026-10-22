@@ -259,5 +259,7 @@
   "{name} is not installed.": "{name} is not installed.",
   "{stage} must be one of: {choices}": "{stage} must be one of: {choices}",
   "{translator} could not translate these lines ({reason}). Try again.": "{translator} could not translate these lines ({reason}). Try again.",
-  "{translator} translation failed.": "{translator} translation failed."
+  "{translator} translation failed.": "{translator} translation failed.",
+  "This subtitle file has no lines PersoDub can read.": "This subtitle file has no lines PersoDub can read.",
+  "Every line of this subtitle file starts after the video ends.": "Every line of this subtitle file starts after the video ends."
 }

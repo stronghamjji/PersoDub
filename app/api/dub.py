@@ -511,7 +511,8 @@ def dub_job_again(jid: str):
     job = state.job_store.get(jid)
     if job is None:
         raise HTTPException(status_code=404, detail=t("Unknown job: {jid}", jid=jid))
-    if kind_of(job) != JobKind.DUB:
+    # A video with the user's own subtitles is dubbed from its Dubbing tab.
+    if kind_of(job) not in (JobKind.DUB, JobKind.CAPTIONS):
         raise _not_a_dubbing(job, "do again")
     title = job.get("title") or job.get("project") or "video"
     original = downloads_api.reopen_original(job, title)

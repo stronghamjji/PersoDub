@@ -545,3 +545,23 @@ test("a plain draft's start names no project", async () => {
   await $("draftStartBtn").fire("click");
   assert.equal(log.started[0].fd.get("project_id"), null);
 });
+
+// A video with the user's own subtitles has no script (the Subtitle style
+// tab on its own): one card with the way to dub it, never the script table.
+test("a captions project's Dubbing tab is one card instead of the script; a dubbing keeps its script", () => {
+  clearDraft();
+  const { $, api, state } = harness();
+  state.jobId = "c1";
+  state.job = { id: "c1", kind: "captions", status: "done" };
+  api.paint();
+  assert.equal($("dubbingCaptions").hidden, false);
+  assert.equal($("dubbingPaneHead").hidden, true, "no Remake voices, no Translate again");
+  assert.equal($("scriptBox").hidden, true, "no script table");
+  assert.equal($("draftSetup").hidden, true);
+  state.jobId = "j1";
+  state.job = { id: "j1", status: "done" };
+  api.paint();
+  assert.equal($("dubbingCaptions").hidden, true);
+  assert.equal($("dubbingPaneHead").hidden, false);
+  assert.equal($("scriptBox").hidden, false);
+});

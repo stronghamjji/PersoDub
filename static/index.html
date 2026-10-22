@@ -338,6 +338,16 @@
                   <button data-i18n class="btn btn-primary" id="draftStartBtn" type="button">Start dubbing</button>
                 </div>
               </div>
+              <!-- A video with the user's own subtitles (the Subtitle style
+                   tab on its own): no script to show here, only the way to
+                   dub the same video in a new project (ui/src/draftSetup.mjs). -->
+              <div class="tab-empty" id="dubbingCaptions" hidden>
+                <div class="tab-empty-group">
+                  <div data-i18n class="tab-empty-sub">This project is a subtitle style job</div>
+                  <button data-i18n class="btn btn-primary btn-sm" id="dubbingCaptionsBtn" type="button">Prepare this video for dubbing</button>
+                  <div class="tab-empty-under"><div class="import-status error" id="dubbingCaptionsError"></div></div>
+                </div>
+              </div>
               <!-- The pane's name, the way the video pane has its tabs and the
                    timeline its heading row: three named boxes with a 6px gap
                    between them (layout G, user 2026-09-08). #scriptCount is
@@ -386,6 +396,31 @@
                    subtitle code owns the buttons' work. -->
               <div class="tab-body cap-tab" id="tabCaptions" role="tabpanel" hidden>
                 <div class="cap-empty" id="capEmpty" hidden></div>
+                <!-- No project open: a video and its subtitle file, made a
+                     project of their own (owner, 2026-10-22). The looks
+                     below stay on show, dim, until both are there. -->
+                <div class="tab-empty cap-alone" id="capAlone" hidden>
+                  <div class="tab-empty-group">
+                    <div id="capImportSlot"></div>
+                    <div class="erase-card video-card" id="capVideoCard" hidden></div>
+                    <div class="import-block cap-srt" id="capSrtZone" tabindex="0" role="button">
+                      <div class="import-head"><span class="import-plus"><svg class="lu" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span><span data-i18n>Subtitle file (.srt)</span></div>
+                      <div class="import-sub" id="capSrtSub"></div>
+                    </div>
+                    <input type="file" id="capVideoInput" accept="video/*" hidden>
+                    <input type="file" id="capSrtInput" accept=".srt" hidden>
+                    <div class="import-status" id="capImportStatus"></div>
+                  </div>
+                </div>
+                <!-- A project made of the two: which video, which file. -->
+                <div class="cap-files" id="capFiles" hidden>
+                  <div class="erase-card video-card" id="capFileVideo"></div>
+                  <div class="erase-card video-card">
+                    <div data-i18n class="k">Subtitle file (.srt)</div>
+                    <div class="m vc-name" id="capFileSrtName"></div>
+                    <div class="s" id="capFileSrtLines"></div>
+                  </div>
+                </div>
                 <div class="cap-main" id="capMain">
                   <div class="cap-side">
                     <div class="cap-pill"><span data-i18n>Captions</span> <svg class="lu" width="10" height="10" viewBox="0 0 24 24" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></div>

@@ -98,8 +98,12 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     importer.render();
     const d = getDraft();
     const active = !!d && !state.jobId;
-    const script = !!state.jobId;
+    // A video with the user's own subtitles has no script: one card instead,
+    // with the way to dub the same video.
+    const own = !!state.jobId && !!state.job && state.job.id === state.jobId && state.job.kind === "captions";
+    const script = !!state.jobId && !own;
     $("draftSetup").hidden = !active;
+    $("dubbingCaptions").hidden = !own;
     const head = $("dubbingPaneHead");
     if (head) head.hidden = !script;
     const box = $("scriptBox");
@@ -243,7 +247,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     $("draftError").textContent = "";
     // Nor is its link: the Import blocks kept the last address in their
     // field, so an empty project opened from Home showed it (review, 2026-10-09).
-    for (const id of ["dubbingLinkInput", "audioLinkInput"]) {
+    for (const id of ["dubbingLinkInput", "audioLinkInput", "capLinkInput"]) {
       const f = $(id);
       if (f) f.value = "";
     }

@@ -79,6 +79,8 @@ export const doingWord = (job) => (isErase(job) ? t("Erasing") : isSeparate(job)
 export function projectMeta(job, langName) {
   if (isErase(job)) return ERASE_META[job.status] || t("Erasing subtitles");
   if (isSeparate(job)) return SEPARATE_META[job.status] || t("Separating the audio");
+  // A video with the user's own subtitles (the Subtitle style tab on its own).
+  if (job.kind === "captions") return t("Subtitle style");
   const langs = `${langName(job.source_lang) || t("Auto")} → ${langName(job.language_code) || t("Script")}`;
   const length = job.trim ? fmtLength(job.trim.end - job.trim.start) : "";
   return [langs, length].filter(Boolean).join(" · ");

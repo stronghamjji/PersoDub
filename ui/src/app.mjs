@@ -41,7 +41,7 @@ import { initWorkFrame } from "./workFrame.mjs";
 import { initPlayerFoot, clockLine } from "./playerFoot.mjs";
 import { initDraftImport } from "./draftImport.mjs";
 import { initAudioTab } from "./audioTab.mjs";
-import { openSeparated } from "./dubApi.mjs";
+import { openSeparated, importCaptions } from "./dubApi.mjs";
 import { initNewProjectWindow } from "./newProjectWindow.mjs";
 import { initDraftSetup } from "./draftSetup.mjs";
 import { initLanguageRow } from "./languageRow.mjs";
@@ -883,7 +883,7 @@ initNewProjectWindow({
 function emptyImportLink() {
   if (state.jobId) return null;
   const tab = document.body.dataset.screen === "erase" ? "erase" : leftTabs.current();
-  const id = { dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink" }[tab];
+  const id = { dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink", captions: "capLink" }[tab];
   return id && $(`${id}Input`).offsetParent ? id : null;
 }
 // A new draft opened from wherever the person stands -- a dubbing's
@@ -895,8 +895,10 @@ function openDraftHere(source, opts, project = null) {
   // resetForNewJob passes through Home, which forgets the dub to go back
   // to: note it first and put it back after.
   const from = state.jobId || null;
-  // From an erased video the way back is to that erase, not to a dubbing.
-  const fromErase = document.body.dataset.screen === "erase";
+  // From an erased video the way back is to that erase, not to a dubbing;
+  // the same from a video with the user's own subtitles.
+  const fromErase = document.body.dataset.screen === "erase"
+    || (!!state.job && state.job.id === from && state.job.kind === "captions");
   resetForNewJob();
   state.draftFromJob = from;
   state.draftBackTip = fromErase ? "Back" : "Back to the dubbing";
@@ -1825,7 +1827,8 @@ async function handleJobUpdate(job, { opened = false } = {}) {
   // which is the case that produced the empty second report: a job's log is
   // not saved to disk, so after a restart there is nothing left to send and
   // the relay files the blank as a failure of its own (2026-09-18).
-  if (!countedOnce(job.id)) {
+  // A video with the user's own subtitles is not a dubbing to count.
+  if (job.kind !== "captions" && !countedOnce(job.id)) {
     window.persodubShell?.countDub?.(job.status, (job.logs || []).slice(1).slice(-6).join("\n"), job.id);
   }
 
@@ -2051,6 +2054,13 @@ async function exportContext() {
   }
   const job = state.job;
   if (!job) return null;
+  // A video with the user's own subtitles: that video in the look picked, and the file.
+  if (job.kind === "captions") {
+    const { preset, query } = subtitles.exportParams();
+    return { kind: "captions", jobId: job.id, ratio, where: whereDownloadsGo(job),
+             subtitled: { href: `/api/dub/result/${job.id}/subtitled?preset=${preset}${query}&download=1`,
+                          name: `video-sub-${preset}.mp4` } };
+  }
   // The subtitles are only offered when there are some (an older job may have
   // none). Asked with HEAD: whether the file exists is the whole question, and
   // fetching it to find out downloaded the subtitles nobody had asked for yet.
@@ -2187,7 +2197,36 @@ const subtitles = initSubtitleOverlay({
   },
   getDoneSource: donePlayer.getDoneSource,
   showVideoSource: donePlayer.showVideoSource,
+  // The Captions tab with no project open: the video comes in as the draft,
+  // and the video with its subtitle file is opened as a finished project,
+  // the way Projects opens a dub, on this tab.
+  alone: {
+    importSource: (source) => draftImport.importSource(source),
+    say: (text, isError) => draftImport.say(text, isError),
+    upload: (downloadId, file) => importCaptions({ downloadId, file }),
+    openJob: async (jid) => {
+      draftBecameJob((getDraft() || {}).downloadId);
+      projects.renderHistory().catch(() => {});
+      await resumeJob(jid);
+      leftTabs.show("captions");
+    },
+  },
 });
+// A video with the user's own subtitles, on its Dubbing tab: the same video
+// held again (POST /api/dub/jobs/{id}/again) and opened as a new project to dub.
+$("dubbingCaptionsBtn").addEventListener("click", async () => {
+  const jid = state.jobId;
+  $("dubbingCaptionsError").textContent = "";
+  try {
+    const src = await dubAgainSource(jid);
+    if (state.jobId !== jid) return;
+    openDraftHere({ downloadId: src.download_id, name: src.title, duration: src.duration_sec }, { tab: "dubbing" });
+  } catch (e) {
+    $("dubbingCaptionsError").textContent = errorText(e);
+  }
+});
+// Come to with no project open, the tab draws its own way in.
+$("leftTabs").addEventListener("click", () => subtitles.paintCaptions());
 
 // ---------------- Ratio and Preview ----------------
 // The two buttons at the right of the player's foot (ui/src/ratio.mjs): the
@@ -2266,6 +2305,7 @@ const timeline = initTimelineUi({
   paintPlayhead: () => (onEraseTab() ? paintErasePlayhead() : donePlayer.paintPlayhead()),
   toggleDonePlay: () => (onEraseTab() ? toggleErasePlay() : donePlayer.toggleDonePlay()),
   markClippedNames: projects.markClippedNames,
+  ownSubtitles: () => !!state.job && state.job.id === state.jobId && state.job.kind === "captions",
 });
 // The keyboard, the observer that re-measures the track and the window resize
 // that puts the remembered pane sizes back -- everything that listens outside

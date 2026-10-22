@@ -164,12 +164,19 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
     tab.addEventListener("click", () => showVideoSource(tab.dataset.src));
   }
 
+  // A video with the user's own subtitles (kind "captions") is one file:
+  // only the Original tab, lit, and the subtitles stay over it (the player
+  // keeps the "dubbed" source, the one they are drawn over).
+  const ownSubtitles = () => !!state.job && state.job.id === state.jobId && state.job.kind === "captions";
+
   // Which of the two tabs is lit. Three places change doneSource, and every one
   // of them has to say so on screen.
   function paintVideoTabs() {
+    const one = ownSubtitles();
     for (const tab of document.querySelectorAll("#videoPane .vtab")) {
-      tab.classList.toggle("active", tab.dataset.src === doneSource);
+      tab.classList.toggle("active", tab.dataset.src === (one ? "original" : doneSource));
     }
+    $("vtabDubbed").hidden = one;
     // Before dubbing there is nothing behind the Dubbing tab: pressed, it did
     // nothing at all and said nothing. Off until there is a dubbed video, with
     // the same words the Captions tab uses (2026-09-30).
@@ -183,6 +190,7 @@ export function initDonePlayer({ $, state, doneVideo, timeline }) {
   // moment the src is set, and a seek into a file that is not there lands nowhere.
   // Already on that source, there is nothing to wait for.
   function showVideoSource(which) {
+    if (ownSubtitles()) which = "dubbed";
     if (!state.job || which === doneSource) return Promise.resolve();
     const at = doneVideo.currentTime;
     const wasPlaying = !doneVideo.paused;
