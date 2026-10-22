@@ -355,8 +355,7 @@ test("applyEngineAvailability: a voice engine that failed to start is a warning 
   const failed = { state: "failed", message: "The voice engine is not running because it could not start." };
   const av = { ...ALL_AVAILABLE, local_engines: { voice: failed, translation: { state: "running", message: "" } } };
   assert.equal(applyEngineAvailability(av, { translate: "chatgpt", stt: "local", dubMode: "local" }).warning,
-    "The voice engine is off. This computer cannot dub until it starts.\n"
-    + "The voice engine is not running because it could not start.");
+    "The voice engine is not running because it could not start.");
   // Perso does the whole dub: it needs no voice engine here.
   assert.equal(applyEngineAvailability(av, { translate: "chatgpt", stt: "local", dubMode: "perso" }).warning, null);
   // Starting, running or not installed has its own way of being told.
@@ -389,7 +388,7 @@ test("applyEngineAvailability: a computer whose memory makes this dub slow says 
   assert.equal(applyEngineAvailability(av, { translate: "gemma", dubMode: "perso" }).warning, null);
   // Under a failed voice engine, one line each.
   const both = { ...av, local_engines: { voice: { state: "failed", message: "Off." } } };
-  assert.equal(applyEngineAvailability(both, { translate: "gemma", dubMode: "local" }).warning.split("\n").length, 3);
+  assert.equal(applyEngineAvailability(both, { translate: "gemma", dubMode: "local" }).warning.split("\n").length, 2);
 });
 
 test("applyEngineAvailability: a missing local Gemma is neither disabled nor switched away", () => {

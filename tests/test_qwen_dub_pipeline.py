@@ -227,6 +227,22 @@ def test_local_separation_failure_aborts_job_with_no_fallback(monkeypatch, tmp_p
         assert "Check the video file." in str(e)
 
 
+def test_a_separation_that_ran_out_of_memory_names_resume(monkeypatch, tmp_path):
+    class _Full(_FailingSeparationEngine):
+        def separate(self, video_path, out_dir):
+            raise RuntimeError("local separation was killed by the operating system, out of memory")
+
+    monkeypatch.setattr(pipeline, "SeparationEngine", _Full)
+    video, out, srt = _write_inputs(tmp_path)
+    with pytest.raises(RuntimeError) as e:
+        pipeline.run_dub(video_path=video, out_path=out, srt_path=srt,
+                         language="Korean", language_code="ko",
+                         qwen_engine=_FakeQwenEngine(), log=[].append)
+    assert str(e.value).startswith("Voice separation failed on this computer. Dubbing stopped because this "
+                                   "computer ran out of memory. Close other programs and press Resume to go "
+                                   "on from where it stopped. (")
+
+
 def test_missing_separation_parts_name_demucs(monkeypatch, tmp_path):
     from app.run_errors import PartsMissing
 

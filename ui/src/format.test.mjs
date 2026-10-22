@@ -5,7 +5,7 @@
 // Run with: node --test ui/src/format.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { modKey, plainFailure, rawLogLines, restartFailure, fmtLength, videoCard, videoCardHtml } from "./format.mjs";
+import { modKey, plainFailure, rawLogLines, restartFailure, restartRanOutOfMemory, fmtLength, videoCard, videoCardHtml } from "./format.mjs";
 import {
   fmtClock,
   fmtClockTenths,
@@ -202,7 +202,11 @@ test("a failure's plain sentence is shown, and a program's own words are not", (
 test("why the voice engine did not start again is said in plain words, never the engine's own line", () => {
   // Issue #187's engine, as the shell hands it back (desktop/src/packIpc.js).
   assert.equal(restartFailure("Installed, but it could not start: OSError: �� �۾��� �Ϸ��ϱ� ���� ����¡ ������ �ʹ� �۽��ϴ�. (os error 1455)"),
-    "Starting it again did not work: this computer ran out of memory.");
+    "Starting it again did not work because there is still not enough memory. Close more programs or restart "
+    + "your computer. Dubbing with the Perso API uses almost no memory.");
+  // That one is said on its own, without the refusal above it (A37).
+  assert.ok(restartRanOutOfMemory("Installed, but it could not start: MemoryError"));
+  assert.ok(!restartRanOutOfMemory("Installed, but it could not start: RuntimeError: boom"));
   assert.equal(restartFailure("Installed, but it could not start: Health check timed out after 300000ms: http://127.0.0.1:5/health"),
     "Starting it again did not work: it took too long to start.");
   // The shell's own sentence is said as it is.

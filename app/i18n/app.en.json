@@ -42,6 +42,7 @@
   "Cross-origin requests are not allowed": "Cross-origin requests are not allowed",
   "Dubbing is running right now. Wait for it to finish, then remove the model.": "Dubbing is running right now. Wait for it to finish, then remove the model.",
   "Dubbing needs 8 GB of memory on this computer.": "Dubbing needs 8 GB of memory on this computer.",
+  "Dubbing stopped because this computer ran out of memory. Close other programs and press Resume to go on from where it stopped.": "Dubbing stopped because this computer ran out of memory. Close other programs and press Resume to go on from where it stopped.",
   "Enter a Perso API key to see its workspaces": "Enter a Perso API key to see its workspaces",
   "Gemini rejected the API key. Open Settings and check the key.": "Gemini rejected the API key. Open Settings and check the key.",
   "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset.": "Gemini quota is used up. Upgrade the key's plan, or try again after the daily reset.",

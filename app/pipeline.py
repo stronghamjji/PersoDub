@@ -38,7 +38,7 @@ from app.perso_client import (
     short_reason,
 )
 from app.qwen_pipeline import cleanup_takes, run_qwen_dub
-from app.run_errors import PartsMissing, advice_both
+from app.run_errors import PartsMissing, advice_both, ran_out_of_memory
 from app.scripts.check_leakage import _validate_manifest_spans, measure_leakage
 from app.scripts.suppress_vocal_echo import suppress_vocal_echo
 from app.separate import SeparationEngine
@@ -158,6 +158,11 @@ _PARTS_MISSING = {
 def _advice(e, part):
     if isinstance(e, PartsMissing):
         return _PARTS_MISSING[part]()
+    # A dub that stopped has Resume, which picks up where it stopped (the
+    # eraser says its own, app/eraser.py).
+    if ran_out_of_memory(str(e)):
+        return both("Dubbing stopped because this computer ran out of memory. "
+                    "Close other programs and press Resume to go on from where it stopped.")
     return advice_both(str(e), _check_file())
 
 

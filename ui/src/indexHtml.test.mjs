@@ -669,8 +669,9 @@ test("a dub refused because the voice engine is not running is retried after the
   assert.match(html, /async function restartVoiceEngine\(errorEl\)/);
   // serverText: the engine's English, which the refusal is known by (ui/src/format.mjs).
   assert.match(html, /voice engine is not running\/\.test\(serverText\(e\)\)\) \{\n\s*const restart = await restartVoiceEngine\(errorEl\);/);
-  // When it does not come back, why is said under the refusal, not thrown away.
-  assert.match(html, /errorEl\.textContent = \[errorText\(e\), restart\.why\]\.filter\(Boolean\)\.join\("\\n"\);/);
+  // When it does not come back, why is said under the refusal, not thrown away
+  // -- or alone, when the memory ran out again and it says all of it (A37).
+  assert.match(html, /errorEl\.textContent = restart\.alone \? restart\.why : \[errorText\(e\), restart\.why\]\.filter\(Boolean\)\.join\("\\n"\);/);
   // And it is scrolled into view: under the advanced options it was below the fold.
   const start = html.slice(html.indexOf("async function submitDubStart"));
   const refused = start.slice(start.indexOf("} catch (e) {"), start.indexOf("return false;"));

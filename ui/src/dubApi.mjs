@@ -206,12 +206,11 @@ export function applyEngineAvailability(av, current) {
     perso: !av.perso_available,
   };
   const local = current.dubMode !== "perso";
-  // Its message is the engine's sentence of why (app/engines_status.py),
-  // kept in English there and said in the page's language here.
+  // Its message is the engine's sentence of why and what to do
+  // (app/engines_status.py), kept in English there and said in the page's
+  // language here, on its own: a line above it said the same thing again.
   const voice = (av.local_engines || {}).voice || {};
-  const voiceOff = local && voice.state === "failed"
-    ? `${t("The voice engine is off. This computer cannot dub until it starts.")}\n${t(voice.message || "")}`.trim()
-    : null;
+  const voiceOff = local && voice.state === "failed" ? t(voice.message) : null;
   const runtime = (av.local_engines || {}).translation || {};
   const name = RUNTIME_TRANSLATORS[current.translate];
   const translatorOff = local && name && runtime.state === "failed"

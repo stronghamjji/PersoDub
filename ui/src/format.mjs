@@ -168,12 +168,18 @@ export function plainFailure(text) {
  */
 export function restartFailure(reason) {
   const text = String(reason ?? "").trim();
-  if (/os error 1455|paging file|out of memory|not enough memory|MemoryError|DefaultCPUAllocator/i.test(text)) {
-    return t("Starting it again did not work: this computer ran out of memory.");
+  if (restartRanOutOfMemory(text)) {
+    return t("Starting it again did not work because there is still not enough memory. Close more programs or restart your computer. Dubbing with the Perso API uses almost no memory.");
   }
   if (/timed out/i.test(text)) return t("Starting it again did not work: it took too long to start.");
   const plain = plainFailure(text);
   return plain && plain === text ? `${t("Starting it again did not work.")} ${plain}` : t("Starting it again did not work.");
+}
+
+/** Whether restartFailure's reason is the memory running out: its line then
+ * says all of it, what to close and the Perso API, and is said on its own. */
+export function restartRanOutOfMemory(reason) {
+  return /os error 1455|paging file|out of memory|not enough memory|MemoryError|DefaultCPUAllocator/i.test(String(reason ?? ""));
 }
 
 /** A job's log lines for Raw log, with its failure text added at the end when
