@@ -55,7 +55,7 @@ function page({ open = [], hiddenIds = [], z = {} } = {}) {
   const backdrop = (id) => Object.assign(el(id), { classList: { contains: (c) => c === "modal-overlay" || c === "open" } });
   return { el, doc, press, backdrop, click: (target) => fire("click", target), down: (target) => fire("mousedown", target) };
 }
-const ALL_MENUS = ["ratioMenu", "previewMenu", "projectCardMenu"];
+const ALL_MENUS = ["ratioMenu", "previewMenu", "videoStylePop", "projectCardMenu"];
 
 test("Escape closes only the dialog on top of a stack", () => {
   const p = page({ open: ["projectOverlay", "chatgptSignInOverlay"], z: { chatgptSignInOverlay: 30 }, hiddenIds: ALL_MENUS });
@@ -89,6 +89,20 @@ test("a press on one menu's button reaches the other menus as a click outside", 
   // Anywhere else is already a click outside.
   p.click({ closest: () => null });
   assert.equal(p.doc.body.clicks, 1);
+});
+
+// Subtitle style beside Download opens its looks the way Ratio opens its menu
+// (owner, 2026-10-22): one open at a time, whichever button was pressed.
+test("Subtitle style's press shuts the Ratio and Preview menus, and theirs shut its looks", () => {
+  const style = { closest: (sel) => (sel === "#videoStyleBtn" ? {} : null) };
+  const shut = page({ hiddenIds: ALL_MENUS });
+  shut.click(style);
+  assert.equal(shut.doc.body.clicks, 1, "opening it reaches the other menus as a click outside");
+  const open = page({ hiddenIds: ALL_MENUS.filter((m) => m !== "videoStylePop") });
+  open.click(style);
+  assert.equal(open.doc.body.clicks, 0, "with its looks open, the press is its own toggle");
+  open.click({ closest: (sel) => (sel === "#ratioBtn" ? {} : null) });
+  assert.equal(open.doc.body.clicks, 1, "Ratio's press reaches the open looks");
 });
 
 test("a press on the backdrop is the dialog's own way out, and the dialog's listeners never hear it", () => {

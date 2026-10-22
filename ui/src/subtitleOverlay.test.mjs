@@ -66,7 +66,7 @@ function harness({ answer = async () => ({ ok: true }) } = {}) {
   body.dataset.screen = "done";
   const calls = { puts: [], drawTimelineTrack: 0 };
   const globals = {
-    document: { body, createElement: (tag) => makeEl(tag) },
+    document: { body, createElement: (tag) => makeEl(tag), addEventListener() {} },
     window: { addEventListener() {} },
     MutationObserver: class { observe() {} },
     getComputedStyle: () => ({}),
@@ -224,6 +224,33 @@ test("a refused style answer leaves the default look", async () => {
     assert.equal(h.subs.getSubStyle().preset, "clean");
     assert.deepEqual(h.subs.getSubStyle().cues, {});
   } finally {
+    h.restore();
+  }
+});
+
+// The looks also open from the finished video panel, left of Download (owner,
+// 2026-10-22). A look picked there is the subtitle style itself: it is saved
+// to the project, and the Download dialog's Dubbed video with subtitles asks
+// for it (ui/src/app.mjs builds that row's link from exportParams).
+test("a look picked over the video is saved and is the look the subtitled download asks for", async () => {
+  const h = harness();
+  const timers = holdTimers();
+  try {
+    await h.subs.loadSubStyle("j1");
+    assert.equal(h.subs.exportParams().preset, "sticker", "the project's own look to begin with");
+    const card = makeEl("card");
+    card.parent = h.$("videoStyleGrid");
+    card.dataset.preset = "white-box";
+    card.closest = (sel) => (sel === "[data-preset]" ? card : null);
+    send(card, "click");
+    assert.equal(h.subs.getSubStyle().preset, "white-box");
+    assert.equal(h.subs.exportParams().preset, "white-box");
+    await timers.run();
+    assert.equal(h.calls.puts.length, 1);
+    assert.equal(h.calls.puts[0].url, "/api/dub/jobs/j1/subtitle_style");
+    assert.equal(h.calls.puts[0].style.preset, "white-box");
+  } finally {
+    timers.restore();
     h.restore();
   }
 });

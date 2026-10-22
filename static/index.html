@@ -628,12 +628,27 @@
               <div class="video-tabs" id="videoTabsNormal">
                 <button data-i18n class="vtab" data-src="original" type="button" id="vtabOriginal">Original</button>
                 <button data-i18n class="vtab active" data-src="dubbed" type="button" id="vtabDubbed">Dubbed</button>
+                <!-- The Subtitle style tab's looks, at the dub's last step, just
+                     before Download (owner, 2026-10-22): the same twelve, opened
+                     over the top of the picture. Dim with the tab until a
+                     finished dub is open (ui/src/captionsTab.mjs). -->
+                <button data-i18n class="ratio-btn video-style-btn" id="videoStyleBtn" type="button"
+                        aria-haspopup="dialog" aria-expanded="false" disabled title="After dubbing">Subtitle style</button>
                 <!-- What the project hands back, at the right end of the tab
                      row of whichever video panel is up: people looked for it
                      beside the video, not among the window's own buttons
                      (owner, 2026-10-22). One button: ui/src/workFrame.mjs
                      moves it to the running and erase panels' rows. -->
                 <button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Download</button>
+              </div>
+              <!-- What Subtitle style opens: the looks in two rows of six, the
+                   one on the video ringed, and what they make. -->
+              <div class="video-style-pop" id="videoStylePop" role="dialog" aria-label="Subtitle style"
+                   data-i18n-aria-label="Subtitle style" hidden>
+                <div class="cap-label"><span data-i18n>Styles · 12</span></div>
+                <div class="cap-grid" id="videoStyleGrid"></div>
+                <div class="erase-card video-style-result"><div data-i18n class="k">What you get</div>
+                  <div class="m"><span data-i18n>A video with the subtitles burned in, and the subtitle file</span></div></div>
               </div>
               <div class="video-body">
                 <div class="video-wrap" id="videoWrap">
