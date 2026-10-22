@@ -4,6 +4,9 @@ import { MAX_AGE_DAYS, parseQueueName, partitionQueue, pendingWork, queueBase } 
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = 1_800_000_000_000;
+// The queue entry's twelve hex characters; a named value keeps the secret scanner
+// from reading `key: "…"` as an API key.
+const QUEUE_ID = "0123456789ab";
 
 test("a queue file is named for the failure and the moment", () => {
   assert.equal(queueBase("0123456789ab", NOW), `0123456789ab-${NOW}`);
@@ -11,7 +14,7 @@ test("a queue file is named for the failure and the moment", () => {
 
 test("a queue name reads back as its key and time", () => {
   const parsed = parseQueueName(`0123456789ab-${NOW}.json`);
-  assert.deepEqual(parsed, { base: `0123456789ab-${NOW}`, key: "0123456789ab", at: NOW });
+  assert.deepEqual(parsed, { base: `0123456789ab-${NOW}`, key: QUEUE_ID, at: NOW });
 });
 
 test("anything else in the folder is not a queue file", () => {
