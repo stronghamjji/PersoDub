@@ -6,9 +6,9 @@
 //   a draft            Video (the kept parts joined), Audio only
 //   a finished dubbing under three headings (owner, 2026-10-22): Video --
 //                      Dubbed video, Dubbed video with subtitles, Original
-//                      video; Subtitles -- Subtitles (.srt); Audio -- Dubbed
-//                      audio, Original voice, Background -- each only when
-//                      there is one
+//                      video; Subtitles & script -- Subtitles (.srt), Script
+//                      (.xlsx); Audio -- Dubbed audio, Original voice,
+//                      Background -- each only when there is one
 //   an erased video    Video, Audio only
 //   separated audio    Voice, Background (the Audio tab's two sounds), both
 //                      ticked until the user says otherwise
@@ -87,9 +87,11 @@ const STEM_TIPS = {
 };
 // The headings a dubbing's rows stand under (owner, 2026-10-22): as one list
 // of seven the subtitles file was the sixth row, and people did not find it.
+// The script's spreadsheet stands beside the subtitles file, and the heading
+// names both.
 const GROUPS = {
   get video() { return t("Video"); },
-  get subtitles() { return t("Subtitles"); },
+  get subtitles() { return t("Subtitles & script"); },
   get audio() { return t("Audio"); },
 };
 
@@ -106,6 +108,10 @@ const GROUPS = {
  * @param {{href: string, name: string}|null} [ctx.subtitled]  a dub with
  *        subtitles: the subtitled video in the look the player shows
  * @param {boolean} [ctx.hasSrt]
+ * @param {boolean} [ctx.hasScript]  a dub: whether it has a script, handed back
+ *        as the spreadsheet Perso's web app downloads
+ * @param {string} [ctx.title]    a dub: the project's name as the screens show it
+ * @param {string} [ctx.source]   a dub: its original's language code, when known
  * @param {{voice?: boolean, background?: boolean}} [ctx.stems]  a dub: which of
  *        the original's two separated sounds the job still has
  * @param {string} [ctx.project]   a dub: the project's folder name, in the
@@ -145,6 +151,13 @@ export function exportRows(ctx, fmt) {
                       href: `${base}/original?download=1`, name: "org.mp4" },
     ctx.hasSrt && { id: "srt", group: "subtitles", icon: "subs", label: t("Subtitles (.srt)"),
                     href: `${base}/srt?download=1`, name: `dub_${ctx.target}.srt` },
+    // Perso's own name for the file. The route sends the same name, with what
+    // a file name cannot hold swapped (app/api/script.py), and that names the
+    // saved file.
+    ctx.hasScript && { id: "script", group: "subtitles", icon: "subs", label: t("Script (original + translation, .xlsx)"),
+                       href: `/api/dub/jobs/${ctx.jobId}/script.xlsx`,
+                       name: `${ctx.title}_${(ctx.source || "auto").toUpperCase()}to${ctx.target.toUpperCase()}`
+                         + "_Original+TranslatedScript.xlsx" },
     { ...audio, group: "audio", label: t("Dubbed audio"),
       href: `${base}/audio?format=${fmt}&download=1${mark}`, name: `dub_${ctx.target}.${fmt}` },
     ...[["voice", t("Original voice")], ["background", t("Background")]].map(([which, label]) =>

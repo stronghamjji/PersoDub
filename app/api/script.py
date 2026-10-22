@@ -2,7 +2,8 @@
 one -- edit a line, listen to its voice, speak it again, remake every line whose
 words changed or every line at once ("read it all again"), put a line back, and
 the two Perso-side routes (fetch a Perso dub for local editing, give one line a
-new speaker).
+new speaker). The lines also go out as a spreadsheet, laid out the way Perso's
+web app hands them out (script.xlsx).
 
 One module because they are one screen: every route here starts from the same
 job folder, and the private helpers below (_dubbed_texts, _line_manifest,
@@ -18,15 +19,20 @@ them, so they are imported here from app.qwen_pipeline where they live, and
 the tests that stub them patch this module.
 """
 import contextlib
+import io
 import json
 import logging
 import os
+import re
 import threading
+import zipfile
 from typing import List, Optional
+from urllib.parse import quote
+from xml.sax.saxutils import escape
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from app import config, dub_launch, engines_status, netlog, perso_client, perso_edit, perso_materialize, state
@@ -34,6 +40,7 @@ from app import setup as dub_setup
 from app.api._launch import check_space
 from app.api._shared import script_work_dir
 from app.api.dub import require_translator
+from app.downloads import file_stem
 from app.dub_script import (
     DUB_NAME,
     EDITED_NAME,
@@ -57,7 +64,7 @@ from app.perso_client import (
 )
 from app.qwen_pipeline import rebuild_dub, resynth_one_line
 from app.retranslate import retranslate_lines
-from app.text.srt import parse_srt
+from app.text.srt import _to_ts, parse_srt
 from app.translate import ChatGptLimitError, ChatGptNotSignedInError, get_translator
 
 router = APIRouter()
@@ -160,6 +167,86 @@ def dub_job_script_stamp(jid: str):
     if not out or (job.get("dub_mode") == "perso" and not _perso_is_materialized(job)):
         return {"stamp": None}
     return {"stamp": _script_stamp(os.path.dirname(out), out)}
+
+
+# The script as a spreadsheet, laid out the way Perso's web app downloads it:
+# one sheet, a header row, then a row per line, every cell an inline string.
+# Perso's file also carries styles, a theme and document properties; none of
+# them shows, so these are only the parts an .xlsx cannot open without.
+_XLSX_HEAD = ("speaker_id", "start_time", "end_time", "original_segment", "translated_segment")
+_XLSX_PARTS = {
+    "[Content_Types].xml":
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/xl/workbook.xml"'
+        ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        '<Override PartName="/xl/worksheets/sheet1.xml"'
+        ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        '</Types>',
+    "_rels/.rels":
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"'
+        ' Target="xl/workbook.xml" Id="rId1"/></Relationships>',
+    "xl/workbook.xml":
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+        ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    "xl/_rels/workbook.xml.rels":
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"'
+        ' Target="/xl/worksheets/sheet1.xml" Id="rId1"/></Relationships>',
+}
+# Characters XML 1.0 cannot hold at all: one pasted into a line would leave a
+# file Excel refuses to open.
+_NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _xlsx(rows: List[tuple]) -> bytes:
+    """The rows as a workbook of one sheet, every cell a string."""
+    sheet = ""
+    for n, row in enumerate(rows, start=1):
+        cells = "".join('<c r="%s%d" t="inlineStr"><is><t>%s</t></is></c>' % (col, n, escape(_NOT_XML.sub("", text)))
+                        for col, text in zip("ABCDE", row))
+        sheet += '<row r="%d">%s</row>' % (n, cells)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, xml in _XLSX_PARTS.items():
+            z.writestr(name, xml)
+        z.writestr("xl/worksheets/sheet1.xml",
+                   '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                   '<dimension ref="A1:E%d"/><sheetData>%s</sheetData></worksheet>' % (len(rows), sheet))
+    return buf.getvalue()
+
+
+@router.get("/api/dub/jobs/{jid}/script.xlsx")
+def dub_job_script_xlsx(jid: str):
+    """The script as the spreadsheet Perso's web app downloads: who speaks,
+    when, the original line and its translation, a row each.
+
+    The lines are dub_job_script's, so a Perso dubbing's come back from Perso
+    as the table's do. Speakers are SPEAKER_01, SPEAKER_02 ... in the order
+    they first speak, the order the table letters them in
+    (ui/src/speakers.mjs); a script nobody is labelled in is one voice, and a
+    line left unlabelled among labelled ones names nobody. The file is named
+    the way Perso names it, after the project as the screens show it.
+    """
+    lines = dub_job_script(jid)["lines"]
+    job = state.job_store.get(jid)
+    speaker_ids = {}
+    for line in lines:
+        if line.get("speaker") is not None:
+            speaker_ids.setdefault(line["speaker"], "SPEAKER_%02d" % (len(speaker_ids) + 1))
+    rows = [_XLSX_HEAD] + [(speaker_ids.get(line.get("speaker"), "" if speaker_ids else "SPEAKER_01"),
+                            _to_ts(line["start"]), _to_ts(line["end"]),
+                            line.get("source") or "", line.get("text") or "") for line in lines]
+    langs = "%sto%s" % ((job.get("source_lang") or "auto").upper(), (job.get("language_code") or "out").upper())
+    # Perso adds a timestamp before .xlsx; the dated Downloads folder already says when.
+    name = "%s_%s_Original+TranslatedScript.xlsx" % (
+        file_stem((job.get("title") or "").strip() or job.get("project") or ""), langs)
+    return Response(content=_xlsx(rows),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename*=UTF-8''" + quote(name)})
 
 
 def _clipped_lines(work_dir: str) -> Optional[list]:

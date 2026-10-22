@@ -132,8 +132,9 @@ When the job finishes it opens on the screen the app is really about: the script
   marked.
 - **Download**, at the right of **Original** and **Dubbed**, saves the dubbed video, with
   or without the subtitles burned in, the dubbed audio, the original voice and the
-  background, the translated `.srt`, and, for a job that started from a link, the
-  original video (each when the job has one).
+  background, the translated `.srt`, the script as a spreadsheet (each line's speaker,
+  times, original and translation, laid out as Perso's web app downloads it), and, for
+  a job that started from a link, the original video (each when the job has one).
 - The click target on the job's name in the top bar renames the project. The folder
   keeps the name it was made with; the screens show the name you gave it.
 
@@ -143,7 +144,7 @@ time slot goes first, then the original line, so the translation always stays wh
 ### Download
 
 **Download** opens a dialog with a row per file, each with a tick box; a dubbing's rows
-stand under three headings, **Video**, **Subtitles** and **Audio**. The dialog's own
+stand under three headings, **Video**, **Subtitles & script** and **Audio**. The dialog's own
 **Download** button saves the ticked rows. Sound rows can be MP3 or WAV. The app saves
 without asking, into `Downloads` / the day the job ran / the project's name; a saved
 row gets a check, and the line under the rows says where it went.

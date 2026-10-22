@@ -69,7 +69,7 @@ test("the original's voice and background are rows only when the job has them", 
 // not find it (feedback sheet, 2026-10-21; owner 4-2 가, 2026-10-22). A
 // dubbing's rows stand under Video, Subtitles and Audio; the rows themselves
 // are the rows they were.
-test("a dubbing's rows stand under Video, Subtitles and Audio; the other kinds have no headings", () => {
+test("a dubbing's rows stand under Video, Subtitles & script and Audio; the other kinds have no headings", () => {
   const rows = exportRows(STEMS, "mp3");
   assert.deepEqual(rows.map((r) => [r.id, r.group]), [
     ["video", "video"], ["subtitled", "video"], ["original", "video"], ["srt", "subtitles"],
@@ -77,7 +77,7 @@ test("a dubbing's rows stand under Video, Subtitles and Audio; the other kinds h
   const html = rowsHtml(rows, "mp3", ["video"]);
   // Each heading once, right before the first row under it.
   assert.deepEqual([...html.matchAll(/<div class="export-group">([^<]*)<\/div><a [^>]*data-row="(\w+)"/g)].map((m) => [m[1], m[2]]),
-    [["Video", "video"], ["Subtitles", "srt"], ["Audio", "audio"]]);
+    [["Video", "video"], ["Subtitles &amp; script", "srt"], ["Audio", "audio"]]);
   assert.equal(html.match(/export-group/g).length, 3);
   assert.equal(html.match(/<a href="#" role="checkbox"/g).length, 7, "seven rows, as before");
   // A heading with no row under it is not drawn: no subtitles, no Subtitles.
@@ -100,10 +100,44 @@ async function inKorean(t) {
   t.after(() => setLanguage("en"));
 }
 
-test("in Korean the three headings read 영상, 자막 and 오디오", async (t) => {
+test("in Korean the three headings read 영상, 자막·대본 and 오디오", async (t) => {
   await inKorean(t);
   const html = rowsHtml(exportRows(STEMS, "mp3"), "mp3");
-  assert.deepEqual([...html.matchAll(/class="export-group">([^<]*)</g)].map((m) => m[1]), ["영상", "자막", "오디오"]);
+  assert.deepEqual([...html.matchAll(/class="export-group">([^<]*)</g)].map((m) => m[1]), ["영상", "자막·대본", "오디오"]);
+});
+
+// The script as the spreadsheet Perso's web app downloads (owner,
+// 2026-10-22): a row under the subtitles file, in Perso's name for the file
+// without the timestamp Perso adds.
+const SCRIPTED = { ...STEMS, hasScript: true, title: "안녕히계세요 여러분", source: "ko", target: "es-MX" };
+const SCRIPT_NAME = "안녕히계세요 여러분_KOtoES-MX_Original+TranslatedScript.xlsx";
+
+test("the script is a row under Subtitles & script whenever the job has one, in Perso's name for the file", () => {
+  const rows = exportRows(SCRIPTED, "mp3");
+  assert.deepEqual(rows.map((r) => [r.id, r.group]), [
+    ["video", "video"], ["subtitled", "video"], ["original", "video"], ["srt", "subtitles"], ["script", "subtitles"],
+    ["audio", "audio"], ["voice", "audio"], ["background", "audio"]]);
+  assert.deepEqual(rows.find((r) => r.id === "script"), {
+    id: "script", group: "subtitles", icon: "subs", label: "Script (original + translation, .xlsx)",
+    href: "/api/dub/jobs/J1/script.xlsx", name: SCRIPT_NAME });
+  // A dubbing made on Perso has its script and no subtitles file: the heading
+  // stands over the script alone.
+  const perso = exportRows({ ...SCRIPTED, hasSrt: false }, "mp3");
+  assert.deepEqual(perso.map((r) => r.id), ["video", "original", "script", "audio", "voice", "background"]);
+  assert.deepEqual([...rowsHtml(perso, "mp3").matchAll(/class="export-group">([^<]*)<\/div><a [^>]*data-row="(\w+)"/g)]
+    .map((m) => [m[1], m[2]]), [["Video", "video"], ["Subtitles &amp; script", "script"], ["Audio", "audio"]]);
+  // No script, no row. A source left on auto-detect that never learned its
+  // language is named so, as the route names it.
+  assert.ok(!exportRows({ ...SCRIPTED, hasScript: false }, "mp3").some((r) => r.id === "script"));
+  assert.equal(exportRows({ ...SCRIPTED, source: null }, "mp3").find((r) => r.id === "script").name,
+               "안녕히계세요 여러분_AUTOtoES-MX_Original+TranslatedScript.xlsx");
+});
+
+test("in Korean the script row reads 대본 (원문·번역, .xlsx) under 자막·대본", async (t) => {
+  await inKorean(t);
+  const html = rowsHtml(exportRows(SCRIPTED, "mp3"), "mp3");
+  assert.match(html, /<div class="export-group">자막·대본<\/div><a [^>]*data-row="srt"/);
+  assert.match(html, /data-row="script" data-name="안녕히계세요 여러분_KOtoES-MX_Original\+TranslatedScript\.xlsx">[^]*?<\/svg>대본 \(원문·번역, \.xlsx\)<span class="export-state"><\/span><\/a>/);
 });
 
 // Under the title 다운로드, "다운로드 / 2026-10-22 / paris_steps에 저장해요"
@@ -385,6 +419,40 @@ test("a dubbing's ticked rows are made, then downloaded one after another as the
   await settle();
   assert.deepEqual(h.saved(), ["video", "voice", "background"]);
   assert.equal(h.$("exportWhere").textContent, "Saved 3 files to Downloads / 2026-09-30 / clip");
+});
+
+// The script goes the way the subtitles file goes: asked for, then handed
+// to the shell, which saves it into the project's dated folder under the
+// name the route sends; the line under the rows names it or counts it.
+test("the script downloads as the subtitles file does, and the line names it or counts it with the rest", async (t) => {
+  const dir = "/Users/me/Downloads/2026-10-22/clip/";
+  let report = null;
+  const alone = harness({ ctx: SCRIPTED, stored: { [TICKS_KEY]: '{"dub":["script"]}' },
+                          shell: { onDownloadDone: (fn) => { report = fn; } } });
+  await alone.api.open();
+  assert.deepEqual(alone.ticked(), ["script"]);
+  alone.go();
+  await settle();
+  assert.deepEqual(alone.asked, ["/api/dub/jobs/J1/script.xlsx"], "asked for first, so a refusal is read as words");
+  assert.deepEqual(alone.followed, [["/api/dub/jobs/J1/script.xlsx", SCRIPT_NAME]]);
+  report({ state: "completed", filename: SCRIPT_NAME, path: dir + SCRIPT_NAME });
+  await settle();
+  assert.deepEqual(alone.saved(), ["script"]);
+  assert.equal(alone.$("exportWhere").textContent, `Saved ${SCRIPT_NAME} to Downloads / 2026-10-22 / clip`);
+
+  await inKorean(t);
+  const both = harness({ ctx: SCRIPTED, stored: { [TICKS_KEY]: '{"dub":["srt","script"]}' },
+                         shell: { onDownloadDone: (fn) => { report = fn; } } });
+  await both.api.open();
+  both.go();
+  await settle();
+  report({ state: "completed", filename: "dub_es-MX.srt", path: dir + "dub_es-MX.srt" });
+  await settle();
+  report({ state: "completed", filename: SCRIPT_NAME, path: dir + SCRIPT_NAME });
+  await settle();
+  assert.deepEqual(both.followed.map((f) => f[0]), ["/api/dub/result/J1/srt?download=1", "/api/dub/jobs/J1/script.xlsx"]);
+  assert.deepEqual(both.saved(), ["srt", "script"]);
+  assert.equal(both.$("exportWhere").textContent, "파일 2개를 다운로드 폴더의 2026-10-22 / clip에 저장했어요");
 });
 
 test("a download the shell could not finish, or a file the app would not make, is said and the rest wait", async () => {
