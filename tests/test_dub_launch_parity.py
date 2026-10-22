@@ -439,6 +439,18 @@ def test_a_redub_is_recorded_as_made_on_this_computer(recorder, tmp_path):
     assert state.job_store.get(r.json()["job_id"])["dub_mode"] == "local"
 
 
+def test_a_redub_keeps_the_model_that_translated_its_script(recorder, tmp_path):
+    # Its voices only are made again: the words are the first run's, so the
+    # model the screen names is the first run's too (B16).
+    jid, work = _saved_job(tmp_path, name="finished", translator_model="gemini-1.5-pro", **_FIRST_RUN)
+    (work / "translated.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nhi\n\n")
+    state.job_store._update(jid, status="done",
+                            result={"out_path": str(work / "dubbed.mp4")})
+    r = client.post(f"/api/dub/jobs/{jid}/redub")
+    assert r.status_code == 200
+    assert state.job_store.get(r.json()["job_id"])["translator_model"] == "gemini-1.5-pro"
+
+
 def test_redub_of_a_job_without_a_script_is_refused_not_a_500(recorder, tmp_path):
     # Found on the real app (2026-09-07): a finished job with no translated.srt
     # crashed the route on the copy. The screen needs a sentence, not a 500.

@@ -354,8 +354,8 @@ test("a line the translator left untranslated says so in its own empty cell, and
   // Still editable, still empty -- the mark is not in the words.
   assert.match(row2, /class="sc-dst" contenteditable="plaintext-only" spellcheck="false"\s+data-line="2" data-empty="Not translated"><\/div>/);
   assert.match(row2, /<span class="sc-len"><\/span>/);
-  assert.match(row2, /class="sc-listen sc-off" data-play="2" type="button" disabled\s+title="Write the translation first"/);
-  assert.match(row2, /class="sc-wave sc-off" data-voice="2"\s+type="button" disabled title="Write the translation first"/);
+  assert.match(row2, /class="sc-listen sc-off" data-play="2" type="button" disabled\s+title="You can press it once the translation is written"/);
+  assert.match(row2, /class="sc-wave sc-off" data-voice="2"\s+type="button" disabled title="You can press it once the translation is written"/);
   // Line 1 is untouched by any of it.
   assert.equal(html.match(/data-empty|sc-off/g).length, 3);
   assert.match(html, /<span class="sc-len sc-v-fit"><span class="sc-dot"><\/span><span class="sc-num">1\.0 \/ <b>0\.9<\/b>s<\/span>/);
@@ -636,14 +636,14 @@ test("the voice button wears all four of its looks", async (t) => {
 
   // 2. The words changed and the voice has not caught up.
   assert.match(waveOf(html, 2), /^<button class="sc-wave stale" data-voice="2"/);
-  assert.match(waveOf(html, 2), /title="The words changed - make the voice again">/);
+  assert.match(waveOf(html, 2), /title="The words changed - press to make this line's voice again">/);
   assert.ok(waveOf(html, 2).includes(WAVE_ICON));
 
   // 3. Made in this sitting: green.
   await btn.fire("click");
   html = h.$("scriptBox").innerHTML;
   assert.match(waveOf(html, 1), /^<button class="sc-wave fresh" data-voice="1"/);
-  assert.match(waveOf(html, 1), /title="Voice made - press to make it again">/);
+  assert.match(waveOf(html, 1), /title="New voice - press to make it once more">/);
   assert.ok(waveOf(html, 1).includes(WAVE_ICON));
 
   // 4. Made, then edited again: stale wins over the green this line still
@@ -861,7 +861,7 @@ test("Translate again sends the chosen lines, changes words only and says how ma
 
   await h.api.retranslate("j1", [2, 3]);
   assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":[2,3]}'));
-  assert.equal(h.$("scriptSaving").textContent, "1 line translated again");
+  assert.equal(h.$("scriptSaving").textContent, "1 line translated again. Press Remake voices to hear it.");
   assert.equal(h.log.reloads, 0, "no voice was made, so the video is the one it was");
   assert.equal(h.log.calls.filter((c) => c === `GET ${SCRIPT}`).length, 2, "the table is drawn again");
 
@@ -893,6 +893,28 @@ test("the Translate again button sends the ticked lines, or every line when none
   assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":[3]}'));
 });
 
+// B2, B3: what Translate again does, and to which lines, on the button itself.
+test("Translate again says what it does and which lines it will translate", async (t) => {
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [line(1), line(2), line(3)] }) } });
+  t.after(h.log.restore);
+  const ticks = [2, 3].map((n) => {
+    const tick = makeButton(`pick${n}`, { pick: String(n) });
+    tick.row = bindClassList(makeEl(`row${n}`));
+    tick.row.classList.toggle = () => {};
+    return tick;
+  });
+  h.$("scriptBox").qs[".sc-pick"] = ticks;
+  await h.api.renderScript("j1");
+  const does = "Translates again with the same translator, so each line fits the time it has. The voices stay as they are.";
+  assert.equal(h.$("retranslateBtn").title, `${does} With no line selected, every line is translated again.`);
+  ticks[0].checked = true;
+  await ticks[0].listeners.change.at(-1)();
+  assert.equal(h.$("retranslateBtn").title, `${does} Only the selected line is translated again.`);
+  ticks[1].checked = true;
+  await ticks[1].listeners.change.at(-1)();
+  assert.equal(h.$("retranslateBtn").title, `${does} Only the 2 selected lines are translated again.`);
+});
+
 test("Translate again asks once before it writes over lines edited by hand", async (t) => {
   let n = 0;
   const h = harness({ responses: {
@@ -907,7 +929,7 @@ test("Translate again asks once before it writes over lines edited by hand", asy
   assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":[2]}'));
 
   await h.api.retranslate("j1", null);
-  assert.equal(h.$("scriptSaving").textContent, "1 edited line is replaced. Press again.");
+  assert.equal(h.$("scriptSaving").textContent, "1 line you edited will be replaced by the new translation too. Press again to go ahead.");
   assert.ok(!h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":null}'));
   await h.api.retranslate("j1", null);
   assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":null}'));
@@ -1029,13 +1051,15 @@ test("Remake voices counts the changed lines, and rests without a number at none
   await h.api.renderScript("j1");
   const btn = h.$("remakeVoicesBtn");
   assert.equal(btn.disabled, true);
+  // Resting, it says what would let it be pressed (B9).
+  assert.equal(btn.title, "You can press it after you change a line's words or translate again.");
   assert.equal(h.$("remakeVoicesCount").textContent, "");
   assert.ok(btn.classList.contains("btn-outline"));
   assert.equal(h.$("scriptChanged").hidden, true);
   assert.doesNotMatch(h.$("scriptBox").innerHTML, /Words changed/);
   // Not a Perso project: All at once rests, and says why.
   assert.equal(h.$("allAtOnceBtn").disabled, true);
-  assert.equal(h.$("allAtOnceBtn").title, "Perso dubbing only.");
+  assert.equal(h.$("allAtOnceBtn").title, "Only for projects dubbed with the Perso API.");
 });
 
 test("changed lines say Words changed, the strip counts them and one press remakes them all", async (t) => {
@@ -1053,10 +1077,12 @@ test("changed lines say Words changed, the strip counts them and one press remak
   assert.match(html, /<span class="sc-h-voice">Voice<\/span>/);
   const btn = h.$("remakeVoicesBtn");
   assert.equal(btn.disabled, false);
+  assert.equal(btn.title, "Makes new voices for the lines whose words changed and puts them in the video. "
+    + "The other lines stay as they are.");
   assert.ok(btn.classList.contains("btn-primary"));
   assert.equal(h.$("remakeVoicesCount").textContent, " (2)");
   assert.equal(h.$("scriptChanged").hidden, false);
-  assert.equal(h.$("scriptChanged").innerHTML, "<b>2 lines changed.</b> Remake their voices to hear them.");
+  assert.equal(h.$("scriptChanged").innerHTML, "<b>2 lines changed.</b> Press Remake voices to hear them in the video.");
 
   await btn.fire("click");
   assert.ok(h.log.calls.includes("POST /api/dub/jobs/j1/voices/stale"), "one press, no second");
@@ -1072,7 +1098,7 @@ test("one changed line reads in the singular", async (t) => {
   t.after(h.log.restore);
   await h.api.renderScript("j1");
   assert.equal(h.$("remakeVoicesCount").textContent, " (1)");
-  assert.equal(h.$("scriptChanged").innerHTML, "<b>1 line changed.</b> Remake its voice to hear it.");
+  assert.equal(h.$("scriptChanged").innerHTML, "<b>1 line changed.</b> Press Remake voices to hear it in the video.");
 });
 
 test("a Remake voices the server refuses says why and gives the button back", async (t) => {
@@ -1120,7 +1146,7 @@ test("a Perso project's lines have no voice button, and its strip says to remake
   assert.equal(h.$("remakeVoicesCount").textContent, " (2)");
   assert.equal(h.$("scriptChanged").innerHTML, "<b>2 lines changed.</b> Remake voices when you are done.");
   assert.equal(h.$("allAtOnceBtn").disabled, false);
-  assert.equal(h.$("allAtOnceBtn").title, "Translation and voices.");
+  assert.equal(h.$("allAtOnceBtn").title, "Perso makes the translation and voice of every line again.");
   assert.deepEqual(h.$("scriptBox").children, [], "and no bar over the table");
   assert.equal(h.api.countStale(), 0);
 });
@@ -1136,7 +1162,7 @@ test("Remake voices on a Perso project asks twice, names no price, and sends eve
   await h.api.renderScript("j1");
   const btn = h.$("remakeVoicesBtn");
   await btn.fire("click");
-  assert.equal(h.$("scriptSaving").textContent, "Perso remakes 2 lines. Press again.");
+  assert.equal(h.$("scriptSaving").textContent, "Perso makes new voices for 2 lines. It may use credits. Press again to go ahead.");
   assert.ok(!h.log.calls.some((c) => c.startsWith("POST")), "the first press spends nothing");
   await btn.fire("click");
   // changed_only: a line the agent voiced meanwhile is not sent again.
@@ -1246,7 +1272,7 @@ test("a Perso dub voiced on this computer is edited like this computer's own", a
 
   assert.match(box.innerHTML, /class="sc-wave" data-voice="1"/, "its lines keep their voice button");
   assert.equal(h.$("allAtOnceBtn").disabled, true);
-  assert.equal(h.$("allAtOnceBtn").title, "Perso dubbing only.");
+  assert.equal(h.$("allAtOnceBtn").title, "Only for projects dubbed with the Perso API.");
   await btn.fire("click");
   assert.ok(h.log.calls.includes("POST /api/dub/jobs/j1/script/1/voice"));
 });
@@ -1313,7 +1339,7 @@ test("a project Perso has nothing to redo in dims All at once once the script is
   assert.equal(btn.disabled, false);
   await settle(h);
   assert.equal(btn.disabled, true);
-  assert.equal(btn.title, "Translation and voices.");
+  assert.equal(btn.title, "Perso makes the translation and voice of every line again.");
   // Drawn again within minutes: Perso is not asked twice.
   await h.api.renderScript("j1");
   await settle(h);
@@ -1333,7 +1359,7 @@ test("a project Perso can redo keeps All at once, and the press names the price"
   const btn = h.$("allAtOnceBtn");
   await settle(h);
   assert.equal(btn.disabled, false);
-  assert.equal(btn.title, "Translation and voices.");
+  assert.equal(btn.title, "Perso makes the translation and voice of every line again.");
   await btn.fire("click");
   assert.equal(h.$("scriptSaving").textContent, "Perso redoes every line. Uses 42 credits. Press again.");
   assert.ok(!h.log.calls.some((c) => c.startsWith("POST")));
@@ -1568,4 +1594,42 @@ test("a revert the server could not do says so in the status line", async (t) =>
   await h.api.renderScript("j1");
   await box.qs["[data-undo]"][0].fire("click");
   assert.equal(h.$("scriptSaving").textContent, "Could not revert line 1. Try again.");
+});
+
+// B15: what translated the script, grey beside its count, from the job on screen.
+test("the pane's head names what translated the script, with its model", async (t) => {
+  const job = { id: "j1", translator: "chatgpt", translator_model: "gpt-5.6-luna" };
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [line(1), line(2)] }) }, job });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+  assert.equal(h.$("scriptCount").textContent, "2 lines");
+  assert.equal(h.$("scriptModel").textContent, "Translation ChatGPT (gpt-5.6-luna)");
+  // Another job's record says nothing about this script.
+  job.id = "j2";
+  await h.api.renderScript("j1");
+  assert.equal(h.$("scriptModel").textContent, "");
+  job.id = "j1";
+  await h.api.renderScript("j1");
+  h.api.reset();
+  assert.equal(h.$("scriptModel").textContent, "");
+});
+
+test("the translator's name takes the particle Korean reads it with", async (t) => {
+  const h = harness({ responses: {
+    [SCRIPT]: ok({ lines: [line(1), line(2)] }),
+    "/api/dub/jobs/j1/retranslate": () => new Promise(() => {}),
+  }, job: { id: "j1", translator: "hunyuan" } });
+  const real = globalThis.fetch;
+  t.after(() => { h.log.restore(); setLanguage("en"); });
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  globalThis.fetch = async () => ({ ok: true, json: async () => ko });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  await h.api.renderScript("j1");
+  assert.equal(h.$("scriptModel").textContent, "번역 Hunyuan 1.8B");
+  h.api.retranslate("j1", [1]);
+  assert.equal(h.$("scriptSaving").textContent, "Hunyuan으로 1줄 번역 중…");
+  h.api.retranslate("j1", null, "chatgpt", true);
+  assert.equal(h.$("scriptSaving").textContent, "ChatGPT로 모든 줄 번역 중…");
 });

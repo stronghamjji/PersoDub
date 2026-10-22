@@ -70,6 +70,7 @@ from app.jobs import JobKind, JobStatus, kind_of
 from app.pipeline import run_dub
 from app.source_fetch import fetch as fetch_source
 from app.text.naming import project_name, safe_name
+from app.translate import translator_model
 
 router = APIRouter()
 logger = logging.getLogger("persodub.api.dub")
@@ -145,9 +146,11 @@ def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engi
     """
     resolved_stt = (stt_engine or default_stt_engine() or "").lower()
     resolved_sep = (sep_engine or dub_setup.default_for("separation")).lower()
+    translator = (translate_engine or dub_setup.default_for("translator")).lower() or None
     return {
         "stt_engine": "perso" if resolved_stt == "perso" else "whisper",
-        "translator": (translate_engine or dub_setup.default_for("translator")).lower() or None,
+        "translator": translator,
+        "translator_model": translator_model(translator),
         "tts": tts_engine or dub_setup.default_for("voice"),
         "quality": n_takes if n_takes is not None else (dub_setup.default_n_takes() or QWEN_N_TAKES),
         "separation": "perso" if resolved_sep == "perso" else "demucs",
@@ -436,7 +439,7 @@ def dub_job_redub(jid: str):
     # folder, whichever door put it there -- the work builder looks for it.
     shutil.copyfile(script, os.path.join(work, "sub.srt"))
 
-    engines = _inherited_engines(job, ("stt_engine", "translator", "tts", "quality"))
+    engines = _inherited_engines(job, ("stt_engine", "translator", "translator_model", "tts", "quality"))
 
     # Only the voices are made again -- no STT, no translation -- but a voice
     # model (or the engine pack) removed since must resurface as the dialog,
@@ -582,16 +585,17 @@ def dub_job_resume(jid: str, body: Optional[ResumeRequest] = None):
     engines = _inherited_engines(job, _RERUN_ENGINES)
     _require_local_models(engines, None if translator or translated else engines.get("translator"))
     check_space(state.WORKSPACE)
+    # Another translator takes over with its own model, which the screen names.
+    switched = {"translator": translator, "translator_model": translator_model(translator)} if translator else {}
     if not state.job_store.claim(jid, RESUMABLE, status=JobStatus.QUEUED, error=None, error_shown=None,
-                                 error_detail=None, cancel_requested=False, notices=[],
-                                 **({"translator": translator} if translator else {})):
+                                 error_detail=None, cancel_requested=False, notices=[], **switched):
         raise HTTPException(status_code=409, detail=t("This project is already running again."))
     state.job_store.append_log(jid, "Resuming from where it stopped…")
     if translator:
         was = engines_status.TRANSLATOR_NAMES.get(job.get("translator"))
         state.job_store.append_log(jid, "Translating with %s%s." % (
             engines_status.TRANSLATOR_NAMES[translator], " instead of %s" % was if was else ""))
-    record = {**job, "work_dir": work_dir, **({"translator": translator} if translator else {})}
+    record = {**job, "work_dir": work_dir, **switched}
     state.job_store.start(jid, lambda log: _work_for(
         record, jid, resume=True, voices_only=bool(job.get("voices_only")))(log))
     return {"job_id": jid}
@@ -644,6 +648,8 @@ def dub_job_retry(jid: str):
     engines = {}
     if job.get("dub_mode") != "perso":
         engines = _inherited_engines(job, _RERUN_ENGINES)
+        # Translated again today, so with today's model of that translator.
+        engines["translator_model"] = translator_model(engines.get("translator"))
         # A script the first run was given is copied in below and dubbed as it
         # is, so no translator is asked for its model or runtime -- the same
         # rule as a start (_translator_preflight).

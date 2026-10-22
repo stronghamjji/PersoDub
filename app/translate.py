@@ -239,6 +239,24 @@ CHATGPT_NO_TOOLS = ("shell_tool", "unified_exec", "browser_use", "computer_use",
 CHATGPT_DEFAULT_MODEL = "gpt-5.6-luna"
 
 
+def chatgpt_model() -> str:
+    """The model ChatGPT translates with: the one ChatGPT itself answers a
+    free account with -- never the one the user's own Codex setup names (a
+    coding model, and on this Mac the top-tier one; user, 2026-09-23).
+    PERSODUB_CHATGPT_MODEL in kit.env is the one way to pick another."""
+    wanted = os.environ.get("PERSODUB_CHATGPT_MODEL", "")
+    return wanted if re.match(r"^[A-Za-z0-9._:-]{1,64}$", wanted) else CHATGPT_DEFAULT_MODEL
+
+
+def translator_model(translator: Optional[str]) -> Optional[str]:
+    """The model `translator` translates with today, kept on a job beside the
+    translator's name (app/api/dub.py) so its screen names the model that
+    made it after the default has moved on. None for one with no model of
+    its own to name (Perso)."""
+    return {"chatgpt": chatgpt_model, "gemini": lambda: GEMINI_MODEL, "gemma": lambda: OLLAMA_GEMMA_MODEL,
+            "hunyuan": lambda: OLLAMA_HUNYUAN_MODEL}.get(translator or "", lambda: None)()
+
+
 class ChatGptNotSignedInError(RuntimeError):
     """The ChatGPT sign-in is missing or expired. The pipeline turns it into
     the notice that sends the user to Settings."""
@@ -324,14 +342,7 @@ class ChatGptTranslator(TranslationEngine):
         from app.agents import base as agent_base
 
         self.binary = binary if binary is not None else agent_base.find_cli("codex")
-        # The model ChatGPT itself answers a free account with -- never the
-        # one the user's own Codex setup names (a coding model, and on this
-        # Mac the top-tier one; user, 2026-09-23). PERSODUB_CHATGPT_MODEL in
-        # kit.env is the one way to pick another.
-        wanted = os.environ.get("PERSODUB_CHATGPT_MODEL", "")
-        if not re.match(r"^[A-Za-z0-9._:-]{1,64}$", wanted):
-            wanted = CHATGPT_DEFAULT_MODEL
-        self.model = model if model is not None else wanted
+        self.model = model if model is not None else chatgpt_model()
         self.timeout = timeout
 
     def _command(self, workdir: str, out_path: str) -> List[str]:

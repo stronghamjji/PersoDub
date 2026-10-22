@@ -97,6 +97,21 @@ def test_the_limit_error_carries_the_reset_time_openai_named(monkeypatch):
     assert e.value.resets == "Oct 24, 1:07 PM"
 
 
+def test_a_job_keeps_the_model_each_translator_translates_with(monkeypatch):
+    """B16: the screen names it beside the translator, after the default has
+    moved on; ChatGPT's is the one kit.env picks, or the free plan's."""
+    monkeypatch.delenv("PERSODUB_CHATGPT_MODEL", raising=False)
+    assert translate.translator_model("chatgpt") == translate.CHATGPT_DEFAULT_MODEL
+    monkeypatch.setenv("PERSODUB_CHATGPT_MODEL", "gpt-5.5")
+    assert translate.translator_model("chatgpt") == "gpt-5.5"
+    assert ChatGptTranslator(binary="/x/codex").model == "gpt-5.5"
+    monkeypatch.setenv("PERSODUB_CHATGPT_MODEL", "no spaces allowed")
+    assert translate.translator_model("chatgpt") == translate.CHATGPT_DEFAULT_MODEL
+    assert translate.translator_model("hunyuan") == translate.OLLAMA_HUNYUAN_MODEL
+    assert translate.translator_model("perso") is None
+    assert translate.translator_model(None) is None
+
+
 def test_a_reset_later_today_is_its_time_alone():
     """Codex writes only the time when it is later today, in this computer's
     own time zone."""

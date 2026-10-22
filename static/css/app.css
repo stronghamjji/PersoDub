@@ -1348,6 +1348,11 @@
   .sc-pick { margin: 0; width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
   .sc-row.sc-picked { background: color-mix(in srgb, var(--primary) 10%, transparent); }
   .sc-pick-n { margin-left: auto; font-size: var(--font-label); font-weight: 400; color: var(--muted-foreground); }
+  /* What translated the script, grey beside its count: it takes the room left
+     on the row, and is the first thing to give way (an ellipsis, the whole
+     on hover) rather than push the row onto two lines. */
+  .sc-model { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: var(--font-label); font-weight: 400; color: var(--muted-foreground); }
   /* The script's three buttons. The panel is 430 to 490px wide on a laptop
      and the pane's name and the three together need more than that, so
      they have a row of their own under the name: three fixed columns, so a

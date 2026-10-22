@@ -94,6 +94,9 @@ def test_resume_with_another_translator_translates_with_it_and_records_it(monkey
     _wait_not_running(jid)
     job = client.get(f"/api/dub/jobs/{jid}").json()
     assert job["status"] == "done" and job["translator"] == "hunyuan"
+    # Its model goes with it: the screen names the one that translated (B16).
+    from app.config import OLLAMA_HUNYUAN_MODEL
+    assert job["translator_model"] == OLLAMA_HUNYUAN_MODEL
     assert calls[1]["resume"] is True and calls[1]["translate_engine"] == "hunyuan"
     assert "Translating with Hunyuan instead of ChatGPT." in job["logs"]
 

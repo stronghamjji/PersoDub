@@ -786,11 +786,30 @@ const ENGINE_LABELS = {
   gemma: { label: "Gemma 3", api: false },
   qwen: { label: "Qwen", api: false },
   hunyuan: { label: "Hunyuan 1.8B", api: false },
-  gemini: { label: "Gemini", api: true },
+  gemini: { label: "Gemini API", api: true },
   chatgpt: { label: "ChatGPT", api: false },
   vertex: { label: "Vertex", api: true },
   qwen3: { label: "Qwen3-TTS", api: false },
 };
+
+/**
+ * What translated a job's script, as the screens name it: "ChatGPT
+ * (gpt-5.6-luna)", "Gemini API (Flash)", "Hunyuan 1.8B", "Gemma 3", "Perso".
+ * The model in brackets is the one the job kept (translator_model, app/api/dub.py)
+ * for a translator whose name does not say it; a job from before it was kept
+ * names the translator alone, since today's model may not be the one that
+ * made it. "" when the job names none.
+ */
+export function translatorLabel(job) {
+  const j = job || {};
+  if (j.dub_mode === "perso") return ENGINE_LABELS.perso.label;
+  const id = String(j.translator || "").toLowerCase();
+  const known = ENGINE_LABELS[id];
+  if (!known) return "";
+  const model = String(j.translator_model || "");
+  const words = !model ? "" : id === "chatgpt" ? model : id === "gemini" ? (/flash/i.test(model) ? "Flash" : model) : "";
+  return words ? `${known.label} (${words})` : known.label;
+}
 
 /**
  * A voice engine's name with the model behind it, from GET /api/engines'
@@ -845,6 +864,8 @@ export function engineChips(job, { withQuality = true, withTts = true, voiceMode
   }
   const tts = chips.find((c) => c.role === "TTS");
   if (tts) tts.label = voiceLabel(String(j.tts).toLowerCase(), voiceModels, true);
+  const translation = chips.find((c) => c.role === "Translation");
+  if (translation) translation.label = translatorLabel(j);
   // A Perso dubbing names the voice model it was made with: "Perso Oriole".
   const dubbing = chips.find((c) => c.role === "Dubbing");
   if (dubbing && modelLabel(j.perso_model)) dubbing.label += ` ${modelLabel(j.perso_model)}`;

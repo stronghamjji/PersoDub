@@ -10,9 +10,18 @@ const NAMES = { chatgpt: "ChatGPT", hunyuan: "Hunyuan", gemma: "Gemma", gemini: 
 // Best first, the order the owner named them.
 const OFFERED = ["hunyuan", "gemma", "gemini"];
 
-/** A translator's name for the screen, or "" for one this file does not know. */
-export function translatorName(id) {
-  return NAMES[id] || "";
+// "with ChatGPT", one whole phrase per translator: Korean puts 로 or 으로
+// after a name by how it is read (ChatGPT로, Hunyuan으로), so the name alone
+// cannot be dropped into a sentence.
+const WITH = {
+  chatgpt: () => t("with ChatGPT"), hunyuan: () => t("with Hunyuan"), gemma: () => t("with Gemma"),
+  gemini: () => t("with Gemini"), perso: () => t("with Perso"),
+};
+
+/** "with ChatGPT", said before what it is doing ("ChatGPT로 1줄 번역 중…"),
+ * or "" for a translator this file does not know. */
+export function withTranslator(id) {
+  return WITH[id] ? WITH[id]() : "";
 }
 
 /**

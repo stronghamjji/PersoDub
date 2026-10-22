@@ -14,6 +14,7 @@ import {
   applyEngineAvailability,
   engineChips,
   engineLine,
+  translatorLabel,
   voiceLabel,
   startedLabel,
   startErase,
@@ -448,7 +449,7 @@ test("engineChips: the local stack, quality first and every role named", () => {
 test("engineChips: the paid engines are marked, and 1 take is Fast mode", () => {
   const chips = engineChips({ stt_engine: "perso", translator: "gemini", tts: "qwen3", quality: 1 });
   assert.deepEqual(chips.map((c) => `${c.role} ${c.label}`.trim()),
-    ["Fast mode", "STT Perso", "Translation Gemini", "TTS Qwen3-TTS"]);
+    ["Fast mode", "STT Perso", "Translation Gemini API", "TTS Qwen3-TTS"]);
   assert.deepEqual(chips.map((c) => c.api), [false, true, true, false]);
 });
 
@@ -484,6 +485,21 @@ test("engineLine names the role beside every engine", () => {
   assert.equal(engineLine({ separation: "demucs", stt_engine: "whisper", translator: "gemma", tts: "qwen3" }),
     "Transcription Whisper · Translation Gemma 3 · Voice Qwen3-TTS");
   assert.equal(engineLine({ project: "old" }), "");
+});
+
+// B14, B16: the translator by the name the company calls it, with the model
+// the job kept; a job from before it was kept names the translator alone.
+test("translatorLabel names the translator with the model the job kept", () => {
+  assert.equal(translatorLabel({ translator: "chatgpt", translator_model: "gpt-5.6-luna" }), "ChatGPT (gpt-5.6-luna)");
+  assert.equal(translatorLabel({ translator: "chatgpt" }), "ChatGPT");
+  assert.equal(translatorLabel({ translator: "gemini", translator_model: "gemini-flash-latest" }), "Gemini API (Flash)");
+  assert.equal(translatorLabel({ translator: "hunyuan", translator_model: "hy-mt2:1.8b" }), "Hunyuan 1.8B");
+  assert.equal(translatorLabel({ translator: "gemma", translator_model: "gemma3:12b" }), "Gemma 3");
+  assert.equal(translatorLabel({ dub_mode: "perso" }), "Perso");
+  assert.equal(translatorLabel({ translator: "made-up" }), "");
+  assert.equal(translatorLabel(null), "");
+  assert.equal(engineLine({ stt_engine: "whisper", translator: "chatgpt", translator_model: "gpt-5.6-luna" }),
+    "Transcription Whisper · Translation ChatGPT (gpt-5.6-luna)");
 });
 
 test("engineChips: a job saved before the fields existed shows nothing", () => {
