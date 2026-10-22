@@ -619,6 +619,7 @@
   "The video could not be fetched.": "영상을 가져오지 못했어요.",
   "The video is still coming in": "영상을 아직 받는 중이에요",
   "The video is uploaded to Perso.": "영상이 Perso로 올라가요.",
+  "The video with subtitles burned in, and the subtitle file": "자막을 입힌 영상과 자막 파일이 나와요",
   "The voice engine is not running because it could not start, so this computer cannot dub. Quit and reopen PersoDub, or use the Perso API.": "목소리 엔진을 켜지 못해서 내 컴퓨터로는 더빙할 수 없어요. PersoDub을 껐다 켜거나 Perso API로 하면 돼요.",
   "The voice engine is not running. Quit and reopen PersoDub.": "목소리 엔진이 꺼져 있어요. PersoDub을 완전히 껐다가 다시 켜 주세요.",
   "The voice engine is not running: this computer ran out of memory. Close other programs, then press Start dubbing and it will start again. Dubbing with the Perso API uses almost no memory.": "메모리가 부족해서 목소리 엔진을 켜지 못했어요. 다른 프로그램을 닫은 뒤 '더빙 시작'을 누르면 다시 켜요. Perso API로 더빙하면 메모리를 거의 쓰지 않아요.",

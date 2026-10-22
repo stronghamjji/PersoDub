@@ -619,6 +619,7 @@
   "The video could not be fetched.": "The video could not be fetched.",
   "The video is still coming in": "The video is still coming in",
   "The video is uploaded to Perso.": "The video is uploaded to Perso.",
+  "The video with subtitles burned in, and the subtitle file": "The video with subtitles burned in, and the subtitle file",
   "The voice engine is not running because it could not start, so this computer cannot dub. Quit and reopen PersoDub, or use the Perso API.": "The voice engine is not running because it could not start, so this computer cannot dub. Quit and reopen PersoDub, or use the Perso API.",
   "The voice engine is not running. Quit and reopen PersoDub.": "The voice engine is not running. Quit and reopen PersoDub.",
   "The voice engine is not running: this computer ran out of memory. Close other programs, then press Start dubbing and it will start again. Dubbing with the Perso API uses almost no memory.": "The voice engine is not running: this computer ran out of memory. Close other programs, then press Start dubbing and it will start again. Dubbing with the Perso API uses almost no memory.",

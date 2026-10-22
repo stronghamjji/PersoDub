@@ -539,6 +539,21 @@ test("the subtitle tools live in the Captions tab and the video stays clean", ()
   assert.equal(html.split("/* === captions === */").length, 2);
 });
 
+// Under the looks, one card says what the tab makes (owner, 2026-10-22). It
+// is the tab's own: inside #capMain, so an empty tab has none either.
+test("the Subtitle style tab says what it makes, in one card under the looks", () => {
+  const html = readPage();
+  const tab = html.slice(html.indexOf('id="capMain"'), html.indexOf('id="runBody"'));
+  assert.match(tab, new RegExp('<div class="cap-grid" id="subStyleMenu"></div>\\s*(<!--[^]*?-->\\s*)?'
+    + '<div class="erase-card result-box" id="capResult">\\s*<div data-i18n class="k">What you get</div>\\s*'
+    + '<div data-i18n class="m">The video with subtitles burned in, and the subtitle file</div>\\s*</div>\\s*</div>'),
+    "the card is not the last thing under the looks");
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["The video with subtitles burned in, and the subtitle file"], "자막을 입힌 영상과 자막 파일이 나와요");
+  // The looks scroll above it; the card keeps the grid's side room.
+  assert.match(html, /\.cap-content \.result-box \{ margin: 0 12px 12px; \}/);
+});
+
 test("after an update the page says so in one line and keeps the What's new sheet for the link", () => {
   const html = readPage();
   // The notice and the sheet are ui/src/whatsNew.mjs's, written one level in.
