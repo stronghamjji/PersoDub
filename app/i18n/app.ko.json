@@ -259,5 +259,7 @@
   "{name} is not installed.": "{name} 프로그램이 설치되어 있지 않아요.",
   "{stage} must be one of: {choices}": "{stage} 값은 다음 중 하나여야 해요: {choices}",
   "{translator} could not translate these lines ({reason}). Try again.": "{translator} 번역기가 이 줄들을 번역하지 못했어요 ({reason}). 다시 시도해 주세요.",
-  "{translator} translation failed.": "{translator} 번역에 실패했어요."
+  "{translator} translation failed.": "{translator} 번역에 실패했어요.",
+  "This subtitle file has no lines PersoDub can read.": "이 자막 파일에서 읽을 수 있는 줄이 없어요.",
+  "Every line of this subtitle file starts after the video ends.": "이 자막 파일의 줄이 모두 영상이 끝난 뒤에 시작해요."
 }

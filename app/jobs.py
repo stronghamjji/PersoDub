@@ -105,7 +105,10 @@ SAVED_FIELDS = ("id", "status", "kind", "language", "language_code", "source_lan
                 # whole video into a new folder each time, and a dubbing that
                 # names the id still finds the two sounds
                 # (app/separate_launch.py stems_for).
-                "held_again")
+                "held_again",
+                # The subtitle file a "captions" job was made from, by name:
+                # the Subtitle style tab shows it beside the video.
+                "srt_name")
 
 # A key a record carries only at run time, left out on purpose. `started`
 # (app/separate_launch.py) is when a separation began, for the time the screen
@@ -155,6 +158,9 @@ class JobKind(StrEnum):
     DUB = "dub"
     ERASE = "erase"
     SEPARATE = "separate"
+    # A video and a subtitle file the user brought, for the Subtitle style
+    # tab alone (app/api/captions.py): finished the moment it exists.
+    CAPTIONS = "captions"
 
 
 def kind_of(job: dict) -> str:

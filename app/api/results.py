@@ -283,6 +283,12 @@ def _target_code(job: dict) -> str:
     return job.get("language_code") or "out"
 
 
+def _file_stem(job: dict) -> str:
+    """The downloads' name before the look: "dub_<code>" for a dubbing, plain
+    "video" for a video with the user's own subtitles (kind "captions")."""
+    return "video" if kind_of(job) == JobKind.CAPTIONS else "dub_" + _target_code(job)
+
+
 @router.get("/api/dub/result/{jid}")
 def dub_result(jid: str, ratio: Optional[str] = None):
     """Return the finished dubbed file -- inside a canvas of `ratio` when one
@@ -443,7 +449,7 @@ def dub_result_srt(jid: str, download: int = 0):
             headers = None
             if download:
                 headers = {"Content-Disposition":
-                           f'attachment; filename="dub_{_target_code(j)}.srt"'}
+                           f'attachment; filename="{_file_stem(j)}.srt"'}
             return Response(content=text,
                             media_type="text/plain; charset=utf-8",
                             headers=headers)
@@ -523,7 +529,7 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
                                 detail=media._failure(t("ffmpeg could not subtitle this video"), run.stderr,
                                                       (out, ass, built)))
         shutil.copyfile(ass, built + ".ass")
-    filename = "dub_%s-sub-%s.mp4" % (_target_code(j), preset)
+    filename = "%s-sub-%s.mp4" % (_file_stem(j), preset)
     headers = ({"Content-Disposition": 'attachment; filename="%s"' % filename}
                if download else None)
     return FileResponse(built, media_type="video/mp4", headers=headers)
