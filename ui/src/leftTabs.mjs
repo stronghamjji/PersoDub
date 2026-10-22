@@ -1,7 +1,8 @@
 // The tabs across the top of the finished screen's left panel (new-layout
-// mockup, user 2026-09-29): Dubbing, Audio, Captions, Erase. Each of the
-// first three shows its own body under the row -- #tabDubbing, #tabAudio,
-// #tabCaptions -- and hides the others. Erase has no body: it is the way to
+// mockup, user 2026-09-29), in Home's order (owner, 2026-10-22): Dubbing,
+// Audio, Erase, and Captions last, named Subtitle style. Dubbing, Audio and
+// Captions each show their own body under the row -- #tabDubbing, #tabAudio,
+// #tabCaptions -- and hide the others. Erase has no body: it is the way to
 // the erase screen, so pressing it runs onErase and leaves the row as it was.
 //
 // A new tool is a new tab: a button with data-tab="<name>" in #leftTabs and a

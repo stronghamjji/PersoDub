@@ -717,7 +717,7 @@ test("the top bar is the name, then Settings, the pane buttons and Export; Home 
   // project is last. Buttons dressed as tabs: no data-tab, so no "on" state.
   const row = html.slice(html.indexOf('id="leftTabs"'), html.indexOf('id="tabDubbing"'));
   const order = ['id="homeBtn"', 'class="left-sep"', 'data-tab="dubbing"', 'data-tab="audio"',
-                 'data-tab="captions"', 'data-tab="erase"', 'id="newProjectBtn"'].map((s) => row.indexOf(s));
+                 'data-tab="erase"', 'data-tab="captions"', 'id="newProjectBtn"'].map((s) => row.indexOf(s));
   assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), "Home, a hairline, the four tabs, New project");
   const home = row.slice(row.indexOf('id="homeBtn"'), row.indexOf("</button>"));
   assert.ok(home.includes("M15 21v-8a1 1 0 0 0-1-1h-4") && home.includes("<span>Home</span>") && !home.includes("data-tab"),
@@ -779,7 +779,13 @@ test("the left panel is a row of tabs, each over a body of its own", () => {
   const tabs = [...pane.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]);
   // One project holds one video: there is no Media tab to keep it in
   // (owner, 2026-09-30).
-  assert.deepEqual(tabs, ["dubbing", "audio", "captions", "erase"]);
+  // Home's order, its three tools first, and the subtitles' look last under a
+  // name that says what it holds (owner, 2026-10-22).
+  assert.deepEqual(tabs, ["dubbing", "audio", "erase", "captions"]);
+  const captions = pane.slice(pane.indexOf('data-tab="captions"'));
+  assert.ok(captions.slice(0, captions.indexOf("</button>")).endsWith("</svg>Subtitle style"));
+  assert.match(readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8"),
+    /\['#leftTabs \[data-tab="captions"\]', t\("Subtitle style"\)\]/);
   assert.ok(!/tabMedia|mediaTab|media-thumb|mediaSearch|mediaImpBtn/.test(html), "nothing of the Media tab is left");
   assert.match(pane, /<div class="tab-body erase-tab audio-tab" id="tabAudio" role="tabpanel" hidden>/);
   assert.match(pane, /<button class="left-tab on"[^>]*data-tab="dubbing" aria-selected="true">/, "Dubbing is on to begin with");

@@ -16,7 +16,7 @@ const words = () => [
   ["#homeHelp", t("Help")],
   ['#leftTabs [data-tab="dubbing"]', t("Dubbing")],
   ['#leftTabs [data-tab="audio"]', t("Separate audio")],
-  ['#leftTabs [data-tab="captions"]', t("Captions")],
+  ['#leftTabs [data-tab="captions"]', t("Subtitle style")],
   ['#leftTabs [data-tab="erase"]', t("Erase")],
   // Home and New project move between the tab row and the top bar.
   ["#homeBtn span", t("Home")],

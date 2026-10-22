@@ -18,7 +18,8 @@ function harness() {
       closest: function () { return this; },
     };
   };
-  const buttons = ["dubbing", "audio", "captions", "erase"].map(button);
+  // The page's order (static/index.html): Home's tools, then Subtitle style.
+  const buttons = ["dubbing", "audio", "erase", "captions"].map(button);
   let onClick = null;
   els.leftTabs = {
     querySelectorAll: () => buttons,
@@ -74,7 +75,7 @@ test("the page can put a tab on show itself", () => {
 
 test("a locked tab is dimmed, says why, cannot be opened, and gives way to Dubbing", () => {
   const h = harness();
-  const captions = h.buttons[2];
+  const captions = h.buttons[3];
   h.press("captions");
   h.api.setLocked("captions", true, "After dubbing");
   assert.equal(captions.disabled, true);

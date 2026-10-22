@@ -26,7 +26,7 @@ Beside it are the **Create project** banner, a row of cards (the **Dub Agent** a
 the four tools) and your projects.
 
 A project opens on the work screen: tabs on the left (**Dubbing**, **Separate
-audio**, **Captions**, **Erase**, between **Home** and **New project**), the video in
+audio**, **Erase**, **Subtitle style**, between **Home** and **New project**), the video in
 the middle, the **Dub Agent** panel on the right and the timeline under all three.
 Along the top is the bar with the project's name, **Settings**, the three pane buttons
 that show or hide the left panel, the timeline and the Dub Agent, and **Export**.
