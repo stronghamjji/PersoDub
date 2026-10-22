@@ -428,9 +428,8 @@
   :root[data-platform="darwin"] .topbar { -webkit-app-region: drag; padding-left: 80px; }
   :root[data-platform="darwin"] .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }
   /* One bar, two layouts (2026-10-21), the name centred in both. The Mac's
-     right end reads Export, Settings, the pane buttons; Windows starts with
-     the pane buttons and Settings at the left, so Export is the last thing
-     before its window buttons. */
+     right end reads Settings, the pane buttons; Windows starts with the
+     pane buttons and Settings at the left. */
   :root[data-platform="darwin"] .topbar :is(#settingsBtn, .panes) { order: 1; }
   :root[data-platform="win32"] .topbar .panes { order: -2; }
   :root[data-platform="win32"] .topbar #settingsBtn { order: -1; }
@@ -441,6 +440,9 @@
   /* The mockup's Export: 22px high, capitals 8px tall (11px words). */
   #exportBtn { height: 22px; min-width: 67px; padding: 0 10px; border-radius: 5px;
     font-size: 11px; font-weight: 600; }
+  /* At the right end of the video panel's tab row, 9px in from its edge
+     (owner, 2026-10-22), below the bar and the window's own buttons. */
+  .video-tabs #exportBtn { align-self: center; margin: 0 9px 0 auto; }
 
   /* The one job-wide message line (a credit warning, or why a dub failed).
      It sits in the progress card, right under the four steps -- the place the
@@ -517,8 +519,8 @@
   body:is([data-screen="running"], [data-screen="failed"]) #runPane { display: flex; }
   body[data-screen="erase"] #erasePane { display: flex; }
   body[data-screen="running"]:not(.timeline-off) #runTimeline { display: flex; }
-  /* A tab with nothing behind it yet, and the top bar's Export before there
-     is anything to hand back. */
+  /* A tab with nothing behind it yet, and Export before there is anything
+     to hand back. */
   .left-tab:disabled, .vtab:disabled { opacity: 0.4; cursor: default; }
   #exportBtn:disabled { background: var(--secondary); color: var(--muted-foreground);
     opacity: 1; cursor: default; box-shadow: none; }

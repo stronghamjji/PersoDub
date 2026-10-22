@@ -699,19 +699,21 @@ test("the project's page is the repository the shell names, or the public one wi
 });
 
 // The new-layout frame (mockup, user 2026-09-29): one bar with Home at the
-// left, the name in the middle, then Settings, the three pane buttons and
-// Export; under it three panels in a row and the timeline under all three.
-test("the top bar is the name, then Settings, the pane buttons and Export; Home and New project are in the tab row", () => {
+// left, the name in the middle, then Settings and the three pane buttons
+// (Export left it for the video panel's tab row, 2026-10-22); under it three
+// panels in a row and the timeline under all three.
+test("the top bar is the name, then Settings and the pane buttons; Home and New project are in the tab row", () => {
   const html = readPage();
   const bar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('<div class="shell">'));
   const at = (s) => bar.indexOf(s);
-  for (const id of ["topbarWays", "topbarTitle", "settingsBtn", "paneList", "paneTimeline", "paneAgent", "exportBtn"]) {
+  for (const id of ["topbarWays", "topbarTitle", "settingsBtn", "paneList", "paneTimeline", "paneAgent"]) {
     assert.ok(at(`id="${id}"`) > 0, `${id} is not in the top bar`);
   }
   assert.ok(at('id="topbarWays"') < at('id="topbarTitle"') && at('id="topbarTitle"') < at('id="settingsBtn"')
     && at('id="settingsBtn"') < at('id="paneList"') && at('id="paneList"') < at('id="paneTimeline"')
-    && at('id="paneTimeline"') < at('id="paneAgent"') && at('id="paneAgent"') < at('id="exportBtn"'),
-    "name, Settings, list, timeline, agent, Export");
+    && at('id="paneTimeline"') < at('id="paneAgent"'),
+    "name, Settings, list, timeline, agent");
+  assert.ok(at('id="exportBtn"') < 0, "Export is in the video panel's tab row, not the bar");
   assert.ok(at('id="homeBtn"') < 0 && at('id="newProjectBtn"') < 0, "the two are not written into the bar");
   // Home is a house over its word, first in the left panel's tab row; New
   // project is last. Buttons dressed as tabs: no data-tab, so no "on" state.
@@ -1062,6 +1064,26 @@ test("the confirms keep their corner X for its listeners, but hidden", () => {
   assert.ok(!html.includes("upd-close"), "the update window's red dot is back");
 });
 
+// People looked for Export beside the video, not among the window's own
+// buttons (feedback sheet, 2026-10-21; owner 4-1 가, 2026-10-22). The one
+// button stands at the right end of the finished panel's tab row in the
+// markup, and each of the three video panels' rows has an id to move it to
+// (ui/src/workFrame.mjs, which is tested there).
+test("Export is one button, at the right end of the video panel's tab row", () => {
+  const html = readPage();
+  assert.equal(html.match(/id="exportBtn"/g).length, 1, "one Export button on the page");
+  const pane = (id, next) => html.slice(html.indexOf(`<div class="video-pane" id="${id}">`), html.indexOf(next));
+  const done = pane("videoPane", 'id="runPane"');
+  const row = done.slice(done.indexOf('<div class="video-tabs" id="videoTabsNormal">'), done.indexOf('<div class="video-body">'));
+  assert.match(row, /id="vtabDubbed">Dubbed<\/button>\s*<!--[^]*?-->\s*<button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Export<\/button>\s*<\/div>\s*$/,
+    "last in the finished panel's tab row, after Original and Dubbed");
+  assert.match(pane("runPane", 'id="erasePane"'), /<div class="video-tabs" id="runTabs">\s*<button class="vtab active" type="button">Original<\/button>/);
+  assert.match(pane("erasePane", "<!-- ============ AGENT PANEL"), /<div class="video-tabs erase-tabs" id="eraseTabs">/);
+  // Pushed to the row's right end, in the middle of its height.
+  assert.match(html, /\.video-tabs #exportBtn \{ align-self: center; margin: 0 9px 0 auto; \}/);
+  assert.match(html, /\.video-tabs \{ flex: 0 0 auto; box-sizing: border-box; height: 42px; display: flex;/);
+});
+
 test("the Export dialog is rows to tick and a foot with Cancel and Export", () => {
   const html = readPage();
   // The rows themselves are ui/src/exportDialog.mjs, tested there; the page
@@ -1351,17 +1373,18 @@ test("on Windows the page draws its own scrollbars and is moved by its top bar; 
 // it -- the Mac's lights at the left, Windows' three at the right -- and the
 // stylesheet orders one row of buttons two ways. Home's bar holds neither
 // Settings nor the pane buttons.
-test("the Mac's bar starts after its lights and ends Export, Settings, panes; Windows' starts panes, Settings", () => {
+test("the Mac's bar starts after its lights and ends Settings, panes; Windows' starts panes, Settings", () => {
   const html = readPage();
   const rule = (css) => new RegExp(css.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const mac = ':root[data-platform="darwin"]';
   const win = ':root[data-platform="win32"]';
   assert.match(html, rule(`${mac} .topbar { -webkit-app-region: drag; padding-left: 80px; }`));
   assert.match(html, rule(`${mac} .topbar :is(button, input, #topbarTitle) { -webkit-app-region: no-drag; }`));
-  // The bar's row, as written: Settings, the panes, then Export last.
+  // The bar's row, as written: Settings, then the panes. Export is not in it
+  // (the video panel's tab row, 2026-10-22).
   const bar = html.slice(html.indexOf('<div class="topbar" id="topbar">'), html.indexOf('<div class="shell">'));
-  assert.ok(bar.indexOf('id="settingsBtn"') < bar.indexOf('class="panes"') && bar.indexOf('class="panes"') < bar.indexOf('id="exportBtn"'));
-  // Mac: Settings and the panes after everything at order 0, Export included.
+  assert.ok(bar.indexOf('id="settingsBtn"') < bar.indexOf('class="panes"') && !bar.includes('id="exportBtn"'));
+  // Mac: Settings and the panes after everything at order 0.
   assert.match(html, rule(`${mac} .topbar :is(#settingsBtn, .panes) { order: 1; }`));
   // Windows: the panes, then Settings, ahead of everything else.
   assert.match(html, rule(`${win} .topbar .panes { order: -2; }`));

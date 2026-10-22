@@ -10,7 +10,7 @@
 
   The new-layout frame (mockup approved 2026-09-29):
   - Skeleton: one 36px top bar (Home at the left, the job's name in the
-    middle, Settings, the pane buttons and Export at the right), a
+    middle, Settings and the pane buttons at the right), a
     collapsible projects sidebar, and the screens (home / running / erase /
     done) swapped by showScreen(). The finished screen is three panels in a
     row -- the tabbed left panel, the video, the agent -- with the timeline
@@ -65,7 +65,8 @@
   <!-- ============ TOPBAR ============ -->
   <!-- The window's one bar, 36px across the whole width (new-layout mockup,
        user 2026-09-29): the job's name in the middle, and on the right
-       Settings, the three pane buttons and Export. On the Mac and Windows the
+       Settings and the three pane buttons (#exportBtn left for the video
+       panel's tab row, 2026-10-22). On the Mac and Windows the
        system's title bar is gone and the window's own buttons sit in this bar;
        the stylesheet orders the buttons for each (2026-10-21). Home and New
        project live in the left panel's tab row (owner, 2026-09-30); while that
@@ -111,7 +112,6 @@
       <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><rect class="fill" x="14" y="6" width="5" height="12" rx="1"/></svg>
     </button>
     </span>
-    <button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Export</button>
   </div>
 
   <div class="shell">
@@ -607,6 +607,12 @@
               <div class="video-tabs" id="videoTabsNormal">
                 <button data-i18n class="vtab" data-src="original" type="button" id="vtabOriginal">Original</button>
                 <button data-i18n class="vtab active" data-src="dubbed" type="button" id="vtabDubbed">Dubbed</button>
+                <!-- What the project hands back, at the right end of the tab
+                     row of whichever video panel is up: people looked for it
+                     beside the video, not among the window's own buttons
+                     (owner, 2026-10-22). One button: ui/src/workFrame.mjs
+                     moves it to the running and erase panels' rows. -->
+                <button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Export</button>
               </div>
               <div class="video-body">
                 <div class="video-wrap" id="videoWrap">
@@ -662,7 +668,7 @@
             <!-- The job's own video, playable while it is dubbed: the file is
                  already on this machine. There is no dubbed one to show yet. -->
             <div class="video-pane" id="runPane">
-              <div class="video-tabs">
+              <div class="video-tabs" id="runTabs">
                 <button class="vtab active" type="button">Original</button>
                 <button class="vtab" type="button" disabled title="After dubbing">Dubbed</button>
               </div>

@@ -28,8 +28,9 @@ the four tools) and your projects.
 A project opens on the work screen: tabs on the left (**Dubbing**, **Separate
 audio**, **Captions**, **Erase**, between **Home** and **New project**), the video in
 the middle, the **Dub Agent** panel on the right and the timeline under all three.
-Along the top is the bar with the project's name, **Settings**, the three pane buttons
-that show or hide the left panel, the timeline and the Dub Agent, and **Export**.
+Along the top is the bar with the project's name, **Settings** and the three pane
+buttons that show or hide the left panel, the timeline and the Dub Agent. **Export**
+is at the right end of the tabs above the video.
 
 ## Dubbing
 
@@ -63,8 +64,8 @@ the Perso API, depending on the **Dubbing model** below ([full list](languages.m
 
 From here:
 
-- **Export** in the top bar saves the kept part as a video, or as audio only, into
-  Downloads.
+- **Export**, at the right end of the tabs above the video, saves the kept part as a
+  video, or as audio only, into Downloads.
 - The **Separate audio** and **Erase** tabs work on the same video.
 - **Start dubbing** begins the dub.
 
@@ -117,10 +118,10 @@ When the job finishes it opens on the screen the app is really about: the script
 - **The timeline** underneath has a lane for the video, one for the original, one
   for the translation and one for the captions. A bar that runs past its slot is
   marked.
-- **Export** in the top bar saves the dubbed video, with or without the subtitles
-  burned in, the dubbed audio, the original voice and the background, the translated
-  `.srt`, and, for a job that started from a link, the original video (each when the
-  job has one).
+- **Export**, at the right of **Original** and **Dubbed**, saves the dubbed video, with
+  or without the subtitles burned in, the dubbed audio, the original voice and the
+  background, the translated `.srt`, and, for a job that started from a link, the
+  original video (each when the job has one).
 - The click target on the job's name in the top bar renames the project. The folder
   keeps the name it was made with; the screens show the name you gave it.
 
@@ -149,7 +150,7 @@ is slow work, minutes for every minute of video, because every frame in the band
 to be painted over. **Erase** starts it.
 
 When it finishes, **Original** and **Erased** above the picture swap between the two
-so you can see what changed. **Export** in the top bar saves the clean video, and
+so you can see what changed. **Export**, at the right of the two, saves the clean video, and
 **Dubbing** opens it as a new project to dub. If something goes wrong, the panel says
 why it stopped, **Try again** runs it again on the same video and the same box, and
 **Raw log** has the detail.

@@ -1,4 +1,5 @@
-// The work screen's tab row, kept in step with the screen's name.
+// The work screen's tab row, kept in step with the screen's name, and the
+// Export button in the tab row of the video panel that name shows.
 //
 // Run with: node --test ui/src/workFrame.test.mjs
 import test from "node:test";
@@ -14,8 +15,13 @@ function harness({ screen = "home", tab = "dubbing" } = {}) {
     addEventListener: (ev, fn) => { if (ev === "click") onClick = fn; },
   };
   const tabs = { show: (name) => { state.tab = name; }, current: () => state.tab };
+  // The other ids are the video panels' tab rows; Export starts in the
+  // finished panel's, where the markup puts it.
+  const exportBtn = { row: "videoTabsNormal" };
+  const els = { leftTabs: row, exportBtn };
+  const $ = (id) => (els[id] ||= { append: (node) => { node.row = id; } });
   const api = initWorkFrame({
-    $: () => row, tabs, getScreen: () => state.screen,
+    $, tabs, getScreen: () => state.screen,
     onLeaveErase: () => { state.left += 1; },
   });
   const go = (name) => { state.screen = name; api.onScreen(name); };
@@ -24,8 +30,28 @@ function harness({ screen = "home", tab = "dubbing" } = {}) {
     if (name !== "erase") state.tab = name;
     onClick({ target: { closest: () => ({ dataset: { tab: name } }) } });
   };
-  return { state, captions, go, press };
+  return { state, captions, go, press, exportRow: () => exportBtn.row };
 }
+
+// People looked for Export beside the video, not in the top bar (owner,
+// 2026-10-22): one button, moved to the row of whichever video panel is up.
+test("Export stands in the tab row of the video panel each screen shows", () => {
+  const h = harness();
+  for (const [screen, row] of [["done", "videoTabsNormal"], ["running", "runTabs"], ["failed", "runTabs"],
+                               ["done", "videoTabsNormal"], ["erase", "eraseTabs"], ["running", "runTabs"]]) {
+    h.go(screen);
+    assert.equal(h.exportRow(), row, `on the ${screen} screen`);
+  }
+});
+
+test("a draft's screen is the finished panel's, and Home leaves Export where it was", () => {
+  const h = harness({ screen: "erase" });
+  assert.equal(h.exportRow(), "eraseTabs", "a frame that starts on a screen places it at once");
+  h.go("home");
+  assert.equal(h.exportRow(), "eraseTabs");
+  h.go("done");   // a draft, before any dub, and a finished job alike
+  assert.equal(h.exportRow(), "videoTabsNormal");
+});
 
 test("a job opened from the first screen starts on the Dubbing tab", () => {
   const h = harness({ tab: "audio" });

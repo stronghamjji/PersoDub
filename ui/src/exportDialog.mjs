@@ -1,6 +1,6 @@
-// The Export dialog: the one way to save anything out of a project. The top
-// bar's Export opens it on whatever is on screen, and its rows are what that
-// has to hand back:
+// The Export dialog: the one way to save anything out of a project. Export,
+// at the right end of the video panel's tab row, opens it on whatever is on
+// screen, and its rows are what that has to hand back:
 //
 //   a draft            Video (the kept parts joined), Audio only
 //   a finished dubbing Dubbed video, Dubbed video with subtitles, Dubbed audio,

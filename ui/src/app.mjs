@@ -492,7 +492,8 @@ function setTopbar({ title, subtitle = "", running = false, done = false, back =
   $("newProjectBtn").hidden = !back;
   $("cancelBtn").hidden = !running;
   // Only a finished job has anything to hand back. On the work screen the
-  // button is there all along, and dim until then.
+  // button is there all along (in the video panel's tab row since
+  // 2026-10-22, ui/src/workFrame.mjs), and dim until then.
   $("exportBtn").hidden = !done && !back;
   // A draft with a video on its timeline has its kept parts to hand back,
   // on the Erase tab too -- which says itself (`exportable`) whether that

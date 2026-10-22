@@ -1,14 +1,22 @@
 // The work screen wears one frame under four names: a dub that is running
 // ("running"), one that finished ("done"), one that stopped ("failed") and the
 // Erase tab ("erase"). The stylesheet picks each one's panels by that name;
-// this file keeps the left panel's tab row in step with it.
+// this file keeps the left panel's tab row in step with it, and the one
+// Export button (#exportBtn) at the right end of the tab row of the video
+// panel that name shows (owner, 2026-10-22).
 //
 // What it does: lights the Erase tab while the erase screen is up and the
 // Dubbing tab when a job takes the screen, and tells the page when a tab
 // other than Erase is pressed on the erase screen -- that is the way back to
 // the job. (Captions is dimmed until there is a dub by ui/src/captionsTab.mjs.)
 //
-// The elements this file touches: #leftTabs and its buttons.
+// The elements this file touches: #leftTabs and its buttons, #exportBtn, and
+// the three video panels' tab rows (#videoTabsNormal, #runTabs, #eraseTabs).
+
+// The tab row of the video panel each name shows (static/css/app.css): the
+// finished one for a finished job and a draft, the running one for a dub that
+// runs or stopped, and the Erase tab's own.
+const EXPORT_ROWS = { done: "videoTabsNormal", running: "runTabs", failed: "runTabs", erase: "eraseTabs" };
 
 /**
  * @param {object} deps
@@ -31,6 +39,8 @@ export function initWorkFrame({ $, tabs, getScreen, onLeaveErase }) {
     if (name === last) return;
     const from = last;
     last = name;
+    // Home has no video panel; the button stays, hidden, in the last row.
+    if (EXPORT_ROWS[name]) $(EXPORT_ROWS[name]).append($("exportBtn"));
     if (name === "erase") { tabs.show("erase"); return; }
     if (name === "home") return;
     // A job opened from the first screen starts on its own tab; so does one
