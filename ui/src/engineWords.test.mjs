@@ -48,7 +48,7 @@ const ENGINE_SENTENCES = [
   "The assistant stopped before finishing.",
   "Usage limit reached. Wait a while or pick another assistant.",
   "Codex is not signed in. Press Sign in above.",
-  "Claude is not signed in. Run claude in Terminal, then /login.",
+  "Claude is not signed in. Press Sign in above.",
   "The assistant is not signed in.",
   "This model isn't available on your plan. Pick another one.",
 ];

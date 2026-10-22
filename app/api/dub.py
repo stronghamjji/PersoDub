@@ -107,7 +107,7 @@ def _valid_language_code(code: str, dub_mode: str = "local") -> bool:
 # Which engines a job is made with, and which models that still needs
 # ---------------------------------------------------------------------------
 
-def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -> str:
+def _ollama_unavailable_message(engine_name: str, status: str) -> str:
     """422 detail for a gemma/qwen preflight failure -- distinguishes an
     unreachable Ollama server from one that's reachable but just hasn't
     pulled the model yet, so a busy-but-valid Ollama isn't misreported as
@@ -128,9 +128,8 @@ def _ollama_unavailable_message(engine_name: str, status: str, model_tag: str) -
             "(Ollama is not running or not reachable). Choose Gemini in the "
             "Translation dropdown, or make sure Ollama is running.", engine=engine_name)
     return t(
-        "Local {engine} translation is not available on this machine "
-        "(the model is not pulled). Choose Gemini in the Translation dropdown, "
-        "or run: ollama pull {tag}", engine=engine_name, tag=model_tag)
+        "The {engine} translation model is not downloaded yet. Download it in Settings > Models, "
+        "or choose another translator.", engine=engine_name)
 
 
 def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engine=None,
@@ -260,7 +259,7 @@ def _ollama_preflight(info):
     # A model the app downloads is the 409 dialog when it is missing; one the
     # app does not download (Qwen) can only be refused until it is pulled.
     if status == "unreachable" or (status != "available" and not info.catalog_id):
-        raise HTTPException(422, _ollama_unavailable_message(info.label, status, info.ollama_model))
+        raise HTTPException(422, _ollama_unavailable_message(info.label, status))
     # Same rule "Try again" applies, asked with the status already in hand
     # so a start still probes Ollama exactly once.
     return need_ollama, dub_launch.translate_model_missing(info.name, status)

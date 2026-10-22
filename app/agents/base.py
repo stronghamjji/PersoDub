@@ -245,12 +245,13 @@ _SIGNED_OUT = {
     "claude": re.compile(r"not\s+logged\s+in|please\s+run\s*/login", re.I),
 }
 
-# What to say instead. Each names the one command that fixes it, because
-# "sign in" on its own leaves the reader looking for a button that is not there.
+# What to say instead. Each names the button that fixes it, the Sign in the
+# panel shows above its box for an assistant that is signed out
+# (ui/src/agentStrip.mjs) -- no terminal command.
 SIGNED_OUT_LINE = {
     # Codex signs in through the app's own window now (one ChatGPT sign-in).
     "codex": "Codex is not signed in. Press Sign in above.",
-    "claude": "Claude is not signed in. Run claude in Terminal, then /login.",
+    "claude": "Claude is not signed in. Press Sign in above.",
 }
 
 

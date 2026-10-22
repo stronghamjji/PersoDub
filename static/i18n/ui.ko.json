@@ -73,7 +73,7 @@
   "Choose every line": "모든 줄 선택",
   "Choose line {n}": "{n}번 줄 선택",
   "Claude Code, installed and signed in, or Codex, which the app can download and sign in.": "Claude Code 또는 Codex 계정으로 움직여요.",
-  "Claude is not signed in. Run claude in Terminal, then /login.": "Claude에 로그인되어 있지 않아요. 터미널에서 claude를 실행한 뒤 /login을 입력해 주세요.",
+  "Claude is not signed in. Press Sign in above.": "Claude에 로그인되어 있지 않아요. 위의 로그인을 누르면 돼요.",
   "Clean": "Clean",
   "Click to rename": "눌러서 이름 바꾸기",
   "Clones each speaker’s voice.": "화자마다 원래 목소리를 따라 해요.",

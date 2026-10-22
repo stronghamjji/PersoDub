@@ -207,7 +207,8 @@ def shown_words(text: str) -> str:
     as it is, and so does a line added to the catalog without one here."""
     return {
         "Audio separation, speech-to-text, voices": t("Audio separation, speech-to-text, voices"),
-        "Translation": t("Translation"),
+        "Needed to run the local translation models (Hunyuan, Gemma 3)":
+            t("Needed to run the local translation models (Hunyuan, Gemma 3)"),
         "Subtitle eraser": t("Subtitle eraser"),
         "More careful": t("More careful"),
         "Small and quick": t("Small and quick"),
@@ -266,7 +267,8 @@ def request_download(entry) -> str:
     if entry["source"].get("kind") == "ollama" and not _runtime.url("ollama"):
         # Only the runtime can pull into its store, and it is not running:
         # say so up front instead of queueing a pull that fails on an empty URL.
-        raise ValueError(t("Install Ollama first, then download this model."))
+        raise ValueError(t("Local translation models (Hunyuan, Gemma 3) need a program called Ollama "
+                           "to run. Download it in Settings > Models."))
     with _lock:
         state = (_downloads.get(entry["id"]) or {}).get("state")
         if state in ("queued", "downloading"):
@@ -304,7 +306,8 @@ def remove_model(entry):
             # Only the runtime can take a model out of its shared blob store,
             # and it is not running. Say so: a silent "removed" that removed
             # nothing is worse than a refusal.
-            raise ValueError(t("Install Ollama first, then remove this model."))
+            raise ValueError(t("Local translation models (Hunyuan, Gemma 3) need a program called Ollama "
+                               "to run. Download it in Settings > Models."))
         # A model pulled under one name and renamed (Hunyuan: pulled from
         # hf.co/..., then given its tag with our template) is held by both
         # names; deleting only the tag freed nothing, 1.1 GB stayed on disk

@@ -73,7 +73,7 @@
   "Choose every line": "Choose every line",
   "Choose line {n}": "Choose line {n}",
   "Claude Code, installed and signed in, or Codex, which the app can download and sign in.": "Claude Code, installed and signed in, or Codex, which the app can download and sign in.",
-  "Claude is not signed in. Run claude in Terminal, then /login.": "Claude is not signed in. Run claude in Terminal, then /login.",
+  "Claude is not signed in. Press Sign in above.": "Claude is not signed in. Press Sign in above.",
   "Clean": "Clean",
   "Click to rename": "Click to rename",
   "Clones each speaker’s voice.": "Clones each speaker’s voice.",

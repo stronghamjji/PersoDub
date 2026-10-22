@@ -4,7 +4,7 @@
    "bytes": {"mac": 2000000000, "win-gpu": 9000000000, "win-cpu": 1500000000},
    "dir": "engines_venv", "markers": [".install/venv-engines.ok", "models/demucs/HTDemucs/955717e8.safetensors"]},
   {"id": "ollama-runtime", "role": "pack", "name": "Ollama",
-   "hint": "Translation",
+   "hint": "Needed to run the local translation models (Hunyuan, Gemma 3)",
    "bytes": {"mac": 460000000, "win-gpu": 1900000000, "win-cpu": 1900000000},
    "dir": "ollama", "markers": ["ollama/ollama"]},
   {"id": "subtitle-eraser", "role": "pack", "name": "Subtitle eraser",

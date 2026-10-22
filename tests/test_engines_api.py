@@ -343,7 +343,9 @@ def test_dub_start_qwen_model_missing_422(monkeypatch):
         data={"language": "Korean", "language_code": "ko", "translate_engine": "qwen"},
     )
     assert r.status_code == 422
-    assert "ollama pull" in r.json()["detail"]
+    # Where to get it, not a terminal command (A41).
+    assert r.json()["detail"] == ("The Qwen translation model is not downloaded yet. Download it in "
+                                  "Settings > Models, or choose another translator.")
 
 
 def test_dub_start_qwen_unreachable_422_message(monkeypatch):

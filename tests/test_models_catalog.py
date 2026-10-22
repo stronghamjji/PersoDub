@@ -237,7 +237,8 @@ def test_removing_an_ollama_model_without_its_runtime_is_refused_with_a_sentence
     monkeypatch.setattr(models_module, "dub_in_progress", lambda: False)
     r = client.delete("/api/models/hunyuan")
     assert r.status_code == 409
-    assert r.json()["detail"] == "Install Ollama first, then remove this model."
+    assert r.json()["detail"] == ("Local translation models (Hunyuan, Gemma 3) need a program called Ollama "
+                                  "to run. Download it in Settings > Models.")
     assert os.path.exists(os.path.join(kit, "models", "ollama", "manifests"))
 
 
@@ -261,7 +262,8 @@ def test_an_ollama_model_asked_for_without_its_runtime_is_refused_with_a_sentenc
     monkeypatch.setattr(models_module, "free_bytes_at", lambda path: 10**12)
     r = client.post("/api/models/hunyuan/download")
     assert r.status_code == 409
-    assert r.json()["detail"] == "Install Ollama first, then download this model."
+    assert r.json()["detail"] == ("Local translation models (Hunyuan, Gemma 3) need a program called Ollama "
+                                  "to run. Download it in Settings > Models.")
 
 
 def test_only_a_row_its_group_title_does_not_explain_carries_a_hint():

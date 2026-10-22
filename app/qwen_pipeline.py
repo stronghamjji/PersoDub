@@ -975,12 +975,12 @@ def _synth_best_of(synth: _LineSynth, units: List[List[int]], n_takes: int,
                "Check QWEN_SCORER_PYTHON and PERSODUB_CAMPPLUS_MODEL." % n_takes)
         synth.log("   " + msg)
         if on_notice:
-            # The same sentence for the screen, in the user's language; the
-            # log line above stays in English.
+            # For the screen, in the user's language: what happened and what
+            # it means for the voices. The settings to check are a
+            # developer's, and stay in the log line above.
             on_notice({"type": "take_scoring_unavailable", "message": i18n.t(
-                "take scoring UNAVAILABLE - best-of-{takes} selection skipped, take 0 used for "
-                "every line (quality degraded: no speaker-similarity or slot-fit choice). "
-                "Check QWEN_SCORER_PYTHON and PERSODUB_CAMPPLUS_MODEL.", takes=n_takes)})
+                "The voice takes could not be compared, so each line uses its first take. "
+                "The voices may sound less like the originals or fit their time less well.")})
         winners = {}
     return _copy_winners(take_paths, winners, synth.work_dir, synth.log)
 

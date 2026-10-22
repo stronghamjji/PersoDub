@@ -664,9 +664,9 @@ test("a download the engine refuses shows its sentence instead of starting nothi
   const h = harness({ rows: [{ id: "hunyuan", role: "translate", name: "Hunyuan", bytes: 1.1e9, state: "not_downloaded" }] });
   t.after(h.state.restore);
   await h.api.refreshModels();
-  h.state.responses = { "/api/models/hunyuan/download": { ok: false, json: async () => ({ detail: "Install Ollama first, then download this model." }) } };
+  h.state.responses = { "/api/models/hunyuan/download": { ok: false, json: async () => ({ detail: "Local translation models (Hunyuan, Gemma 3) need a program called Ollama to run. Download it in Settings > Models." }) } };
   await h.api.downloadModel("hunyuan");
-  assert.equal(h.$("modelsError").textContent, "Hunyuan: Install Ollama first, then download this model.");
+  assert.equal(h.$("modelsError").textContent, "Hunyuan: Local translation models (Hunyuan, Gemma 3) need a program called Ollama to run. Download it in Settings > Models.");
 });
 
 test("a ready row says what it is for after its status, and a row on its way says only its status", async (t) => {
