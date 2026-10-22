@@ -5,18 +5,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DEFAULT_MODEL, isModelId, languagesFor, modelCaption, modelHint, modelInfo, modelLabel, modelsIn }
-  from "./persoModels.mjs";
+import { DEFAULT_MODEL, defaultLanguages, defaultModelFor, isModelId, languagesFor, modelCaption, modelHint, modelInfo,
+         modelLabel, modelsIn } from "./persoModels.mjs";
 import { loadTable, setLanguage } from "./i18n.mjs";
 
 const ko = { id: "ko", models: ["NIGHTINGALE", "ORIOLE", "WREN"] };
 const gb = { id: "en-GB", models: ["ORIOLE", "NIGHTINGALE"] };
 const au = { id: "en-AU", models: ["NIGHTINGALE"] };
 
-test("the choice offers every model the list names, the known ones first in their order, Oriole selected first", () => {
+test("the choice offers every model the list names, the known ones first in their order, Linnet 4 the default", () => {
   assert.deepEqual(modelsIn([ko, gb, au]), ["ORIOLE", "WREN", "NIGHTINGALE"]);
   assert.deepEqual(modelsIn([{ id: "x", models: ["NEW_ONE", "FINCH", "LINNET_4", "bad id"] }]), ["LINNET_4", "FINCH", "NEW_ONE"]);
-  assert.equal(DEFAULT_MODEL, "ORIOLE");
+  assert.equal(DEFAULT_MODEL, "LINNET_4");
+});
+
+// Perso's own API default since 2026-10-12, which the app follows as it
+// always names the model (owner, 2026-10-22).
+test("nobody choosing, a language is dubbed with Linnet 4, or with Oriole where it lacks Linnet 4", () => {
+  const de = { id: "de", models: ["ORIOLE", "LINNET_4", "NIGHTINGALE"] };
+  const es = { id: "es-ES", models: ["ORIOLE", "NIGHTINGALE"] };
+  const yue = { id: "yue", models: ["LINNET_4"] };
+  assert.equal(defaultModelFor(de), "LINNET_4");
+  assert.equal(defaultModelFor(yue), "LINNET_4");
+  assert.equal(defaultModelFor(es), "ORIOLE");
+  assert.equal(defaultModelFor(gb), "ORIOLE");
+  // Before the list answers its entries name no models; no language at all is the same.
+  assert.equal(defaultModelFor({ id: "en" }), "LINNET_4");
+  assert.equal(defaultModelFor(undefined), "LINNET_4");
+  // The languages offered then are every one either has, and only those.
+  assert.deepEqual(defaultLanguages([de, es, au, yue, { id: "en" }]).map((l) => l.id), ["de", "es-ES", "yue", "en"]);
 });
 
 test("before the list answers, the known models are offered", () => {
@@ -46,7 +63,8 @@ test("a model's name as the screen says it, a new one's made from its id", () =>
 });
 
 test("the line under a model and under the choice", () => {
-  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "Default · Can be edited line by line · 1 credit per second · 77 languages");
+  assert.equal(modelCaption(modelInfo("LINNET_4"), 80), "Default · 1 credit per second · 80 languages");
+  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "Can be edited line by line · 1 credit per second · 77 languages");
   // Whether one line can be remade on its own, where the app knows (owner, 2026-10-22).
   assert.equal(modelCaption(modelInfo("NIGHTINGALE"), 102),
     "Premium voice · Cannot be edited line by line · 6 credits per second · 102 languages");
@@ -69,7 +87,8 @@ test("in Korean the line under the choice says the count is this model's", async
   setLanguage("ko");
   t.after(() => setLanguage("en"));
   assert.equal(modelHint(modelInfo("ORIOLE"), 77), "1초 1크레딧 · 이 모델은 언어 77개");
-  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "기본 · 한 줄씩 고칠 수 있어요 · 1초 1크레딧 · 언어 77개");
+  assert.equal(modelCaption(modelInfo("LINNET_4"), 80), "기본 · 1초 1크레딧 · 언어 80개");
+  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "한 줄씩 고칠 수 있어요 · 1초 1크레딧 · 언어 77개");
   assert.equal(modelCaption(modelInfo("NIGHTINGALE"), 102), "고급 목소리 · 한 줄씩은 못 고쳐요 · 1초 6크레딧 · 언어 102개");
   assert.equal(modelCaption(modelInfo("WREN"), 32), "1초 1크레딧 · 언어 32개");
 });

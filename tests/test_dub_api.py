@@ -1417,8 +1417,8 @@ def test_dub_start_cloud_mode_skips_local_pipeline(monkeypatch):
     assert j["dub_mode"] == "perso"
     call = _FakeCloudClient.calls[0]
     assert call["target"] == "en" and call["source"] == "ko" and call["speakers"] == 2
-    # Nobody chose a voice model: ORIOLE, and the job says so.
-    assert call["tts_model"] == "ORIOLE" and j["perso_model"] == "ORIOLE"
+    # Nobody chose a voice model: LINNET_4, which English has, and the job says so.
+    assert call["tts_model"] == "LINNET_4" and j["perso_model"] == "LINNET_4"
     # Named on Perso's workspace as the project is here, not "input".
     assert call["title"] == "v"
     # and the finished file is the cloud one

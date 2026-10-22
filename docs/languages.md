@@ -4,7 +4,7 @@
 Italian · Portuguese · Russian · Spanish
 
 **With the Perso API (100+):** the languages follow the voice model picked under
-**Dubbing model**: Oriole (the default) has 77, Linnet 4 has 80, Linnet 3 has 34, Wren has 32, Finch has 79, Nightingale has 102. Finch and Nightingale need a Perso Pro plan.
+**Dubbing model**: Oriole has 77, Linnet 4 has 80, Linnet 3 has 34, Wren has 32, Finch has 79, Nightingale has 102. Until you choose one, a language is dubbed with Linnet 4, or with Oriole where Linnet 4 does not have it. Finch and Nightingale need a Perso Pro plan.
 
 **All six models (32):** Arabic · Bulgarian · Chinese · Croatian · Czech · Danish · Dutch · English (US) · Filipino · Finnish · French · German · Greek · Hindi · Hungarian · Indonesian · Italian · Japanese · Korean · Malay · Norwegian · Polish · Portuguese (Brazil) · Romanian · Russian · Slovak · Spanish (Mexico) · Swedish · Tamil · Turkish · Ukrainian · Vietnamese
 

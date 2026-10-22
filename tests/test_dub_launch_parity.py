@@ -332,14 +332,14 @@ def test_start_a_perso_cloud_dub(recorder):
         "source_code": "en",
         "target_code": "ko",
         "num_speakers": 2,
-        # Nobody chose a Perso voice model: ORIOLE, which Korean has.
-        "tts_model": "ORIOLE",
+        # Nobody chose a Perso voice model: LINNET_4, which Korean has.
+        "tts_model": "LINNET_4",
         # The project's name, which Perso's workspace shows it under: here
         # the uploaded file's, as the app names the project.
         "title": "v",
     }
     assert recorder["run_dub"] == []
-    assert state.job_store.get(jid)["perso_model"] == "ORIOLE"
+    assert state.job_store.get(jid)["perso_model"] == "LINNET_4"
 
 
 def _start_cloud(**extra):
@@ -662,7 +662,7 @@ def test_the_cloud_path_hands_perso_the_voice_model(monkeypatch, tmp_path):
     dub_api._run_cloud_dub(state.job_store.create(), *args, tts_model="NIGHTINGALE", title="Paris steps")
     # A record from before the model was kept: the language's own.
     dub_api._run_cloud_dub(state.job_store.create(), *args[:3], "ko", None, lambda m: None)
-    assert [kw["tts_model"] for kw in sent] == ["NIGHTINGALE", "ORIOLE"]
+    assert [kw["tts_model"] for kw in sent] == ["NIGHTINGALE", "LINNET_4"]
     assert sent[0]["target_tag"] == "en-AU"
     # The project's name goes with it, for Perso's workspace to show.
     assert [kw["title"] for kw in sent] == ["Paris steps", None]

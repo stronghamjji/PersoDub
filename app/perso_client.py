@@ -228,9 +228,12 @@ NIGHTINGALE = "NIGHTINGALE"
 # list names, so one Perso adds is offered without an app update (owner,
 # 2026-10-19). These are the ones known on 2026-10-19, in the order the screen
 # lists them; a name not here comes after them, in the list's own order.
-# ORIOLE is what a dubbing gets when nobody chose, as on Perso's site.
+# LINNET_4 is what a dubbing gets when nobody chose, ORIOLE in a language
+# without it: Perso's own API default since 2026-10-12 (changelog v1.0.17),
+# which the app follows itself because it always names the model.
 TTS_MODELS = ("ORIOLE", "LINNET_4", "LINNET_3", "WREN", "FINCH", NIGHTINGALE)
-DEFAULT_TTS_MODEL = "ORIOLE"
+DEFAULT_TTS_MODEL = "LINNET_4"
+FALLBACK_TTS_MODEL = "ORIOLE"
 # What a model's name may look like: Perso's own ids are like "LINNET_4".
 TTS_MODEL_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,30}$")
 

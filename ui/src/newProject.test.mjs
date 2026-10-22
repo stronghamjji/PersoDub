@@ -664,8 +664,9 @@ test("readOptions hands back the whole form, field for field", async (t) => {
     sttEngine: "local",
     sepEngine: "perso",
     dubMode: "local",
-    // What the Dubbing model row would select; only a Perso dubbing sends it.
-    persoModel: "ORIOLE",
+    // What the Dubbing model row would select, nobody having chosen one; only
+    // a Perso dubbing sends it.
+    persoModel: "LINNET_4",
     qualityMode: "high",
     numSpeakers: 2,
     translateEngine: "gemini",
@@ -791,6 +792,7 @@ test("Start hands the job back to the page", (t) => {
 
 // -- the Dubbing model row ---------------------------------------------------
 
+// No Linnet 4 in these: a dubbing nobody chose a model for is Oriole's here.
 const PERSO_LANGS = [
   { id: "en", code: "en", name: "English (US)", tag: null, models: ["NIGHTINGALE", "ORIOLE", "WREN"] },
   { id: "en-GB", code: "en", name: "English (UK)", tag: "en-GB", models: ["NIGHTINGALE", "ORIOLE"] },
@@ -915,7 +917,7 @@ test("every model Perso names is offered, a new one under a name made from its i
   const rows = await openModels(h);
   assert.deepEqual(rows.map(nameOf), ["Oriole", "Finch", "Nightingale", "New One"]);
   const caption = (o) => o.children[0].children[1].textContent;
-  assert.equal(caption(rows[0]), "Default · Can be edited line by line · 1 credit per second · 1 languages");
+  assert.equal(caption(rows[0]), "Can be edited line by line · 1 credit per second · 1 languages");
   assert.equal(caption(rows[1]), "Lowest-cost basic dubbing · 0.2 credits per second · 1 languages");
   assert.equal(caption(rows[3]), "1 languages");                    // nothing known of it but its languages
   assert.equal(rows[1].children[1].textContent, "Pro and up");       // the Pro badge
@@ -1206,13 +1208,13 @@ async function openLanguages(h) {
 const rowNames = (opts) => opts.children.map((o) => o.children[0].children[0].textContent);
 const key = (k, target = null) => ({ key: k, target, preventDefault() {}, stopPropagation() {} });
 
-test("the Target language opens as a list with a search: 스페 leaves the two Spanish, 77개 중 2개", async (t) => {
+test("the Target language opens as a list with a search: 스페 leaves the two Spanish, 83개 중 2개", async (t) => {
   await inKorean(t);
   const h = await bundledPerso();
   t.after(h.log.restore);
   assert.equal(langBox(h).children[0].children[0].textContent, "🇺🇸 영어(미국)", "the button names the language");
   const { opts, field, count } = await openLanguages(h);
-  assert.equal(opts.children.length, 77, "Oriole's 77");
+  assert.equal(opts.children.length, 83, "Linnet 4's 80 and the three only Oriole has");
   assert.equal(opts.children[0].attrs["aria-selected"], "true", "the chosen one is marked");
   assert.equal(count.hidden, true, "nothing to count before a search");
   assert.equal(field.placeholder, "언어 검색");
@@ -1220,10 +1222,10 @@ test("the Target language opens as a list with a search: 스페 leaves the two S
   await field.fire("input");
   assert.deepEqual(rowNames(opts), ["🇲🇽 스페인어(멕시코)", "🇪🇸 스페인어(스페인)"]);
   assert.equal(count.hidden, false);
-  assert.equal(count.textContent, "77개 중 2개");
+  assert.equal(count.textContent, "83개 중 2개");
   field.value = "";
   await field.fire("input");
-  assert.equal(opts.children.length, 77);
+  assert.equal(opts.children.length, 83);
 });
 
 test("the search also finds a language by its English name and its code, so eng finds English in Korean", async (t) => {
@@ -1235,7 +1237,7 @@ test("the search also finds a language by its English name and its code, so eng 
   await field.fire("input");
   // Bengali too: its English name has "eng" in it.
   assert.deepEqual(rowNames(opts), ["🇺🇸 영어(미국)", "🇧🇩 벵골어", "🇬🇧 영어(영국)"]);
-  assert.equal(count.textContent, "77개 중 3개");
+  assert.equal(count.textContent, "83개 중 3개");
   // "zh" is in no name: Chinese is found by its code.
   field.value = "ZH";
   await field.fire("input");
@@ -1276,6 +1278,34 @@ test("Enter in the search takes the first language left, and Escape closes the l
   await list.fire("keydown", key("Escape"));
   assert.equal(langBox(h).children.length, 1, "closed");
   assert.equal(h.$("targetLangSelect").value, "ja", "and nothing chosen by it");
+});
+
+// Nobody choosing, the model is Linnet 4, or Oriole for a language Linnet 4
+// lacks, as Perso's own API picks since 2026-10-12 (owner, 2026-10-22); a
+// model the person chose still wins, after a restart too.
+test("a dubbing nobody chose a model for is Linnet 4, Oriole where the language lacks it, and a choice wins", async (t) => {
+  const store = memoryStorage();
+  const h = await bundledPerso(store);
+  const button = (x) => pick(x).children[0].children[0].textContent;
+  assert.equal(button(h), "Linnet 4");
+  assert.equal(h.api.readOptions().persoModel, "LINNET_4");
+  assert.ok(targets(h).includes("es-ES") && targets(h).includes("yue"), "Oriole's languages and Linnet 4's both");
+  await choose(h, "targetLangSelect", "es-ES");              // Spanish (Spain): Oriole, not Linnet 4
+  assert.equal(button(h), "Oriole");
+  assert.equal(h.api.readOptions().persoModel, "ORIOLE");
+  assert.equal((await openModels(h)).find((o) => nameOf(o) === "Linnet 4").disabled, true);
+  await choose(h, "targetLangSelect", "ko");
+  assert.equal(h.api.readOptions().persoModel, "LINNET_4");
+  // Oriole chosen for Korean is the person's: the next project starts on it,
+  // with Oriole's own languages.
+  await chooseModel(h, "Oriole");
+  h.log.restore();
+  const h2 = await bundledPerso(store);
+  t.after(h2.log.restore);
+  assert.equal(h2.$("targetLangSelect").value, "ko");
+  assert.equal(button(h2), "Oriole");
+  assert.equal(h2.api.readOptions().persoModel, "ORIOLE");
+  assert.equal(targets(h2).length, 77);
 });
 
 // The four languages that are shown by name alone, no country's flag.

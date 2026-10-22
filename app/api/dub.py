@@ -1202,8 +1202,8 @@ def dub_start(
     language): one video's languages are one project on Home.
     perso_model = the Perso voice model of a Perso cloud dubbing, any one Perso's
     language list names ("ORIOLE", "LINNET_4", "FINCH", ...), which the target
-    language must have; omitted, ORIOLE
-    when the language has it, else the first it has (app/languages.py model_for).
+    language must have; omitted, LINNET_4
+    when the language has it, else ORIOLE, else the first it has (app/languages.py model_for).
     """
     try:
         plan = _start_plan(

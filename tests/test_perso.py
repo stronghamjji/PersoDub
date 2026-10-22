@@ -750,7 +750,7 @@ def test_perso_client_dub_video_happy_path(monkeypatch, tmp_path):
     assert any(t.startswith("[Step 3/3] download DONE (") for t in traced)
     assert [t for t in traced if " Context: " in t] == [
         "[Step 1/3] upload Context: bytes=10",
-        "[Step 2/3] perso-dubbing Context: target=en model=ORIOLE speakers=2",
+        "[Step 2/3] perso-dubbing Context: target=en model=LINNET_4 speakers=2",
         "[Step 3/3] download Context: project=888",
     ]
     assert screen == ["   Uploading the video to Perso…", "   Perso is dubbing… this takes a few minutes.",
@@ -762,8 +762,8 @@ def test_perso_client_dub_video_happy_path(monkeypatch, tmp_path):
     assert body["mediaSeq"] == 555
     assert body["isVideoProject"] is True
     assert body["sourceLanguageCode"] == "ko"
-    # ORIOLE unless a model is named: Perso's list no longer has AUDIO_ENGINE_V3.
-    assert body["targetLanguages"] == [{"languageCode": "en", "ttsModel": "ORIOLE"}]
+    # LINNET_4 unless a model is named, as Perso's own default since 2026-10-12.
+    assert body["targetLanguages"] == [{"languageCode": "en", "ttsModel": "LINNET_4"}]
     assert body["numberOfSpeakers"] == 2
     assert body["preferredSpeedType"] == "GREEN"
     # download-info gate ran before the download link was asked for

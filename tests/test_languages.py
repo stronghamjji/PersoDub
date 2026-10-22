@@ -107,11 +107,18 @@ def test_a_kept_list_from_before_models_were_kept_still_loads_as_oriole(monkeypa
         {"id": "hi", "code": "hi", "name": "Hindi", "tag": None, "models": ["ORIOLE"]}]
 
 
-def test_model_for_takes_the_one_asked_for_or_oriole_or_the_first_the_language_has():
+def test_model_for_takes_the_one_asked_for_or_linnet_4_or_oriole_or_the_first_the_language_has(monkeypatch):
     ko = {"name": "Korean", "models": ["NIGHTINGALE", "ORIOLE", "WREN"]}
     au = {"name": "English (Australia)", "models": ["NIGHTINGALE"]}
+    # Nobody asking: LINNET_4, else ORIOLE, as Perso's own API picks since
+    # 2026-10-12 (the app always names the model, so it has to pick alike).
+    assert languages.model_for({"name": "German", "models": ["ORIOLE", "LINNET_4", "NIGHTINGALE"]}) == "LINNET_4"
+    assert languages.model_for({"name": "Cantonese", "models": ["LINNET_4"]}) == "LINNET_4"
     assert languages.model_for(ko) == "ORIOLE"
     assert languages.model_for(au) == "NIGHTINGALE"
+    monkeypatch.setattr(languages, "_fetch", lambda: None)
+    assert languages.model_for(languages.lookup("perso", "ko")) == "LINNET_4"
+    assert languages.model_for(languages.lookup("perso", "es-ES")) == "ORIOLE"     # no Linnet 4 for Spain
     assert languages.model_for(ko, "wren") == "WREN"             # case-insensitive
     assert languages.model_for({"name": "Old", "code": "zz"}) == "ORIOLE"   # no models kept
     with pytest.raises(ValueError, match="Wren.*English \\(Australia\\)") as refused:

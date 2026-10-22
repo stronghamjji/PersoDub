@@ -97,7 +97,7 @@ test("without the app's setup only the choices that need nothing from it come ba
 
 test("a Perso model that is no model id, or a speaker count that is not a number, is left out", () => {
   // Any model id is put back (one Perso adds is offered without an app
-  // update); the dialog falls back to Oriole when Perso's list no longer has it.
+  // update); the dialog falls back to the default when Perso's list no longer has it.
   const s = storage();
   rememberChoice(s, "persoModel", "not a model", DEFAULTS);
   rememberChoice(s, "speakers", "two", DEFAULTS);

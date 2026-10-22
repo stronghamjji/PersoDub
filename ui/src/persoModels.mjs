@@ -17,15 +17,19 @@ import { t } from "./i18n.mjs";
 // the app knows (app/perso_edit.py nightingale); Wren's is unknown, so it
 // has none (owner, 2026-10-22).
 const KNOWN = [
-  { id: "ORIOLE", label: "Oriole", desc: "Default · Can be edited line by line", rate: 1 },
+  { id: "ORIOLE", label: "Oriole", desc: "Can be edited line by line", rate: 1 },
   { id: "LINNET_4", label: "Linnet 4", rate: 1 },
   { id: "LINNET_3", label: "Linnet 3", rate: 1 },
   { id: "WREN", label: "Wren", rate: 1 },
   { id: "FINCH", label: "Finch", desc: "Lowest-cost basic dubbing", rate: 0.2, pro: true },
   { id: "NIGHTINGALE", label: "Nightingale", desc: "Premium voice · Cannot be edited line by line", rate: 6, pro: true },
 ];
-// The one selected until another is chosen, as on Perso's site.
-export const DEFAULT_MODEL = "ORIOLE";
+// What a dubbing nobody chose a model for is made with: Linnet 4, or Oriole
+// in a language Linnet 4 lacks, as Perso's own API picks since 2026-10-12
+// (owner, 2026-10-22). The app always names the model, so it picks alike
+// (app/languages.py model_for).
+export const DEFAULT_MODEL = "LINNET_4";
+const FALLBACK_MODEL = "ORIOLE";
 // What a model's id may look like (Perso's own are like "LINNET_4").
 const MODEL_ID = /^[A-Z][A-Z0-9_]{1,30}$/;
 
@@ -64,15 +68,29 @@ export function languagesFor(list, model) {
   return list.filter((l) => !l.models || l.models.includes(model));
 }
 
+/** The model a dubbing into this language gets when nobody chose one:
+    Linnet 4 when the language has it, else Oriole. An entry that names no
+    models, or none at all, is Linnet 4's. */
+export function defaultModelFor(entry) {
+  return !entry || !entry.models || entry.models.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : FALLBACK_MODEL;
+}
+
+/** The languages a dubbing nobody chose a model for can go into: every one
+    Linnet 4 or Oriole has, each with its own (defaultModelFor). */
+export function defaultLanguages(list) {
+  return list.filter((l) => !l.models || l.models.includes(DEFAULT_MODEL) || l.models.includes(FALLBACK_MODEL));
+}
+
 // One credit is singular in English: the line read "1 credits per second" (2026-10-22).
 function rateText(info) {
   if (info.rate == null) return "";
   return info.rate === 1 ? t("{n} credit per second", { n: info.rate }) : t("{n} credits per second", { n: info.rate });
 }
 
-/** The line under a model in the list: "Default · 1 credit a second · 77 languages". */
+/** The line under a model in the list: "Default · 1 credit per second · 80 languages". */
 export function modelCaption(info, languages) {
-  return [info.desc ? t(info.desc) : "", rateText(info), t("{n} languages", { n: languages })]
+  return [info.id === DEFAULT_MODEL ? t("Default") : "", info.desc ? t(info.desc) : "", rateText(info),
+          t("{n} languages", { n: languages })]
     .filter(Boolean).join(" · ");
 }
 

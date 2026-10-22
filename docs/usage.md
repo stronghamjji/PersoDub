@@ -63,7 +63,8 @@ exactly where you asked.
 computer and the one a first project starts on, or **Perso API**, where the video is
 uploaded to Perso and Perso makes the whole dub, which needs a Perso API key and uses
 Perso credits. With **Perso API** the **Dubbing model** row under it picks Perso's voice
-model: *Oriole* to begin with, *Nightingale*, *Wren* and the others. Later projects start
+model: *Linnet 4* to begin with (*Oriole* for a language Linnet 4 does not have),
+*Nightingale*, *Wren* and the others. Later projects start
 on the choices you made last.
 
 **Original language** can stay on *Auto-detect* unless detection gets it wrong.

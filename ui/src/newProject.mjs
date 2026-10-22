@@ -20,7 +20,8 @@ import { LANGUAGES, fetchLanguages, startDownload, fetchDownload,
 import { fmtLength } from "./format.mjs";
 import { initTrimBar } from "./trimBar.mjs";
 import { downloadsLabel, errorText } from "./format.mjs";
-import { DEFAULT_MODEL, languagesFor, modelCaption, modelHint, modelInfo, modelsIn } from "./persoModels.mjs";
+import { DEFAULT_MODEL, defaultLanguages, defaultModelFor, languagesFor, modelCaption, modelHint, modelInfo,
+         modelsIn } from "./persoModels.mjs";
 import { readRemembered, rememberChoice, choicesToPutBack } from "./rememberedChoices.mjs";
 import { lucide } from "./icons.mjs";
 import { placeList, listKeys } from "./pickList.mjs";
@@ -145,17 +146,28 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
                                              ...(l.models ? { models: l.models } : {}) }));
   let languageLists = { local: asEntries(LANGUAGES), perso: asEntries(LANGUAGES) };
   let persoModel = DEFAULT_MODEL;
+  // Whether the model is one the person chose (or a choice put back). Until
+  // then it is the target language's own default, Linnet 4 or Oriole
+  // (ui/src/persoModels.mjs defaultModelFor), and the target list offers
+  // every language either of the two has.
+  let modelChosen = false;
   // A remembered target the list on screen does not have yet: a Perso one
   // while GET /api/languages has not answered, or while this computer dubs.
   // Picked as soon as a list has it; forgotten once the person picks another.
   let wantedTarget = null;
   function currentLanguages() {
     const mode = $("dubModeSelect") ? $("dubModeSelect").value : "local";
-    return mode === "perso" ? languagesFor(languageLists.perso, persoModel) : languageLists.local;
+    if (mode !== "perso") return languageLists.local;
+    return modelChosen ? languagesFor(languageLists.perso, persoModel) : defaultLanguages(languageLists.perso);
   }
   function refillTargetLanguages() {
     const sel = $("targetLangSelect");
     if (!sel) return;
+    // A remembered model Perso no longer names (once its list has answered)
+    // gives way to the default rather than starting a dubbing Perso refuses.
+    if (languageLists.perso.some((l) => l.models) && !modelsIn(languageLists.perso).includes(persoModel)) {
+      modelChosen = false;
+    }
     const list = currentLanguages();
     const want = wantedTarget && list.some((l) => l.id === wantedTarget) ? wantedTarget : null;
     if (want) wantedTarget = null;
@@ -184,11 +196,6 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   let pickOpen = false;
   let pickBtn = null;
   function paintPersoModel() {
-    // A remembered model Perso no longer names (once its list has answered)
-    // gives way to the default rather than starting a dubbing Perso refuses.
-    if (languageLists.perso.some((l) => l.models) && !modelsIn(languageLists.perso).includes(persoModel)) {
-      persoModel = DEFAULT_MODEL;
-    }
     $("persoModelRow").hidden = $("dubModeSelect").value !== "perso";
     if ($("persoModelRow").hidden) pickOpen = false;
     const box = $("persoModelPick");
@@ -197,7 +204,10 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     // it used to swap the language for English without a word, and a Start
     // then dubbed into the wrong language for credits (Windows C11, 2026-10-07).
     const target = $("targetLangSelect") ? $("targetLangSelect").value : "";
-    const targetName = (languageLists.perso.find((l) => l.id === target) || {}).name || target;
+    const entry = languageLists.perso.find((l) => l.id === target);
+    const targetName = (entry || {}).name || target;
+    // Nobody chose one: the language's own, so it follows the language.
+    if (!modelChosen) persoModel = defaultModelFor(entry);
     const chosen = modelInfo(persoModel);
     const btn = document.createElement("button");
     btn.type = "button";
@@ -262,6 +272,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
       opt.addEventListener("click", () => {
         if (lacks) return;
         persoModel = id;
+        modelChosen = true;
         pickOpen = false;
         rememberChoice(storage, "persoModel", id, savedDefaults);
         refillTargetLanguages();
@@ -504,8 +515,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     pick("dubModeSelect", c.dubMode);
     paintModeSwitch();
     // The Perso voice model has no saved default: without one handed in, the
-    // row starts on Oriole again.
+    // row starts on the target language's default again.
     persoModel = c.persoModel || DEFAULT_MODEL;
+    modelChosen = !!c.persoModel;
     refillTargetLanguages();
     pick("sepSelect", c.sep);
     pick("sttSelect", c.stt);
@@ -538,7 +550,8 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   function takeChoices() {
     return { dubMode: $("dubModeSelect").value, sep: $("sepSelect").value,
              stt: $("sttSelect").value, translator: $("translateSelect").value,
-             quality: $("qualitySelect").value, voice: $("voiceSelect").value, persoModel };
+             quality: $("qualitySelect").value, voice: $("voiceSelect").value,
+             persoModel: modelChosen ? persoModel : undefined };
   }
   // What the dialog was set to when it sent its video to the erase screen. The
   // way back reopens the dialog, and reopening starts the dropdowns on the
