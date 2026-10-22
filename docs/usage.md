@@ -59,7 +59,7 @@ you do not want, with **Undo** and **Redo**. Leave it alone to take the whole vi
 cut video is re-encoded before the work starts, which takes a moment but cuts
 exactly where you asked.
 
-**Processing**, first, is how the dub is made: **Local model**, the free path on this
+**Choose a model**, first, is how the dub is made: **Local model**, the free path on this
 computer and the one a first project starts on, or **Perso API**, where the video is
 uploaded to Perso and Perso makes the whole dub, which needs a Perso API key and uses
 Perso credits. With **Perso API** the **Dubbing model** row under it picks Perso's voice
@@ -85,9 +85,9 @@ From here:
   dub costs, the dubbing model's credits a second times the seconds kept, and how many
   credits your Perso workspace has left.
 
-### Advanced options
+### Dubbing step settings
 
-Collapsed by default. The rows from **Voice separation** to **Voice quality** apply only
+Always shown under **Choose a model**. The rows from **Voice separation** to **Voice quality** apply only
 with **Local model**. While Perso dubs they are greyed out and read *Perso*; what you chose
 for the local model comes back when you choose it again.
 

@@ -8,9 +8,9 @@
 macOS, 0.9 GB on Windows. The AI engine, translation runtime, and models download the
 first time you dub on this computer. Later launches start immediately.
 
-**The engine dropdowns are greyed out.** While **Dubbing** is set to **Perso API**, Perso
-does every step, so the other choices do not apply. Set **Dubbing** to **On this
-computer**, the default, to pick them. A cloud choice with no key saved asks for the key
+**The engine dropdowns are greyed out.** While **Choose a model** is set to **Perso API**, Perso
+does every step, so the other choices do not apply. Set **Choose a model** to **Local
+model**, the default, to pick them. A cloud choice with no key saved asks for the key
 when you pick it.
 
 **I saved a key but nothing changed.** Keys are read each time a dub starts, so a saved
@@ -51,9 +51,8 @@ run the server yourself (the desktop app always keeps them in its own folder).
 ## FAQ
 
 **Does my video leave my computer?**
-By default, no: Start dubbing uses this computer. **Advanced options >
-Speech-to-text** set to **Perso API** uploads it for transcription, and
-**Dubbing** set to **Perso API** uploads it to Perso's
+By default, no: Start dubbing uses this computer. **Speech-to-text** (under **Dubbing step settings**) set to **Perso API** uploads it for transcription, and
+**Choose a model** set to **Perso API** uploads it to Perso's
 cloud, which makes the whole dub. Translation sends only the transcript text: to
 ChatGPT through your own sign-in on a new install, or nowhere with a local translator.
 See [Data and privacy](privacy.md).

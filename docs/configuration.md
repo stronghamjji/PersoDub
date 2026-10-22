@@ -5,7 +5,7 @@ speaker-labeling run on local Whisper + CAM++ (on Perso instead while a Perso ke
 saved), and translation runs on ChatGPT through your own free sign-in, or on local
 Hunyuan via Ollama on a computer that already has the Hunyuan model.
 
-Want better quality, or Perso API dubbing (**Advanced options > Dubbing > Perso API**)?
+Want better quality, or Perso API dubbing (**Choose a model > Perso API**)?
 Add an API key in the app's **Settings** screen ([guide](usage.md#settings)):
 
 | Add this key | Improves | Get it from |

@@ -1095,7 +1095,7 @@ test("Send job logs says what goes where, what never goes and why, a sentence a 
 test("each API key and the ChatGPT sign-in say which step uses them", () => {
   const html = readPage();
   const keys = html.slice(html.indexOf('id="settingsPanel-keys"'), html.indexOf('id="settingsPanel-storage"'));
-  assert.match(keys, /id="persoKeyInput"[^>]*>\s*<!--[^]*?-->\s*<div data-i18n class="settings-hint" id="persoKeyHint">Used when Processing, Voice separation or Speech-to-text is set to Perso API\. Uses Perso credits\.<\/div>/);
+  assert.match(keys, /id="persoKeyInput"[^>]*>\s*<!--[^]*?-->\s*<div data-i18n class="settings-hint" id="persoKeyHint">Used when Choose a model, Voice separation or Speech-to-text is set to Perso API\. Uses Perso credits\.<\/div>/);
   assert.match(keys, /id="geminiKeyInput"[^>]*>\s*<div data-i18n class="settings-hint" id="geminiKeyHint">Used only when Translation is set to Gemini API\. Uses your own Google API quota\.<\/div>/);
   // ChatGPT's state and button stay on one line, and its line goes under them.
   assert.match(keys, /<span>ChatGPT<\/span>\s*<div class="set-ctl">\s*<div class="set-ctl set-inline">\s*<span class="settings-hint" id="chatgptState"[^]*?id="chatgptSignInBtn"[^]*?<\/button>\s*<\/div>\s*<div data-i18n class="settings-hint" id="chatgptHint">Used when Translation is ChatGPT \(the default on a new install\)\. The Dub Agent's Codex uses this sign-in too\.<\/div>\s*<\/div>/);

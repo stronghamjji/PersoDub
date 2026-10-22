@@ -7,7 +7,7 @@ and speech synthesis run locally, and speech-to-text runs on local Whisper and
 CAM++, key or no key. One step can still leave by default: translation sends the
 transcript text through your own ChatGPT account on a new install (a computer that
 already has the Hunyuan model translates locally). With **Whisper** and a local translator (Hunyuan or
-Gemma), nothing from the video leaves at all. Set **Advanced options > Dubbing** to
+Gemma), nothing from the video leaves at all. Set **Choose a model** to
 **Perso API** and the video is uploaded to Perso, which makes the whole
 dub; that needs a Perso API key.
 
@@ -23,7 +23,7 @@ What each dubbing service receives, precisely:
 | **Google Gemini key** | **The transcript text only** — not the video, not the audio. | Google |
 | **ChatGPT sign-in** (the default translator) | **The transcript text**, with the translation instructions, sent through your own ChatGPT account, under that account's own data settings. The program that carries it (OpenAI's Codex) runs in a folder of PersoDub's own with every tool switched off, so it reads nothing else on your computer and none of your own Codex settings go along; OpenAI's program may send its own usage statistics. The sign-in is OpenAI's own flow and stays on your computer; PersoDub never sees the password or token. | OpenAI |
 
-Clearing the key in **Settings** stops that engine. Picking a local translator (Hunyuan or Gemma) in **Advanced options** keeps translation on your computer too.
+Clearing the key in **Settings** stops that engine. Picking a local translator (Hunyuan or Gemma) under **Dubbing step settings** keeps translation on your computer too.
 
 When a Perso key is configured, requests to Perso carry a header identifying the
 application name, version, and operating system family so the vendor can attribute API
@@ -146,7 +146,7 @@ Link fetching is powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 installed from PyPI on your machine at install time; PersoDub does not bundle or
 redistribute its code. Reading and fetching a link contacts the site it points to, and
 when a fetch fails for a reason other than the network, the app updates yt-dlp from PyPI
-and tries once more. The fetched video is saved locally and is dubbed where **Dubbing**
+and tries once more. The fetched video is saved locally and is dubbed where **Choose a model**
 says (this computer by default), like any
 dropped file. Only dub videos you hold the rights to — downloading content may be
 restricted by the source platform's terms of service, and that responsibility is yours.

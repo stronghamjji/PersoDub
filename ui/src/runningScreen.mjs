@@ -91,9 +91,9 @@ const CREDIT_MODALS = {
   perso_duration_limit: {
     get title() { return t("Video too long"); },
     message: (notice) => (notice && notice.limit_seconds
-      ? t("Your Perso plan dubs videos up to {limit}. Upgrade your plan, or set Processing to Local model.",
+      ? t("Your Perso plan dubs videos up to {limit}. Upgrade your plan, or set Choose a model to Local model.",
         { limit: limitText(notice.limit_seconds) })
-      : t("Your Perso plan does not take a video this long. Upgrade your plan, or set Processing to Local model.")),
+      : t("Your Perso plan does not take a video this long. Upgrade your plan, or set Choose a model to Local model.")),
     get button() { return t("See plans"); },
   },
   // A voice model the plan does not cover (VT40314: FINCH and NIGHTINGALE

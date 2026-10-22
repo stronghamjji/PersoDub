@@ -165,7 +165,7 @@ These two steps are the same on macOS and Windows.
 By default, **Start dubbing** uses this computer and works with no key: translation runs
 on ChatGPT through your own free sign-in on a new install, or on a local model (Hunyuan
 or Gemma) if you pick one. Perso API dubbing
-(**Advanced options > Dubbing > Perso API**) needs a Perso API key.
+(**Choose a model > Perso API**) needs a Perso API key.
 To enable the cloud engines:
 
 1. Open **Settings** in the app.

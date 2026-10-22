@@ -119,7 +119,7 @@ Listen for pacing: PersoDub fits the translation to the time instead of speeding
 
 **Updating from 0.8.4 or earlier?** Download and install the latest version once. From 0.8.5 on, PersoDub updates itself.
 
-Start dubbing uses this computer by default and needs no key. Speech-to-text uses Whisper unless you choose Perso API, and on a new install translation uses ChatGPT through your own sign-in. To keep everything on your computer, open **Advanced options** and set **Translation** to **Hunyuan** or **Gemma 3**. To dub with the Perso API instead, save a free [Perso API key](docs/configuration.md) and set **Dubbing** to **Perso API**.
+Start dubbing uses this computer by default and needs no key. Speech-to-text uses Whisper unless you choose Perso API, and on a new install translation uses ChatGPT through your own sign-in. To keep everything on your computer, set **Translation**, under **Dubbing step settings**, to **Hunyuan** or **Gemma 3**. To dub with the Perso API instead, save a free [Perso API key](docs/configuration.md) and set **Choose a model** to **Perso API**.
 
 First setup is under 1 GB. A Perso API dub downloads nothing more. The first dub on this computer downloads Python + PyTorch and the models: about 10 GB on a Mac, 17 GB on a Windows PC with an NVIDIA GPU, 9 GB without one. A local translator adds 1.6 to 10 GB and the subtitle eraser 4.4 to 9.3 GB, so keep 30 GB free, 40 GB on Windows with an NVIDIA GPU. [Full table](docs/requirements.md)
 
@@ -154,7 +154,7 @@ Repository: https://github.com/stronghamjji/PersoDub
    a free Perso API key, for better transcription or the Perso API. If yes, open
    https://perso.ai/dubbing?utm_source=desktop_app_github&utm_medium=desktop-app&utm_campaign=desktop_app&utm_content=install_prompt
    then open PersoDub's Settings so I can paste the key in myself. Never ask to see it.
-   For a Perso API dub, set Advanced options > Dubbing to Perso API.
+   For a Perso API dub, set Choose a model to Perso API.
 5. Dub one video under a minute with me. Before a first dub on this computer, tell me
    the download size (9-17 GB).
    If I pick ChatGPT for translation, I sign in myself. A free account is enough.
