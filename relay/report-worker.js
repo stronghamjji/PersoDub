@@ -10,6 +10,7 @@ import {
   logSummary,
   newId,
   rateDecision,
+  reopenText,
   validateReport,
   withLogsLine,
   withTally,
@@ -23,7 +24,8 @@ import {
 //
 // Two ways in, both of them inward:
 //   POST /report            a failure -> a new issue, or "+1" on the one that
-//                           already describes it (same fingerprint)
+//                           already describes it (same fingerprint), reopened
+//                           when it had been closed
 //   POST /report/<id>/logs  the full logs (gzipped tar) for a report just made
 //
 // What it never does: log an IP (only a salted daily hash of one, for the rate
@@ -128,6 +130,10 @@ async function handleReport(request, env, ctx) {
   // What the issue's body will say it has been seen: kept in KV beside the
   // issue number, so a body somebody edits by hand cannot lose the count.
   let tally = null;
+  // The state GitHub gave the known issue, and whether this report reopened
+  // it: the private dashboard shows both (logSummary).
+  let priorState = "";
+  let reopened = false;
 
   if (issue) {
     // The hundredth machine to hit one bug counts up in the issue it already
@@ -139,7 +145,20 @@ async function handleReport(request, env, ctx) {
     tally = countSighting(known, report);
     const got = await gh(env, `/issues/${issue}`);
     if (got.ok) {
-      const body = withTally((await got.json()).body || "", tally);
+      const current = await got.json();
+      priorState = String(current.state || "");
+      // A closed issue seen again is a fix that did not hold -- or a machine
+      // still on a version from before the fix, which the relay cannot tell
+      // apart: the version a fix shipped in is written nowhere it can read
+      // ("Fixed in 0.8.1" is a sentence in a closing comment). So it always
+      // reopens, says so in one comment, and leaves closing it again to the
+      // owner. Rewriting only the count let #106, closed as fixed in 0.8.1,
+      // take a sighting from a 0.7.0 app that nobody saw (2026-10-22).
+      if (priorState === "closed") {
+        reopened = (await gh(env, `/issues/${issue}`, { method: "PATCH", body: JSON.stringify({ state: "open" }) })).ok;
+        await gh(env, `/issues/${issue}/comments`, { method: "POST", body: JSON.stringify({ body: reopenText(report) }) });
+      }
+      const body = withTally(current.body || "", tally);
       await gh(env, `/issues/${issue}`, { method: "PATCH", body: JSON.stringify({ body }) });
     }
     await env.REPORTS.put(`fp:${report.fingerprint}`, JSON.stringify({ issue, url, ...tally }));
@@ -182,7 +201,7 @@ async function handleReport(request, env, ctx) {
     `id:${id}`,
     JSON.stringify({
       fingerprint: report.fingerprint, issue, commentId,
-      summary: logSummary(report, issue),
+      summary: logSummary(report, issue, { priorState, reopened }),
     }),
     { expirationTtl: 7 * 24 * 60 * 60 },
   );
