@@ -67,6 +67,8 @@ on the choices you made last.
 **Target language** is the language to dub into: ten on this computer (English, Korean,
 Chinese, Japanese, French, German, Italian, Portuguese, Russian and Spanish), 100+ with
 the Perso API, depending on the **Dubbing model** above ([full list](languages.md)).
+It opens as a list with a search field on top: type part of a name and only the
+languages that match stay, with a count such as *2 of 77* under them.
 
 From here:
 

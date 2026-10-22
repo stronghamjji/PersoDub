@@ -850,7 +850,10 @@
                  languages follow the one chosen (ui/src/newProject.mjs paintPersoModel). -->
             <div class="field opt-row" id="persoModelRow" hidden><label data-i18n id="persoModelLabel">Dubbing model</label><div class="model-pick" id="persoModelPick"></div><div class="settings-hint" id="persoModelHint"></div></div>
             <div class="field opt-row"><label data-i18n for="sourceLangSelect">Original language</label><select id="sourceLangSelect"><option value="" selected data-i18n>Auto-detect</option></select></div>
-            <div class="field opt-row"><label data-i18n for="targetLangSelect">Target language</label><select id="targetLangSelect"></select></div>
+            <!-- A list with a search field, in the Dubbing model's dress
+                 (owner, 2026-10-22); it sets #targetLangSelect, kept hidden
+                 (ui/src/newProject.mjs paintTargetPick). -->
+            <div class="field opt-row"><label data-i18n id="targetLangLabel">Target language</label><div class="model-pick" id="targetLangPick"></div><select id="targetLangSelect" hidden></select></div>
           </div>
           <!-- The voice engine that failed to start, for a dub on this computer,
                said here rather than only after Start (ui/src/dubApi.mjs

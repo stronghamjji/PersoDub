@@ -22,6 +22,7 @@ import { initTrimBar } from "./trimBar.mjs";
 import { downloadsLabel, errorText } from "./format.mjs";
 import { DEFAULT_MODEL, languagesFor, modelCaption, modelHint, modelInfo, modelsIn } from "./persoModels.mjs";
 import { readRemembered, rememberChoice, choicesToPutBack } from "./rememberedChoices.mjs";
+import { lucide } from "./icons.mjs";
 import { languageName, t } from "./i18n.mjs";
 
 // The flags are the app's one deliberate use of emoji: where the dub is headed
@@ -170,6 +171,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     }
     sel.value = list.some((l) => l.id === keep) ? keep : "en";
     paintPersoModel();
+    paintTargetPick();
   }
 
   // The Dubbing model: a button naming the chosen model and, pressed, a list
@@ -289,15 +291,16 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     return list;
   }
   // Under the button, as wide as it (300 to 420 pixels), or over it when the
-  // screen has no room below.
+  // screen has no room below -- held there by its bottom edge, so a search
+  // that shortens the language list leaves it against the button.
   function placeList(list, btn) {
     const r = btn.getBoundingClientRect();
     list.style.left = `${r.left}px`;
     list.style.width = `${Math.min(Math.max(r.width, 300), 420)}px`;
     const below = r.bottom + 5;
     const screen = globalThis.innerHeight ?? Infinity;   // none in the tests' stand-in page
-    list.style.top = below + list.offsetHeight > screen && r.top > list.offsetHeight + 5
-      ? `${r.top - 5 - list.offsetHeight}px` : `${below}px`;
+    if (below + list.offsetHeight > screen && r.top > list.offsetHeight + 5) list.style.bottom = `${screen - r.top + 5}px`;
+    else list.style.top = `${below}px`;
   }
   function closePick() {
     if (!pickOpen) return;
@@ -317,6 +320,151 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     pickOpen = false;
     paintPersoModel();
   });
+  // The Target language: a button naming the chosen language and, pressed,
+  // the list in the Dubbing model's dress with a search field at its top --
+  // Oriole has 77 languages, found by scrolling until now (owner, 2026-10-22).
+  // Choosing one sets #targetLangSelect, kept hidden, and fires its change,
+  // so everything that reads the language goes on reading it there.
+  let langOpen = false;
+  let langQuery = "";
+  let langBtn = null;
+  function paintTargetPick() {
+    const box = $("targetLangPick");
+    box.innerHTML = "";
+    const sel = $("targetLangSelect");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "targetLangBtn";
+    btn.className = "model-pick-btn";
+    btn.setAttribute("aria-haspopup", "listbox");
+    btn.setAttribute("aria-expanded", String(langOpen));
+    btn.setAttribute("aria-labelledby", "targetLangLabel targetLangBtn");
+    const name = document.createElement("span");
+    name.className = "model-name";
+    name.textContent = ([...sel.options].find((o) => o.value === sel.value) || {}).textContent || "";
+    btn.appendChild(name);
+    btn.addEventListener("click", () => {
+      langOpen = !langOpen;
+      langQuery = "";
+      paintTargetPick();
+    });
+    langBtn = btn;
+    box.appendChild(btn);
+    if (langOpen) {
+      const list = languageList();
+      box.appendChild(list);
+      placeList(list, btn);
+    }
+  }
+  // The search narrows the list to the names with the typed words in them,
+  // and says how many of how many are left ("77개 중 2개").
+  function languageList() {
+    const list = document.createElement("div");
+    list.id = "targetLangList";
+    list.className = "model-pick-list lang-pick-list";
+    const search = document.createElement("div");
+    search.className = "lang-search";
+    search.innerHTML = lucide("search", 14);
+    const field = document.createElement("input");
+    field.type = "search";
+    field.value = langQuery;
+    field.placeholder = t("Search languages");
+    field.setAttribute("aria-label", t("Search languages"));
+    search.appendChild(field);
+    const opts = document.createElement("div");
+    opts.className = "lang-opts";
+    opts.setAttribute("role", "listbox");
+    opts.setAttribute("aria-labelledby", "targetLangLabel");
+    const count = document.createElement("div");
+    count.className = "lang-count";
+    function fill() {
+      const all = [...$("targetLangSelect").options];
+      const words = langQuery.trim().toLowerCase();
+      const found = words ? all.filter((o) => o.textContent.toLowerCase().includes(words)) : all;
+      opts.innerHTML = "";
+      for (const o of found) opts.appendChild(languageRow(o));
+      count.textContent = words ? t("{shown} of {all}", { shown: found.length, all: all.length }) : "";
+      count.hidden = !words;
+    }
+    fill();
+    field.addEventListener("input", () => { langQuery = field.value; fill(); });
+    // Enter in the field takes the first one left; up and down move between
+    // the field and the languages; Escape closes the list and not the dialog
+    // under it.
+    list.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closeLanguages();
+        langBtn?.focus?.();
+        return;
+      }
+      const rows = [...opts.children];
+      if (e.key === "Enter" && e.target === field) {
+        e.preventDefault();
+        if (rows[0]) chooseLanguage(rows[0].dataset.lang);
+        return;
+      }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const at = rows.indexOf(document.activeElement);   // -1: the field
+      const next = e.key === "ArrowDown" ? rows[Math.min(at + 1, rows.length - 1)] : at > 0 ? rows[at - 1] : field;
+      next?.focus?.();
+    });
+    list.append(search, opts, count);
+    setTimeout(() => {
+      field.focus?.({ preventScroll: true });
+      const on = opts.querySelector(".model-opt.on");
+      if (on) opts.scrollTop = on.offsetTop - (opts.clientHeight - on.offsetHeight) / 2;
+    }, 0);
+    return list;
+  }
+  function languageRow(o) {
+    const on = o.value === $("targetLangSelect").value;
+    const opt = document.createElement("button");
+    opt.type = "button";
+    opt.className = on ? "model-opt on" : "model-opt";
+    opt.setAttribute("role", "option");
+    opt.setAttribute("aria-selected", String(on));
+    opt.dataset.lang = o.value;
+    const text = document.createElement("span");
+    text.className = "model-text";
+    const name = document.createElement("span");
+    name.className = "model-name";
+    name.textContent = o.textContent;
+    text.appendChild(name);
+    opt.appendChild(text);
+    opt.addEventListener("click", () => chooseLanguage(o.value));
+    return opt;
+  }
+  function chooseLanguage(id) {
+    langOpen = false;
+    const sel = $("targetLangSelect");
+    if (sel.value === id) paintTargetPick();
+    else {
+      sel.value = id;
+      sel.dispatchEvent(new Event("change"));
+    }
+    langBtn?.focus?.();
+  }
+  function closeLanguages() {
+    if (!langOpen) return;
+    langOpen = false;
+    paintTargetPick();
+  }
+  // Scrolling (but not in the list), resizing or a press anywhere else closes it.
+  globalThis.addEventListener?.("resize", closeLanguages);
+  document.addEventListener("scroll", (e) => {
+    if (e.target && typeof e.target.closest === "function" && e.target.closest("#targetLangList")) return;
+    closeLanguages();
+  }, true);
+  document.addEventListener("pointerdown", (e) => {
+    if (!langOpen || !e.target || typeof e.target.closest !== "function") return;
+    if (e.target.closest("#targetLangPick")) return;
+    closeLanguages();
+  });
+  $("targetLangSelect").addEventListener("change", paintTargetPick);
+  paintTargetPick();
+
   fetchLanguages().then((lists) => {
     languageLists = { local: asEntries(lists.local), perso: asEntries(lists.perso) };
     refillTargetLanguages();

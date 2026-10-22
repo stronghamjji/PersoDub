@@ -1083,6 +1083,19 @@ test("Processing and the Dubbing model come first in the options block, above th
   assert.ok(!Object.hasOwn(ko, "On this computer"));
 });
 
+// The Target language is a list with a search field, in the Dubbing model's
+// dress, over the hidden #targetLangSelect (owner, 2026-10-22).
+// ui/src/newProject.test.mjs runs it.
+test("the Target language is a list with a search on top, not a bare dropdown", () => {
+  const html = readPage();
+  assert.match(html, /<label data-i18n id="targetLangLabel">Target language<\/label><div class="model-pick" id="targetLangPick"><\/div><select id="targetLangSelect" hidden><\/select>/);
+  assert.match(html, /\.lang-search \{ display: flex; align-items: center; gap: 7px; height: 28px;/);
+  assert.match(html, /\.lang-opts \{ position: relative; display: flex; flex-direction: column; gap: 1px; max-height: 240px; overflow-y: auto; \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Search languages"], "언어 검색");
+  assert.equal(ko["{shown} of {all}"], "{all}개 중 {shown}개");
+});
+
 // With Perso API the stage rows read "Perso" over the dropdowns' own words,
 // which stay their values; only the words are hidden, so the arrow stays
 // (owner, 2026-10-22, the 2-1 picture). ui/src/dubbingPrep.test.mjs runs it.

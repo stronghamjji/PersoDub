@@ -8,8 +8,10 @@
 // Run with: node --test ui/src/newProject.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { initNewProjectUi, lengthLine } from "./newProject.mjs";
 import { LANGUAGES } from "./dubApi.mjs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 function makeEl(id) {
   const classes = new Set();
@@ -1146,6 +1148,96 @@ test("a storage the browser blocks leaves the dialog working on its defaults", a
   h.api.openNewProject({ downloadId: "d2", title: "Next" });
   await tick();
   assert.equal(h.$("dubModeSelect").value, "local");
+});
+
+// -- the Target language's list (owner, 2026-10-22) ---------------------------
+// A button and, pressed, a list in the Dubbing model's dress with a search
+// field on top; it sets the hidden #targetLangSelect that everything reads.
+
+const BUNDLED = JSON.parse(readFileSync(new URL("../../app/perso_languages.json", import.meta.url), "utf8")).languages
+  .map((l) => ({ id: l.tag || l.code, code: l.code, name: l.name, tag: l.tag, models: l.models }));
+async function inKorean(t) {
+  const real = globalThis.fetch;
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  globalThis.fetch = async () => ({ ok: true, json: async () => ko });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+}
+// A project open on the bundled list (app/perso_languages.json), Perso API chosen.
+async function bundledPerso(storage = memoryStorage()) {
+  const h = harness({ responses: { "/api/languages": ok({ local: [], perso: BUNDLED }), ...setupWith() }, storage });
+  fillAdvanced(h.$);
+  h.api.openNewProject({ downloadId: "d1", title: "A talk" });
+  await tick();
+  if (h.$("dubModeSelect").value !== "perso") await choose(h, "dubModeSelect", "perso");
+  return h;
+}
+const langBox = (h) => h.$("targetLangPick");
+async function openLanguages(h) {
+  await langBox(h).children[0].fire("click");
+  const list = langBox(h).children[1];
+  const [search, opts, count] = list.children;
+  return { list, field: search.children[0], opts, count };
+}
+const rowNames = (opts) => opts.children.map((o) => o.children[0].children[0].textContent);
+const key = (k, target = null) => ({ key: k, target, preventDefault() {}, stopPropagation() {} });
+
+test("the Target language opens as a list with a search: 스페 leaves the two Spanish, 77개 중 2개", async (t) => {
+  await inKorean(t);
+  const h = await bundledPerso();
+  t.after(h.log.restore);
+  assert.equal(langBox(h).children[0].children[0].textContent, "🇺🇸 영어(미국)", "the button names the language");
+  const { opts, field, count } = await openLanguages(h);
+  assert.equal(opts.children.length, 77, "Oriole's 77");
+  assert.equal(opts.children[0].attrs["aria-selected"], "true", "the chosen one is marked");
+  assert.equal(count.hidden, true, "nothing to count before a search");
+  assert.equal(field.placeholder, "언어 검색");
+  field.value = "스페";
+  await field.fire("input");
+  assert.deepEqual(rowNames(opts), ["🇲🇽 스페인어(멕시코)", "🇪🇸 스페인어(스페인)"]);
+  assert.equal(count.hidden, false);
+  assert.equal(count.textContent, "77개 중 2개");
+  field.value = "";
+  await field.fire("input");
+  assert.equal(opts.children.length, 77);
+});
+
+test("a language chosen in the list is the hidden dropdown's, so it is what is started with and remembered", async (t) => {
+  const store = memoryStorage();
+  const h = await bundledPerso(store);
+  const { opts, field } = await openLanguages(h);
+  field.value = "spanish";
+  await field.fire("input");
+  assert.deepEqual(rowNames(opts), ["🇲🇽 Spanish (Mexico)", "🇪🇸 Spanish (Spain)"]);
+  await opts.children[1].fire("click");
+  assert.equal(h.$("targetLangSelect").value, "es-ES");
+  assert.equal(langBox(h).children.length, 1, "choosing closes the list");
+  assert.equal(langBox(h).children[0].children[0].textContent, "🇪🇸 Spanish (Spain)");
+  assert.equal(h.api.readOptions().targetLang, "es-ES");
+  h.log.restore();
+
+  // The next project, after a restart: Perso API and Spanish (Spain) again.
+  const h2 = await bundledPerso(store);
+  t.after(h2.log.restore);
+  assert.equal(h2.$("targetLangSelect").value, "es-ES");
+  assert.equal(langBox(h2).children[0].children[0].textContent, "🇪🇸 Spanish (Spain)");
+});
+
+test("Enter in the search takes the first language left, and Escape closes the list", async (t) => {
+  const h = await bundledPerso();
+  t.after(h.log.restore);
+  let { list, field } = await openLanguages(h);
+  field.value = "japan";
+  await field.fire("input");
+  await list.fire("keydown", key("Enter", field));
+  assert.equal(h.$("targetLangSelect").value, "ja");
+  assert.equal(langBox(h).children.length, 1);
+  ({ list } = await openLanguages(h));
+  await list.fire("keydown", key("Escape"));
+  assert.equal(langBox(h).children.length, 1, "closed");
+  assert.equal(h.$("targetLangSelect").value, "ja", "and nothing chosen by it");
 });
 
 // The four languages that are shown by name alone, no country's flag.
