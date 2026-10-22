@@ -2297,7 +2297,9 @@
   /* Quiet enough not to compete with the links above it, and it wraps rather
      than pushing the dialog wider -- a project name can be long. */
   .export-where { margin: 12px 0 0; font-size: var(--font-label); color: var(--muted-foreground);
-    line-height: 1.45; word-break: break-word; }
+    /* Korean wraps between words, not inside one (저장해요 split in two, 2026-10-22); a
+       long file name without spaces still wraps somewhere. */
+    line-height: 1.45; word-break: keep-all; overflow-wrap: anywhere; }
 
 
   /* ---------------- Settings modal ---------------- */
