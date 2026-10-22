@@ -746,11 +746,11 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
 
   /** Lets a draft's Dubbing tab borrow the block while there is no dialog to
       show it in (ui/src/draftSetup.mjs). Order: languages, the voice
-      engine's warning, then Advanced. */
+      engine's warning, then the stage rows under their heading. */
   function moveOptionsInto(container) {
     container.appendChild($("langGrid"));
     container.appendChild($("engineWarning"));
-    container.appendChild($("advancedBtn"));
+    container.appendChild($("stageHead"));
     container.appendChild($("advancedBody"));
   }
 
@@ -869,12 +869,6 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     if (e.key === "Escape" && $("projectOverlay").classList.contains("open")) closeNewProject();
   });
   $("projectReplace").addEventListener("click", () => { closeNewProject(); onPickFile(); });
-  $("advancedBtn").addEventListener("click", () => {
-    const open = $("advancedBody").hidden;
-    $("advancedBody").hidden = !open;
-    $("advancedBtn").setAttribute("aria-expanded", String(open));
-    $("advancedBtn").classList.toggle("open", open);
-  });
 
   // Start is wired here so the dialog owns every button inside it; what the
   // button does -- the job, the running screen, the top bar -- stays on the page.

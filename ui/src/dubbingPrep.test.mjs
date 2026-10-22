@@ -83,4 +83,21 @@ test("Replace opens the Import block's picker, and Remove asks first and leaves 
   assert.deepEqual(kept(), []);
 });
 
+// No fold (owner, 2026-10-22, remark 2): the card shows the six stage rows
+// under their heading the moment it is up, with nothing pressed.
+test("Before dubbing shows the six stage rows under Dubbing step settings without a press", () => {
+  assert.equal($("advancedBtn"), null, "no fold button on the page");
+  setDraft({ downloadId: "fedcba21", name: "steps.mp4", duration: 24, videoUrl: "/v" });
+  assert.equal($("draftSetup").hidden, false);
+  for (const id of ["stageHead", "advancedBody"]) {
+    assert.equal($(id).parentElement, $("draftOptionsSlot"), `${id} is in the card`);
+    assert.equal($(id).hidden, false, `${id} is in sight`);
+  }
+  assert.equal($("stageHead").textContent, "Dubbing step settings");
+  // The two rows that stay dropdowns are on show; the four stages are buttons
+  // in their selects' place (ui/src/stagePicker.test.mjs).
+  for (const id of ["qualitySelect", "numSpeakers"]) assert.equal($(id).hidden, false, id);
+  for (const id of ["sepSelect", "sttSelect", "translateSelect", "voiceSelect"]) assert.equal($(id).hidden, true, id);
+});
+
 test.after(() => page.restore());

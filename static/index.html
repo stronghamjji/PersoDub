@@ -306,7 +306,7 @@
               </div>
               <!-- A draft's own face of this tab: no job yet, so nothing to
                    script -- the part of the video to dub, the two languages,
-                   Advanced options and Start dubbing (ui/src/draftSetup.mjs).
+                   the stage rows and Start dubbing (ui/src/draftSetup.mjs).
                    The Script pane below is hidden while this shows, and shown
                    again the moment a real job exists. -->
               <div class="draft-setup" id="draftSetup" hidden>
@@ -861,7 +861,7 @@
         <div class="trim" id="trimBox"></div>
       </div>
       <div class="project-right">
-        <!-- The languages and Advanced options are one block that a draft's
+        <!-- The languages and the stage rows are one block that a draft's
              Dubbing tab borrows (ui/src/newProject.mjs moveOptionsInto), so
              each of the three wears its own look: nothing about them is
              styled by where they happen to sit. Only this box scrolls. -->
@@ -886,10 +886,11 @@
                said here rather than only after Start (ui/src/dubApi.mjs
                applyEngineAvailability). Travels with the languages. -->
           <div class="form-error engine-warning" id="engineWarning"></div>
-          <button class="advanced-btn" id="advancedBtn" type="button" aria-expanded="false">
-            <span class="chev"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span data-i18n>Advanced options</span>
-          </button>
-          <div class="opt-panel advanced-body" id="advancedBody" hidden>
+          <!-- The six stage rows, always in sight under a plain heading in the
+               type the Advanced options fold had, with no arrow: there is
+               nothing to open (owner, 2026-10-22, remark 2). -->
+          <div data-i18n class="stage-head" id="stageHead">Dubbing step settings</div>
+          <div class="opt-panel advanced-body" id="advancedBody">
             <div class="field opt-row"><label data-i18n for="sepSelect">Voice separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="roformer">Mel-Band RoFormer</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sepHint"></div><div class="settings-hint model-line" id="sepModelHint" hidden></div></div>
             <div class="field opt-row"><label data-i18n for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sttHint"></div><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
             <div class="field opt-row"><label data-i18n for="translateSelect">Translation</label><select id="translateSelect"><option value="chatgpt" selected>ChatGPT</option><option value="hunyuan">Hunyuan (1.8B)</option><option value="gemma">Gemma 3 (12B)</option><option value="gemini">Gemini API</option></select><div class="settings-hint" id="translateHint"></div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>

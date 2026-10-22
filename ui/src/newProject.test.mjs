@@ -766,18 +766,14 @@ test("Replace closes the dialog and reopens the file picker", (t) => {
 
 // -- the rest of the dialog's own chrome -----------------------------------
 
-test("Advanced options folds open and shut", (t) => {
+// No fold any more (owner, 2026-10-22, remark 2): the heading over the six
+// stage rows answers no press, and opening the dialog leaves the rows in sight.
+test("the stage rows have no fold: their heading is no button, and the dialog never hides them", (t) => {
   const h = harness();
   t.after(h.log.restore);
-  h.$("advancedBody").hidden = true;
-
-  h.$("advancedBtn").fire("click");
+  h.api.openNewProject({ probe: PROBE });
+  assert.deepEqual(h.$("stageHead").listeners, {}, "nothing listens on the heading");
   assert.equal(h.$("advancedBody").hidden, false);
-  assert.equal(h.$("advancedBtn").attrs["aria-expanded"], "true");
-
-  h.$("advancedBtn").fire("click");
-  assert.equal(h.$("advancedBody").hidden, true);
-  assert.equal(h.$("advancedBtn").attrs["aria-expanded"], "false");
 });
 
 test("Start hands the job back to the page", (t) => {
@@ -1378,9 +1374,9 @@ test("the options block goes home to the box that scrolls, in order, and out to 
   h.api.openNewProject({ probe: PROBE });
   // The voice engine's warning goes with the languages (issue #187).
   assert.deepEqual(h.$("projectOptions").children.map((e) => e.id),
-    ["langGrid", "engineWarning", "advancedBtn", "advancedBody"]);
+    ["langGrid", "engineWarning", "stageHead", "advancedBody"]);
 
   const slot = h.$("draftOptionsSlot");
   h.api.moveOptionsInto(slot);
-  assert.deepEqual(slot.children.map((e) => e.id), ["langGrid", "engineWarning", "advancedBtn", "advancedBody"]);
+  assert.deepEqual(slot.children.map((e) => e.id), ["langGrid", "engineWarning", "stageHead", "advancedBody"]);
 });

@@ -1052,7 +1052,7 @@ test("the New project dialog is two columns, and its options carry their own loo
   // line sit under it, outside the scroll.
   const box = at('class="project-options" id="projectOptions"');
   const error = at('id="projectError"');
-  for (const id of ["langGrid", "advancedBtn", "advancedBody"]) {
+  for (const id of ["langGrid", "stageHead", "advancedBody"]) {
     const i = at(`id="${id}"`);
     assert.ok(box < i && i < error, `${id} is home in #projectOptions`);
   }
@@ -1062,7 +1062,7 @@ test("the New project dialog is two columns, and its options carry their own loo
     && at('id="saveClipBtn"') < at('id="eraseBtn"') && at('id="eraseBtn"') < at('id="startBtn"'));
   // The look travels on the moved nodes themselves.
   assert.match(dlg, /<div class="opt-panel" id="langGrid">/);
-  assert.match(dlg, /<div class="opt-panel advanced-body" id="advancedBody" hidden>/);
+  assert.match(dlg, /<div class="opt-panel advanced-body" id="advancedBody">/);
   assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "Processing, two languages and six options, each a row");
   // Voice separation offers Demucs, Mel-Band RoFormer and Perso API, the RoFormer before it is downloaded too.
   assert.match(dlg, /<select id="sepSelect"><option value="local" selected>Demucs<\/option><option value="roformer">Mel-Band RoFormer<\/option><option value="perso">Perso API<\/option><\/select>/);
@@ -1075,6 +1075,31 @@ test("the New project dialog is two columns, and its options carry their own loo
   assert.match(html, /grid-template-columns: 320px minmax\(0, 1fr\); gap: 16px; padding: 16px; \}/);
   // Scrolling, the dialog keeps its stuck 55 foot clear the way the draft card does (H29).
   assert.match(html, /@media \(max-width: 759px\) \{\n    \.project-modal \{ overflow-y: auto; scroll-padding-bottom: 55px; \}/);
+});
+
+// The Advanced options fold is gone: the six stage rows are always in sight
+// under a plain heading in the type the fold's button had, with no arrow, and
+// the card they are in scrolls with Start stuck at its foot (owner,
+// 2026-10-22, remark 2). ui/src/dubbingPrep.test.mjs runs it in the page.
+test("the six stage rows are always in sight under Dubbing step settings, with no fold to open", () => {
+  const html = readPage();
+  const block = html.slice(html.indexOf('id="engineWarning"'), html.indexOf('id="projectError"'));
+  assert.match(block, /<div data-i18n class="stage-head" id="stageHead">Dubbing step settings<\/div>\s*<div class="opt-panel advanced-body" id="advancedBody">/);
+  const rows = block.slice(block.indexOf('id="advancedBody"'));
+  assert.deepEqual([...rows.matchAll(/<label data-i18n for="(\w+)">/g)].map((m) => m[1]),
+    ["sepSelect", "sttSelect", "translateSelect", "voiceSelect", "qualitySelect", "numSpeakers"], "six rows, in order");
+  for (const gone of ["advancedBtn", "advanced-btn"]) assert.ok(!html.includes(gone), `no ${gone} left`);
+  assert.doesNotMatch(html, /data-i18n[^>]*>\s*Advanced options\s*</, "no fold's name on screen");
+  assert.match(html, /\.stage-head \{ padding: 10px 0 8px; font-size: 11\.5px; font-weight: 500; color: var\(--foreground\); \}/);
+  // The card scrolls, and Start stays stuck at its foot.
+  assert.match(html, /\.draft-setup \{ flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px;\n    padding: 14px 12px; overflow: auto;/);
+  assert.match(html, /position: sticky; bottom: -14px;/);
+  assert.match(readFileSync(fileURLToPath(new URL("./newProject.mjs", import.meta.url)), "utf8"),
+    /container\.appendChild\(\$\("engineWarning"\)\);\n    container\.appendChild\(\$\("stageHead"\)\);\n    container\.appendChild\(\$\("advancedBody"\)\);/);
+  const table = (code) => JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
+  assert.equal(table("ko")["Dubbing step settings"], "더빙 단계별 설정");
+  assert.equal(table("en")["Dubbing step settings"], "Dubbing step settings");
+  assert.ok(!Object.hasOwn(table("ko"), "Advanced options"), "the fold's name is out of the table");
 });
 
 // Processing and the Dubbing model sit above the languages, outside Advanced

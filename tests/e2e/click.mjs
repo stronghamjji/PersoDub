@@ -236,12 +236,9 @@ async function newProjectStep(snap, base) {
   await choose("#sttSelect", "local");
   await choose("#targetLangSelect", "ko");
   // Without --translator the dub keeps the one the app starts a new project
-  // on, which hangs on whoever used the app last; with it, Advanced options
-  // is opened with its own button and that translator picked.
-  if (opt.translator) {
-    if (!(await inPage(shown, "#translateSelect"))) await click("#advancedBtn");
-    await choose("#translateSelect", opt.translator);
-  }
+  // on, which hangs on whoever used the app last; with it, that translator is
+  // picked in its row, always in sight under Dubbing step settings.
+  if (opt.translator) await choose("#translateSelect", opt.translator);
   await shot(`${base}-draft`);
   const before = await js(`document.body.dataset.jobId || ""`);
   await click("#draftStartBtn");

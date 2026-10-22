@@ -1283,9 +1283,9 @@
   .draft-card.video-card .m { font-size: var(--font-ui); }
 
   /* A draft's "Before dubbing" card, in the Dubbing tab. The language
-     dropdowns and Advanced options that land in #draftOptionsSlot are the New
+     dropdowns and the stage rows that land in #draftOptionsSlot are the New
      project dialog's own (ui/src/newProject.mjs moveOptionsInto) -- their look
-     is that dialog's .option-grid/.field/.advanced-btn, unchanged. */
+     is that dialog's .option-grid/.field/.stage-head, unchanged. */
   .draft-setup { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px;
     padding: 14px 12px; overflow: auto;
     /* What is scrolled into view here -- a refused Start's reason, a focused
@@ -1306,8 +1306,8 @@
   .draft-part .vc-del { color: var(--destructive); }
   .draft-import-status { text-align: left; }
   .draft-import-status:empty { display: none; }
-  /* Stuck to the foot of the card: with Advanced options open the card
-     scrolls, and Start dubbing must not scroll away with it (QA 2026-09-29). */
+  /* Stuck to the foot of the card: with the six stage rows always in sight
+     the card scrolls, and Start dubbing must not scroll away with it (QA 2026-09-29). */
   .draft-foot { margin-top: auto; padding: 10px 0 0; border-top: 1px solid var(--border);
     display: flex; align-items: center; gap: 10px; font-size: var(--font-label); color: var(--muted-foreground);
     position: sticky; bottom: -14px; margin-bottom: -14px; padding-bottom: 14px; z-index: 1;
@@ -2542,17 +2542,6 @@
   .trim-range:focus { outline: none; }
   .trim-range:focus-visible::-webkit-slider-thumb { box-shadow: var(--focus-ring); }
   .option-grid.two { grid-template-columns: 1fr 1fr; }
-  /* A whole-width bordered row rather than a link, so it reads as the lid on
-     everything the user does not normally have to open. */
-  .advanced-btn { width: 100%; padding: 0 12px; justify-content: space-between;
-    background: var(--background); border: 1px solid var(--control-line); font-weight: 500; }
-  .advanced-btn > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
-  .advanced-btn .chev { color: var(--muted-foreground); display: inline-flex;
-    transition: transform 0.15s ease; }
-  /* Open turns the chevron over. The arrow is one SVG that points down and is
-     flipped here, rather than two glyphs swapped by hand. */
-  .advanced-btn.open .chev { transform: rotate(180deg); }
-  .advanced-btn.open, .advanced-btn.open .chev { border-color: var(--primary); color: var(--primary); }
   /* A sentence, not a field: it belongs under the whole grid rather than in a
      column beside one. The grid's own gap already spaces it. */
   /* The two that end here sit left, the one that goes on to a dub sits right,
@@ -2618,7 +2607,7 @@
      46 with a 24 control; a 55 footer with 86x28 buttons. */
 
   /* -- New project: the picture on the left, the decisions on the right.
-     The body is one fixed height, so opening Advanced scrolls the right
+     The body is one fixed height, so the options scroll in the right
      column and the window stays where it is. */
   .project-modal { width: min(720px, 92vw); max-height: 92vh; display: flex; flex-direction: column;
     overflow: hidden; }
@@ -2750,13 +2739,10 @@
   .opt-row > .settings-hint.model-busy { color: var(--destructive); }
   .opt-row > .settings-hint.model-ok { color: var(--success-ink); }
   .opt-row .keys-link { padding: 0 8px; height: 22px; font-size: 11px; font-weight: 500; }
-  .advanced-btn, .advanced-btn.open { display: flex; align-items: center; justify-content: flex-start; gap: 6px;
-    width: 100%; height: auto; padding: 10px 0 8px; border: 0; border-radius: 0; background: none;
-    color: var(--foreground); font-family: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer; }
-  .advanced-btn .chev, .advanced-btn.open .chev { color: var(--icon); }
-  .advanced-btn .chev .icon { width: 13px; height: 13px; stroke-width: 1.5; }
-  .advanced-btn.open .chev { transform: rotate(90deg); }
-  .advanced-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+  /* "Dubbing step settings" over the six stage rows, in the type the
+     Advanced options fold had, with no arrow: the rows are always in sight
+     (owner, 2026-10-22, remark 2). */
+  .stage-head { padding: 10px 0 8px; font-size: 11.5px; font-weight: 500; color: var(--foreground); }
 
 
   /* -- Settings: the measured 22 for a field, and 24 at the panel's sides. */
