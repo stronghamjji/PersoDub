@@ -986,6 +986,9 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   }
 
   // retranslate: reached from its button above; returned for the tests.
+  // linesOf: the lines on screen when they are that job's, else null (+ Add
+  // language prices a Perso dubbing by where they are spoken).
   return { renderScript, refreshAfterVoices, setSaving: scriptSaving, reset, retranslate,
-           getJobId: () => scriptJobId, countStale, getStamp: () => drawnStamp };
+           getJobId: () => scriptJobId, countStale, getStamp: () => drawnStamp,
+           linesOf: (jobId) => (jobId === scriptJobId ? shown : null) };
 }

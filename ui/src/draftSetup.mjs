@@ -17,7 +17,7 @@
 // importSource for the shortcut above.
 import { buildDubFormData, fetchCreditsLeft, saveDownloadParts } from "./dubApi.mjs";
 import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
-import { getDraft, clearDraft, setRanges, keptSeconds, isWhole, onDraftChange } from "./draft.mjs";
+import { getDraft, clearDraft, setRanges, keptSeconds, spokenSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { modelInfo } from "./persoModels.mjs";
 import { t } from "./i18n.mjs";
 import { gb } from "./modelsUi.mjs";
@@ -63,23 +63,31 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
                                   showDraftTimeline = () => {}, getScreen = () => "done",
                                   stemsFrom = () => "", removeDraft = () => {}, firstDownloadBytes = () => 0 }) {
   // What a Perso API dubbing of the kept part costs and what the workspace
-  // has left, beside Start (owner, 2026-10-22): the model's credits a second
-  // times the seconds kept, whole seconds as Perso counts them, and what
-  // Settings' workspace list says is left. That one is asked at most once a
-  // minute: it moves only when credits are spent.
+  // has left, beside Start (owner, 2026-10-22). Perso charges the model's
+  // credits a second for the whole seconds spoken: until a script has heard
+  // the video that is at most every second kept, and once one has (a draft
+  // opened by + Add language) about the seconds it heard in the kept parts,
+  // whole seconds as the clock beside it counts them. What is left is what
+  // Settings' workspace list says, asked at most once a minute: it moves
+  // only when credits are spent.
   const LEFT_FRESH_MS = 60 * 1000;
   let creditsLeft = null;
   let leftAskedAt = -Infinity;
   const number = (n) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
-  function persoCost(seconds) {
+  function persoCost(d) {
     if (Date.now() - leftAskedAt >= LEFT_FRESH_MS) {
       leftAskedAt = Date.now();
       fetchCreditsLeft().then((n) => { creditsLeft = n; paintFoot(); });
     }
     const { rate } = modelInfo(newProject.persoModel());
-    const cost = rate == null || !(seconds > 0) ? null : Math.round(Math.ceil(seconds) * rate * 10) / 10;
-    return [cost == null ? "" : cost === 1 ? t("{n} credit", { n: 1 }) : t("{n} credits", { n: number(cost) }),
-            creditsLeft == null ? "" : t("{n} left", { n: number(creditsLeft) })].filter(Boolean);
+    const spoken = spokenSeconds(d);
+    const cost = rate == null || !(keptSeconds(d) > 0) ? null
+      : Math.round(Math.floor(spoken ?? keptSeconds(d)) * rate * 10) / 10;
+    const about = spoken != null;
+    const price = cost == null ? ""
+      : cost === 1 ? (about ? t("about {n} credit", { n: 1 }) : t("up to {n} credit", { n: 1 }))
+      : about ? t("about {n} credits", { n: number(cost) }) : t("up to {n} credits", { n: number(cost) });
+    return [price, creditsLeft == null ? "" : t("{n} left", { n: number(creditsLeft) })].filter(Boolean);
   }
 
   // The Dubbing tab's three faces: the Import block with no video yet (the
@@ -120,7 +128,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
       : $("qualitySelect").value === "high" ? t("High quality mode") : t("Fast mode");
     const first = firstDownloadBytes();
     $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality }),
-      ...(cloud ? persoCost(keptSeconds(d)) : first ? [t("{size} GB the first time", { size: gb(first) })] : [])].join(" · ");
+      ...(cloud ? persoCost(d) : first ? [t("{size} GB the first time", { size: gb(first) })] : [])].join(" · ");
   }
   // The foot names the mode, so it has to follow the two choices that set it:
   // it went on saying "Fast mode" after High quality was picked (2026-09-30).

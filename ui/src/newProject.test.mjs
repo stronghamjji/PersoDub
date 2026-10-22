@@ -870,7 +870,7 @@ test("the target languages are the ones the chosen model has", async (t) => {
   assert.deepEqual(targets(h), ["en", "en-GB"]);                    // Oriole
   await chooseModel(h, "Nightingale");            // Nightingale
   assert.deepEqual(targets(h), ["en", "en-GB", "en-AU"]);
-  assert.equal(h.$("persoModelHint").textContent, "6 credits per second · 3 languages with this model · Perso Pro plan and up");
+  assert.equal(h.$("persoModelHint").textContent, "4 credits per second · 3 languages with this model · Perso Pro plan and up");
   assert.deepEqual(await models(h), ["Oriole", "Wren", "[Nightingale]"]);
   await chooseModel(h, "Wren");            // Wren
   assert.deepEqual(targets(h), ["en"]);

@@ -961,7 +961,7 @@ class PersoClient:
                   "width": int(width), "height": int(height),
                   "projectSeq": int(project_seq)}
         if tts_model:
-            # The rate per second depends on the voice model (NIGHTINGALE: 6).
+            # The rate per second depends on the voice model (NIGHTINGALE: 4).
             params["ttsModelCounts"] = "%s:1" % tts_model
         r = httpx.get(
             f"{self.base_url}/video-translator/api/v1/projects/spaces/{space}/media/quota",

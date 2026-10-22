@@ -14,6 +14,7 @@
 //
 // The elements this file touches: #langRow and what it draws in it.
 import { dubAgainSource } from "./dubApi.mjs";
+import { toOriginal } from "./draft.mjs";
 import { errorText, escapeHtml } from "./format.mjs";
 import { languageName, t } from "./i18n.mjs";
 
@@ -83,9 +84,11 @@ const NOTE_MS = 4000;
  * @param {(source: object, opts: object, project: string) => Promise<void>} deps.openDraft
  *        the Before dubbing card on a held video, in `project`
  * @param {(job: object) => string} deps.nameOf   what the project is called
+ * @param {(jobId: string) => object[]|null} [deps.linesOf]  that dubbing's
+ *        script lines as the table shows them, or null
  * @returns {{ setJobs: (jobs: object[]) => void, paint: () => void }}
  */
-export function initLanguageRow({ $, getJob, langName, onOpenJob, openDraft, nameOf }) {
+export function initLanguageRow({ $, getJob, langName, onOpenJob, openDraft, nameOf, linesOf = () => null }) {
   let jobs = [];
   let opening = false;
 
@@ -110,7 +113,11 @@ export function initLanguageRow({ $, getJob, langName, onOpenJob, openDraft, nam
     btn.textContent = t("Opening…");
     try {
       const src = await dubAgainSource(job.id);
-      await openDraft({ downloadId: src.download_id, name: nameOf(job), duration: src.duration_sec },
+      // Where the video is spoken, from this dubbing's lines: a Perso API
+      // dubbing is charged by those seconds (owner, 2026-10-22).
+      const lines = linesOf(job.id);
+      const speech = lines && lines.length ? toOriginal(lines.map((l) => [l.start, l.end]), src.ranges) : null;
+      await openDraft({ downloadId: src.download_id, name: nameOf(job), duration: src.duration_sec, speech },
                       { tab: "dubbing", ranges: src.ranges, choices: choicesOf(job) },
                       projectKey(job));
     } catch (e) {

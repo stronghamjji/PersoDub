@@ -886,6 +886,17 @@ test("the table says which job it is showing, and forgets it when a new one star
   assert.equal(h.$("scriptCount").textContent, "");
 });
 
+// + Add language prices a Perso dubbing by where the open one is spoken.
+test("the table hands over the lines it shows for that job, and none for another or once reset", async (t) => {
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [line(1), line(2)] }) } });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+  assert.deepEqual(h.api.linesOf("j1").map((l) => [l.start, l.end]), [[1, 2], [2, 3]]);
+  assert.equal(h.api.linesOf("j2"), null);
+  h.api.reset();
+  assert.equal(h.api.linesOf("j1"), null);
+});
+
 test("countStale counts the lines still waiting for a new voice", async (t) => {
   const h = harness({ responses: { [SCRIPT]: ok({ lines: [line(1)] }) } });
   t.after(h.log.restore);
