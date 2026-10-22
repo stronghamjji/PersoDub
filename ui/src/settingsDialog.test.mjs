@@ -8,6 +8,7 @@
 // Run with: node --test ui/src/settingsDialog.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { initSettingsUi, SETTINGS_TABS } from "./settingsDialog.mjs";
 import { currentLanguage, setLanguage } from "./i18n.mjs";
 
@@ -40,8 +41,9 @@ function makeEl(id) {
   };
 }
 
-/** A page, a fetch log and a stopped clock. `responses` answers per URL. */
-function harness({ responses = {}, refreshModelCatalog = null } = {}) {
+/** A page, a fetch log and a stopped clock. `responses` answers per URL;
+    `shell` stands in for the desktop shell, none for a browser. */
+function harness({ responses = {}, refreshModelCatalog = null, shell = null } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -98,6 +100,7 @@ function harness({ responses = {}, refreshModelCatalog = null } = {}) {
     onSaved: () => { state.saved += 1; },
     refreshModelCatalog: () => { state.models += 1; return refreshModelCatalog && refreshModelCatalog($); },
     startAgain: () => { state.startedAgain += 1; },
+    shell,
   });
   return { $, api, state };
 }
@@ -377,6 +380,45 @@ test("the finished-videos button is named for this computer and asks the engine 
 
   assert.deepEqual(h.state.calls, ["POST /api/settings/reveal-output"]);
   assert.equal(h.$("storageHint").textContent, "");
+});
+
+// The folder Change in the Download dialog picks (owner, 2026-10-22): Storage
+// says it in one line and has nothing to change it with.
+test("Storage says where downloads go, as the shell says it each time the sheet opens", async (t) => {
+  let now = { folder: "/Users/me/Downloads", chosen: "", missing: false };
+  const h = harness({ shell: { downloadFolder: async () => now } });
+  t.after(h.state.restore);
+  const opened = async () => { await h.api.openSettings(); await new Promise((r) => setImmediate(r)); };
+
+  await opened();
+  assert.equal(h.$("downloadFolderRow").hidden, false);
+  assert.equal(h.$("downloadFolderLine").textContent, "Download folder: /Users/me/Downloads");
+  now = { folder: "/Volumes/Work SSD", chosen: "/Volumes/Work SSD", missing: false };
+  await opened();
+  assert.equal(h.$("downloadFolderLine").textContent, "Download folder: /Volumes/Work SSD");
+  // Gone (a drive taken out): the folder the files go to meanwhile.
+  now = { folder: "/Users/me/Downloads", chosen: "/Volumes/Work SSD", missing: true };
+  await opened();
+  assert.equal(h.$("downloadFolderLine").textContent, "Download folder: /Users/me/Downloads");
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Download folder: {path}"], "다운로드 폴더: {path}");
+});
+
+test("in a browser, which saves where it is set to, Storage has no download-folder line", async (t) => {
+  const h = harness();
+  t.after(h.state.restore);
+  await h.api.openSettings();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(h.$("downloadFolderRow").hidden, true);
+  assert.equal(h.$("downloadFolderLine").textContent, "");
+});
+
+test("the download-folder line is a line of words in Storage, with nothing to press", () => {
+  const page = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
+  const storage = page.slice(page.indexOf('id="settingsPanel-storage"'), page.indexOf('id="settingsPanel-privacy"'));
+  const row = /<div class="set-row" id="downloadFolderRow" hidden>([^]*?)<\/div>/.exec(storage);
+  assert.ok(row, "the row is in the Storage panel");
+  assert.equal(row[1].trim(), '<span class="set-line" id="downloadFolderLine"></span>');
 });
 
 test("a folder that will not open says so under the button", async (t) => {

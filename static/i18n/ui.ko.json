@@ -164,6 +164,7 @@
   "Done": "완료",
   "Download": "다운로드",
   "Download failed - try again": "다운로드하지 못했어요. 다시 시도해 주세요",
+  "Download folder: {path}": "다운로드 폴더: {path}",
   "Download from a link": "링크로 다운로드",
   "Download stopped. Resume it in Settings.": "다운로드가 멈췄어요. 설정에서 이어 받아 주세요.",
   "Download {name}?": "{name} 다운로드할까요?",

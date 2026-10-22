@@ -191,6 +191,8 @@ const settings = initSettingsUi({
   $,
   onSaved: () => applyEngineAvailabilityToForm(),
   refreshModelCatalog: () => models.refreshModels(),
+  // Storage says where downloads go; only the desktop shell knows.
+  shell: window.persodubShell || null,
 });
 
 $("settingsBtn").addEventListener("click", settings.openSettings);

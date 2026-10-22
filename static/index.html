@@ -1195,6 +1195,12 @@
             <div class="settings-hint" id="storageHint"></div>
           </div>
         </div>
+        <!-- Where downloads go, said and nothing more: Change in the Download
+             dialog picks it (owner, 2026-10-22). Only the desktop shell knows
+             it; in a browser the row stays away. -->
+        <div class="set-row" id="downloadFolderRow" hidden>
+          <span class="set-line" id="downloadFolderLine"></span>
+        </div>
       </div>
 
       <div class="set-panel" id="settingsPanel-privacy" role="tabpanel" aria-labelledby="settingsTab-privacy" hidden>

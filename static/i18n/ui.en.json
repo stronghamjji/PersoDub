@@ -164,6 +164,7 @@
   "Done": "Done",
   "Download": "Download",
   "Download failed - try again": "Download failed - try again",
+  "Download folder: {path}": "Download folder: {path}",
   "Download from a link": "Download from a link",
   "Download stopped. Resume it in Settings.": "Download stopped. Resume it in Settings.",
   "Download {name}?": "Download {name}?",

@@ -2406,6 +2406,9 @@
   .set-ctl { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
   .set-ctl.set-inline { flex-direction: row; align-items: center; gap: 8px; }
   .set-wide { grid-column: 1 / -1; padding-top: 8px; }
+  /* A row that is one line of words across both columns (Storage's download
+     folder), broken anywhere when a long path needs it. */
+  .set-line { grid-column: 1 / -1; overflow-wrap: anywhere; }
   .set-panel input[type="password"], .set-panel input[type="text"], .set-panel select {
     height: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: 5px;
     background-color: var(--secondary); font-size: 11.5px; }
