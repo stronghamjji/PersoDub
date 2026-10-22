@@ -1026,6 +1026,41 @@ test("the dubbing step is Voice separation, and the tool tab keeps its own name"
     + "If it stops again, you can try the Perso API."].startsWith("목소리를 분리하다가 멈췄어요."));
 });
 
+// The Audio tab's one choice is named for what it is, and under it one card
+// says what Separate makes, in the place the two dim rows had (owner,
+// 2026-10-22). The rows are the result itself and come only with it
+// (ui/src/audioTab.mjs paint).
+test("the Audio tab asks for a model, and one card under it says what Separate makes", () => {
+  const html = readPage();
+  assert.match(html, /<label data-i18n class="k" for="audioEngine">Choose a model<\/label>/);
+  const body = html.slice(html.indexOf('id="audioBody"'), html.indexOf('id="audioRow"'));
+  assert.match(body, new RegExp('<div class="erase-card result-box" id="audioResult" hidden>\\s*'
+    + '<div data-i18n class="k">What you get</div>\\s*'
+    + '<div data-i18n class="m">A voice file \\(speech only\\) · a background file \\(music and effects\\) · MP3 or WAV</div>\\s*</div>'));
+  // Under the choice, and under the running card that takes its place; over the rows.
+  const at = (id) => body.indexOf(`id="${id}"`);
+  assert.ok(at("audioEngineCard") < at("audioRunCard") && at("audioRunCard") < at("audioResult")
+    && at("audioResult") < at("audioVoiceRow"), "the card is not under the choice");
+  // The dim rows' notes went with them.
+  for (const gone of ["audioVoiceNote", "audioBackgroundNote", "audio-note", ".audio-row.dim"]) {
+    assert.ok(!html.includes(gone), `${gone} is back`);
+  }
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Choose a model"], "모델 선택");
+  assert.equal(ko["What you get"], "이 작업을 하면 이렇게 나와요");
+  assert.equal(ko["A voice file (speech only) · a background file (music and effects) · MP3 or WAV"],
+    "목소리 파일(말소리만) · 배경음 파일(음악과 효과음) · MP3 또는 WAV");
+  for (const code of ["en", "ko"]) {
+    const table = JSON.parse(readFileSync(new URL(`../../static/i18n/ui.${code}.json`, import.meta.url), "utf8"));
+    for (const gone of ["Runs on", "Speech only", "Music and effects"]) {
+      assert.ok(!Object.hasOwn(table, gone), `ui.${code}.json still has "${gone}"`);
+    }
+  }
+  // The panel's own card, with a little room over it, and its line spaced for two lines.
+  assert.match(html, /\.result-box \{ margin: 8px 0 4px; \}/);
+  assert.match(html, /\.result-box \.m \{ line-height: 1\.5; \}/);
+});
+
 test("the sentence that named no API is gone from the page and from both tables", () => {
   assert.ok(!readPage().includes("For accuracy, use the API."));
   for (const code of ["en", "ko"]) {
@@ -1275,8 +1310,6 @@ test("the edit flow: per-tab foots, no preview strip, and Add language on a dub'
     assert.ok(html.includes(`id="${id}"`), `#${id} is gone`);
   }
   assert.match(html, /<div class="erase-desc">Splits the sound into voice and background\.<\/div>/);
-  assert.match(html, /id="audioVoiceNote">Speech only</);
-  assert.match(html, /id="audioBackgroundNote">Music and effects</);
   assert.match(html, /onDub: \(held\) => openDraftHere\(\{[^}]*\}, \{ tab: "dubbing" \}\)/);
   // Home's Dubbing card and item open an empty project on its Dubbing tab,
   // whose Import block takes a link too, not the bare file picker (owner, 2026-10-09).

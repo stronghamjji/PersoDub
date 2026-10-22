@@ -650,6 +650,10 @@
     font-size: var(--font-label); color: var(--primary-ink); }
   .erase-link:hover { text-decoration: underline; }
   .erase-card .erase-link { position: absolute; right: 12px; top: 10px; }
+  /* What a tool makes: one card under its last choice, "What you get" over
+     the files (owner, 2026-10-22). */
+  .result-box { margin: 8px 0 4px; }
+  .result-box .m { line-height: 1.5; }
   /* The pack line and the no-graphics-card line. */
   .erase-notice { flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
     padding: 8px 10px; border-radius: 6px; background: var(--accent);
@@ -687,10 +691,6 @@
     display: grid; place-items: center; cursor: pointer; background: var(--secondary); color: var(--foreground); }
   .audio-play:hover { background: var(--accent); }
   .audio-wave { flex: 1; min-width: 0; height: 26px; }
-  /* Before there is a separation: the same two rows, dim, each saying what
-     it will be. */
-  .audio-row.dim { color: var(--muted-foreground); }
-  .audio-row .audio-note { font-size: var(--font-label); font-weight: 400; color: var(--muted-foreground); }
   .audio-tab .erase-desc { flex: 0 0 auto; padding: 0 14px 8px; font-size: var(--font-label);
     color: var(--muted-foreground); }
   .audio-tab .erase-label { padding-bottom: 2px; }
