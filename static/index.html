@@ -1203,13 +1203,14 @@
           </div>
         </div>
         <div class="set-row">
-          <label data-i18n for="reportsToggle">Automatic failure reports</label>
+          <label data-i18n for="reportsToggle">Send job logs</label>
           <div class="set-ctl">
             <input type="checkbox" class="switch" id="reportsToggle" checked>
-            <!-- Separate from the counts: this one carries what broke, so it is
-                 its own choice. Nothing personal leaves -- keys and folder names
-                 are taken out first (desktop/src/report.js). -->
-            <div data-i18n class="settings-hint" id="reportsHint">Sends the error and its log, your computer's specs and the app version. No video, file names, keys or personal data.</div>
+            <!-- Separate from the counts: this one carries the logs of finished
+                 and failed jobs, so it is its own choice. Nothing personal
+                 leaves -- keys and folder names are taken out first
+                 (desktop/src/report.js). -->
+            <div data-i18n class="settings-hint" id="reportsHint">Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.</div>
           </div>
         </div>
       </div>
