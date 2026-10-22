@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { MIN_H, MIN_W, RATE, SETUP_SECONDS, clampArea, toScreen, toVideo,
          videoPerScreen, dragArea, defaultArea, isWhole, estimateSeconds,
          estimateLabel, progressLine, erasePercent, isPackMissing,
-         packNeededLine, eraseView, workLength, trimNote, partRange, NO_GPU_SLOWER, noGpuNote, bigBoxNote, CHECK_SHARE_EXTRA } from "./eraseArea.mjs";
+         packNeededLine, eraseView, workLength, trimNote, partRange, NO_GPU_SLOWER, noGpuNote, bigBoxNote, CHECK_SHARE_EXTRA,
+         rangeLine, cropView } from "./eraseArea.mjs";
 
 // A portrait clip in a stage wider and shorter than it is: the picture is
 // letterboxed down both sides, which is what the conversions have to allow for.
@@ -102,6 +103,48 @@ test("the whole frame is the whole frame, near enough", () => {
   assert.equal(isWhole([614, 847, 23, 571], FRAME.w, FRAME.h), false);
 });
 
+// -- the Area card's enlargement (design 5, owner 2026-10-22) ------------------
+
+// The box the app offered for the owner's 720p test clip, and a picture the
+// shape of the Area card's at the 1280x800 window: 579 x 80.
+const WIDE = { w: 1280, h: 720 };
+const BOX = [547, 649, 187, 1088];
+const CARD = 579 / 80;
+const holds = (c, [y0, y1, x0, x1]) => c.x <= x0 && c.x + c.w >= x1 && c.y <= y0 && c.y + c.h >= y1;
+const near = (a, b) => Math.abs(a - b) < 1e-9;
+
+test("the enlargement is the box and a margin round it, in the card's own shape", () => {
+  const c = cropView(BOX, WIDE.w, WIDE.h, CARD);
+  assert.ok(near(c.w / c.h, CARD), "it fills the picture, no bands");
+  assert.ok(holds(c, BOX));
+  // 20 px over and under a box on a 720-line frame; wider than that to the
+  // sides, which is the card's shape.
+  assert.ok(near(BOX[0] - c.y, 20) && near(c.y + c.h - BOX[1], 20));
+  assert.ok(BOX[2] - c.x > 20);
+  // Centred on the box.
+  assert.ok(near(c.x + c.w / 2, (BOX[2] + BOX[3]) / 2));
+  // The dotted edge lands on the box itself.
+  assert.ok(near(c.x + c.box.left * c.w, BOX[2]) && near(c.y + c.box.top * c.h, BOX[0]));
+  assert.ok(near(c.box.width * c.w, BOX[3] - BOX[2]) && near(c.box.height * c.h, BOX[1] - BOX[0]));
+});
+
+test("a box against the frame's edge is enlarged from inside the frame", () => {
+  const low = [650, 720, 100, 1180];
+  const c = cropView(low, WIDE.w, WIDE.h, CARD);
+  assert.ok(holds(c, low));
+  assert.ok(near(c.y + c.h, WIDE.h), "moved up rather than past the bottom");
+  assert.ok(c.x >= 0 && c.x + c.w <= WIDE.w);
+  assert.ok(near(c.y + c.box.top * c.h, low[0]));
+});
+
+test("a box taller than the card can show is shown whole, centred, with nothing beside it", () => {
+  const whole = [0, WIDE.h, 0, WIDE.w];
+  const c = cropView(whole, WIDE.w, WIDE.h, CARD);
+  assert.ok(holds(c, whole));
+  assert.ok(c.x < 0 && near(c.x + c.w / 2, WIDE.w / 2));
+  assert.ok(near(c.w / c.h, CARD));
+});
+
 // -- what it will cost --------------------------------------------------------
 
 test("the estimate is this computer's rate times the length, plus the setup", () => {
@@ -117,9 +160,10 @@ test("the estimate is this computer's rate times the length, plus the setup", ()
 });
 
 test("the estimate is said in whole minutes, rounded up, or not at all", () => {
-  assert.equal(estimateLabel(estimateSeconds(10)), "About 10 min");  // 587s
-  assert.equal(estimateLabel(61), "About 2 min");
-  assert.equal(estimateLabel(5), "About 1 min");                     // never "0 min"
+  // Named by where it runs, the way the dubbing's choice is (owner, 2026-10-22).
+  assert.equal(estimateLabel(estimateSeconds(10)), "Local model · about 10 min");  // 587s
+  assert.equal(estimateLabel(61), "Local model · about 2 min");
+  assert.equal(estimateLabel(5), "Local model · about 1 min");                     // never "0 min"
   assert.equal(estimateLabel(0), "");
 });
 
@@ -141,7 +185,17 @@ test("several kept parts are counted, and measured all together", () => {
 test("a video whose length is not known has no part to name", () => {
   for (const source of [null, { duration: 0, ranges: null }, { duration: 0, ranges: [[1, 2]] }]) {
     assert.equal(partRange(source), "");
+    assert.equal(rangeLine(source), "");
   }
+});
+
+// The video card's line before an erase (design 5, owner 2026-10-22): the
+// parts the timeline kept, each with its two ends.
+test("the card's line names the whole video, the one part, or every part kept", () => {
+  assert.equal(rangeLine({ duration: 10, ranges: null }), "Part to erase · 00:00:00.0 – 00:00:10.0 · Whole video");
+  assert.equal(rangeLine({ duration: 10, ranges: [[2, 8]] }), "Part to erase · 00:00:02.0 – 00:00:08.0");
+  assert.equal(rangeLine({ duration: 10, ranges: [[0, 3.4], [7, 10]] }),
+    "Part to erase · 00:00:00.0 – 00:00:03.4, 00:00:07.0 – 00:00:10.0");
 });
 
 test("the running line counts down, and stops promising near the end", () => {

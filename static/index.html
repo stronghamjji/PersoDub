@@ -217,7 +217,7 @@
             <button class="home-card home-card-btn" id="homeEraseCard" type="button">
               <span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></span>
               <div data-i18n class="home-card-title">Erase subtitles</div>
-              <div data-i18n class="home-card-desc">Take burned-in subtitles out</div>
+              <div data-i18n class="home-card-desc">Erases burned-in subtitles. Dub the erased video for clean subtitles in the new language.</div>
             </button>
             <button class="home-card home-card-btn" id="homeSaveCard" type="button">
               <span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></span>
@@ -559,17 +559,28 @@
                       <div class="m"><span id="erasePartRange"></span><span class="pct" id="erasePct" hidden></span></div>
                       <div class="progress-bar erase-bar" id="eraseBarBox" hidden><div id="eraseFill"></div></div>
                       <div class="s" id="erasePartNote"></div>
+                      <div class="s" id="eraseDoneNote"></div>
                       <div class="s erase-state" id="eraseState"></div>
                     </div>
                     <!-- Which area: the one box on the video. -->
                     <div class="erase-card" id="eraseAreaCard">
                       <div data-i18n class="k">Area</div>
                       <div data-i18n class="m">Box over the subtitles</div>
+                      <!-- The box's own part of the picture at the playhead,
+                           enlarged, its edge dotted over it: writing that sticks
+                           out of the box shows here (design 5, 2026-10-22). -->
+                      <div id="eraseCrop" hidden>
+                        <div class="erase-crop-pic"><canvas id="eraseCropPic"></canvas><i class="erase-crop-box" id="eraseCropBox"></i></div>
+                        <div class="s erase-crop-time" id="eraseCropTime"></div>
+                      </div>
                       <div class="s" id="eraseAreaNote"></div>
                       <div class="s" id="eraseAreaTip" hidden></div>
                       <div class="s erase-big" id="eraseBigBox" hidden></div>
                       <button data-i18n class="erase-link" id="eraseResetBtn" type="button">Reset</button>
                     </div>
+                    <!-- One line for the state the screen is in: placing the
+                         box, erasing, or done (design 5, 2026-10-22). -->
+                    <div class="erase-notice erase-tip" id="eraseTip" hidden><svg class="lu" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><span id="eraseTipText"></span></div>
                     <!-- Where Export answers. A line, not a dialog: the file
                          is already written by the time this appears. -->
                     <span class="erase-saved" id="eraseSaved" hidden><span data-i18n>Saved to</span> <span id="eraseSavedWhere">Downloads</span><span id="eraseShowWrap" hidden>· <button data-i18n type="button" class="show-link" id="eraseShowBtn">Show</button></span></span>
@@ -943,7 +954,7 @@
       <div class="modal-inner">
         <div class="help-item"><b>Dubbing</b><p>Voices a video in another language, in each speaker&#8217;s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.</p><div class="help-where">This computer (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).</div></div>
         <div class="help-item"><b>Separate audio</b><p>Splits the sound into Voice (only the speech) and Background (music, effects, noise). Save either one, or go on to Dubbing.</p><div class="help-where">This computer or Perso API.</div></div>
-        <div class="help-item"><b>Erase subtitles</b><p>Takes subtitles burned into the picture out. Box them, press Erase, and dub the clean video.</p><div class="help-where">This computer. The eraser downloads the first time.</div></div>
+        <div class="help-item"><b>Erase subtitles</b><p>Why: Original subtitles left in the video overlap the translated ones.</p><p>How: Fit the box → Erase subtitles → Dubbing → burn in a Captions style.</p><div class="help-where">Time: About 10 min for a 10-second video (Local model).</div></div>
         <div class="help-item"><b>Save video</b><p>Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Download saves it, or dub it, separate it or erase it from there.</p><div class="help-where">This computer.</div></div>
         <div class="help-item"><b>Dub Agent</b><p>Ask in plain words, such as &#8220;Korean dubbing for this link&#8221; or &#8220;make line 9 fit&#8221;. It works through the same tools and shows each step.</p><div class="help-where">Claude Code, installed and signed in, or Codex, which the app can download and sign in.</div></div>
         <p class="help-links"><a href="#" id="helpGuide">User guide</a> · <a href="#" id="helpFaq">FAQ</a></p>

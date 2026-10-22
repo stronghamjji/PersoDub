@@ -232,8 +232,7 @@ test("the erase screen says only what the mockup says", () => {
   const erase = readFileSync(ERASE, "utf8");
   assert.match(erase, /"Finding subtitles…" : "Subtitles"/);
   for (const words of ["Part to erase", "Erasing", "Erased", "Locked while erasing",
-                       "Compare in the Original and Erased tabs",
-                       "on this computer"]) {
+                       "Compare in the Original and Erased tabs"]) {
     assert.ok(erase.includes(words), `the Erase tab no longer says "${words}"`);
   }
   // The Area card's two tips (owner, 2026-09-30), kept in ui/src/eraseArea.mjs.
@@ -1349,7 +1348,7 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
   assert.ok(at > 0, "the Help dialog is in the page");
   const dialog = html.slice(at, html.indexOf('<div class="modal-overlay"', at + 1));
   assert.match(dialog, /aria-labelledby="helpTitle"[^>]*>\s*<div class="modal-head"><h2 id="helpTitle">What PersoDub does<\/h2>/);
-  const names = [...dialog.matchAll(/<div class="help-item"><b>([^<]+)<\/b><p>[^<]+<\/p><div class="help-where">[^<]+<\/div><\/div>/g)].map((m) => m[1]);
+  const names = [...dialog.matchAll(/<div class="help-item"><b>([^<]+)<\/b>(?:<p>[^<]+<\/p>)+<div class="help-where">[^<]+<\/div><\/div>/g)].map((m) => m[1]);
   assert.deepEqual(names, ["Dubbing", "Separate audio", "Erase subtitles", "Save video", "Dub Agent"]);
   assert.match(dialog, /<p class="help-links"><a href="#" id="helpGuide">User guide<\/a> · <a href="#" id="helpFaq">FAQ<\/a><\/p>/);
   assert.match(dialog, /<div class="modal-foot"><button class="btn btn-primary" id="helpOk" type="button">OK<\/button><\/div>/);
@@ -1358,6 +1357,33 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
   // The links open the repo's docs and stay off the page's own "#".
   assert.match(html, /\[\["helpGuide", "usage"\], \["helpFaq", "faq"\]\]/);
   assert.match(html, /e\.preventDefault\(\);\n    window\.open\(`\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
+});
+
+// Help's Erase subtitles says why, how and how long, a line each (owner,
+// 2026-10-22): the markup, the words it is painted with, and the Korean as
+// approved.
+test("Help's Erase subtitles item says why, how and how long", () => {
+  const lines = ["Why: Original subtitles left in the video overlap the translated ones.",
+                 "How: Fit the box → Erase subtitles → Dubbing → burn in a Captions style.",
+                 "Time: About 10 min for a 10-second video (Local model)."];
+  assert.ok(readPage().includes(`<div class="help-item"><b>Erase subtitles</b><p>${lines[0]}</p><p>${lines[1]}</p><div class="help-where">${lines[2]}</div></div>`));
+  const words = readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8");
+  for (const [at, line] of [["p:nth-of-type(1)", lines[0]], ["p:nth-of-type(2)", lines[1]], [".help-where", lines[2]]]) {
+    assert.ok(words.includes(`["#helpOverlay .help-item:nth-child(3) ${at}", t("${line}")]`), at);
+  }
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.deepEqual(lines.map((l) => ko[l]), ["왜: 원래 자막이 남아 있으면 번역 자막과 겹쳐요.",
+    "어떻게: 상자 맞추기 → 자막 지우기 → 더빙 → 자막 스타일에서 입히기.", "시간: 10초 영상에 약 10분 (로컬 모델)."]);
+});
+
+// Home's Erase subtitles card says what erasing is for, in its small line
+// (owner, 2026-10-22), and the Korean reads as approved.
+test("Home's Erase subtitles card says what erasing is for", () => {
+  const html = readPage();
+  const line = "Erases burned-in subtitles. Dub the erased video for clean subtitles in the new language.";
+  assert.ok(html.includes(`<div data-i18n class="home-card-title">Erase subtitles</div>\n              <div data-i18n class="home-card-desc">${line}</div>`));
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko[line], "영상에 새겨진 자막을 지워요. 지운 영상으로 더빙하면 새 언어 자막을 깨끗하게 입힐 수 있어요.");
 });
 
 // Help's "100+" is every dubbing model's languages together, and the line under

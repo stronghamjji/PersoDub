@@ -45,8 +45,10 @@ const words = () => [
   ["#helpOverlay .help-item:nth-child(2) p", t("Splits the sound into Voice (only the speech) and Background (music, effects, noise). Save either one, or go on to Dubbing.")],
   ["#helpOverlay .help-item:nth-child(2) .help-where", t("This computer or Perso API.")],
   ["#helpOverlay .help-item:nth-child(3) b", t("Erase subtitles")],
-  ["#helpOverlay .help-item:nth-child(3) p", t("Takes subtitles burned into the picture out. Box them, press Erase, and dub the clean video.")],
-  ["#helpOverlay .help-item:nth-child(3) .help-where", t("This computer. The eraser downloads the first time.")],
+  // Erase subtitles says why, how and how long, a line each (owner, 2026-10-22).
+  ["#helpOverlay .help-item:nth-child(3) p:nth-of-type(1)", t("Why: Original subtitles left in the video overlap the translated ones.")],
+  ["#helpOverlay .help-item:nth-child(3) p:nth-of-type(2)", t("How: Fit the box → Erase subtitles → Dubbing → burn in a Captions style.")],
+  ["#helpOverlay .help-item:nth-child(3) .help-where", t("Time: About 10 min for a 10-second video (Local model).")],
   ["#helpOverlay .help-item:nth-child(4) b", t("Save video")],
   ["#helpOverlay .help-item:nth-child(4) p", t("Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Download saves it, or dub it, separate it or erase it from there.")],
   ["#helpOverlay .help-item:nth-child(4) .help-where", t("This computer.")],

@@ -7,6 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initEraseScreenUi } from "./eraseScreen.mjs";
+import { cropView } from "./eraseArea.mjs";
 import { setDraft, clearDraft, setRanges, getDraft } from "./draft.mjs";
 
 function makeEl(id) {
@@ -62,7 +63,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 /** A page, the app behind it, and what the screen reached out for. */
 function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1100] },
-                   erase = { status: "running", percent: 35 }, projectOpen = false } = {}) {
+                   erase = { status: "running", percent: 35 }, projectOpen = false, platform = "mac" } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -77,7 +78,7 @@ function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1
   globalThis.fetch = async (url, opts = {}) => {
     const answer = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
     if (opts.method === "POST") { log.posts.push(String(url)); log.bodies.push(opts.body); }
-    if (url === "/api/models") return answer({ platform: "mac" });
+    if (url === "/api/models") return answer({ platform });
     if (url === "/api/erase/suggest") {
       return app.suggest ? answer(app.suggest)
         : answer({ detail: { reason: "pack_missing", message: "needed" } }, 409);
@@ -164,7 +165,8 @@ test("a video from the New project dialog comes with its part, and the way back 
   // card has nothing to say before an erase.
   assert.equal(h.$("eraseVideoCard").innerHTML,
     '<div class="k">Video</div><div class="m vc-name" title="Street food">Street food</div>'
-    + '<div class="s vc-len">00:06<span class="vc-cut">00:04 cut</span></div>');
+    + '<div class="s vc-len">00:06<span class="vc-cut">00:04 cut</span></div>'
+    + '<div class="s erase-range" title="Part to erase · 00:00:02.0 – 00:00:08.0">Part to erase · 00:00:02.0 – 00:00:08.0</div>');
   assert.equal(h.$("erasePartCard").hidden, true);
   assert.equal(h.$("erasePartNote").textContent, "");
   // The two things to know about the box, before the erase starts.
@@ -182,7 +184,7 @@ test("a video from the New project dialog comes with its part, and the way back 
   assert.deepEqual(h.log.timeline, { strip: "draft", locked: false,
                                      lane: { text: "Erase · 00:06", cls: "", pct: 0 } });
   // The foot: the minutes, and the button.
-  assert.match(h.log.topbar.estimate, /^About \d+ min on this computer$/);
+  assert.match(h.log.topbar.estimate, /^Local model · about \d+ min$/);
   assert.equal(h.log.topbar.erase, true);
   assert.equal(h.$("eraseRunBtn").disabled, false);
   // Only the first tab has anything behind it.
@@ -228,6 +230,8 @@ test("with the eraser not installed the tab says so, offers the download, and ho
   assert.equal(h.$("eraseRunBtn").disabled, true);
   // The box can still be placed.
   assert.equal(h.$("eraseBox").hidden, false);
+  // The download is the line to read; the help line waits for the eraser.
+  assert.equal(h.$("eraseTip").hidden, true);
 });
 
 test("while it erases: the percent, the bar, the line with the time left, Cancel, and a locked box", async () => {
@@ -333,6 +337,7 @@ test("an erase that stopped says why, and offers Try again, Back and the log", a
   assert.equal(h.$("eraseLogBox").textContent, "progress 35%\nstopped");
   assert.equal(h.$("eraseCancelBtn").hidden, true);
   assert.equal(h.log.timeline.lane, null, "nothing was erased");
+  assert.equal(h.$("eraseTip").hidden, true, "the reason is the line to read, not a tip");
 
   // Back: the box, the video and the cuts, as they were.
   await h.$("eraseBackBtn").fire("click");
@@ -579,4 +584,132 @@ test("an erase watched from another screen leaves the top bar alone", async () =
   assert.equal(h.log.topbar, null);
   // Stop the watch so the test can end.
   h.api.openErase();
+});
+
+// ---- Design 5 (owner, 2026-10-22): the panel filled, with no new control ----
+
+test("the video card names the part to erase before an erase, and leaves it to the erase's card after", async () => {
+  clearDraft();
+  const h = harness();
+  setDraft({ downloadId: "D5", name: "Paris", duration: 10, videoUrl: "/api/downloads/D5/video" });
+  h.api.openEraseTab();
+  await settle();
+  assert.match(h.$("eraseVideoCard").innerHTML,
+    /<div class="s erase-range" title="Part to erase · 00:00:00\.0 – 00:00:10\.0 · Whole video">Part to erase · 00:00:00\.0 – 00:00:10\.0 · Whole video<\/div>$/);
+  // Cut on the timeline: every kept part, and the whole video no more.
+  setRanges([[0, 3.4], [7, 10]]);
+  assert.match(h.$("eraseVideoCard").innerHTML, />Part to erase · 00:00:00\.0 – 00:00:03\.4, 00:00:07\.0 – 00:00:10\.0<\/div>$/);
+  // Erasing: the erase's own card says which part.
+  await h.$("eraseRunBtn").fire("click");
+  assert.ok(!h.$("eraseVideoCard").innerHTML.includes("erase-range"));
+  assert.equal(h.$("erasePartRange").textContent, "2 parts");
+  h.api.openErase();   // stop the watch
+  clearDraft();
+});
+
+test("one line under the cards says what to do now: placing the box, erasing, done", async () => {
+  clearDraft();
+  const h = harness();
+  h.api.openErase();
+  assert.equal(h.$("eraseTip").hidden, true, "nothing to say before there is a video");
+  h.api.openEraseWith(HELD);
+  await settle();
+  assert.equal(h.$("eraseTip").hidden, false);
+  assert.equal(h.$("eraseTipText").textContent,
+    "Dub after erasing and the translated subtitles won't overlap. "
+    + "Fit the box, then play to check the subtitles stay in it from start to end.");
+  await h.$("eraseRunBtn").fire("click");
+  assert.equal(h.$("eraseTipText").textContent,
+    "Erasing carries on if you go to another screen. The Home card shows the progress.");
+  assert.equal(h.$("eraseDoneNote").textContent, "");
+  h.app.erase = { status: "done", percent: 100 };
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.equal(h.$("eraseTip").hidden, false);
+  assert.equal(h.$("eraseTipText").textContent, "Save it with Download, or carry on with Dubbing.");
+  // The erased card says what the clean video is for.
+  assert.equal(h.$("eraseDoneNote").textContent,
+    "Send the erased video to Dubbing to add new subtitles in the dubbing language. The original subtitles are gone now.");
+  h.api.openErase();
+  assert.equal(h.$("eraseTip").hidden, true);
+  clearDraft();
+});
+
+test("the Area card enlarges the box's part of the frame at the playhead, and follows a seek and a drag", async () => {
+  clearDraft();
+  const h = harness();
+  // A canvas with a size and a context, which the page has and this one only
+  // when it is given them.
+  const drawn = [];
+  const pic = h.$("eraseCropPic");
+  pic.clientHeight = 80;
+  pic.getContext = () => ({ drawImage: (...args) => drawn.push(args) });
+  h.api.openEraseWith(HELD);   // kept: 00:00:02.0 - 00:00:08.0
+  await settle();
+  assert.equal(h.$("eraseCrop").hidden, false);
+  // No frame yet: the time and the dotted edge, and no picture.
+  assert.equal(h.$("eraseCropTime").textContent, "In the box · 00:00:00.0");
+  assert.equal(drawn.length, 0);
+  const first = cropView([560, 680, 180, 1100], 1280, 720, 900 / 80);
+  assert.equal(h.$("eraseCropBox").style.left, `${first.box.left * 100}%`);
+  assert.equal(h.$("eraseCropBox").style.width, `${first.box.width * 100}%`);
+  // A seek to 3.5 s of the video: 1.5 s into what the timeline kept, the time
+  // the clock under the video says too.
+  const v = h.$("eraseVideo");
+  v.readyState = 2;
+  v.currentTime = 3.5;
+  await v.fire("seeked");
+  assert.equal(h.$("eraseCropTime").textContent, "In the box · 00:00:01.5");
+  assert.deepEqual(drawn.at(-1), [v, first.x, first.y, first.w, first.h, 0, 0, 900, 80]);
+  assert.deepEqual([pic.width, pic.height], [900, 80]);
+  // Played on: each new moment is drawn.
+  v.currentTime = 4.2;
+  await v.fire("timeupdate");
+  assert.equal(h.$("eraseCropTime").textContent, "In the box · 00:00:02.2");
+  // The box dragged up: the enlargement goes with it.
+  const before = drawn.length;
+  await h.$("eraseBox").fire("pointerdown", { target: { dataset: {} }, pointerId: 1, clientX: 100, clientY: 300, preventDefault() {} });
+  await h.$("eraseBox").fire("pointermove", { pointerId: 1, clientX: 100, clientY: 200 });
+  await h.$("eraseBox").fire("pointerup", { pointerId: 1 });
+  assert.ok(drawn.length > before);
+  assert.ok(drawn.at(-1)[2] < first.y, "drawn from higher up the frame");
+  // Out of sight (the left panel hidden): the time still follows, nothing is drawn.
+  pic.clientWidth = 0;
+  const hiddenAt = drawn.length;
+  v.currentTime = 5;
+  await v.fire("seeked");
+  assert.equal(h.$("eraseCropTime").textContent, "In the box · 00:00:03.0");
+  assert.equal(drawn.length, hiddenAt);
+  pic.clientWidth = 900;
+  // Erasing locks the box, and the enlargement goes with the box's tips.
+  await h.$("eraseRunBtn").fire("click");
+  assert.equal(h.$("eraseCrop").hidden, true);
+  h.api.openErase();   // stop the watch
+  clearDraft();
+});
+
+// The column at 1280x800 has room for the help line or a warning, not both.
+test("placing the box, the help line gives way to the no-graphics-card line and to the big box warning", async () => {
+  clearDraft();
+  const h = harness({ platform: "win-cpu" });
+  h.api.openEraseWith(HELD);
+  await settle();
+  assert.equal(h.$("eraseNoGpu").hidden, false);
+  assert.equal(h.$("eraseTip").hidden, true);
+  clearDraft();
+
+  const mac = harness();
+  mac.api.openEraseWith(HELD);
+  await settle();
+  assert.equal(mac.$("eraseTip").hidden, false);
+  // Dragged out over most of the frame: the warning, and no help line.
+  const corner = { dataset: { handle: "nw" }, setPointerCapture() {}, hasPointerCapture: () => true, releasePointerCapture() {} };
+  await mac.$("eraseBox").fire("pointerdown", { target: corner, pointerId: 1, clientX: 100, clientY: 300, preventDefault() {} });
+  await mac.$("eraseBox").fire("pointermove", { pointerId: 1, clientX: 0, clientY: 0 });
+  await mac.$("eraseBox").fire("pointerup", { pointerId: 1 });
+  assert.equal(mac.$("eraseBigBox").hidden, false);
+  assert.equal(mac.$("eraseTip").hidden, true);
+  // Reset: the line is back.
+  await mac.$("eraseResetBtn").fire("click");
+  assert.equal(mac.$("eraseTip").hidden, false);
+  clearDraft();
 });

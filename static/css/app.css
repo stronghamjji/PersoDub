@@ -658,6 +658,22 @@
   .erase-error { color: var(--destructive); font-size: var(--font-label); }
   .erase-error:empty { display: none; }
   .erase-tab .erase-log { margin: 0; }
+  /* Design 5 (owner, 2026-10-22). The video card's line naming the part to
+     erase: one line, the whole of it on the tip. */
+  .video-card .s.erase-range { color: var(--muted-foreground); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  /* The box's own part of the picture, enlarged, at a height that never
+     moves the cards under it; its edge is the box's dotted line. */
+  .erase-crop-pic { position: relative; height: 80px; margin-top: 8px; overflow: hidden;
+    border-radius: 4px; background: var(--thumb-bg); }
+  .erase-crop-pic canvas { display: block; width: 100%; height: 100%; }
+  .erase-crop-box { position: absolute; box-sizing: border-box; border: 1.5px dashed var(--success);
+    border-radius: 3px; }
+  .erase-crop-box.finding { border-color: var(--destructive); }
+  .erase-card .erase-crop-time { margin-top: 4px; font-variant-numeric: tabular-nums; }
+  /* The line for the state the screen is in, at the foot of the column. */
+  .erase-tip { margin-top: auto; }
+  .erase-tip .lu { color: var(--primary-ink); }
   /* ---- Audio: the left panel's tab (ui/src/audioTab.mjs) ---- */
   /* The Erase tab's cards and foot, without its side list. */
   .audio-tab .erase-card select { margin-top: 6px; height: 28px; padding: 0 8px; font-size: 12px; }
