@@ -179,8 +179,9 @@ test("a row carries the line number, who said it, both languages and whether it 
   assert.match(html, /class="sc-src">안녕하세요</);
   assert.match(html, /class="sc-dst" contenteditable="plaintext-only"[\s\S]*?data-line="1">Hello 1</);
   // The three verdicts: fits, runs over by this much, and is this much short
-  // -- the slot first, then the voice in bold.
-  assert.match(html, /<span class="sc-len sc-v-fit"><span class="sc-dot"><\/span><span class="sc-num">1\.0 \/ <b>0\.9<\/b>s<\/span><\/span>/);
+  // -- the slot first, then the voice in bold. A line that fits wears a tick
+  // where the others have their dot.
+  assert.match(html, /<span class="sc-len sc-v-fit"><span class="sc-tick"><svg[^>]*><path d="M20 6 9 17l-5-5"\/><\/svg><\/span><span class="sc-num">1\.0 \/ <b>0\.9<\/b>s<\/span><\/span>/);
   assert.match(html, /<span class="sc-len sc-v-over"><span class="sc-dot"><\/span><span class="sc-num">1\.0 \/ <b>2\.4<\/b>s · <\/span><span class="sc-diff">\+1\.4s<\/span><\/span>/);
   assert.match(html, /<span class="sc-len sc-v-short"><span class="sc-dot"><\/span><span class="sc-num">1\.0 \/ <b>0\.2<\/b>s · <\/span><span class="sc-diff">−0\.8s<\/span><\/span>/);
   // A local dub's chip only displays -- changing a speaker is Perso's own.
@@ -229,15 +230,16 @@ test("a line whose voice could not be made says No sound, and one line above the
   }
 });
 
-test("the script's own clipped list replaces the job's old one, so a remade line stops saying cut", async (t) => {
+test("the script's own clipped list replaces the job's old one, so a remade line stops running over", async (t) => {
   const job = { id: "j1", result: { clipped: [{ line: 2, cut_s: 0.6 }], clipped_count: 1 } };
   const h = harness({ job, responses: { [SCRIPT]: ok({ lines: [line(1), line(2)], clipped: [] }) } });
   t.after(h.log.restore);
   await h.api.renderScript("j1");
-  assert.doesNotMatch(h.$("scriptBox").innerHTML, /cut 0\.6s/);
+  assert.doesNotMatch(h.$("scriptBox").innerHTML, /\+0\.6s/);
+  assert.match(h.$("scriptBox").innerHTML, /data-line="2"[\s\S]*?<span class="sc-len sc-v-fit">/);
 });
 
-test("a line the assembly cut short is marked cut whatever its own numbers say, and one notice names them all", async (t) => {
+test("a line the assembly cut short runs over by what was cut whatever its own numbers say, and one notice names them all", async (t) => {
   const job = { id: "j1", result: { clipped: [{ line: 2, cut_s: 0.6 }], clipped_count: 1 } };
   const h = harness({ job, responses: { [SCRIPT]: ok({ lines: [
     line(1),
@@ -249,8 +251,10 @@ test("a line the assembly cut short is marked cut whatever its own numbers say, 
   await h.api.renderScript("j1");
   const html = box.innerHTML;
 
-  assert.match(html, /data-line="2"[\s\S]*?<span class="sc-len sc-v-cut">[^]*?<span class="sc-diff" title="Cut off by 0\.6s">cut 0\.6s<\/span>/);
+  // Said as any line over its time is: the red dot and +0.6s, no word for it.
+  assert.match(html, /data-line="2"[\s\S]*?<span class="sc-len sc-v-over"><span class="sc-dot"><\/span>[^]*?<span class="sc-diff">\+0\.6s<\/span>/);
   assert.match(html, /data-line="1"[\s\S]*?<span class="sc-len sc-v-fit">/); // line 1 untouched
+  assert.doesNotMatch(html, /cut \d|Cut off by/);
 
   // One line above the table, singular for one line, with a way to jump there.
   const bar = box.children[0];
@@ -308,7 +312,9 @@ const ONE_ROW =
   '</button>\n' +
   '    <div class="sc-dst" contenteditable="plaintext-only" spellcheck="false"\n' +
   '      data-line="7">Hello</div>\n' +
-  '    <div class="sc-tools"><span class="sc-len sc-v-fit"><span class="sc-dot"></span>' +
+  // A line that fits wears a tick, not a dot (owner, 2026-10-22).
+  '    <div class="sc-tools"><span class="sc-len sc-v-fit"><span class="sc-tick">' +
+  '<svg class="lu" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>' +
   '<span class="sc-num">1.5 / <b>1.3</b>s</span></span>' +
   '<span></span><button class="sc-wave" data-voice="7"\n' +
   '        type="button" title="Make this line\'s voice again">' +
@@ -358,7 +364,7 @@ test("a line the translator left untranslated says so in its own empty cell, and
   assert.match(row2, /class="sc-wave sc-off" data-voice="2"\s+type="button" disabled title="You can press it once the translation is written"/);
   // Line 1 is untouched by any of it.
   assert.equal(html.match(/data-empty|sc-off/g).length, 3);
-  assert.match(html, /<span class="sc-len sc-v-fit"><span class="sc-dot"><\/span><span class="sc-num">1\.0 \/ <b>0\.9<\/b>s<\/span>/);
+  assert.match(html, /<span class="sc-len sc-v-fit"><span class="sc-tick"><svg[^>]*><path d="M20 6 9 17l-5-5"\/><\/svg><\/span><span class="sc-num">1\.0 \/ <b>0\.9<\/b>s<\/span>/);
 });
 
 test("with no length known yet the strip is drawn to the last line's end", async (t) => {
@@ -411,8 +417,12 @@ test("an answer that arrives after another job was opened changes nothing on scr
 const lengthOf = (html, n) => html.match(new RegExp(`<div class="sc-row" data-line="${n}"`
   + '[\\s\\S]*?<div class="sc-tools">(<span class="sc-len[\\s\\S]*?</span>)<span></span><button class="sc-wave"'))[1];
 const DOT = '<span class="sc-dot"></span>';
+// Written out, as ONE_ROW's icons are: a pin that read the code's own
+// constant could not notice it changing.
+const TICK = '<span class="sc-tick"><svg class="lu" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">'
+  + '<path d="M20 6 9 17l-5-5"/></svg></span>';
 
-test("the length gives the slot, then the voice in bold, and what is missed: over, well short, cut -- a line that fits says no more", async (t) => {
+test("the length gives the slot, then the voice in bold, and what is missed: over, well short, cut off -- a line that fits says no more", async (t) => {
   const len = (n, slot, sec) => line(n, { slot, estimated: sec, audio_sec: sec });
   const job = { id: "j1", result: { clipped: [{ line: 7, cut_s: 0.3 }], clipped_count: 1 } };
   const h = harness({ job, responses: { [SCRIPT]: ok({ lines: [
@@ -433,14 +443,35 @@ test("the length gives the slot, then the voice in bold, and what is missed: ove
     `<span class="sc-len sc-v-over">${DOT}<span class="sc-num">1.9 / <b>2.5</b>s · </span><span class="sc-diff">+0.6s</span></span>`);
   assert.equal(lengthOf(html, 2),
     `<span class="sc-len sc-v-short">${DOT}<span class="sc-num">3.0 / <b>1.6</b>s · </span><span class="sc-diff">−1.4s</span></span>`);
-  assert.equal(lengthOf(html, 3), `<span class="sc-len sc-v-fit">${DOT}<span class="sc-num">4.7 / <b>4.4</b>s</span></span>`);
-  assert.equal(lengthOf(html, 4), `<span class="sc-len sc-v-fit">${DOT}<span class="sc-num">6.5 / <b>6.0</b>s</span></span>`);
+  assert.equal(lengthOf(html, 3), `<span class="sc-len sc-v-fit">${TICK}<span class="sc-num">4.7 / <b>4.4</b>s</span></span>`);
+  assert.equal(lengthOf(html, 4), `<span class="sc-len sc-v-fit">${TICK}<span class="sc-num">6.5 / <b>6.0</b>s</span></span>`);
   assert.equal(lengthOf(html, 5),
     `<span class="sc-len sc-v-short">${DOT}<span class="sc-num">10.0 / <b>8.5</b>s · </span><span class="sc-diff">−1.5s</span></span>`);
   assert.equal(lengthOf(html, 6),
     `<span class="sc-len sc-v-short">${DOT}<span class="sc-num">4.0 / <b>3.1</b>s · </span><span class="sc-diff">−0.9s</span></span>`);
-  assert.equal(lengthOf(html, 7), `<span class="sc-len sc-v-cut">${DOT}<span class="sc-num">2.0 / <b>2.0</b>s · </span>`
-    + '<span class="sc-diff" title="Cut off by 0.3s">cut 0.3s</span></span>');
+  // Cut off by 0.3s: over by that, as any line over its time is said.
+  assert.equal(lengthOf(html, 7),
+    `<span class="sc-len sc-v-over">${DOT}<span class="sc-num">2.0 / <b>2.0</b>s · </span><span class="sc-diff">+0.3s</span></span>`);
+});
+
+// The fit verdict's mark (the length-cell mockup's first option, owner 2026-10-22):
+// a lone green dot read as nothing in particular, so a line that fits wears
+// a tick in the dot's place, and still says nothing past its two numbers.
+test("a line that fits wears the green tick where the dot was, and the others keep their dot", async (t) => {
+  const h = harness({ responses: { [SCRIPT]: ok({ lines: [
+    line(1),                                          // 0.1 short of its slot
+    line(2, { estimated: 1.04, audio_sec: 1.04 }),    // a hair over, forgiven
+    line(3, { estimated: 1.6, audio_sec: 1.6 }),      // 0.6 over
+  ] }) } });
+  t.after(h.log.restore);
+  await h.api.renderScript("j1");
+  const html = h.$("scriptBox").innerHTML;
+  assert.equal(lengthOf(html, 1), `<span class="sc-len sc-v-fit">${TICK}<span class="sc-num">1.0 / <b>0.9</b>s</span></span>`);
+  assert.equal(lengthOf(html, 2), `<span class="sc-len sc-v-fit">${TICK}<span class="sc-num">1.0 / <b>1.0</b>s</span></span>`);
+  assert.equal(lengthOf(html, 3),
+    `<span class="sc-len sc-v-over">${DOT}<span class="sc-num">1.0 / <b>1.6</b>s · </span><span class="sc-diff">+0.6s</span></span>`);
+  assert.equal(html.match(/class="sc-tick"/g).length, 2);
+  assert.equal(html.match(/class="sc-dot"/g).length, 1);
 });
 
 test("in Korean the unit is said once, after the voice's length, and the heading names the two numbers", async (t) => {
@@ -463,6 +494,52 @@ test("in Korean the unit is said once, after the voice's length, and the heading
     `<span class="sc-len sc-v-over">${DOT}<span class="sc-num">1.9 / <b>2.5</b>초 · </span><span class="sc-diff">+0.6초</span></span>`);
 });
 
+// A cut under a tenth of a second reads 0.0s: the assembly took nothing
+// anybody hears, so it is no cut (owner, 2026-10-22).
+test("a cut under a tenth of a second is no cut: the line keeps its tick and nothing is said above the table", async (t) => {
+  const job = { id: "j1", result: { clipped: [{ line: 1, cut_s: 0.04 }], clipped_count: 1 } };
+  const h = harness({ job, responses: { [SCRIPT]: ok({ lines: [line(1), line(2)] }) } });
+  t.after(h.log.restore);
+  const box = h.$("scriptBox");
+  await h.api.renderScript("j1");
+  assert.equal(lengthOf(box.innerHTML, 1), `<span class="sc-len sc-v-fit">${TICK}<span class="sc-num">1.0 / <b>0.9</b>s</span></span>`);
+  assert.doesNotMatch(box.innerHTML, /0\.0s/);
+  assert.deepEqual(box.children, [], "no notice");
+});
+
+test("in Korean a cut of 0.3s reads +0.3초 by the red dot, never 잘림, and the notice counts and finds that line alone", async (t) => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true,
+    json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+  // Line 1 lost 0.04s, which is nothing; line 2 lost 0.3s.
+  const job = { id: "j1", result: { clipped: [{ line: 1, cut_s: 0.04 }, { line: 2, cut_s: 0.3 }], clipped_count: 2 } };
+  const h = harness({ job, responses: { [SCRIPT]: ok({ lines: [line(1), line(2)] }) } });
+  t.after(h.log.restore);
+  const box = h.$("scriptBox");
+  await h.api.renderScript("j1");
+  const html = box.innerHTML;
+
+  assert.equal(lengthOf(html, 1), `<span class="sc-len sc-v-fit">${TICK}<span class="sc-num">1.0 / <b>0.9</b>초</span></span>`);
+  assert.equal(lengthOf(html, 2),
+    `<span class="sc-len sc-v-over">${DOT}<span class="sc-num">1.0 / <b>0.9</b>초 · </span><span class="sc-diff">+0.3초</span></span>`);
+  assert.doesNotMatch(html, /잘림/);
+  const bar = box.children[0];
+  assert.equal(bar.className, "sc-clipped");
+  assert.match(bar.innerHTML, /1줄이 끝나기 전에 잘려요\. 짧게 고친 뒤 목소리를 다시 만들어 주세요\./);
+  assert.equal(box.children.length, 1);
+  // A press goes to line 2, the one that lost something.
+  const row = bindClassList(makeEl("row2"));
+  let scrolled = null;
+  row.scrollIntoView = (opts) => { scrolled = opts; };
+  box.q1 = { '.sc-row[data-line="2"]': row };
+  await bar.fire("click");
+  assert.deepEqual(scrolled, { block: "center" });
+});
+
 // -- the fit rule, which the timeline shares ----------------------------------
 
 test("lineOverBy forgives a hair over the slot and trusts the server before a voice exists", () => {
@@ -474,9 +551,10 @@ test("lineOverBy forgives a hair over the slot and trusts the server before a vo
   assert.equal(lineOverBy({ audio_sec: null, estimated: 9, slot: 1, fits: false }), 8);
 });
 
-test("lineVerdict: cut before anything else, then over, then short by more than a second or a fifth", () => {
+test("lineVerdict: over by what was cut off before anything else, then over, then short by more than a second or a fifth", () => {
   const v = (slot, sec, clipped) => lineVerdict({ line: 1, slot, estimated: sec, audio_sec: sec, fits: true }, clipped);
-  assert.deepEqual(v(2, 3, new Map([[1, 0.4]])), { kind: "cut", by: 0.4 }, "cut, though it runs over as well");
+  assert.deepEqual(v(2, 3, new Map([[1, 0.4]])), { kind: "over", by: 0.4 }, "the cut, not its own 1.0 over");
+  assert.deepEqual(v(2, 1.9, new Map([[1, 0.4]])), { kind: "over", by: 0.4 }, "cut off, though it fits by its own numbers");
   assert.equal(v(1.9, 2.5).kind, "over");
   assert.equal(v(1.9, 2.5).by.toFixed(1), "0.6");
   assert.equal(v(3, 1.6).kind, "short");

@@ -40,6 +40,11 @@ import { t } from "./i18n.mjs";
 // that much into the silence after it.
 const OVER_TOLERANCE = 0.05;
 
+// A cut under a tenth of a second reads "0.0s": the assembly took nothing
+// anybody hears, so it is no cut, on its row or in the notice above the
+// table (owner, 2026-10-22).
+const MIN_CUT = 0.1;
+
 // How long a line actually takes to say: the voice that was made for it if that
 // is still on disk, otherwise the estimate from its characters.
 function lineLength(l) {
@@ -57,14 +62,16 @@ export function lineOverBy(l) {
 }
 
 // What a line's length comes to, in one word, and the seconds behind it
-// (owner, 2026-10-20): "cut" by what the assembly step cut off (clippedMap,
-// from job.result.clipped) -- whatever its own numbers say, because the true
-// story is not "it fits", it is "it was made to fit by force"; "over" by the
-// overrun; "short" by the shortfall, once more than a second of the slot, or
-// more than a fifth of it, is left empty; and "fit" in between.
+// (owner, 2026-10-20): "over" by what the assembly step cut off (clippedMap,
+// from job.result.clipped, the cuts of MIN_CUT or more) -- whatever its own
+// numbers say, because the true story is not "it fits", it is "it was made to
+// fit by force" -- and said as any overrun is, never as a word of its own
+// (owner, 2026-10-22); else "over" by the line's own overrun; "short" by the
+// shortfall, once more than a second of the slot, or more than a fifth of it,
+// is left empty; and "fit" in between.
 export function lineVerdict(l, clippedMap) {
   const cut = clippedMap && clippedMap.get(l.line);
-  if (cut != null) return { kind: "cut", by: cut };
+  if (cut != null) return { kind: "over", by: cut };
   const over = lineOverBy(l);
   if (over) return { kind: "over", by: over };
   const under = l.slot - lineLength(l);
@@ -79,6 +86,9 @@ export function lineVerdict(l, clippedMap) {
 const PLAY_ICON = lucide("play", 14, true);
 const WAVE_ICON = lucide("refresh-cw", 14);
 const UNDO_ICON = lucide("undo-2", 14);
+// The length's mark for a line that fits: a tick in the dot's place, as a
+// lone green dot said nothing in particular (owner, 2026-10-22).
+const FIT_MARK = `<span class="sc-tick">${lucide("check", 12)}</span>`;
 
 /**
  * Wire the script table to a page.
@@ -190,15 +200,16 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       : `<span class="spk-chip" title="${t("Speaker {n}", { n })}" aria-label="${t("Speaker {n}", { n })}"><b>${speakerLetter(n)}</b></span>`;
     // "1.9 / 2.5s · +0.6s": the time the line has, how long its voice runs
     // (in bold) and the difference, behind a dot in the verdict's colour --
-    // red over time or cut, orange much shorter, green when it fits, which
-    // then says nothing past its numbers (owner, 2026-10-20).
+    // red over time (or cut off by that much), orange much shorter. A line
+    // that fits has a green tick instead and says nothing past its numbers
+    // (owner, 2026-10-20 and 2026-10-22).
     const verdict = lineVerdict(l, clippedMap);
     const by = verdict.by.toFixed(1);
-    const diffText = verdict.kind === "cut" ? t("cut {s}s", { s: by })
-      : verdict.kind === "over" ? `+${t("{s}s", { s: by })}` : verdict.kind === "short" ? `−${t("{s}s", { s: by })}` : "";
-    const diffTitle = verdict.kind === "cut" ? ` title="${t("Cut off by {s}s", { s: by })}"` : "";
-    const diff = diffText && `<span class="sc-diff"${diffTitle}>${diffText}</span>`;
-    // The dot and the difference are the answer; the two numbers are the
+    const diffText = verdict.kind === "over" ? `+${t("{s}s", { s: by })}`
+      : verdict.kind === "short" ? `−${t("{s}s", { s: by })}` : "";
+    const diff = diffText && `<span class="sc-diff">${diffText}</span>`;
+    const mark = verdict.kind === "fit" ? FIT_MARK : '<span class="sc-dot"></span>';
+    // The mark and the difference are the answer; the two numbers are the
     // working. A narrow table drops the working (the stylesheet hides .sc-num)
     // and keeps the answer, so the row still says whether the line fits.
     // A line the translator gave nothing (app/dub_script.py load_lines sets
@@ -214,7 +225,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // the way Words changed is; its voice button makes it.
     const mute = voicedJob && !untr && l.audio_sec == null;
     const lengthCell = untr ? ""
-      : `<span class="sc-dot"></span><span class="sc-num">${l.slot.toFixed(1)} / ${t("{s}s", { s: `<b>${lineLength(l).toFixed(1)}</b>` })}${diff ? " · " : ""}</span>${diff}`;
+      : `${mark}<span class="sc-num">${l.slot.toFixed(1)} / ${t("{s}s", { s: `<b>${lineLength(l).toFixed(1)}</b>` })}${diff ? " · " : ""}</span>${diff}`;
     const verdictClass = untr ? "" : ` sc-v-${verdict.kind}`;
     const off = untr ? " sc-off" : "";
     const offAttr = untr ? " disabled" : "";
@@ -345,9 +356,9 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     // means unknown, not "nothing was cut", so job/result stay optional).
     const job = getJob();
     // The script's own list wins: a remade line changed it after the job
-    // record was written.
-    const clipped = data.clipped
-      || (job && job.id === jobId && job.result && job.result.clipped) || [];
+    // record was written. A cut under MIN_CUT is no cut, here or above.
+    const clipped = (data.clipped
+      || (job && job.id === jobId && job.result && job.result.clipped) || []).filter((c) => c.cut_s >= MIN_CUT);
     const clippedMap = new Map(clipped.map((c) => [c.line, c.cut_s]));
     voicedJob = !isPersoJob() && data.lines.some((l) => l.audio_sec != null);
     // Same rule as scriptRow: what follows the backtick is output, so it keeps

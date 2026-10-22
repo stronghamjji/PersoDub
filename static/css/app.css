@@ -1444,17 +1444,21 @@
   .sc-len b { font-weight: 600; color: var(--foreground); }
   /* The verdict (length-dots mockup, owner 2026-10-20): a dot in front of
      the numbers and the difference after them, in one colour -- red over
-     time, or cut short by the assembly step whatever its own numbers say
+     time, or by what the assembly step cut off whatever its own numbers say
      (lineVerdict, ui/src/scriptTable.mjs); orange much shorter; green fits,
-     with no difference to show. A dot where the pill was, so the cell keeps
-     its width and the words beside it lose nothing. */
-  .sc-v-over, .sc-v-cut { --verdict: var(--destructive); }
+     with a tick for the dot and no difference to show (owner, 2026-10-22).
+     A dot where the pill was, so the cell keeps its width and the words
+     beside it lose nothing. */
+  .sc-v-over { --verdict: var(--destructive); }
   .sc-v-short { --verdict: var(--timeline-short); }
   .sc-v-fit { --verdict: var(--success); }
   /* On the baseline, where an 8px dot sits on the digits' centre to 0.4px;
      vertical-align: middle put it 0.7px low (measured, 2026-10-20). */
   .sc-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px;
     border-radius: 50%; background: var(--verdict); }
+  /* The tick a line that fits has in the dot's place, as the mockup draws it. */
+  .sc-tick { display: inline-flex; width: 12px; margin-right: 4px; vertical-align: -2px; color: var(--verdict); }
+  .sc-tick .lu { stroke-width: 2.4; }
   .sc-diff { color: var(--verdict); font-weight: 600; }
 
   /* ---------------- The script table, narrow ---------------- */
@@ -1489,8 +1493,10 @@
        58 is the widest verdict there is, "cut 0.3s", measured: at 44 (and 40
        and 30 in the tiers below) it ran under the revert button beside it,
        and on a 1280px window so did every "+0.5s" (2026-09-30). With a dot in
-       front where a pill's padding was, it is 57.9 (2026-10-20). The last
-       track above is this cell: 10 + 58 + 6 + 22 + 6 + 22. */
+       front where a pill's padding was, it is 57.9 (2026-10-20). A cut reads
+       "+0.3s" now, and the widest left is a two-digit "+12.3초", 56.0
+       (measured, 2026-10-22). The last track above is this cell:
+       10 + 58 + 6 + 22 + 6 + 22. */
     .sc-tools { grid-template-columns: 58px 22px 22px; gap: 6px; }
   }
 
@@ -1616,9 +1622,9 @@
 
   /* === script: the cut-off notice (point 3, user 2026-09-29) === */
   /* One line above the table, from job.result.clipped: the lines the
-     assembly step had to cut short. A click scrolls to the first of them --
-     the red dot and "cut" on each such row (lineVerdict in scriptRow) are
-     the per-line mark. */
+     assembly step had to cut short by a tenth of a second or more. A click
+     scrolls to the first of them -- the red dot and "+0.3s" on each such row
+     (lineVerdict in scriptRow) are the per-line mark. */
   .sc-clipped { display: flex; align-items: center; gap: 8px;
     padding: 8px 14px; font-size: var(--font-label); font-weight: 600;
     color: var(--destructive); cursor: pointer; }
