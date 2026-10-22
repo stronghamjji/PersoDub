@@ -128,9 +128,10 @@ def _ollama_unavailable_message(engine_name: str, status: str) -> str:
             "Local {engine} translation is not available on this machine "
             "(Ollama is not running or not reachable). Choose Gemini in the "
             "Translation dropdown, or make sure Ollama is running.", engine=engine_name)
-    return t(
-        "The {engine} translation model is not downloaded yet. Download it in Settings > Models, "
-        "or choose another translator.", engine=engine_name)
+    # Only Qwen gets here, and it is no row in Settings > Models: a model the
+    # app downloads is the download dialog instead (_ollama_preflight).
+    return t("The {engine} translation model is not downloaded yet. Choose another translator.",
+             engine=engine_name)
 
 
 def _engines_used(stt_engine=None, translate_engine=None, n_takes=None, sep_engine=None,

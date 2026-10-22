@@ -105,8 +105,7 @@ def _runtime_not_running(engine):
 
 
 def _not_pulled(engine):
-    return (f"The {engine} translation model is not downloaded yet. Download it in Settings > Models, "
-            "or choose another translator.")
+    return f"The {engine} translation model is not downloaded yet. Choose another translator."
 
 
 # ── the table ───────────────────────────────────────────────────────────────

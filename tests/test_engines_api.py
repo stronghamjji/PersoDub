@@ -344,8 +344,7 @@ def test_dub_start_qwen_model_missing_422(monkeypatch):
     )
     assert r.status_code == 422
     # Where to get it, not a terminal command (A41).
-    assert r.json()["detail"] == ("The Qwen translation model is not downloaded yet. Download it in "
-                                  "Settings > Models, or choose another translator.")
+    assert r.json()["detail"] == "The Qwen translation model is not downloaded yet. Choose another translator."
 
 
 def test_dub_start_qwen_unreachable_422_message(monkeypatch):

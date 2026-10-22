@@ -160,7 +160,7 @@
   "The voice engine is still starting. Try again in a minute.": "The voice engine is still starting. Try again in a minute.",
   "The voice engine stopped responding. Quit and reopen PersoDub, then Resume.": "The voice engine stopped responding. Quit and reopen PersoDub, then Resume.",
   "The voice takes could not be compared, so each line uses its first take. The voices may sound less like the originals or fit their time less well.": "The voice takes could not be compared, so each line uses its first take. The voices may sound less like the originals or fit their time less well.",
-  "The {engine} translation model is not downloaded yet. Download it in Settings > Models, or choose another translator.": "The {engine} translation model is not downloaded yet. Download it in Settings > Models, or choose another translator.",
+  "The {engine} translation model is not downloaded yet. Choose another translator.": "The {engine} translation model is not downloaded yet. Choose another translator.",
   "There are no words to check.": "There are no words to check.",
   "There is no line {line}.": "There is no line {line}.",
   "This Perso key has no dubbing workspace.": "This Perso key has no dubbing workspace.",

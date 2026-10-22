@@ -160,7 +160,7 @@
   "The voice engine is still starting. Try again in a minute.": "목소리 엔진이 아직 켜지는 중이에요. 1분 뒤 다시 시도해 주세요.",
   "The voice engine stopped responding. Quit and reopen PersoDub, then Resume.": "목소리 엔진이 응답하지 않아요. PersoDub을 완전히 껐다가 다시 켠 뒤 '이어 하기'를 눌러 주세요.",
   "The voice takes could not be compared, so each line uses its first take. The voices may sound less like the originals or fit their time less well.": "목소리 후보를 비교하지 못해 줄마다 첫 후보를 썼어요. 원래 목소리와 덜 닮거나 길이가 덜 맞을 수 있어요.",
-  "The {engine} translation model is not downloaded yet. Download it in Settings > Models, or choose another translator.": "{engine} 번역 모델을 아직 다운로드하지 않았어요. 설정 > 모델에서 다운로드하거나 다른 번역기를 고르면 돼요.",
+  "The {engine} translation model is not downloaded yet. Choose another translator.": "{engine} 번역 모델을 아직 다운로드하지 않았어요. 다른 번역기를 고르면 돼요.",
   "There are no words to check.": "확인할 대사가 없어요.",
   "There is no line {line}.": "{line}번 줄은 없어요.",
   "This Perso key has no dubbing workspace.": "이 Perso 키에는 더빙 작업공간이 없어요.",
