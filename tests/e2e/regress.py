@@ -18,13 +18,16 @@ what each step checks.
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
+import zipfile
 from datetime import datetime
 
 # How far a result's length may be from its input's: a dub keeps the video's
@@ -47,6 +50,12 @@ SETTINGS_FIELDS = ("gemini_key_set", "perso_key_set", "gemini_api_key", "perso_a
 # What the script table's length column and the timeline read off each line
 # (ui/src/scriptTable.mjs lineVerdict).
 VERDICT_FIELDS = ("line", "slot", "audio_sec", "estimated", "fits")
+# The four steps of a dub the usage count times, by the names the job record
+# keeps them under (app/jobs.py timed_step, desktop/src/analytics.js STAGE_FIELDS).
+TIMED_STAGES = ("separate", "transcribe", "translate", "synthesize")
+# The subtitle file the captions step brings with the clip: three lines, all
+# inside its first ten seconds.
+CUES = ((0.5, 3.0, "The first line"), (3.5, 6.0, "The second line"), (6.5, 9.0, "The third line"))
 
 BASE = ""            # the app, from --base
 FFPROBE = "ffprobe"  # find_ffprobe's answer
@@ -88,25 +97,28 @@ def api(method, path, json_body=None, form=None, upload=None, timeout=120):
 
 def multipart(form, upload=None):
     """A multipart/form-data body, which urllib has no builder for: the form's
-    fields, then `upload` = (field, file name, path) when there is a file."""
+    fields, then `upload` = (field, file name, path[, type]) when there is a
+    file; a video unless the type says otherwise."""
     boundary = uuid.uuid4().hex
     body = b""
     for name, value in form.items():
         body += f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
     if upload:
-        field, filename, path = upload
+        field, filename, path, kind = (*upload, "video/mp4")[:4]
         with open(path, "rb") as f:
             body += (f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; '
-                     f'filename="{filename}"\r\nContent-Type: video/mp4\r\n\r\n').encode() + f.read() + b"\r\n"
+                     f'filename="{filename}"\r\nContent-Type: {kind}\r\n\r\n').encode() + f.read() + b"\r\n"
     return body + f"--{boundary}--\r\n".encode(), "multipart/form-data; boundary=" + boundary
 
 
-def fetch(path, dest, timeout=600):
+def fetch(path, dest, timeout=600, headers=None):
     """GET a file the app hands out, into dest: (status, the bytes written or
-    the refusal's words)."""
+    the refusal's words). A `headers` dict is filled with the answer's headers."""
     try:
         with urllib.request.urlopen(BASE + path, timeout=timeout) as r, open(dest, "wb") as f:
             shutil.copyfileobj(r, f)
+            if headers is not None:
+                headers.update(r.headers.items())
             return r.status, f.tell()
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")[:300]
@@ -155,6 +167,16 @@ def same_length(label, path, want):
     if abs(got - want) > TOLERANCE:
         raise Fail(f"{label} is {got:.2f}s, the input {want:.2f}s (allowed {TOLERANCE}s)")
     return f"{label} {got:.2f}s"
+
+
+def cue_count(path):
+    """How many cues an .srt holds: one "-->" each."""
+    with open(path, encoding="utf-8-sig") as f:
+        return f.read().count("-->")
+
+
+def srt_time(sec):
+    return "%02d:%02d:%02d,%03d" % (sec // 3600, sec % 3600 // 60, sec % 60, round(sec % 1 * 1000))
 
 
 def held(ctx, path):
@@ -309,14 +331,21 @@ def step_separate(ctx):
 
 
 def step_erase(ctx):
-    """Erase subtitles in the band the app guesses, and the eraser's own look
-    at the finished video finding no writing left (job.check)."""
+    """Erase subtitles in the band the app guesses, which lies in the bottom
+    third of the picture where the fixture's captions are (90 px above the
+    bottom edge, 630 of 720); the eraser's own look at the finished video
+    finding no writing left (job.check), and that video as long as the clip."""
     did = held(ctx, ctx["args"].subs_clip)
     status, found = api("POST", "/api/erase/suggest", form={"download_id": did}, timeout=600)
     if status != 200:
         raise Fail(f"suggest: HTTP {status} {detail(found)}")
     if not found.get("found"):
         raise Fail(f"suggest found no subtitles (it offers the bottom band {found.get('area')})")
+    # The area is [ymin, ymax, xmin, xmax], rows first.
+    top, bottom, height = found["area"][0], found["area"][1], found["height"]
+    if not (top >= height * 2 / 3 and top <= height - 90 <= bottom <= height):
+        raise Fail(f"the band is rows {top}-{bottom} of {height}: not in the bottom third "
+                   f"(from {height * 2 / 3:.0f}) around the captions at {height - 90}")
     form = {"download_id": did, "area": json.dumps(found["area"]), "project": "e2e-erase"}
     jid = started(ctx, *api("POST", "/api/erase", form=form, timeout=600))
     job, queued = wait_for(jid, "erase")
@@ -326,8 +355,15 @@ def step_erase(ctx):
     check = record.get("check") or {}
     if check.get("frames_with_text") != 0:
         raise Fail(f"frames_with_text {check.get('frames_with_text')} of {check.get('frames_checked')} checked")
-    return (f"area {found['area']} of {found['width']}x{found['height']}; {ran(job, queued)}; erased.mp4 there; "
-            f"frames_with_text 0 of {check.get('frames_checked')} checked, {check.get('repainted')} repainted")
+    erased = os.path.join(ctx["files"], "erased.mp4")
+    status, got = fetch(f"/api/erase/{jid}/video", erased)
+    if status != 200:
+        raise Fail(f"GET /api/erase/{jid}/video: HTTP {status} {got}")
+    length = same_length("erased.mp4", erased, ctx["subs_sec"])
+    return (f"area {found['area']} of {found['width']}x{found['height']}, rows {top}-{bottom} in the bottom third "
+            f"(from {height * 2 / 3:.0f}) around {height - 90}; {ran(job, queued)}; {length}, input "
+            f"{ctx['subs_sec']:.2f}s; frames_with_text 0 of {check.get('frames_checked')} checked, "
+            f"{check.get('repainted')} repainted")
 
 
 def step_export(ctx):
@@ -371,7 +407,37 @@ def step_export(ctx):
             said.append(f"{label} {cues} cues")
         else:
             said.append(same_length(label, path, ctx["clip_sec"]))
-    return f"{len(rows)} rows: " + ", ".join(said) + "; the desktop shell's save to Downloads not run"
+    said.append(script_sheet(ctx, jid, job))
+    return f"{len(rows) + 1} rows: " + ", ".join(said) + "; the desktop shell's save to Downloads not run"
+
+
+def script_sheet(ctx, jid, job):
+    """The Export dialog's script row (exportDialog.mjs, id "script"): a
+    workbook whose one sheet has the header and a row per script line, named
+    <project>_<SRC>to<TGT>_OriginalTranslatedScript.xlsx by the route itself."""
+    _, script = api("GET", f"/api/dub/jobs/{jid}/script")
+    lines = len(script.get("lines") or [])
+    path = os.path.join(ctx["export"], "script.xlsx")
+    headers = {}
+    status, got = fetch(f"/api/dub/jobs/{jid}/script.xlsx", path, headers=headers)
+    if status != 200:
+        raise Fail(f"script (.xlsx): HTTP {status} {got}")
+    said = headers.get("content-disposition") or headers.get("Content-Disposition") or ""
+    name = urllib.parse.unquote(said.split("''", 1)[1]) if "''" in said else said
+    want = (f"{job.get('title') or job['project']}_{(job.get('source_lang') or 'auto').upper()}to"
+            f"{(job.get('language_code') or 'out').upper()}_OriginalTranslatedScript.xlsx")
+    if name != want:
+        raise Fail(f"script (.xlsx) is named {name!r}, not {want!r}")
+    try:
+        with zipfile.ZipFile(path) as z:
+            sheet = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    except (zipfile.BadZipFile, KeyError) as e:
+        raise Fail(f"script (.xlsx) is not a workbook with xl/worksheets/sheet1.xml: {e}")
+    rows = len(re.findall(r"<row ", sheet))
+    if rows != lines + 1 or "speaker_id" not in sheet.split("</row>", 1)[0]:
+        raise Fail(f"script (.xlsx) has {rows} rows for {lines} lines and a header")
+    os.replace(path, os.path.join(ctx["export"], name))
+    return f"script (.xlsx) {rows} rows = header + {lines} lines, named {name}"
 
 
 def step_perso(ctx):
@@ -429,13 +495,83 @@ def step_settings(ctx):
     return f"ui_language {before} -> {flipped} -> {before}, each read back"
 
 
+def step_timings(ctx):
+    """The finished dub's record carries how long it took, the numbers the
+    usage count sends (desktop/src/analytics.js timingSeconds): its whole
+    seconds and each of the four timed steps', every one above 0 and the four
+    together no longer than the whole."""
+    jid = ctx.get("dub_done")
+    if not jid:
+        raise Skip("needs step 2's finished dub")
+    status, job = api("GET", f"/api/dub/jobs/{jid}")
+    if status != 200:
+        raise Fail(f"GET /api/dub/jobs/{jid}: HTTP {status} {detail(job)}")
+    whole, stages = job.get("elapsed_seconds"), job.get("stage_seconds") or {}
+    got = {name: stages.get(name) for name in TIMED_STAGES}
+    bad = [name for name, n in got.items() if not isinstance(n, int) or n <= 0]
+    if not isinstance(whole, int) or whole <= 0 or bad:
+        raise Fail(f"elapsed_seconds {whole}, stage_seconds {stages}: not a whole number above 0 for "
+                   + ", ".join(bad or ["elapsed_seconds"]))
+    if sum(got.values()) > whole + 1:
+        raise Fail(f"the four steps add up to {sum(got.values())}s, more than the whole {whole}s")
+    return (f"job {jid}: elapsed_seconds {whole}; " + ", ".join(f"{name} {n}s" for name, n in got.items())
+            + f" (together {sum(got.values())}s); started_hour {job.get('started_hour')}")
+
+
+def step_captions(ctx):
+    """The Subtitle style tab on its own: the held clip and a subtitle file of
+    three lines made a finished project of kind "captions" (POST
+    /api/captions/import, as ui/src/dubApi.mjs importCaptions sends it), whose
+    two rows the Export dialog offers: the video in the Sticker look, as long
+    as the clip, and the .srt with its three cues. A file with no subtitles is
+    refused with 422, a video that is not held with 404."""
+    srt = os.path.join(ctx["files"], "captions.srt")
+    with open(srt, "w", encoding="utf-8") as f:
+        f.write("\n".join(f"{n}\n{srt_time(a)} --> {srt_time(b)}\n{text}\n" for n, (a, b, text) in enumerate(CUES, 1)))
+    junk = os.path.join(ctx["files"], "not-subtitles.srt")
+    with open(junk, "w", encoding="utf-8") as f:
+        f.write("no cues here\n")
+    did = held(ctx, ctx["args"].clip)
+
+    def send(download_id, path):
+        return api("POST", "/api/captions/import", form={"download_id": download_id},
+                   upload=("srt", os.path.basename(path), path, "application/x-subrip"), timeout=600)
+
+    status, body = send(did, srt)
+    jid = started(ctx, status, body)
+    status, job = api("GET", f"/api/dub/jobs/{jid}")
+    if status != 200 or job.get("kind") != "captions" or job.get("status") != "done" or body.get("lines") != len(CUES):
+        raise Fail(f"job {jid}: HTTP {status}, kind {job.get('kind')}, {job.get('status')}, "
+                   f"{body.get('lines')} lines of {len(CUES)}")
+    video = os.path.join(ctx["export"], "video-sub-sticker.mp4")
+    status, got = fetch(f"/api/dub/result/{jid}/subtitled?preset=sticker&download=1", video)
+    if status != 200:
+        raise Fail(f"video with subtitles: HTTP {status} {got}")
+    length = same_length("video with subtitles (sticker)", video, ctx["clip_sec"])
+    path = os.path.join(ctx["export"], "video.srt")
+    status, got = fetch(f"/api/dub/result/{jid}/srt?download=1", path)
+    if status != 200:
+        raise Fail(f"subtitles: HTTP {status} {got}")
+    cues = cue_count(path)
+    if cues != len(CUES):
+        raise Fail(f"the subtitles file has {cues} cues, not {len(CUES)}")
+    bad, _ = send(did, junk)
+    missing, _ = send("e2e-no-such-download", srt)
+    if (bad, missing) != (422, 404):
+        raise Fail(f"a file with no subtitles answered HTTP {bad} (not 422), a video not held HTTP {missing} (not 404)")
+    return (f"job {jid} kind captions, done at once, {len(CUES)} lines; {length}, input {ctx['clip_sec']:.2f}s; "
+            f"subtitles {cues} cues; no subtitles in the file HTTP 422, video not held HTTP 404")
+
+
 STEPS = (("1. Engines and settings answer", step_answers),
          ("2. Local dub, English to Korean", step_local_dub),
          ("3. Separate audio", step_separate),
          ("4. Erase subtitles", step_erase),
          ("5. Export the dub", step_export),
          ("6. Perso dub", step_perso),
-         ("7. Settings round trip", step_settings))
+         ("7. Settings round trip", step_settings),
+         ("8. The dub's step timings", step_timings),
+         ("9. Subtitles on their own", step_captions))
 
 
 def run_step(name, fn, ctx):
