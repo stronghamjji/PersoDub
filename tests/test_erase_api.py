@@ -443,6 +443,22 @@ def test_saving_with_no_folder_goes_under_downloads_by_day_and_project(erased, t
     assert open(path, "rb").read() == b"clean-video"
 
 
+def test_saving_with_no_folder_goes_into_the_download_folder_picked(erased, tmp_path, monkeypatch):
+    # The folder the Download dialog's Change wrote into kit.env, which the
+    # dub's own files go into too (desktop/src/downloadsIpc.js).
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    jid = _start(project="my clip.mp4").json()["job_id"]
+    job = _wait(jid)
+    kit, picked = tmp_path / "kit", tmp_path / "Work SSD"
+    kit.mkdir()
+    picked.mkdir()
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    (kit / "kit.env").write_text("PERSODUB_DOWNLOAD_DIR=%s\n" % picked, encoding="utf-8")
+    path = client.post("/api/erase/%s/save" % jid, json={}).json()["path"]
+    assert path == os.path.join(str(picked), job["day"], "my clip", "my clip (no subtitles).mp4")
+
+
 # --- Try again --------------------------------------------------------------
 
 def test_try_again_runs_the_same_video_in_the_same_band(erased, tmp_path):

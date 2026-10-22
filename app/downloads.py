@@ -13,8 +13,14 @@ import uuid
 from typing import Callable, Dict, Optional
 
 from app.i18n import t
+from app.settings_env import current_value
 
 _PERCENT = re.compile(r"(\d+)%")
+
+# The folder the Download dialog's Change picked. The desktop shell writes it
+# into kit.env (desktop/src/downloadsIpc.js) and saves a dub's files there
+# itself; this is the same folder for the files the app writes.
+DOWNLOAD_DIR_KEY = "PERSODUB_DOWNLOAD_DIR"
 
 # What Finder and Explorer refuse in a name, plus the colon macOS shows as
 # a slash. Each becomes " - " (or "-" between digits, so "17/17" reads
@@ -26,9 +32,15 @@ def save_folder(chosen: str, day: str, project: str) -> str:
     """Where a saved file goes: the folder the caller named, or -- the rule
     every save in the app follows -- Downloads/<day>/<project>. The erased
     video and a saved clip used to land loose in Downloads while the dub's
-    exports sat in their day-and-project folder (Windows, 2026-09-10)."""
+    exports sat in their day-and-project folder (Windows, 2026-09-10).
+
+    Downloads is the folder picked in the Download dialog instead, while it is
+    there; one that is gone (a drive taken out) leaves the files in Downloads."""
     if chosen:
         return os.path.expanduser(chosen)
+    picked = current_value(DOWNLOAD_DIR_KEY)
+    if picked and os.path.isdir(picked):
+        return os.path.join(picked, day, project)
     # expanduser only replaces the "~": a "/" written after it survives, so on
     # Windows this came back as C:\Users\me/Downloads\2026-09-11\clip and the
     # path the app reported was not the path Windows would have written (CI
