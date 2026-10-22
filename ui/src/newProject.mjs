@@ -101,6 +101,8 @@ export function lengthLine(seconds, trim) {
  * @param {() => void} deps.onPickFile   open the file picker (Replace)
  * @param {(path: string) => void} [deps.reveal]  show a saved file in the
  *        computer's own file window, or null outside the desktop app
+ * @param {() => Promise<string>} [deps.pickedFolder]  the folder the Download
+ *        dialog's Change picked, "" for Downloads, so the saved line names it
  * @param {(source: {downloadId, title, duration_sec, trim}) => void} deps.onErase
  *        hand the held video to the subtitle-erasing screen
  * @param {Storage} [deps.storage]  the browser's localStorage, where the last
@@ -110,7 +112,8 @@ export function lengthLine(seconds, trim) {
 export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
                                    updateEngineHints, paintDubMode,
                                    playRange, cancelRange, labelPx,
-                                   onClosed, onPickFile, onErase, reveal = null, storage = null }) {
+                                   onClosed, onPickFile, onErase, reveal = null, storage = null,
+                                   pickedFolder = async () => "" }) {
   // Populated from dubApi.LANGUAGES (the model's own supported-language table).
   // sourceLangSelect's default is the literal "Auto-detect" <option> written into
   // its markup -- defCode null never matches a real LANGUAGES code, so no
@@ -899,7 +902,8 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     $("projectShowWrap").hidden = true;
     try {
       const saved = await saveDownloadClip(np.downloadId, np.trim);
-      $("projectSaved").textContent = t("Saved to {folder}", { folder: downloadsLabel(saved.path) || t("Downloads") });
+      const folder = downloadsLabel(saved.path, await pickedFolder()) || t("Downloads");
+      $("projectSaved").textContent = t("Saved to {folder}", { folder });
       // Where it went, for the Show beside that line. Only the desktop app can
       // open a folder; in a browser the line says where and stops there.
       savedClipPath = saved.path || "";

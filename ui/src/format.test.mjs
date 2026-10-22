@@ -151,6 +151,43 @@ test("in Korean the folders under Downloads are named as in the Downloads folder
   t.after(() => setLanguage("en"));
   assert.equal(downloadsLabel("C:\\Users\\x\\Downloads\\2026-10-22\\clip\\dub_ko.mp4"), "다운로드 폴더의 2026-10-22 / clip");
   assert.equal(downloadsLabel("/Users/x/Downloads/clip.mp4"), "다운로드");
+  // A folder picked with Change in the Download dialog, by its own name.
+  assert.equal(downloadsLabel("/Volumes/작업용 SSD/2026-10-22/paris_steps/dub_ko.mp4", "/Volumes/작업용 SSD"),
+    "작업용 SSD의 2026-10-22 / paris_steps");
+});
+
+import { folderName, insideFolder } from "./format.mjs";
+
+// The Download dialog's Change picks a folder of the user's (owner, 2026-10-22);
+// the "… saved" sentences name it by the last part of its path.
+test("downloadsLabel names a file saved in the picked folder from that folder's own name", () => {
+  const picked = "/Volumes/Work SSD";
+  assert.equal(downloadsLabel("/Volumes/Work SSD/2026-10-22/paris_steps/dub_ko.mp4", picked),
+    "Work SSD / 2026-10-22 / paris_steps");
+  // Loose in it (the separated sounds), by the name alone.
+  assert.equal(downloadsLabel("/Volumes/Work SSD/clip_voice.mp3", picked), "Work SSD");
+  // Windows, either kind of slash, and a whole drive picked.
+  assert.equal(downloadsLabel("D:\\Work\\2026-10-22\\clip\\clip.mp4", "D:\\Work"), "Work / 2026-10-22 / clip");
+  assert.equal(downloadsLabel("D:\\2026-10-22\\clip\\clip.mp4", "D:\\"), "D: / 2026-10-22 / clip");
+  // Not in it (the drive was taken out, the files went to Downloads): Downloads, as before.
+  assert.equal(downloadsLabel("/Users/x/Downloads/2026-10-22/clip/clip.mp4", picked), "Downloads / 2026-10-22 / clip");
+  // A folder of its own inside Downloads is named as itself.
+  assert.equal(downloadsLabel("/Users/x/Downloads/PersoDub/2026-10-22/clip/clip.mp4", "/Users/x/Downloads/PersoDub"),
+    "PersoDub / 2026-10-22 / clip");
+  // A name that only starts the same is another folder.
+  assert.equal(downloadsLabel("/Volumes/Work SSD 2/clip.mp4", picked), "");
+});
+
+test("insideFolder and folderName read a path as written, either kind of slash", () => {
+  assert.equal(insideFolder("/Volumes/Work SSD/a/b.mp4", "/Volumes/Work SSD/"), true);
+  assert.equal(insideFolder("C:\\Work\\a.mp4", "C:/Work"), true);
+  assert.equal(insideFolder("/Volumes/Work SSD", "/Volumes/Work SSD"), false, "the folder itself holds no file");
+  assert.equal(insideFolder("/Volumes/Work SSD2/a.mp4", "/Volumes/Work SSD"), false);
+  assert.equal(insideFolder("/a.mp4", ""), false);
+  assert.equal(insideFolder("/a.mp4", "/"), false, "no folder, not the whole disk");
+  assert.equal(folderName("/Volumes/작업용 SSD"), "작업용 SSD");
+  assert.equal(folderName("C:\\Users\\x\\Work\\"), "Work");
+  assert.equal(folderName("D:\\"), "D:");
 });
 
 import { statusParts } from "./format.mjs";

@@ -18,6 +18,11 @@
 // and the first row is ticked until the user says otherwise. A saved row shows
 // a check at its right end and the line under the rows says where it went.
 //
+// Before a save that line says where the files go, and in the desktop shell
+// it ends in Change, which opens the computer's own folder picker, and Use
+// default once a folder is picked (owner, 2026-10-22). The shell keeps the
+// folder for every download after it, and the app's own saves go there too.
+//
 // A dubbing's rows are links the browser (or the desktop shell) downloads; a
 // draft's and an erased video's are written by the app itself into Downloads.
 // Every sound row carries the MP3 / WAV switch, one pick for all of them,
@@ -34,8 +39,10 @@
 // original video are what they are, whatever the ratio.
 //
 // The elements this file touches: #exportOverlay, #exportList, #exportWhere,
-// #exportCloseX, #exportCloseBtn (Cancel), #exportGoBtn (Download).
-import { downloadsLabel, escapeHtml, errorText } from "./format.mjs";
+// #exportFolder (Change, #exportFolderPick, and Use default, #exportFolderReset
+// in #exportFolderResetWrap), #exportCloseX, #exportCloseBtn (Cancel),
+// #exportGoBtn (Download).
+import { downloadsLabel, escapeHtml, errorText, folderName } from "./format.mjs";
 import { withRatio } from "./ratio.mjs";
 import { t } from "./i18n.mjs";
 
@@ -197,6 +204,26 @@ export function rowsHtml(rows, fmt, ticked = [], saved = []) {
   }).join("");
 }
 
+/**
+ * The line under the rows before a save, in the desktop shell: where the files
+ * go. A folder picked with Change is named by its own name, with a dubbing's
+ * dated folder under it, the way `ctx.where` names Downloads. A picked folder
+ * that is gone (a drive taken out) is said once, ahead of that Downloads line:
+ * the files go there instead.
+ *
+ * @param {{where?: string, day?: string, project?: string}} ctx  the dialog's
+ *        context: the Downloads line, and a dubbing's day and project
+ * @param {{chosen: string, missing: boolean}} folder  the shell's answer
+ */
+export function whereLine(ctx, { chosen, missing }) {
+  if (!chosen) return ctx.where || "";
+  const name = folderName(chosen);
+  if (missing) return `${t("Cannot find {folder}.", { folder: name })} ${ctx.where || ""}`.trim();
+  return ctx.day && ctx.project
+    ? t("Saved in {folder} / {day} / {project}", { folder: name, day: ctx.day, project: ctx.project })
+    : t("Saved in {folder}", { folder: name });
+}
+
 /** "clip.mp3" out of a path with either kind of slash. */
 function baseName(path) {
   return String(path || "").split(/[\\/]+/).pop();
@@ -217,12 +244,16 @@ function followLink(href, name) {
  * @param {object} deps
  * @param {(id: string) => any} deps.$
  * @param {() => Promise<object|null>} deps.getContext  what is on screen, as
- *        exportRows reads it, plus `where` (the line under the rows) and, for
- *        a draft or an erased video, `save({audio} | {ratio}) => Promise<path>`; null
- *        when there is nothing to export
+ *        exportRows reads it, plus `where` (the line under the rows, naming
+ *        Downloads), for a dubbing `day` (its files' dated folder, with
+ *        `project`) and, for a draft or an erased video,
+ *        `save({audio} | {ratio}) => Promise<path>`; null when there is
+ *        nothing to export
  * @param {{getItem: Function, setItem: Function}} [deps.storage]
  * @param {object} [deps.shell]  the desktop shell (window.persodubShell): it
- *        saves a link without a word, then reports the file it wrote
+ *        saves a link without a word, then reports the file it wrote; and it
+ *        keeps the folder downloads go into (downloadFolder, pickDownloadFolder,
+ *        resetDownloadFolder, each answering {folder, chosen, missing})
  * @param {(href: string, init?: object) => Promise<Response>} [deps.fetchFn]
  * @param {(href: string, name: string) => void} [deps.follow]  hand a link to
  *        the browser to download
@@ -241,12 +272,20 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
   let saving = false;
   // The shell's report of the download the Export button is waiting on.
   let landed = null;
+  // Where the files go, as the shell said it ({folder, chosen, missing}):
+  // asked each time the dialog opens and after each save, since a drive can be
+  // taken out in between. Null in a browser, which saves where it is set to.
+  let folder = null;
 
   const rows = () => exportRows(ctx, fmt);
+  const whereText = () => (folder ? whereLine(ctx, folder) : ctx.where || "");
   function paint() {
     list.innerHTML = rowsHtml(rows(), fmt, ticked, saved);
     go.disabled = saving || !ticked.length;
     $("exportCloseBtn").disabled = saving;
+    // Change, and Use default once a folder is picked; not while files go out.
+    $("exportFolder").hidden = saving || !folder;
+    $("exportFolderResetWrap").hidden = !(folder && folder.chosen);
   }
 
   function pickFormat(f) {
@@ -312,10 +351,15 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
         saved.push(row.id);
         paint();
       }
-      const folder = downloadsLabel(last) || t("Downloads");
-      where.textContent = !last ? ctx.where || ""
-        : todo.length > 1 ? t("Saved {n} files to {folder}", { n: todo.length, folder })
-        : t("Saved {name} to {folder}", { name: baseName(last), folder });
+      // Asked again: the files went wherever the folder was just now.
+      if (folder) folder = await shell.downloadFolder().catch(() => folder);
+      const label = downloadsLabel(last, folder ? folder.chosen : "") || t("Downloads");
+      const said = !last ? whereText()
+        : todo.length > 1 ? t("Saved {n} files to {folder}", { n: todo.length, folder: label })
+        : t("Saved {name} to {folder}", { name: baseName(last), folder: label });
+      // A picked folder that was gone is said once, ahead of where the files went.
+      where.textContent = last && folder && folder.missing
+        ? `${t("Cannot find {folder}.", { folder: folderName(folder.chosen) })} ${said}` : said;
     } catch (e) {
       where.textContent = errorText(e);
     } finally {
@@ -343,6 +387,18 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
   });
   go.addEventListener("click", exportTicked);
 
+  // Change: the computer's own folder picker, through the shell, which keeps
+  // the folder for this download and every one after it. Use default: back to
+  // Downloads. Either way the line says the new place at once.
+  async function changeFolder(ask) {
+    if (saving || !folder) return;
+    folder = await ask().catch(() => folder);
+    where.textContent = whereText();
+    paint();
+  }
+  $("exportFolderPick").addEventListener("click", () => changeFolder(() => shell.pickDownloadFolder()));
+  $("exportFolderReset").addEventListener("click", () => changeFolder(() => shell.resetDownloadFolder()));
+
   if (shell && shell.onDownloadDone) shell.onDownloadDone((info) => {
     if (landed) { const tell = landed; landed = null; tell(info); }
   });
@@ -362,13 +418,14 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
     const next = await getContext();
     if (!next) return;
     ctx = next;
+    folder = shell && shell.downloadFolder ? await shell.downloadFolder().catch(() => null) : null;
     saved = [];
     let kept = null;
     try { kept = storage && storage.getItem(TICKS_KEY); } catch { /* private window */ }
     const ids = rows().map((r) => r.id);
     ticked = tick ? ids.filter((id) => tick.includes(id)) : ticksFor(kept, ctx.kind, ids);
     paint();
-    where.textContent = ctx.where || "";
+    where.textContent = whereText();
     $("exportOverlay").classList.add("open");
   }
 

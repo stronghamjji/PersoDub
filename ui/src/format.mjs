@@ -71,13 +71,37 @@ export function formatBytes(n) {
  * folder is named in the page's language, the way Finder and Explorer name it;
  * in Korean as a folder (다운로드 폴더의 …), since under the Download dialog's
  * title 다운로드 / … read as the title said twice (owner, 2026-10-22).
+ *
+ * `picked` is the folder the Download dialog's Change picked: a file inside
+ * it is named from that folder's own name the same way ("Work SSD /
+ * 2026-10-22 / clip", in Korean 작업용 SSD의 …), a file loose in it by the
+ * name alone.
  */
-export function downloadsLabel(path) {
+export function downloadsLabel(path, picked = "") {
+  if (insideFolder(path, picked)) {
+    const folders = slashed(path).slice(slashed(picked).length + 1).split("/").slice(0, -1);
+    return folders.length ? t("{folder} / {folders}", { folder: folderName(picked), folders: folders.join(" / ") })
+      : folderName(picked);
+  }
   const parts = String(path || "").split(/[\\/]+/);
   const i = parts.indexOf("Downloads");
   if (i < 0) return "";
   const folders = parts.slice(i + 1, -1);
   return folders.length ? t("Downloads / {folders}", { folders: folders.join(" / ") }) : t("Downloads");
+}
+
+// A path written with one kind of slash and none at its end, so two can be compared.
+const slashed = (path) => String(path || "").replace(/[\\/]+/g, "/").replace(/\/$/, "");
+
+/** Is `path` inside `folder`? Compared as written, either kind of slash. */
+export function insideFolder(path, folder) {
+  const top = slashed(folder);
+  return top !== "" && slashed(path).startsWith(`${top}/`);
+}
+
+/** A folder's own name: the last part of its path ("D:" for a whole drive). */
+export function folderName(path) {
+  return slashed(path).split("/").pop();
 }
 
 export function escapeHtml(s) {

@@ -2778,6 +2778,12 @@
   .export-modal .export-list a .export-state .icon { width: 16px; height: 16px; stroke-width: 1.5; color: inherit; }
   .export-modal .export-list a.saved .export-state { color: var(--success); }
   .export-modal .export-where { font-size: 12px; line-height: 1.5; }
+  /* The line under the title that says what comes out (owner, 2026-10-22). */
+  .export-modal .export-headline { margin: 0 0 10px; font-size: 12px; color: var(--muted-foreground); }
+  /* Change · Use default at the end of the line: the erase card's words at the
+     line's own size, kept together when a long folder name wraps the line. */
+  .export-where .erase-link { font-size: inherit; }
+  .export-where .export-links { white-space: nowrap; }
   /* === export === */
   /* Audio only's MP3 / WAV switch, at the right of its row (mockup
      export-ratio 1): the Captions tab's segment, lit in the primary colour. */

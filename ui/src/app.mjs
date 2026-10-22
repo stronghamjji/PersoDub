@@ -611,6 +611,11 @@ async function openLastScreen() {
   await resumeJob(last);
 }
 
+// The folder the Download dialog's Change picked ("" while downloads go to
+// Downloads), for the lines that say which folder a file was saved in
+// (ui/src/format.mjs downloadsLabel). Asked of the desktop shell each time.
+const pickedFolder = async () => (await window.persodubShell?.downloadFolder?.()?.catch(() => null))?.chosen || "";
+
 // ---------------- New project dialog ----------------
 // Opens the moment a video or a link is ready, and is the only place a job can
 // be started from. Everything it holds -- the thumbnail and its trim bar, the
@@ -650,6 +655,7 @@ const newProject = initNewProjectUi({
   // Only the desktop app can open a folder (see the erase screen's own Show).
   reveal: window.persodubShell?.revealPath
     ? (path) => window.persodubShell.revealPath(path) : null,
+  pickedFolder,
   // Where the last project's choices are kept for the next one.
   storage: localStorage,
 });
@@ -689,6 +695,7 @@ const eraseScreen = initEraseScreenUi({
   // open, and the "Show" beside "Saved to Downloads" stays away.
   reveal: window.persodubShell?.revealPath
     ? (path) => window.persodubShell.revealPath(path) : null,
+  pickedFolder,
   // The timeline under it is the one the dub and the draft use (read late:
   // it is wired further down).
   showTimeline: (info) => timeline.showErase(info),
@@ -2070,7 +2077,9 @@ async function exportContext() {
     videoHref: donePlayer.doneVideoSrc(job, "dubbed"),
     subtitled: { href: `/api/dub/result/${job.id}/subtitled?preset=${subPreset}${posQ}&download=1${mark}`,
                  name: `dub_${target}-sub-${subPreset}.mp4` },
-    where: whereDownloadsGo(job),
+    // The day with the project: the dated folder the files go in, inside a
+    // folder picked with Change as inside Downloads.
+    where: whereDownloadsGo(job), day: job.day,
   };
 }
 const exportDialog = initExportDialog({

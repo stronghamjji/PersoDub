@@ -56,6 +56,8 @@ export const PACK_ID = "subtitle-eraser";
  *        erased video, on its Dubbing tab
  * @param {(path: string) => void} deps.reveal  show a saved file in the
  *        computer's own file window, or null outside the desktop app
+ * @param {() => Promise<string>} [deps.pickedFolder]  the folder the Download
+ *        dialog's Change picked, "" for Downloads, so the saved line names it
  * @param {(info: object) => void} deps.showTimeline  what the timeline draws
  *        while this screen is up (ui/src/timeline.mjs showErase)
  * @param {() => boolean} [deps.projectOpen]  a dubbing project is open on the
@@ -67,7 +69,7 @@ export const PACK_ID = "subtitle-eraser";
 export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFile,
                                     installPack, packRow, onPackProgress, onJobsChanged,
                                     onDub, reveal, showTimeline, projectOpen = () => false,
-                                    onEraseStarted = () => {} }) {
+                                    onEraseStarted = () => {}, pickedFolder = async () => "" }) {
   // No video yet: the shared Import block (ui/src/importBlock.mjs), wired at
   // the end of this function.
   $("eraseImportSlot").outerHTML = emptyTabHtml("erase", "eraseZone", "eraseLink");
@@ -951,9 +953,10 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
   async function exportErased({ audio = "", ratio = null } = {}) {
     if (!erasedJob()) throw new Error(t("This video is not erased yet."));
     const res = await saveErased(job.id, { audio, ratio });
+    const picked = await pickedFolder();
     savedPath = res.path || "";
     // Which folder, the way the dub's export line says it.
-    $("eraseSavedWhere").textContent = downloadsLabel(savedPath) || t("Downloads");
+    $("eraseSavedWhere").textContent = downloadsLabel(savedPath, picked) || t("Downloads");
     // Show is the desktop app's; in a browser there is no file window to open,
     // so the line says where it went and stops there.
     $("eraseShowWrap").hidden = !reveal || !savedPath;

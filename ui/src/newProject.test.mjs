@@ -64,7 +64,7 @@ function memoryStorage() {
 }
 
 /** A page, a fetch log and the callbacks the dialog reaches out through. */
-function harness({ responses = {}, storage = memoryStorage() } = {}) {
+function harness({ responses = {}, storage = memoryStorage(), pickedFolder } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -123,6 +123,7 @@ function harness({ responses = {}, storage = memoryStorage() } = {}) {
     onPickFile: () => { log.picked += 1; },
     onErase: (source) => { log.erased.push(source); },
     storage,
+    pickedFolder,
   });
   return { $, api, state, log };
 }
@@ -132,9 +133,9 @@ const bad = (status, detail) => ({ ok: false, status, json: async () => ({ detai
 // A link's dialog with the holding area answering: POST /api/downloads hands
 // back id "d1", and every tick of the clock reads the next record in `steps`
 // (the last one repeats).
-function linkHarness(steps, extra = {}) {
+function linkHarness(steps, extra = {}, more = {}) {
   let at = 0;
-  return harness({ responses: {
+  return harness({ ...more, responses: {
     "/api/downloads": () => ok({ id: "d1" }),
     "/api/downloads/d1": () => ok({ id: "d1", url: "https://x/y",
                                     ...steps[Math.min(at++, steps.length - 1)] }),
@@ -488,8 +489,8 @@ test("a copy that will not upload leaves the file itself to be dubbed", async (t
 // -- Save clip and Erase subtitles ------------------------------------------
 
 /** A dialog whose link has landed, with the trim bar drawn for a 30s video. */
-async function readyDialog(extra = {}) {
-  const h = linkHarness([{ status: "ready", percent: 100 }], extra);
+async function readyDialog(extra = {}, more = {}) {
+  const h = linkHarness([{ status: "ready", percent: 100 }], extra, more);
   h.api.openNewProject({ probe: PROBE });
   await new Promise((r) => setTimeout(r, 0));
   await h.log.tick();
@@ -526,6 +527,19 @@ test("Save clip with the handles at the ends asks for the whole video", async (t
   const save = h.log.requests.find((r) => r.url === "/api/downloads/d1/save");
   assert.deepEqual(JSON.parse(save.body), {});
   assert.equal(h.$("projectSaved").textContent, "Saved to Downloads");
+});
+
+// The folder the Download dialog's Change picked (owner, 2026-10-22): the app
+// saves the clip there, and the line names it as it names Downloads.
+test("Save clip names the folder picked for downloads by its own name", async (t) => {
+  const h = await readyDialog({
+    "/api/downloads/d1/save": () => ok({ path: "/Volumes/Work SSD/2026-10-22/A talk/A talk.mp4", seconds: 30 }),
+  }, { pickedFolder: async () => "/Volumes/Work SSD" });
+  t.after(h.log.restore);
+
+  await h.$("saveClipBtn").fire("click");
+
+  assert.equal(h.$("projectSaved").textContent, "Saved to Work SSD / 2026-10-22 / A talk");
 });
 
 test("a clip that cannot be saved says so on the red line, and claims nothing", async (t) => {
