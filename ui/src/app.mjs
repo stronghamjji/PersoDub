@@ -932,6 +932,8 @@ const languageRow = initLanguageRow({
   onOpenJob: (jobId) => resumeJob(jobId),
   openDraft: openDraftHere,
   nameOf: (job) => shownName(job),
+  // Read when + Add language is pressed: the table is wired further down.
+  linesOf: (jobId) => scriptTable.linesOf(jobId),
 });
 // The project's own page, from the logo in Settings > About. window.open
 // rather than an <a>: the shell hands every http(s) open to the OS browser

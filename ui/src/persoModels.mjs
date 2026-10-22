@@ -12,16 +12,17 @@ import { t } from "./i18n.mjs";
 // The models known on 2026-10-19 (Perso's API docs and language list), in
 // the order the choice lists them: a line of what each is for, from Perso's
 // dubbing models page in the words the owner approved (2026-10-22), its price
-// in credits per second, and whether a plan below Pro is refused (VT40314,
-// app/perso_client.py PersoPlanRequiredError). Nightingale's also says one
-// line cannot be remade on its own (app/perso_edit.py nightingale).
+// in credits per second of speech (Nightingale's is 4, owner 2026-10-22), and
+// whether a plan below Pro is refused (VT40314, app/perso_client.py
+// PersoPlanRequiredError). Nightingale's also says one line cannot be remade
+// on its own (app/perso_edit.py nightingale).
 const KNOWN = [
   { id: "ORIOLE", label: "Oriole", desc: "Natural local pronunciation, steady voice. Lectures and corporate video", rate: 1 },
   { id: "LINNET_4", label: "Linnet 4", desc: "New model that follows the context. Honours audio tags", rate: 1 },
   { id: "LINNET_3", label: "Linnet 3", desc: "The earlier expressive model", rate: 1 },
   { id: "WREN", label: "Wren", desc: "Steady narration. Lecture scripts, company intros, read-aloud; most even Korean voice", rate: 1 },
   { id: "FINCH", label: "Finch", desc: "Keeps your own voice, lowest cost. Interviews and whole channels", rate: 0.2, pro: true },
-  { id: "NIGHTINGALE", label: "Nightingale", desc: "Rich emotion for drama and shows. No per-line remake", rate: 6, pro: true },
+  { id: "NIGHTINGALE", label: "Nightingale", desc: "Rich emotion for drama and shows. No per-line remake", rate: 4, pro: true },
 ];
 // What a dubbing nobody chose a model for is made with: Linnet 4, or Oriole
 // in a language Linnet 4 lacks, as Perso's own API picks since 2026-10-12

@@ -370,6 +370,18 @@ test("a link still coming down when another project opens on a held video does n
   log.restore();
 });
 
+// Add language hands over where the video is spoken, which prices a Perso
+// dubbing of it (owner, 2026-10-22).
+test("a held video brought in with where it is spoken keeps that on its draft", async (t) => {
+  const { api, log } = harness();
+  t.after(log.restore);
+  await api.importSource({ downloadId: "heldB", name: "video B", duration: 5, speech: [[1, 2]] });
+  assert.deepEqual(getDraft().speech, [[1, 2]]);
+  clearDraft();   // as openDraft lets the last draft go
+  await api.importSource({ downloadId: "heldC", name: "video C", duration: 5 });
+  assert.equal(getDraft().speech, null, "one brought without it knows none");
+});
+
 // Save video's Export opens on this (2026-10-21): only for the link it was
 // handed with, and only once that link's video is the draft.
 test("a link's onReady is told once, when its video is the draft", async () => {

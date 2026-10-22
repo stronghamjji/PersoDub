@@ -179,7 +179,7 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
     if (source.downloadId) {
       cancelImport();
       setDraft({ downloadId: source.downloadId, name: source.name || "", duration: source.duration || 0,
-                 videoUrl: downloadVideoUrl(source.downloadId) });
+                 videoUrl: downloadVideoUrl(source.downloadId), speech: source.speech || null });
       return;
     }
     if (source.file) return holdFile(source.file);

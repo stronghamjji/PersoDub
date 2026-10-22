@@ -47,7 +47,7 @@ test("Add language starts on the open dubbing's own choices", () => {
                    { dubMode: "perso", source: "", speakers: "", persoModel: "WREN" });
 });
 
-function harness(open, { again } = {}) {
+function harness(open, { again, lines = {} } = {}) {
   const row = { hidden: true, innerHTML: "", listeners: [],
                 addEventListener(ev, fn) { this.listeners.push(fn); } };
   const log = { opened: [], drafts: [], sent: [] };
@@ -60,6 +60,7 @@ function harness(open, { again } = {}) {
     onOpenJob: (id) => log.opened.push(id),
     openDraft: async (source, opts, project) => { log.drafts.push({ source, opts, project }); },
     nameOf: (job) => job.title || job.project || "Dubbing",
+    linesOf: (id) => lines[id] || null,
   });
   const click = (btn) => Promise.all(row.listeners.map((fn) => fn({ target: { closest: () => btn } })));
   return { row, api, log, state, click, restore: () => Object.assign(globalThis, real) };
@@ -122,10 +123,26 @@ test("+ Add language opens the same video and kept parts, set up as the open dub
   await h.click({ id: "langAddBtn", dataset: {}, classList: { contains: () => false } });
   assert.deepEqual(h.log.sent, ["POST /api/dub/jobs/en2/again"]);
   assert.deepEqual(h.log.drafts, [{
-    source: { downloadId: "ab12cd34", name: "My cats", duration: 52.6 },
+    source: { downloadId: "ab12cd34", name: "My cats", duration: 52.6, speech: null },
     opts: { tab: "dubbing", ranges: [[0, 20]], choices: { dubMode: "perso", source: "ko", speakers: "" } },
     project: "ko1",
   }]);
+});
+
+// Perso charges a dubbing by the seconds spoken (owner, 2026-10-22): the open
+// dubbing's lines say where, on its own clock, which runs through the parts
+// it kept one after another.
+test("+ Add language says where the video is spoken: the open dubbing's lines, moved onto the video held again", async (t) => {
+  const open = { ...JOBS()[0], title: "My cats" };
+  const h = harness(open, {
+    again: { ok: true, json: async () => ({ download_id: "ab12cd34", title: "Cats", duration_sec: 52.6,
+                                            ranges: [[10, 20], [30, 40]] }) },
+    lines: { en2: [{ line: 1, start: 2, end: 5 }, { line: 2, start: 8, end: 13 }] },
+  });
+  t.after(h.restore);
+  h.api.setJobs(JOBS());
+  await h.click({ id: "langAddBtn", dataset: {}, classList: { contains: () => false } });
+  assert.deepEqual(h.log.drafts[0].source.speech, [[12, 15], [18, 20], [30, 33]]);
 });
 
 test("+ Add language on a video that is gone says it could not open, with the reason as its tip", async (t) => {

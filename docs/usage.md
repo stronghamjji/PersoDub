@@ -82,8 +82,10 @@ From here:
   video, or as audio only, into Downloads.
 - The **Separate audio** and **Erase** tabs work on the same video.
 - **Start dubbing** begins the dub. With **Perso API** the line beside it says what the
-  dub costs, the dubbing model's credits a second times the seconds kept, and how many
-  credits your Perso workspace has left.
+  dub costs and how many credits your Perso workspace has left. Perso charges the dubbing
+  model's credits a second for the whole seconds that are spoken, so a new video says *up
+  to* that rate times every whole second kept, and one opened with **+ Add language** says
+  *about* that rate times the seconds its first dubbing's script speaks.
 
 ### Dubbing step settings
 
