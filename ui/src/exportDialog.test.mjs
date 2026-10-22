@@ -6,14 +6,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { initExportDialog, exportRows, rowsHtml, audioFormat, ticksFor, AUDIO_KEY, TICKS_KEY } from "./exportDialog.mjs";
-import { loadTable, setLanguage } from "./i18n.mjs";
+import { loadTable, setLanguage, t as say } from "./i18n.mjs";
 
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
 
 const DUB = { kind: "dub", jobId: "J1", target: "ko", mark: "&v=2", hasSrt: true, fromLink: true,
               videoHref: "/api/dub/result/J1?v=2",
               subtitled: { href: "/api/dub/result/J1/subtitled?preset=clean&download=1", name: "dub_ko-sub-clean.mp4" },
-              where: "Saves to Downloads / 2026-09-30 / clip" };
+              where: "Saved in Downloads / 2026-09-30 / clip" };
 const STEMS = { ...DUB, project: "clip", stems: { voice: true, background: true } };
 
 test("MP3 is the format unless WAV was remembered", () => {
@@ -89,7 +89,8 @@ test("a dubbing's rows stand under Video, Subtitles and Audio; the other kinds h
   }
 });
 
-test("in Korean the three headings read 영상, 자막 and 오디오", async (t) => {
+// The page's Korean table, for the tests that read the dialog in Korean.
+async function inKorean(t) {
   const real = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: true,
     json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
@@ -97,8 +98,37 @@ test("in Korean the three headings read 영상, 자막 and 오디오", async (t)
   globalThis.fetch = real;
   setLanguage("ko");
   t.after(() => setLanguage("en"));
+}
+
+test("in Korean the three headings read 영상, 자막 and 오디오", async (t) => {
+  await inKorean(t);
   const html = rowsHtml(exportRows(STEMS, "mp3"), "mp3");
   assert.deepEqual([...html.matchAll(/class="export-group">([^<]*)</g)].map((m) => m[1]), ["영상", "자막", "오디오"]);
+});
+
+// Under the title 다운로드, "다운로드 / 2026-10-22 / paris_steps에 저장해요"
+// read as the title said twice (owner, 2026-10-22): the line names the
+// Downloads folder as a folder, before a save and after it, in every kind.
+test("the line under the rows names the Downloads folder as a folder, not as the title again", async (t) => {
+  const where = { day: "2026-10-22", project: "paris_steps" };
+  assert.equal(say("Saved in Downloads / {day} / {project}", where), "Saved in Downloads / 2026-10-22 / paris_steps");
+  await inKorean(t);
+  // Before a save: what app.mjs's whereDownloadsGo says, and the other kinds' line.
+  assert.equal(say("Saved in Downloads / {day} / {project}", where), "다운로드 폴더의 2026-10-22 / paris_steps에 저장해요");
+  assert.equal(say("Saved in Downloads"), "다운로드 폴더에 저장해요");
+  // After a save, a draft's two files and an erased video's one.
+  const dir = "/Users/me/Downloads/2026-10-22/clip/";
+  const draft = harness({ ctx: { kind: "draft", save: async (what) => `${dir}clip.${what.audio || "mp4"}` } });
+  await draft.api.open();
+  draft.tick("audio");
+  draft.go();
+  await settle();
+  assert.equal(draft.$("exportWhere").textContent, "파일 2개를 다운로드 폴더의 2026-10-22 / clip에 저장했어요");
+  const erase = harness({ ctx: { kind: "erase", save: async () => `${dir}clip.mp4` } });
+  await erase.api.open();
+  erase.go();
+  await settle();
+  assert.equal(erase.$("exportWhere").textContent, "clip.mp4 파일을 다운로드 폴더의 2026-10-22 / clip에 저장했어요");
 });
 
 test("a row is a checkbox, its icon, its name and the place its saved check goes; sound rows carry the switch", () => {
@@ -242,14 +272,14 @@ test("an opening that names its rows ticks those, and what was remembered stays 
 test("Export saves a draft's ticked rows in turn and says where they went", async () => {
   const asked = [];
   let release = null;
-  const ctx = { kind: "draft", ratio: "9:16", where: "Saves to Downloads",
+  const ctx = { kind: "draft", ratio: "9:16", where: "Saved in Downloads",
     save: (what) => new Promise((resolve) => {
       asked.push(what);
       release = () => resolve(`/Users/me/Downloads/2026-09-30/clip/clip.${what.audio || "mp4"}`);
     }) };
   const h = harness({ ctx });
   await h.api.open();
-  assert.equal(h.$("exportWhere").textContent, "Saves to Downloads");
+  assert.equal(h.$("exportWhere").textContent, "Saved in Downloads");
   h.tick("audio");
   h.go();
   await settle();
@@ -279,7 +309,7 @@ test("Export saves a draft's ticked rows in turn and says where they went", asyn
 });
 
 test("one file is named on the line; an erased video saves the same way, Windows path and all", async () => {
-  const ctx = { kind: "erase", where: "Saves to Downloads",
+  const ctx = { kind: "erase", where: "Saved in Downloads",
                 save: async () => "C:\\Users\\me\\Downloads\\2026-09-30\\clip\\clip.mp4" };
   const h = harness({ ctx });
   await h.api.open();
@@ -333,7 +363,7 @@ test("a dubbing's ticked rows are made, then downloaded one after another as the
   const shell = { onDownloadDone: (fn) => { report = fn; } };
   const h = harness({ ctx: STEMS, shell });
   await h.api.open();
-  assert.equal(h.$("exportWhere").textContent, "Saves to Downloads / 2026-09-30 / clip");
+  assert.equal(h.$("exportWhere").textContent, "Saved in Downloads / 2026-09-30 / clip");
   h.tick("voice");
   h.tick("background");
   h.pick("wav");
@@ -403,7 +433,7 @@ test("the X, Cancel and the backdrop each shut the dialog", async () => {
 });
 
 test("separated audio hands back its two sounds as links, both ticked to begin with", async () => {
-  const ctx = { kind: "separate", jobId: "S1", project: "clip", where: "Saves to Downloads" };
+  const ctx = { kind: "separate", jobId: "S1", project: "clip", where: "Saved in Downloads" };
   for (const fmt of ["mp3", "wav"]) {
     assert.deepEqual(exportRows(ctx, fmt).map((r) => [r.id, r.label, r.href, r.name, r.audio]), [
       ["voice", "Voice", `/api/dub/result/S1/stem/voice?format=${fmt}`, `clip_voice.${fmt}`, true],

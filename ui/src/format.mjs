@@ -68,13 +68,16 @@ export function formatBytes(n) {
  * "Downloads / 2026-09-10 / clip" out of a saved file's path: the folders
  * under Downloads, without the file. "Downloads" for a file loose in it, ""
  * for a path that is not under Downloads at all. Either kind of slash. The
- * folder is named in the page's language, the way Finder and Explorer name it.
+ * folder is named in the page's language, the way Finder and Explorer name it;
+ * in Korean as a folder (다운로드 폴더의 …), since under the Download dialog's
+ * title 다운로드 / … read as the title said twice (owner, 2026-10-22).
  */
 export function downloadsLabel(path) {
   const parts = String(path || "").split(/[\\/]+/);
   const i = parts.indexOf("Downloads");
   if (i < 0) return "";
-  return [t("Downloads"), ...parts.slice(i + 1, -1)].join(" / ");
+  const folders = parts.slice(i + 1, -1);
+  return folders.length ? t("Downloads / {folders}", { folders: folders.join(" / ") }) : t("Downloads");
 }
 
 export function escapeHtml(s) {

@@ -124,7 +124,9 @@ test("errorText survives an empty or missing error", () => {
 });
 
 
+import { readFileSync } from "node:fs";
 import { downloadsLabel } from "./format.mjs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 test("downloadsLabel names the folders under Downloads, on either kind of slash", () => {
   assert.equal(downloadsLabel("/Users/x/Downloads/2026-09-10/clip/clip (no subtitles).mp4"),
@@ -135,6 +137,20 @@ test("downloadsLabel names the folders under Downloads, on either kind of slash"
   assert.equal(downloadsLabel("/Users/x/Downloads/clip.mp4"), "Downloads");
   assert.equal(downloadsLabel("/elsewhere/clip.mp4"), "");
   assert.equal(downloadsLabel(""), "");
+});
+
+// Under the Download dialog's title 다운로드, "다운로드 / 2026-10-22 / clip"
+// read as the title said twice (owner, 2026-10-22).
+test("in Korean the folders under Downloads are named as in the Downloads folder", async (t) => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true,
+    json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+  assert.equal(downloadsLabel("C:\\Users\\x\\Downloads\\2026-10-22\\clip\\dub_ko.mp4"), "다운로드 폴더의 2026-10-22 / clip");
+  assert.equal(downloadsLabel("/Users/x/Downloads/clip.mp4"), "다운로드");
 });
 
 import { statusParts } from "./format.mjs";

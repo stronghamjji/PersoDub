@@ -1985,7 +1985,7 @@ async function exportContext() {
   // button, so the shape is the one its draft was left on; an erase opened
   // from Projects has no draft behind it and is saved as it is.
   if (document.body.dataset.screen === "erase" && eraseScreen.erasedJob()) {
-    return { kind: "erase", ratio: (getDraft() || {}).ratio || "original", where: t("Saves to Downloads"), save: (what) => eraseScreen.exportErased(what) };
+    return { kind: "erase", ratio: (getDraft() || {}).ratio || "original", where: t("Saved in Downloads"), save: (what) => eraseScreen.exportErased(what) };
   }
   // Any other erase screen hands back only the draft it shows: an empty one
   // saved whatever draft was still held (Windows test E9).
@@ -1995,11 +1995,11 @@ async function exportContext() {
   const separated = !state.jobId && leftTabs.current() === "audio" && audioTab.separatedJob();
   if (separated) {
     return { kind: "separate", jobId: separated.id, project: String((getDraft() || {}).name || "").replace(/\.[A-Za-z0-9]{2,4}$/, "") || "audio",
-             where: t("Saves to Downloads") };
+             where: t("Saved in Downloads") };
   }
   // A draft with a video on the timeline, before any dub.
   if (!state.jobId && draftSetup.canExport()) {
-    return { kind: "draft", ratio, where: t("Saves to Downloads"), save: (what) => draftSetup.saveDraft(what) };
+    return { kind: "draft", ratio, where: t("Saved in Downloads"), save: (what) => draftSetup.saveDraft(what) };
   }
   const job = state.job;
   if (!job) return null;
@@ -2063,8 +2063,8 @@ document.addEventListener("keydown", (e) => {
 function whereDownloadsGo(job) {
   if (!window.persodubShell) return t("Saves to the Downloads folder");
   return job?.day && job?.project
-    ? t("Saves to Downloads / {day} / {project}", { day: job.day, project: job.project })
-    : t("Saves to Downloads");
+    ? t("Saved in Downloads / {day} / {project}", { day: job.day, project: job.project })
+    : t("Saved in Downloads");
 }
 
 // ---------------- the script table ----------------
