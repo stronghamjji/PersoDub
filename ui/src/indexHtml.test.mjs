@@ -583,9 +583,11 @@ test("every small confirm wears the warning sign, a question and at most one sho
   const confirms = readFileSync(CONFIRMS, "utf8");
   assert.match(confirms, /\$\("deleteTitle"\)\.textContent = job\.draftId \? t\("Delete this draft\?"\) : t\("Delete this project\?"\);/);
   // Its one line says how many languages go with a project of several
-  // (ui/src/languageRow.mjs deleteLine), and nothing else.
-  assert.equal((html.match(/\$\("deleteMessage"\)\.textContent/g) || []).length, 1);
+  // (ui/src/languageRow.mjs deleteLine), and nothing else; asked about a base
+  // program in Settings > Models, the one line the asker hands it.
+  assert.equal((html.match(/\$\("deleteMessage"\)\.textContent/g) || []).length, 2);
   assert.match(confirms, /\$\("deleteMessage"\)\.textContent = deleteLine\(job\.draftId \? 1 : projectLanguages\(members\)\.length\);/);
+  assert.match(confirms, /\$\("deleteMessage"\)\.textContent = line;/);
   assert.match(html, /<h2>Replace this video\?<\/h2>\s*<p>Cuts are reset\.<\/p>/);
   assert.match(html, /id="cancelDubKeepBtn" type="button">Keep going<[^]*?id="cancelDubConfirmBtn" type="button">Stop</);
   assert.match(html, /\.modal\.modal-alert \{ width: 280px;/);

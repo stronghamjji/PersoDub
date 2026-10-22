@@ -303,6 +303,8 @@ const models = initModelsUi({
   // Keep the catalog fresh while Settings shows it.
   keepPolling: () => $("settingsOverlay").classList.contains("open"),
   ramOk: () => ramOk,
+  // The Delete dialog is made further down; it is asked only on a press.
+  askToDelete: (q) => confirmDialogs.askToDelete(q),
 });
 // The four stage dropdowns as buttons whose lists hold every choice, the
 // models not downloaded yet included (ui/src/stagePicker.mjs); painted with

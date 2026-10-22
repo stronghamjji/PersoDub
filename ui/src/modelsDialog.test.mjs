@@ -68,6 +68,8 @@ function harness({ rows = [], shell = null, ramOk = true } = {}) {
     shell,
     keepPolling: () => state.keepPolling === true,
     ramOk: () => ramOk,
+    // The Delete dialog: records the question, answers Delete unless a test says No.
+    askToDelete: async (q) => { (state.askedToDelete ||= []).push(q); return state.deleteAnswer ?? true; },
   });
   return { $, api, state };
 }
@@ -623,17 +625,13 @@ test("the Settings catalog's pack rows ask the desktop app to install or remove,
   // Remove asks the engine first (it knows whether a dub is running); its
   // "packs are the desktop app's" refusal is the all-clear.
   h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "Packs are installed by the desktop app" }) } };
-  btn(runtimeRow).onclick();   // asks first
-  await settle();
-  btn(runtimeRow).onclick();   // then removes
+  btn(runtimeRow).onclick();   // the Delete dialog asks, and Delete is pressed
   await settle(); await settle(); await settle();
   assert.deepEqual(shell.asked, ["install engine", "remove ollama-runtime"]);
   assert.ok(h.state.calls.includes("DELETE /api/models/ollama-runtime"));
 
   // A dub in progress: the engine's sentence is shown and the desktop app is not asked.
   h.state.responses = { "/api/models/ollama-runtime": { ok: false, json: async () => ({ detail: "Dubbing is running right now. Wait for it to finish, then remove the model." }) } };
-  btn(runtimeRow).onclick();
-  await settle();
   btn(runtimeRow).onclick();
   await settle(); await settle(); await settle();
   assert.deepEqual(shell.asked, ["install engine", "remove ollama-runtime"], "not asked again");
@@ -645,6 +643,44 @@ test("the Settings catalog's pack rows ask the desktop app to install or remove,
   const row = listRows(bare)[0];
   assert.equal(btn(row).disabled, true);
   assert.equal(row.children[2].textContent, "Installed by PersoDub");
+});
+
+test("removing Python + PyTorch or Ollama asks in the Delete dialog what stops working, and No keeps it", async (t) => {
+  const shell = fakeShell();
+  const h = harness({ rows: [{ ...ENGINE, state: "ready" },
+                             { ...ENGINE, id: "ollama-runtime", name: "Ollama", bytes: 0.46e9, state: "ready" },
+                             { ...ENGINE, id: "subtitle-eraser", name: "Subtitle eraser", bytes: 1.0e9, state: "ready" }], shell });
+  t.after(h.state.restore);
+  await h.api.refreshModels();
+  const btn = (name) => listRows(h).find((r) => r.children[0].textContent === name).children[3];
+
+  h.state.deleteAnswer = false;   // Keep it
+  btn("Python + PyTorch").onclick();
+  await settle(); await settle(); await settle();
+  assert.deepEqual(h.state.askedToDelete, [{
+    title: "Delete Python + PyTorch?",
+    line: "Without it, local models cannot separate audio, transcribe or make voices.",
+  }]);
+  assert.equal(btn("Python + PyTorch").textContent, "Remove", "no second-press question on the button");
+  assert.ok(!h.state.calls.some((c) => c.startsWith("DELETE")), "kept: the engine is not even asked");
+  assert.deepEqual(shell.asked, []);
+
+  h.state.deleteAnswer = true;    // Delete
+  btn("Python + PyTorch").onclick();
+  await settle(); await settle(); await settle();
+  assert.ok(h.state.calls.includes("DELETE /api/models/engine"), "one press and a yes goes on to remove it");
+
+  btn("Ollama").onclick();
+  await settle();
+  assert.deepEqual(h.state.askedToDelete.at(-1),
+                   { title: "Delete Ollama?", line: "Without it, local models cannot translate." });
+
+  // Anything else keeps its two presses and asks nothing in a dialog.
+  const asked = h.state.askedToDelete.length;
+  btn("Subtitle eraser").onclick();
+  await settle();
+  assert.equal(btn("Subtitle eraser").textContent, "Remove 1.0 GB?");
+  assert.equal(h.state.askedToDelete.length, asked);
 });
 
 test("an Ollama pull that failed before it began is told in the dialog, not polled at 0% forever", async (t) => {

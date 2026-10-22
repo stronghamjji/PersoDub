@@ -1,5 +1,6 @@
 // The page's three small confirms: "Stop dubbing?" (or separating, or
-// erasing), "Delete this project?" (or draft), and the full disk. Each is the
+// erasing), "Delete this project?" (or draft, or a base program in Settings >
+// Models), and the full disk. Each is the
 // app's own dialog rather than window.confirm(), which freezes every event in
 // the Electron shell while it is up and writes its buttons in the machine's
 // own language. Lifted out of the page's script unchanged (2026-10-10).
@@ -26,10 +27,12 @@ import { t } from "./i18n.mjs";
  * @param {{renderHistory: () => Promise<void>}} deps.projects  the Projects list
  * @returns {{ askCancelDub: (question?: string) => Promise<boolean>,
  *   askDelete: (job: object, members?: object[]) => void,
+ *   askToDelete: (q: {title: string, line: string}) => Promise<boolean>,
  *   showIfOutOfSpace: (e: any) => boolean }}
  *   askCancelDub answers yes or no; askDelete asks about a project (every
  *   language in `members`) or a kept draft (`job.draftId`) and deletes it on
- *   yes; showIfOutOfSpace shows the full-disk dialog when `e` says so, and
+ *   yes; askToDelete asks the same dialog about anything else and answers yes
+ *   or no; showIfOutOfSpace shows the full-disk dialog when `e` says so, and
  *   answers whether it did.
  */
 export function initConfirmDialogs({ $, state, forgetDraft, resetForNewJob, getLastJobId, forgetLastJob,
@@ -75,10 +78,23 @@ export function initConfirmDialogs({ $, state, forgetDraft, resetForNewJob, getL
   // the app's own -- window.confirm() freezes every event in the Electron shell
   // until it is dismissed.
   let pendingDelete = null;
+  // The same dialog asked about something that is not a project (a base
+  // program in Settings > Models): whoever asked waits for the answer.
+  let answerDelete = null;
+
+  function askToDelete({ title, line }) {
+    closeDelete();
+    $("deleteTitle").textContent = title;
+    $("deleteMessage").textContent = line;
+    $("deleteError").textContent = "";
+    $("deleteOverlay").classList.add("open");
+    return new Promise((resolve) => { answerDelete = resolve; });
+  }
 
   // A project is every language of its video (`members`, ui/src/languageRow.mjs):
   // they all go, and the second line says how many when there is more than one.
   function askDelete(job, members = [job]) {
+    closeDelete();
     pendingDelete = { ...job, members };
     $("deleteTitle").textContent = job.draftId ? t("Delete this draft?") : t("Delete this project?");
     $("deleteMessage").textContent = deleteLine(job.draftId ? 1 : projectLanguages(members).length);
@@ -89,6 +105,10 @@ export function initConfirmDialogs({ $, state, forgetDraft, resetForNewJob, getL
   function closeDelete() {
     $("deleteOverlay").classList.remove("open");
     pendingDelete = null;
+    // Closed without Delete is a no.
+    const answer = answerDelete;
+    answerDelete = null;
+    if (answer) answer(false);
   }
   $("deleteCloseX").addEventListener("click", closeDelete);
   $("deleteCancelBtn").addEventListener("click", closeDelete);
@@ -102,6 +122,13 @@ export function initConfirmDialogs({ $, state, forgetDraft, resetForNewJob, getL
     if (e.key === "Escape" && $("deleteOverlay").classList.contains("open")) closeDelete();
   });
   $("deleteConfirmBtn").addEventListener("click", async () => {
+    if (answerDelete) {
+      const answer = answerDelete;
+      answerDelete = null;
+      $("deleteOverlay").classList.remove("open");
+      answer(true);
+      return;
+    }
     const job = pendingDelete;
     if (!job) return;
     // A kept draft is only remembered here: forgetting it is the deleting.
@@ -160,5 +187,5 @@ export function initConfirmDialogs({ $, state, forgetDraft, resetForNewJob, getL
   $("spaceCloseX").addEventListener("click", () => $("spaceOverlay").classList.remove("open"));
   $("spaceCloseBtn").addEventListener("click", () => $("spaceOverlay").classList.remove("open"));
 
-  return { askCancelDub, askDelete, showIfOutOfSpace };
+  return { askCancelDub, askDelete, askToDelete, showIfOutOfSpace };
 }
