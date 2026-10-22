@@ -866,7 +866,7 @@ test("the target languages are the ones the chosen model has", async (t) => {
   assert.deepEqual(targets(h), ["en", "en-GB"]);                    // Oriole
   await chooseModel(h, "Nightingale");            // Nightingale
   assert.deepEqual(targets(h), ["en", "en-GB", "en-AU"]);
-  assert.equal(h.$("persoModelHint").textContent, "6 credits per second · 3 supported languages · Perso Pro plan and up");
+  assert.equal(h.$("persoModelHint").textContent, "6 credits per second · 3\u00a0supported\u00a0languages · Perso Pro plan and up");
   assert.deepEqual(await models(h), ["Oriole", "Wren", "[Nightingale]"]);
   await chooseModel(h, "Wren");            // Wren
   assert.deepEqual(targets(h), ["en"]);
@@ -936,9 +936,9 @@ test("every model Perso names is offered, a new one under a name made from its i
   const rows = await openModels(h);
   assert.deepEqual(rows.map(nameOf), ["Oriole", "Finch", "Nightingale", "New One"]);
   const caption = (o) => o.children[0].children[1].textContent;
-  assert.equal(caption(rows[0]), "Natural local pronunciation, steady voice. Lectures and corporate video · 1 credit per second · 1 supported languages");
-  assert.equal(caption(rows[1]), "Keeps your own voice, lowest cost. Interviews and whole channels · 0.2 credits per second · 1 supported languages");
-  assert.equal(caption(rows[3]), "1 supported languages");    // nothing known of it but its languages
+  assert.equal(caption(rows[0]), "Natural local pronunciation, steady voice. Lectures and corporate video · 1 credit per second · 1\u00a0supported\u00a0languages");
+  assert.equal(caption(rows[1]), "Keeps your own voice, lowest cost. Interviews and whole channels · 0.2 credits per second · 1\u00a0supported\u00a0languages");
+  assert.equal(caption(rows[3]), "1\u00a0supported\u00a0languages");    // nothing known of it but its languages
   assert.equal(rows[1].children[1].textContent, "Pro and up");       // the Pro badge
   assert.equal(rows[0].children.length, 1);                          // none on Oriole
   assert.equal(rows[0].attrs.role, "option");
@@ -946,7 +946,7 @@ test("every model Perso names is offered, a new one under a name made from its i
   await rows[1].fire("click");
   assert.equal(h.api.readOptions().persoModel, "FINCH");
   assert.equal(pick(h).children.length, 1, "choosing closes the list");
-  assert.equal(h.$("persoModelHint").textContent, "0.2 credits per second · 1 supported languages · Perso Pro plan and up");
+  assert.equal(h.$("persoModelHint").textContent, "0.2 credits per second · 1\u00a0supported\u00a0languages · Perso Pro plan and up");
 });
 
 test("the chosen model survives the trip to Erase subtitles, and a new video starts on it too", async (t) => {

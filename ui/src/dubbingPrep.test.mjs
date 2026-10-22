@@ -107,7 +107,7 @@ test("the top row is Choose a model, and the line under Perso's model says its s
   $("dubModePerso").click();
   assert.equal($("persoModelRow").hidden, false);
   // Linnet 4 until Perso's list answers, with the ten languages shown till then.
-  assert.equal($("persoModelHint").textContent, "1 credit per second · 10 supported languages");
+  assert.equal($("persoModelHint").textContent, "1 credit per second · 10\u00a0supported\u00a0languages");
   $("dubModeLocal").click();
   assert.equal($("persoModelRow").hidden, true);
 });

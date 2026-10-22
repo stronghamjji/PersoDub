@@ -89,7 +89,7 @@ function rateText(info) {
 // "80 supported languages", 지원 언어 80개, as one unit: a line too long for
 // its box wraps around it, never inside it (owner, 2026-10-22).
 function supportedLanguages(n) {
-  return t("{n} supported languages", { n }).replaceAll(" ", " ");
+  return t("{n} supported languages", { n }).replaceAll(" ", "\u00a0");
 }
 
 /** The line under a model in the list: "Default · 1 credit per second · 80 supported languages". */
