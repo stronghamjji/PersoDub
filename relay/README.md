@@ -15,6 +15,7 @@ way as the usage-count worker `persodub-count`.
 | `report-worker.js` | Handles the incoming request (the entry point) |
 | `report-logic.js` | Decisions only: checks, labels, body, signing, rate limits |
 | `report-logic.test.mjs` | Tests for those decisions |
+| `report-worker.test.mjs` | Tests for the handler, with stand-ins for KV and GitHub |
 
 Tests, from the repository root: `node --test relay/*.test.mjs`
 
@@ -105,6 +106,10 @@ curl -s -X POST https://persodub-report.persodub.workers.dev/report \
 # -> {"id":"...","issue":12,"url":"https://github.com/.../issues/12","dedup":false}
 
 # 2) The same fingerprint again -> dedup:true, a comment and no new issue
+
+# 3) Close the issue (as completed), then the same fingerprint once more -> the issue is
+#    open again, with one comment "Seen again on 0.5.5, mac 24.6.0, after the issue was closed."
+#    Closed as not planned, or labelled duplicate, it stays closed and gets only the comment.
 ```
 
 Close the test issue once you have checked it.

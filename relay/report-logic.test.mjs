@@ -16,6 +16,7 @@ import {
   maskAgain,
   newId,
   rateDecision,
+  seenAgainText,
   tallyLine,
   validateReport,
   withLogsLine,
@@ -379,6 +380,25 @@ test("an archive carries enough to be listed without being opened", () => {
   for (const v of Object.values(s)) assert.equal(typeof v, "string");
 });
 
+// A sighting on a closed issue reopens it (report-worker.js); the dashboard
+// shows which archives did, and what state they found their issue in.
+test("an archive's summary says what state its issue was in and whether the report reopened it", () => {
+  const { report } = validateReport(GOOD);
+  const fresh = logSummary(report, 72);
+  assert.deepEqual([fresh.priorState, fresh.reopened], ["", ""], "a new issue had no state before");
+  const again = logSummary(report, 72, { priorState: "closed", reopened: true });
+  assert.deepEqual([again.priorState, again.reopened], ["closed", "true"]);
+  for (const v of Object.values(again)) assert.equal(typeof v, "string");
+});
+
+test("the seen-again comment names the version and the system, and nobody can be mentioned through it", () => {
+  const { report } = validateReport({ ...GOOD, version: "0.7.0" });
+  assert.equal(seenAgainText(report), "Seen again on 0.7.0, windows 10.0.26100, after the issue was closed.");
+  assert.equal(seenAgainText({ ...report, env: { ...report.env, os: "" } }), "Seen again on 0.7.0, after the issue was closed.");
+  const forged = validateReport({ ...GOOD, env: { ...GOOD.env, os: "@someone #12 <img src=x>" } }).report;
+  assert.doesNotMatch(seenAgainText(forged), /[@#<>]/);
+});
+
 test("diagnostics survive validation only in the published shape", () => {
   const { report } = validateReport({ ...GOOD, diagnostics: {
     network: { "pypi.org": { reachable: true, issuer: "ALYac Web Security", root: "ALYac Web Security", chainLength: 2 } },
@@ -621,7 +641,7 @@ test("the device reaches the archive's summary and nothing the public issue is m
   assert.equal(logSummary(report, 72).device, DEVICE);
   assert.equal(logSummary(validateReport(GOOD).report, 72).device, "");
   const pub = [issueTitle(report), issueBody(report, { logsRef: "a".repeat(32) }), ...summaryLines(report),
-               commentText(report), ...labelsFor(report), tallyLine(countSighting(null, report))].join("\n");
+               commentText(report), seenAgainText(report), ...labelsFor(report), tallyLine(countSighting(null, report))].join("\n");
   assert.ok(!pub.includes(DEVICE), pub);
 });
 

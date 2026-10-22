@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 
 // Boot looks for an old settings file in the default kit folder, which
@@ -113,6 +113,32 @@ test("an install that stops names its step on the error screen, and shell.log te
   // Under it, what the step's own error said, indented: here the missing folder.
   assert.match(lines[failed + 1], /^ERROR {3}ENOENT: no such file or directory, lstat '.*kit-src.sidecar'$/);
   assert.equal(failed + 2, lines.length, lines.join("\n"));
+});
+
+// A computer whose install keeps failing never reached the flush after the
+// page is up, so the reports it kept never left. The queue is flushed as the
+// launch starts, before the install, and again once an install that stopped
+// has its screen up -- neither one waited on.
+test("the report queue is flushed before the install and again once a stopped install is on screen", async (t) => {
+  const appDir = join(base, "app-flush");
+  mkdirSync(join(appDir, "resources", "payload", "app-repo"), { recursive: true });
+  writeFileSync(join(appDir, "resources", "payload", "KIT_VERSION"), "9.9.9+test");
+  const kitBefore = process.env.PERSODUB_KIT_DIR;
+  const kit = join(base, "kit-flush");
+  process.env.PERSODUB_KIT_DIR = kit;
+  t.after(() => { process.env.PERSODUB_KIT_DIR = kitBefore; });
+  const seen = [];
+  const win = { loadFile: async (path) => { seen.push(basename(path)); }, webContents: { send: () => {} } };
+  const app = { getVersion: () => "1.2.3", getPath: () => join(base, "userData") };
+  const boot = createBoot({
+    app, ctx: {}, appDir, shellLog: () => {}, countUsage: () => {},
+    sendReport: (r) => seen.push(`report ${r.kind} ${r.step}`),
+    // Never settles: a boot that waited on the queue would stop right here.
+    flushReports: (kitDir) => { seen.push(`flush ${kitDir}`); return new Promise(() => {}); },
+    startUpdater: () => {},
+  });
+  await boot(win);
+  assert.deepEqual(seen, [`flush ${kit}`, "installing.html", "report install payload", "error.html", `flush ${kit}`]);
 });
 
 // An install that stopped says its cause in a sentence and what to press --

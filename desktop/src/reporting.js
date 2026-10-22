@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { freeSpaceAt } from "./config.js";
@@ -16,8 +17,8 @@ import { readFileEnd } from "./fileEnd.js";
 // this says why -- the machine, the step, the error, and the logs -- and it
 // becomes a GitHub issue without the user needing an account or knowing what
 // an issue is. What may leave is decided in report.js (an allow-list,
-// masked); this is the wiring: gather, send, and if that fails, keep it for
-// the next launch.
+// masked); this is the wiring: write the failure down, gather, send, and keep
+// whatever did not land for the next launch.
 export const REPORT_ENDPOINT = "https://persodub-report.persodub.workers.dev";
 // Reports wait here rather than in userData: a report belongs to the kit that
 // produced it, and a user who deletes a kit is done with its failures too.
@@ -28,15 +29,19 @@ const reportsDir = (kitDir) => join(kitDir, "reports");
 const ENGINE_LOGS = { backend: "backend.log", sidecar: "sidecar.log", ollama: "ollama.log" };
 const ENGINE_LOG_BYTES = 2 * 1024 * 1024;
 
-/** Write a report (and its archive) into the kit's queue for the next launch. */
-function queueReport(kitDir, entry, archive) {
+/** Write a queue entry (and its archive) into the kit's queue, under its base name. */
+function queueReport(kitDir, base, entry, archive) {
   try {
     const dir = reportsDir(kitDir);
     mkdirSync(dir, { recursive: true });
-    const base = queueBase(entry.report.fingerprint, Date.now());
     writeFileSync(join(dir, `${base}${REPORT_EXT}`), JSON.stringify(entry));
     if (archive) writeFileSync(join(dir, `${base}${ARCHIVE_EXT}`), archive);
   } catch { /* a report that cannot be saved is a report that is lost, nothing more */ }
+}
+
+/** Take a queue entry, and its archive, out of the kit's queue. */
+function unqueue(kitDir, base) {
+  for (const ext of [REPORT_EXT, ARCHIVE_EXT]) rmSync(join(reportsDir(kitDir), `${base}${ext}`), { force: true });
 }
 
 /**
@@ -52,6 +57,12 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
   const REPORT_STATE = () => join(app.getPath("userData"), "reports.json");
   // What the page shows once a report has gone out ("Report sent - #142").
   let lastReport = null;
+  // The queue entries being worked on right now, by sendReport or a flush, by
+  // base name. Flushes overlap -- the one as a launch starts, the one after an
+  // install stopped, the one once the app is up -- and a report sent twice is
+  // counted twice, and spends two of the five a day the relay takes from one
+  // machine. An entry in here is left to whoever has it.
+  const inHand = new Set();
 
   function reportMode(kitDir) {
     return resolveReportMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
@@ -193,9 +204,10 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
 
   /**
    * Send one report, then its logs. Says what landed and leaves the keeping to
-   * the caller -- a first attempt starts a queue entry, a retry updates the one
-   * it already has, and the difference matters: re-queueing under a new name
-   * would restart the week a report is allowed to keep trying for.
+   * the caller -- a first attempt keeps it in the entry its failure was written
+   * to, a retry updates the one it already has, and the difference matters:
+   * re-queueing under a new name would restart the week a report is allowed to
+   * keep trying for.
    */
   async function deliver(report, archive) {
     const answer = await postJson(REPORT_ENDPOINT + "/report", report);
@@ -209,6 +221,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
   // the network. The promise is returned for the tests; it never rejects.
   function sendReport(opts) {
     return (async () => {
+      let base = null;
       try {
         const kitDir = opts.kitDir;
         if (!kitDir) return;
@@ -228,7 +241,20 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
         // reports never gets one, and no file appears claiming otherwise. It has
         // to happen BEFORE the report is built, or the id in the report and the
         // id on disk would be two different ids.
-        if (mode === "on") saveState(REPORT_STATE(), loadState(REPORT_STATE()));
+        if (mode === "on") {
+          saveState(REPORT_STATE(), loadState(REPORT_STATE()));
+          // The failure goes on disk before anything is gathered, and before the
+          // first await. Gathering and sending take seconds -- the backend, the
+          // probes, the relay -- and a person who closes the error screen at
+          // once quits the app before they are done: an install that ran out of
+          // memory on 2026-10-20 was counted and never reported. The next
+          // launch's flush builds the report from this entry.
+          const at = Date.now();
+          base = queueBase(randomBytes(6).toString("hex"), at);
+          inHand.add(base);
+          const { kind, code, step, message, jobId } = opts;
+          queueReport(kitDir, base, { failure: { kind, code, step, message, jobId }, at });
+        }
         const { report, archive } = await collectReport(opts);
         if (mode === "debug") {
           shellLog(`[persodub-report] would send: ${JSON.stringify(report)}`);
@@ -236,15 +262,25 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
           return;
         }
         const { sent, id, logsSent } = await deliver(report, archive);
-        if (!sent) queueReport(kitDir, { report, id: null }, archive);
-        else if (!logsSent) queueReport(kitDir, { report, id }, archive);
-      } catch { /* a failure to report a failure stops here */ }
+        // Landed whole: off the queue. Otherwise the entry becomes the report
+        // itself (id null until the relay has taken it), under the failure's
+        // own name, so the week it may keep trying in counts from the failure.
+        // At least once rather than at most: a launch that ends between the
+        // relay's answer and this line sends it again, and a sighting counted
+        // twice is better than a failure nobody hears of.
+        if (sent && logsSent) unqueue(kitDir, base);
+        else queueReport(kitDir, base, { report, id }, archive);
+      } catch { /* a failure to report a failure stops here */ } finally {
+        if (base) inHand.delete(base);
+      }
     })();
   }
 
   /**
-   * Reports that could not be sent when they happened. Runs once a launch, after
-   * the app is up, and never blocks it: the network is the reason they are here.
+   * Reports that could not be sent when they happened, and failures a launch
+   * wrote down but did not live to report. Runs as a launch starts, after an
+   * install that stopped, and once the app is up (bootFlow.js), and never
+   * blocks any of them: the network is the reason they are here.
    */
   async function flushReports(kitDir) {
     const dir = reportsDir(kitDir);
@@ -252,19 +288,41 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
     let names = [];
     try { names = readdirSync(dir); } catch { return; }
     const { retry, expired } = partitionQueue(names);
-    const remove = (base) => {
-      for (const ext of [REPORT_EXT, ARCHIVE_EXT]) rmSync(join(dir, `${base}${ext}`), { force: true });
-    };
+    const remove = (base) => unqueue(kitDir, base);
     for (const base of expired) remove(base);
     if (reportMode(kitDir) !== "on") return;   // off or debug: nothing leaves, nothing is deleted
     for (const base of retry) {
+      if (inHand.has(base)) continue;
+      inHand.add(base);
+      try { await flushOne(base); } finally { inHand.delete(base); }
+    }
+
+    // One entry: whatever its json says is still to do.
+    async function flushOne(base) {
       let entry = null;
       try { entry = JSON.parse(readFileSync(join(dir, `${base}${REPORT_EXT}`), "utf8")); } catch { entry = null; }
       const archivePath = join(dir, `${base}${ARCHIVE_EXT}`);
       const hasArchive = existsSync(archivePath);
-      const work = pendingWork(entry, { hasArchive });
-      if (work === "done") { remove(base); continue; }
-      const archive = hasArchive ? readFileSync(archivePath) : null;
+      let work = pendingWork(entry, { hasArchive });
+      if (work === "done") { remove(base); return; }
+      let archive = hasArchive ? readFileSync(archivePath) : null;
+      if (work === "collect") {
+        // A dub's or an erase's report is half the backend's -- its stage and
+        // its job's log, which only the engines can give -- and built without
+        // them it would fingerprint as a failure nobody has seen. One that
+        // names a job waits for a flush with the engines up.
+        if (entry.failure.jobId && !(ctx.engines && ctx.engines.url)) return;
+        // Only the failure was written down: the launch that met it ended
+        // before its report was built (sendReport). It is built now, from logs
+        // that still hold that launch's lines, and kept as an ordinary unsent
+        // report before it goes -- the install id minted first, as there.
+        saveState(REPORT_STATE(), loadState(REPORT_STATE()));
+        const built = await collectReport({ ...entry.failure, kitDir });
+        entry = { report: built.report, id: null };
+        archive = built.archive;
+        queueReport(kitDir, base, entry, archive);
+        work = "send";
+      }
       if (work === "send") {
         // The counts' switch is asked again: a report queued while they were
         // on goes without their id once they have been turned off.
@@ -275,7 +333,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
         // (so the week it has to try in keeps running) with the id written in,
         // and only the upload is retried next launch.
         else if (sent) writeFileSync(join(dir, `${base}${REPORT_EXT}`), JSON.stringify({ report: entry.report, id }));
-        continue;
+        return;
       }
       if (await postLogs(entry.id, archive) !== "retry") remove(base);
     }

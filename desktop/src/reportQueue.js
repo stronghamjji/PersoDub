@@ -4,8 +4,15 @@
 // happens on a machine with no network at that moment, so "we tried once" is
 // not good enough.
 //
-// Two files share one base name, "<fingerprint>-<milliseconds>":
-//   <base>.json     {report, id}  -- id is null until the relay has taken it
+// Two files share one base name, "<key>-<milliseconds>": twelve hex
+// characters and the moment of the failure. The key was the report's
+// fingerprint until a failure began to be written down before its report is
+// built (0.8.8); it is random now, and only keeps two names apart.
+//   <base>.json     {failure, at} -- the failure alone (kind, code, step,
+//                                    message, job), written before anything
+//                                    is gathered: a launch that ends first
+//                                    leaves it for the next to build and send
+//                   {report, id}  -- id is null until the relay has taken it
 //   <base>.tar.gz   the full logs, when there are any
 // The pair is deleted once both halves have landed. Keeping the id in the
 // json is what lets a delivered report whose LOG upload failed retry only the
@@ -23,17 +30,17 @@ export const MAX_AGE_DAYS = 7;
 const NAME = /^([0-9a-f]{12})-(\d{10,16})$/;
 
 /** The base name for one queued report. */
-export function queueBase(fingerprint, at) {
-  return `${fingerprint}-${at}`;
+export function queueBase(key, at) {
+  return `${key}-${at}`;
 }
 
-/** {fingerprint, at} out of a queue file's name, or null when it is not one.
+/** {key, at} out of a queue file's name, or null when it is not one.
  *  A stray file in the folder must never be read, sent or deleted. */
 export function parseQueueName(name) {
   const file = String(name || "");
   if (!file.endsWith(REPORT_EXT)) return null;
   const m = NAME.exec(file.slice(0, -REPORT_EXT.length));
-  return m ? { base: file.slice(0, -REPORT_EXT.length), fingerprint: m[1], at: Number(m[2]) } : null;
+  return m ? { base: file.slice(0, -REPORT_EXT.length), key: m[1], at: Number(m[2]) } : null;
 }
 
 /**
@@ -52,14 +59,16 @@ export function partitionQueue(names, { now = Date.now(), maxAgeDays = MAX_AGE_D
 
 /**
  * What is left to do for one queued item, given what its json says.
+ *  - "collect": only the failure was written down; build its report, then send.
  *  - "send":   the relay has never seen it.
  *  - "logs":   the issue exists; only the archive did not land.
  *  - "done":   nothing left -- delete the pair.
- * A file that does not hold a report at all is "done" too: unreadable is not
- * a reason to keep retrying, and it is certainly not a reason to send garbage.
+ * A file that holds neither a report nor a failure is "done" too: unreadable
+ * is not a reason to keep retrying, and it is certainly not a reason to send garbage.
  */
 export function pendingWork(entry, { hasArchive = false } = {}) {
-  if (!entry || typeof entry !== "object" || !entry.report) return "done";
+  if (!entry || typeof entry !== "object") return "done";
+  if (!entry.report) return entry.failure && typeof entry.failure === "object" ? "collect" : "done";
   if (!entry.id) return "send";
   return hasArchive ? "logs" : "done";
 }
