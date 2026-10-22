@@ -18,6 +18,7 @@ import {
   voiceLabel,
   startedLabel,
   startErase,
+  fetchCreditsLeft,
 } from "./dubApi.mjs";
 
 test("buildDubFormData sends exactly the fields app/main.py:dub_start expects", () => {
@@ -685,6 +686,34 @@ test("startErase carries the trim, both fields or neither -- the route refuses o
   // Several kept parts go as the pairs the dub's own route reads.
   assert.equal(sent[2].body.get("ranges"), "[[0,3.4],[6.8,10]]");
   assert.equal(sent[2].body.get("trim_start"), null);
+});
+
+// The credits left that the Before dubbing card shows beside Start (owner,
+// 2026-10-22): the workspace a dubbing spends from, by the engine's own rule.
+test("fetchCreditsLeft reads the picked workspace's credits, or the only one's, and nothing it cannot be sure of", async () => {
+  const real = globalThis.fetch;
+  const answer = (spaces, settings) => {
+    globalThis.fetch = async (url) => ({ ok: true, json: async () => (url === "/api/perso/spaces" ? { spaces } : settings) });
+  };
+  const two = [{ seq: 7, name: "Mine", credits: 1280 }, { seq: 9, name: "Team", credits: 40 }];
+  try {
+    answer(two, { perso_space_seq: "9" });
+    assert.equal(await fetchCreditsLeft(), 40, "the one picked in Settings");
+    answer([two[0]], { perso_space_seq: "" });
+    assert.equal(await fetchCreditsLeft(), 1280, "a key's only workspace needs no pick");
+    answer(two, { perso_space_seq: "" });
+    assert.equal(await fetchCreditsLeft(), null, "several and none picked: the dubbing would ask which");
+    answer([two[0]], { perso_space_seq: "3" });
+    assert.equal(await fetchCreditsLeft(), null, "a pick the list no longer has is not someone else's");
+    answer([{ seq: 7, name: "Mine", credits: null }], { perso_space_seq: "7" });
+    assert.equal(await fetchCreditsLeft(), null, "Perso did not say");
+    globalThis.fetch = async () => ({ ok: false, status: 409, json: async () => ({}) });
+    assert.equal(await fetchCreditsLeft(), null, "no key saved");
+    globalThis.fetch = async () => { throw new TypeError("Failed to fetch"); };
+    assert.equal(await fetchCreditsLeft(), null);
+  } finally {
+    globalThis.fetch = real;
+  }
 });
 
 test("buildDubFormData: the voice engine travels when one is chosen, and only then", () => {

@@ -68,11 +68,12 @@ def translate_model_missing(translator: str, status: Optional[str] = None) -> Op
 
 
 def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speakers, log,
-                  tts_model=None):
+                  tts_model=None, title=None):
     """The whole-job Perso path: upload -> cloud dub -> download. Same failure
     grammar as the Perso STT/separation stages (no silent local fallback).
     tts_model is the Perso voice model the job's record names; a record from
-    before one was kept names none and gets the language's own."""
+    before one was kept names none and gets the language's own. title is the
+    project's name, which Perso's workspace shows the project under."""
     log("1/1 Dubbing in the Perso cloud…")
     # Made inside the `try`, as the stages make theirs: a client that cannot
     # be made (no key, or the workspace lookup offline or refused) is worded
@@ -91,7 +92,7 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
         entry = languages.lookup("perso", target_code) or {"code": target_code, "tag": None}
         tag = {"target_tag": entry["tag"]} if entry.get("tag") else {}
         pc.dub_video(video_path, out_path, source_code, entry["code"], num_speakers=num_speakers, log=log,
-                     tts_model=tts_model or languages.model_for(entry), **tag)
+                     tts_model=tts_model or languages.model_for(entry), title=title, **tag)
         # The Perso project number is how the script viewer (and later the
         # agent) finds this job's sentences again -- persist it with the job.
         seq = getattr(pc, "last_dub_project_seq", None)
@@ -196,9 +197,16 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
 
             cut_ranges(video_path, job["ranges"], on_cut=_joined_recorded)
         if job.get("dub_mode") == "perso" and not voices_only:
+            # Named on Perso's workspace as on this app's screens: the name
+            # the person gave it, else the one it was made with.
             return run_cloud_dub(jid, video_path, out_path, job.get("source_lang"),
                                  language_code, job.get("num_speakers"), log,
-                                 tts_model=job.get("perso_model"))
+                                 tts_model=job.get("perso_model"),
+                                 title=job.get("title") or job.get("project"))
+        # A stage sent to Perso is named on its workspace as the cloud dub is
+        # (owner, 2026-10-22); said only then, for the same fakes.
+        to_perso = not voices_only and "perso" in (job.get("stt_engine"), job.get("separation"))
+        perso_name = (job.get("title") or job.get("project")) if to_perso else None
         return run_dub(
             video_path=video_path,
             srt_path=srt_path,
@@ -219,6 +227,7 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
             log=log,
             # Only said when it is true: the run_dub fakes in tests predate it.
             **({"resume": True} if resume else {}),
+            **({"title": perso_name} if perso_name else {}),
         )
 
     return work_now

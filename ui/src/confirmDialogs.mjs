@@ -28,9 +28,9 @@ import { t } from "./i18n.mjs";
  *   askDelete: (job: object, members?: object[]) => void,
  *   showIfOutOfSpace: (e: any) => boolean }}
  *   askCancelDub answers yes or no; askDelete asks about a project (every
- *   language in `members`) or a kept draft (`job.draftId`) and deletes it on
- *   yes; showIfOutOfSpace shows the full-disk dialog when `e` says so, and
- *   answers whether it did.
+ *   language in `members`) or a kept draft (`job.draftId`, and `job.onGone`
+ *   told once it is deleted) and deletes it on yes; showIfOutOfSpace shows
+ *   the full-disk dialog when `e` says so, and answers whether it did.
  */
 export function initConfirmDialogs({ $, state, forgetDraft, resetForNewJob, getLastJobId, forgetLastJob,
                                      projects }) {
@@ -109,6 +109,7 @@ export function initConfirmDialogs({ $, state, forgetDraft, resetForNewJob, getL
       forgetDraft(job.draftId);
       if ((getDraft() || {}).downloadId === job.draftId && !state.jobId) clearDraft();
       closeDelete();
+      if (job.onGone) job.onGone();
       return;
     }
     const btn = $("deleteConfirmBtn");

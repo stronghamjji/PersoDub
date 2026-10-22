@@ -12,14 +12,17 @@ import { t } from "./i18n.mjs";
 // The models known on 2026-10-19 (Perso's API docs and language list), in
 // the order the choice lists them: a line of what each is where Perso says,
 // its price in credits per second, and whether a plan below Pro is refused
-// (VT40314, app/perso_client.py PersoPlanRequiredError).
+// (VT40314, app/perso_client.py PersoPlanRequiredError). Oriole's and
+// Nightingale's lines say whether one line can be remade on its own, which
+// the app knows (app/perso_edit.py nightingale); Wren's is unknown, so it
+// has none (owner, 2026-10-22).
 const KNOWN = [
-  { id: "ORIOLE", label: "Oriole", desc: "Default", rate: 1 },
+  { id: "ORIOLE", label: "Oriole", desc: "Default · Can be edited line by line", rate: 1 },
   { id: "LINNET_4", label: "Linnet 4", rate: 1 },
   { id: "LINNET_3", label: "Linnet 3", rate: 1 },
   { id: "WREN", label: "Wren", rate: 1 },
   { id: "FINCH", label: "Finch", desc: "Lowest-cost basic dubbing", rate: 0.2, pro: true },
-  { id: "NIGHTINGALE", label: "Nightingale", desc: "Premium voice", rate: 6, pro: true },
+  { id: "NIGHTINGALE", label: "Nightingale", desc: "Premium voice · Cannot be edited line by line", rate: 6, pro: true },
 ];
 // The one selected until another is chosen, as on Perso's site.
 export const DEFAULT_MODEL = "ORIOLE";

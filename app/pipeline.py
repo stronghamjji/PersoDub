@@ -177,7 +177,7 @@ _NOTICE_ERRORS = {
     # popup says the limit and links to the plans; nothing to retry.
     PersoDurationLimitError: (
         "perso_duration_limit",
-        lambda: both("This video is longer than your Perso plan allows. Upgrade your plan, or switch Dubbing to Local model."),
+        lambda: both("This video is longer than your Perso plan allows. Upgrade your plan, or set Processing to Local model."),
         "link",
         None,
     ),
@@ -603,7 +603,7 @@ def _carry_speaker_labels(target_cues: List[dict], labelled_cues: List[dict]) ->
             cue["speaker_id"] = spk
 
 
-def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_notice, log):
+def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_notice, log, title=None):
     """Perso cloud voice/background separation for run_dub's 1b stage.
 
     Same contract as the local SeparationEngine ({"vocals", "background"}), and
@@ -627,7 +627,9 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
         if ws:
             name = ws.get("name") or f"workspace {ws.get('seq')}"
             log(f"   Perso workspace: {name} (#{ws.get('seq')})")
-        sep_paths = pc.separate(video_path, work_dir)
+        # Named on Perso's workspace as the project is here. Only said when
+        # there is a name: the fake clients in tests predate it.
+        sep_paths = pc.separate(video_path, work_dir, **({"title": title} if title else {}))
         # What THIS job consumed, not just the balance -- a surprise in the
         # credits payload must never discard the paid result (STT stage rule).
         note_credits(ws, pc, log, "Perso separation")
@@ -643,7 +645,7 @@ def _separate_with_perso(video_path, work_dir, perso_client, cancel_check, on_no
 
 
 def _stage_separate(video_path, work_dir, sep_engine, perso_client,
-                    cancel_check, on_notice, log, video_duration=None):
+                    cancel_check, on_notice, log, video_duration=None, title=None):
     """Stage 1/6 -- voice/background separation.
 
     Local Demucs (default) or Perso cloud. Either way a failure fails the whole
@@ -657,13 +659,15 @@ def _stage_separate(video_path, work_dir, sep_engine, perso_client,
 
     video_duration, when known, scales the local Demucs subprocess timeout for
     long videos (see app.timeouts.scaled_timeout) -- unused on the Perso path.
+    title, the project's name, is what Perso's workspace calls the upload --
+    unused on the local path.
     """
     began = time.monotonic()
     if (sep_engine or "").lower() == "perso":
         model = "Perso"
         _log_stage(log, "separate", "Separating background audio via Perso cloud…")
         sep_paths, perso_client = _separate_with_perso(
-            video_path, work_dir, perso_client, cancel_check, on_notice, log)
+            video_path, work_dir, perso_client, cancel_check, on_notice, log, title=title)
     else:
         engine = SeparationEngine(video_duration=video_duration)
         # getattr: test fakes may not carry them.
@@ -696,7 +700,8 @@ def _separation_note(vocals_path, background_path, model=None):
     return note
 
 
-def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, log, video_duration=None):
+def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, log, video_duration=None,
+                            title=None):
     """Stage 2/6 -- Perso cloud STT (diarization & timestamps). Returns
     (cues, client) -- the client so the job can report what the stage spent.
 
@@ -725,7 +730,8 @@ def _stage_transcribe_perso(video_path, perso_client, cancel_check, on_notice, l
         if ws:
             name = ws.get("name") or f"workspace {ws.get('seq')}"
             log(f"   Perso workspace: {name} (#{ws.get('seq')})")
-        segments = pc.transcribe(video_path)
+        # Named as the separation's is (_separate_with_perso).
+        segments = pc.transcribe(video_path, **({"title": title} if title else {}))
         # What THIS job consumed (balance before minus after), not just the
         # remaining balance (user feedback 2026-08-06). Counted as soon as
         # Perso answers, before the answer is read, as separation and the
@@ -1068,7 +1074,7 @@ def _duration_or_none(video_path):
 
 
 def _separate_or_reuse(video_path, work_dir, resume, sep_engine, perso_client, cancel_check, on_notice, log,
-                       video_duration=None):
+                       video_duration=None, title=None):
     """Stage 1/6, or the separation the earlier run saved (SEPARATED_NAME)
     when resuming. Returns (vocals_path, background_path, perso_client,
     model, reused)."""
@@ -1080,14 +1086,14 @@ def _separate_or_reuse(video_path, work_dir, resume, sep_engine, perso_client, c
         return vocals_path, background_path, perso_client, model, True
     vocals_path, background_path, perso_client, model = _stage_separate(
         video_path, work_dir, sep_engine, perso_client, cancel_check, on_notice, log,
-        video_duration=video_duration)
+        video_duration=video_duration, title=title)
     _save_json(work_dir, SEPARATED_NAME, _separation_note(vocals_path, background_path, model))
     return vocals_path, background_path, perso_client, model, False
 
 
 def _transcribe_or_reuse(video_path, work_dir, reuse, vocals_path, stt_engine, source_language_code,
                          diar_engine, num_speakers, perso_client, cancel_check, on_notice, log,
-                         video_duration=None):
+                         video_duration=None, title=None):
     """Stage 2/6, or the transcript the earlier run saved (TRANSCRIPT_NAME)
     when `reuse`. Perso cloud STT if the user picked it, else local Whisper.
     Whisper auto-detects the source language, and that code comes back so
@@ -1105,7 +1111,8 @@ def _transcribe_or_reuse(video_path, work_dir, reuse, vocals_path, stt_engine, s
     perso_cues = None
     if stt_engine == "perso":
         perso_cues, perso_client = _stage_transcribe_perso(
-            video_path, perso_client, cancel_check, on_notice, log, video_duration=video_duration)
+            video_path, perso_client, cancel_check, on_notice, log, video_duration=video_duration,
+            title=title)
     if perso_cues is None:
         src_cues, detected_code, diar_engine = _stage_transcribe_local(
             video_path, source_language_code, diar_engine, log, video_duration=video_duration,
@@ -1196,6 +1203,9 @@ def run_dub(
     cancel_check: Optional[Callable[[], bool]] = None,
     on_notice: Optional[Callable[[dict], None]] = None,
     resume: bool = False,
+    # The project's name, which a stage sent to Perso is named by on the
+    # workspace (owner, 2026-10-22); without one Perso shows input.
+    title: Optional[str] = None,
 ) -> dict:
     """Dub a single video and save it to out_path.
 
@@ -1253,7 +1263,7 @@ def run_dub(
                       duration=None if video_duration is None else round(video_duration, 1)):
         vocals_path, background_path, perso_client, sep_model, sep_reused = _separate_or_reuse(
             video_path, work_dir, resume, sep_engine, perso_client, cancel_check, on_notice, log,
-            video_duration=video_duration)
+            video_duration=video_duration, title=title)
 
     checkpoint()
 
@@ -1269,7 +1279,7 @@ def run_dub(
         src_cues, perso_cues, detected_code, perso_client, tx_reused = _transcribe_or_reuse(
             video_path, work_dir, sep_reused, vocals_path, stt_engine, source_language_code,
             diar_engine, num_speakers, perso_client, cancel_check, on_notice, log,
-            video_duration=video_duration)
+            video_duration=video_duration, title=title)
         source_cues = _pick_source_cues(source_srt_path, perso_cues, src_cues)
 
     checkpoint()

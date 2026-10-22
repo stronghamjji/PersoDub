@@ -1297,6 +1297,15 @@
     display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
   .draft-card { background: var(--well); border: 1px solid var(--well-line); border-radius: var(--radius);
     padding: 10px 12px; }
+  /* Replace · Remove on the Video card's label line, in the words of the
+     erase card's Reset (owner, 2026-10-22). The line under the card is
+     there only while it has something to say. */
+  .draft-part { position: relative; }
+  .draft-part .vc-acts { position: absolute; right: 13px; top: 11px; display: inline-flex; align-items: center;
+    gap: 6px; font-size: var(--font-label); color: var(--muted-foreground); }
+  .draft-part .vc-del { color: var(--destructive); }
+  .draft-import-status { text-align: left; }
+  .draft-import-status:empty { display: none; }
   /* Stuck to the foot of the card: with Advanced options open the card
      scrolls, and Start dubbing must not scroll away with it (QA 2026-09-29). */
   .draft-foot { margin-top: auto; padding: 10px 0 0; border-top: 1px solid var(--border);
@@ -2668,6 +2677,15 @@
   .opt-row > select, .opt-row > input { grid-column: 2; grid-row: 1; height: 24px; padding: 0 8px;
     border: 1px solid transparent; border-radius: 5px; background-color: var(--secondary); font-size: 11.5px; }
   .opt-row > select:focus, .opt-row > input:focus { border-color: var(--primary); }
+  /* Processing: Local model | Perso API, two halves in a dropdown's place
+     (owner, 2026-10-22) -- the export dialog's MP3 / WAV segment, as wide as
+     the dropdowns under it. The choice itself is #dubModeSelect, hidden. */
+  .opt-row > .mode-seg { grid-column: 2; grid-row: 1; display: flex; height: 24px; padding: 2px; box-sizing: border-box;
+    border-radius: 5px; background: var(--secondary); }
+  .mode-seg button { flex: 1 1 0; min-width: 0; padding: 0 8px; border: 0; border-radius: 4px; background: none;
+    font: inherit; font-size: 11.5px; color: var(--muted-foreground); cursor: pointer; white-space: nowrap; }
+  .mode-seg button[aria-checked="true"] { background: var(--primary); color: var(--primary-foreground); }
+  .mode-seg button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   /* The Dubbing model: a button on the dropdowns' fill and, pressed, a list
      in the ratio menu's dress with a line of what each model is under its
      name (ui/src/newProject.mjs paintPersoModel). The list is fixed to the
@@ -2695,8 +2713,27 @@
   .model-name { font-size: 11.5px; font-weight: 600; }
   .model-pick-btn .model-name { font-weight: 400; }
   .model-caption { font-size: 10.5px; color: var(--muted-foreground); }
+  /* The Target language's list (owner, 2026-10-22): the model list's dress,
+     a search field at its top, the languages scrolling under it, and how many
+     of how many a search has left. */
+  .lang-search { display: flex; align-items: center; gap: 7px; height: 28px; margin: 0 0 4px; padding: 0 9px;
+    border: 1px solid var(--primary); border-radius: 6px; background: var(--field); color: var(--muted-foreground); }
+  .lang-search input { flex: 1; min-width: 0; height: 26px; padding: 0; border: 0; border-radius: 0; background: none;
+    color: var(--foreground); font: inherit; font-size: 11.5px; }
+  .lang-search input:focus { border: 0; box-shadow: none; }
+  .lang-opts { position: relative; display: flex; flex-direction: column; gap: 1px; max-height: 240px; overflow-y: auto; }
+  .lang-count { margin-top: 4px; padding: 6px 9px 2px; border-top: 1px solid var(--border); font-size: 10.5px;
+    color: var(--muted-foreground); }
+  .lang-count[hidden] { display: none; }
   .model-pro { flex: none; padding: 1px 7px; border: 1px solid var(--border); border-radius: 999px;
     font-size: 10px; color: var(--muted-foreground); white-space: nowrap; }
+  /* A Perso API dubbing's stage rows, greyed (ui/src/app.mjs paintDubMode):
+     each reads "Perso" over the choice made for this computer, which stays
+     the dropdown's value for when Local model is chosen again (owner,
+     2026-10-22). The word sits where the dropdown's own would, as dim. */
+  .advanced-body.by-perso .opt-row > select { -webkit-text-fill-color: transparent; }
+  .advanced-body.by-perso .opt-row:has(> select)::after { content: "Perso"; grid-column: 2; grid-row: 1;
+    padding: 0 9px; font-size: 11.5px; color: var(--foreground); opacity: 0.45; pointer-events: none; }
   .opt-row > .settings-hint { grid-column: 2; margin: 5px 0 0; font-size: 11px; color: var(--muted-foreground); }
   .opt-row > .settings-hint:empty { display: none; }
   .opt-row > .settings-hint.model-busy { color: var(--destructive); }

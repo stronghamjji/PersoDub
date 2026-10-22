@@ -719,7 +719,7 @@ test("the top bar is the name, then Settings and the pane buttons; Home and New 
   // project is last. Buttons dressed as tabs: no data-tab, so no "on" state.
   const row = html.slice(html.indexOf('id="leftTabs"'), html.indexOf('id="tabDubbing"'));
   const order = ['id="homeBtn"', 'class="left-sep"', 'data-tab="dubbing"', 'data-tab="audio"',
-                 'data-tab="captions"', 'data-tab="erase"', 'id="newProjectBtn"'].map((s) => row.indexOf(s));
+                 'data-tab="erase"', 'data-tab="captions"', 'id="newProjectBtn"'].map((s) => row.indexOf(s));
   assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), "Home, a hairline, the four tabs, New project");
   const home = row.slice(row.indexOf('id="homeBtn"'), row.indexOf("</button>"));
   assert.ok(home.includes("M15 21v-8a1 1 0 0 0-1-1h-4") && home.includes("<span>Home</span>") && !home.includes("data-tab"),
@@ -781,7 +781,13 @@ test("the left panel is a row of tabs, each over a body of its own", () => {
   const tabs = [...pane.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]);
   // One project holds one video: there is no Media tab to keep it in
   // (owner, 2026-09-30).
-  assert.deepEqual(tabs, ["dubbing", "audio", "captions", "erase"]);
+  // Home's order, its three tools first, and the subtitles' look last under a
+  // name that says what it holds (owner, 2026-10-22).
+  assert.deepEqual(tabs, ["dubbing", "audio", "erase", "captions"]);
+  const captions = pane.slice(pane.indexOf('data-tab="captions"'));
+  assert.ok(captions.slice(0, captions.indexOf("</button>")).endsWith("</svg>Subtitle style"));
+  assert.match(readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8"),
+    /\['#leftTabs \[data-tab="captions"\]', t\("Subtitle style"\)\]/);
   assert.ok(!/tabMedia|mediaTab|media-thumb|mediaSearch|mediaImpBtn/.test(html), "nothing of the Media tab is left");
   assert.match(pane, /<div class="tab-body erase-tab audio-tab" id="tabAudio" role="tabpanel" hidden>/);
   assert.match(pane, /<button class="left-tab on"[^>]*data-tab="dubbing" aria-selected="true">/, "Dubbing is on to begin with");
@@ -978,7 +984,7 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
 test("each API key and the ChatGPT sign-in say which step uses them", () => {
   const html = readPage();
   const keys = html.slice(html.indexOf('id="settingsPanel-keys"'), html.indexOf('id="settingsPanel-storage"'));
-  assert.match(keys, /id="persoKeyInput"[^>]*>\s*<!--[^]*?-->\s*<div data-i18n class="settings-hint" id="persoKeyHint">Used when Dubbing, Audio separation or Speech-to-text is set to Perso API\. Uses Perso credits\.<\/div>/);
+  assert.match(keys, /id="persoKeyInput"[^>]*>\s*<!--[^]*?-->\s*<div data-i18n class="settings-hint" id="persoKeyHint">Used when Processing, Voice separation or Speech-to-text is set to Perso API\. Uses Perso credits\.<\/div>/);
   assert.match(keys, /id="geminiKeyInput"[^>]*>\s*<div data-i18n class="settings-hint" id="geminiKeyHint">Used only when Translation is set to Gemini API\. Uses your own Google API quota\.<\/div>/);
   // ChatGPT's state and button stay on one line, and its line goes under them.
   assert.match(keys, /<span>ChatGPT<\/span>\s*<div class="set-ctl">\s*<div class="set-ctl set-inline">\s*<span class="settings-hint" id="chatgptState"[^]*?id="chatgptSignInBtn"[^]*?<\/button>\s*<\/div>\s*<div data-i18n class="settings-hint" id="chatgptHint">Used when Translation is ChatGPT \(the default on a new install\)\. The Dub Agent's Codex uses this sign-in too\.<\/div>\s*<\/div>/);
@@ -996,6 +1002,22 @@ test("Audio separation and Speech-to-text on this computer point at the Perso AP
   const html = readPage();
   assert.match(html, /sep: \{ get local\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Perso API\."\)\]; \},/);
   assert.match(html, /stt: \{ get local\(\) \{ return \[t\("Runs on this computer, free\."\), t\("For accuracy, use the Perso API\."\)\]; \},/);
+});
+
+// The dubbing's own step that splits the voice from the background is Voice
+// separation, so it no longer reads as the Separate audio tab (owner, 2026-10-22):
+// in Korean on the running screen's steps and the finished dubbing's engine
+// line too ("Separating audio" and "Separation" are only ever that step).
+test("the dubbing step is Voice separation, and the tool tab keeps its own name", () => {
+  const html = readPage();
+  assert.match(html, /<label data-i18n for="sepSelect">Voice separation<\/label>/);
+  const tab = html.slice(html.indexOf('data-tab="audio"'));
+  assert.ok(tab.slice(0, tab.indexOf("</button>")).endsWith("</svg>Separate audio"));
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Voice separation"], "목소리 분리");
+  assert.equal(ko["Separating audio"], "목소리 분리");
+  assert.equal(ko.Separation, "목소리 분리");
+  assert.equal(ko["Separate audio"], "오디오 분리");
 });
 
 test("the sentence that named no API is gone from the page and from both tables", () => {
@@ -1035,7 +1057,7 @@ test("the New project dialog is two columns, and its options carry their own loo
   // The look travels on the moved nodes themselves.
   assert.match(dlg, /<div class="opt-panel" id="langGrid">/);
   assert.match(dlg, /<div class="opt-panel advanced-body" id="advancedBody" hidden>/);
-  assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "two languages and seven options, each a row");
+  assert.equal((dlg.match(/<div class="field opt-row">/g) || []).length, 9, "Processing, two languages and six options, each a row");
   for (const id of ["sourceLangSelect", "targetLangSelect", "dubModeSelect", "sepSelect", "sttSelect",
                     "translateSelect", "voiceSelect", "qualitySelect", "numSpeakers",
                     "dubModeHint", "sepHint", "sttHint", "sttModelHint", "translateHint", "translateModelHint",
@@ -1045,6 +1067,70 @@ test("the New project dialog is two columns, and its options carry their own loo
   assert.match(html, /grid-template-columns: 320px minmax\(0, 1fr\); gap: 16px; padding: 16px; \}/);
   // Scrolling, the dialog keeps its stuck 55 foot clear the way the draft card does (H29).
   assert.match(html, /@media \(max-width: 759px\) \{\n    \.project-modal \{ overflow-y: auto; scroll-padding-bottom: 55px; \}/);
+});
+
+// Processing and the Dubbing model sit above the languages, outside Advanced
+// options, because the languages follow both (owner, 2026-10-22). Processing
+// is two halves, Local model and Perso API, over the hidden #dubModeSelect.
+test("Processing and the Dubbing model come first in the options block, above the languages", () => {
+  const html = readPage();
+  const grid = html.slice(html.indexOf('<div class="opt-panel" id="langGrid">'), html.indexOf('id="engineWarning"'));
+  const order = ['id="dubModeLabel"', 'id="dubModeSeg"', 'id="dubModeSelect"', 'id="persoModelRow"',
+                 'id="sourceLangSelect"', 'id="targetLangSelect"'].map((s) => grid.indexOf(s));
+  assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), "Processing, the model, then the two languages");
+  assert.match(grid, /<label data-i18n id="dubModeLabel">Processing<\/label><div class="mode-seg" id="dubModeSeg" role="radiogroup" aria-labelledby="dubModeLabel"><button type="button" role="radio" id="dubModeLocal" aria-checked="true" data-i18n>Local model<\/button><button type="button" role="radio" id="dubModePerso" aria-checked="false">Perso API<\/button><\/div><select id="dubModeSelect" hidden>/);
+  const advanced = html.slice(html.indexOf('id="advancedBody"'), html.indexOf('id="projectError"'));
+  assert.ok(!advanced.includes("dubModeSelect") && !advanced.includes("persoModelRow"), "neither is under Advanced options");
+  assert.ok(!html.includes(">On this computer<"), "the old name of the choice is gone");
+  assert.match(html, /\.opt-row > \.mode-seg \{ grid-column: 2; grid-row: 1; display: flex; height: 24px;/);
+  assert.match(html, /\.mode-seg button\[aria-checked="true"\] \{ background: var\(--primary\); color: var\(--primary-foreground\); \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.deepEqual([ko.Processing, ko["Local model"]], ["처리 방식", "로컬 모델"]);
+  assert.ok(!Object.hasOwn(ko, "On this computer"));
+});
+
+// The Target language is a list with a search field, in the Dubbing model's
+// dress, over the hidden #targetLangSelect (owner, 2026-10-22).
+// ui/src/newProject.test.mjs runs it.
+test("the Target language is a list with a search on top, not a bare dropdown", () => {
+  const html = readPage();
+  assert.match(html, /<label data-i18n id="targetLangLabel">Target language<\/label><div class="model-pick" id="targetLangPick"><\/div><select id="targetLangSelect" hidden><\/select>/);
+  assert.match(html, /\.lang-search \{ display: flex; align-items: center; gap: 7px; height: 28px;/);
+  assert.match(html, /\.lang-opts \{ position: relative; display: flex; flex-direction: column; gap: 1px; max-height: 240px; overflow-y: auto; \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Search languages"], "언어 검색");
+  assert.equal(ko["{shown} of {all}"], "{all}개 중 {shown}개");
+});
+
+// The Video card's two ways out, words at its top right in the erase card's
+// Reset dress, and the line under it for a video taking its place (owner,
+// 2026-10-22). ui/src/draftSetup.test.mjs, draftImport.test.mjs and
+// dubbingPrep.test.mjs run them.
+test("the Video card has Replace · Remove at its top right, and a line under it only when it has something to say", () => {
+  const html = readPage();
+  assert.match(html, /<div class="draft-part">\s*<div class="draft-card video-card" id="draftPartCard"><\/div>\s*<span class="vc-acts"><button data-i18n class="erase-link" id="draftReplaceBtn" type="button">Replace<\/button><span aria-hidden="true">·<\/span><button data-i18n class="erase-link vc-del" id="draftRemoveBtn" type="button">Remove<\/button><\/span>\s*<\/div>\s*<div class="import-status draft-import-status" id="draftImportStatus"><\/div>/);
+  assert.match(html, /\.draft-part \{ position: relative; \}/);
+  assert.match(html, /\.draft-part \.vc-acts \{ position: absolute; right: 13px; top: 11px;/);
+  assert.match(html, /\.draft-part \.vc-del \{ color: var\(--destructive\); \}/);
+  assert.match(html, /\.draft-import-status:empty \{ display: none; \}/);
+  // A replaced video's Draft card leaves Home, as one an erase started on does.
+  assert.match(html, /onReplaced: \(downloadId\) => forgetDraft\(downloadId\),/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko.Replace, "바꾸기");
+  assert.equal(ko.Remove, "삭제");
+});
+
+// With Perso API the stage rows read "Perso" over the dropdowns' own words,
+// which stay their values; only the words are hidden, so the arrow stays
+// (owner, 2026-10-22, the 2-1 picture). ui/src/dubbingPrep.test.mjs runs it.
+test("a Perso dubbing's greyed stage rows read Perso, and say Perso handles them", () => {
+  const html = readPage();
+  assert.match(html, /\.advanced-body\.by-perso \.opt-row > select \{ -webkit-text-fill-color: transparent; \}/);
+  assert.match(html, /\.advanced-body\.by-perso \.opt-row:has\(> select\)::after \{ content: "Perso"; grid-column: 2; grid-row: 1;/);
+  assert.match(html, /\$\("advancedBody"\)\.classList\.toggle\("by-perso", cloud\);/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Perso handles this."], "Perso가 처리해요.");
+  assert.equal(ko["The video is uploaded to Perso."], "영상이 Perso로 올라가요.");
 });
 
 test("the confirms keep their corner X for its listeners, but hidden", () => {
@@ -1394,7 +1480,7 @@ test("Home's Erase subtitles card says what erasing is for", () => {
 // the Dubbing model choice says the chosen one's own count (owner, 2026-10-21):
 // the markup and the words it is painted with say the same sentence.
 test("Help says the Perso API's 100+ languages depend on the dubbing model", () => {
-  const where = "This computer (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).";
+  const where = "Local model (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).";
   assert.ok(readPage().includes(`<div class="help-where">${where}</div>`));
   const words = readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8");
   assert.ok(words.includes(`["#helpOverlay .help-item:nth-child(1) .help-where", t("${where}")]`));

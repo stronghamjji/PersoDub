@@ -168,7 +168,7 @@ Finish the setup, not just a plan. Tell me any step you could not do.
 - **Fix any line after the dub.** Change the words, the speaker or the voice of one line and only that line is remade. Cut on the timeline, or tell the Dub Agent what to fix.
 - **Fits the words to the time.** Other tools speed the audio up. On this computer, PersoDub fits the translation instead, and speeds a line up (10% at most) only when it would run into the next one.
 - **Voice cloning, not narration.** Each speaker still sounds like themselves.
-- **Everything else is kept.** Music and effects stay. The translated `.srt` comes with the video, or burn it in from the Captions tab.
+- **Everything else is kept.** Music and effects stay. The translated `.srt` comes with the video, or burn it in from the Subtitle style tab.
 
 ## Details
 

@@ -16,7 +16,7 @@ const words = () => [
   ["#homeHelp", t("Help")],
   ['#leftTabs [data-tab="dubbing"]', t("Dubbing")],
   ['#leftTabs [data-tab="audio"]', t("Separate audio")],
-  ['#leftTabs [data-tab="captions"]', t("Captions")],
+  ['#leftTabs [data-tab="captions"]', t("Subtitle style")],
   ['#leftTabs [data-tab="erase"]', t("Erase")],
   // Home and New project move between the tab row and the top bar.
   ["#homeBtn span", t("Home")],
@@ -40,10 +40,10 @@ const words = () => [
   ["#helpTitle", t("What PersoDub does")],
   ["#helpOverlay .help-item:nth-child(1) b", t("Dubbing")],
   ["#helpOverlay .help-item:nth-child(1) p", t("Voices a video in another language, in each speaker’s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.")],
-  ["#helpOverlay .help-item:nth-child(1) .help-where", t("This computer (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).")],
+  ["#helpOverlay .help-item:nth-child(1) .help-where", t("Local model (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).")],
   ["#helpOverlay .help-item:nth-child(2) b", t("Separate audio")],
   ["#helpOverlay .help-item:nth-child(2) p", t("Splits the sound into Voice (only the speech) and Background (music, effects, noise). Save either one, or go on to Dubbing.")],
-  ["#helpOverlay .help-item:nth-child(2) .help-where", t("This computer or Perso API.")],
+  ["#helpOverlay .help-item:nth-child(2) .help-where", t("Local model or Perso API.")],
   ["#helpOverlay .help-item:nth-child(3) b", t("Erase subtitles")],
   // Erase subtitles says why, how and how long, a line each (owner, 2026-10-22).
   ["#helpOverlay .help-item:nth-child(3) p:nth-of-type(1)", t("Why: Original subtitles left in the video overlap the translated ones.")],

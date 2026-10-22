@@ -398,9 +398,12 @@ $("translateSelect").addEventListener("change", () => applyEngineAvailabilityToF
 // the hint slots render these with pre-line whitespace. Getters, so each is
 // read in the language of the moment. The Perso API dubbing hint names the
 // free first minute (owner, 2026-10-21): it is what gets people to sign up.
+// And that the video leaves this computer (owner, 2026-10-22): the intro
+// page promises it stays, for the local path.
 const ENGINE_HINTS = {
   dubMode: { get local() { return [t("Runs on this computer, free."), t("You can edit the script after.")]; },
-             get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that.")]; } },
+             get perso() { return [t("Perso does the dubbing start to finish."), t("Sign up and the first minute is free. Credits after that."),
+                                   t("The video is uploaded to Perso.")]; } },
   sep: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
          get perso() { return [t("Most accurate."), t("Uses Perso credits.")]; } },
   stt: { get local() { return [t("Runs on this computer, free."), t("For accuracy, use the Perso API.")]; },
@@ -411,12 +414,16 @@ const ENGINE_HINTS = {
                get chatgpt() { return [t("Free within a ChatGPT account's limit. Sign in once, no download.")]; } },
   voice: { get qwen3() { return [t("Runs on this computer, free."), t("Clones each speaker\u2019s voice.")]; } },
 };
+// Perso does every stage of a Perso API dubbing: the greyed rows say so, not
+// what they would do on this computer (owner, 2026-10-22).
+const byPerso = () => $("dubModeSelect").value === "perso";
 function updateEngineHints() {
+  const stage = (hints, value) => (byPerso() ? [t("Perso handles this.")] : hints[value] || []).join("\n");
   $("dubModeHint").textContent = (ENGINE_HINTS.dubMode[$("dubModeSelect").value] || []).join("\n");
-  $("sepHint").textContent = (ENGINE_HINTS.sep[$("sepSelect").value] || []).join("\n");
-  $("sttHint").textContent = (ENGINE_HINTS.stt[$("sttSelect").value] || []).join("\n");
-  $("translateHint").textContent = (ENGINE_HINTS.translate[$("translateSelect").value] || []).join("\n");
-  $("voiceHint").textContent = (ENGINE_HINTS.voice[$("voiceSelect").value] || []).join("\n");
+  $("sepHint").textContent = stage(ENGINE_HINTS.sep, $("sepSelect").value);
+  $("sttHint").textContent = stage(ENGINE_HINTS.stt, $("sttSelect").value);
+  $("translateHint").textContent = stage(ENGINE_HINTS.translate, $("translateSelect").value);
+  $("voiceHint").textContent = stage(ENGINE_HINTS.voice, $("voiceSelect").value);
 }
 for (const id of ["dubModeSelect", "sepSelect", "sttSelect", "translateSelect", "voiceSelect"]) {
   $(id).addEventListener("change", updateEngineHints);
@@ -429,6 +436,10 @@ function paintDubMode() {
   for (const id of ["sepSelect", "sttSelect", "translateSelect", "voiceSelect", "qualitySelect"]) {
     $(id).disabled = cloud;
   }
+  // ...and each greyed one reads "Perso" (static/css/app.css .by-perso), over
+  // the choice made for this computer, which is still its value and is back
+  // in sight the moment Local model is chosen again.
+  $("advancedBody").classList.toggle("by-perso", cloud);
 }
 // The voice engine's warning is for a dub on this computer only: asked again
 // when the choice changes.
@@ -604,7 +615,7 @@ const newProject = initNewProjectUi({
   applyEngineAvailability: applyEngineAvailabilityToForm,
   // The download line under each dropdown too: a remembered translator that
   // is still downloading must say so the moment the dialog puts it back.
-  updateEngineHints: () => { updateEngineHints(); models.repaint(); },
+  updateEngineHints: () => { updateEngineHints(); updateQualityHint(); models.repaint(); },
   paintDubMode,
   playRange,
   cancelRange,
@@ -740,6 +751,9 @@ const draftImport = initDraftImport({
   $, state,
   getScreen: () => document.body.dataset.screen,
   checkFile: (file) => videoProblem(file),
+  // A video replaced on the draft is let go the way one an erase was started
+  // on is: its Draft card leaves Home, so drafts do not pile up (owner, 2026-10-22).
+  onReplaced: (downloadId) => forgetDraft(downloadId),
 });
 const draftSetup = initDraftSetup({
   $, state, showScreen, setTopbar,
@@ -760,6 +774,10 @@ const draftSetup = initDraftSetup({
   getScreen: () => document.body.dataset.screen,
   // A dubbing of a cut the Audio tab already separated takes its two sounds.
   stemsFrom: () => (audioTab.separatedJob() || {}).id || "",
+  // Remove on the Video card: the Home card's Delete, asked the same way,
+  // and then the empty project, top bar and all (owner, 2026-10-22).
+  removeDraft: (d) => confirmDialogs.askDelete({ draftId: d.downloadId, project: d.name || "this draft",
+                                                onGone: () => draftSetup.showDraftScreen() }),
 });
 // ---------------- Separate audio ----------------
 let showAudioLanes = () => {};
@@ -1511,9 +1529,10 @@ const QUALITY_HINTS = {
   get high() { return t("Best of 4 takes per line. About 4× slower."); },
 };
 function updateQualityHint() {
-  $("qualityHint").textContent = QUALITY_HINTS[$("qualitySelect").value] || "";
+  $("qualityHint").textContent = byPerso() ? t("Perso handles this.") : QUALITY_HINTS[$("qualitySelect").value] || "";
 }
 $("qualitySelect").addEventListener("change", updateQualityHint);
+$("dubModeSelect").addEventListener("change", updateQualityHint);
 updateQualityHint();
 
 // ---------------- Start dubbing ----------------

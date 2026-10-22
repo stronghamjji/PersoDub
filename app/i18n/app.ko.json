@@ -200,7 +200,7 @@
   "This site isn't supported yet.": "아직 이 사이트는 지원하지 않아요.",
   "This uses Perso credits. Ask the user, then send confirm=true.": "Perso 크레딧을 써요. 사용자에게 먼저 물어본 뒤 confirm=true로 보내 주세요.",
   "This video has no sound.": "이 영상에는 소리가 없어요.",
-  "This video is longer than your Perso plan allows. Upgrade your plan, or switch Dubbing to Local model.": "이 영상은 지금 Perso 요금제가 허용하는 길이보다 길어요. 요금제를 올리거나 더빙을 '로컬 모델'로 바꾸면 돼요.",
+  "This video is longer than your Perso plan allows. Upgrade your plan, or set Processing to Local model.": "이 영상은 지금 Perso 요금제가 허용하는 길이보다 길어요. 요금제를 올리거나 처리 방식을 '로컬 모델'로 바꾸면 돼요.",
   "This video is no longer on this computer.": "이 영상이 이제 내 컴퓨터에 없어요.",
   "This video is not erased yet.": "이 영상은 아직 자막을 지우지 않았어요.",
   "This video is only {seconds}s long.": "이 영상은 {seconds}초밖에 안 돼요.",

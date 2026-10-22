@@ -285,10 +285,10 @@
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.8 20v-4.1l1.9.2a2.3 2.3 0 0 0 2.164-2.1V8.3A5.37 5.37 0 0 0 2 8.25c0 2.8.656 3.054 1 4.55a5.77 5.77 0 0 1 .029 2.758L2 20"/><path d="M19.8 17.8a7.5 7.5 0 0 0 .003-10.603"/><path d="M17 15a3.5 3.5 0 0 0-.025-4.975"/></svg>Dubbing</button>
                 <button class="left-tab" type="button" role="tab" data-tab="audio" aria-selected="false">
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>Separate audio</button>
-                <button class="left-tab" type="button" role="tab" data-tab="captions" aria-selected="false" disabled title="After dubbing">
-                  <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></svg>Captions</button>
                 <button class="left-tab" type="button" role="tab" data-tab="erase" aria-selected="false">
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg>Erase</button>
+                <button class="left-tab" type="button" role="tab" data-tab="captions" aria-selected="false" disabled title="After dubbing">
+                  <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></svg>Subtitle style</button>
                 <button class="left-tab way-out way-new" id="newProjectBtn" type="button" aria-label="New project" data-i18n-aria-label="New project" hidden>
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg><span>New project</span></button>
               </div>
@@ -316,8 +316,15 @@
                   <button class="btn btn-outline btn-sm draft-back" id="draftBackBtn" type="button" hidden data-i18n>Back</button>
                 </div>
                 <!-- Which video, and how much of it is kept
-                     (ui/src/format.mjs videoCardHtml). -->
-                <div class="draft-card video-card" id="draftPartCard"></div>
+                     (ui/src/format.mjs videoCardHtml), with Replace and
+                     Remove at its top right (owner, 2026-10-22;
+                     ui/src/draftSetup.mjs), and under it what a video taking
+                     its place is doing, or why it could not (ui/src/draftImport.mjs). -->
+                <div class="draft-part">
+                  <div class="draft-card video-card" id="draftPartCard"></div>
+                  <span class="vc-acts"><button data-i18n class="erase-link" id="draftReplaceBtn" type="button">Replace</button><span aria-hidden="true">·</span><button data-i18n class="erase-link vc-del" id="draftRemoveBtn" type="button">Remove</button></span>
+                </div>
+                <div class="import-status draft-import-status" id="draftImportStatus"></div>
                 <!-- Over 30 minutes kept: said plainly, not refused (ui/src/draftSetup.mjs). -->
                 <div data-i18n class="job-notice" id="draftLongHint" hidden>Over 30 minutes. Dubbing takes much longer and depends on your computer. Cutting into parts is recommended.</div>
                 <div id="draftOptionsSlot"></div>
@@ -482,7 +489,7 @@
                     <div class="erase-card video-card" id="audioPartCard"></div>
                     <div class="erase-card" id="audioEngineCard">
                       <label data-i18n class="k" for="audioEngine">Runs on</label>
-                      <select id="audioEngine"><option value="local" selected data-i18n>This computer</option><option value="perso">Perso API</option></select>
+                      <select id="audioEngine"><option value="local" selected data-i18n>Local model</option><option value="perso">Perso API</option></select>
                       <div class="s" id="audioEngineNote"></div>
                     </div>
                     <div class="erase-card" id="audioRunCard" hidden>
@@ -860,8 +867,20 @@
              styled by where they happen to sit. Only this box scrolls. -->
         <div class="project-options" id="projectOptions">
           <div class="opt-panel" id="langGrid">
+            <!-- How the dubbing is made, then Perso's voice model when Perso
+                 makes it: above the languages, which follow both (owner,
+                 2026-10-22). The two halves set #dubModeSelect, kept hidden,
+                 which everything that reads the choice goes by
+                 (ui/src/newProject.mjs paintModeSwitch). -->
+            <div class="field opt-row"><label data-i18n id="dubModeLabel">Processing</label><div class="mode-seg" id="dubModeSeg" role="radiogroup" aria-labelledby="dubModeLabel"><button type="button" role="radio" id="dubModeLocal" aria-checked="true" data-i18n>Local model</button><button type="button" role="radio" id="dubModePerso" aria-checked="false">Perso API</button></div><select id="dubModeSelect" hidden><option value="local" selected>Local model</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint"></div></div>
+            <!-- Perso's voice models, when Perso does the dubbing; the target
+                 languages follow the one chosen (ui/src/newProject.mjs paintPersoModel). -->
+            <div class="field opt-row" id="persoModelRow" hidden><label data-i18n id="persoModelLabel">Dubbing model</label><div class="model-pick" id="persoModelPick"></div><div class="settings-hint" id="persoModelHint"></div></div>
             <div class="field opt-row"><label data-i18n for="sourceLangSelect">Original language</label><select id="sourceLangSelect"><option value="" selected data-i18n>Auto-detect</option></select></div>
-            <div class="field opt-row"><label data-i18n for="targetLangSelect">Target language</label><select id="targetLangSelect"></select></div>
+            <!-- A list with a search field, in the Dubbing model's dress
+                 (owner, 2026-10-22); it sets #targetLangSelect, kept hidden
+                 (ui/src/newProject.mjs paintTargetPick). -->
+            <div class="field opt-row"><label data-i18n id="targetLangLabel">Target language</label><div class="model-pick" id="targetLangPick"></div><select id="targetLangSelect" hidden></select></div>
           </div>
           <!-- The voice engine that failed to start, for a dub on this computer,
                said here rather than only after Start (ui/src/dubApi.mjs
@@ -871,11 +890,7 @@
             <span class="chev"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span><span data-i18n>Advanced options</span>
           </button>
           <div class="opt-panel advanced-body" id="advancedBody" hidden>
-            <div class="field opt-row"><label data-i18n for="dubModeSelect">Dubbing</label><select id="dubModeSelect"><option value="local" selected data-i18n>On this computer</option><option value="perso">Perso API</option></select><div class="settings-hint" id="dubModeHint"></div></div>
-            <!-- Perso's voice models, when Perso does the dubbing; the target
-                 languages follow the one chosen (ui/src/newProject.mjs paintPersoModel). -->
-            <div class="field opt-row" id="persoModelRow" hidden><label data-i18n id="persoModelLabel">Dubbing model</label><div class="model-pick" id="persoModelPick"></div><div class="settings-hint" id="persoModelHint"></div></div>
-            <div class="field opt-row"><label data-i18n for="sepSelect">Audio separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sepHint"></div></div>
+            <div class="field opt-row"><label data-i18n for="sepSelect">Voice separation</label><select id="sepSelect"><option value="local" selected>Demucs</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sepHint"></div></div>
             <div class="field opt-row"><label data-i18n for="sttSelect">Speech-to-text</label><select id="sttSelect"><option value="local" selected>Whisper</option><option value="perso">Perso API</option></select><div class="settings-hint" id="sttHint"></div><div class="settings-hint model-line" id="sttModelHint" hidden></div></div>
             <div class="field opt-row"><label data-i18n for="translateSelect">Translation</label><select id="translateSelect"><option value="chatgpt" selected>ChatGPT</option><option value="hunyuan">Hunyuan (1.8B)</option><option value="gemma">Gemma 3 (12B)</option><option value="gemini">Gemini API</option></select><div class="settings-hint" id="translateHint"></div><div class="settings-hint model-line" id="translateModelHint" hidden></div></div>
             <div class="field opt-row"><label data-i18n for="voiceSelect">Text-to-speech</label><select id="voiceSelect"><option value="qwen3" selected>Qwen3-TTS</option></select><div class="settings-hint" id="voiceHint"></div><div class="settings-hint model-line" id="voiceModelHint" hidden></div></div>
@@ -955,8 +970,8 @@
     <div class="modal-head"><h2 id="helpTitle">What PersoDub does</h2></div>
     <div class="modal-body">
       <div class="modal-inner">
-        <div class="help-item"><b>Dubbing</b><p>Voices a video in another language, in each speaker&#8217;s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.</p><div class="help-where">This computer (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).</div></div>
-        <div class="help-item"><b>Separate audio</b><p>Splits the sound into Voice (only the speech) and Background (music, effects, noise). Save either one, or go on to Dubbing.</p><div class="help-where">This computer or Perso API.</div></div>
+        <div class="help-item"><b>Dubbing</b><p>Voices a video in another language, in each speaker&#8217;s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.</p><div class="help-where">Local model (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).</div></div>
+        <div class="help-item"><b>Separate audio</b><p>Splits the sound into Voice (only the speech) and Background (music, effects, noise). Save either one, or go on to Dubbing.</p><div class="help-where">Local model or Perso API.</div></div>
         <div class="help-item"><b>Erase subtitles</b><p>Why: Original subtitles left in the video overlap the translated ones.</p><p>How: Fit the box → Erase subtitles → Dubbing → burn in a Captions style.</p><div class="help-where">Time: About 10 min for a 10-second video (Local model).</div></div>
         <div class="help-item"><b>Save video</b><p>Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Download saves it, or dub it, separate it or erase it from there.</p><div class="help-where">This computer.</div></div>
         <div class="help-item"><b>Dub Agent</b><p>Ask in plain words, such as &#8220;Korean dubbing for this link&#8221; or &#8220;make line 9 fit&#8221;. It works through the same tools and shows each step.</p><div class="help-where">Claude Code, installed and signed in, or Codex, which the app can download and sign in.</div></div>
@@ -1104,7 +1119,7 @@
           <div class="set-ctl">
             <input type="password" id="persoKeyInput" placeholder="Not set" data-i18n-placeholder="Not set" spellcheck="false">
             <!-- Which steps each key and sign-in is for (owner, 2026-10-21). -->
-            <div data-i18n class="settings-hint" id="persoKeyHint">Used when Dubbing, Audio separation or Speech-to-text is set to Perso API. Uses Perso credits.</div>
+            <div data-i18n class="settings-hint" id="persoKeyHint">Used when Processing, Voice separation or Speech-to-text is set to Perso API. Uses Perso credits.</div>
             <!-- The only path from this app to a Perso account. href is replaced with the
                  UTM-tagged link from /api/settings on open; this plain URL is the fallback
                  so the link still works if that request fails. -->

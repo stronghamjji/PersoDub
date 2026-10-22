@@ -26,7 +26,7 @@ Beside it are the **Create project** banner, a row of cards (the **Dub Agent** a
 the four tools) and your projects.
 
 A project opens on the work screen: tabs on the left (**Dubbing**, **Separate
-audio**, **Captions**, **Erase**, between **Home** and **New project**), the video in
+audio**, **Erase**, **Subtitle style**, between **Home** and **New project**), the video in
 the middle, the **Dub Agent** panel on the right and the timeline under all three.
 Along the top is the bar with the project's name, **Settings** and the three pane
 buttons that show or hide the left panel, the timeline and the Dub Agent. **Download**
@@ -47,8 +47,11 @@ you can play it, cut it, and save a copy. See
 ## New project
 
 As soon as one video is ready it opens as a new project: the work screen, with the
-**Dubbing** tab on the left showing **Before dubbing**. Several videos at once open
-the **New project** dialog instead, where one set of choices starts them all.
+**Dubbing** tab on the left showing **Before dubbing**. Its **Video** card has
+**Replace**, which opens the file picker and puts the video you choose in its place
+(the old one's Draft card leaves Home), and **Remove**, which asks first, deletes this
+draft and leaves the project empty for another video. Several videos at once open the **New project** dialog instead, where
+one set of choices starts them all.
 
 **Cutting** happens on the timeline under the video: **Split at playhead**, **Delete
 left of playhead**, **Delete right of playhead** and **Delete selected** take out what
@@ -56,32 +59,40 @@ you do not want, with **Undo** and **Redo**. Leave it alone to take the whole vi
 cut video is re-encoded before the work starts, which takes a moment but cuts
 exactly where you asked.
 
+**Processing**, first, is how the dub is made: **Local model**, the free path on this
+computer and the one a first project starts on, or **Perso API**, where the video is
+uploaded to Perso and Perso makes the whole dub, which needs a Perso API key and uses
+Perso credits. With **Perso API** the **Dubbing model** row under it picks Perso's voice
+model: *Oriole* to begin with, *Nightingale*, *Wren* and the others. Later projects start
+on the choices you made last.
+
 **Original language** can stay on *Auto-detect* unless detection gets it wrong.
 
 **Target language** is the language to dub into: ten on this computer (English, Korean,
 Chinese, Japanese, French, German, Italian, Portuguese, Russian and Spanish), 100+ with
-the Perso API, depending on the **Dubbing model** below ([full list](languages.md)).
+the Perso API, depending on the **Dubbing model** above ([full list](languages.md)).
+It opens as a list with a search field on top: type part of a name, in your language
+or in English, or a code such as *zh*, and only the languages that match stay, with a
+count such as *2 of 77* under them.
 
 From here:
 
 - **Download**, at the right end of the tabs above the video, saves the kept part as a
   video, or as audio only, into Downloads.
 - The **Separate audio** and **Erase** tabs work on the same video.
-- **Start dubbing** begins the dub.
+- **Start dubbing** begins the dub. With **Perso API** the line beside it says what the
+  dub costs, the dubbing model's credits a second times the seconds kept, and how many
+  credits your Perso workspace has left.
 
 ### Advanced options
 
-Collapsed by default. A first project starts with **Dubbing** set to **On this
-computer**, the free path. Set it to **Perso API** and Perso makes the whole dub, which
-needs a Perso API key and uses Perso credits; later projects start on the choices you
-made last. The rows from **Audio separation** to **Voice quality** apply only on
-this computer, and are greyed out while Perso dubs.
+Collapsed by default. The rows from **Voice separation** to **Voice quality** apply only
+with **Local model**. While Perso dubs they are greyed out and read *Perso*; what you chose
+for the local model comes back when you choose it again.
 
 | Field | Default | Notes |
 |---|---|---|
-| **Dubbing** | On this computer | *On this computer* runs the steps below, free. *Perso API* uploads the video and Perso does every step. |
-| **Dubbing model** | Oriole | Shown while Perso dubs: Perso's voice model, *Nightingale*, *Oriole* or *Wren*. The target languages follow it. |
-| **Audio separation** | Demucs | Splits the voice from the music and effects. Runs Mel-Band RoFormer instead once its model is downloaded in **Settings > Models**. *Perso API* needs a Perso key. |
+| **Voice separation** | Demucs | Splits the voice from the music and effects. Runs Mel-Band RoFormer instead once its model is downloaded in **Settings > Models**. *Perso API* needs a Perso key. |
 | **Speech-to-text** | Whisper; Perso API when you choose it | Turns the speech in your video into text. *Perso API* uploads the video. |
 | **Translation** | ChatGPT (Hunyuan on a computer that already has the Hunyuan model) | *ChatGPT* uses your own free ChatGPT account; you sign in on your first dub. *Hunyuan* and *Gemma 3* translate locally. *Gemini API* needs a Google key. |
 | **Text-to-speech** | Qwen3-TTS | Speaks the translated lines in the cloned voice. |
@@ -168,7 +179,7 @@ The **Separate audio** card on the home screen splits a video's sound into two
 files: the voice, and everything else. Drop a video or paste a link, the same two
 ways the Dubbing tab offers. A pasted link starts fetching by itself.
 
-The tab shows the video's name and length, then **Runs on**: *This computer* or *Perso
+The tab shows the video's name and length, then **Runs on**: *Local model* or *Perso
 API*. Perso spends credits, so its **Separate** button has to be pressed twice. A
 line under it estimates the time, for example "About 1 min". While it runs you see
 "Separating… 42%", a bar and **Stop**. On this computer the work is done by a

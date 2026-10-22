@@ -26,15 +26,16 @@ from app.jobs import JobCancelled, JobKind, JobStatus, kind_of
 STEMS = {"voice": "vocals.wav", "background": "background.wav"}
 
 
-def separate(video_path, work, engine, *, cancel_check, on_notice, log, seconds=None):
+def separate(video_path, work, engine, *, cancel_check, on_notice, log, seconds=None, title=None):
     """Run the pipeline's separation stage. Returns (vocals, background, client, model).
 
     Its own name on this module because this is the seam the tests replace,
     the way app/erase_launch.py reaches the eraser through its module.
+    `title` names the upload on Perso's workspace; the local engine has no use for it.
     """
     return pipeline._stage_separate(
         video_path, work, "perso" if engine == "perso" else None, None,
-        cancel_check, on_notice, log, video_duration=seconds)
+        cancel_check, on_notice, log, video_duration=seconds, title=title)
 
 
 def work_for(job, *, cancel_check, on_notice):
@@ -57,9 +58,12 @@ def work_for(job, *, cancel_check, on_notice):
         # When the separating itself began (not when the job joined the line):
         # the screen counts its progress from here.
         state.job_store.update(jid, started=time.time())
+        # Through Perso it is named on the workspace as the project is here
+        # (owner, 2026-10-22). Only said then: the seam's fakes in tests predate it.
         vocals, background, client, model = separate(
             video_path, work, engine, cancel_check=cancel_check,
-            on_notice=on_notice, log=log, seconds=seconds)
+            on_notice=on_notice, log=log, seconds=seconds,
+            **({"title": job.get("title") or job.get("project")} if engine == "perso" else {}))
         # The same note a dubbing leaves, so a dubbing handed these two files
         # reads them exactly as it reads its own after a Resume.
         pipeline._save_json(work, pipeline.SEPARATED_NAME,

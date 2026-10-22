@@ -46,7 +46,11 @@ test("a model's name as the screen says it, a new one's made from its id", () =>
 });
 
 test("the line under a model and under the choice", () => {
-  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "Default · 1 credit per second · 77 languages");
+  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "Default · Can be edited line by line · 1 credit per second · 77 languages");
+  // Whether one line can be remade on its own, where the app knows (owner, 2026-10-22).
+  assert.equal(modelCaption(modelInfo("NIGHTINGALE"), 102),
+    "Premium voice · Cannot be edited line by line · 6 credits per second · 102 languages");
+  assert.equal(modelCaption(modelInfo("WREN"), 32), "1 credit per second · 32 languages", "Wren's is not known yet");
   assert.equal(modelCaption(modelInfo("NEW_ONE"), 3), "3 languages");
   assert.equal(modelHint(modelInfo("NIGHTINGALE"), 102), "6 credits per second · 102 languages with this model · Perso Pro plan and up");
   assert.equal(modelHint(modelInfo("WREN"), 32), "1 credit per second · 32 languages with this model");
@@ -65,5 +69,7 @@ test("in Korean the line under the choice says the count is this model's", async
   setLanguage("ko");
   t.after(() => setLanguage("en"));
   assert.equal(modelHint(modelInfo("ORIOLE"), 77), "1초 1크레딧 · 이 모델은 언어 77개");
-  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "기본 · 1초 1크레딧 · 언어 77개", "the list's own lines stay as they were");
+  assert.equal(modelCaption(modelInfo("ORIOLE"), 77), "기본 · 한 줄씩 고칠 수 있어요 · 1초 1크레딧 · 언어 77개");
+  assert.equal(modelCaption(modelInfo("NIGHTINGALE"), 102), "고급 목소리 · 한 줄씩은 못 고쳐요 · 1초 6크레딧 · 언어 102개");
+  assert.equal(modelCaption(modelInfo("WREN"), 32), "1초 1크레딧 · 언어 32개");
 });

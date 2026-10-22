@@ -322,7 +322,7 @@ test("a video too long for the Perso plan pops its own popup: the limit Perso na
                 link: "https://perso.ai/pricing?utm_content=pricing", limit_seconds: 60 }] });
   assert.equal(h.$("creditTitle").textContent, "Video too long");
   assert.equal(h.$("creditMessage").textContent,
-    "Your Perso plan dubs videos up to 1 min. Upgrade your plan, or switch Dubbing to Local model.");
+    "Your Perso plan dubs videos up to 1 min. Upgrade your plan, or set Processing to Local model.");
   assert.equal(h.$("creditRechargeBtn").textContent, "See plans");
   assert.deepEqual(h.log.opened, ["https://perso.ai/pricing?utm_content=pricing"]);
   assert.ok(h.$("creditOverlay").classList.contains("open"));
@@ -334,10 +334,10 @@ test("a plan limit that is not whole minutes, or not named, still reads", (t) =>
 
   h.api.showCreditModal({ type: "perso_duration_limit", limit_seconds: 90, link: "https://perso.ai/pricing" });
   assert.equal(h.$("creditMessage").textContent,
-    "Your Perso plan dubs videos up to 90 s. Upgrade your plan, or switch Dubbing to Local model.");
+    "Your Perso plan dubs videos up to 90 s. Upgrade your plan, or set Processing to Local model.");
   h.api.showCreditModal({ type: "perso_duration_limit", link: "https://perso.ai/pricing" });
   assert.equal(h.$("creditMessage").textContent,
-    "Your Perso plan does not take a video this long. Upgrade your plan, or switch Dubbing to Local model.");
+    "Your Perso plan does not take a video this long. Upgrade your plan, or set Processing to Local model.");
 });
 
 test("a voice model the plan does not cover has its own popup, not the wrong-key one", (t) => {

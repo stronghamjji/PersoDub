@@ -1378,10 +1378,10 @@ class _FakeCloudClient:
         self.cancel_check = None
 
     def dub_video(self, video_path, out_path, source_code, target_code, num_speakers=None, space_seq=None, log=None,
-                  tts_model=None):
+                  tts_model=None, title=None):
         _FakeCloudClient.calls.append({
             "video": video_path, "out": out_path, "source": source_code,
-            "target": target_code, "speakers": num_speakers, "tts_model": tts_model,
+            "target": target_code, "speakers": num_speakers, "tts_model": tts_model, "title": title,
         })
         with open(out_path, "wb") as f:
             f.write(b"CLOUDMP4")
@@ -1419,6 +1419,8 @@ def test_dub_start_cloud_mode_skips_local_pipeline(monkeypatch):
     assert call["target"] == "en" and call["source"] == "ko" and call["speakers"] == 2
     # Nobody chose a voice model: ORIOLE, and the job says so.
     assert call["tts_model"] == "ORIOLE" and j["perso_model"] == "ORIOLE"
+    # Named on Perso's workspace as the project is here, not "input".
+    assert call["title"] == "v"
     # and the finished file is the cloud one
     rr = client.get(f"/api/dub/result/{j['id']}")
     assert rr.content == b"CLOUDMP4"

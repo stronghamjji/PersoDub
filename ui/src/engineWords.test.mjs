@@ -30,7 +30,7 @@ const ENGINE_SENTENCES = [
   "The voice engine is not running because it could not start, so this computer cannot dub. Quit and reopen PersoDub, or use the Perso API.",
   "The voice engine is not running: this computer ran out of memory. Close other programs, then press Start dubbing and it will start again. Dubbing with the Perso API uses almost no memory.",
   "The voice engine is not running. Quit and reopen PersoDub.",
-  "Perso separation needs an API key. Open Settings and save your Perso API key, or choose This computer.",
+  "Perso separation needs an API key. Open Settings and save your Perso API key, or choose Local model.",
   "Sign in to ChatGPT first.",
   "ChatGPT usage limit reached for now. Try again after it resets.",
   // The models dialog's refusal for a pack, which the desktop app installs (app/models.py).
