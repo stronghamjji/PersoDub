@@ -1003,7 +1003,9 @@ test("Audio separation and Speech-to-text on this computer point at the Perso AP
 });
 
 // The dubbing's own step that splits the voice from the background is Voice
-// separation, so it no longer reads as the Separate audio tab (owner, 2026-10-22).
+// separation, so it no longer reads as the Separate audio tab (owner, 2026-10-22):
+// in Korean on the running screen's steps and the finished dubbing's engine
+// line too ("Separating audio" and "Separation" are only ever that step).
 test("the dubbing step is Voice separation, and the tool tab keeps its own name", () => {
   const html = readPage();
   assert.match(html, /<label data-i18n for="sepSelect">Voice separation<\/label>/);
@@ -1011,6 +1013,8 @@ test("the dubbing step is Voice separation, and the tool tab keeps its own name"
   assert.ok(tab.slice(0, tab.indexOf("</button>")).endsWith("</svg>Separate audio"));
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.equal(ko["Voice separation"], "목소리 분리");
+  assert.equal(ko["Separating audio"], "목소리 분리");
+  assert.equal(ko.Separation, "목소리 분리");
   assert.equal(ko["Separate audio"], "오디오 분리");
 });
 
