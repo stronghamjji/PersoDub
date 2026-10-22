@@ -261,6 +261,9 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
         pickOpen = false;
         rememberChoice(storage, "persoModel", id, savedDefaults);
         refillTargetLanguages();
+        // Said like a dropdown's choice: the Before dubbing card prices the
+        // dubbing by the model (ui/src/draftSetup.mjs).
+        $("persoModelPick").dispatchEvent(new Event("change"));
         pickBtn?.focus?.();
       });
       list.appendChild(opt);

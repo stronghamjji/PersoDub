@@ -47,7 +47,7 @@ function harness() {
   const newProject = {
     startOnDefaults: async (kept) => { log.defaults = (log.defaults || 0) + 1; log.kept = kept; },
     currentLanguages: () => [{ id: "en", code: "en", name: "English" }],
-    persoModel: () => "WREN",
+    persoModel: () => log.model ?? "WREN",
     moveOptionsInto: (el) => { log.moved += 1; el.appendChild($("langGrid")); },
   };
   let submitResult = true;
@@ -264,7 +264,68 @@ test("the foot's mode follows the quality and the Dubbing choice as they are cha
   assert.equal($("draftFootLabel").textContent, "Dubbing 00:10 · High quality mode");
   $("dubModeSelect").value = "perso";
   await $("dubModeSelect").fire("change");
-  assert.equal($("draftFootLabel").textContent, "Dubbing 00:10 · Perso API");
+  assert.equal($("draftFootLabel").textContent, "Dubbing 00:10 · Perso API · 10 credits");
+});
+
+// Before a Perso API dubbing, what it costs and what is left (owner,
+// 2026-10-22, 2-1): the first thing a paid dubbing should say.
+test("a Perso dubbing's foot says its credits, the model's a second times the whole seconds kept, and what is left", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (url) => {
+    asked.push(url);
+    return { ok: true, json: async () => (url === "/api/perso/spaces"
+      ? { spaces: [{ seq: 7, name: "Mine", tier: "Free", credits: 1280 }] } : { perso_space_seq: "7" }) };
+  };
+  try {
+    const { $, log } = harness();
+    log.model = "ORIOLE";
+    setDraft({ downloadId: "d1", name: "paris_steps.mp4", duration: 24.7, videoUrl: "/v" });
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Perso API · 25 credits", "the price at once");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Perso API · 25 credits · 1,280 left");
+    // Another model prices it again (newProject.mjs fires the pick's change).
+    log.model = "NIGHTINGALE";
+    await $("persoModelPick").fire("change");
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Perso API · 150 credits · 1,280 left");
+    log.model = "FINCH";
+    await $("persoModelPick").fire("change");
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Perso API · 5 credits · 1,280 left");
+    // A cut prices what is kept; one credit is one.
+    log.model = "ORIOLE";
+    setRanges([[0, 0.6]]);
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:00 · Perso API · 1 credit · 1,280 left");
+    // What is left was asked once: it moves only when credits are spent.
+    assert.deepEqual(asked, ["/api/perso/spaces", "/api/settings"]);
+    // Back on Local model the foot is the mode alone again.
+    $("dubModeSelect").value = "local";
+    await $("dubModeSelect").fire("change");
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:00 · Fast mode");
+  } finally {
+    globalThis.fetch = real;
+    clearDraft();
+  }
+});
+
+test("the foot leaves out what is left when the workspace cannot be told", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url) => ({ ok: true, json: async () => (url === "/api/perso/spaces"
+    ? { spaces: [{ seq: 7, credits: 1280 }, { seq: 9, credits: 40 }] } : { perso_space_seq: "" }) });
+  try {
+    const { $ } = harness();
+    setDraft({ downloadId: "d1", name: "a.mp4", duration: 10, videoUrl: "/v" });
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:10 · Perso API · 10 credits");
+  } finally {
+    globalThis.fetch = real;
+    clearDraft();
+  }
 });
 
 test("a draft's Perso dubbing starts with the Dubbing model its row has selected", async () => {

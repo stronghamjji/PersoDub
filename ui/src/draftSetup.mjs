@@ -15,9 +15,10 @@
 // With no video yet the tab shows the shared Import block instead; bringing
 // a video in is ui/src/draftImport.mjs, and this file only calls its
 // importSource for the shortcut above.
-import { buildDubFormData, saveDownloadParts } from "./dubApi.mjs";
+import { buildDubFormData, fetchCreditsLeft, saveDownloadParts } from "./dubApi.mjs";
 import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
 import { getDraft, clearDraft, setRanges, keptSeconds, isWhole, onDraftChange } from "./draft.mjs";
+import { modelInfo } from "./persoModels.mjs";
 import { t } from "./i18n.mjs";
 
 function stripExt(name) {
@@ -56,6 +57,26 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
                                   leftTabsShow, importer, newProject, submitDubStart, setDubRestart,
                                   showDraftTimeline = () => {}, getScreen = () => "done",
                                   stemsFrom = () => "" }) {
+  // What a Perso API dubbing of the kept part costs and what the workspace
+  // has left, beside Start (owner, 2026-10-22): the model's credits a second
+  // times the seconds kept, whole seconds as Perso counts them, and what
+  // Settings' workspace list says is left. That one is asked at most once a
+  // minute: it moves only when credits are spent.
+  const LEFT_FRESH_MS = 60 * 1000;
+  let creditsLeft = null;
+  let leftAskedAt = -Infinity;
+  const number = (n) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  function persoCost(seconds) {
+    if (Date.now() - leftAskedAt >= LEFT_FRESH_MS) {
+      leftAskedAt = Date.now();
+      fetchCreditsLeft().then((n) => { creditsLeft = n; paintDubbingTab(); });
+    }
+    const { rate } = modelInfo(newProject.persoModel());
+    const cost = rate == null || !(seconds > 0) ? null : Math.round(Math.ceil(seconds) * rate * 10) / 10;
+    return [cost == null ? "" : cost === 1 ? t("{n} credit", { n: 1 }) : t("{n} credits", { n: number(cost) }),
+            creditsLeft == null ? "" : t("{n} left", { n: number(creditsLeft) })].filter(Boolean);
+  }
+
   // The Dubbing tab's three faces: the Import block with no video yet (the
   // importer shows it), this card once there is one, and the Script pane
   // (script engineer's own #dubbingPaneHead/#scriptBox) for a job.
@@ -78,15 +99,18 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     // took its place and said nothing (Windows B11, 2026-10-07).
     $("draftLongHint").hidden = !(keptSeconds(d) > LONG_VIDEO_SECONDS);
     // Perso does the whole job, so the voice-quality choice is not in force.
-    const quality = $("dubModeSelect").value === "perso" ? "Perso API"
+    const cloud = $("dubModeSelect").value === "perso";
+    const quality = cloud ? "Perso API"
       : $("qualitySelect").value === "high" ? t("High quality mode") : t("Fast mode");
-    $("draftFootLabel").textContent = t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality });
+    $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality }),
+      ...(cloud ? persoCost(keptSeconds(d)) : [])].join(" · ");
     $("draftStartBtn").disabled = !d.downloadId;
     $("draftStartBtn").title = d.downloadId ? "" : t("The video is still coming in");
   }
   // The foot names the mode, so it has to follow the two choices that set it:
   // it went on saying "Fast mode" after High quality was picked (2026-09-30).
-  for (const id of ["qualitySelect", "dubModeSelect"]) $(id).addEventListener("change", paintDubbingTab);
+  // And the Dubbing model, which prices a Perso dubbing.
+  for (const id of ["qualitySelect", "dubModeSelect", "persoModelPick"]) $(id).addEventListener("change", paintDubbingTab);
 
   onDraftChange(() => {
     paintDubbingTab();

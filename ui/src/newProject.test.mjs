@@ -850,6 +850,16 @@ test("pressing a segment chooses that model, and it is what the dubbing starts w
   assert.equal(h.api.persoModel(), "WREN");
 });
 
+test("choosing a model says so on the pick, as a dropdown's change does: the card's foot prices by it", async (t) => {
+  const h = await persoDialog();
+  t.after(h.log.restore);
+  let said = 0;
+  pick(h).addEventListener("change", () => { said += 1; });
+  await chooseModel(h, "Wren");
+  assert.equal(said, 1);
+  assert.equal(h.api.persoModel(), "WREN");
+});
+
 test("the target languages are the ones the chosen model has", async (t) => {
   const h = await persoDialog();
   t.after(h.log.restore);

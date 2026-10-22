@@ -58,9 +58,9 @@ exactly where you asked.
 **Processing**, first, is how the dub is made: **Local model**, the free path on this
 computer and the one a first project starts on, or **Perso API**, where the video is
 uploaded to Perso and Perso makes the whole dub, which needs a Perso API key and uses
-Perso credits. With **Perso API** the
-**Dubbing model** row under it picks Perso's voice model: *Oriole* to begin with,
-*Nightingale*, *Wren* and the others. Later projects start on the choices you made last.
+Perso credits. With **Perso API** the **Dubbing model** row under it picks Perso's voice
+model: *Oriole* to begin with, *Nightingale*, *Wren* and the others. Later projects start
+on the choices you made last.
 
 **Original language** can stay on *Auto-detect* unless detection gets it wrong.
 
@@ -73,7 +73,9 @@ From here:
 - **Export** in the top bar saves the kept part as a video, or as audio only, into
   Downloads.
 - The **Separate audio** and **Erase** tabs work on the same video.
-- **Start dubbing** begins the dub.
+- **Start dubbing** begins the dub. With **Perso API** the line beside it says what the
+  dub costs, the dubbing model's credits a second times the seconds kept, and how many
+  credits your Perso workspace has left.
 
 ### Advanced options
 
