@@ -130,7 +130,8 @@ time slot goes first, then the original line, so the translation always stays wh
 
 ### Export
 
-**Export** opens a dialog with a row per file, each with a tick box, and its own
+**Export** opens a dialog with a row per file, each with a tick box; a dubbing's rows
+stand under three headings, **Video**, **Subtitles** and **Audio**. The dialog's own
 **Export** button saves the ticked rows. Sound rows can be MP3 or WAV. The app saves
 without asking, into `Downloads` / the day the job ran / the project's name; a saved
 row gets a check, and the line under the rows says where it went.

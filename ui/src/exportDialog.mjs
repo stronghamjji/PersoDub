@@ -3,9 +3,11 @@
 // screen, and its rows are what that has to hand back:
 //
 //   a draft            Video (the kept parts joined), Audio only
-//   a finished dubbing Dubbed video, Dubbed video with subtitles, Dubbed audio,
-//                      Original voice, Background, Subtitles, Original video
-//                      -- each only when there is one
+//   a finished dubbing under three headings (owner, 2026-10-22): Video --
+//                      Dubbed video, Dubbed video with subtitles, Original
+//                      video; Subtitles -- Subtitles (.srt); Audio -- Dubbed
+//                      audio, Original voice, Background -- each only when
+//                      there is one
 //   an erased video    Video, Audio only
 //   separated audio    Voice, Background (the Audio tab's two sounds), both
 //                      ticked until the user says otherwise
@@ -82,6 +84,13 @@ const STEM_TIPS = {
   get voice() { return t("Only the speech."); },
   get background() { return t("Everything except speech: music, effects, noise."); },
 };
+// The headings a dubbing's rows stand under (owner, 2026-10-22): as one list
+// of seven the subtitles file was the sixth row, and people did not find it.
+const GROUPS = {
+  get video() { return t("Video"); },
+  get subtitles() { return t("Subtitles"); },
+  get audio() { return t("Audio"); },
+};
 
 /**
  * The rows for what is on screen.
@@ -105,8 +114,9 @@ const STEM_TIPS = {
  *        "original" (or nothing) or "9:16", "16:9", "1:1", "4:5"
  * @param {"mp3"|"wav"} fmt
  * @returns {Array<{id: string, icon: string, label: string, href?: string,
- *   name?: string, audio?: boolean}>}  a row with an href is downloaded; one
- *   without is saved by the app (ctx.save)
+ *   name?: string, audio?: boolean, group?: string}>}  a row with an href is
+ *   downloaded; one without is saved by the app (ctx.save). A dubbing's rows
+ *   carry the heading they stand under (GROUPS), in that order.
  */
 export function exportRows(ctx, fmt) {
   const audio = { id: "audio", icon: "audio", label: t("Audio only"), audio: true };
@@ -123,23 +133,23 @@ export function exportRows(ctx, fmt) {
   const base = `/api/dub/result/${ctx.jobId}`;
   const mark = ctx.mark || "";
   return [
-    { id: "video", icon: "film", label: t("Dubbed video"),
+    { id: "video", group: "video", icon: "film", label: t("Dubbed video"),
       href: withRatio(ctx.videoHref, ctx.ratio), name: `dub_${ctx.target}.mp4` },
     // There whenever the project has subtitles (owner, 2026-09-30).
-    ctx.hasSrt && ctx.subtitled && { id: "subtitled", icon: "film", label: t("Dubbed video with subtitles"),
+    ctx.hasSrt && ctx.subtitled && { id: "subtitled", group: "video", icon: "film", label: t("Dubbed video with subtitles"),
                                      href: withRatio(ctx.subtitled.href, ctx.ratio),
                                      name: ctx.subtitled.name },
-    { ...audio, label: t("Dubbed audio"),
+    // A local file is already on the machine it would be saved to.
+    ctx.fromLink && { id: "original", group: "video", icon: "film", label: t("Original video"),
+                      href: `${base}/original?download=1`, name: "org.mp4" },
+    ctx.hasSrt && { id: "srt", group: "subtitles", icon: "subs", label: t("Subtitles (.srt)"),
+                    href: `${base}/srt?download=1`, name: `dub_${ctx.target}.srt` },
+    { ...audio, group: "audio", label: t("Dubbed audio"),
       href: `${base}/audio?format=${fmt}&download=1${mark}`, name: `dub_${ctx.target}.${fmt}` },
     ...[["voice", t("Original voice")], ["background", t("Background")]].map(([which, label]) =>
-      (ctx.stems || {})[which] && { id: which, icon: "audio", label, audio: true, tip: STEM_TIPS[which],
+      (ctx.stems || {})[which] && { id: which, group: "audio", icon: "audio", label, audio: true, tip: STEM_TIPS[which],
                                     href: `${base}/stem/${which}?format=${fmt}`,
                                     name: `${ctx.project || "project"}_${which}.${fmt}` }),
-    ctx.hasSrt && { id: "srt", icon: "subs", label: t("Subtitles (.srt)"),
-                    href: `${base}/srt?download=1`, name: `dub_${ctx.target}.srt` },
-    // A local file is already on the machine it would be saved to.
-    ctx.fromLink && { id: "original", icon: "film", label: t("Original video"),
-                      href: `${base}/original?download=1`, name: "org.mp4" },
   ].filter(Boolean);
 }
 
@@ -147,6 +157,7 @@ export function exportRows(ctx, fmt) {
  * The rows as the dialog draws them: a checkbox, the icon, the name, a "?"
  * with what the file is on a row that has a tip (the two separated sounds),
  * the MP3 / WAV switch on a sound row, and the place the saved check appears.
+ * A row that starts a group has its heading over it.
  *
  * @param {Array} rows   exportRows' answer
  * @param {"mp3"|"wav"} fmt
@@ -157,9 +168,11 @@ export function rowsHtml(rows, fmt, ticked = [], saved = []) {
   const seg = `<span class="export-seg" role="radiogroup" aria-label="${t("Audio format")}">`
     + ["mp3", "wav"].map((f) => `<span role="radio" tabindex="0" data-fmt="${f}" aria-checked="${f === fmt}"`
       + `${f === fmt ? ' class="on"' : ""}>${f.toUpperCase()}</span>`).join("") + "</span>";
-  return rows.map((r) => {
+  return rows.map((r, i) => {
     const done = saved.includes(r.id);
-    return `<a href="#" role="checkbox" aria-checked="${ticked.includes(r.id)}" data-row="${r.id}"`
+    const head = r.group && r.group !== rows[i - 1]?.group
+      ? `<div class="export-group">${escapeHtml(GROUPS[r.group])}</div>` : "";
+    return `${head}<a href="#" role="checkbox" aria-checked="${ticked.includes(r.id)}" data-row="${r.id}"`
       + `${r.name ? ` data-name="${escapeHtml(r.name)}"` : ""}${done ? ' class="saved"' : ""}>`
       + `<span class="export-check">${svg(CHECK, "icon")}</span>`
       + `${ICONS[r.icon]}${escapeHtml(r.label)}`

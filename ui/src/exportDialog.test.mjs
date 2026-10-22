@@ -4,7 +4,9 @@
 // Run with: node --test ui/src/exportDialog.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { initExportDialog, exportRows, rowsHtml, audioFormat, ticksFor, AUDIO_KEY, TICKS_KEY } from "./exportDialog.mjs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
 
@@ -30,18 +32,20 @@ test("a draft and an erased video hand back a video and its sound", () => {
 
 test("a finished dubbing's rows, in the owner's order, with its sound named Dubbed audio", () => {
   const rows = exportRows(STEMS, "wav");
+  // The videos, the subtitles, then the sounds (owner, 2026-10-22).
   assert.deepEqual(rows.map((r) => r.label),
-    ["Dubbed video", "Dubbed video with subtitles", "Dubbed audio", "Original voice", "Background",
-     "Subtitles (.srt)", "Original video"]);
+    ["Dubbed video", "Dubbed video with subtitles", "Original video", "Subtitles (.srt)",
+     "Dubbed audio", "Original voice", "Background"]);
   assert.deepEqual(rows.map((r) => r.name),
-    ["dub_ko.mp4", "dub_ko-sub-clean.mp4", "dub_ko.wav", "clip_voice.wav", "clip_background.wav",
-     "dub_ko.srt", "org.mp4"]);
-  assert.equal(rows[0].href, "/api/dub/result/J1?v=2");
+    ["dub_ko.mp4", "dub_ko-sub-clean.mp4", "org.mp4", "dub_ko.srt",
+     "dub_ko.wav", "clip_voice.wav", "clip_background.wav"]);
+  const href = (list, id) => list.find((r) => r.id === id).href;
+  assert.equal(href(rows, "video"), "/api/dub/result/J1?v=2");
   // The remake mark rides on the audio too, so it is never the old sound.
-  assert.equal(rows[2].href, "/api/dub/result/J1/audio?format=wav&download=1&v=2");
-  assert.equal(exportRows(DUB, "mp3")[2].href, "/api/dub/result/J1/audio?format=mp3&download=1&v=2");
-  assert.equal(rows[3].href, "/api/dub/result/J1/stem/voice?format=wav");
-  assert.equal(rows[4].href, "/api/dub/result/J1/stem/background?format=wav");
+  assert.equal(href(rows, "audio"), "/api/dub/result/J1/audio?format=wav&download=1&v=2");
+  assert.equal(href(exportRows(DUB, "mp3"), "audio"), "/api/dub/result/J1/audio?format=mp3&download=1&v=2");
+  assert.equal(href(rows, "voice"), "/api/dub/result/J1/stem/voice?format=wav");
+  assert.equal(href(rows, "background"), "/api/dub/result/J1/stem/background?format=wav");
   // No subtitles and a local file: the video and its sound are all there is.
   const bare = exportRows({ ...DUB, hasSrt: false, fromLink: false }, "mp3");
   assert.deepEqual(bare.map((r) => r.id), ["video", "audio"]);
@@ -54,11 +58,47 @@ test("the subtitled video is there whenever the project has subtitles", () => {
 
 test("the original's voice and background are rows only when the job has them", () => {
   const one = exportRows({ ...STEMS, stems: { voice: false, background: true } }, "mp3");
-  assert.deepEqual(one.map((r) => r.id), ["video", "subtitled", "audio", "background", "srt", "original"]);
+  assert.deepEqual(one.map((r) => r.id), ["video", "subtitled", "original", "srt", "audio", "background"]);
   // A dubbing made wholly on Perso has neither.
   assert.deepEqual(exportRows({ ...DUB, stems: {} }, "mp3").map((r) => r.id),
-                   ["video", "subtitled", "audio", "srt", "original"]);
-  assert.deepEqual(exportRows(DUB, "mp3").map((r) => r.id), ["video", "subtitled", "audio", "srt", "original"]);
+                   ["video", "subtitled", "original", "srt", "audio"]);
+  assert.deepEqual(exportRows(DUB, "mp3").map((r) => r.id), ["video", "subtitled", "original", "srt", "audio"]);
+});
+
+// As one list of seven the subtitles file was the sixth row, and people did
+// not find it (feedback sheet, 2026-10-21; owner 4-2 가, 2026-10-22). A
+// dubbing's rows stand under Video, Subtitles and Audio; the rows themselves
+// are the rows they were.
+test("a dubbing's rows stand under Video, Subtitles and Audio; the other kinds have no headings", () => {
+  const rows = exportRows(STEMS, "mp3");
+  assert.deepEqual(rows.map((r) => [r.id, r.group]), [
+    ["video", "video"], ["subtitled", "video"], ["original", "video"], ["srt", "subtitles"],
+    ["audio", "audio"], ["voice", "audio"], ["background", "audio"]]);
+  const html = rowsHtml(rows, "mp3", ["video"]);
+  // Each heading once, right before the first row under it.
+  assert.deepEqual([...html.matchAll(/<div class="export-group">([^<]*)<\/div><a [^>]*data-row="(\w+)"/g)].map((m) => [m[1], m[2]]),
+    [["Video", "video"], ["Subtitles", "srt"], ["Audio", "audio"]]);
+  assert.equal(html.match(/export-group/g).length, 3);
+  assert.equal(html.match(/<a href="#" role="checkbox"/g).length, 7, "seven rows, as before");
+  // A heading with no row under it is not drawn: no subtitles, no Subtitles.
+  const noSrt = rowsHtml(exportRows({ ...STEMS, hasSrt: false }, "mp3"), "mp3");
+  assert.deepEqual([...noSrt.matchAll(/class="export-group">([^<]*)</g)].map((m) => m[1]), ["Video", "Audio"]);
+  // A draft, an erased video and separated audio are two rows each, and plain.
+  for (const ctx of [{ kind: "draft" }, { kind: "erase" }, { kind: "separate", jobId: "S1" }]) {
+    assert.doesNotMatch(rowsHtml(exportRows(ctx, "mp3"), "mp3"), /export-group/, ctx.kind);
+  }
+});
+
+test("in Korean the three headings read 영상, 자막 and 오디오", async (t) => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true,
+    json: async () => JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8")) });
+  await loadTable("ko");
+  globalThis.fetch = real;
+  setLanguage("ko");
+  t.after(() => setLanguage("en"));
+  const html = rowsHtml(exportRows(STEMS, "mp3"), "mp3");
+  assert.deepEqual([...html.matchAll(/class="export-group">([^<]*)</g)].map((m) => m[1]), ["영상", "자막", "오디오"]);
 });
 
 test("a row is a checkbox, its icon, its name and the place its saved check goes; sound rows carry the switch", () => {
@@ -141,8 +181,17 @@ function harness({ ctx, stored = {}, shell = null, fetchFn = null } = {}) {
   const tick = (id) => click({ closest: (sel) => (sel === "a" ? { dataset: { row: id } } : null) });
   const pick = (fmt) => click({ closest: (sel) => (sel === "[data-fmt]" ? { dataset: { fmt } } : null) });
   const go = () => $("exportGoBtn").listeners.click();
-  return { $, api, list, tag, ticked, saved, tick, pick, go, store, asked, followed };
+  return { $, api, list, tag, ticked, saved, tick, pick, go, click, store, asked, followed };
 }
+
+test("the dialog draws a dubbing's headings, and a press on one ticks nothing", async () => {
+  const h = harness({ ctx: STEMS });
+  await h.api.open();
+  assert.equal(h.list.html.match(/class="export-group"/g).length, 3);
+  const e = h.click({ closest: () => null });
+  assert.equal(e.prevented, false);
+  assert.deepEqual(h.ticked(), ["video"]);
+});
 
 test("with nothing to export the dialog stays shut", async () => {
   const h = harness({ ctx: null });

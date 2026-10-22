@@ -2732,6 +2732,11 @@
   .export-list a[aria-checked="true"] .export-check { background: var(--primary); border-color: var(--primary); }
   .export-list a[aria-checked="true"] .export-check .icon { visibility: visible; }
   .export-modal .export-list a .export-state { min-width: 16px; }
+  /* A dubbing's three headings, Video, Subtitles and Audio (owner,
+     2026-10-22): quiet, and closer to the rows under them than to the ones
+     above. */
+  .export-list .export-group { margin: 6px 0 -2px; font-size: 11px; color: var(--muted-foreground); }
+  .export-list .export-group:first-child { margin-top: 0; }
   /* === /export === */
   /* === qa-fixes === */
   /* 2. Narrower than the 590px tier fits (a 1280px window with the Dub Agent
