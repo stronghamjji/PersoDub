@@ -316,8 +316,15 @@
                   <button class="btn btn-outline btn-sm draft-back" id="draftBackBtn" type="button" hidden data-i18n>Back</button>
                 </div>
                 <!-- Which video, and how much of it is kept
-                     (ui/src/format.mjs videoCardHtml). -->
-                <div class="draft-card video-card" id="draftPartCard"></div>
+                     (ui/src/format.mjs videoCardHtml), with Replace and
+                     Remove at its top right (owner, 2026-10-22;
+                     ui/src/draftSetup.mjs), and under it what a video taking
+                     its place is doing, or why it could not (ui/src/draftImport.mjs). -->
+                <div class="draft-part">
+                  <div class="draft-card video-card" id="draftPartCard"></div>
+                  <span class="vc-acts"><button data-i18n class="erase-link" id="draftReplaceBtn" type="button">Replace</button><span aria-hidden="true">·</span><button data-i18n class="erase-link vc-del" id="draftRemoveBtn" type="button">Remove</button></span>
+                </div>
+                <div class="import-status draft-import-status" id="draftImportStatus"></div>
                 <!-- Over 30 minutes kept: said plainly, not refused (ui/src/draftSetup.mjs). -->
                 <div data-i18n class="job-notice" id="draftLongHint" hidden>Over 30 minutes. Dubbing takes much longer and depends on your computer. Cutting into parts is recommended.</div>
                 <div id="draftOptionsSlot"></div>

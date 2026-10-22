@@ -49,6 +49,8 @@ function stripExt(name) {
  *        edits the same draft and keeps its own top bar
  * @param {() => string} [deps.stemsFrom]  the id of a finished Separate audio
  *        job of the draft as it is cut now, or ""
+ * @param {(d: object) => void} [deps.removeDraft]  the Video card's Remove:
+ *        asks, as the Home card's Delete does, and deletes this draft
  * @returns {{ openDraft: (source?: {file?, link?, downloadId?, name?, duration?}) => Promise<void>,
  *             showDraftScreen: () => void, paint: () => void, canExport: () => boolean,
  *             saveDraft: (what?: {audio?: string, ratio?: string}) => Promise<string> }}
@@ -56,7 +58,7 @@ function stripExt(name) {
 export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, sizeVideoPane,
                                   leftTabsShow, importer, newProject, submitDubStart, setDubRestart,
                                   showDraftTimeline = () => {}, getScreen = () => "done",
-                                  stemsFrom = () => "" }) {
+                                  stemsFrom = () => "", removeDraft = () => {} }) {
   // What a Perso API dubbing of the kept part costs and what the workspace
   // has left, beside Start (owner, 2026-10-22): the model's credits a second
   // times the seconds kept, whole seconds as Perso counts them, and what
@@ -169,6 +171,15 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     }
   }
   $("draftStartBtn").addEventListener("click", () => startDraftDubbing());
+
+  // The Video card's two ways out (owner, 2026-10-22): Replace opens the
+  // Import block's own file picker (ui/src/draftImport.mjs takes the file),
+  // and Remove deletes the draft once asked, leaving the empty project.
+  $("draftReplaceBtn").addEventListener("click", () => $("draftFileInput").click());
+  $("draftRemoveBtn").addEventListener("click", () => {
+    const d = getDraft();
+    if (d) removeDraft(d);
+  });
 
   // What the top bar's Export hands back before a dub: the kept parts as one
   // video, in the canvas of `ratio` when the Ratio button is on one, or their

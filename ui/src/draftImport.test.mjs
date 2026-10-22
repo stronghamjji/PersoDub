@@ -7,7 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initDraftImport } from "./draftImport.mjs";
-import { clearDraft, getDraft, setDraft } from "./draft.mjs";
+import { clearDraft, getDraft, setDraft, setRanges } from "./draft.mjs";
 
 function makeEl(id) {
   const classes = new Set();
@@ -288,6 +288,48 @@ test("a video file dropped on the empty timeline row comes in with no question, 
   await p;
   await settle();
   assert.equal(getDraft().downloadId, "d3");
+  log.restore();
+});
+
+// Replace on the Before dubbing card opens this same picker (owner,
+// 2026-10-22): pressing Replace was the asking, so the file chosen takes the
+// video's place with no question, and the line under the card says how it
+// is going -- the Import block's own line is hidden behind the card.
+test("a file chosen in the picker while the card has a video replaces it with no question, said under the card", async () => {
+  const { $, log } = harness({ responses: { "/api/downloads/upload": ok({ id: "d2" }) } });
+  const video = { preload: "", src: "", duration: 12, listeners: {},
+    addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); } };
+  globalThis.document.createElement = (tag) => (tag === "video" ? video : makeEl(tag));
+  setDraft({ downloadId: "d1", name: "first.mp4", duration: 10, videoUrl: "/v" });
+  $("draftFileInput").files = [{ name: "second.mp4", size: 1 }];
+  const p = $("draftFileInput").fire("change");
+  await settle();
+  assert.equal($("mediaReplaceOverlay").classList.contains("open"), false);
+  assert.equal($("draftImportStatus").textContent, "Importing…");
+  await video.listeners.loadedmetadata[0]();
+  await p;
+  await settle();
+  assert.equal(getDraft().downloadId, "d2");
+  assert.equal(getDraft().name, "second.mp4");
+  assert.equal($("draftImportStatus").textContent, "");
+  log.restore();
+});
+
+test("a file the app does not take says why under the card, until another video is on it", async () => {
+  const { $, log } = harness({ checkFile: () => "Please choose an MP4 or MOV video file." });
+  setDraft({ downloadId: "d1", name: "first.mp4", duration: 10, videoUrl: "/v" });
+  $("draftFileInput").files = [{ name: "clip.mkv", size: 1 }];
+  await $("draftFileInput").fire("change");
+  await settle();
+  assert.equal($("draftImportStatus").textContent, "Please choose an MP4 or MOV video file.");
+  assert.equal($("draftImportStatus").classList.contains("error"), true);
+  assert.equal(getDraft().downloadId, "d1", "the video stays");
+  // A cut is still this video: what was said stays said.
+  setRanges([[0, 5]]);
+  assert.equal($("draftImportStatus").textContent, "Please choose an MP4 or MOV video file.");
+  // Another one on the card (a draft opened from Home) is not what it was about.
+  setDraft({ downloadId: "d9", name: "other.mp4", duration: 10, videoUrl: "/v9" });
+  assert.equal($("draftImportStatus").textContent, "");
   log.restore();
 });
 

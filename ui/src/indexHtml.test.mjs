@@ -1096,6 +1096,22 @@ test("the Target language is a list with a search on top, not a bare dropdown", 
   assert.equal(ko["{shown} of {all}"], "{all}개 중 {shown}개");
 });
 
+// The Video card's two ways out, words at its top right in the erase card's
+// Reset dress, and the line under it for a video taking its place (owner,
+// 2026-10-22). ui/src/draftSetup.test.mjs, draftImport.test.mjs and
+// dubbingPrep.test.mjs run them.
+test("the Video card has Replace · Remove at its top right, and a line under it only when it has something to say", () => {
+  const html = readPage();
+  assert.match(html, /<div class="draft-part">\s*<div class="draft-card video-card" id="draftPartCard"><\/div>\s*<span class="vc-acts"><button data-i18n class="erase-link" id="draftReplaceBtn" type="button">Replace<\/button><span aria-hidden="true">·<\/span><button data-i18n class="erase-link vc-del" id="draftRemoveBtn" type="button">Remove<\/button><\/span>\s*<\/div>\s*<div class="import-status draft-import-status" id="draftImportStatus"><\/div>/);
+  assert.match(html, /\.draft-part \{ position: relative; \}/);
+  assert.match(html, /\.draft-part \.vc-acts \{ position: absolute; right: 13px; top: 11px;/);
+  assert.match(html, /\.draft-part \.vc-del \{ color: var\(--destructive\); \}/);
+  assert.match(html, /\.draft-import-status:empty \{ display: none; \}/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko.Replace, "바꾸기");
+  assert.equal(ko.Remove, "삭제");
+});
+
 // With Perso API the stage rows read "Perso" over the dropdowns' own words,
 // which stay their values; only the words are hidden, so the arrow stays
 // (owner, 2026-10-22, the 2-1 picture). ui/src/dubbingPrep.test.mjs runs it.

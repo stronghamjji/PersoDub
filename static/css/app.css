@@ -1279,6 +1279,15 @@
     display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
   .draft-card { background: var(--well); border: 1px solid var(--well-line); border-radius: var(--radius);
     padding: 10px 12px; }
+  /* Replace · Remove on the Video card's label line, in the words of the
+     erase card's Reset (owner, 2026-10-22). The line under the card is
+     there only while it has something to say. */
+  .draft-part { position: relative; }
+  .draft-part .vc-acts { position: absolute; right: 13px; top: 11px; display: inline-flex; align-items: center;
+    gap: 6px; font-size: var(--font-label); color: var(--muted-foreground); }
+  .draft-part .vc-del { color: var(--destructive); }
+  .draft-import-status { text-align: left; }
+  .draft-import-status:empty { display: none; }
   /* Stuck to the foot of the card: with Advanced options open the card
      scrolls, and Start dubbing must not scroll away with it (QA 2026-09-29). */
   .draft-foot { margin-top: auto; padding: 10px 0 0; border-top: 1px solid var(--border);

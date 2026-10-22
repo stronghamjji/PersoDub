@@ -19,6 +19,7 @@ function makeEl(id) {
     classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c),
                  contains: (c) => classes.has(c) },
     appendChild: function (kid) { this.children.push(kid); },
+    click: function () { this.clicked = (this.clicked || 0) + 1; },
     addEventListener: function (ev, fn) { (this.listeners[ev] ||= []).push(fn); },
     fire: async function (ev, arg) { for (const fn of [...(this.listeners[ev] || [])]) await fn(arg); },
   };
@@ -34,7 +35,7 @@ function harness() {
   $("qualitySelect").value = "fast";
 
   const log = { screens: [], topbars: [], fit: 0, sized: 0, tabs: [], mediaRendered: 0,
-                imported: [], moved: 0, started: [] };
+                imported: [], moved: 0, started: [], removed: [] };
   const state = { jobId: null };
   const importer = {
     render: () => { log.mediaRendered += 1; },
@@ -66,6 +67,7 @@ function harness() {
     importer, newProject, submitDubStart,
     setDubRestart: (fn) => { restart = fn; },
     getScreen: () => log.screen,
+    removeDraft: (d) => log.removed.push(d.downloadId),
   });
   log.screen = "done";
   return { $, api, log, state, setSubmitResult: (v) => { submitResult = v; }, restart: () => restart };
@@ -406,6 +408,23 @@ test("an Add language draft starts on the dubbing's choices and its start names 
   state.draftProject = "ko123456";
   await $("draftStartBtn").fire("click");
   assert.equal(log.started[0].fd.get("project_id"), "ko123456");
+});
+
+// The Video card's Replace and Remove (owner, 2026-10-22). Replace is the
+// Import block's own picker (#draftFileInput); Remove is the page's delete
+// question, which ui/src/dubbingPrep.test.mjs answers in the page itself.
+test("Replace on the Video card opens the Import block's file picker, and Remove hands the draft to the delete question", async () => {
+  clearDraft();
+  const { $, log } = harness();
+  await $("draftRemoveBtn").fire("click");
+  assert.deepEqual(log.removed, [], "no video, nothing to remove");
+  setDraft({ downloadId: "d1", name: "a.mp4", duration: 10, videoUrl: "/v" });
+  await $("draftReplaceBtn").fire("click");
+  assert.equal($("draftFileInput").clicked, 1);
+  assert.deepEqual(log.removed, []);
+  await $("draftRemoveBtn").fire("click");
+  assert.deepEqual(log.removed, ["d1"]);
+  assert.equal(getDraft().downloadId, "d1", "nothing is gone until the question is answered");
 });
 
 test("a plain draft's start names no project", async () => {

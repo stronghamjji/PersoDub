@@ -10,8 +10,10 @@
 // ui/src/eraseScreen.mjs.)
 //
 // A video dropped on the timeline while the draft already has one replaces
-// it -- asked first, in the app's usual confirm-dialog style. Any other way
-// to another video is New project.
+// it -- asked first, in the app's usual confirm-dialog style. Replace on the
+// Before dubbing card's Video (owner, 2026-10-22) opens this block's own
+// file picker, and the file chosen replaces it with no question: pressing
+// Replace was the asking.
 //
 // The network calls (uploading a dropped file, fetching a link) are the same
 // ones the New project dialog makes (ui/src/dubApi.mjs); nothing here talks
@@ -23,8 +25,9 @@ import { emptyTabHtml, wireImportBlock, wireImportInput } from "./importBlock.mj
 import { t } from "./i18n.mjs";
 
 const DOWNLOAD_POLL_MS = 1000;
-// The line under each tab's Import block.
-const STATUS_IDS = ["dubbingImportStatus", "audioImportStatus"];
+// The line under each tab's Import block, and the one under the Before
+// dubbing card, where a video taking the card's place says how it is going.
+const STATUS_IDS = ["dubbingImportStatus", "audioImportStatus", "draftImportStatus"];
 
 /**
  * Wire importing to a page. The page needs: #dubbingImport, the Dubbing tab's
@@ -239,7 +242,8 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
 
   const fileInput = $("draftFileInput");
   if (fileInput) {
-    wireImportInput(fileInput, (files) => pickOrReplace({ file: files[0] }));
+    // Opened by the Import block, there only with no video, or by Replace.
+    wireImportInput(fileInput, (files) => importSource({ file: files[0] }));
     wireImportBlock($, {
       id: "dubbingZone", linkId: "dubbingLink", input: fileInput,
       // A project holds one video: the first of a drop is the one taken.
@@ -249,8 +253,13 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
     });
   }
 
+  // The line under the card is about the video on it: another one there
+  // (a draft opened from Home) is not what an earlier refusal was about.
+  let onCard = "";
   onDraftChange((d) => {
     if (!d) cancelImport();
+    else if (d.downloadId !== onCard) setStatus("");
+    onCard = d ? d.downloadId : "";
     render();
   });
 

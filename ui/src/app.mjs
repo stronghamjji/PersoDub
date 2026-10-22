@@ -767,6 +767,10 @@ const draftSetup = initDraftSetup({
   getScreen: () => document.body.dataset.screen,
   // A dubbing of a cut the Audio tab already separated takes its two sounds.
   stemsFrom: () => (audioTab.separatedJob() || {}).id || "",
+  // Remove on the Video card: the Home card's Delete, asked the same way,
+  // and then the empty project, top bar and all (owner, 2026-10-22).
+  removeDraft: (d) => confirmDialogs.askDelete({ draftId: d.downloadId, project: d.name || "this draft",
+                                                onGone: () => draftSetup.showDraftScreen() }),
 });
 // ---------------- Separate audio ----------------
 let showAudioLanes = () => {};
