@@ -615,7 +615,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
         ? (n === 1 ? t("1 line remade. {credits} credits used.", { credits }) : t("{n} lines remade. {credits} credits used.", { n, credits }))
         : (n === 1 ? t("1 line remade") : t("{n} lines remade", { n })));
       await refreshAfterVoices(jobId);
-      setTimeout(() => scriptSaving(""), 2000);
+      clearSoon(2000);
     } catch (e) {
       if (left(jobId)) return;
       // The lines Perso did voice before it stopped are drawn as made.
@@ -853,7 +853,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
         : t("{n} lines translated again. Press Remake voices to hear them.", { n: changed.length }));
       forgetLive(jobId);
       await renderScript(jobId);
-      setTimeout(() => scriptSaving(""), 4000);
+      clearSoon(4000);
     } catch (e) {
       if (!left(jobId)) scriptSaving(errorText(e));
     } finally {
@@ -865,6 +865,14 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   function scriptSaving(text) {
     const el = $("scriptSaving");
     if (el) el.textContent = text || "";
+  }
+  // A done message goes after a while -- but only if it is still the one
+  // showing: a later press's "Translating…" stays while it works (sweep
+  // D7, 2026-10-24: a "Saved" from just before wiped it).
+  function clearSoon(ms) {
+    const el = $("scriptSaving");
+    const was = el ? el.textContent : "";
+    setTimeout(() => { if (el && el.textContent === was) scriptSaving(""); }, ms);
   }
 
   async function saveLine(jobId, line, text) {
@@ -881,7 +889,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || t("Could not save"));
       scriptSaving(t("Saved"));
       await renderScript(jobId); // the slot check has to be recomputed
-      setTimeout(() => scriptSaving(""), 1500);
+      clearSoon(1500);
     } catch (e) {
       if (!left(jobId)) scriptSaving(errorText(e));
     }
@@ -921,7 +929,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       scriptSaving(t("Line {line} done", { line }));
       freshLines.add(`${jobId}:${line}`);
       await refreshAfterVoices(jobId);
-      setTimeout(() => scriptSaving(""), 2000);
+      clearSoon(2000);
     } catch (e) {
       if (!left(jobId)) scriptSaving(errorText(e));
       btn.disabled = false;
@@ -962,7 +970,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       if (!r.ok) throw new Error(data.detail || t("Could not change that line's speaker."));
       scriptSaving(t("Line {line} done", { line }));
       await refreshAfterVoices(jobId);
-      setTimeout(() => scriptSaving(""), 2000);
+      clearSoon(2000);
     } catch (e) {
       if (!left(jobId)) scriptSaving(errorText(e));
       btn.disabled = false;

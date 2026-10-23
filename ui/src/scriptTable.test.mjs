@@ -618,6 +618,19 @@ test("committing an edited cell saves that line's new words", async (t) => {
   assert.equal(h.$("scriptSaving").textContent, "", "and the word goes away by itself");
 });
 
+// A later word stays: the "Saved" timer must not wipe what came after it,
+// such as Translate again's "Translating…" while it still works (sweep D7).
+test("the Saved word's timer leaves a newer word alone", async (t) => {
+  const { h, cell } = await withCell(t, {
+    responses: { "/api/dub/jobs/j1/script/1": ok({}) },
+  });
+  cell.textContent = "Good morning";
+  await cell.fire("blur");
+  h.$("scriptSaving").textContent = "Translating 3 lines…";
+  h.log.runTimers();
+  assert.equal(h.$("scriptSaving").textContent, "Translating 3 lines…");
+});
+
 test("a save the server refuses leaves the reason under the table", async (t) => {
   const { h, cell } = await withCell(t, {
     responses: { "/api/dub/jobs/j1/script/1": bad("That line is locked") },

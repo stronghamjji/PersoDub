@@ -500,6 +500,19 @@ export const steps = [
     async run(app, ctx) {
       const s = ctx.state.dub2;
       await onDub(app, s);
+      // The page's own saves from here on, counted.
+      await app.inPage(() => {
+        window.__subPuts = 0;
+        if (!window.__subPutsHooked) {
+          window.__subPutsHooked = true;
+          const f = window.fetch;
+          window.fetch = (u, o) => {
+            if (/subtitle_style/.test(String(u)) && o && o.method === "PUT") window.__subPuts++;
+            return f(u, o);
+          };
+        }
+        return true;
+      });
       const v0 = await view(app, s.jobId), st0 = JSON.stringify(await style(app, s.jobId));
       await app.click("#previewBtn");
       const items = await app.waitFor("the preview menu", 5000, () => !document.querySelector("#previewMenu").hidden
@@ -521,7 +534,13 @@ export const steps = [
       await app.click('#previewMenu [data-id="none"]');
       await app.waitFor("the preview gone", 5000, () => document.querySelector("#ratioPreview").hidden
         && !document.querySelector("#previewBtn").classList.contains("on"));
-      if (v1.ratio !== v0.ratio || st1 !== st0) throw new Error(`Reels changed what is saved: ratio ${v0.ratio} → ${v1.ratio}, style ${st0 === st1 ? "same" : "changed"}`);
+      if (v1.ratio !== v0.ratio || st1 !== st0) {
+        const a = JSON.parse(st0), b = JSON.parse(st1);
+        const keys = Object.keys({ ...a, ...b }).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+        const puts = await app.inPage(() => window.__subPuts);
+        throw new Error(`Reels changed what is saved: ratio ${v0.ratio} → ${v1.ratio}, style ${st0 === st1 ? "same"
+          : `changed (${keys.join(", ")}; ${puts} save(s) from the page)`}`);
+      }
       return `menu ${items.join(", ")}; Reels: phone frame ${phone.w}x${phone.h} px, ${phone.parts} parts drawn, button lit ${phone.on}; `
         + `saved ratio ${v1.ratio} and subtitle style unchanged; None took it off`;
     } },
