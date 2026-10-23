@@ -1593,8 +1593,8 @@ test("Dubbing, Audio and Erase with no video draw one empty state", async () => 
     dubbing: ["Dubbing", "Voice a video in another language."],
     audio: ["Separate audio", "Splits the sound into voice and background."],
     erase: ["Erase subtitles", "Takes burned-in subtitles out."],
-    // The Subtitle style tab on its own (owner, 2026-10-22).
-    captions: ["Subtitle style", "Burns subtitles into a video."],
+    // Burn in subtitles starting a project (owner, 2026-10-22, 2026-10-23).
+    captions: ["Burn in subtitles", "Burns subtitles into a video."],
   });
   // The same three pieces in the same order, whatever the tab.
   const shape = (tab) => emptyTabHtml(tab, "z", "l")
