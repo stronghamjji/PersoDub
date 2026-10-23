@@ -240,7 +240,11 @@
                GET /api/dub/jobs list ui/src/projects.mjs reads for the
                sidebar and the card above. -->
           <div class="projects-head" id="projectsHead">
-            <h3 data-i18n>Projects</h3><span class="projects-count" id="projectsCount"></span>
+            <h3 data-i18n>Projects</h3>
+            <!-- Collapse / Expand: the cards fold away to this row, and stay
+                 so next time (owner, 2026-10-23; ui/src/homeScreen.mjs). -->
+            <button class="home-sbtn proj-fold" id="projectFoldBtn" type="button" aria-controls="projectsGrid"
+                    aria-expanded="true"></button><span class="projects-count" id="projectsCount"></span>
             <button class="home-sbtn" id="projectSearchBtn" type="button">
               <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg><span data-i18n>Search</span></button>
           </div>

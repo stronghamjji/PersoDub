@@ -1076,6 +1076,8 @@
     display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 11px;
     font-weight: 500; color: var(--foreground); border: none; cursor: pointer; font-family: inherit; }
   .home-sbtn:hover { background: var(--accent); }
+  /* Collapse / Expand: Search's shape, right beside the heading. */
+  .projects-head .proj-fold { margin-left: 0; }
   .projects-search-box { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
     border-radius: var(--radius-sm); background: var(--well); color: var(--muted-foreground); }
   .projects-search-box input { flex: 1; border: none; background: none; padding: 0;

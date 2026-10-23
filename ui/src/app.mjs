@@ -1324,6 +1324,7 @@ const home = initHomeScreen({
   onError: homeError,
   onOpenDraft: (id) => reopenDraft(id),
   onDeleteDraft: (d) => confirmDialogs.askDelete({ draftId: d.downloadId, project: d.name || "this draft" }),
+  storage: localStorage,
 });
 
 // ---------------- Drafts left before dubbing ----------------

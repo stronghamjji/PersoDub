@@ -10,12 +10,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { initHomeScreen } from "./homeScreen.mjs";
+import { initHomeScreen, FOLD_KEY } from "./homeScreen.mjs";
 
 function makeEl(id) {
   return {
     id, textContent: "", value: "", hidden: false, dataset: {}, style: {},
-    listeners: {}, focused: false, selected: false,
+    listeners: {}, focused: false, selected: false, attrs: {},
+    setAttribute(k, v) { this.attrs[k] = v; },
     set innerHTML(v) { this.html = v; },
     get innerHTML() { return this.html || ""; },
     qs: {},
@@ -31,7 +32,7 @@ function makeEl(id) {
 
 const clickEvent = (target) => ({ target, stopPropagation() { this.stopped = true; }, stopped: false, preventDefault() {} });
 
-function harness({ fetchOk = true } = {}) {
+function harness({ fetchOk = true, storage = null } = {}) {
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const log = { opened: [], deleted: [], calls: [], errors: [], openedDrafts: [], deletedDrafts: [] };
@@ -54,6 +55,7 @@ function harness({ fetchOk = true } = {}) {
     onError: (text) => log.errors.push(text),
     onOpenDraft: (id) => log.openedDrafts.push(id),
     onDeleteDraft: (d) => log.deletedDrafts.push(d.downloadId),
+    storage,
   });
   return { $, api, log };
 }
@@ -566,4 +568,35 @@ test("a picture the server had none for is asked for again when the cards are pa
   assert.equal(grid.writes, 1);
   assert.equal(cardOf(grid, "e"), card);
   assert.equal(card.querySelector(".proj-thumb").kids[0].className, "proj-img");
+});
+
+// A long list is a lot to face (owner, 2026-10-23): Collapse folds the cards
+// away to the heading row, and the next start remembers it.
+test("Collapse folds the grid away and Expand brings it back, remembered for the next start", (t) => {
+  const kept = new Map();
+  const storage = { getItem: (k) => (kept.has(k) ? kept.get(k) : null), setItem: (k, v) => kept.set(k, v) };
+  const h = harness({ storage });
+  t.after(h.log.restore);
+  const btn = h.$("projectFoldBtn");
+  assert.equal(h.$("projectsGrid").hidden, false);
+  assert.equal(btn.attrs["aria-expanded"], "true");
+  assert.match(btn.innerHTML, /<span>Collapse<\/span>$/);
+  btn.fire("click");
+  assert.equal(h.$("projectsGrid").hidden, true);
+  assert.equal(btn.attrs["aria-expanded"], "false");
+  assert.match(btn.innerHTML, /<span>Expand<\/span>$/);
+  assert.equal(kept.get(FOLD_KEY), "1");
+  // The next start opens folded.
+  const again = harness({ storage });
+  t.after(again.log.restore);
+  assert.equal(again.$("projectsGrid").hidden, true);
+  again.$("projectFoldBtn").fire("click");
+  assert.equal(again.$("projectsGrid").hidden, false);
+  assert.equal(kept.get(FOLD_KEY), "0");
+  // No storage to read (a private window): open, and a press still folds.
+  const bare = harness({ storage: { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } } });
+  t.after(bare.log.restore);
+  assert.equal(bare.$("projectsGrid").hidden, false);
+  bare.$("projectFoldBtn").fire("click");
+  assert.equal(bare.$("projectsGrid").hidden, true);
 });

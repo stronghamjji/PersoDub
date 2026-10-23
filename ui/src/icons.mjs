@@ -34,6 +34,7 @@ const LUCIDE = {
   "zoom-in": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6"/><path d="M8 11h6"/>',
   "zoom-out": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/>',
   "chevron-down": '<path d="m6 9 6 6 6-6"/>',
+  "chevron-up": '<path d="m18 15-6-6-6 6"/>',
   // The Home screen (mockup 2026-09-29): the banner's plus, the "From a link"
   // card's link mark reused as a search glyph, the Dub Agent card's bubble,
   // the "..." project-card menu, and the two dialogs' own marks (the alert

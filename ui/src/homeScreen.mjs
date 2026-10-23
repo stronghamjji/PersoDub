@@ -6,7 +6,7 @@
 // (see projects.mjs), so the sidebar, the queue card and this grid all repaint
 // off one fetch.
 //
-// Owns #projectsGrid, #projectsCount, #projectSearchBtn/#projectSearchBox/
+// Owns #projectsGrid, #projectsCount, #projectFoldBtn, #projectSearchBtn/#projectSearchBox/
 // #projectSearchInput and the "..." card menu (#projectCardMenu with
 // #projectMenuRename/#projectMenuDelete). Delete reuses the page's own
 // confirm dialog through onDeleteJob, exactly as the sidebar's Delete button
@@ -26,6 +26,9 @@ import { lucide } from "./icons.mjs";
 import { isErase, isSeparate, doingWord, projectMeta, shownName } from "./projects.mjs";
 import { groupProjects, projectKey, projectLanguages, languageLabel } from "./languageRow.mjs";
 import { t } from "./i18n.mjs";
+
+// Where Collapse is remembered: "1" while the grid is folded away.
+export const FOLD_KEY = "persodub.home.projectsFolded";
 
 // The chip's colour follows the same states the sidebar's dot does
 // (JOB_DOT in projects.mjs) -- done gets no chip at all, a finished card
@@ -50,12 +53,14 @@ const CHIP = {
  *        did not work (a rename the server refused)
  * @param {(downloadId: string) => void} [deps.onOpenDraft]  open a kept draft again
  * @param {(draft: object) => void} [deps.onDeleteDraft]  ask, then let it go
+ * @param {{getItem: Function, setItem: Function}} [deps.storage]  where the
+ *        grid's being folded is remembered
  * @returns {{renderProjects: (jobs: object[]) => void,
  *            renderDrafts: (drafts: object[]) => void,
  *            setRunningPct: (jobId: string, pct: number|null) => void}}
  */
 export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = () => {},
-                                 onOpenDraft = () => {}, onDeleteDraft = () => {} }) {
+                                 onOpenDraft = () => {}, onDeleteDraft = () => {}, storage = null }) {
   let jobs = [];
   let drafts = [];
   let menuDraftId = null;
@@ -361,6 +366,25 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && (menuJobId || menuDraftId)) closeMenu();
   });
+
+  // -- fold --------------------------------------------------------------
+  // A long list is a lot to face (owner, 2026-10-23): Collapse folds the
+  // cards away to the heading row, Expand brings them back, and the choice
+  // is there again at the next start.
+  let folded = false;
+  try { folded = !!storage && storage.getItem(FOLD_KEY) === "1"; } catch { /* private window */ }
+  function paintFold() {
+    $("projectsGrid").hidden = folded;
+    const btn = $("projectFoldBtn");
+    btn.setAttribute("aria-expanded", String(!folded));
+    btn.innerHTML = `${lucide(folded ? "chevron-down" : "chevron-up", 12)}<span>${t(folded ? "Expand" : "Collapse")}</span>`;
+  }
+  $("projectFoldBtn").addEventListener("click", () => {
+    folded = !folded;
+    try { if (storage) storage.setItem(FOLD_KEY, folded ? "1" : "0"); } catch { /* private window */ }
+    paintFold();
+  });
+  paintFold();
 
   // -- search ------------------------------------------------------------
   function closeSearch() {
