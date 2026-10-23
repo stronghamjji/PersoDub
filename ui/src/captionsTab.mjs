@@ -20,8 +20,8 @@
 // and a press on either is the same pick.
 //
 // Anywhere else it starts one (owner, 2026-10-22 and 2026-10-23): a video --
-// the open project's own, the draft's, or one brought in through the shared
-// Import block -- and a subtitle file (.srt), then the two made a finished
+// the open project's own, the erase screen's erased one, the draft's, or one
+// brought in through the shared Import block -- and a subtitle file (.srt), then the two made a finished
 // project of kind "captions" (POST /api/captions/import) that the page opens
 // like a finished dub. The looks stay on show, dim, until both are there;
 // once open, a row above them names the two files.

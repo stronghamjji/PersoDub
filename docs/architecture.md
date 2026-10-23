@@ -459,7 +459,7 @@ and `static/css/agent.css` are its stylesheets. `ui/src/` is flat:
 |---|---|
 | Composition root | `app.mjs`: imports every screen, wires them together in page order (the order is behaviour), owns the page state |
 | API layer | `dubApi.mjs`: form building, polling, progress parsing, the stage table, engine labels |
-| Screens | `homeScreen`, `homeSidebar`, `projects`, `runningScreen`, `eraseScreen`, `eraseArea`, `audioTab`, `draftSetup`, `draftImport`, `importBlock`, `newProject`, `newProjectWindow`, `workFrame`, `leftTabs`, `languageRow` |
+| Screens | `homeScreen`, `homeSidebar`, `projects`, `runningScreen`, `eraseScreen`, `eraseArea`, `draftSetup`, `draftImport`, `importBlock`, `newProject`, `newProjectWindow`, `workFrame`, `leftTabs`, `languageRow` |
 | Finished-dub editor | `scriptTable`, `scriptWatch`, `timeline`, `cutTools`, `trimBar`, `donePlayer`, `playerFoot`, `playRange`, `subtitleOverlay`, `subtitleLayout`, `captionsTab`, `ratio`, `speakers` |
 | Dialogs | `settingsDialog`, `modelsDialog` + `modelsUi`, `keyWindow`, `chatgptSignIn`, `chatgptSetup`, `confirmDialogs`, `exportDialog`, `updateWindow`, `whatsNew`, `translatorChoice` |
 | Small state | `draft`, `keptDrafts`, `rememberedChoices`, `reportedOnce`, `pendingSave` |

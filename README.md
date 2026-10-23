@@ -61,11 +61,9 @@ Box the subtitles, press **Erase**, and dub the clean video.
 <tr>
 <td width="50%" valign="top">
 
-<img src="docs/images/separate-screen.png" alt="The separate audio screen: the voice and the background as two tracks, ready to export" />
+### Burn in subtitles
 
-### Separate audio
-
-Split a video into the voice and the background. Export either one, or dub from there.
+Put a subtitle file on a video in the look you choose.
 
 </td>
 <td width="50%" valign="top">
@@ -168,7 +166,7 @@ Finish the setup, not just a plan. Tell me any step you could not do.
 - **Fix any line after the dub.** Change the words, the speaker or the voice of one line and only that line is remade. Cut on the timeline, or tell the Dub Agent what to fix.
 - **Fits the words to the time.** Other tools speed the audio up. On this computer, PersoDub fits the translation instead, and speeds a line up (10% at most) only when it would run into the next one.
 - **Voice cloning, not narration.** Each speaker still sounds like themselves.
-- **Everything else is kept.** Music and effects stay. The translated `.srt` comes with the video, or burn it in from the Subtitle style tab.
+- **Everything else is kept.** Music and effects stay. The translated `.srt` comes with the video, or burn it in, in the look you pick with **Subtitle style**.
 
 ## Details
 

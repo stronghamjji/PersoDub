@@ -142,8 +142,8 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
     sendReport({ kind: "erase", kitDir: ctx.bootedKitDir, code, message: detail, jobId });
   });
 
-  // A separation that finished, from the Audio tab (ui/src/audioTab.mjs),
-  // which follows its own job the way the erase screen does. Not counted --
+  // A separation that finished (preload separateDone). The Audio tab that
+  // sent it is gone from the page; the channel stays for now. Not counted --
   // the counts have no word for one -- only its record sent.
   ipcMain.on("shell:separate-done", (_e, msg) => sendRecord("separate", isJobId(msg && msg.job) ? msg.job : undefined));
 }

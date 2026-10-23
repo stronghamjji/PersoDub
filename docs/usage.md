@@ -18,15 +18,15 @@ the app partway through does not lose the work, setup resumes where it stopped.
 
 The Home screen has a sidebar down the left:
 
-- **Tools**: **Dubbing**, **Separate audio**, **Erase subtitles** and **Save video**.
+- **Tools**: **Dubbing**, **Erase subtitles**, **Burn in subtitles** and **Save video**.
 - **Management**: **Projects**, every job this app has run, and **Settings**.
 - At its foot, **Help**, **Send feedback** and **What's new**.
 
 Beside it are the **Create project** banner, a row of cards (the **Dub Agent** and
 the four tools) and your projects.
 
-A project opens on the work screen: tabs on the left (**Dubbing**, **Separate
-audio**, **Erase**, **Subtitle style**, between **Home** and **New project**), the video in
+A project opens on the work screen: tabs on the left (**Dubbing**, **Erase**, **Burn in
+subtitles**, **Save video**, between **Home** and **New project**), the video in
 the middle, the **Dub Agent** panel on the right and the timeline under all three.
 Along the top is the bar with the project's name, **Settings** and the three pane
 buttons that show or hide the left panel, the timeline and the Dub Agent. **Download**
@@ -80,7 +80,7 @@ From here:
 
 - **Download**, at the right end of the tabs above the video, saves the kept part as a
   video, or as audio only, into Downloads.
-- The **Separate audio** and **Erase** tabs work on the same video.
+- The **Erase** and **Burn in subtitles** tabs work on the same video.
 - **Start dubbing** begins the dub. With **Perso API** the line beside it says what the
   dub costs and how many credits your Perso workspace has left. Perso charges the dubbing
   model's credits a second for the whole seconds that are spoken, so a new video says *up
@@ -170,36 +170,28 @@ is slow work, minutes for every minute of video, because every frame in the band
 to be painted over. **Erase** starts it.
 
 When it finishes, **Original** and **Erased** above the picture swap between the two
-so you can see what changed. **Download**, at the right of the two, saves the clean video, and
-**Dubbing** opens it as a new project to dub. If something goes wrong, the panel says
+so you can see what changed. **Download**, at the right of the two, saves the clean video,
+**Dubbing** opens it as a new project to dub, and the **Burn in subtitles** tab puts a
+subtitle file on it. If something goes wrong, the panel says
 why it stopped, **Try again** runs it again on the same video and the same box, and
 **Raw log** has the detail.
 
 The eraser is a pack of its own, downloaded the first time you use it.
 
-## Separate audio
+## Burn in subtitles
 
-The **Separate audio** card on the home screen splits a video's sound into two
-files: the voice, and everything else. Drop a video or paste a link, the same two
-ways the Dubbing tab offers. A pasted link starts fetching by itself.
+The **Burn in subtitles** card on the home screen, or the tab of the same name in a
+project, puts a subtitle file (`.srt`) on a video in the look you choose. Bring the
+video the same ways the Dubbing tab offers; in a project the tab uses that project's
+video (the original it was cut from, while the app still has it), and on the erase
+screen the erased one. Then drop the `.srt` file, and the two open as a new project.
 
-The tab shows the video's name and length, then **Runs on**: *Local model* or *Perso
-API*. Perso spends credits, so its **Separate** button has to be pressed twice. A
-line under it estimates the time, for example "About 1 min". While it runs you see
-"Separating… 42%", a bar and **Stop**. On this computer the work is done by a
-Mel-Band RoFormer model, or by Demucs if the RoFormer files have not been downloaded.
-On an M4 MacBook Air a 38 second clip took 43 seconds.
+Its tab names the two files and holds the looks, **A-** / **A+** for the size, **All
+lines** / **This line** for the boxed looks, and **Show**. Clicking the subtitle on the
+picture picks that line. **Download** saves the video with the subtitles burned in.
 
-When it is done there are two rows, **Voice** (only the speech) and **Background**
-(music, effects and noise, everything except speech). Each has a play button and its
-waveform, and the timeline gets a lane for each, which can be muted. A short note
-beside each name says what it holds. **Dubbing** goes to the Dubbing tab, where a dub
-of the same cut reuses these two files instead of separating again. **Download** saves
-Voice and Background as MP3 or WAV into Downloads.
-The files stay in the project folder as `vocals.wav` and `background.wav`.
-
-Cutting the video on the timeline puts the tab back to how it was before you
-separated; undoing the cut brings the two sounds back.
+In a dub, the **Subtitle style** button just above the subtitle, shown while the video
+is paused, opens the same looks for the dub's own subtitles.
 
 ## Save video
 
@@ -209,7 +201,7 @@ project on the Dubbing tab, where the video is fetched onto your computer with t
 percentage on screen.
 
 From there **Download** > **Video** saves the file, in the shape the **Ratio** button is
-set to. The same video can also be dubbed, separated or have its subtitles erased
+set to. The same video can also be dubbed or have its subtitles erased
 without fetching it again.
 
 Links are fetched with yt-dlp on your computer. Saving uploads nothing; dubbing or
