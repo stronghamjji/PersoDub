@@ -1,4 +1,4 @@
-// Home: the project grid, its search, What's new, Help, deleting a test
+// Home: the project grid, folding it, its search, What's new, Help, deleting a test
 // project from its card's menu, and a finished dub's card opening its screen.
 // Only a card named e2e-click-* or e2e-dub* is ever deleted.
 import { shown, pressable, isOpen, isClosed, onHome, textOf } from "../lib/cdp.mjs";
@@ -35,7 +35,7 @@ export const steps = [
     async run(app) {
       await toHome(app);
       const n = await app.waitFor("the project grid to paint", 15000, () => document.querySelectorAll("#projectsGrid .proj-card").length);
-      const tools = { "#homeDubCard": "Dubbing", "#homeAudioCard": "Separate audio", "#homeEraseCard": "Erase subtitles", "#homeSaveCard": "Save video" };
+      const tools = { "#homeDubCard": "Dubbing", "#homeEraseCard": "Erase subtitles", "#homeCaptionsCard": "Burn in subtitles", "#homeSaveCard": "Save video" };
       for (const [sel, key] of Object.entries(tools)) {
         await app.waitFor(`${sel} on show`, 5000, shown, sel);
         const said = await app.inPage(textOf, `${sel} .home-card-title`);
@@ -49,6 +49,34 @@ export const steps = [
       const gh = await app.inPage(textOf, "#homeGhName");
       if (gh !== app.tr("PersoDub on GitHub") || !(await app.inPage(pressable, "#homeGhName"))) throw new Error(`the GitHub button reads "${gh}"`);
       return `${n} cards; tool cards ${Object.values(tools).map((k) => app.tr(k)).join(", ")}; Perso pill "${pill.label}" with its wordmark; "${gh}"`;
+    } },
+
+  { name: "projects fold and unfold", looks: ["#projectsHead", "#projectsGrid"],
+    async run(app) {
+      await toHome(app);
+      const KEY = "persodub.home.projectsFolded";
+      const was = await app.inPage((k) => localStorage.getItem(k), KEY);
+      const state = () => ({ grid: !document.querySelector("#projectsGrid").hidden,
+        expanded: document.querySelector("#projectFoldBtn").getAttribute("aria-expanded"),
+        label: document.querySelector("#projectFoldBtn").textContent.trim() });
+      // From open: Collapse, then Expand; a folded start is opened first.
+      if (!(await app.inPage(state)).grid) await app.click("#projectFoldBtn");
+      const open = await app.waitFor("the grid open", 5000, () => !document.querySelector("#projectsGrid").hidden);
+      const s0 = await app.inPage(state);
+      if (!open || s0.label !== app.tr("Collapse") || s0.expanded !== "true") throw new Error(`open: ${JSON.stringify(s0)}`);
+      await app.click("#projectFoldBtn");
+      await app.waitFor("the grid folded", 5000, () => document.querySelector("#projectsGrid").hidden);
+      const s1 = await app.inPage(state);
+      const kept = await app.inPage((k) => localStorage.getItem(k), KEY);
+      await app.shot("home-projects-folded");
+      if (s1.label !== app.tr("Expand") || s1.expanded !== "false" || kept !== "1") throw new Error(`folded: ${JSON.stringify(s1)}, stored ${kept}`);
+      await app.click("#projectFoldBtn");
+      await app.waitFor("the grid back", 5000, () => !document.querySelector("#projectsGrid").hidden);
+      const back = await app.inPage((k) => localStorage.getItem(k), KEY);
+      if (back !== "0") throw new Error(`unfolded, yet stored ${back}`);
+      // The rest of the area presses cards: left open, and the stored value as it was.
+      await app.inPage((k, v) => { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); return true; }, KEY, was);
+      return `"${s0.label}" folded the grid away (stored ${kept}), "${s1.label}" brought it back (stored ${back}); stored value put back (${was})`;
     } },
 
   { name: "search filters cards", looks: ["#projectsHead", "#projectsGrid"],
@@ -101,7 +129,8 @@ export const steps = [
       const help = await app.inPage(() => ({ title: document.querySelector("#helpTitle").textContent.trim(),
                                              items: document.querySelectorAll("#helpOverlay .help-item").length }));
       await app.shot("home-help-open");
-      if (help.title !== app.tr("What PersoDub does") || help.items !== 5) throw new Error(`Help shows "${help.title}" with ${help.items} items`);
+      // Dubbing, Erase subtitles, Save video and the Dub Agent: Separate audio left the tools (2026-10-23).
+      if (help.title !== app.tr("What PersoDub does") || help.items !== 4) throw new Error(`Help shows "${help.title}" with ${help.items} items`);
       await app.key("Escape");
       await app.waitFor("the Help dialog to close", 5000, isClosed, "#helpOverlay");
       return `"${label}" opened the Help dialog "${help.title}" (${help.items} tools, not an external link); Escape closed it`;

@@ -3,8 +3,8 @@
 // Retranslate unfit lines with nothing ticked, a line's block on the timeline, the
 // timeline's fit, fold and height, a subtitle block's end, the video pane's
 // width, a 9:16 download, the social media preview, renaming by the title,
-// dragging the subtitle on the picture, and the Audio and Erase tabs inside a
-// dub. Everything stays on this computer, and every value changed is put
+// the subtitle staying at the foot when dragged, the tab row, and the Erase
+// tab inside a dub. Everything stays on this computer, and every value changed is put
 // back: by the same control where one does it, and at the end, from what
 // step 1 read, for what no control can undo (a retimed subtitle's entry).
 import { spawnSync } from "node:child_process";
@@ -563,15 +563,20 @@ export const steps = [
       return `title → "${bar}": API title "${RENAMED}", Home card "${card}"; back to "${was}" (API ${JSON.stringify(back.title)}, top bar "${bar2}")`;
     } },
 
-  { name: "V7 drag the subtitle on the picture", looks: ["#videoPane", "#subOverlay"],
+  // Fixed at the foot of the picture (owner, 2026-10-23): a drag moves
+  // nothing, saves nothing, and brings up no tab.
+  { name: "V7 the subtitle stays at the foot when dragged", looks: ["#videoPane", "#subOverlay"],
     async run(app, ctx) {
       const s = ctx.state.dub2;
       await onDub(app, s);
       const st0 = await style(app, s.jobId);
-      if (st0.enabled === false) throw new Error("subtitles are off on this dub");
+      const eye = async (want) => {
+        if ((await style(app, s.jobId)).enabled === want) return;
+        await app.click("#tlSubEye");
+        await until(`the saved enabled=${want}`, 10000, async () => (await style(app, s.jobId)).enabled === want);
+      };
+      await eye(true);
       await atLine(app, 2);
-      // Its block in the subtitle lane: the video at that subtitle's own start (T4 may have moved it off the line's).
-      await app.click('#timeline .tl-lane-caps .tl-cap[data-idx="1"] .tl-cap-txt');
       await app.waitFor("the subtitle on the picture", 5000, () => {
         const r = document.querySelector("#subOverlayText").getBoundingClientRect();
         return !document.querySelector("#subOverlay").hidden && document.querySelector("#subOverlayText").textContent.trim() && r.height > 0;
@@ -579,54 +584,36 @@ export const steps = [
       const geo = () => {
         const v = document.querySelector("#doneVideo").getBoundingClientRect();
         const tx = document.querySelector("#subOverlayText").getBoundingClientRect();
-        return { top: v.top, h: v.height, bottom: tx.bottom, mid: tx.top + tx.height / 2 };
+        return { bottom: tx.bottom - v.top, tab: document.querySelector("#leftTabs .left-tab.on")?.dataset.tab || "" };
       };
       const g0 = await app.inPage(geo);
-      // Where it sits now, as a share of the picture from the top: what pos would say.
-      const pos0 = Math.round((g0.bottom - g0.top) / g0.h * 100);
-      // Near its left end: once raised its middle sits under the big play button.
+      const before = await style(app, s.jobId);
       const p = await spotOf(app, "#subOverlayText", 0.15);
       await drag(app, p.x, p.y, 0, -40);
-      const want = Math.round((p.y - 40 - g0.top) / g0.h * 100);
-      const st1 = await until(`the saved position ${want}`, 10000, async () => {
-        const st = await style(app, s.jobId);
-        return st.pos != null && Math.abs(st.pos - want) <= 1 ? st : null;
-      }).catch(async () => { throw new Error(`after a 40 px drag the saved pos is ${(await style(app, s.jobId)).pos} (wanted ${want}, was ${st0.pos})`); });
+      await sleep(800);   // past the page's debounced save, had there been one
       const g1 = await app.inPage(geo);
-      if (!(g1.mid < g0.mid - 10)) throw new Error(`the subtitle's middle went ${g0.mid.toFixed(0)} → ${g1.mid.toFixed(0)} px`);
-      await app.shot("dub2-subtitle-moved");
-      // Back to where it was drawn: the pointer to the old bottom edge.
-      const p2 = await spotOf(app, "#subOverlayText", 0.15);
-      await drag(app, p2.x, p2.y, 0, g0.bottom - p2.y);
-      const st2 = await until(`the saved position back to ${pos0}`, 10000, async () => {
-        const st = await style(app, s.jobId);
-        return st.pos != null && Math.abs(st.pos - pos0) <= 1 ? st : null;
-      });
-      const g2 = await app.inPage(geo);
-      // The press took the left panel to Subtitle style; Dubbing again.
-      await app.click('#leftTabs [data-tab="dubbing"]');
-      await app.waitFor("the Dubbing tab", 5000, shown, "#scriptBox");
-      return `subtitle dragged 40 px up: saved pos ${st0.pos} → ${st1.pos} (wanted ${want}), its middle ${g0.mid.toFixed(0)} → ${g1.mid.toFixed(0)} px; `
-        + `dragged back: pos ${st2.pos} (drawn at ${pos0}), bottom ${g0.bottom.toFixed(0)} → ${g2.bottom.toFixed(0)} px; the saved null comes back at the area's end`;
+      const after = await style(app, s.jobId);
+      await app.shot("dub2-subtitle-not-moved");
+      await eye(st0.enabled);
+      if (Math.abs(g1.bottom - g0.bottom) > 1) throw new Error(`a 40 px drag moved the subtitle's foot ${g0.bottom.toFixed(0)} → ${g1.bottom.toFixed(0)} px`);
+      if (after.pos !== 93 || after.pos !== before.pos) throw new Error(`the saved pos went ${before.pos} → ${after.pos}`);
+      if (g1.tab !== "dubbing") throw new Error(`the press brought up the ${g1.tab} tab`);
+      return `dragged 40 px up: foot ${g0.bottom.toFixed(0)} → ${g1.bottom.toFixed(0)} px, saved pos ${before.pos} → ${after.pos}, `
+        + `tab still ${g1.tab}; eye back to ${st0.enabled}`;
     } },
 
-  { name: "V8 Audio tab in a dub", looks: ["#tabAudio"],
+  // The project screen's tabs, in Home's order (owner, 2026-10-23).
+  { name: "V8 the tab row in a dub", looks: ["#leftTabs"],
     async run(app, ctx) {
       const s = ctx.state.dub2;
       await onDub(app, s);
-      await app.click('#leftTabs [data-tab="audio"]');
-      const note = await app.waitFor("the Audio tab's note", 5000, () => {
-        const n = document.querySelector("#audioEmptyNote");
-        return n && !n.hidden && n.getClientRects().length ? n.textContent.trim() : null;
-      });
-      const zone = await app.inPage(shown, "#audioZone");
-      await app.shot("dub2-audio-tab");
-      await app.click('#leftTabs [data-tab="dubbing"]');
-      await app.waitFor("the Dubbing tab", 5000, shown, "#scriptBox");
-      const want = app.tr("Separate audio starts from a new project.");
-      if (note !== want) throw new Error(`the Audio tab says "${note}", not "${want}"`);
-      if (zone) throw new Error("the Audio tab offers a video drop inside a dub");
-      return `Audio tab: "${note}" (1 line), no drop zone; back on Dubbing`;
+      const row = await app.inPage(() => [...document.querySelectorAll("#leftTabs .left-tab")]
+        .map((b) => b.dataset.tab || b.id).filter(Boolean));
+      const want = ["homeBtn", "dubbing", "erase", "captions", "save", "newProjectBtn"];
+      if (JSON.stringify(row) !== JSON.stringify(want)) throw new Error(`the tab row is ${row.join(", ")}`);
+      const words = await app.inPage(() => ["captions", "save"].map((t) => document.querySelector(`#leftTabs [data-tab="${t}"]`).textContent.trim()));
+      if (words[0] !== app.tr("Burn in subtitles") || words[1] !== app.tr("Save video")) throw new Error(`the two read ${words.join(", ")}`);
+      return `${row.join(", ")}; "${words.join('", "')}"`;
     } },
 
   { name: "V9 Erase tab in a dub", looks: ["#tabErase", "#erasePane"],

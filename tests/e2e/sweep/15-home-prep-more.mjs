@@ -262,13 +262,15 @@ export const steps = [
     async run(app) {
       await toHome(app);
       const said = [];
-      await app.click("#homeNavAudio");
-      const audio = await app.waitFor("the Audio tab", 10000, () => {
-        const b = document.querySelector('#leftTabs [data-tab="audio"]');
-        return b.classList.contains("on") && b.getAttribute("aria-selected") === "true" && !document.querySelector("#tabAudio").hidden
+      // Burn in subtitles: an empty new project on its tab, asking for a video and a .srt.
+      await app.click("#homeNavCaptions");
+      const burn = await app.waitFor("the Burn in subtitles tab", 10000, () => {
+        const b = document.querySelector('#leftTabs [data-tab="captions"]');
+        return b.classList.contains("on") && b.getAttribute("aria-selected") === "true" && !document.querySelector("#tabCaptions").hidden
+          && !document.querySelector("#capAlone").hidden && document.querySelector("#capSrtZone").getClientRects().length > 0
           && document.body.dataset.screen;
       });
-      said.push(`${app.tr("Separate audio")} → audio tab on (screen ${audio})`);
+      said.push(`${app.tr("Burn in subtitles")} → its tab on, video and .srt asked for (screen ${burn})`);
       await app.click("#homeBtn");
       await app.waitFor("Home", 10000, onHome);
       await app.click("#homeNavErase");

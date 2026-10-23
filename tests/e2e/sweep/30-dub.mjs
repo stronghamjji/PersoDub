@@ -400,50 +400,83 @@ export const steps = [
         + `full screen on #${fs}, ended by ${how}, window ${win.join("x")} again`;
     } },
 
-  { name: "subtitle style panel", looks: ["#videoStylePop", "#tabCaptions"],
+  // A dub's subtitles (owner, 2026-10-23): off until the timeline's eye turns
+  // them on, fixed at the foot of the picture, and their looks behind the
+  // Subtitle style chip just above them while the video stands still.
+  { name: "subtitle style chip", looks: ["#subStyleChip", "#videoStylePop", "#timeline"],
     async run(app, ctx) {
       const s = ctx.state.dub;
       await onDub(app, s);
       const was = await style(app, s.jobId);
-      // The video at line 2, so a subtitle is on the picture.
+      const eye = async (want) => {
+        if ((await style(app, s.jobId)).enabled === want) return;
+        await app.click("#tlSubEye");
+        await until(`the saved enabled=${want}`, 10000, async () => (await style(app, s.jobId)).enabled === want);
+      };
+      // The video at line 2, still, so a subtitle is on the picture once they are on.
       await app.click(`${row(2)} .sc-time`);
       await app.waitFor("the video at line 2", 5000, (sel) => Math.abs(document.querySelector("#doneVideo").currentTime
         - +document.querySelector(sel).dataset.start) < 0.05, row(2));
+      await eye(false);
+      await app.waitFor("no subtitle and no chip while they are off", 5000, () => document.querySelector("#subOverlay").hidden);
+      await eye(true);
+      const geo = () => {
+        const v = document.querySelector("#doneVideo"), r = v.getBoundingClientRect();
+        // The picture inside the player's box (object-fit: contain).
+        const k = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+        const pic = { top: r.top + (r.height - v.videoHeight * k) / 2, h: v.videoHeight * k };
+        const tx = document.querySelector("#subOverlayText").getBoundingClientRect();
+        const c = document.querySelector("#subStyleChip").getBoundingClientRect();
+        return { foot: pic.top + pic.h - tx.bottom, h: pic.h, gap: tx.top - c.bottom };
+      };
+      await app.waitFor("the subtitle and the chip over it", 5000, () => !document.querySelector("#subOverlay").hidden
+        && !document.querySelector("#subStyleChip").hidden);
+      const g0 = await app.inPage(geo);
+      // 7 % of the picture up from its foot, and the chip about 10px over the words.
+      if (Math.abs(g0.foot - 0.07 * g0.h) > 3) throw new Error(`the subtitle's foot is ${g0.foot.toFixed(1)} px up, not 7 % of ${g0.h.toFixed(0)} px`);
+      if (Math.abs(g0.gap - 10) > 3) throw new Error(`the chip is ${g0.gap.toFixed(1)} px over the words, not about 10`);
       const pick = async (preset) => {
-        await app.click("#videoStyleBtn");
-        await app.waitFor("the looks over the video", 5000, () => !document.querySelector("#videoStylePop").hidden);
+        await app.click("#subStyleChip");
+        const pop = await app.waitFor("the looks over the video", 5000, () => {
+          const p = document.querySelector("#videoStylePop");
+          if (p.hidden) return null;
+          const tiles = [...document.querySelectorAll("#videoStyleGrid .cap-pv")];
+          return { bottom: p.getBoundingClientRect().bottom, tiles: tiles.length,
+                   bg: tiles.filter((t) => getComputedStyle(t).backgroundImage !== "none").length,
+                   words: document.querySelector("#videoStyleGrid .cap-sample")?.textContent.trim() };
+        });
+        const chipTop = (await app.inPage(() => document.querySelector("#subStyleChip").getBoundingClientRect().top));
+        if (pop.bottom > chipTop) throw new Error(`the looks open down to ${pop.bottom.toFixed(0)} px, past the chip's top ${chipTop.toFixed(0)}`);
+        if (pop.tiles !== 12 || pop.bg || pop.words !== app.tr("Abc 123")) throw new Error(`the looks: ${JSON.stringify(pop)}`);
         await app.click(`#videoStyleGrid [data-preset="${preset}"]`);
         await app.waitFor("the looks to close on the pick", 5000, () => document.querySelector("#videoStylePop").hidden);
         const t0 = Date.now();
-        await until(`the saved look ${preset}`, 10000, async () => (await style(app, s.jobId)).preset === preset);
+        const st = await until(`the saved look ${preset}`, 10000, async () => { const v = await style(app, s.jobId); return v.preset === preset && v; });
+        if (st.pos !== 93) throw new Error(`the look ${preset} saved pos ${st.pos}, not 93`);
+        const g = await app.inPage(geo);
+        if (Math.abs(g.foot - g0.foot) > 3) throw new Error(`${preset} moved the subtitle's foot ${g0.foot.toFixed(1)} → ${g.foot.toFixed(1)} px`);
         return `${preset} ${Date.now() - t0} ms`;
       };
       const looks = [await pick("clean"), await pick("bold-punch")];
-      // A+ / A- and Show live in the Subtitle style tab.
+      // Playing, the chip goes; still again, it is back.
+      await app.click("#playToggle");
+      await app.waitFor("the chip gone while it plays", 5000, () => !document.querySelector("#doneVideo").paused
+        && document.querySelector("#subStyleChip").hidden);
+      await app.click("#playToggle");
+      await app.waitFor("the video still", 5000, () => document.querySelector("#doneVideo").paused);
+      // Burn in subtitles here is no style of this dub's: it starts a burn-in project from this video.
       await app.click('#leftTabs [data-tab="captions"]');
-      await app.waitFor("the tab's tools", 5000, shown, "#subToolbar");
-      const size0 = was.size == null ? 100 : was.size;
-      const sizes = [];
-      for (const [btn, want] of [["#subBigger", size0 + 10], ["#subSmaller", size0]]) {
-        await app.click(btn);
-        await until(`the saved size ${want}`, 10000, async () => ((await style(app, s.jobId)).size ?? 100) === want);
-        sizes.push(`${await app.inPage(textOf, "#subSizeLv")}`);
-      }
-      const overlay = () => !document.querySelector("#subOverlay").hidden;
-      if (!(await app.inPage(overlay))) throw new Error("no subtitle on the picture at line 2 before 보기 is pressed");
-      const shows = [];
-      for (const want of [false, true]) {
-        await app.click("#subShow");
-        await app.waitFor(`the subtitle ${want ? "back" : "gone"}`, 5000, (on) => !document.querySelector("#subOverlay").hidden === on, want);
-        await until(`the saved enabled=${want}`, 10000, async () => (await style(app, s.jobId)).enabled === want);
-        shows.push(want ? "shown" : "hidden");
-      }
-      // The look it had, back, and the Dubbing tab.
-      if (was.preset !== "bold-punch") looks.push(`back to ${await pick(was.preset)}`);
+      const burn = await app.waitFor("Burn in subtitles' start", 5000, () => !document.querySelector("#capAlone").hidden
+        && document.querySelector("#capMain").inert && document.querySelector("#capZone").hidden
+        && document.querySelector("#capVideoCard").textContent.trim());
       await app.click('#leftTabs [data-tab="dubbing"]');
       await app.waitFor("the Dubbing tab", 5000, shown, "#scriptBox");
-      return `picks closed the panel, saved ${looks.join(", ")}; A+ ${sizes[0]}, A- ${sizes[1]} (saved ${size0 + 10}, ${size0}); `
-        + `${app.tr("Show")}: subtitle ${shows.join(" then ")}`;
+      // The look and the switch it had, back.
+      if (was.preset !== "bold-punch") looks.push(`back to ${await pick(was.preset)}`);
+      await eye(was.enabled);
+      return `off, then on by the eye; foot ${g0.foot.toFixed(1)} px up of ${g0.h.toFixed(0)} px, chip ${g0.gap.toFixed(1)} px over the words; `
+        + `picks opened above the chip, plain tiles "${app.tr("Abc 123")}", saved ${looks.join(", ")} at pos 93, foot unmoved; `
+        + `chip gone while playing; ${app.tr("Burn in subtitles")} shows this video "${burn}" to start from; eye back to ${was.enabled}`;
     } },
 
   { name: "download every row", looks: ["#exportOverlay"],

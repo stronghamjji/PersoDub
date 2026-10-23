@@ -38,7 +38,7 @@ mkdirSync(out, { recursive: true });
 const PROJECT = `e2e-click-${stamp}`;
 const video = join(out, `${PROJECT}.mp4`);
 copyFileSync(opt.video, video);
-// The Subtitle style tab's own project: the same video under a name of its
+// A Burn in subtitles project: the same video under a name of its
 // own, so its card and its Downloads folder are not the dub's, and a subtitle
 // file of three lines inside the video's first ten seconds.
 const CAP_PROJECT = `${PROJECT}-cap`;
@@ -135,7 +135,7 @@ async function homeStep() {
   if (dialog) throw new Error(`#${dialog} is open; the run starts with no dialog in the way`);
   if (!(await inPage(onHome))) await click("#homeBtn");
   await waitFor("the Home screen", 10000, onHome);
-  for (const sel of ["#homePerso", "#homeGhName", "#homeDubCard", "#homeAudioCard", "#homeEraseCard", "#homeSaveCard"]) {
+  for (const sel of ["#homePerso", "#homeGhName", "#homeDubCard", "#homeEraseCard", "#homeCaptionsCard", "#homeSaveCard"]) {
     await waitFor(`${sel} on show`, 5000, shown, sel);
   }
   if (!(await js(`document.querySelector("#homePerso img").naturalWidth`))) throw new Error("the Perso pill's wordmark did not load");
@@ -263,8 +263,14 @@ async function dubStep(snap, base) {
 }
 
 async function lookStep(snap, base) {
-  // The video panel's Subtitle style, left of Download: the tab's twelve looks over the picture.
-  await click("#videoStyleBtn");
+  // A dub's subtitles start off (2026-10-23): the timeline's eye turns them
+  // on, and the chip just above them, while the video stands still, opens the
+  // twelve looks over the picture.
+  if (!(await inPage(() => document.querySelector("#tlSubEye").classList.contains("on")))) await click("#tlSubEye");
+  await click('#scriptBox .sc-row[data-line="1"] .sc-time');
+  await waitFor("the Subtitle style chip over the subtitle", 10000, () => !document.querySelector("#subOverlay").hidden
+    && !document.querySelector("#subStyleChip").hidden && document.querySelector("#doneVideo").paused);
+  await click("#subStyleChip");
   const pop = await waitFor("the looks over the video", 5000, () => {
     if (document.querySelector("#videoStylePop").hidden) return null;
     const cards = [...document.querySelectorAll("#videoStyleGrid [data-preset]")];
@@ -323,10 +329,8 @@ async function backHomeStep(snap) {
 async function captionsStep(snap, base) {
   if (!(await inPage(onHome))) await click("#homeBtn");
   await waitFor("the Home screen", 10000, onHome);
-  await click("#homeDubCard");
-  await waitFor("the Dubbing tab's Import block", 10000, shown, "#dubbingZone .import-head");
-  // With no project open the Subtitle style tab takes a video and a subtitle file itself.
-  await click('#leftTabs [data-tab="captions"]');
+  // Home's Burn in subtitles card: an empty new project on that tab, which takes a video and a subtitle file.
+  await click("#homeCaptionsCard");
   await waitFor("the tab's Import block and subtitle file block", 10000, () =>
     ["#capAlone", "#capZone", "#capSrtZone"].every((s) => document.querySelector(s)?.getClientRects().length > 0));
   await feed("#capZone .import-head", capVideo);
@@ -421,10 +425,10 @@ const STEPS = [
   { id: "settings", title: "Settings > Models", look: ["#settingsPanel-models"], run: settingsStep },
   { id: "new-project", title: "New dubbing into Korean", look: ["#draftSetup", "#dubbingImport"], run: newProjectStep },
   { id: "dub", title: "Dub finished: script and timeline", look: ["#doneFail", "#scriptBox"], run: dubStep },
-  { id: "look", title: "Subtitle style on the video, Sticker", look: ["#videoStylePop", "#exportOverlay"], run: lookStep },
+  { id: "look", title: "Subtitles on, the Subtitle style chip, Sticker", look: ["#videoStylePop", "#exportOverlay"], run: lookStep },
   { id: "export", title: "Export", look: ["#exportOverlay"], run: exportStep },
   { id: "back-home", title: "Home again, new card", look: ["#projectsGrid"], run: backHomeStep },
-  { id: "captions", title: "Subtitle style on its own: video + .srt, Sticker, Download", look: ["#capAlone", "#capFiles", "#exportOverlay"], run: captionsStep },
+  { id: "captions", title: "Burn in subtitles from Home: video + .srt, Sticker, Download", look: ["#capAlone", "#capFiles", "#exportOverlay"], run: captionsStep },
   { id: "captions-dub", title: "Its Dubbing tab: prepare for dubbing, Back", look: ["#dubbingCaptions", "#draftSetup"], run: captionsDubStep },
 ];
 

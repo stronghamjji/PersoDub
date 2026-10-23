@@ -1,8 +1,8 @@
 // The running dub and every way to stop work: a local dub's progress card
 // (its four stages ticking in order, the percent), Home while it runs and back
 // in, a second dub waiting in line and taken out of it, the first one finishing
-// by itself, a running dub stopped, then resumed and stopped again, a
-// separation and an erase stopped, and a dub with Gemini and no key (the key
+// by itself, a running dub stopped, then resumed and stopped again, an
+// erase stopped, and a dub with Gemini and no key (the key
 // window stops it before it can fail). Everything runs on this computer with
 // the translator the app remembers; the projects it made are deleted at the end.
 import { copyFileSync } from "node:fs";
@@ -341,45 +341,12 @@ export const steps = [
         + `stopped again → "${last.why}"`;
     } },
 
-  { name: "stop a separation", looks: ["#tabAudio"],
+  { name: "stop an erase", looks: ["#tabErase", "#erasePane"],
     async run(app, ctx) {
       const r = ctx.state.run;
       if (!r) throw new Error("step 1 did not run");
       await lineEmpty(app);
-      const name = r.draft = await newDraft(app, ctx, "d");
-      await app.click('#leftTabs [data-tab="audio"]');
-      await app.waitFor(`${app.tr("Separate")} on show`, 10000, pressable, "#audioRunBtn");
-      if (await app.js(`document.querySelector("#audioEngine").value`) !== "local") await app.choose("#audioEngine", "local");
-      const before = { btn: await app.inPage(textOf, "#audioRunBtn"), foot: await app.inPage(textOf, "#audioFootLabel") };
-      const t0 = Date.now();
-      await app.click("#audioRunBtn");
-      await app.click("#audioStopBtn", 5000);
-      const pressed = since(t0);
-      const sep = (await app.api("/api/dub/jobs")).jobs.find((j) => j.kind === "separate" && nameOf(j).startsWith(name));
-      const asked = await app.waitFor("the stop question", 3000, isOpen, "#cancelDubOverlay").catch(() => false);
-      const q = asked ? await app.inPage(textOf, "#cancelDubTitle") : "";
-      if (asked) await app.click("#cancelDubConfirmBtn");
-      if (pressed > 2) throw new Error(`${app.tr("Stop")} could be pressed only ${pressed} s after ${app.tr("Separate")}`);
-      const job = await jobOf(app, "separate", name);
-      await reaches(app, job.id, "cancelled", 30000);
-      const took = since(t0);
-      const said = await app.waitFor("the tab to say it stopped", 10000, () => !document.querySelector("#audioBackBtn").hidden
-        && document.querySelector("#audioState").textContent.trim());
-      await app.shot("running-separation-stopped");
-      if (said !== app.tr("Separating was stopped.")) throw new Error(`the tab says "${said}"`);
-      await app.click("#audioBackBtn");
-      const after = await app.waitFor("the tab before separating", 5000, () => !document.querySelector("#audioRunBtn").hidden
-        && !document.querySelector("#audioEngineCard").hidden && document.querySelector("#audioRunCard").hidden
-        && { btn: document.querySelector("#audioRunBtn").textContent.trim(), foot: document.querySelector("#audioFootLabel").textContent.trim() });
-      if (after.btn !== before.btn || after.foot !== before.foot) throw new Error(`the foot was "${before.foot}" "${before.btn}", now "${after.foot}" "${after.btn}"`);
-      return `"${before.btn}" (${before.foot}) → ${app.tr("Stop")} at ${pressed} s (job ${sep ? sep.status : "not listed yet"})${q ? `, "${q}" confirmed` : ""} → job ${job.id} cancelled ${took} s in; `
-        + `"${said}"; ${app.tr("Back")} → "${after.foot}" "${after.btn}" again`;
-    } },
-
-  { name: "stop an erase", looks: ["#tabErase", "#erasePane"],
-    async run(app, ctx) {
-      const r = ctx.state.run;
-      if (!r?.draft) throw new Error("step 6 left no draft on screen");
+      r.draft = await newDraft(app, ctx, "d");
       await app.click('#leftTabs [data-tab="erase"]');
       await app.waitFor("the box on the video", 15000, shown, "#eraseBox");
       await app.waitFor(`${app.tr("Erase")} to light (the subtitles found)`, 90000, pressable, "#eraseRunBtn");

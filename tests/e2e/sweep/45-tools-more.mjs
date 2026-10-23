@@ -1,11 +1,9 @@
 // The tools screens' remaining controls and their hand-offs into dubbing,
-// pressed the way a person does, on a fresh draft of the clip: Separate audio
-// (this computer's model only), the timeline's two mute buttons, a cut that
-// sets the separation aside and Undo that brings it back, and Dubbing from
-// that separation; then Erase subtitles on a new copy (the minutes, the box
-// moved and stretched, Original/Erased, Erase another part, Back after a
-// cancelled erase, Dubbing from the erased video, not started); then Subtitle
-// style's result card and its project of a video and a .srt.
+// pressed the way a person does, on a fresh copy of the clip: Erase subtitles
+// (the minutes, the box moved and stretched, Original/Erased, Erase another
+// part, Back after a cancelled erase, Dubbing from the erased video, not
+// started); then Burn in subtitles' result card and its project of a video
+// and a .srt.
 //
 // An erase of this clip that an e2e- project already finished (the same box,
 // the whole video) is opened from Home instead of erasing again, which takes
@@ -152,35 +150,6 @@ async function erasedOnScreen(app, jid) {
   return "opened from its Home card";
 }
 
-// The draft timeline's ruler pressed at `at` seconds of a whole video: the
-// playhead goes there, and the video with it.
-async function seekRuler(app, video, at, total) {
-  const p = await app.inPage((k, tot) => {
-    const inner = document.querySelector("#timeline .tl-inner");
-    const ruler = inner && inner.querySelector(".tl-ruler");
-    const cuts = inner ? [...inner.querySelectorAll(".tl-cut")] : [];
-    if (!ruler || !cuts.length) return null;
-    const last = cuts[cuts.length - 1];
-    const pps = (parseFloat(last.style.left) + parseFloat(last.style.width) + 2) / tot;
-    const r = ruler.getBoundingClientRect();
-    return { x: inner.getBoundingClientRect().left + k * pps, y: r.top + r.height / 2, pps };
-  }, at, total);
-  if (!p) throw new Error("the timeline has no ruler or no clip to press");
-  let x = p.x;
-  for (let i = 0; i < 2; i++) {
-    const hit = await app.inPage((px, py) => !!document.elementFromPoint(px, py)?.closest(".tl-ruler"), x, p.y);
-    if (!hit) throw new Error(`the ruler is not under (${Math.round(x)}, ${Math.round(p.y)})`);
-    for (const type of ["mousePressed", "mouseReleased"]) {
-      await app.send("Input.dispatchMouseEvent", { type, x, y: p.y, button: "left", buttons: type === "mousePressed" ? 1 : 0, clickCount: 1 });
-    }
-    await sleep(300);
-    const got = await app.inPage((v) => document.querySelector(v).currentTime, video);
-    if (Math.abs(got - at) <= 0.04) return got;
-    x += (at - got) * p.pps;
-  }
-  throw new Error(`the ruler press did not bring the playhead to ${at} s`);
-}
-
 // What a dub started from the prep screen would run on: never Perso.
 const choices = () => ({ mode: document.querySelector("#dubModeSelect").value, sep: document.querySelector("#sepSelect").value,
                          stt: document.querySelector("#sttSelect").value });
@@ -208,139 +177,11 @@ async function deleteCard(app, kind, id) {
 // ---- the steps ----------------------------------------------------------------
 
 export const steps = [
-  { name: "separate", looks: ["#tabAudio"], async run(app, ctx) {
+  { name: "erase minutes", looks: ["#eraseAreaCard", "#topbar"], async run(app, ctx) {
     const s = ctx.state;
     await take();
     s.name = `e2e-tools2-${ctx.stamp}`;
-    s.video = join(ctx.out, `${s.name}.mp4`);
-    copyFileSync(ctx.video, s.video);
     s.choices = await app.inPage((k) => localStorage.getItem(k), CHOICES_KEY);
-    await home(app);
-    await app.click("#homeAudioCard");
-    await app.waitFor("the Audio tab's Import block", 10000, shown, "#audioZone .import-head");
-    await app.feed("#audioZone .import-head", s.video);
-    const c = await app.waitFor("the Audio tab's Separate button", 120000, () => {
-      const st = document.querySelector("#audioImportStatus");
-      if (st.classList.contains("error") && st.textContent.trim()) return { refused: st.textContent.trim() };
-      return document.querySelector("#audioRunBtn").getClientRects().length ? { engine: document.querySelector("#audioEngine").value } : null;
-    });
-    if (c.refused) throw new Error(`the import was refused: ${c.refused}`);
-    if (c.engine !== "local") await app.choose("#audioEngine", "local");
-    const t0 = Date.now();
-    await app.click("#audioRunBtn");
-    // Ten minutes: a job of someone else's may be ahead of it in the line.
-    const r = await app.waitFor("the Voice and Background rows", 600000, () => {
-      const on = (id) => document.getElementById(id).getClientRects().length > 0;
-      const error = document.querySelector("#audioError").textContent.trim();
-      if (error || on("audioRetryBtn")) return { error: error || document.querySelector("#audioState").textContent.trim() };
-      return on("audioVoiceRow") && on("audioBackgroundRow") ? { src: document.querySelector("#audioVoice").getAttribute("src") || "" } : null;
-    });
-    if (r.error) throw new Error(`separating stopped: ${r.error}`);
-    s.sepJob = (/\/api\/dub\/result\/([^/]+)\/stem\//.exec(r.src) || [])[1];
-    if (!s.sepJob) throw new Error(`the voice plays from "${r.src}", not a separation's stem`);
-    const job = await app.api(`/api/dub/jobs/${s.sepJob}`);
-    if (job.separation === "perso") throw new Error(`PERSO CREDITS WERE SPENT: job ${s.sepJob} separated on Perso`);
-    if (job.kind !== "separate" || job.status !== "done") throw new Error(`job ${s.sepJob} is ${job.kind} ${job.status}`);
-    s.sep = job;
-    return `job ${s.sepJob} ${job.kind} ${job.separation}/${job.separation_model} done ${Math.round((Date.now() - t0) / 1000)} s after the press `
-      + `(${job.elapsed_seconds} s of work); Voice and Background rows on show`;
-  } },
-
-  { name: "lane mutes", looks: ["#timeline"], async run(app, ctx) {
-    if (!ctx.state.sepJob) throw new Error("no separation (the step before failed)");
-    const said = [];
-    for (const [stem, el] of [["voice", "#audioVoice"], ["background", "#audioBackground"]]) {
-      const btn = `#timeline .tl-mute[data-stem="${stem}"]`;
-      const read = (b, e) => ({ muted: document.querySelector(e).muted, pressed: document.querySelector(b)?.getAttribute("aria-pressed") });
-      const was = await app.inPage(read, btn, el);
-      if (was.muted || was.pressed !== "false") throw new Error(`the ${stem} starts muted=${was.muted}, aria-pressed ${was.pressed}`);
-      for (const want of [true, false]) {
-        await app.click(btn);
-        await app.waitFor(`${el}.muted ${want}`, 5000, (b, e, w) => document.querySelector(e).muted === w
-          && document.querySelector(b).getAttribute("aria-pressed") === String(w), btn, el, want);
-      }
-      said.push(`${stem}: muted false → true → false`);
-    }
-    return `${said.join("; ")} (aria-pressed with it)`;
-  } },
-
-  { name: "cut sets the separation aside", looks: ["#tabAudio", "#timeline"], async run(app, ctx) {
-    const s = ctx.state;
-    if (!s.sepJob) throw new Error("no separation");
-    const card = () => ({ rows: ["audioVoiceRow", "audioBackgroundRow"].filter((id) => document.getElementById(id).getClientRects().length).length,
-                          result: document.querySelector("#audioResult").getClientRects().length > 0,
-                          run: document.querySelector("#audioRunBtn").getClientRects().length > 0,
-                          len: (document.querySelector("#audioPartCard .vc-len")?.firstChild?.textContent || "").trim(),
-                          src: document.querySelector("#audioVoice").getAttribute("src") || "" });
-    const total = await app.inPage(() => document.querySelector("#doneVideo").duration);
-    const was = await app.inPage(card);
-    await seekRuler(app, "#doneVideo", 1, total);
-    await app.click("#tlDelLeft");
-    const cut = await poll("the result set aside", 5000, async () => {
-      const c = await app.inPage(card);
-      return c.rows === 0 && c.result && c.run ? c : null;
-    });
-    await app.click("#tlUndo");
-    const back = await poll("the two rows again", 5000, async () => {
-      const c = await app.inPage(card);
-      return c.rows === 2 && !c.result && c.src.includes(`/result/${s.sepJob}/`) ? c : null;
-    });
-    if (was.rows !== 2 || cut.len === was.len || back.len !== was.len) throw new Error(`lengths ${was.len} → ${cut.len} → ${back.len}, rows ${was.rows}`);
-    return `${was.len}, 2 rows → playhead 1.0, ${app.tr("Delete left of playhead")} → ${cut.len}, 0 rows, "${app.tr("What you get")}" card and Separate back `
-      + `→ ${app.tr("Undo")} → ${back.len}, 2 rows of job ${s.sepJob} again`;
-  } },
-
-  { name: "dub from the separation", looks: ["#draftSetup", "#progressCard"], async run(app, ctx) {
-    const s = ctx.state;
-    if (!s.sepJob) throw new Error("no separation");
-    await app.click("#audioDubBtn");
-    await app.waitFor("the Before dubbing card with Start lit", 30000, () => !document.querySelector("#draftSetup").hidden
-      && !document.querySelector("#draftStartBtn").disabled && !!document.querySelector('#leftTabs [data-tab="dubbing"].on'));
-    if ((await app.inPage(choices)).mode !== "local") await app.choose("#dubModeSelect", "local");
-    for (const sel of ["#sepSelect", "#sttSelect"]) {
-      if (await app.inPage((q) => document.querySelector(q).value, sel) === "perso") await app.choose(sel, "local");
-    }
-    const c = await app.inPage(choices);
-    if (c.mode !== "local" || c.sep === "perso" || c.stt === "perso") throw new Error(`the choices would spend Perso credits: ${JSON.stringify(c)}`);
-    const t0 = Date.now();
-    await app.click("#draftStartBtn");
-    const started = await app.waitFor("the dub to start", 60000, () => {
-      const b = document.body;
-      if (b.dataset.jobId) return `job:${b.dataset.jobId}`;
-      const error = document.querySelector("#draftError").textContent.trim();
-      if (error) return `refused: ${error}`;
-      const d = document.querySelector(".modal-overlay.open");
-      return d ? `#${d.id} opened` : "";
-    });
-    if (!started.startsWith("job:")) {
-      if (started.includes("opened")) await app.key("Escape");
-      throw new Error(`Start was ${started}`);
-    }
-    const jid = started.slice(4);
-    const first = await app.api(`/api/dub/jobs/${jid}`);
-    if (first.dub_mode !== "local" || first.separation === "perso" || first.stt_engine === "perso") {
-      throw new Error(`PERSO CREDITS: job ${jid} runs ${first.dub_mode}/${first.separation}/${first.stt_engine}`);
-    }
-    const job = await waitJob(app, jid, 1800000);
-    const took = Math.round((Date.now() - t0) / 1000);
-    if (job.status !== "done") throw new Error(`dub ${jid} ended ${job.status}: ${job.error || ""}`);
-    const sec = (job.stage_seconds || {}).separate;
-    const same = job.separation === s.sep.separation && job.separation_model === s.sep.separation_model && job.download_id === s.sep.download_id;
-    if (!same) {
-      throw new Error(`dub ${jid} separated ${job.separation}/${job.separation_model} of ${job.download_id}; the separation was `
-        + `${s.sep.separation}/${s.sep.separation_model} of ${s.sep.download_id}`);
-    }
-    if (!(sec <= 1)) throw new Error(`dub ${jid} spent ${sec} s separating (stage_seconds ${JSON.stringify(job.stage_seconds)}): the stems were not reused`);
-    // The finished dub on screen for the picture.
-    await home(app);
-    await app.click(`#projectsGrid .proj-card[data-job="${jid}"]`);
-    await app.waitFor("the finished dub", 20000, (id) => document.body.dataset.screen === "done" && document.body.dataset.jobId === id, jid);
-    return `dub ${jid} (${job.dub_mode}, ${job.stt_engine}, ${job.translator}, ${job.language_code}) done ${took} s after Start; `
-      + `separation ${job.separation}/${job.separation_model} of held ${job.download_id} = job ${s.sepJob}'s; stage_seconds.separate ${sec}`;
-  } },
-
-  { name: "erase minutes", looks: ["#eraseAreaCard", "#topbar"], async run(app, ctx) {
-    const s = ctx.state;
     await home(app);
     await app.click("#homeEraseCard");
     await app.waitFor("the Erase tab's Import block", 10000, shown, "#eraseZone .import-head");
@@ -513,11 +354,10 @@ export const steps = [
       + `${held} bytes = /api/erase/${s.eraseJob}/video), ${r.len}, no job started`;
   } },
 
-  { name: "subtitle style result card", looks: ["#capResult", "#tabCaptions"], async run(app) {
+  { name: "burn in subtitles result card", looks: ["#capResult", "#tabCaptions"], async run(app) {
+    // Home's Burn in subtitles card: an empty new project on that tab (2026-10-23).
     await home(app);
-    await app.click("#homeDubCard");
-    await app.waitFor("the Dubbing tab's Import block", 10000, shown, "#dubbingZone .import-head");
-    await app.click('#leftTabs [data-tab="captions"]');
+    await app.click("#homeCaptionsCard");
     await app.waitFor("the tab's video and subtitle file blocks", 10000, () =>
       ["#capAlone", "#capZone", "#capSrtZone"].every((q) => document.querySelector(q)?.getClientRects().length > 0));
     const c = await app.inPage(() => {
@@ -534,7 +374,7 @@ export const steps = [
       + (c.inView ? "in view" : `below the fold (top ${c.top} px, the tab ends at ${c.colBottom} px), scrolled to`);
   } },
 
-  { name: "subtitle style project", looks: ["#capFiles", "#timeline", "#videoTabsNormal"], async run(app, ctx) {
+  { name: "burn in subtitles project", looks: ["#capFiles", "#timeline", "#videoTabsNormal"], async run(app, ctx) {
     const s = ctx.state;
     if (!ctx.srt) throw new Error("this step needs --srt");
     const video = join(ctx.out, `${s.name || `e2e-tools2-${ctx.stamp}`}-cap.mp4`);

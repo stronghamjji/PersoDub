@@ -134,11 +134,11 @@ with a screenshot and a time for each step. Node 22 or later (global WebSocket),
     node tests/e2e/click.mjs --video <short mp4 with speech> --out <folder> [--port 9333] [--translator hunyuan]
 
 Nine steps: Home; Settings > Models; a new dubbing of the video into Korean on this
-computer; the finished script table and timeline; the video panel's Subtitle style
-(12 looks, Sticker pressed, the panel closes and the project saves sticker; Download
-lists "Dubbed video with subtitles" and "Script (original + translation, .xlsx)");
-Export; Home again with the new project's card; the Subtitle style tab with no
-project open (Home, Dubbing card, the tab): the video and a three-line .srt fed into
+computer; the finished script table and timeline; the subtitles turned on by the
+timeline's eye and the Subtitle style chip over them (12 looks, Sticker pressed, the
+panel closes and the project saves sticker; Download lists "Dubbed video with
+subtitles" and "Script (original + translation, .xlsx)"); Export; Home again with
+the new project's card; Burn in subtitles from Home's card: the video and a three-line .srt fed into
 its two blocks, the files row, Sticker, and Download's two rows both saved and
 measured (the video as long as the input within 1 s, the .srt 3 cues); then its
 Dubbing tab's "Prepare this video for dubbing", the prep screen's Back, and Home.

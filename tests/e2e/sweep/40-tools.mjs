@@ -1,19 +1,17 @@
-// The tools tabs of the work screen, pressed the way a person does: Separate
-// audio on a new project (this computer's model only, so no Perso credits),
-// then Erase subtitles on the same video (the box, the part, the erase itself
-// and its download), then Subtitle style on its own with a video and a .srt
-// (the twelve looks, the size, the scope, Show, and two looks burned in).
+// The tools tabs of the work screen, pressed the way a person does: Erase
+// subtitles on a new project (the box, the part, the erase itself and its
+// download), then Burn in subtitles from Home with a video and a .srt (the
+// twelve looks, the size, the scope, Show, and two looks burned in).
 //
-// It moves every file it downloads out of Downloads into <out>/sep, erase and
+// It moves every file it downloads out of Downloads into <out>/erase and
 // captions, and puts back the Download dialog's remembered ticks and audio
 // format at the end. ffprobe and ffmpeg (PATH, or PERSODUB_FFPROBE /
 // PERSODUB_FFMPEG) measure what it downloads. The erase of a 10 s clip takes
 // about 7 minutes on an M4 MacBook Air.
 //
-// SWEEP_TOOLS=audio,erase,captions (the default) runs all three; any of them
-// alone runs that part and the last step, so a shared app can be held for one
-// part at a time. Erase on its own opens its own project from Home.
-// A job's limit (90 s to separate, 600 s to erase) counts from when it
+// SWEEP_TOOLS=erase,captions (the default) runs both; either alone runs that
+// part and the last step, so a shared app can be held for one part at a time.
+// A job's limit (600 s to erase) counts from when it
 // leaves the app's queue: the app does one local job at a time, and a job of
 // someone else's ahead of it is waiting, not this tab being slow.
 import { spawnSync } from "node:child_process";
@@ -178,12 +176,6 @@ const clockTenths = (sec) => {
   return `${[Math.floor(t / 3600), Math.floor((t % 3600) / 60), t % 60].map((n) => String(n).padStart(2, "0")).join(":")}.${tenths % 10}`;
 };
 
-// The newest job of this kind for this project, or null.
-async function jobOf(app, kind, project) {
-  const { jobs } = await app.api("/api/dub/jobs");
-  return jobs.find((j) => j.kind === kind && j.project === project) || null;
-}
-
 // The localStorage values the last step puts back: the Download dialog's ticks and format.
 async function remember(app, ctx) {
   if (!ctx.state.kept) ctx.state.kept = await app.inPage((keys) => keys.map((k) => [k, localStorage.getItem(k)]), [TICKS_KEY, AUDIO_KEY]);
@@ -202,122 +194,6 @@ async function savedStyle(app, jid, what, ok) {
 // ---- the steps ----------------------------------------------------------------
 
 const ALL = [
-  { group: "audio", name: "separate before", looks: ["#tabAudio"], stopsArea: true, async run(app, ctx) {
-    const s = ctx.state;
-    s.name = `e2e-tools-${ctx.stamp}`;
-    s.video = join(ctx.out, `${s.name}.mp4`);
-    copyFileSync(ctx.video, s.video);
-    await remember(app, ctx);
-    await downloadsSoFar(app);
-    await home(app);
-    await app.click("#homeAudioCard");
-    await app.waitFor("the Audio tab's Import block", 10000, shown, "#audioZone .import-head");
-    await app.feed("#audioZone .import-head", s.video);
-    const c = await app.waitFor("the Audio tab's model card", 120000, () => {
-      const st = document.querySelector("#audioImportStatus");
-      if (st.classList.contains("error") && st.textContent.trim()) return { refused: st.textContent.trim() };
-      const on = (id) => document.getElementById(id).getClientRects().length > 0;
-      if (!on("audioEngineCard") || !on("audioRunBtn")) return null;
-      const sel = document.querySelector("#audioEngine");
-      const txt = (q) => (document.querySelector(q)?.textContent || "").trim();
-      return { tab: !!document.querySelector('#leftTabs [data-tab="audio"].on'), label: txt('label[for="audioEngine"]'),
-               options: [...sel.options].map((o) => `${o.value}=${o.textContent.trim()}`), value: sel.value,
-               result: on("audioResult") ? [txt("#audioResult .k"), txt("#audioResult .m")] : null,
-               name: txt("#audioPartCard .vc-name"), len: txt("#audioPartCard .vc-len"), foot: txt("#audioFootLabel") };
-    });
-    if (c.refused) throw new Error(`the import was refused: ${c.refused}`);
-    const want = [`local=${app.tr("Local model")}`, "perso=Perso API"];
-    if (!c.tab) throw new Error("the Separate audio tab is not the one lit");
-    if (c.label !== app.tr("Choose a model") || c.options.join() !== want.join()) {
-      throw new Error(`the model row reads "${c.label}" with ${c.options.join(", ")}, not "${app.tr("Choose a model")}" with ${want.join(", ")}`);
-    }
-    if (c.value !== "local") throw new Error(`the model row starts on ${c.value}, not local`);
-    if (!c.result || c.result[0] !== app.tr("What you get")) throw new Error(`no "${app.tr("What you get")}" card before separating (${c.result})`);
-    return `${c.name} ${c.len}; ${c.label}: ${c.options.join(" / ")}, on ${c.value}; card "${c.result[0]}" / "${c.result[1]}"; foot "${c.foot}"`;
-  } },
-
-  { group: "audio", name: "separate", looks: ["#tabAudio"], async run(app, ctx) {
-    const s = ctx.state;
-    if (await app.inPage(() => document.querySelector("#audioEngine").value) !== "local") throw new Error("the model is not local; not pressing Separate");
-    const t0 = Date.now();
-    await app.click("#audioRunBtn");
-    const lines = [];
-    let r, began = 0, queued = 0, jid = "";
-    for (;;) {
-      if (!began) {
-        const j = await jobOf(app, "separate", s.name);
-        if (j && j.separation === "perso") throw new Error(`PERSO CREDITS ARE BEING SPENT: job ${j.id} separates on Perso; stop it in the app now`);
-        if (j && j.status !== "queued") { began = Date.now(); queued = Math.round((began - t0) / 1000); jid = j.id; }
-      }
-      r = await app.inPage(() => {
-        const on = (id) => document.getElementById(id).getClientRects().length > 0;
-        return { line: document.querySelector("#audioRunLine").textContent.trim(), voice: on("audioVoiceRow"), bg: on("audioBackgroundRow"),
-                 failed: on("audioRetryBtn"), why: document.querySelector("#audioState").textContent.trim(),
-                 error: document.querySelector("#audioError").textContent.trim(),
-                 src: document.querySelector("#audioVoice").getAttribute("src") || "",
-                 buttons: ["audioVoicePlay", "audioBackgroundPlay"].filter((id) => on(id) && document.getElementById(id).querySelector("svg")).length };
-      });
-      if (r.line && r.line !== lines[lines.length - 1]) lines.push(r.line);
-      if (r.error || r.failed) throw new Error(`separating stopped: ${r.error || r.why}`);
-      if (r.voice && r.bg) break;
-      if (began && Date.now() - began > 90000) throw new Error(`not separated 90 s after it left the queue (last "${r.line}")`);
-      if (!began && Date.now() - t0 > 900000) throw new Error(`job ${jid || "?"} still in the queue after 15 min`);
-      await sleep(500);
-    }
-    const took = Math.round((Date.now() - (began || t0)) / 1000);
-    s.sepJob = (/\/api\/dub\/result\/([^/]+)\/stem\//.exec(r.src) || [])[1];
-    if (!s.sepJob) throw new Error(`the voice plays from "${r.src}", not a separation's stem`);
-    const job = await app.api(`/api/dub/jobs/${s.sepJob}`);
-    if (job.separation === "perso") throw new Error(`PERSO CREDITS WERE SPENT: job ${s.sepJob} separated on Perso`);
-    if (job.kind !== "separate" || job.status !== "done") throw new Error(`job ${s.sepJob} is ${job.kind} ${job.status}`);
-    if (r.buttons !== 2) throw new Error(`${r.buttons} of the two rows have a play button`);
-    const played = [];
-    for (const [which, el, other] of [["voice", "audioVoice", "audioBackground"], ["background", "audioBackground", "audioVoice"]]) {
-      const btn = which === "voice" ? "#audioVoicePlay" : "#audioBackgroundPlay";
-      await app.click(btn);
-      const from = await app.waitFor(`the ${which} to play alone`, 10000, (a, b) => {
-        const me = document.getElementById(a), them = document.getElementById(b);
-        return !me.paused && !me.muted && them.muted ? { t: me.currentTime } : null;
-      }, el, other);
-      await sleep(700);
-      const at = await app.inPage((a) => document.getElementById(a).currentTime, el);
-      await app.click(btn);
-      await app.waitFor(`the ${which} to pause`, 10000, (a) => document.getElementById(a).paused, el);
-      played.push(`${which} ${from.t.toFixed(1)}→${at.toFixed(1)} s then paused`);
-    }
-    return `job ${s.sepJob} (${job.kind}, ${job.separation_model || job.separation}) ${queued} s in the queue, separated in ${took} s; lines ${lines.join(" > ")}; `
-      + `Voice and Background rows with play; ${played.join(", ")}`;
-  } },
-
-  { group: "audio", name: "separate download", looks: ["#exportOverlay", "#tabAudio"], async run(app, ctx) {
-    const s = ctx.state;
-    if (!s.sepJob) throw new Error("no separation to download (the step before failed)");
-    const rows = await openExport(app, "#audioExportBtn");
-    const want = [["voice", app.tr("Voice")], ["background", app.tr("Background")]];
-    if (rows.length !== 2 || want.some(([id, label], i) => rows[i].id !== id || !rows[i].label.startsWith(label) || rows[i].fmts.join() !== "mp3,wav")) {
-      throw new Error(`Download offers ${rows.map((r) => `${r.id} "${r.label}" ${r.fmts}`).join(", ")}, not "${want[0][1]}" and "${want[1][1]}" with MP3/WAV`);
-    }
-    await tickOnly(app, ["voice", "background"]);
-    if (!(await app.inPage(() => document.querySelector('#exportList [data-fmt="mp3"]').getAttribute("aria-checked") === "true"))) {
-      await app.click('#exportList a[data-row="voice"] [data-fmt="mp3"]');
-      await app.waitFor("MP3 picked", 5000, () => document.querySelector('#exportList [data-fmt="mp3"]').getAttribute("aria-checked") === "true");
-    }
-    const n = await downloadsSoFar(app);
-    const end = await downloadTicked(app);
-    if (["voice", "background"].some((id) => !end.saved.includes(id))) throw new Error(`the download stopped: ${end.where}`);
-    const got = await downloadsSince(app, n);
-    if (got.length !== 2 || got.some((d) => d.state !== "completed")) throw new Error(`the shell reported ${JSON.stringify(got.map((d) => [d.filename, d.state]))}`);
-    const moved = moveOut(ctx, got.map((d) => d.path), "sep");
-    const said = moved.map((f) => {
-      if (!f.name.endsWith(".mp3")) throw new Error(`${f.name} is not an MP3`);
-      const sec = seconds(f.path);
-      if (Math.abs(sec - 10) > 1) throw new Error(`${f.name} is ${sec.toFixed(2)} s, not 10.0 ± 1`);
-      return `${f.name} ${sec.toFixed(2)} s ${(f.size / 1e3).toFixed(0)} KB`;
-    });
-    await closeExport(app);
-    return `rows "${rows[0].label}", "${rows[1].label}" with MP3/WAV; saved ${said.join(", ")} (moved into sep/); "${end.where}"`;
-  } },
-
   { group: "erase", name: "erase area", looks: ["#eraseAreaCard", "#tabErase"], async run(app, ctx) {
     const s = ctx.state;
     await remember(app, ctx);
@@ -494,10 +370,10 @@ const ALL = [
     return `rows "${rows[0].label}", "${rows[1].label}"; saved ${f.name} ${sec.toFixed(2)} s ${(f.size / 1e6).toFixed(2)} MB (moved into erase/); "${end.where}"`;
   } },
 
-  { group: "erase", name: "erase then subtitle style", looks: ["#tabCaptions", "#leftTabs"], async run(app) {
+  { group: "erase", name: "erase then burn in subtitles", looks: ["#tabCaptions", "#leftTabs"], async run(app) {
     const tab = '#leftTabs [data-tab="captions"]';
     const dim = await app.inPage((q) => { const b = document.querySelector(q); return b.disabled ? b.title || "disabled" : ""; }, tab);
-    if (dim) throw new Error(`the Subtitle style tab is dim after the erase ("${dim}")`);
+    if (dim) throw new Error(`the Burn in subtitles tab is dim after the erase ("${dim}")`);
     await app.click(tab);
     const c = await app.waitFor("the tab's own import face", 10000, () => {
       const on = (id) => document.getElementById(id).getClientRects().length > 0;
@@ -516,10 +392,9 @@ const ALL = [
     await downloadsSoFar(app);
     s.capVideo = join(ctx.out, `e2e-tools-${ctx.stamp}-cap.mp4`);
     copyFileSync(ctx.video, s.capVideo);
+    // Home's Burn in subtitles card: an empty new project on that tab (2026-10-23).
     await home(app);
-    await app.click("#homeDubCard");
-    await app.waitFor("the Dubbing tab's Import block", 10000, shown, "#dubbingZone .import-head");
-    await app.click('#leftTabs [data-tab="captions"]');
+    await app.click("#homeCaptionsCard");
     await app.waitFor("the tab's Import block and subtitle file block", 10000, () =>
       ["#capAlone", "#capZone", "#capSrtZone"].every((q) => document.querySelector(q)?.getClientRects().length > 0));
     await app.feed("#capZone .import-head", s.capVideo);
@@ -653,5 +528,5 @@ const ALL = [
   } },
 ];
 
-const PARTS = (process.env.SWEEP_TOOLS || "audio,erase,captions").split(",");
+const PARTS = (process.env.SWEEP_TOOLS || "erase,captions").split(",");
 export const steps = ALL.filter((st) => st.group === "end" || PARTS.includes(st.group));
