@@ -143,8 +143,9 @@ async function atLine(app, n) {
   }
   if (!(await app.inPage(() => document.querySelector("#doneVideo").paused))) await app.click("#playToggle");
   await app.click(`${row(n)} .sc-time`);
-  await app.waitFor(`the video at line ${n}`, 5000, (sel) => Math.abs(document.querySelector("#doneVideo").currentTime
-    - +document.querySelector(sel).dataset.start) < 0.05, row(n));
+  // Not while it still seeks: the subtitle on the picture is the old spot's until it lands.
+  await app.waitFor(`the video at line ${n}`, 5000, (sel) => !document.querySelector("#doneVideo").seeking
+    && Math.abs(document.querySelector("#doneVideo").currentTime - +document.querySelector(sel).dataset.start) < 0.05, row(n));
 }
 
 // Download pressed: waits for it to come back, the saved rows and the line under them.

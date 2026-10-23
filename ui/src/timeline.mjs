@@ -967,8 +967,12 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
       hdl.removeEventListener("pointercancel", up);
       blk.classList.remove("trimming");
       tip.remove();
-      getSubStyle().cues[String(idx + 1)] = { start: Math.round(cue.start * 10) / 10,
-                                              end: Math.round(cue.end * 10) / 10 };
+      // Only the end that was dragged goes to a tenth: the other stays where
+      // it was, or a line starting at 4.49 s would start its subtitle at 4.5 s
+      // and the line's own time would show none (sweep V7, 2026-10-24).
+      const tenth = (s) => Math.round(s * 10) / 10;
+      getSubStyle().cues[String(idx + 1)] = isL ? { start: tenth(cue.start), end: c0.end }
+                                                : { start: c0.start, end: tenth(cue.end) };
       saveSubStyle(); updateSubtitleNow();
     };
     hdl.addEventListener("pointermove", move);

@@ -661,6 +661,23 @@ test("a subtitle block is trimmed by its right end, and the tip says the new tim
   assert.equal(tip.removed, true);
 });
 
+// A line that starts between tenths keeps that start when its end is
+// trimmed: the line's own time still shows its subtitle.
+test("a trim moves only the end it drags, the other end exactly as it was", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  const lines = LINES.map((l) => (l.line === 2 ? { ...l, start: 2.04, end: 4.03 } : l));
+  h.api.renderTimeline(lines, 30);
+  const right = grabHandle(h, "r", 1);
+  right.hdl.fire("pointermove", { clientX: 138.5 });
+  right.hdl.fire("pointerup", {});
+  assert.deepEqual(h.subStyle.cues["2"], { start: 2.04, end: 4.5 });
+  const left = grabHandle(h, "l", 1);
+  left.hdl.fire("pointermove", { clientX: 138.5 });
+  left.hdl.fire("pointerup", {});
+  assert.deepEqual(h.subStyle.cues["2"], { start: 2.5, end: 4.5 });
+});
+
 test("a trim cannot be pulled through its own other end, or off the video", (t) => {
   const h = harness();
   t.after(h.log.restore);
