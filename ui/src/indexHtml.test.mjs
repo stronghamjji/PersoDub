@@ -1627,6 +1627,28 @@ test("a script line pressed stops the video at its start and the strip is brough
 // Help (owner, 2026-10-09): one button above Send feedback, and one dialog
 // that says what each tool does and where it runs, in the sidebar's order,
 // with the guide and the FAQ under them and OK as its only way out.
+// Home's four tools, the same four in the same order on the cards and in the
+// sidebar (owner, 2026-10-23), and the banner's line naming what a video
+// can be made into.
+test("Home's cards and sidebar are Dubbing, Erase subtitles, Burn in subtitles and Save video", () => {
+  const html = readPage();
+  const cards = html.slice(html.indexOf('<div class="home-cards">'), html.indexOf('id="linkCard"'));
+  assert.deepEqual([...cards.matchAll(/id="home(\w+)Card"/g)].map((m) => m[1]), ["Agent", "Dub", "Erase", "Captions", "Save"]);
+  const side = html.slice(html.indexOf('<aside class="home-side"'), html.indexOf("</aside>"));
+  assert.deepEqual([...side.matchAll(/id="homeNav(\w+)"/g)].map((m) => m[1]), ["Dub", "Erase", "Captions", "Save", "Settings"]);
+  assert.match(cards, /id="homeCaptionsCard" type="button">\s*<span class="home-card-icon"><svg class="icon" viewBox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"\/>[^]*?<div data-i18n class="home-card-title">Burn in subtitles<\/div>\s*<div data-i18n class="home-card-desc">Put a subtitle file on a video in the style you choose<\/div>/);
+  assert.match(cards, /<div data-i18n class="home-card-desc">Saves a video from a link<\/div>/);
+  assert.match(html, /<span data-i18n class="home-banner-title">Create project<\/span>/);
+  assert.match(html, /<div data-i18n class="home-banner-sub">Upload a video to dub it, erase or burn in subtitles, or save it from a link\. Drop it here or click to choose<\/div>/);
+  assert.match(html, /onCaptions: \(\) => draftSetup\.openDraft\(null, \{ tab: "captions" \}\),/);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Upload a video to dub it, erase or burn in subtitles, or save it from a link. Drop it here or click to choose"],
+    "영상을 올리면 더빙 · 자막 지우기 · 자막 입히기 · 링크 저장을 할 수 있어요. 끌어 놓거나 눌러서 골라 주세요");
+  assert.equal(ko["Burn in subtitles"], "자막 입히기");
+  assert.equal(ko["Put a subtitle file on a video in the style you choose"], "영상과 자막 파일을 넣으면 원하는 스타일로 자막을 입혀요");
+  assert.equal(ko["Saves a video from a link"], "링크로 올린 영상을 저장해요");
+});
+
 test("Home's Help sits above Send feedback and opens its tools and the Dub Agent in order", () => {
   const html = readPage();
   const side = html.slice(html.indexOf('class="home-grow"'), html.indexOf('id="homeWhatsNew"'));

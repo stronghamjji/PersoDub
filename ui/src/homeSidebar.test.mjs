@@ -45,6 +45,7 @@ function harness({ screen = "home", classes = [], version = "0.7.1" } = {}) {
     openUrl: (u) => log.urls.push(u),
     onDubbing: () => log.calls.push("dub"),
     onErase: () => log.calls.push("erase"),
+    onCaptions: () => log.calls.push("captions"),
     onSaveVideo: () => log.calls.push("save"),
     onSettings: (...args) => log.calls.push(`settings(${args.length})`),
     onHelp: () => log.calls.push("help"),
@@ -74,14 +75,14 @@ test("the GitHub button opens the repo, perso.ai the workspace link, and Send fe
   ]);
 });
 
-test("the tool items and the tool cards open the same ways in", (t) => {
+test("the four tool items and the four tool cards open the same four ways in", (t) => {
   const h = harness();
   t.after(h.log.restore);
-  for (const id of ["homeNavDub", "homeNavErase", "homeNavSave",
-                    "homeDubCard", "homeEraseCard", "homeSaveCard"]) {
+  for (const id of ["homeNavDub", "homeNavErase", "homeNavCaptions", "homeNavSave",
+                    "homeDubCard", "homeEraseCard", "homeCaptionsCard", "homeSaveCard"]) {
     h.$(id).fire("click", {});
   }
-  assert.deepEqual(h.log.calls, ["dub", "erase", "save", "dub", "erase", "save"]);
+  assert.deepEqual(h.log.calls, ["dub", "erase", "captions", "save", "dub", "erase", "captions", "save"]);
 });
 
 // A caret alone in the banner's field read as nothing happening (2026-10-21).

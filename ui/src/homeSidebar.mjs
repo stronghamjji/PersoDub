@@ -2,10 +2,10 @@
 // (the mockup's first screen, user 2026-09-30).
 //
 // Owns the sidebar's buttons (#homeGhName, #homePerso, #homeNavDub,
-// #homeNavErase, #homeNavSave, #homeNavSettings,
+// #homeNavErase, #homeNavCaptions, #homeNavSave, #homeNavSettings,
 // #homeHelp, #homeFeedback, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
 // the banner (#homeAgentCard with its [data-prompt] chips, #homeDubCard,
-// #homeEraseCard, #homeSaveCard). Every one of them opens something the page
+// #homeEraseCard, #homeCaptionsCard, #homeSaveCard). Every one of them opens something the page
 // already has; this file only decides which.
 //
 // The Dub Agent column is hidden on Home until something here opens it: the
@@ -66,19 +66,21 @@ export function whatsNewTitle(version) {
  * @param {(url: string) => void} deps.openUrl   opens in the system browser
  * @param {() => void} deps.onDubbing     a new project on its Dubbing tab (file or link)
  * @param {() => void} deps.onErase
+ * @param {() => void} deps.onCaptions    Burn in subtitles: a new project on its own tab
  * @param {() => void} deps.onSaveVideo   the banner's link field
  * @param {() => void} deps.onSettings
  * @param {() => void} deps.onHelp        the Help dialog: what each tool does
  * @param {() => Promise<{version?: string}>} deps.loadWhatsNew
  */
 export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing, onErase,
-                                  onSaveVideo, onSettings, onHelp, loadWhatsNew }) {
+                                  onCaptions, onSaveVideo, onSettings, onHelp, loadWhatsNew }) {
   const on = (id, fn) => $(id).addEventListener("click", fn);
 
   on("homeGhName", () => openUrl(repoUrl));
   on("homePerso", () => openUrl(persoUrl()));
   on("homeNavDub", onDubbing);
   on("homeNavErase", onErase);
+  on("homeNavCaptions", onCaptions);
   on("homeNavSave", onSaveVideo);
   on("homeNavSettings", () => onSettings());
   on("homeHelp", onHelp);
@@ -91,6 +93,7 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
 
   on("homeDubCard", onDubbing);
   on("homeEraseCard", onErase);
+  on("homeCaptionsCard", onCaptions);
   on("homeSaveCard", onSaveVideo);
   // A chip opens the agent with its sentence in the box; anywhere else on the
   // card (the Open Dub Agent button included) opens it as it is. The

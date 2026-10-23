@@ -1413,6 +1413,9 @@ initHomeSidebar({
   // file or a link, where the bare file picker took only a file (owner, 2026-10-09).
   onDubbing: () => draftSetup.openDraft(null, { tab: "dubbing" }),
   onErase: () => eraseScreen.openErase(),
+  // An empty new project on Burn in subtitles: a video and a subtitle file
+  // make a burn-in project there (owner, 2026-10-23).
+  onCaptions: () => draftSetup.openDraft(null, { tab: "captions" }),
   // A link pasted into the banner is how a video gets saved: the field is
   // pointed at, and the link pasted next opens Export once it is in.
   onSaveVideo: () => { pointAtLink($); saveVideoNext = true; },
