@@ -35,7 +35,8 @@ import { t } from "./i18n.mjs";
  * @param {(which: string) => Promise<void>} deps.showVideoSource  put the
  *        player on that file; answers once it is showing it
  * @param {object} [deps.alone]  the Captions tab on its own, with no project
- *        open (ui/src/captionsTab.mjs initCaptionsTab's alone)
+ *        open (ui/src/captionsTab.mjs initCaptionsTab's alone); its erased()
+ *        is the erase screen's erased video, or null
  * @returns {{ getSubStyle: () => object, loadSubStyle: (jobId: string) => Promise<void>,
  *   saveSubStyle: () => void, subCueOf: (l: object, idx: number) => {start: number, end: number},
  *   updateSubtitleNow: () => void, subLinesChanged: () => void, syncVideoChrome: () => void,
@@ -321,6 +322,8 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
   // here, next to the style object it changes.
   // A video with the user's own subtitles: the one project the tab's tools are for.
   const burnIn = () => !!state.job && state.job.id === state.jobId && state.job.kind === "captions";
+  // The erase screen's tab starts from the video there, whatever is open.
+  const erasing = () => document.body.dataset.screen === "erase";
   const captions = initCaptionsTab({
     $, alone,
     // [id, label] with the label read each time the tab draws its grid, not
@@ -337,13 +340,16 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
       enabled: subStyle.enabled !== false,
       // Any other project, or none: the tab takes a video and a subtitle file
       // and makes a burn-in project of them.
-      alone: !burnIn(),
-      // The open project's video is the one, when a project is open.
-      from: !burnIn() && state.jobId ? { id: state.jobId,
+      alone: erasing() || !burnIn(),
+      // The open project's video is the one, when a project is open; on the
+      // erase screen, the erased video once there is one (alone.erased),
+      // else the draft it shows.
+      from: erasing() ? (alone?.erased?.() || null)
+        : !burnIn() && state.jobId ? { id: state.jobId,
         name: (state.job && state.job.id === state.jobId && (state.job.title || state.job.project)) || "",
         duration: (state.job && state.job.id === state.jobId && state.job.duration) || 0 } : null,
       // A project made of those two: their names over the looks.
-      files: burnIn() ? { name: state.job.title || state.job.project, duration: state.job.duration || 0,
+      files: !erasing() && burnIn() ? { name: state.job.title || state.job.project, duration: state.job.duration || 0,
                           srt: state.job.srt_name || "" } : null,
     }),
     onPick: (preset) => { subStyle.preset = preset; saveSubStyle(); updateSubtitleNow(); paintSubToolbar(); },

@@ -99,12 +99,15 @@ test("another tab pressed on the erase screen is the way back to the job", () =>
   h.press("dubbing");
   assert.equal(h.state.left, 1);
   // Erase pressed again is not a way out, nor Save video (it saves what is
-  // on screen), and neither is a tab pressed on any other screen.
+  // on screen), nor Burn in subtitles (it starts from that video), and
+  // neither is a tab pressed on any other screen.
   h.press("erase");
   assert.equal(h.state.left, 1);
   h.go("done");
   h.go("erase");
   h.press("save");
+  assert.equal(h.state.left, 1);
+  h.press("captions");
   assert.equal(h.state.left, 1);
   h.go("done");
   h.press("captions");

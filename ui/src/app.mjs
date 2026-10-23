@@ -40,7 +40,7 @@ import { initLeftTabs } from "./leftTabs.mjs";
 import { initWorkFrame } from "./workFrame.mjs";
 import { initPlayerFoot, clockLine } from "./playerFoot.mjs";
 import { initDraftImport } from "./draftImport.mjs";
-import { openSeparated, importCaptions } from "./dubApi.mjs";
+import { openSeparated, importCaptions, eraseToDub } from "./dubApi.mjs";
 import { initNewProjectWindow } from "./newProjectWindow.mjs";
 import { initDraftSetup } from "./draftSetup.mjs";
 import { initLanguageRow } from "./languageRow.mjs";
@@ -742,7 +742,8 @@ async function openEraseForProject() {
   }
 }
 // Any other tab pressed there is the way back to the job that is open. With
-// no job open the tab's own body is all there is to show.
+// no job open the tab's own body is all there is to show. Burn in subtitles
+// stays on the erase screen: it starts from the video there (workFrame).
 workFrame = initWorkFrame({
   $, tabs: leftTabs,
   getScreen: () => document.body.dataset.screen,
@@ -2158,8 +2159,10 @@ const subtitles = initSubtitleOverlay({
   alone: {
     importSource: (source) => draftImport.importSource(source),
     say: (text, isError) => draftImport.say(text, isError),
-    // A project's own video, held again the way + Add language holds it.
-    hold: async (jid) => (await dubAgainSource(jid)).download_id,
+    // A project's own video, held again the way + Add language holds it; an
+    // erased video, held the way its Dubbing button holds it.
+    hold: async (from) => (await (from.erase ? eraseToDub(from.id) : dubAgainSource(from.id))).download_id,
+    erased: () => { const v = eraseScreen.erasedVideo(); return v && { ...v, erase: true }; },
     upload: (downloadId, file) => importCaptions({ downloadId, file }),
     openJob: async (jid) => {
       draftBecameJob((getDraft() || {}).downloadId);

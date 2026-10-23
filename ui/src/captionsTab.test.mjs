@@ -235,7 +235,7 @@ function aloneHarness(view = {}, { upload } = {}) {
   const held = [];
   const alone = {
     importSource: () => Promise.resolve(),
-    hold: (jid) => { held.push(jid); return Promise.resolve(`held-${jid}`); },
+    hold: (from) => { held.push(from.erase ? `erase:${from.id}` : from.id); return Promise.resolve(`held-${from.id}`); },
     say: (text, isError = false) => said.push([text, isError]),
     upload: upload || ((id, file) => { sent.push([id, file.name]); return Promise.resolve("c1"); }),
     openJob: (jid) => { opened.push(jid); return Promise.resolve(); },
@@ -347,5 +347,19 @@ test("in another project the tab starts from its video, held again, and makes a 
     assert.deepEqual(h.sent, [["held-j1", "paris_ko.srt"]]);
     assert.deepEqual(h.opened, ["c1"]);
   }
+  clearDraft();
+});
+
+// On the erase screen (owner, 2026-10-23): the erased video is the one, held
+// the way the Dubbing button holds it; never the erase job's original.
+test("on the erase screen the tab starts from the erased video", async () => {
+  setDraft({ downloadId: "orig", name: "paris.mp4", duration: 30, videoUrl: "/v" });
+  const h = aloneHarness({ screen: "erase", from: { id: "e1", name: "paris", duration: 12, erase: true } });
+  h.tab.paint();
+  assert.equal(h.$("capZone").hidden, true);
+  assert.match(h.$("capVideoCard").innerHTML, /00:12/, "the erased length, not the draft's");
+  await h.tab.takeSrt({ name: "paris_ko.srt" });
+  assert.deepEqual(h.held, ["erase:e1"]);
+  assert.deepEqual(h.sent, [["held-e1", "paris_ko.srt"]]);
   clearDraft();
 });

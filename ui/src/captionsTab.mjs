@@ -100,8 +100,9 @@ export function styleCardsHtml(styles, sample) {
  *   video in as the draft (ui/src/draftImport.mjs)
  * @param {(text: string, isError?: boolean) => void} deps.alone.say  the line
  *   under the blocks
- * @param {(jobId: string) => Promise<string>} deps.alone.hold  hold an open
- *   project's video again (ui/src/dubApi.mjs dubAgainSource); its download id
+ * @param {(from: object) => Promise<string>} deps.alone.hold  hold the view's
+ *   `from` video again (ui/src/dubApi.mjs dubAgainSource, or eraseToDub for an
+ *   erased video, `from.erase`); its download id
  * @param {(downloadId: string, file: File) => Promise<string>} deps.alone.upload
  *   make the two a project (ui/src/dubApi.mjs importCaptions); its job id
  * @param {(jobId: string) => Promise<void>} deps.alone.openJob  open it
@@ -201,7 +202,7 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow,
     sending = true;
     alone.say(t("Importing…"));
     try {
-      const jid = await alone.upload(from ? await alone.hold(from.id) : id, srtFile);
+      const jid = await alone.upload(from ? await alone.hold(from) : id, srtFile);
       srtFile = null;
       alone.say("");
       await alone.openJob(jid);

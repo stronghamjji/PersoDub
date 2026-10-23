@@ -942,6 +942,9 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
 
   /** The erased job the top bar's Export has something to hand back from. */
   const erasedJob = () => (job && job.done ? job : null);
+  // The erased video as a video to start from (Burn in subtitles): its job,
+  // its name and the length that was erased.
+  const erasedVideo = () => (erasedJob() ? { id: job.id, name: source.title || "", duration: workLength(source) } : null);
 
   /**
    * What the Export dialog saves while this screen is up: the erased video,
@@ -1033,6 +1036,6 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
   // a dubbing project is open. That project's video is held as the draft for its
   // Erase tab, and Export there handed back the dubbing's own files instead.
   const exportsDraft = () => showsDraft() && !projectOpen();
-  return { openErase, openEraseTab, openEraseWith, openEraseOn, sourceId, openEraseJob, exportErased, erasedJob, hasJob,
+  return { openErase, openEraseTab, openEraseWith, openEraseOn, sourceId, openEraseJob, exportErased, erasedJob, erasedVideo, hasJob,
            showsDraft, exportsDraft, origin };
 }

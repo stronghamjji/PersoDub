@@ -7,8 +7,10 @@
 //
 // What it does: lights the Erase tab while the erase screen is up and the
 // Dubbing tab when a job takes the screen, and tells the page when a tab
-// other than Erase or Save video is pressed on the erase screen -- that is
-// the way back to the job. Save video saves what is on screen, where it is.
+// other than Erase, Save video or Burn in subtitles is pressed on the erase
+// screen -- that is the way back to the job. Save video saves what is on
+// screen, where it is; Burn in subtitles starts from that video (owner,
+// 2026-10-23).
 //
 // The elements this file touches: #leftTabs and its buttons, #exportBtn, and
 // the three video panels' tab rows (#videoTabsNormal, #runTabs, #eraseTabs).
@@ -53,7 +55,7 @@ export function initWorkFrame({ $, tabs, getScreen, onLeaveErase }) {
   // After the row's own listener, which has already shown the tab's body.
   row.addEventListener("click", (e) => {
     const b = e.target.closest("[data-tab]");
-    if (!b || b.dataset.tab === "erase" || b.dataset.tab === "save") return;
+    if (!b || ["erase", "save", "captions"].includes(b.dataset.tab)) return;
     if (getScreen() === "erase") onLeaveErase();
   });
 
