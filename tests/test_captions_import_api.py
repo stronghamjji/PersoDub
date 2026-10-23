@@ -52,6 +52,8 @@ def test_a_video_and_its_srt_become_a_finished_captions_project():
     # The finished-dub script route reads the same lines for the tab.
     lines = client.get("/api/dub/jobs/%s/script" % jid).json()["lines"]
     assert [l["text"] for l in lines] == ["Bonjour", "Comment ca va", "A bientot"]
+    # A dub's subtitles start off; these are the project, so they start on.
+    assert client.get("/api/dub/jobs/%s/subtitle_style" % jid).json()["enabled"] is True
     # Written beside the video, so Projects reopens it after a restart.
     assert os.path.isfile(os.path.join(work, "job.json"))
 

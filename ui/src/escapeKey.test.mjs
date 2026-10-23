@@ -91,10 +91,10 @@ test("a press on one menu's button reaches the other menus as a click outside", 
   assert.equal(p.doc.body.clicks, 1);
 });
 
-// Subtitle style beside Download opens its looks the way Ratio opens its menu
-// (owner, 2026-10-22): one open at a time, whichever button was pressed.
+// The Subtitle style chip over the picture opens its looks the way Ratio
+// opens its menu (owner, 2026-10-22): one open at a time, whichever was pressed.
 test("Subtitle style's press shuts the Ratio and Preview menus, and theirs shut its looks", () => {
-  const style = { closest: (sel) => (sel === "#videoStyleBtn" ? {} : null) };
+  const style = { closest: (sel) => (sel === "#subStyleChip" ? {} : null) };
   const shut = page({ hiddenIds: ALL_MENUS });
   shut.click(style);
   assert.equal(shut.doc.body.clicks, 1, "opening it reaches the other menus as a click outside");

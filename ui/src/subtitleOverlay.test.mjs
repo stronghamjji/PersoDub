@@ -96,7 +96,7 @@ function harness({ answer = async () => ({ ok: true }), state = { job: null, job
   const restore = () => {
     for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
   };
-  return { $, subs, calls, restore };
+  return { $, subs, calls, restore, video };
 }
 
 // The save waits 350 ms for the last of a run of changes (ui/src/pendingSave.mjs,
@@ -256,22 +256,52 @@ test("a look picked over the video is saved and is the look the subtitled downlo
   }
 });
 
-// The video panel's Subtitle style is dim while the dub has no lines. The
-// lines arrive after the job opens, and the one under the playhead can have
-// no words ("Not translated"): the overlay draws nothing for it, and the
-// button stayed dim saying the project had no subtitles.
-test("Subtitle style in the video panel wakes when the lines arrive, even if the first has no words", async () => {
-  const lines = [];
-  const h = harness({ state: { job: { id: "j1", status: "done", kind: "dub" }, jobId: "j1" }, lines });
+// A dub's way to its looks (owner, 2026-10-23): a chip 10px over the words
+// while the video stands still, gone while it plays and on a line with no
+// words; a burn-in project has its looks in its own tab instead.
+test("the Subtitle style chip stands over the words while the video is still, and goes while it plays", async () => {
+  const lines = [{ start: 0, end: 2, text: "" }, { start: 2, end: 5, text: "Hello there" }];
+  const state = { job: { id: "j1", status: "done", kind: "dub" }, jobId: "j1" };
+  const h = harness({ state, lines });
   try {
     await h.subs.loadSubStyle("j1");
-    assert.equal(h.$("videoStyleBtn").disabled, true, "no lines yet");
-    lines.push({ start: 0, end: 2, text: "" }, { start: 2, end: 5, text: "Hello there" });
-    // What the page does when the script lands (ui/src/app.mjs renderTimeline).
-    h.subs.subLinesChanged();
+    const video = h.video;
+    const chip = h.$("subStyleChip");
+    // At 0 s the line has no words: no subtitle, no chip.
     h.subs.updateSubtitleNow();
-    assert.equal(h.$("videoStyleBtn").disabled, false);
-    assert.equal(h.$("videoStyleBtn").title, "");
+    assert.equal(chip.hidden, true);
+    h.$("subOverlayText").offsetHeight = 20;
+    video.currentTime = 3;
+    h.subs.updateSubtitleNow();
+    assert.equal(chip.hidden, false);
+    // The words' foot is 7 % of the 100 px picture up; the chip 10px over their 20px.
+    assert.equal(h.$("subOverlayText").style.bottom, "7px");
+    assert.equal(chip.style.bottom, "37px");
+    video.paused = false;
+    h.subs.updateSubtitleNow();
+    assert.equal(chip.hidden, true, "playing");
+    video.paused = true;
+    state.job.kind = "captions";
+    h.subs.updateSubtitleNow();
+    assert.equal(chip.hidden, true, "a burn-in project");
+  } finally {
+    h.restore();
+  }
+});
+
+// Off by default (owner, 2026-10-23): with no answer the subtitles stay off,
+// and wherever a project once dragged them, every look sits at the foot.
+test("a refused style answer leaves the subtitles off, and every style sits at the foot of the picture", async () => {
+  const h = harness();
+  try {
+    globalThis.fetch = async () => ({ ok: false, json: async () => ({}) });
+    await h.subs.loadSubStyle("gone");
+    assert.equal(h.subs.getSubStyle().enabled, false);
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ ...SAVED_STYLE, pos: 30 }) });
+    await h.subs.loadSubStyle("j1");
+    assert.equal(h.subs.getSubStyle().enabled, true, "a saved choice wins");
+    assert.equal(h.subs.getSubStyle().pos, 93);
+    assert.match(h.subs.exportParams().query, /^&pos=93&/, "and the download is burned there too");
   } finally {
     h.restore();
   }

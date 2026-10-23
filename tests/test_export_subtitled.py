@@ -211,7 +211,7 @@ def test_subtitle_settings_start_with_the_defaults(monkeypatch, tmp_path):
     ran, jid, work = _done_job(monkeypatch, tmp_path)
     r = client.get(f"/api/dub/jobs/{jid}/subtitle_style")
     assert r.status_code == 200
-    assert r.json() == {"enabled": True, "preset": "clean", "pos": None,
+    assert r.json() == {"enabled": False, "preset": "clean", "pos": None,
                         "size": None, "cues": {}, "boxWidth": None, "widths": {},
                         "layout": {}}
 

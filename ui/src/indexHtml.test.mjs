@@ -1361,8 +1361,8 @@ test("Download is one button, at the right end of the video panel's tab row", ()
   const pane = (id, next) => html.slice(html.indexOf(`<div class="video-pane" id="${id}">`), html.indexOf(next));
   const done = pane("videoPane", 'id="runPane"');
   const row = done.slice(done.indexOf('<div class="video-tabs" id="videoTabsNormal">'), done.indexOf('<div class="video-body">'));
-  assert.match(row, /id="vtabDubbed">Dubbed<\/button>\s*<!--[^]*?-->\s*<button data-i18n class="ratio-btn video-style-btn" id="videoStyleBtn"[^>]*>Subtitle style<\/button>\s*<!--[^]*?-->\s*<button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Download<\/button>\s*<\/div>/,
-    "last in the finished panel's tab row, after Original, Dubbed and Subtitle style");
+  assert.match(row, /id="vtabDubbed">Dubbed<\/button>\s*<!--[^]*?-->\s*<button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Download<\/button>\s*<\/div>/,
+    "last in the finished panel's tab row, after Original and Dubbed");
   assert.match(pane("runPane", 'id="erasePane"'), /<div class="video-tabs" id="runTabs">\s*<button class="vtab active" type="button">Original<\/button>/);
   assert.match(pane("erasePane", "<!-- ============ AGENT PANEL"), /<div class="video-tabs erase-tabs" id="eraseTabs">/);
   // Pushed to the row's right end, in the middle of its height.
@@ -1375,34 +1375,32 @@ test("Download is one button, at the right end of the video panel's tab row", ()
 // panel's tab row opens the same twelve over the top of the picture, in two
 // rows of six with what they make under them (mock 지적 시안 C). The tab
 // itself stays for now. The button's work is ui/src/captionsTab.mjs's.
-test("Subtitle style opens the looks from the finished video panel, just left of Download", () => {
+// Over a dub's picture (owner, 2026-10-23): no button beside Download, a
+// chip just above the subtitle that opens the same looks above it.
+test("the Subtitle style chip sits in the subtitle overlay and opens the looks, Download alone in the row", () => {
   const html = readPage();
-  const done = html.slice(html.indexOf('<div class="video-pane" id="videoPane">'), html.indexOf('<div class="video-body">'));
+  const done = html.slice(html.indexOf('<div class="video-pane" id="videoPane">'), html.indexOf('<div class="video-under"'));
   const row = done.slice(0, done.indexOf("</div>"));
-  const at = (s) => row.indexOf(s);
-  assert.ok(at('id="vtabDubbed"') < at('id="videoStyleBtn"') && at('id="videoStyleBtn"') < at('id="exportBtn"'),
-    "Original, Dubbed, Subtitle style, Download");
-  assert.match(row, /<button data-i18n class="ratio-btn video-style-btn" id="videoStyleBtn" type="button"\s+aria-haspopup="dialog" aria-expanded="false" disabled title="After dubbing">Subtitle style<\/button>/,
-    "dim until a finished dub is open, as the tab is");
-  // Its looks: right under the row, shut to begin with, the tab's own label
-  // and tiles, and the line that says what comes out.
+  assert.ok(!html.includes('id="videoStyleBtn"'), "no Subtitle style button in the tab row");
+  assert.ok(row.indexOf('id="vtabDubbed"') < row.indexOf('id="exportBtn"'));
+  assert.match(done, /<div class="sub-overlay" id="subOverlay" hidden>\s*<span class="sub-ov-text" id="subOverlayText"><\/span>\s*<button class="sub-style-chip" id="subStyleChip" type="button" aria-haspopup="dialog"\s+aria-expanded="false" hidden><svg[^]*?<\/svg><span data-i18n>Subtitle style<\/span><\/button>\s*<\/div>/);
+  // Its looks: shut to begin with, the tab's own label and tiles, and the
+  // line that says what comes out.
   const pop = done.slice(done.indexOf('<div class="video-style-pop" id="videoStylePop"'));
-  assert.ok(done.indexOf('id="videoStylePop"') > done.indexOf('id="exportBtn"'), "after the tab row");
   assert.match(pop, /^<div class="video-style-pop" id="videoStylePop" role="dialog" aria-label="Subtitle style"\s+data-i18n-aria-label="Subtitle style" hidden>/);
   assert.match(pop, /<div class="cap-label"><span data-i18n>Styles · 12<\/span><\/div>\s*<div class="cap-grid" id="videoStyleGrid"><\/div>/);
   assert.match(pop, /<div class="erase-card video-style-result"><div data-i18n class="k">What you get<\/div>\s*<div class="m"><span data-i18n>The video with subtitles burned in, and the subtitle file<\/span><\/div><\/div>/);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.equal(ko["What you get"], "이 작업을 하면 이렇게 나와요");
   assert.equal(ko["The video with subtitles burned in, and the subtitle file"], "자막을 입힌 영상과 자막 파일이 나와요");
-  // The mock's sizes: the button 8px left of Download, the looks 560px wide
-  // and 8px in from the panel's right edge, never wider or taller than it.
-  assert.match(html, /\.video-tabs \.video-style-btn \{ align-self: center; margin: 0 8px 0 auto; \}/);
-  assert.match(html, /\.video-tabs \.video-style-btn ~ #exportBtn \{ margin-left: 0; \}/);
-  assert.match(html, /\.video-style-pop \{ position: absolute; right: 8px; top: 39px; z-index: 6;[^}]*width: min\(560px, calc\(100% - 16px\)\); max-height: calc\(100% - 47px\); overflow-y: auto;/);
+  assert.equal(ko["Abc 123"], "가나다 ABC");
+  // The looks 560px wide, placed by script, never wider or taller than the
+  // panel; the tiles carry no frame of the video.
+  assert.match(html, /\.video-style-pop \{ position: absolute; z-index: 6;[^}]*width: min\(560px, calc\(100% - 16px\)\); max-height: calc\(100% - 47px\); overflow-y: auto;/);
   assert.match(html, /\.video-style-pop \.cap-grid \{ grid-template-columns: repeat\(6, minmax\(0, 1fr\)\);/);
-  // The tab is still there, and Download's subtitled video asks for the look
-  // the player shows, whichever of the two picked it.
-  assert.ok(html.includes('data-tab="captions"') && html.includes('id="subStyleMenu"'));
+  assert.match(html, /\.cap-pv \{[^}]*background: none;/);
+  assert.match(html, /\.sub-style-chip \{ position: absolute;[^}]*background: rgba\(0, 0, 0, 0\.6\);/);
+  // Download's subtitled video asks for the look the player shows.
   assert.match(html, /const \{ preset: subPreset, query: posQ \} = subtitles\.exportParams\(\);/);
   assert.match(html, /subtitled: \{ href: `\/api\/dub\/result\/\$\{job\.id\}\/subtitled\?preset=\$\{subPreset\}\$\{posQ\}&download=1\$\{mark\}`,/);
 });
@@ -1471,10 +1469,10 @@ test("no narrow tier gives the length verdict under 58px or the clock under 62px
 
 // Clicking the subtitle drawn on the video opens Captions (subSelect) and makes
 // "This line" the scope -- but only for a click, never at the end of a drag.
-test("a plain click on the video's subtitle picks 'This line', a drag does not", () => {
+test("a click on the video's subtitle picks 'This line', and nothing drags it up or down", () => {
   const subs = readFileSync(SUBTITLES, "utf8");
-  assert.match(subs,
-    /if \(dragged\) saveSubStyle\(\);\n\s*\/\/[^\n]*\n\s*else \{ subScope = "one"; paintSubToolbar\(\); \}/);
+  assert.match(subs, /subSelect\(true\);\n\s*subScope = "one"; paintSubToolbar\(\);/);
+  assert.ok(!/subStyle\.pos = Math/.test(subs), "the position is SUB_POS, never the pointer's");
 });
 
 // Editing before dubbing, the same on every tab (mockup edit-flow, user

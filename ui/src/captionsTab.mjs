@@ -1,7 +1,8 @@
 // The Captions tab of the work screen's left panel (new-layout mockup,
 // editorc, user 2026-09-29): the subtitle tools that used to float over the
 // video. A− / size / A＋, All lines / This line (box looks only), the Show
-// switch, and every look drawn as a small tile over a frame of the video.
+// switch, and every look drawn as a small tile: its words alone, no frame of
+// the video behind them (owner, 2026-10-23).
 //
 // The page keeps the subtitle style itself (subtitle_style.json, the overlay,
 // the layout maths shared with the export); this file only draws the tab from
@@ -10,10 +11,11 @@
 // (onShow, which is the timeline's eye). A− / A＋ and the scope buttons are
 // wired by the page, as they were on the floating bar.
 //
-// The same looks open from the finished video panel too, at the dub's last
-// step: Subtitle style, left of Download (owner, 2026-10-22). Its grid is
-// drawn and ringed with the tab's, a press on either is the same pick, and
-// the button is dim whenever the tab has no looks to show.
+// The same looks open over a dub's picture too: the Subtitle style chip just
+// above the subtitle, while the video stands still (owner, 2026-10-23; the
+// page shows and hides the chip, ui/src/subtitleOverlay.mjs). They open
+// above the chip, never below. Its grid is drawn and ringed with the tab's,
+// and a press on either is the same pick.
 //
 // With no project open the tab works on its own (owner, 2026-10-22): a video
 // (the shared Import block) and a subtitle file (.srt) brought in, then the
@@ -23,7 +25,7 @@
 //
 // The elements this file touches: #capEmpty, #capMain, #capHint, #subSizeLv,
 // #subScopeSep, #subScopeSeg, #subScopeAll, #subScopeOne, #subShow, the grid
-// of looks, #subStyleMenu, and the video panel's #videoStyleBtn,
+// of looks, #subStyleMenu, and the video panel's #subStyleChip,
 // #videoStylePop and its grid, #videoStyleGrid; on its own, #capAlone,
 // #capImportSlot, #capVideoInput, #capVideoCard, #capSrtZone, #capSrtSub,
 // #capSrtInput, #capImportStatus, #capFiles, #capFileVideo, #capFileSrtName
@@ -73,15 +75,6 @@ export function captionsLocked({ dubbed, alone = false }) {
   return !alone && !dubbed;
 }
 
-/** The word each tile shows: the first one the subtitles say, else "Aa". */
-export function sampleWord(lines) {
-  for (const l of lines || []) {
-    const w = String(l.text || "").trim().split(/\s+/)[0];
-    if (w) return w.length > 8 ? w.slice(0, 7) + "…" : w;
-  }
-  return "Aa";
-}
-
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -90,13 +83,11 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
  * (sub-ov-<id>), so a tile is what the video will show.
  *
  * @param {Array<[string, string]>} styles  [id, label] in menu order
- * @param {string} sample  the word drawn on every tile
- * @param {string} thumb   the frame behind the words ("" for a plain tile)
+ * @param {string} sample  the words drawn on every tile
  */
-export function styleCardsHtml(styles, sample, thumb) {
-  const bg = thumb ? ` style="background-image:url('${escapeHtml(thumb)}')"` : "";
+export function styleCardsHtml(styles, sample) {
   return styles.map(([id, label]) => `<button class="cap-card" type="button" data-preset="${escapeHtml(id)}"`
-    + ` aria-pressed="false"><span class="cap-pv"${bg}><span class="cap-sample sub-ov-${escapeHtml(id)}">`
+    + ` aria-pressed="false"><span class="cap-pv"><span class="cap-sample sub-ov-${escapeHtml(id)}">`
     + `${escapeHtml(sample)}</span></span><span class="cap-nm">${escapeHtml(label)}</span></button>`).join("");
 }
 
@@ -104,7 +95,7 @@ export function styleCardsHtml(styles, sample, thumb) {
  * @param {object} deps
  * @param {(id: string) => any} deps.$   the page's getElementById helper
  * @param {Array<[string, string]>} deps.styles  the looks, [id, label]
- * @param {() => {screen: string, lines: Array<{text: string}>, jobId: string|null,
+ * @param {() => {screen: string, lines: Array<{text: string}>,
  *   preset: string, size: number, boxed: boolean, scope: "all"|"one",
  *   line: number, enabled: boolean, dubbed: boolean}} deps.getView
  *   the subtitle state as it is now; line is the selected subtitle's number
@@ -131,22 +122,31 @@ export function styleCardsHtml(styles, sample, thumb) {
 export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked = () => {},
                                   doc = globalThis.document, alone = null }) {
   const grids = [$("subStyleMenu"), $("videoStyleGrid")];
-  const styleBtn = $("videoStyleBtn");
+  const styleBtn = $("subStyleChip");
   const pop = $("videoStylePop");
-  let drawn = null;   // the sample and frame the grids were last built with
+  let drawn = null;   // the words and names the grids were last built with
 
-  // The video panel's looks open and shut the way the Ratio menu beside them
-  // does (ui/src/ratio.mjs): their button, a press anywhere else, Escape. A
-  // pick shuts them as well, so the look is seen on the whole picture.
+  // The video panel's looks open and shut the way the Ratio menu does
+  // (ui/src/ratio.mjs): their chip, a press anywhere else, Escape. A pick
+  // shuts them as well, so the look is seen on the whole picture.
   function shut() {
     pop.hidden = true;
     styleBtn.setAttribute("aria-expanded", "false");
+  }
+  // Above the chip, 8px clear of it, centred on it and kept inside the panel.
+  function place() {
+    const chip = styleBtn.getBoundingClientRect();
+    const pane = pop.offsetParent.getBoundingClientRect();
+    const left = chip.left + chip.width / 2 - pane.left - pop.offsetWidth / 2;
+    pop.style.left = Math.max(8, Math.min(left, pane.width - pop.offsetWidth - 8)) + "px";
+    pop.style.top = Math.max(8, chip.top - pane.top - pop.offsetHeight - 8) + "px";
   }
   styleBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     const open = pop.hidden;
     pop.hidden = !open;
     styleBtn.setAttribute("aria-expanded", String(open));
+    if (open) place();
   });
   pop.addEventListener("click", (e) => e.stopPropagation());
   doc.addEventListener("click", shut);
@@ -251,11 +251,9 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
     const locked = captionsLocked({ dubbed: !!v.dubbed, alone: lone });
     setLocked(locked);
     const empty = lone ? "" : captionsEmpty({ screen: v.screen, lines: v.lines.length });
-    // The video panel's button opens onto these same looks: dim whenever the
-    // tab has none to show, with the tab's reason on its tip.
-    styleBtn.disabled = locked || lone || !!empty;
-    styleBtn.title = locked || lone ? t(LOCKED_TIP) : empty && t(empty);
-    if (styleBtn.disabled) shut();
+    // The chip went with the subtitle (the video plays, the screen changed):
+    // its looks go too.
+    if (styleBtn.hidden) shut();
     $("capEmpty").textContent = empty && t(empty);
     $("capEmpty").hidden = !empty;
     $("capMain").hidden = !!empty;
@@ -276,15 +274,13 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
     show.classList.toggle("on", v.enabled);
     show.setAttribute("aria-checked", String(v.enabled));
 
-    // The looks' names too: they change with the language.
-    // On its own there is no project yet: plain tiles, none ringed.
-    const sample = lone ? "Aa" : sampleWord(v.lines);
-    const jobId = lone ? "" : v.jobId;
-    const key = JSON.stringify([sample, jobId, styles.map((s) => s[1])]);
+    // The same words on every tile, and the looks' names: both change with
+    // the language. On its own there is no project yet: none ringed.
+    const sample = t("Abc 123");
+    const key = JSON.stringify([sample, styles.map((s) => s[1])]);
     if (key !== drawn) {
       drawn = key;
-      const thumb = jobId ? `/api/dub/jobs/${encodeURIComponent(jobId)}/thumb` : "";
-      for (const grid of grids) grid.innerHTML = styleCardsHtml(styles, sample, thumb);
+      for (const grid of grids) grid.innerHTML = styleCardsHtml(styles, sample);
     }
     for (const grid of grids) {
       for (const card of grid.querySelectorAll("[data-preset]")) {

@@ -535,7 +535,8 @@ def dub_result_subtitled(jid: str, preset: Optional[str] = None, download: int =
     return FileResponse(built, media_type="video/mp4", headers=headers)
 
 
-_SUBTITLE_STYLE_DEFAULTS = {"enabled": True, "preset": "clean",
+# Off until the user turns them on (owner, 2026-10-23): a dub plays clean.
+_SUBTITLE_STYLE_DEFAULTS = {"enabled": False, "preset": "clean",
                             "pos": None, "size": None, "cues": {},
                             "boxWidth": None, "widths": {}, "layout": {}}
 

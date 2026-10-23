@@ -42,7 +42,7 @@ export const WAYS_OUT = {
 export const MENU_BUTTONS = [
   ["#ratioBtn", ["ratioMenu"]],
   ["#previewBtn", ["previewMenu"]],
-  ["#videoStyleBtn", ["videoStylePop"]],
+  ["#subStyleChip", ["videoStylePop"]],
   [".proj-more", ["projectCardMenu"]],
 ];
 

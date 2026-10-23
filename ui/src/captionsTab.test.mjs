@@ -4,8 +4,8 @@
 // Run with: node --test ui/src/captionsTab.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initCaptionsTab, captionsEmpty, captionsLocked, sampleWord, styleCardsHtml,
-         AFTER_DUB, NO_SUBTITLES, PICK_A_LINE, LOCKED_TIP, SRT_SUB, NOT_SRT } from "./captionsTab.mjs";
+import { initCaptionsTab, captionsEmpty, captionsLocked, styleCardsHtml,
+         AFTER_DUB, NO_SUBTITLES, PICK_A_LINE, SRT_SUB, NOT_SRT } from "./captionsTab.mjs";
 import { clearDraft, setDraft } from "./draft.mjs";
 
 const STYLES = [["clean", "Clean"], ["sticker", "Sticker"], ["black-box", "Black Box"]];
@@ -13,7 +13,10 @@ const STYLES = [["clean", "Clean"], ["sticker", "Sticker"], ["black-box", "Black
 function makeEl(id) {
   const classes = new Set();
   const el = {
-    id, textContent: "", hidden: false, dataset: {}, listeners: {}, attrs: {}, cards: [],
+    id, textContent: "", hidden: false, dataset: {}, listeners: {}, attrs: {}, cards: [], style: {},
+    // Where it is on screen, set by the test that needs it.
+    rect: { left: 0, top: 0, width: 0, height: 0 },
+    getBoundingClientRect() { return this.rect; },
     classList: { contains: (c) => classes.has(c),
                  toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) },
     setAttribute(k, v) { this.attrs[k] = v; },
@@ -44,6 +47,10 @@ function harness(view = {}, extra = {}) {
   let shown = 0;
   // The page: a press anywhere on it, and its keys.
   const doc = makeEl("document");
+  // The video panel the looks open in: 800 x 400 from the window's corner.
+  const pane = makeEl("videoPane");
+  pane.rect = { left: 0, top: 0, width: 800, height: 400 };
+  Object.assign($("videoStylePop"), { offsetParent: pane, offsetWidth: 560, offsetHeight: 200 });
   const tab = initCaptionsTab({ $, styles: STYLES, getView: () => v, doc,
     onPick: (p) => picked.push(p), onShow: () => { shown++; }, setLocked: (on) => locks.push(on), ...extra });
   // A press on an element that stops it there, as the button and the panel do.
@@ -65,12 +72,6 @@ test("the tab says why it is empty: before dubbing, and with no subtitles", () =
   assert.equal(captionsEmpty({ screen: "done", lines: 0 }), NO_SUBTITLES);
   assert.equal(captionsEmpty({ screen: "done", lines: 2 }), "");
   assert.equal(NO_SUBTITLES, "No captions for this project");
-  // The video panel's button opens onto the same looks, so it is dim too,
-  // with the same reason on its tip.
-  const h = harness({ lines: [] });
-  h.tab.paint();
-  assert.equal(h.$("videoStyleBtn").disabled, true);
-  assert.equal(h.$("videoStyleBtn").title, NO_SUBTITLES);
 });
 
 test("a video held as a draft beside a finished dub (the Erase tab's) leaves the tab open", () => {
@@ -84,7 +85,6 @@ test("a video held as a draft beside a finished dub (the Erase tab's) leaves the
   h.tab.paint();
   assert.equal(h.$("capMain").hidden, false);
   assert.deepEqual(h.locks, [false, false]);
-  assert.equal(h.$("videoStyleBtn").disabled, false, "and the video panel's way to the looks with it");
   clearDraft();
   h.v.lines = [];
   h.tab.paint();
@@ -125,13 +125,13 @@ test("All lines / This line shows only for box looks, and This line needs a sele
   assert.equal(h.$("capHint").hidden, true);
 });
 
-test("every look is a tile over the video's frame, the current one ringed", () => {
+test("every look is a tile of the same words alone, no frame of the video, the current one ringed", () => {
   const h = harness({ preset: "sticker" });
   h.tab.paint();
   const grid = h.$("subStyleMenu");
   assert.deepEqual(grid.cards.map((c) => c.dataset.preset), ["clean", "sticker", "black-box"]);
-  assert.match(grid.innerHTML, /\/api\/dub\/jobs\/j1\/thumb/);
-  assert.match(grid.innerHTML, /class="cap-sample sub-ov-black-box">Hola</);
+  assert.doesNotMatch(grid.innerHTML, /thumb|background-image/);
+  assert.match(grid.innerHTML, /class="cap-sample sub-ov-black-box">Abc 123</);
   assert.deepEqual(grid.cards.map((c) => c.classList.contains("on")), [false, true, false]);
   // Painting again does not rebuild the grid (it is painted on every tick of
   // the player); a pick moves the ring.
@@ -144,14 +144,8 @@ test("every look is a tile over the video's frame, the current one ringed", () =
   assert.deepEqual(h.picked, ["black-box"]);
 });
 
-test("the sample word is the subtitles' first, kept short", () => {
-  assert.equal(sampleWord([{ text: "" }, { text: "  Bienvenidos de nuevo" }]), "Bienven…");
-  assert.equal(sampleWord([{ text: "안녕하세요 여러분" }]), "안녕하세요");
-  assert.equal(sampleWord([]), "Aa");
-  // No frame to show: a plain tile, and the words are escaped either way.
-  const html = styleCardsHtml([["clean", "Clean"]], "<b>", "");
-  assert.doesNotMatch(html, /background-image/);
-  assert.match(html, /&lt;b&gt;/);
+test("a tile's words are escaped", () => {
+  assert.match(styleCardsHtml([["clean", "Clean"]], "<b>"), /&lt;b&gt;/);
 });
 
 test("the tab is shut until there is a dub, and opens once there is", () => {
@@ -160,35 +154,31 @@ test("the tab is shut until there is a dub, and opens once there is", () => {
   const h = harness({ dubbed: false });
   h.tab.paint();
   assert.deepEqual(h.locks, [true]);
-  assert.equal(h.$("videoStyleBtn").disabled, true, "the video panel's button is dim with the tab");
-  assert.equal(h.$("videoStyleBtn").title, LOCKED_TIP);
   h.v.dubbed = true;
   h.tab.paint();
   assert.deepEqual(h.locks, [true, false]);
-  assert.equal(h.$("videoStyleBtn").disabled, false);
-  assert.equal(h.$("videoStyleBtn").title, "");
 });
 
-// The tab's looks moved into the dub's last step (owner, 2026-10-22): a
-// button left of Download opens the same twelve over the video.
-test("Subtitle style in the video panel opens the same looks, the current one ringed", () => {
+// The looks over a dub's picture (owner, 2026-10-23): the chip just above
+// the subtitle opens the same twelve.
+test("the Subtitle style chip opens the same looks, the current one ringed", () => {
   const h = harness({ preset: "sticker" });
   h.tab.paint();
   const grid = h.$("videoStyleGrid");
   assert.equal(grid.innerHTML, h.$("subStyleMenu").innerHTML, "the tab's tiles, over the same frame");
   assert.deepEqual(grid.cards.map((c) => c.attrs["aria-pressed"]), ["false", "true", "false"]);
   assert.deepEqual(grid.cards.map((c) => c.classList.contains("on")), [false, true, false]);
-  // Shut until its button is pressed; the press opens it and goes no further.
+  // Shut until its chip is pressed; the press opens it and goes no further.
   h.$("videoStylePop").hidden = true;
-  h.press("videoStyleBtn");
+  h.press("subStyleChip");
   assert.equal(h.$("videoStylePop").hidden, false);
-  assert.equal(h.$("videoStyleBtn").attrs["aria-expanded"], "true");
-  // A press inside it leaves it open; the button again shuts it.
+  assert.equal(h.$("subStyleChip").attrs["aria-expanded"], "true");
+  // A press inside it leaves it open; the chip again shuts it.
   h.press("videoStylePop");
   assert.equal(h.$("videoStylePop").hidden, false);
-  h.press("videoStyleBtn");
+  h.press("subStyleChip");
   assert.equal(h.$("videoStylePop").hidden, true);
-  assert.equal(h.$("videoStyleBtn").attrs["aria-expanded"], "false");
+  assert.equal(h.$("subStyleChip").attrs["aria-expanded"], "false");
   // Painting again keeps both grids and moves both rings.
   const before = grid.cards;
   h.v.preset = "black-box";
@@ -198,36 +188,52 @@ test("Subtitle style in the video panel opens the same looks, the current one ri
   assert.deepEqual(h.$("subStyleMenu").cards.map((c) => c.classList.contains("on")), [false, false, true]);
 });
 
+// Never below the chip (owner, 2026-10-23): its foot 8px over the chip,
+// centred on it inside the panel, and held 8px from the panel's top.
+test("the chip's looks open above it, centred on it and inside the panel", () => {
+  const h = harness();
+  h.tab.paint();
+  h.$("videoStylePop").hidden = true;
+  h.$("subStyleChip").rect = { left: 280, top: 300, width: 100, height: 26 };
+  h.press("subStyleChip");
+  assert.equal(h.$("videoStylePop").style.top, "92px", "300 - 200 - 8");
+  assert.equal(h.$("videoStylePop").style.left, "50px", "centred on the chip at 330");
+  h.press("subStyleChip");
+  // A chip at the panel's right edge and near its top.
+  h.$("subStyleChip").rect = { left: 740, top: 120, width: 60, height: 26 };
+  h.press("subStyleChip");
+  assert.equal(h.$("videoStylePop").style.left, "232px", "800 - 560 - 8");
+  assert.equal(h.$("videoStylePop").style.top, "8px");
+});
+
 test("a look picked over the video is the tab's own pick, and it shuts the panel", () => {
   const h = harness();
   h.tab.paint();
-  h.press("videoStyleBtn");
+  h.press("subStyleChip");
   h.pick("videoStyleGrid", "black-box");
   assert.deepEqual(h.picked, ["black-box"], "the same onPick the tab's tiles press");
   assert.equal(h.$("videoStylePop").hidden, true, "shut, so the look is seen on the whole picture");
-  assert.equal(h.$("videoStyleBtn").attrs["aria-expanded"], "false");
+  assert.equal(h.$("subStyleChip").attrs["aria-expanded"], "false");
   // The tab's tiles go on picking as before.
   h.pick("subStyleMenu", "sticker");
   assert.deepEqual(h.picked, ["black-box", "sticker"]);
 });
 
-test("the video panel's looks shut on a press elsewhere, on Escape, and when they go dim", () => {
+test("the chip's looks shut on a press elsewhere, on Escape, and when the chip goes", () => {
   const h = harness();
   h.tab.paint();
-  h.press("videoStyleBtn");
+  h.press("subStyleChip");
   h.doc.fire("click", {});
   assert.equal(h.$("videoStylePop").hidden, true, "a press anywhere else");
-  h.press("videoStyleBtn");
+  h.press("subStyleChip");
   h.doc.fire("keydown", { key: "Space" });
   assert.equal(h.$("videoStylePop").hidden, false, "another key leaves it");
   h.doc.fire("keydown", { key: "Escape" });
   assert.equal(h.$("videoStylePop").hidden, true, "Escape");
-  // Open when the screen changes under it (a dub starts, Home): shut.
-  h.press("videoStyleBtn");
-  h.v.screen = "running";
-  h.v.dubbed = false;
+  // Open when the video plays or the screen changes (the page hides the chip): shut.
+  h.press("subStyleChip");
+  h.$("subStyleChip").hidden = true;
   h.tab.paint();
-  assert.equal(h.$("videoStyleBtn").disabled, true);
   assert.equal(h.$("videoStylePop").hidden, true);
 });
 
@@ -267,10 +273,9 @@ test("with no project open the tab takes a video and a subtitle file, the looks 
   const grid = h.$("subStyleMenu");
   assert.equal(grid.cards.length, 3);
   assert.doesNotMatch(grid.innerHTML, /background-image/, "no project, so no frame behind them");
-  assert.match(grid.innerHTML, />Aa</);
+  assert.match(grid.innerHTML, />Abc 123</);
   assert.deepEqual(grid.cards.map((c) => c.classList.contains("on")), [false, false, false]);
   assert.equal(h.$("capFiles").hidden, true);
-  assert.equal(h.$("videoStyleBtn").disabled, true);
 });
 
 test("a held video shows as its card in the Import block's place", () => {
@@ -329,9 +334,7 @@ test("once the two are a project, its two files are named over the looks, which 
   assert.equal(h.$("capMain").inert, false);
   assert.equal(h.$("capMain").classList.contains("cap-off"), false);
   const grid = h.$("subStyleMenu");
-  assert.match(grid.innerHTML, /\/api\/dub\/jobs\/c1\/thumb/);
   assert.deepEqual(grid.cards.map((c) => c.classList.contains("on")), [false, true, false]);
-  assert.equal(h.$("videoStyleBtn").disabled, false);
 });
 
 test("beside a dub the tab is as it was: shut until it is finished, no files row", () => {

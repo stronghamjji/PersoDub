@@ -683,12 +683,6 @@
               <div class="video-tabs" id="videoTabsNormal">
                 <button data-i18n class="vtab" data-src="original" type="button" id="vtabOriginal">Original</button>
                 <button data-i18n class="vtab active" data-src="dubbed" type="button" id="vtabDubbed">Dubbed</button>
-                <!-- The Subtitle style tab's looks, at the dub's last step, just
-                     before Download (owner, 2026-10-22): the same twelve, opened
-                     over the top of the picture. Dim with the tab until a
-                     finished dub is open (ui/src/captionsTab.mjs). -->
-                <button data-i18n class="ratio-btn video-style-btn" id="videoStyleBtn" type="button"
-                        aria-haspopup="dialog" aria-expanded="false" disabled title="After dubbing">Subtitle style</button>
                 <!-- What the project hands back, at the right end of the tab
                      row of whichever video panel is up: people looked for it
                      beside the video, not among the window's own buttons
@@ -696,8 +690,9 @@
                      moves it to the running and erase panels' rows. -->
                 <button data-i18n class="btn btn-primary" id="exportBtn" type="button" hidden>Download</button>
               </div>
-              <!-- What Subtitle style opens: the looks in two rows of six, the
-                   one on the video ringed, and what they make. -->
+              <!-- What the Subtitle style chip over the subtitle opens, above
+                   it: the looks in two rows of six, the one on the video
+                   ringed, and what they make (ui/src/captionsTab.mjs). -->
               <div class="video-style-pop" id="videoStylePop" role="dialog" aria-label="Subtitle style"
                    data-i18n-aria-label="Subtitle style" hidden>
                 <div class="cap-label"><span data-i18n>Styles · 12</span></div>
@@ -711,10 +706,14 @@
                   <div class="ratio-canvas" id="ratioCanvas" hidden></div>
                   <video id="doneVideo" playsinline></video>
                   <!-- The subtitles, live on the player: what the burned file
-                       will say, where and how big. Click to style, drag to
-                       move. Kept in the job's own subtitle_style.json. -->
+                       will say and how big, always at the foot of the picture
+                       (owner, 2026-10-23). Kept in the job's own
+                       subtitle_style.json. While the video stands still, the
+                       chip just above them opens their looks. -->
                   <div class="sub-overlay" id="subOverlay" hidden>
                     <span class="sub-ov-text" id="subOverlayText"></span>
+                    <button class="sub-style-chip" id="subStyleChip" type="button" aria-haspopup="dialog"
+                            aria-expanded="false" hidden><svg class="lu" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg><span data-i18n>Subtitle style</span></button>
                   </div>
                   <!-- The ruler's stand-in: wears a look's class so its padding,
                        weight and line height can be read off the CSS. -->

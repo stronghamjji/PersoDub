@@ -9,6 +9,7 @@ From there the finished-dub routes serve it as they serve a dub: the video
 (/subtitle_style), the subtitled video (/subtitled) and the .srt (/srt). The
 video is the one file of the job, so it is both the "original" and the result.
 """
+import json
 import os
 import shutil
 from typing import Optional
@@ -62,6 +63,9 @@ def captions_import(download_id: str = Form(...), srt: UploadFile = File(...),
         raise HTTPException(422, t("Every line of this subtitle file starts after the video ends."))
     with open(os.path.join(work, DUB_NAME), "w", encoding="utf-8") as f:
         f.write(build_srt(cues))
+    # A dub's subtitles start off; these are the project, so they start on.
+    with open(os.path.join(work, "subtitle_style.json"), "w", encoding="utf-8") as f:
+        json.dump({"enabled": True}, f)
 
     jid = state.job_store.create()
     state.job_store.update(
