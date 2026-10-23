@@ -18,8 +18,8 @@ function harness() {
       closest: function () { return this; },
     };
   };
-  // The page's order (static/index.html): Home's tools, then Subtitle style.
-  const buttons = ["dubbing", "audio", "erase", "captions"].map(button);
+  // The page's order (static/index.html): Home's tools.
+  const buttons = ["dubbing", "audio", "erase", "captions", "save"].map(button);
   let onClick = null;
   els.leftTabs = {
     querySelectorAll: () => buttons,
@@ -27,10 +27,11 @@ function harness() {
   };
   for (const id of ["tabAudio", "tabDubbing", "tabCaptions"]) els[id] = { hidden: false };
   const erased = [];
-  const api = initLeftTabs({ $: (id) => els[id], onErase: () => erased.push(1) });
+  const saved = [];
+  const api = initLeftTabs({ $: (id) => els[id], onErase: () => erased.push(1), onSave: () => saved.push(1) });
   const press = (tab) => onClick({ target: buttons.find((b) => b.dataset.tab === tab) });
   const lit = () => buttons.filter((b) => b.classList.contains("on")).map((b) => b.dataset.tab);
-  return { els, api, press, lit, erased, buttons };
+  return { els, api, press, lit, erased, saved, buttons };
 }
 
 test("Dubbing is the tab on show to begin with, and only its body is", () => {
@@ -73,26 +74,11 @@ test("the page can put a tab on show itself", () => {
   assert.equal(h.els.tabAudio.hidden, false);
 });
 
-test("a locked tab is dimmed, says why, cannot be opened, and gives way to Dubbing", () => {
+test("Save video saves the project's video and leaves the row as it was", () => {
   const h = harness();
-  const captions = h.buttons[3];
   h.press("captions");
-  h.api.setLocked("captions", true, "After dubbing");
-  assert.equal(captions.disabled, true);
-  assert.equal(captions.title, "After dubbing");
-  assert.equal(h.api.current(), "dubbing", "it was the tab on show: Dubbing takes its place");
-  assert.equal(h.els.tabCaptions.hidden, true);
-  // Nothing opens it while it is locked, a press or the page itself.
-  h.api.show("captions");
-  assert.equal(h.api.current(), "dubbing");
-  // Locked while another tab is up: that tab stays.
-  h.press("audio");
-  h.api.setLocked("captions", true, "After dubbing");
-  assert.equal(h.api.current(), "audio");
-  // Open again once there is a dub.
-  h.api.setLocked("captions", false);
-  assert.equal(captions.disabled, false);
-  assert.equal(captions.title, "");
-  h.press("captions");
+  h.press("save");
+  assert.equal(h.saved.length, 1);
   assert.equal(h.api.current(), "captions");
+  assert.deepEqual(h.lit(), ["captions"]);
 });

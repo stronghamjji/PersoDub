@@ -61,6 +61,7 @@ const SAVED_STYLE = { enabled: true, preset: "sticker", pos: null, size: null, c
  */
 function harness({ answer = async () => ({ ok: true }), state = { job: null, jobId: null },
                    lines = [{ start: 0, end: 5, text: "Hello there" }] } = {}) {
+  const shown = [];
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const body = makeEl("body");
@@ -87,7 +88,7 @@ function harness({ answer = async () => ({ ok: true }), state = { job: null, job
   });
   const subs = initSubtitleOverlay({
     $, state, doneVideo: video,
-    leftTabs: { show() {}, setLocked() {} },
+    leftTabs: { show: (name) => shown.push(name) },
     timeline: { getLines: () => lines, redraw() {},
                 drawTimelineTrack: () => { calls.drawTimelineTrack++; } },
     getDoneSource: () => "dubbed",
@@ -96,7 +97,7 @@ function harness({ answer = async () => ({ ok: true }), state = { job: null, job
   const restore = () => {
     for (const [k, d] of saved) { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; }
   };
-  return { $, subs, calls, restore, video };
+  return { $, subs, calls, restore, video, shown };
 }
 
 // The save waits 350 ms for the last of a run of changes (ui/src/pendingSave.mjs,
@@ -127,8 +128,11 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 // the handle it held is gone, and later moves land on the new one, which
 // listens to nothing. On screen that was "the box widens one notch per click"
 // (user, 2026-09-07). The drag has to live on the box, which survives.
+// On a burn-in project: the one the subtitles are selected on (a dub's are not).
+const BURN_IN = { job: { id: "j1", status: "done", kind: "captions" }, jobId: "j1" };
+
 test("dragging a subtitle width handle keeps following the pointer after the box is redrawn", async () => {
-  const h = harness();
+  const h = harness({ state: BURN_IN });
   const timers = holdTimers();
   try {
     await h.subs.loadSubStyle("j1");
@@ -304,5 +308,21 @@ test("a refused style answer leaves the subtitles off, and every style sits at t
     assert.match(h.subs.exportParams().query, /^&pos=93&/, "and the download is burned there too");
   } finally {
     h.restore();
+  }
+});
+
+// A dub's subtitles are not selected (owner, 2026-10-23): a press on them
+// brings up no tab, since Burn in subtitles is not a dub's style.
+test("a press on a dub's subtitle selects nothing and brings up no tab; a burn-in project's does", async () => {
+  for (const [state, want] of [[{ job: { id: "j1", status: "done", kind: "dub" }, jobId: "j1" }, []], [BURN_IN, ["captions"]]]) {
+    const h = harness({ state });
+    try {
+      await h.subs.loadSubStyle("j1");
+      h.subs.updateSubtitleNow();
+      send(h.$("subOverlayText"), "pointerdown");
+      assert.deepEqual(h.shown, want);
+    } finally {
+      h.restore();
+    }
   }
 });

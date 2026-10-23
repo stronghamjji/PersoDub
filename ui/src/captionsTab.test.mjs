@@ -4,7 +4,7 @@
 // Run with: node --test ui/src/captionsTab.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initCaptionsTab, captionsEmpty, captionsLocked, styleCardsHtml,
+import { initCaptionsTab, captionsEmpty, styleCardsHtml,
          AFTER_DUB, NO_SUBTITLES, PICK_A_LINE, SRT_SUB, NOT_SRT } from "./captionsTab.mjs";
 import { clearDraft, setDraft } from "./draft.mjs";
 
@@ -40,10 +40,9 @@ function makeEl(id) {
 function harness(view = {}, extra = {}) {
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
-  const v = { screen: "done", lines: [{ text: "Hola amigos" }], jobId: "j1", preset: "clean",
-              size: 100, boxed: false, scope: "all", line: 0, enabled: true, dubbed: true, ...view };
+  const v = { screen: "done", lines: [{ text: "Hola amigos" }], preset: "clean",
+              size: 100, boxed: false, scope: "all", line: 0, enabled: true, ...view };
   const picked = [];
-  const locks = [];
   let shown = 0;
   // The page: a press anywhere on it, and its keys.
   const doc = makeEl("document");
@@ -52,7 +51,7 @@ function harness(view = {}, extra = {}) {
   pane.rect = { left: 0, top: 0, width: 800, height: 400 };
   Object.assign($("videoStylePop"), { offsetParent: pane, offsetWidth: 560, offsetHeight: 200 });
   const tab = initCaptionsTab({ $, styles: STYLES, getView: () => v, doc,
-    onPick: (p) => picked.push(p), onShow: () => { shown++; }, setLocked: (on) => locks.push(on), ...extra });
+    onPick: (p) => picked.push(p), onShow: () => { shown++; }, ...extra });
   // A press on an element that stops it there, as the button and the panel do.
   const press = (id) => {
     const e = { stopped: false, stopPropagation() { this.stopped = true; } };
@@ -62,7 +61,7 @@ function harness(view = {}, extra = {}) {
   // A press on one look's tile in a grid.
   const pick = (grid, preset) => $(grid).fire("click", {
     target: { closest: () => ({ dataset: { preset } }) }, stopPropagation() {} });
-  return { $, v, tab, picked, locks, shown: () => shown, doc, press, pick };
+  return { $, v, tab, picked, shown: () => shown, doc, press, pick };
 }
 
 test("the tab says why it is empty: before dubbing, and with no subtitles", () => {
@@ -84,7 +83,6 @@ test("a video held as a draft beside a finished dub (the Erase tab's) leaves the
   setDraft({ downloadId: "d", name: "a.mp4", duration: 5, videoUrl: "/v" });
   h.tab.paint();
   assert.equal(h.$("capMain").hidden, false);
-  assert.deepEqual(h.locks, [false, false]);
   clearDraft();
   h.v.lines = [];
   h.tab.paint();
@@ -148,16 +146,6 @@ test("a tile's words are escaped", () => {
   assert.match(styleCardsHtml([["clean", "Clean"]], "<b>"), /&lt;b&gt;/);
 });
 
-test("the tab is shut until there is a dub, and opens once there is", () => {
-  assert.equal(captionsLocked({ dubbed: false }), true, "a draft, a running or failed job, or nothing open");
-  assert.equal(captionsLocked({ dubbed: true }), false);
-  const h = harness({ dubbed: false });
-  h.tab.paint();
-  assert.deepEqual(h.locks, [true]);
-  h.v.dubbed = true;
-  h.tab.paint();
-  assert.deepEqual(h.locks, [true, false]);
-});
 
 // The looks over a dub's picture (owner, 2026-10-23): the chip just above
 // the subtitle opens the same twelve.
@@ -237,29 +225,30 @@ test("the chip's looks shut on a press elsewhere, on Escape, and when the chip g
   assert.equal(h.$("videoStylePop").hidden, true);
 });
 
-// ---- The tab on its own (owner, 2026-10-22): a video and a subtitle file ----
+// ---- Starting a burn-in project (owner, 2026-10-22, 2026-10-23): a video and a subtitle file ----
 
 // The page's side of it: what was said on the line, sent, and opened.
 function aloneHarness(view = {}, { upload } = {}) {
   const said = [];
   const sent = [];
   const opened = [];
+  const held = [];
   const alone = {
     importSource: () => Promise.resolve(),
+    hold: (jid) => { held.push(jid); return Promise.resolve(`held-${jid}`); },
     say: (text, isError = false) => said.push([text, isError]),
     upload: upload || ((id, file) => { sent.push([id, file.name]); return Promise.resolve("c1"); }),
     openJob: (jid) => { opened.push(jid); return Promise.resolve(); },
   };
-  const h = harness({ screen: "done", lines: [], jobId: null, dubbed: false, alone: true, files: null, ...view },
+  const h = harness({ screen: "done", lines: [], alone: true, from: null, files: null, ...view },
                     { alone });
-  return { ...h, said, sent, opened };
+  return { ...h, said, sent, opened, held };
 }
 
 test("with no project open the tab takes a video and a subtitle file, the looks dim under them", () => {
   clearDraft();
   const h = aloneHarness({ preset: "sticker" });
   h.tab.paint();
-  assert.deepEqual(h.locks, [false], "open, not shut as it is beside a dub still running");
   assert.equal(h.$("capAlone").hidden, false);
   assert.equal(h.$("capZone").hidden, false, "the shared Import block for the video");
   assert.equal(h.$("capVideoCard").hidden, true);
@@ -320,11 +309,10 @@ test("a subtitle file with a video already there is sent at once; a refusal is s
 });
 
 test("once the two are a project, its two files are named over the looks, which open", () => {
-  const h = aloneHarness({ alone: false, dubbed: true, jobId: "c1", preset: "sticker",
+  const h = aloneHarness({ alone: false, preset: "sticker",
                            lines: [{ text: "Bonjour" }, { text: "Salut" }, { text: "Ciao" }],
                            files: { name: "paris_steps", duration: 24.7, srt: "paris_ko.srt" } });
   h.tab.paint();
-  assert.deepEqual(h.locks, [false]);
   assert.equal(h.$("capAlone").hidden, true);
   assert.equal(h.$("capFiles").hidden, false);
   assert.match(h.$("capFileVideo").innerHTML, /paris_steps/);
@@ -337,19 +325,24 @@ test("once the two are a project, its two files are named over the looks, which 
   assert.deepEqual(grid.cards.map((c) => c.classList.contains("on")), [false, true, false]);
 });
 
-test("beside a dub the tab is as it was: shut until it is finished, no files row", () => {
-  assert.equal(captionsLocked({ dubbed: false, alone: false }), true);
-  assert.equal(captionsLocked({ dubbed: false, alone: true }), false);
-  const h = aloneHarness({ alone: false, screen: "running", jobId: "j1" });
-  h.tab.paint();
-  assert.deepEqual(h.locks, [true]);
-  assert.equal(h.$("capEmpty").textContent, AFTER_DUB);
-  assert.equal(h.$("capAlone").hidden, true);
-  assert.equal(h.$("capFiles").hidden, true);
-  // A finished dub: the looks, and still no files row.
-  const d = aloneHarness({ alone: false, dubbed: true, jobId: "j1", lines: [{ text: "Hola" }] });
-  d.tab.paint();
-  assert.deepEqual(d.locks, [false]);
-  assert.equal(d.$("capFiles").hidden, true);
-  assert.equal(d.$("capMain").inert, false);
+// In a dub or any other project (owner, 2026-10-23): not the dub's style, but
+// the way to burn a subtitle file into this project's own video, held again.
+test("in another project the tab starts from its video, held again, and makes a burn-in project", async () => {
+  setDraft({ downloadId: "beside", name: "erase-draft.mp4", duration: 3, videoUrl: "/v" });
+  for (const screen of ["done", "running"]) {
+    const h = aloneHarness({ screen, from: { id: "j1", name: "paris_steps", duration: 24.7 },
+                             lines: [{ text: "Hola" }] });
+    h.tab.paint();
+    assert.equal(h.$("capEmpty").hidden, true, `${screen}: never empty, never shut`);
+    assert.equal(h.$("capAlone").hidden, false);
+    assert.equal(h.$("capZone").hidden, true, "no Import block: the video is the project's");
+    assert.match(h.$("capVideoCard").innerHTML, /paris_steps/, "its card, not the draft held beside it");
+    assert.equal(h.$("capFiles").hidden, true);
+    assert.equal(h.$("capMain").inert, true, "the looks dim: they are not this dub's");
+    await h.tab.takeSrt({ name: "paris_ko.srt" });
+    assert.deepEqual(h.held, ["j1"]);
+    assert.deepEqual(h.sent, [["held-j1", "paris_ko.srt"]]);
+    assert.deepEqual(h.opened, ["c1"]);
+  }
+  clearDraft();
 });

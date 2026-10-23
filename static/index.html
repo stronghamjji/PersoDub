@@ -287,8 +287,12 @@
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>Separate audio</button>
                 <button class="left-tab" type="button" role="tab" data-tab="erase" aria-selected="false">
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg>Erase</button>
-                <button class="left-tab" type="button" role="tab" data-tab="captions" aria-selected="false" disabled title="After dubbing">
-                  <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></svg>Subtitle style</button>
+                <button class="left-tab" type="button" role="tab" data-tab="captions" aria-selected="false">
+                  <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></svg>Burn in subtitles</button>
+                <!-- Save video: the project's own video as a file, through the
+                     Download dialog with that one row (ui/src/app.mjs). -->
+                <button class="left-tab" type="button" role="tab" data-tab="save" aria-selected="false">
+                  <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Save video</button>
                 <button class="left-tab way-out way-new" id="newProjectBtn" type="button" aria-label="New project" data-i18n-aria-label="New project" hidden>
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg><span>New project</span></button>
               </div>
@@ -338,12 +342,12 @@
                   <button data-i18n class="btn btn-primary" id="draftStartBtn" type="button">Start dubbing</button>
                 </div>
               </div>
-              <!-- A video with the user's own subtitles (the Subtitle style
-                   tab on its own): no script to show here, only the way to
-                   dub the same video in a new project (ui/src/draftSetup.mjs). -->
+              <!-- A video with the user's own subtitles (a Burn in subtitles
+                   project): no script to show here, only the way to dub the
+                   same video in a new project (ui/src/draftSetup.mjs). -->
               <div class="tab-empty" id="dubbingCaptions" hidden>
                 <div class="tab-empty-group">
-                  <div data-i18n class="tab-empty-sub">This project is a subtitle style job</div>
+                  <div data-i18n class="tab-empty-sub">This project is a burn-in subtitles job</div>
                   <button data-i18n class="btn btn-primary btn-sm" id="dubbingCaptionsBtn" type="button">Prepare this video for dubbing</button>
                   <div class="tab-empty-under"><div class="import-status error" id="dubbingCaptionsError"></div></div>
                 </div>
@@ -390,15 +394,17 @@
                    and their models (user, 2026-09-30). -->
               <div class="script-note" id="scriptJobNote" hidden></div>
               </div>
-              <!-- === captions: the subtitle tools, moved here from the bar
-                   that floated over the video (mockup editorc, user
-                   2026-09-29). ui/src/captionsTab.mjs paints it; the page's
-                   subtitle code owns the buttons' work. -->
+              <!-- === captions: Burn in subtitles. On a burn-in project, the
+                   subtitle tools, moved here from the bar that floated over
+                   the video (mockup editorc, user 2026-09-29); anywhere else,
+                   the way to start one. ui/src/captionsTab.mjs paints it; the
+                   page's subtitle code owns the buttons' work. -->
               <div class="tab-body cap-tab" id="tabCaptions" role="tabpanel" hidden>
                 <div class="cap-empty" id="capEmpty" hidden></div>
-                <!-- No project open: a video and its subtitle file, made a
-                     project of their own (owner, 2026-10-22). The looks
-                     below stay on show, dim, until both are there. -->
+                <!-- Not a burn-in project: a video (the open project's, the
+                     draft's, or one brought in) and its subtitle file, made
+                     a project of their own (owner, 2026-10-22, 2026-10-23).
+                     The looks below stay on show, dim, until both are there. -->
                 <div class="tab-empty cap-alone" id="capAlone" hidden>
                   <div class="tab-empty-group">
                     <div id="capImportSlot"></div>
@@ -1048,7 +1054,7 @@
       <div class="modal-inner">
         <div class="help-item"><b>Dubbing</b><p>Voices a video in another language, in each speaker&#8217;s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.</p><div class="help-where">Local model (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).</div></div>
         <div class="help-item"><b>Separate audio</b><p>Splits the sound into Voice (only the speech) and Background (music, effects, noise). Save either one, or go on to Dubbing.</p><div class="help-where">Local model or Perso API.</div></div>
-        <div class="help-item"><b>Erase subtitles</b><p>Why: Original subtitles left in the video overlap the translated ones.</p><p>How: Fit the box → Erase subtitles → Dubbing → burn in a Subtitle style.</p><div class="help-where">Time: About 10 min for a 10-second video (Local model).</div></div>
+        <div class="help-item"><b>Erase subtitles</b><p>Why: Original subtitles left in the video overlap the translated ones.</p><p>How: Fit the box → Erase subtitles → Dubbing → Burn in subtitles.</p><div class="help-where">Time: About 10 min for a 10-second video (Local model).</div></div>
         <div class="help-item"><b>Save video</b><p>Paste a YouTube, TikTok or Reels link. The video is fetched to this computer; Download saves it, or dub it, separate it or erase it from there.</p><div class="help-where">This computer.</div></div>
         <div class="help-item"><b>Dub Agent</b><p>Ask in plain words, such as &#8220;Korean dubbing for this link&#8221; or &#8220;make line 9 fit&#8221;. It works through the same tools and shows each step.</p><div class="help-where">Claude Code, installed and signed in, or Codex, which the app can download and sign in.</div></div>
         <p class="help-links"><a href="#" id="helpGuide">User guide</a> · <a href="#" id="helpFaq">FAQ</a></p>

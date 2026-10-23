@@ -156,7 +156,7 @@ test("the Erase tab has its faces, and the left tab that opens it", () => {
     "the left panel's Erase tab is the way in");
   // The tab comes back as it was left, or on the new project's video; only
   // the first screen's card opens it empty (eraseScreen.openErase).
-  assert.match(html, /initLeftTabs\(\{ \$, onErase: \(\) => \{[^}]*openEraseForProject\(\);\s*\} \}\);/);
+  assert.match(html, /initLeftTabs\(\{ \$, onErase: \(\) => \{[^}]*openEraseForProject\(\);\s*\},/);
   // An open dub's Erase tab starts from that project's own video; anything
   // else (a draft, no project) opens the tab the way it always did.
   assert.match(html, /const src = await dubAgainSource\(jid\);[^]*?eraseScreen\.openEraseOn\(\{ downloadId: src\.download_id,/);
@@ -822,13 +822,19 @@ test("the left panel is a row of tabs, each over a body of its own", () => {
   const tabs = [...pane.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]);
   // One project holds one video: there is no Media tab to keep it in
   // (owner, 2026-09-30).
-  // Home's order, its three tools first, and the subtitles' look last under a
-  // name that says what it holds (owner, 2026-10-22).
-  assert.deepEqual(tabs, ["dubbing", "audio", "erase", "captions"]);
+  // Home's order (owner, 2026-10-23): Burn in subtitles is the tool that
+  // burns a subtitle file in, not a dub's style, and Save video comes last.
+  assert.deepEqual(tabs, ["dubbing", "audio", "erase", "captions", "save"]);
   const captions = pane.slice(pane.indexOf('data-tab="captions"'));
-  assert.ok(captions.slice(0, captions.indexOf("</button>")).endsWith("</svg>Subtitle style"));
-  assert.match(readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8"),
-    /\['#leftTabs \[data-tab="captions"\]', t\("Subtitle style"\)\]/);
+  assert.ok(captions.slice(0, captions.indexOf("</button>")).endsWith("</svg>Burn in subtitles"));
+  assert.ok(!captions.slice(0, captions.indexOf(">")).includes("disabled"), "never dimmed: it starts a project anywhere");
+  const save = pane.slice(pane.indexOf('data-tab="save"'));
+  assert.ok(save.slice(0, save.indexOf("</button>")).endsWith("</svg>Save video"));
+  const words = readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8");
+  assert.match(words, /\['#leftTabs \[data-tab="captions"\]', t\("Burn in subtitles"\)\]/);
+  assert.match(words, /\['#leftTabs \[data-tab="save"\]', t\("Save video"\)\]/);
+  // It opens the Download dialog with the project's own video alone.
+  assert.match(html, /const row = state\.jobId && document\.body\.dataset\.screen !== "erase" \? \["original"\] : \["video"\];\n\s*exportDialog\.open\(row, row\);/);
   assert.ok(!/tabMedia|mediaTab|media-thumb|mediaSearch|mediaImpBtn/.test(html), "nothing of the Media tab is left");
   assert.match(pane, /<div class="tab-body erase-tab audio-tab" id="tabAudio" role="tabpanel" hidden>/);
   assert.match(pane, /<button class="left-tab on"[^>]*data-tab="dubbing" aria-selected="true">/, "Dubbing is on to begin with");
@@ -1691,7 +1697,7 @@ test("Home's Help sits above Send feedback and opens the five tools in order", (
 // approved.
 test("Help's Erase subtitles item says why, how and how long", () => {
   const lines = ["Why: Original subtitles left in the video overlap the translated ones.",
-                 "How: Fit the box → Erase subtitles → Dubbing → burn in a Subtitle style.",
+                 "How: Fit the box → Erase subtitles → Dubbing → Burn in subtitles.",
                  "Time: About 10 min for a 10-second video (Local model)."];
   assert.ok(readPage().includes(`<div class="help-item"><b>Erase subtitles</b><p>${lines[0]}</p><p>${lines[1]}</p><div class="help-where">${lines[2]}</div></div>`));
   const words = readFileSync(new URL("./markupWords.mjs", import.meta.url), "utf8");
@@ -1700,7 +1706,7 @@ test("Help's Erase subtitles item says why, how and how long", () => {
   }
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.deepEqual(lines.map((l) => ko[l]), ["왜: 원래 자막이 남아 있으면 번역 자막과 겹쳐요.",
-    "어떻게: 상자 맞추기 → 자막 지우기 → 더빙 → 자막 스타일에서 입히기.", "시간: 10초 영상에 약 10분 (로컬 모델)."]);
+    "어떻게: 상자 맞추기 → 자막 지우기 → 더빙 → 자막 입히기.", "시간: 10초 영상에 약 10분 (로컬 모델)."]);
 });
 
 // Home's Erase subtitles card says what erasing is for, in its small line

@@ -709,6 +709,13 @@ const leftTabs = initLeftTabs({ $, onErase: () => {
   // erase screen can be standing under another tab.
   leftTabs.show("erase");
   openEraseForProject();
+},
+// Save video: the project's own video as a file -- the Download dialog with
+// that one row ticked and no other (owner, 2026-10-23). A project's is its
+// original; a draft's, or the erase screen's, the video it shows.
+onSave: () => {
+  const row = state.jobId && document.body.dataset.screen !== "erase" ? ["original"] : ["video"];
+  exportDialog.open(row, row);
 } });
 // A dub that is open (running, finished or stopped): its Erase tab starts
 // from that project's own video, held again the way + Add language holds it,
@@ -2101,9 +2108,12 @@ const exportDialog = initExportDialog({
 });
 $("exportBtn").addEventListener("click", () => exportDialog.open());
 // Why Export is dim, on its tip. Three places switch it on and off, so the tip
-// follows the button itself rather than each of them.
+// follows the button itself rather than each of them. The Save video tab
+// opens the same dialog, so it is dim with it.
 new MutationObserver(() => {
-  $("exportBtn").title = $("exportBtn").disabled ? t("Nothing to download yet") : "";
+  const save = $("leftTabs").querySelector('[data-tab="save"]');
+  save.disabled = $("exportBtn").disabled;
+  $("exportBtn").title = save.title = $("exportBtn").disabled ? t("Nothing to download yet") : "";
 }).observe($("exportBtn"), { attributes: true, attributeFilter: ["disabled"] });
 
 // A button keeps the keyboard after the mouse presses it, and the timeline's
@@ -2203,6 +2213,8 @@ const subtitles = initSubtitleOverlay({
   alone: {
     importSource: (source) => draftImport.importSource(source),
     say: (text, isError) => draftImport.say(text, isError),
+    // A project's own video, held again the way + Add language holds it.
+    hold: async (jid) => (await dubAgainSource(jid)).download_id,
     upload: (downloadId, file) => importCaptions({ downloadId, file }),
     openJob: async (jid) => {
       draftBecameJob((getDraft() || {}).downloadId);

@@ -26,8 +26,9 @@ function harness({ screen = "home", tab = "dubbing" } = {}) {
   });
   const go = (name) => { state.screen = name; api.onScreen(name); };
   // The row's own listener shows the body first; this one runs after it.
+  // Erase and Save video show no body of their own: the tab on show stays.
   const press = (name) => {
-    if (name !== "erase") state.tab = name;
+    if (name !== "erase" && name !== "save") state.tab = name;
     onClick({ target: { closest: () => ({ dataset: { tab: name } }) } });
   };
   return { state, captions, go, press, exportRow: () => exportBtn.row };
@@ -104,9 +105,13 @@ test("another tab pressed on the erase screen is the way back to the job", () =>
   h.go("erase");
   h.press("dubbing");
   assert.equal(h.state.left, 1);
-  // Erase pressed again is not a way out, and neither is a tab pressed on
-  // any other screen.
+  // Erase pressed again is not a way out, nor Save video (it saves what is
+  // on screen), and neither is a tab pressed on any other screen.
   h.press("erase");
+  assert.equal(h.state.left, 1);
+  h.go("done");
+  h.go("erase");
+  h.press("save");
   assert.equal(h.state.left, 1);
   h.go("done");
   h.press("audio");

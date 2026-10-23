@@ -1,6 +1,8 @@
-// The Captions tab of the work screen's left panel (new-layout mockup,
-// editorc, user 2026-09-29): the subtitle tools that used to float over the
-// video. A− / size / A＋, All lines / This line (box looks only), the Show
+// The Captions tab of the work screen's left panel, named Burn in subtitles
+// (owner, 2026-10-23): the tool that burns a subtitle file into a video, not
+// a dub's own subtitle style. On a burn-in project (kind "captions") it holds
+// the subtitle tools that used to float over the video (mockup editorc, user
+// 2026-09-29). A− / size / A＋, All lines / This line (box looks only), the Show
 // switch, and every look drawn as a small tile: its words alone, no frame of
 // the video behind them (owner, 2026-10-23).
 //
@@ -17,11 +19,12 @@
 // above the chip, never below. Its grid is drawn and ringed with the tab's,
 // and a press on either is the same pick.
 //
-// With no project open the tab works on its own (owner, 2026-10-22): a video
-// (the shared Import block) and a subtitle file (.srt) brought in, then the
-// two made a finished project of kind "captions" (POST /api/captions/import)
-// that the page opens like a finished dub. The looks stay on show, dim, until
-// both are there; once open, a row above them names the two files.
+// Anywhere else it starts one (owner, 2026-10-22 and 2026-10-23): a video --
+// the open project's own, the draft's, or one brought in through the shared
+// Import block -- and a subtitle file (.srt), then the two made a finished
+// project of kind "captions" (POST /api/captions/import) that the page opens
+// like a finished dub. The looks stay on show, dim, until both are there;
+// once open, a row above them names the two files.
 //
 // The elements this file touches: #capEmpty, #capMain, #capHint, #subSizeLv,
 // #subScopeSep, #subScopeSeg, #subScopeAll, #subScopeOne, #subShow, the grid
@@ -38,8 +41,6 @@ import { t } from "./i18n.mjs";
 // The English sentences, compared by the tests; each is drawn through t()
 // where it lands on screen (its key is added to the tables by hand).
 export const AFTER_DUB = "Captions come after dubbing";
-// The tip the tab itself wears while it is locked.
-export const LOCKED_TIP = "After dubbing";
 export const NO_SUBTITLES = "No captions for this project";
 export const PICK_A_LINE = "Select a caption on the video";
 // The subtitle file's drop area, on its own.
@@ -59,20 +60,6 @@ export function captionsEmpty({ screen, lines }) {
   if (screen !== "done") return AFTER_DUB;
   if (!lines) return NO_SUBTITLES;
   return "";
-}
-
-/**
- * Whether the tab is shut: before a dub exists there is nothing in it, so it
- * is dimmed rather than opened onto an empty panel (owner, 2026-09-30). A
- * job that is not finished has no dub; a draft on its own has none open
- * either (the page clears the job when a draft starts), so dubbed says it all.
- *
- * With no project open at all it is the tab's own way in, so never shut.
- *
- * @param {{dubbed: boolean, alone?: boolean}} v
- */
-export function captionsLocked({ dubbed, alone = false }) {
-  return !alone && !dubbed;
 }
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -97,29 +84,31 @@ export function styleCardsHtml(styles, sample) {
  * @param {Array<[string, string]>} deps.styles  the looks, [id, label]
  * @param {() => {screen: string, lines: Array<{text: string}>,
  *   preset: string, size: number, boxed: boolean, scope: "all"|"one",
- *   line: number, enabled: boolean, dubbed: boolean}} deps.getView
+ *   line: number, enabled: boolean}} deps.getView
  *   the subtitle state as it is now; line is the selected subtitle's number
- *   (1-based), 0 when none is selected; dubbed is whether a finished dub is open
- * @param {(locked: boolean) => void} [deps.setLocked]  dim the tab itself, or
- *   open it again (ui/src/leftTabs.mjs)
+ *   (1-based), 0 when none is selected
  * @param {(preset: string) => void} deps.onPick  a look was pressed
  * @param {() => void} deps.onShow  the Show switch was pressed
  * @param {any} [deps.doc]  the page: a press anywhere else on it, or Escape,
  *   shuts the video panel's looks
- * @param {object} [deps.alone]  the tab on its own; the view then says
- *   alone (no project open: the video is the draft, ui/src/draft.mjs) and
- *   files ({name, duration, srt} of an open "captions" project, or null)
+ * @param {object} [deps.alone]  the tab starting a project; the view then
+ *   says alone (no burn-in project open), from ({id, name, duration} of the
+ *   open project whose video it starts from, or null: the video is then the
+ *   draft, ui/src/draft.mjs) and files ({name, duration, srt} of an open
+ *   "captions" project, or null)
  * @param {(source: object) => Promise<void>} deps.alone.importSource  bring a
  *   video in as the draft (ui/src/draftImport.mjs)
  * @param {(text: string, isError?: boolean) => void} deps.alone.say  the line
  *   under the blocks
+ * @param {(jobId: string) => Promise<string>} deps.alone.hold  hold an open
+ *   project's video again (ui/src/dubApi.mjs dubAgainSource); its download id
  * @param {(downloadId: string, file: File) => Promise<string>} deps.alone.upload
  *   make the two a project (ui/src/dubApi.mjs importCaptions); its job id
  * @param {(jobId: string) => Promise<void>} deps.alone.openJob  open it
  * @returns {{ paint: () => void, takeSrt: (file: File) => Promise<void> }}
  *   takeSrt is what a subtitle file dropped on the tab's drop area does
  */
-export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked = () => {},
+export function initCaptionsTab({ $, styles, getView, onPick, onShow,
                                   doc = globalThis.document, alone = null }) {
   const grids = [$("subStyleMenu"), $("videoStyleGrid")];
   const styleBtn = $("subStyleChip");
@@ -205,12 +194,14 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
 
   /** Both files here: make them a project and open it. Called again when the video arrives. */
   async function send() {
+    // An open project's video is held again first; the draft's is held already.
+    const from = getView().from;
     const id = (getDraft() || {}).downloadId;
-    if (!srtFile || !id || sending) return;
+    if (!srtFile || (!from && !id) || sending) return;
     sending = true;
     alone.say(t("Importing…"));
     try {
-      const jid = await alone.upload(id, srtFile);
+      const jid = await alone.upload(from ? await alone.hold(from.id) : id, srtFile);
       srtFile = null;
       alone.say("");
       await alone.openJob(jid);
@@ -237,7 +228,7 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
       $("capFileSrtLines").textContent = t("{n} lines", { n: v.lines.length });
     }
     if (!on) return;
-    const d = getDraft();
+    const d = v.from || getDraft();
     $("capZone").hidden = !!d;
     $("capVideoCard").hidden = !d;
     $("capVideoCard").innerHTML = d ? videoCardHtml({ name: d.name, kept: d.duration, total: d.duration }) : "";
@@ -248,8 +239,6 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow, setLocked 
     const v = getView();
     // On its own only where the page wired it so.
     const lone = !!alone && !!v.alone;
-    const locked = captionsLocked({ dubbed: !!v.dubbed, alone: lone });
-    setLocked(locked);
     const empty = lone ? "" : captionsEmpty({ screen: v.screen, lines: v.lines.length });
     // The chip went with the subtitle (the video plays, the screen changed):
     // its looks go too.

@@ -15,7 +15,7 @@
 // #timeline (a press on its subtitle lane), #videoPane (a press beside the
 // subtitle) and the Captions tab's own (ui/src/captionsTab.mjs).
 import { layoutOf, pictureRect, SUB_FONT_CSS } from "./subtitleLayout.mjs";
-import { initCaptionsTab, LOCKED_TIP as CAPTIONS_LOCKED_TIP } from "./captionsTab.mjs";
+import { initCaptionsTab } from "./captionsTab.mjs";
 import { pendingSave } from "./pendingSave.mjs";
 import { t } from "./i18n.mjs";
 
@@ -23,10 +23,9 @@ import { t } from "./i18n.mjs";
  * @param {object} deps
  * @param {(id: string) => any} deps.$   the page's getElementById helper
  * @param {{job: object|null, jobId: string|null}} deps.state  the page's app
- *        state, read when the Captions tab paints (is a finished dub open?)
+ *        state, read when the Captions tab paints (is a burn-in project open?)
  * @param {any} deps.doneVideo  the finished screen's <video>
- * @param {{show: (name: string) => void,
- *          setLocked: (name: string, locked: boolean, tip: string) => void}} deps.leftTabs
+ * @param {{show: (name: string) => void}} deps.leftTabs
  *        the left panel's tabs (ui/src/leftTabs.mjs)
  * @param {{getLines: () => object[], redraw: () => void, drawTimelineTrack: () => void}} deps.timeline
  *        the timeline's lines and its two redraws. The page wires the timeline
@@ -320,6 +319,8 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
   // 2026-09-29); now they are the left panel's Captions tab and the video stays
   // clean. ui/src/captionsTab.mjs draws the tab from getView; the work stays
   // here, next to the style object it changes.
+  // A video with the user's own subtitles: the one project the tab's tools are for.
+  const burnIn = () => !!state.job && state.job.id === state.jobId && state.job.kind === "captions";
   const captions = initCaptionsTab({
     $, alone,
     // [id, label] with the label read each time the tab draws its grid, not
@@ -334,18 +335,17 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
       scope: subScope,
       line: subSelected ? subNowIdx + 1 : 0,
       enabled: subStyle.enabled !== false,
-      // A finished dub is open: the one thing the tab has anything for.
-      dubbed: !!state.job && state.job.id === state.jobId && state.job.status === "done"
-        && state.job.kind !== "erase",
-      // No project open: the tab takes a video and a subtitle file itself.
-      alone: !state.jobId,
+      // Any other project, or none: the tab takes a video and a subtitle file
+      // and makes a burn-in project of them.
+      alone: !burnIn(),
+      // The open project's video is the one, when a project is open.
+      from: !burnIn() && state.jobId ? { id: state.jobId,
+        name: (state.job && state.job.id === state.jobId && (state.job.title || state.job.project)) || "",
+        duration: (state.job && state.job.id === state.jobId && state.job.duration) || 0 } : null,
       // A project made of those two: their names over the looks.
-      files: state.job && state.job.id === state.jobId && state.job.kind === "captions"
-        ? { name: state.job.title || state.job.project, duration: state.job.duration || 0,
-            srt: state.job.srt_name || "" } : null,
+      files: burnIn() ? { name: state.job.title || state.job.project, duration: state.job.duration || 0,
+                          srt: state.job.srt_name || "" } : null,
     }),
-    // Before a dub exists the tab itself is dimmed and cannot be opened.
-    setLocked: (locked) => leftTabs.setLocked("captions", locked, t(CAPTIONS_LOCKED_TIP)),
     onPick: (preset) => { subStyle.preset = preset; saveSubStyle(); updateSubtitleNow(); paintSubToolbar(); },
     // The timeline's eye is the one switch; this presses it, so the two can
     // never disagree.
@@ -357,8 +357,11 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
   new MutationObserver(paintSubToolbar).observe(document.body, { attributeFilter: ["data-screen"] });
 
   // A subtitle selected on the video or in the timeline brings up this tab
-  // rather than anything floating over the picture.
+  // rather than anything floating over the picture -- on a burn-in project,
+  // the one the tab's tools are for. A dub's subtitles are not selected: its
+  // looks are the chip's (owner, 2026-10-23).
   function subSelect(on) {
+    on = on && burnIn();
     subSelected = on;
     subOvText.classList.toggle("sel", on);
     if (on) {

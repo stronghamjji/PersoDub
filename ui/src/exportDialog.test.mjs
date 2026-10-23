@@ -303,6 +303,26 @@ test("an opening that names its rows ticks those, and what was remembered stays 
   assert.deepEqual(h.ticked(), ["audio"]);
 });
 
+// The Save video tab (owner, 2026-10-23): the project's own video and nothing
+// else -- a draft's video, a project's original whatever it came from.
+test("an opening for some rows offers those alone, the original included for any project", async () => {
+  const fromFile = { ...DUB, fromLink: false };
+  const only = ["original"];
+  assert.deepEqual(exportRows({ ...fromFile, only }, "mp3").map((r) => [r.id, r.href]),
+    [["original", "/api/dub/result/J1/original"]], "a file's original, served without the link-only download flag");
+  assert.deepEqual(exportRows({ ...DUB, only }, "mp3").map((r) => [r.id, r.href]),
+    [["original", "/api/dub/result/J1/original?download=1"]]);
+  assert.deepEqual(exportRows({ kind: "captions", jobId: "C1", subtitled: { href: "/s", name: "s.mp4" }, only }, "mp3")
+    .map((r) => [r.id, r.href]), [["original", "/api/dub/result/C1/original"]]);
+  assert.deepEqual(exportRows({ kind: "draft", only: ["video"] }, "mp3").map((r) => r.id), ["video"]);
+  assert.ok(!exportRows(fromFile, "mp3").some((r) => r.id === "original"), "the whole dialog still leaves a file's original out");
+  const h = harness({ ctx: fromFile, stored: { [TICKS_KEY]: '{"dub":["srt"]}' } });
+  await h.api.open(only, only);
+  assert.deepEqual(h.ticked(), ["original"]);
+  h.tick("original");
+  assert.equal(h.store.get(TICKS_KEY), '{"dub":["srt"]}', "nothing is remembered for the whole dialog");
+});
+
 test("Export saves a draft's ticked rows in turn and says where they went", async () => {
   const asked = [];
   let release = null;

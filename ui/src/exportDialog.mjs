@@ -126,6 +126,8 @@ const GROUPS = {
  * @param {string} [ctx.project]   a dub: the project's folder name, in the
  *        names of those two files
  * @param {boolean} [ctx.fromLink]  only a link job has an original to hand back
+ *        -- unless the dialog was opened for it (Save video, ctx.only)
+ * @param {string[]} [ctx.only]  the rows asked for, the rest left out
  * @param {string} [ctx.ratio]     the shape the player shows the project in:
  *        "original" (or nothing) or "9:16", "16:9", "1:1", "4:5"
  * @param {"mp3"|"wav"} fmt
@@ -135,7 +137,14 @@ const GROUPS = {
  *   carry the heading they stand under (GROUPS), in that order.
  */
 export function exportRows(ctx, fmt) {
+  const all = allRows(ctx, fmt);
+  return ctx.only ? all.filter((r) => ctx.only.includes(r.id)) : all;
+}
+function allRows(ctx, fmt) {
   const audio = { id: "audio", icon: "audio", label: t("Audio only"), audio: true };
+  // The original video, asked for by name (Save video): served whatever the
+  // project came from, where a link's alone is offered among the rest.
+  const original = (ctx.only || []).includes("original");
   if (ctx.kind === "separate") {
     // The same links a dubbing's two sounds go out by.
     return [["voice", t("Voice")], ["background", t("Background")]].map(([which, label]) =>
@@ -147,7 +156,9 @@ export function exportRows(ctx, fmt) {
     return [{ id: "subtitled", icon: "film", label: t("Video with subtitles"),
               href: withRatio(ctx.subtitled.href, ctx.ratio), name: ctx.subtitled.name },
             { id: "srt", icon: "subs", label: t("Subtitles (.srt)"),
-              href: `/api/dub/result/${ctx.jobId}/srt?download=1`, name: "video.srt" }];
+              href: `/api/dub/result/${ctx.jobId}/srt?download=1`, name: "video.srt" },
+            original && { id: "original", icon: "film", label: t("Original video"),
+                          href: `/api/dub/result/${ctx.jobId}/original`, name: "org.mp4" }].filter(Boolean);
   }
   if (ctx.kind !== "dub") {
     return [{ id: "video", icon: "film", label: t("Video") }, audio];
@@ -162,8 +173,8 @@ export function exportRows(ctx, fmt) {
                                      href: withRatio(ctx.subtitled.href, ctx.ratio),
                                      name: ctx.subtitled.name },
     // A local file is already on the machine it would be saved to.
-    ctx.fromLink && { id: "original", group: "video", icon: "film", label: t("Original video"),
-                      href: `${base}/original?download=1`, name: "org.mp4" },
+    (ctx.fromLink || original) && { id: "original", group: "video", icon: "film", label: t("Original video"),
+                                    href: `${base}/original${ctx.fromLink ? "?download=1" : ""}`, name: "org.mp4" },
     ctx.hasSrt && { id: "srt", group: "subtitles", icon: "subs", label: t("Subtitles (.srt)"),
                     href: `${base}/srt?download=1`, name: `dub_${ctx.target}.srt` },
     // Perso's own name for the file. The route sends the same name, with what
@@ -265,7 +276,7 @@ function followLink(href, name) {
  * @param {(href: string, init?: object) => Promise<Response>} [deps.fetchFn]
  * @param {(href: string, name: string) => void} [deps.follow]  hand a link to
  *        the browser to download
- * @returns {{ open: (tick?: string[]) => Promise<void>, close: () => void }}
+ * @returns {{ open: (tick?: string[], only?: string[]) => Promise<void>, close: () => void }}
  */
 export function initExportDialog({ $, getContext, storage = null, shell = null,
                                    fetchFn = (...a) => fetch(...a), follow = followLink }) {
@@ -310,7 +321,8 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
     // Kept in the rows' order: that is the order they are saved in.
     ticked = rows().map((r) => r.id).filter((r) => (r === id) !== ticked.includes(r));
     try {
-      if (storage) {
+      // A dialog cut down to some rows remembers nothing for the whole one.
+      if (storage && !ctx.only) {
         let all = {};
         try { all = JSON.parse(storage.getItem(TICKS_KEY) || "{}") || {}; } catch { /* not ours */ }
         storage.setItem(TICKS_KEY, JSON.stringify({ ...all, [ctx.kind]: ticked }));
@@ -421,11 +433,12 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
   });
 
   // `tick`: the rows to tick this time in place of the remembered ones (Save
-  // video's own opening ticks Video), remembering nothing.
-  async function open(tick = null) {
+  // video's own opening ticks Video), remembering nothing. `only`: the rows
+  // to offer, the rest left out (the Save video tab's original).
+  async function open(tick = null, only = null) {
     const next = await getContext();
     if (!next) return;
-    ctx = next;
+    ctx = only ? { ...next, only } : next;
     folder = shell && shell.downloadFolder ? await shell.downloadFolder().catch(() => null) : null;
     saved = [];
     let kept = null;
