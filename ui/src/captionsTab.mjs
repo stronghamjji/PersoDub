@@ -264,7 +264,8 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow,
     show.setAttribute("aria-checked", String(v.enabled));
 
     // The same words on every tile, and the looks' names: both change with
-    // the language. On its own there is no project yet: none ringed.
+    // the language. The tab's dim looks while it starts a project ring none;
+    // the chip's over a dub always ring the dub's own look.
     const sample = t("Abc 123");
     const key = JSON.stringify([sample, styles.map((s) => s[1])]);
     if (key !== drawn) {
@@ -272,8 +273,9 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow,
       for (const grid of grids) grid.innerHTML = styleCardsHtml(styles, sample);
     }
     for (const grid of grids) {
+      const ringed = !lone || grid === $("videoStyleGrid");
       for (const card of grid.querySelectorAll("[data-preset]")) {
-        const on = !lone && card.dataset.preset === v.preset;
+        const on = ringed && card.dataset.preset === v.preset;
         card.classList.toggle("on", on);
         card.setAttribute("aria-pressed", String(on));
       }

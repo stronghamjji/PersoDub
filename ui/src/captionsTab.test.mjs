@@ -339,6 +339,9 @@ test("in another project the tab starts from its video, held again, and makes a 
     assert.match(h.$("capVideoCard").innerHTML, /paris_steps/, "its card, not the draft held beside it");
     assert.equal(h.$("capFiles").hidden, true);
     assert.equal(h.$("capMain").inert, true, "the looks dim: they are not this dub's");
+    // The chip's looks over the dub still ring the dub's own; the dim tab's ring none.
+    assert.deepEqual(h.$("videoStyleGrid").cards.map((c) => c.classList.contains("on")), [true, false, false]);
+    assert.deepEqual(h.$("subStyleMenu").cards.map((c) => c.classList.contains("on")), [false, false, false]);
     await h.tab.takeSrt({ name: "paris_ko.srt" });
     assert.deepEqual(h.held, ["j1"]);
     assert.deepEqual(h.sent, [["held-j1", "paris_ko.srt"]]);
