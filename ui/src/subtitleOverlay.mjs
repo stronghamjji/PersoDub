@@ -439,7 +439,8 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
     if (e.target.closest?.(".sub-wh")) return;
     e.preventDefault(); e.stopPropagation();
     subSelect(true);
-    subScope = "one"; paintSubToolbar();
+    // Only a burn-in project's line is styled on its own.
+    if (burnIn()) { subScope = "one"; paintSubToolbar(); }
   });
   // A click anywhere else on the picture lets the subtitle go.
   $("videoPane").addEventListener("click", (e) => {

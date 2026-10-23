@@ -1435,10 +1435,11 @@ test("no narrow tier gives the length verdict under 58px or the clock under 62px
 });
 
 // Clicking the subtitle drawn on the video opens Captions (subSelect) and makes
-// "This line" the scope -- but only for a click, never at the end of a drag.
+// "This line" the scope -- but only for a click, never at the end of a drag,
+// and only on a burn-in project: a dub's subtitles are not styled line by line.
 test("a click on the video's subtitle picks 'This line', and nothing drags it up or down", () => {
   const subs = readFileSync(SUBTITLES, "utf8");
-  assert.match(subs, /subSelect\(true\);\n\s*subScope = "one"; paintSubToolbar\(\);/);
+  assert.match(subs, /subSelect\(true\);\n[^\n]*\n\s*if \(burnIn\(\)\) \{ subScope = "one"; paintSubToolbar\(\); \}/);
   assert.ok(!/subStyle\.pos = Math/.test(subs), "the position is SUB_POS, never the pointer's");
 });
 
