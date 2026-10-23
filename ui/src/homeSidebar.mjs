@@ -2,10 +2,10 @@
 // (the mockup's first screen, user 2026-09-30).
 //
 // Owns the sidebar's buttons (#homeGhName, #homePerso, #homeNavDub,
-// #homeNavAudio, #homeNavErase, #homeNavSave, #homeNavSettings,
+// #homeNavErase, #homeNavSave, #homeNavSettings,
 // #homeHelp, #homeFeedback, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
 // the banner (#homeAgentCard with its [data-prompt] chips, #homeDubCard,
-// #homeAudioCard, #homeEraseCard, #homeSaveCard). Every one of them opens something the page
+// #homeEraseCard, #homeSaveCard). Every one of them opens something the page
 // already has; this file only decides which.
 //
 // The Dub Agent column is hidden on Home until something here opens it: the
@@ -66,20 +66,18 @@ export function whatsNewTitle(version) {
  * @param {(url: string) => void} deps.openUrl   opens in the system browser
  * @param {() => void} deps.onDubbing     a new project on its Dubbing tab (file or link)
  * @param {() => void} deps.onErase
- * @param {() => void} [deps.onAudio]     Separate audio: a new project on its Audio tab
  * @param {() => void} deps.onSaveVideo   the banner's link field
  * @param {() => void} deps.onSettings
  * @param {() => void} deps.onHelp        the Help dialog: what each tool does
  * @param {() => Promise<{version?: string}>} deps.loadWhatsNew
  */
 export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing, onErase,
-                                  onAudio = () => {}, onSaveVideo, onSettings, onHelp, loadWhatsNew }) {
+                                  onSaveVideo, onSettings, onHelp, loadWhatsNew }) {
   const on = (id, fn) => $(id).addEventListener("click", fn);
 
   on("homeGhName", () => openUrl(repoUrl));
   on("homePerso", () => openUrl(persoUrl()));
   on("homeNavDub", onDubbing);
-  on("homeNavAudio", onAudio);
   on("homeNavErase", onErase);
   on("homeNavSave", onSaveVideo);
   on("homeNavSettings", () => onSettings());
@@ -92,7 +90,6 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
   on("homeWhatsNew", () => window.dispatchEvent(new CustomEvent("persodub:open-update")));
 
   on("homeDubCard", onDubbing);
-  on("homeAudioCard", onAudio);
   on("homeEraseCard", onErase);
   on("homeSaveCard", onSaveVideo);
   // A chip opens the agent with its sentence in the box; anywhere else on the

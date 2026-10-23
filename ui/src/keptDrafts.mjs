@@ -16,7 +16,7 @@ const MAX_KEPT = 12;
 // The tabs a draft can be left on (2026-10-21): its card says what it was
 // being made into, and opens there again. A draft kept before then, or with
 // anything else, was on Dubbing.
-const TABS = ["dubbing", "audio", "erase"];
+const TABS = ["dubbing", "erase"];
 
 function clean(row) {
   if (!row || typeof row.downloadId !== "string" || !/^[0-9a-f]{8}$/.test(row.downloadId)) return null;

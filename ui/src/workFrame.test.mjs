@@ -55,28 +55,21 @@ test("a draft's screen is the finished panel's, and Home leaves Export where it 
 });
 
 test("a job opened from the first screen starts on the Dubbing tab", () => {
-  const h = harness({ tab: "audio" });
+  const h = harness({ tab: "save" });
   h.go("running");
   assert.equal(h.state.tab, "dubbing");
-});
-
-test("the frame leaves dimming Captions to the Captions tab", () => {
-  const h = harness();
-  h.go("running");
-  h.go("done");
-  assert.equal(h.captions.disabled, false);
 });
 
 test("a dub's reports leave the tab the user went to alone", () => {
   const h = harness();
   h.go("running");
-  h.press("audio");
+  h.press("captions");
   h.go("running");
   h.go("running");
-  assert.equal(h.state.tab, "audio");
+  assert.equal(h.state.tab, "captions");
   // And it is still there when the dub is done.
   h.go("done");
-  assert.equal(h.state.tab, "audio");
+  assert.equal(h.state.tab, "captions");
 });
 
 test("a dub that starts while Captions is up moves to Dubbing", () => {
@@ -95,9 +88,9 @@ test("the erase screen lights the Erase tab, and leaving it puts Dubbing back", 
 
 test("going home leaves the row as it is", () => {
   const h = harness({ screen: "done" });
-  h.press("audio");
+  h.press("captions");
   h.go("home");
-  assert.equal(h.state.tab, "audio");
+  assert.equal(h.state.tab, "captions");
 });
 
 test("another tab pressed on the erase screen is the way back to the job", () => {
@@ -114,6 +107,6 @@ test("another tab pressed on the erase screen is the way back to the job", () =>
   h.press("save");
   assert.equal(h.state.left, 1);
   h.go("done");
-  h.press("audio");
+  h.press("captions");
   assert.equal(h.state.left, 1);
 });

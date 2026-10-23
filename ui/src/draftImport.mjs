@@ -1,6 +1,6 @@
 // How a video comes into a new project, whichever tab is open (no-media-tab
 // mockup, owner 2026-09-30): one project holds one video, so there is no bin
-// to keep it in. With no video the Dubbing and Audio tabs show the one shared
+// to keep it in. With no video the Dubbing tab shows the one shared
 // Import block (ui/src/importBlock.mjs) over the timeline's empty row "Drop
 // videos here"; a file, a drop or a link lands as the draft
 // (ui/src/draft.mjs), on the timeline at once, and the tab that was open
@@ -27,7 +27,7 @@ import { t } from "./i18n.mjs";
 const DOWNLOAD_POLL_MS = 1000;
 // The line under each tab's Import block, and the one under the Before
 // dubbing card, where a video taking the card's place says how it is going.
-const STATUS_IDS = ["dubbingImportStatus", "audioImportStatus", "draftImportStatus", "capImportStatus"];
+const STATUS_IDS = ["dubbingImportStatus", "draftImportStatus", "capImportStatus"];
 
 /**
  * Wire importing to a page. The page needs: #dubbingImport, the Dubbing tab's

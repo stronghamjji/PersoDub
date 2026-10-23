@@ -124,12 +124,11 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
   // How many seconds of a draft its cuts keep.
   const keptOf = (d) => d.ranges.reduce((s, [a, b]) => s + (b - a), 0);
 
-  // What a draft was being made into (2026-10-21): one left on the Erase or
-  // Audio tab says so; one left on Dubbing is not dubbed yet. The English is
+  // What a draft was being made into (2026-10-21): one left on the Erase
+  // tab says so; one left on Dubbing is not dubbed yet. The English is
   // the Dubbing card's way of saying it: "Erase subtitles · Not finished" ran
   // past the card's 124px (2026-10-22). The Korean names the tool.
-  const draftMeta = (d) => (d.tab === "erase" ? t("Not erased yet")
-    : d.tab === "audio" ? t("Not separated yet") : t("Not dubbed yet"));
+  const draftMeta = (d) => (d.tab === "erase" ? t("Not erased yet") : t("Not dubbed yet"));
 
   // A kept draft: a frame of its video (the held file itself, stopped near
   // its start -- a draft has no thumbnail made for it), how much of it the

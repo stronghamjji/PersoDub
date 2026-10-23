@@ -83,8 +83,8 @@ test("a dubbing's rows stand under Video, Subtitles & script and Audio; the othe
   // A heading with no row under it is not drawn: no subtitles, no Subtitles.
   const noSrt = rowsHtml(exportRows({ ...STEMS, hasSrt: false }, "mp3"), "mp3");
   assert.deepEqual([...noSrt.matchAll(/class="export-group">([^<]*)</g)].map((m) => m[1]), ["Video", "Audio"]);
-  // A draft, an erased video and separated audio are two rows each, and plain.
-  for (const ctx of [{ kind: "draft" }, { kind: "erase" }, { kind: "separate", jobId: "S1" }]) {
+  // A draft and an erased video are two rows each, and plain.
+  for (const ctx of [{ kind: "draft" }, { kind: "erase" }]) {
     assert.doesNotMatch(rowsHtml(exportRows(ctx, "mp3"), "mp3"), /export-group/, ctx.kind);
   }
 });
@@ -175,7 +175,6 @@ test("a row is a checkbox, its icon, its name and the place its saved check goes
   assert.match(html, /Original voice<span class="export-help" data-tip="Only the speech\." tabindex="0" role="img" aria-label="Only the speech\.">\?<\/span><span class="export-seg"/);
   assert.match(html, /Background<span class="export-help" data-tip="Everything except speech: music, effects, noise\."/);
   assert.equal(html.match(/export-help"/g).length, 2);
-  assert.equal(rowsHtml(exportRows({ kind: "separate", jobId: "S1" }, "mp3"), "mp3").match(/export-help"/g).length, 2);
   assert.doesNotMatch(html, /download=/, "no row is a link to follow");
   const draft = rowsHtml(exportRows({ kind: "draft" }, "wav"), "wav", ["audio"]);
   assert.match(draft, /aria-checked="false" data-row="video">/);
@@ -520,27 +519,6 @@ test("the X, Cancel and the backdrop each shut the dialog", async () => {
   }
 });
 
-test("separated audio hands back its two sounds as links, both ticked to begin with", async () => {
-  const ctx = { kind: "separate", jobId: "S1", project: "clip", where: "Saved in Downloads" };
-  for (const fmt of ["mp3", "wav"]) {
-    assert.deepEqual(exportRows(ctx, fmt).map((r) => [r.id, r.label, r.href, r.name, r.audio]), [
-      ["voice", "Voice", `/api/dub/result/S1/stem/voice?format=${fmt}`, `clip_voice.${fmt}`, true],
-      ["background", "Background", `/api/dub/result/S1/stem/background?format=${fmt}`, `clip_background.${fmt}`, true],
-    ]);
-  }
-  assert.deepEqual(ticksFor(null, "separate", ["voice", "background"]), ["voice", "background"]);
-  assert.deepEqual(ticksFor('{"separate":["background"]}', "separate", ["voice", "background"]), ["background"]);
-  // Any other kind still opens on its first row.
-  assert.deepEqual(ticksFor(null, "draft", ["video", "audio"]), ["video"]);
-
-  const h = harness({ ctx });
-  await h.api.open();
-  h.go();
-  await settle();
-  assert.deepEqual(h.followed.map((f) => f[1]), ["clip_voice.mp3", "clip_background.mp3"]);
-  assert.deepEqual(h.saved(), ["voice", "background"]);
-});
-
 // ---- the folder the files go into (owner, 2026-10-22) ------------------------
 
 // The desktop shell's side of it (desktop/src/downloadsIpc.js): what it says
@@ -614,7 +592,7 @@ test("in Korean the line reads as the approved mock, in all three states", async
   assert.equal(h.$("exportWhere").textContent, "dub_ko.mp4 파일을 작업용 SSD의 2026-10-22 / paris_steps에 저장했어요");
 });
 
-test("files saved in the picked folder are named from it: a dubbing's, the app's own and loose sounds", async () => {
+test("files saved in the picked folder are named from it: a dubbing's and the app's own", async () => {
   const shell = folderShell(SSD);
   const h = harness({ ctx: DATED, shell, stored: { [TICKS_KEY]: '{"dub":["video","voice"]}' } });
   await h.api.open();
@@ -630,16 +608,6 @@ test("files saved in the picked folder are named from it: a dubbing's, the app's
   draft.go();
   await settle();
   assert.equal(draft.$("exportWhere").textContent, "Saved clip.mp4 to Work SSD / 2026-09-30 / clip");
-  // Separated sounds, loose in the folder.
-  const sep = folderShell(SSD);
-  const s = harness({ ctx: { kind: "separate", jobId: "S1", project: "clip", where: "Saved in Downloads" }, shell: sep });
-  await s.api.open();
-  assert.equal(s.$("exportWhere").textContent, "Saved in Work SSD");
-  s.go();
-  await settle();
-  await landedAt(sep, "/Volumes/Work SSD/clip_voice.mp3");
-  await landedAt(sep, "/Volumes/Work SSD/clip_background.mp3");
-  assert.equal(s.$("exportWhere").textContent, "Saved 2 files to Work SSD");
 });
 
 test("a picked folder that is gone is said once on the line, before and after the files go to Downloads", async () => {

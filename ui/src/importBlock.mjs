@@ -30,7 +30,6 @@ export function importBlockHtml(id, linkId, variant = IMPORT_VARIANT) {
 // Getters, so each read is in the page's language at that moment.
 export const EMPTY_TABS = {
   get dubbing() { return [t("Dubbing"), t("Voice a video in another language.")]; },
-  get audio() { return [t("Separate audio"), t("Splits the sound into voice and background.")]; },
   get erase() { return [t("Erase subtitles"), t("Takes burned-in subtitles out.")]; },
   get captions() { return [t("Burn in subtitles"), t("Burns subtitles into a video.")]; },
 };

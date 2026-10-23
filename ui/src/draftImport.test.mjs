@@ -119,7 +119,7 @@ test("something that is not a link is answered on every tab's status line, and f
   const { $, log } = harness();
   $("dubbingLinkInput").value = "holiday";
   await $("dubbingLinkInput").fire("keydown", { key: "Enter", preventDefault() {} });
-  for (const id of ["dubbingImportStatus", "audioImportStatus"]) {
+  for (const id of ["dubbingImportStatus", "capImportStatus"]) {
     assert.equal($(id).textContent, "That is not a link. Paste one that starts with https://");
     assert.equal($(id).classList.contains("error"), true);
   }
@@ -178,10 +178,10 @@ test("a link is fetched and, once ready, becomes the draft", async () => {
   $("dubbingLinkInput").value = "https://example.com/v";
   await $("dubbingLinkInput").fire("keydown", { key: "Enter", preventDefault() {} });
   await settle();
-  assert.equal($("audioImportStatus").textContent, "Reading the link…");
+  assert.equal($("capImportStatus").textContent, "Reading the link…");
   await log.tick();
   assert.equal($("dubbingImportStatus").textContent, "Downloading… 40%");
-  assert.equal($("audioImportStatus").textContent, "Downloading… 40%", "the same line on whichever tab is open");
+  assert.equal($("capImportStatus").textContent, "Downloading… 40%", "the same line on whichever tab is open");
   await log.tick();
   assert.equal($("dubbingImportStatus").textContent, "");
 

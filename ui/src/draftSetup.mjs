@@ -48,8 +48,6 @@ function stripExt(name) {
  *        finished model download resumes (the models dialog's onStartDubbing)
  * @param {() => string} [deps.getScreen]  the screen that is up: the Erase tab
  *        edits the same draft and keeps its own top bar
- * @param {() => string} [deps.stemsFrom]  the id of a finished Separate audio
- *        job of the draft as it is cut now, or ""
  * @param {(d: object) => void} [deps.removeDraft]  the Video card's Remove:
  *        asks, as the Home card's Delete does, and deletes this draft
  * @param {() => number} [deps.firstDownloadBytes]  what a dubbing on the
@@ -61,7 +59,7 @@ function stripExt(name) {
 export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, sizeVideoPane,
                                   leftTabsShow, importer, newProject, submitDubStart, setDubRestart,
                                   showDraftTimeline = () => {}, getScreen = () => "done",
-                                  stemsFrom = () => "", removeDraft = () => {}, firstDownloadBytes = () => 0 }) {
+                                  removeDraft = () => {}, firstDownloadBytes = () => 0 }) {
   // What a Perso API dubbing of the kept part costs and what the workspace
   // has left, beside Start (owner, 2026-10-22). Perso charges the model's
   // credits a second for the whole seconds spoken: until a script has heard
@@ -171,9 +169,6 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
         translateEngine: $("translateSelect").value,
         ttsEngine: $("voiceSelect").value,
         project: stripExt(d.name) || undefined,
-        // The Audio tab's finished separation of this same cut, when there
-        // is one: the dubbing takes its two sounds (app/api/dub.py).
-        stemsFrom: stemsFrom() || undefined,
         // Add language: the project this dubbing joins (ui/src/languageRow.mjs).
         projectId: state.draftProject || undefined,
       };
@@ -247,7 +242,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     $("draftError").textContent = "";
     // Nor is its link: the Import blocks kept the last address in their
     // field, so an empty project opened from Home showed it (review, 2026-10-09).
-    for (const id of ["dubbingLinkInput", "audioLinkInput", "capLinkInput"]) {
+    for (const id of ["dubbingLinkInput", "capLinkInput"]) {
       const f = $(id);
       if (f) f.value = "";
     }

@@ -125,8 +125,6 @@ const SPEAKER_COLOURS = 6;
  *        a draft makes count kept time too
  * @param {() => any[]} [deps.videos]  every video getVideo can answer with, so
  *        each one plays a draft's kept parts only
- * @param {(which: string) => void} [deps.onStemMute]  the speaker on a Voice
- *        or Background lane was pressed (a separated draft, ui/src/audioTab.mjs)
  * @returns the operations the rest of the page calls.
  */
 export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, getSubStyle,
@@ -135,7 +133,6 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
                                  toggleDonePlay, markClippedNames,
                                  getPlayerClock = () => $("videoTime"),
                                  videos = () => [getVideo()],
-                                 onStemMute = () => {},
                                  // A video with the user's own subtitles (kind
                                  // "captions"): no voices, so no voice lanes
                                  // and no voice legend, only the video and captions.
@@ -184,14 +181,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
   //   locked  the cuts cannot change
   let erase = null;
   const jobClip = () => (erase && erase.strip && erase.strip !== "draft" ? erase.strip : null);
-  // The Audio tab's say over a draft's strip, or null (showAudio):
-  //   locked  the cuts cannot change (they are being separated)
-  //   stems   {id, muted: {voice, background}} once that job's two sounds are
-  //           there: a lane each under the video, with a switch to silence it
-  // The Erase tab's strip is its own; this is for the draft's alone.
-  let audio = null;
-  const stems = () => (!erase && audio && audio.stems) || null;
-  const locked = () => (erase ? !!erase.locked : !!audio && !!audio.locked);
+  const locked = () => !!erase && !!erase.locked;
 
   // ---- The pictures of the video: film strip and waveform ---------------------
   // Fetched once per URL and kept for the session; the strip is drawn in the
@@ -331,18 +321,8 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
     const name = (cls, icon, size, text, lead = "") => `<div class="tl-name ${cls}">${lead || lucide(icon, size)}<span>${t(text)}</span></div>`;
     if (mode === "draft") {
       if (!clips) return "";
-      const st = stems();
-      // One whole sentence per lane and state.
-      const muteLabel = (which, off) => (which === "voice"
-        ? (off ? t("Unmute the voice") : t("Mute the voice"))
-        : (off ? t("Unmute the background") : t("Mute the background")));
-      const mute = (which) => `<button class="tl-eye tl-mute${st.muted[which] ? "" : " on"}" data-stem="${which}" type="button"
-            title="${st.muted[which] ? t("Unmute") : t("Mute")}" aria-label="${muteLabel(which, st.muted[which])}"
-            aria-pressed="${!!st.muted[which]}">${lucide(st.muted[which] ? "volume-x" : "volume-2", 12)}</button>`;
       return name("tl-name-video", "square-play", 12.3, "Video")
-        + (erase && erase.lane ? name("tl-name-erase", "eraser", 12, "Erase") : "")
-        + (st ? name(`tl-name-stem${st.muted.voice ? " off" : ""}`, "", 0, "Voice", mute("voice"))
-              + name(`tl-name-stem${st.muted.background ? " off" : ""}`, "", 0, "Background", mute("background")) : "");
+        + (erase && erase.lane ? name("tl-name-erase", "eraser", 12, "Erase") : "");
     }
     const on = getSubStyle().enabled;
     const eye = `<button class="tl-eye${on ? " on" : ""}" id="tlSubEye" type="button"
@@ -432,18 +412,6 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
       return;
     }
     renderDraft();
-  }
-
-  /**
-   * The Audio tab locks a draft's cuts while they are separated, then adds
-   * the two sounds' lanes (info, see `audio` above), or takes both away
-   * (null). Called on every repaint of that tab: the same answer twice draws
-   * nothing.
-   */
-  function showAudio(info) {
-    if (JSON.stringify(audio) === JSON.stringify(info)) return;
-    audio = info;
-    if (mode === "draft" && !erase) renderShell();
   }
 
   // The clips follow the draft: a new video (or ranges changed from elsewhere)
@@ -662,20 +630,7 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
       // of it), so a thin accent line marks the seam. Not after the last piece.
       if (i < clips.length - 1) html += `<div class="tl-seam" style="left:${(x - 2).toFixed(1)}px;width:2px"></div>`;
     });
-    return `<div class="tl-lanes"><div class="tl-lane tl-lane-video">${html}</div>${eraseLaneHtml(x)}${stemLanesHtml(x)}</div>`;
-  }
-
-  // The Voice and Background lanes: each sound the length of everything
-  // kept, which is exactly what was separated, drawn as its loudness.
-  function stemLanesHtml(width) {
-    const st = stems();
-    if (!st) return "";
-    const total = totalOf(clips);
-    return ["voice", "background"].map((which) => {
-      const wave = picture(`/api/separate/${encodeURIComponent(st.id)}/waveform/${which}`, fetchJson);
-      return `<div class="tl-lane tl-lane-stem tl-stem-${which}${st.muted[which] ? " off" : ""}"><div class="tl-stem"
-      style="left:0;width:${Math.max(1, width - 2).toFixed(1)}px"><div class="tl-wave">${waveSvg(wave, 0, total)}</div></div></div>`;
-    }).join("");
+    return `<div class="tl-lanes"><div class="tl-lane tl-lane-video">${html}</div>${eraseLaneHtml(x)}</div>`;
   }
 
   // The Erase lane: one block the length of everything kept, which is exactly
@@ -896,8 +851,6 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
       saveSubStyle(); updateSubtitleNow(); renderTimeline(timelineLines, timelineDuration);
       return;
     }
-    const mute = e.target.closest(".tl-mute");
-    if (mute) { onStemMute(mute.dataset.stem); return; }
     if (e.target.closest(".tl-hdl")) return;   // a trim, not a click-to-play
     if (e.target.closest(".tl-fold")) { setTimelineOpen(!timelineOpen); return; }
     if (e.target.closest("#tlZoomIn")) { setTimelineZoom(timelineZoom * TL_ZOOM_STEP); return; }
@@ -1295,13 +1248,13 @@ export function initTimelineUi({ $, getVideo, getClock, getMedia = () => null, g
 
   return { renderTimeline, redraw, drawTimelineTrack, paintTimeline, getLines,
            revealTime,
-           resetView, fitLayout, attach, showDraft, showErase, showAudio };
+           resetView, fitLayout, attach, showDraft, showErase };
 }
 
 /**
  * The loudness of [a, b] seconds of a sound as bars, one per value: `wave` is
  * {rate, peaks} as app/media_preview.py answers. "" when there is nothing to
- * draw. The Audio tab draws its two rows with it too.
+ * draw.
  */
 export function waveSvg(wave, a, b) {
   if (!wave || !wave.peaks || !wave.peaks.length) return "";

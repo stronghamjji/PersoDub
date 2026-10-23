@@ -1384,54 +1384,6 @@ test("a new draft's video starts at zoom 1; a cut on the same video keeps the zo
   assert.equal(zoom(), "×1");
 });
 
-// -- a separated draft (the Audio tab) ------------------------------------------
-
-test("a separated draft gets a Voice and a Background lane, each with a speaker that silences it", async (t) => {
-  const h = drafting();
-  t.after(h.log.restore);
-  h.api.showAudio({ locked: false, stems: { id: "S1", muted: { voice: false, background: true } } });
-  await settle();
-  const names = h.box.innerHTML;
-  assert.ok(names.includes("<span>Voice</span>") && names.includes("<span>Background</span>"));
-  assert.match(names, /class="tl-eye tl-mute on" data-stem="voice"[^>]*\n\s*title="Mute"/);
-  assert.match(names, /class="tl-eye tl-mute" data-stem="background"[^>]*\n\s*title="Unmute"/);
-  const track = h.$("timelineTrack").innerHTML;
-  // Each as long as everything kept: 770px less the 2px seam, with its picture.
-  assert.match(track, /<div class="tl-lane tl-lane-stem tl-stem-voice"><div class="tl-stem"\n      style="left:0;width:768.0px"><div class="tl-wave"><svg/);
-  assert.match(track, /<div class="tl-lane tl-lane-stem tl-stem-background off">/);
-  assert.ok(h.log.fetched.includes("/api/separate/S1/waveform/voice"));
-  assert.ok(h.log.fetched.includes("/api/separate/S1/waveform/background"));
-  // The cuts are still the draft's to make.
-  h.video.currentTime = 4;
-  h.api.paintTimeline(4, 10, "clock");
-  assert.equal(h.$("tlSplit").disabled, false);
-
-  // The same answer twice draws nothing; taking it away takes the lanes away.
-  h.$("tlUndo").marker = "kept";
-  h.api.showAudio({ locked: false, stems: { id: "S1", muted: { voice: false, background: true } } });
-  assert.equal(h.$("tlUndo").marker, "kept");
-  h.api.showAudio(null);
-  assert.ok(!h.$("timelineTrack").innerHTML.includes("tl-lane-stem"));
-  assert.ok(!h.box.innerHTML.includes("<span>Voice</span>"));
-});
-
-test("while a draft is being separated its cuts are locked", (t) => {
-  const h = drafting();
-  t.after(h.log.restore);
-  h.video.currentTime = 5;
-  h.api.showAudio({ locked: true, stems: null });
-  h.api.paintTimeline(5, 10, "clock");
-  for (const id of ["tlUndo", "tlRedo", "tlSplit", "tlDelLeft", "tlDelRight", "tlDelete"]) {
-    assert.equal(h.$(id).disabled, true, `${id} is locked`);
-  }
-  h.box.fire("click", evt({ "#tlDelRight": {} }));
-  h.log.fireDoc("keydown", key("Delete"));
-  assert.deepEqual(getDraft().ranges, [[0, 10]]);
-  h.api.showAudio({ locked: false, stems: null });
-  h.api.paintTimeline(5, 10, "clock");
-  assert.equal(h.$("tlSplit").disabled, false);
-});
-
 test("a long video's film strip keeps every frame its own size and draws only the part near the view", async (t) => {
   // 1,000 seconds at zoom 1 is 77,000px: boxes widened to fit a cap of 400
   // stretched every frame sideways (owner, 2026-10-14). Now a box is always

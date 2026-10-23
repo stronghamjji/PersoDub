@@ -8,7 +8,7 @@
 // The elements this file touches: #keyOverlay and what is in it (#keyTitle,
 // #keyLink, #keyField, #keyInput, #keySpaceRow, #keySpace, #keyError, #keySave,
 // #keyCancel), and the dropdowns that need a key: #dubModeSelect, #sepSelect,
-// #sttSelect, #translateSelect and #audioEngine.
+// #sttSelect and #translateSelect.
 import { t } from "./i18n.mjs";
 
 /**
@@ -112,8 +112,7 @@ export function initKeyWindow({ $, keySaved, onSaved }) {
     }
   }
   for (const [id, kind, value] of [["dubModeSelect", "perso", "perso"], ["sepSelect", "perso", "perso"],
-                                   ["sttSelect", "perso", "perso"], ["translateSelect", "gemini", "gemini"],
-                                   ["audioEngine", "perso", "perso"]]) {
+                                   ["sttSelect", "perso", "perso"], ["translateSelect", "gemini", "gemini"]]) {
     const sel = $(id);
     let last = sel.value;
     sel.addEventListener("focus", () => { last = sel.value; });

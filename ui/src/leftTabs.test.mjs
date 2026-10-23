@@ -19,13 +19,13 @@ function harness() {
     };
   };
   // The page's order (static/index.html): Home's tools.
-  const buttons = ["dubbing", "audio", "erase", "captions", "save"].map(button);
+  const buttons = ["dubbing", "erase", "captions", "save"].map(button);
   let onClick = null;
   els.leftTabs = {
     querySelectorAll: () => buttons,
     addEventListener: (ev, fn) => { if (ev === "click") onClick = fn; },
   };
-  for (const id of ["tabAudio", "tabDubbing", "tabCaptions"]) els[id] = { hidden: false };
+  for (const id of ["tabDubbing", "tabCaptions"]) els[id] = { hidden: false };
   const erased = [];
   const saved = [];
   const api = initLeftTabs({ $: (id) => els[id], onErase: () => erased.push(1), onSave: () => saved.push(1) });
@@ -39,7 +39,6 @@ test("Dubbing is the tab on show to begin with, and only its body is", () => {
   assert.equal(h.api.current(), "dubbing");
   assert.deepEqual(h.lit(), ["dubbing"]);
   assert.equal(h.els.tabDubbing.hidden, false);
-  assert.equal(h.els.tabAudio.hidden, true);
   assert.equal(h.els.tabCaptions.hidden, true);
   assert.equal(h.buttons[0].getAttribute("aria-selected"), "true");
   assert.equal(h.buttons[1].getAttribute("aria-selected"), "false");
@@ -52,8 +51,8 @@ test("pressing a tab shows its body and hides the rest", () => {
   assert.deepEqual(h.lit(), ["captions"]);
   assert.equal(h.els.tabCaptions.hidden, false);
   assert.equal(h.els.tabDubbing.hidden, true);
-  h.press("audio");
-  assert.equal(h.els.tabAudio.hidden, false);
+  h.press("dubbing");
+  assert.equal(h.els.tabDubbing.hidden, false);
   assert.equal(h.els.tabCaptions.hidden, true);
 });
 
@@ -69,9 +68,9 @@ test("Erase goes to the erase screen and leaves the row as it was", () => {
 
 test("the page can put a tab on show itself", () => {
   const h = harness();
-  h.api.show("audio");
-  assert.deepEqual(h.lit(), ["audio"]);
-  assert.equal(h.els.tabAudio.hidden, false);
+  h.api.show("captions");
+  assert.deepEqual(h.lit(), ["captions"]);
+  assert.equal(h.els.tabCaptions.hidden, false);
 });
 
 test("Save video saves the project's video and leaves the row as it was", () => {

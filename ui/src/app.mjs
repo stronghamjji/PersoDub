@@ -4,7 +4,7 @@
 // behaviour. initEscapeKey() runs first, so Escape is answered before any
 // dialog's own listener; openLastScreen() runs last, once everything it can
 // open is wired; and the hooks assigned further down (workFrame,
-// leaveEraseTimeline, fitWorkLayout, showAudioLanes, dubRestart) are read only
+// leaveEraseTimeline, fitWorkLayout, dubRestart) are read only
 // when called, or checked for null first.
 //
 // Its imports are "./x.mjs": app/main.py stamps that form (and "/js/x.mjs")
@@ -40,7 +40,6 @@ import { initLeftTabs } from "./leftTabs.mjs";
 import { initWorkFrame } from "./workFrame.mjs";
 import { initPlayerFoot, clockLine } from "./playerFoot.mjs";
 import { initDraftImport } from "./draftImport.mjs";
-import { initAudioTab } from "./audioTab.mjs";
 import { openSeparated, importCaptions } from "./dubApi.mjs";
 import { initNewProjectWindow } from "./newProjectWindow.mjs";
 import { initDraftSetup } from "./draftSetup.mjs";
@@ -702,8 +701,8 @@ const eraseScreen = initEraseScreenUi({
   // it is wired further down).
   showTimeline: (info) => timeline.showErase(info),
 });
-// The work screen's left panel: Dubbing, Audio, Captions, and Erase, which
-// is the way to the erase screen (ui/src/leftTabs.mjs).
+// The work screen's left panel: Dubbing, Erase, which is the way to the erase
+// screen, Captions (Burn in subtitles) and Save video (ui/src/leftTabs.mjs).
 const leftTabs = initLeftTabs({ $, onErase: () => {
   // Lit here as well as by the screen's name: with no job to go back to, the
   // erase screen can be standing under another tab.
@@ -757,8 +756,8 @@ workFrame = initWorkFrame({
       leftTabs.show("erase");
       if (eraseScreen.erasedJob()) $("eraseDubBtn").click();
     }
-    // No job: the draft the Erase tab was cutting, as the Dubbing and Audio
-    // tabs show it (or the empty new project, to bring one in).
+    // No job: the draft the Erase tab was cutting, as the Dubbing tab shows
+    // it (or the empty new project, to bring one in).
     else draftSetup.showDraftScreen();
   },
 });
@@ -799,8 +798,6 @@ const draftSetup = initDraftSetup({
   },
   setDubRestart: (fn) => { dubRestart = fn; },
   getScreen: () => document.body.dataset.screen,
-  // A dubbing of a cut the Audio tab already separated takes its two sounds.
-  stemsFrom: () => (audioTab.separatedJob() || {}).id || "",
   // Remove on the Video card: the Home card's Delete, asked the same way,
   // and then the empty project, top bar and all (owner, 2026-10-22).
   removeDraft: (d) => confirmDialogs.askDelete({ draftId: d.downloadId, project: d.name || "this draft",
@@ -808,55 +805,9 @@ const draftSetup = initDraftSetup({
   firstDownloadBytes,
 });
 paintDraftFoot = draftSetup.paintFoot;
-// ---------------- Separate audio ----------------
-let showAudioLanes = () => {};
-// The Audio tab (#tabAudio) belongs to ui/src/audioTab.mjs: the draft's kept
-// parts, separated into voice and background as a job of its own. What the
-// page hands it is the page's: the way a video comes in, the stop question,
-// the windows a start can come back short of, and the Export dialog.
-const audioTab = initAudioTab({
-  $, state,
-  getVideo: () => $("doneVideo"),
-  goToTab: (name) => $("leftTabs").querySelector(`[data-tab="${name}"]`).click(),
-  importSource: (source) => draftImport.importSource(source),
-  say: (text, isError) => draftImport.say(text, isError),
-  askStop: () => confirmDialogs.askCancelDub(t("Stop separating?")),
-  // The engine pack is missing (the download notice, then the start again),
-  // no Perso key or no workspace picked (the key window, then again), or no
-  // room on the disk.
-  onStartRefused: (e, retry) => {
-    // The engine's words, English on purpose: the refusals are known by them.
-    const text = serverText(e);
-    if (e && e.status === 409 && e.detail && e.detail.missing) {
-      dubRestart = retry;
-      models.refreshModels().then(() => models.showModelsDialog(e.detail));
-      return true;
-    }
-    if (e && e.status === 422 && /Select a Perso workspace/.test(text)) {
-      keyWindow.askKey("perso", null, null, { spaceOnly: true, then: retry });
-      return true;
-    }
-    if (e && e.status === 422 && /needs an API key/.test(text)) {
-      keyWindow.askKey("perso", null, null, { then: retry });
-      return true;
-    }
-    return confirmDialogs.showIfOutOfSpace(e);
-  },
-  onJobsChanged: () => {
-    projects.renderHistory().catch(() => {});
-    projects.renderQueueCard().catch(() => {});
-  },
-  openExport: () => exportDialog.open(),
-  // The timeline is wired further down; until then there is none to tell.
-  showTimeline: (info) => showAudioLanes(info),
-  // From its separation's start a video's card on Home is that separation's own.
-  onSeparateStarted: draftBecameJob,
-});
-// The tab is repainted when it is come to: whether a job owns the screen is
-// read then.
-$("leftTabs").addEventListener("click", () => audioTab.paint());
-// A row in the Projects list: the separation's video is held again and
-// opened as a draft, on its Audio tab, with its two sounds.
+// A row in the Projects list: a separation made before Separate audio left
+// the tools (owner, 2026-10-23). Its video is held again and opened as a
+// draft on the Dubbing tab, with the parts it kept.
 async function openSeparatedJob(job) {
   const held = await openSeparated(job.id);
   resetForNewJob();
@@ -864,9 +815,8 @@ async function openSeparatedJob(job) {
   state.draftFromJob = null;
   state.draftProject = null;
   paintDraftBack();
-  audioTab.adopt(job, held);
   await draftSetup.openDraft({ downloadId: held.download_id, name: job.title || held.title,
-                               duration: held.duration_sec }, { tab: "audio", ranges: held.ranges });
+                               duration: held.duration_sec }, { tab: "dubbing", ranges: held.ranges });
 }
 
 // The top bar's New project: what the Home banner does with a video, from
@@ -890,7 +840,7 @@ initNewProjectWindow({
 function emptyImportLink() {
   if (state.jobId) return null;
   const tab = document.body.dataset.screen === "erase" ? "erase" : leftTabs.current();
-  const id = { dubbing: "dubbingLink", audio: "audioLink", erase: "eraseLink", captions: "capLink" }[tab];
+  const id = { dubbing: "dubbingLink", erase: "eraseLink", captions: "capLink" }[tab];
   return id && $(`${id}Input`).offsetParent ? id : null;
 }
 // A new draft opened from wherever the person stands -- a dubbing's
@@ -1463,8 +1413,6 @@ initHomeSidebar({
   // file or a link, where the bare file picker took only a file (owner, 2026-10-09).
   onDubbing: () => draftSetup.openDraft(null, { tab: "dubbing" }),
   onErase: () => eraseScreen.openErase(),
-  // An empty new project, on its Audio tab.
-  onAudio: () => draftSetup.openDraft(null, { tab: "audio" }),
   // A link pasted into the banner is how a video gets saved: the field is
   // pointed at, and the link pasted next opens Export once it is in.
   onSaveVideo: () => { pointAtLink($); saveVideoNext = true; },
@@ -1530,7 +1478,7 @@ async function resumeJob(jobId) {
     // Erasing subtitles is the other work this app does, and it has a screen of
     // its own: the same row, the same click, a different place to land.
     if (job.kind === "erase") { eraseScreen.openEraseJob(job); return; }
-    // Separate audio is a tab of a draft: its video comes back as one.
+    // A separation made before it left the tools: its video comes back as a draft.
     if (job.kind === "separate") { await openSeparatedJob(job); return; }
     // Asked for by name, from wherever the person happens to be standing: this
     // one is allowed to change the screen.
@@ -2048,13 +1996,6 @@ async function exportContext() {
   // Any other erase screen hands back only the draft it shows: an empty one
   // saved whatever draft was still held (Windows test E9).
   if (document.body.dataset.screen === "erase" && !eraseScreen.exportsDraft()) return null;
-  // The Audio tab with its two sounds: those are what it hands back. Links,
-  // the way a dubbing's own two are.
-  const separated = !state.jobId && leftTabs.current() === "audio" && audioTab.separatedJob();
-  if (separated) {
-    return { kind: "separate", jobId: separated.id, project: String((getDraft() || {}).name || "").replace(/\.[A-Za-z0-9]{2,4}$/, "") || "audio",
-             where: t("Saved in Downloads") };
-  }
   // A draft with a video on the timeline, before any dub.
   if (!state.jobId && draftSetup.canExport()) {
     return { kind: "draft", ratio, where: t("Saved in Downloads"), save: (what) => draftSetup.saveDraft(what) };
@@ -2297,8 +2238,6 @@ function toggleErasePlay() {
   if (v.paused || v.ended) v.play().catch(() => {}); else v.pause();
 }
 const timeline = initTimelineUi({
-  // A Voice or Background lane's speaker (a separated draft, the Audio tab).
-  onStemMute: (which) => audioTab.toggleMute(which),
   $,
   getVideo: () => (onEraseTab() ? $("eraseVideo") : doneVideo),
   getClock: () => (onEraseTab() ? clockLine($("eraseVideo")) : donePlayer.getDoneClock()),
@@ -2325,7 +2264,6 @@ const timeline = initTimelineUi({
 timeline.attach();
 leaveEraseTimeline = () => timeline.showErase(null);
 fitWorkLayout = () => timeline.fitLayout();
-showAudioLanes = (info) => timeline.showAudio(info);
 // After the player row's own listeners, so the clock under the erase video
 // ends up counting kept time the way the strip does.
 for (const e of ["play", "playing", "pause", "ended", "emptied", "timeupdate", "loadedmetadata", "seeked"]) {

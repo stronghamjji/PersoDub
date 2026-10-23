@@ -185,9 +185,6 @@ export function buildDubFormData(opts) {
   if (opts.ranges) fd.append("ranges", JSON.stringify(opts.ranges));
   // Add language: the first dubbing of the project this one joins.
   if (opts.projectId) fd.append("project_id", opts.projectId);
-  // A finished Separate audio job of this same cut: the server checks that it
-  // is, and then takes its voice and background instead of separating again.
-  if (opts.stemsFrom) fd.append("stems_from", opts.stemsFrom);
 
   return fd;
 }
@@ -506,29 +503,7 @@ export async function eraseToDub(jid, { baseUrl = "" } = {}) {
   return res.json();
 }
 
-// ---- Separate audio (app/api/separate.py) -----------------------------------
-
-/**
- * POST /api/separate -- queue a separation of the kept parts of a held video;
- * answers with the job id to follow. `engine` is "local" or "perso". A
- * refusal is thrown with `status` and the server's `detail` beside it: the
- * missing-pack 409 carries the download notice's own payload.
- */
-export async function startSeparate({ downloadId, engine = "local", project = "", trim = null, ranges = null },
-                                    { baseUrl = "" } = {}) {
-  const fd = new FormData();
-  fd.append("download_id", downloadId);
-  fd.append("engine", engine);
-  if (project) fd.append("project", project);
-  if (trim) {
-    fd.append("trim_start", String(trim.start));
-    fd.append("trim_end", String(trim.end));
-  }
-  if (ranges) fd.append("ranges", JSON.stringify(ranges));
-  const res = await fetch(`${baseUrl}/api/separate`, { method: "POST", body: fd });
-  if (!res.ok) throw await separateError(res, t("Could not start separating."));
-  return (await res.json()).job_id;
-}
+// ---- A separation's video, and a burn-in project (app/api/separate.py, captions.py) ----
 
 async function separateError(res, fallback) {
   const body = await res.json().catch(() => ({}));
@@ -540,7 +515,7 @@ async function separateError(res, fallback) {
 
 /**
  * POST /api/captions/import -- a held video and the user's own .srt, made a
- * finished project of kind "captions" for the Subtitle style tab; answers
+ * finished project of kind "captions" for the Burn in subtitles tab; answers
  * with its job id. A refusal is thrown with the server's sentence (a file
  * with no lines, a video that is not held).
  */
@@ -553,39 +528,12 @@ export async function importCaptions({ downloadId, file }, { baseUrl = "" } = {}
   return (await res.json()).job_id;
 }
 
-/** POST /api/separate/{jid}/retry -- the same cut, the same way, again. */
-export async function retrySeparate(jid, { baseUrl = "" } = {}) {
-  const res = await fetch(`${baseUrl}/api/separate/${jid}/retry`, { method: "POST" });
-  if (!res.ok) throw await separateError(res, t("Could not start it again."));
-  return (await res.json()).job_id;
-}
-
-/** GET /api/separate/{jid} -- the record, plus `elapsed` (seconds it has been
-    separating) and `done` (both sounds are there). */
-export async function fetchSeparate(jid, { baseUrl = "" } = {}) {
-  const res = await fetch(`${baseUrl}/api/separate/${jid}`);
-  if (!res.ok) throw await separateError(res, t("Lost track of the separation."));
-  return res.json();
-}
-
 /** POST /api/separate/{jid}/open -- the job's video, held again for a draft:
     {download_id, title, duration_sec, ranges}. */
 export async function openSeparated(jid, { baseUrl = "" } = {}) {
   const res = await fetch(`${baseUrl}/api/separate/${jid}/open`, { method: "POST" });
   if (!res.ok) throw await separateError(res, t("Could not open this video."));
   return res.json();
-}
-
-/** Where one of a job's two sounds plays or downloads from: `which` is
-    "voice" or "background", `fmt` "mp3" or "wav". A dubbing's and a
-    separation's alike. */
-export function stemUrl(jid, which, fmt = "mp3", { baseUrl = "" } = {}) {
-  return `${baseUrl}/api/dub/result/${jid}/stem/${which}?format=${fmt}`;
-}
-
-/** Where the picture of one of a separation's two sounds is read from. */
-export function stemWaveUrl(jid, which, { baseUrl = "" } = {}) {
-  return `${baseUrl}/api/separate/${jid}/waveform/${which}`;
 }
 
 /**

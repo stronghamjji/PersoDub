@@ -22,10 +22,11 @@ test("a kept draft is its video, its name, its length, its cuts, its shape and i
 });
 
 // The tab says what the draft was being made into (2026-10-21). One kept
-// before there was a tab, or with any other, was on Dubbing.
-test("a draft's tab is Dubbing, Audio or Erase; none or any other is Dubbing", () => {
+// before there was a tab, or with any other, was on Dubbing -- one left on
+// Separate audio too, now that it is no tool of its own (owner, 2026-10-23).
+test("a draft's tab is Dubbing or Erase; none or any other is Dubbing", () => {
   const tabOf = (tab) => keepDraft(storage(), { ...DRAFT, tab })[0].tab;
-  assert.equal(tabOf("audio"), "audio");
+  assert.equal(tabOf("audio"), "dubbing");
   assert.equal(tabOf("erase"), "erase");
   assert.equal(tabOf(undefined), "dubbing");
   assert.equal(tabOf("captions"), "dubbing");

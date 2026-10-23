@@ -683,24 +683,6 @@
   #tabErase .result-box { margin: 0; }
   /* One pixel tighter: the column was 385.5px in 385, which drew a scrollbar (Mac check, 2026-10-22). */
   #tabErase .result-box .m { margin-top: 2px; }
-  /* ---- Audio: the left panel's tab (ui/src/audioTab.mjs) ---- */
-  /* The Erase tab's cards and foot, without its side list. */
-  .audio-tab .erase-card select { margin-top: 6px; height: 28px; padding: 0 8px; font-size: 12px; }
-  .audio-tab .audio-run { font-size: 13px; font-weight: 600; }
-  /* One sound: its play button, its name, its picture. */
-  .audio-row { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; background: var(--well);
-    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
-    font-size: 12px; font-weight: 500; }
-  .audio-row .audio-name { flex: 0 0 74px; }
-  .audio-play { flex: 0 0 auto; width: 26px; height: 26px; border: 0; border-radius: 50%; padding: 0;
-    display: grid; place-items: center; cursor: pointer; background: var(--secondary); color: var(--foreground); }
-  .audio-play:hover { background: var(--accent); }
-  .audio-wave { flex: 1; min-width: 0; height: 26px; }
-  .audio-tab .erase-desc { flex: 0 0 auto; padding: 0 14px 8px; font-size: var(--font-label);
-    color: var(--muted-foreground); }
-  .audio-tab .erase-label { padding-bottom: 2px; }
-  .audio-wave svg { display: block; width: 100%; height: 100%; fill: var(--primary); }
-  #audioBackgroundWave svg { fill: var(--success); }
   /* What Export has to say, and only after it has said it. */
   .erase-saved { display: inline-flex; align-items: center; gap: 6px;
     font-size: var(--font-label); color: var(--muted-foreground); }
@@ -1255,11 +1237,10 @@
 
   /* === import === */
   /* The Dubbing tab with no video yet: the shared Import block and the line
-     that says how an import is going (ui/src/draftImport.mjs). The Audio tab
-     carries the same line under its own block. */
+     that says how an import is going (ui/src/draftImport.mjs). */
   /* A tab with no video yet (ui/src/importBlock.mjs emptyTabHtml): what the
      tab is for, one sentence, and the Import block, one group in the middle
-     of the panel -- the same group at the same place on Dubbing, Audio and
+     of the panel -- the same group at the same place on Dubbing, Burn in subtitles and
      Erase. What an import has to say hangs under the group, out of the
      flow, so a line of status never moves it. */
   .tab-empty { flex: 1; min-height: 0; box-sizing: border-box; padding: 12px; overflow: hidden;
@@ -2121,13 +2102,6 @@
   .tl-lane { position: relative; height: 26px; }
   .tl-lane-video { height: 74px; }
   .tl-lane-dub { height: 30px; }
-  /* A separated draft's two sounds (the Audio tab): a lane each, the voice in
-     the accent colour and the background in green; dim while silenced. */
-  .tl-stem { position: absolute; top: 0; height: 26px; box-sizing: border-box; border-radius: 4px;
-    overflow: hidden; background: var(--well); display: flex; flex-direction: column; }
-  .tl-stem-voice .tl-wave svg { fill: var(--primary); }
-  .tl-stem-background .tl-wave svg { fill: var(--success); }
-  .tl-lane-stem.off, .tl-name-stem.off span { opacity: 0.35; }
 
   /* The video: its name and length, the film strip, the waveform. */
   .tl-vclip { position: absolute; top: 0; height: 74px; box-sizing: border-box; border-radius: 4px;

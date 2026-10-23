@@ -10,10 +10,8 @@
 //                      (.xlsx); Audio -- Dubbed audio, Original voice,
 //                      Background -- each only when there is one
 //   an erased video    Video, Audio only
-//   separated audio    Voice, Background (the Audio tab's two sounds), both
-//                      ticked until the user says otherwise
 //   a video and its    Video with subtitles (the look picked burned in),
-//   own subtitles      Subtitles (.srt) -- the Subtitle style tab on its own
+//   own subtitles      Subtitles (.srt) -- a Burn in subtitles project
 //
 // Every row has a checkbox; the foot's Download saves each ticked row in turn
 // (owner, 2026-09-30). The ticks are remembered for each of the three kinds,
@@ -67,8 +65,7 @@ export function audioFormat(stored) {
  * @returns {string[]}
  */
 export function ticksFor(stored, kind, ids) {
-  // Separated audio is two sounds and both are what was asked for.
-  const fresh = kind === "separate" ? ids.slice() : ids.slice(0, 1);
+  const fresh = ids.slice(0, 1);
   let kept = null;
   try { kept = (JSON.parse(stored || "{}") || {})[kind]; } catch { /* not ours */ }
   if (!Array.isArray(kept)) return fresh;
@@ -108,8 +105,8 @@ const GROUPS = {
  * The rows for what is on screen.
  *
  * @param {object} ctx
- * @param {"draft"|"dub"|"erase"|"separate"|"captions"} ctx.kind
- * @param {string} [ctx.jobId]      a dub or a separation: the job
+ * @param {"draft"|"dub"|"erase"|"captions"} ctx.kind
+ * @param {string} [ctx.jobId]      a dub or a burn-in project: the job
  * @param {string} [ctx.target]     a dub: its language code, in the file names
  * @param {string} [ctx.videoHref]  a dub: the URL the player is on
  * @param {string} [ctx.mark]       a dub: "&v=3" after a remake, so a download
@@ -145,13 +142,6 @@ function allRows(ctx, fmt) {
   // The original video, asked for by name (Save video): served whatever the
   // project came from, where a link's alone is offered among the rest.
   const original = (ctx.only || []).includes("original");
-  if (ctx.kind === "separate") {
-    // The same links a dubbing's two sounds go out by.
-    return [["voice", t("Voice")], ["background", t("Background")]].map(([which, label]) =>
-      ({ id: which, icon: "audio", label, audio: true, tip: STEM_TIPS[which],
-         href: `/api/dub/result/${ctx.jobId}/stem/${which}?format=${fmt}`,
-         name: `${ctx.project || "project"}_${which}.${fmt}` }));
-  }
   if (ctx.kind === "captions") {
     return [{ id: "subtitled", icon: "film", label: t("Video with subtitles"),
               href: withRatio(ctx.subtitled.href, ctx.ratio), name: ctx.subtitled.name },
