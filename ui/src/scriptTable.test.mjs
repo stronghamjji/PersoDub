@@ -972,6 +972,9 @@ test("the Translate again button sends the ticked lines, or the lines that do no
   tick.row.classList.toggle = () => {};
   h.$("scriptBox").qs[".sc-pick"] = [tick];
   await h.api.renderScript("j1");
+  // Both kinds of red line, the cut-off one and the one over its time.
+  assert.match(h.$("retranslateBtn").title,
+    /only the lines whose length does not fit \(marked red\) are translated again\.$/);
 
   await h.$("retranslateBtn").fire("click");
   assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":[1,2]}'));
@@ -997,7 +1000,7 @@ test("with every line fitting and none ticked, Translate again rests until a lin
   h.$("scriptBox").qs[".sc-pick"] = [tick];
   await h.api.renderScript("j1");
   assert.equal(h.$("retranslateBtn").disabled, true);
-  assert.match(h.$("retranslateBtn").title, /No line is cut off\. Select the lines you want translated again\.$/);
+  assert.match(h.$("retranslateBtn").title, /No line's length is off \(marked red\)\. Select the lines you want translated again\.$/);
 
   tick.checked = true;
   await tick.listeners.change.at(-1)();
@@ -1027,7 +1030,7 @@ test("Translate again says what it does and which lines it will translate", asyn
   h.$("scriptBox").qs[".sc-pick"] = ticks;
   await h.api.renderScript("j1");
   const does = "Translates again with the same translator, so each line fits the time it has. The voices stay as they are.";
-  assert.equal(h.$("retranslateBtn").title, `${does} No line is cut off. Select the lines you want translated again.`);
+  assert.equal(h.$("retranslateBtn").title, `${does} No line's length is off (marked red). Select the lines you want translated again.`);
   ticks[0].checked = true;
   await ticks[0].listeners.change.at(-1)();
   assert.equal(h.$("retranslateBtn").title, `${does} Only the selected line is translated again.`);

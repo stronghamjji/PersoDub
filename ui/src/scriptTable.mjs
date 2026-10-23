@@ -765,8 +765,8 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     btn.title = `${t("Translates again with the same translator, so each line fits the time it has. The voices stay as they are.")} ${
       n === 1 ? t("Only the selected line is translated again.")
         : n ? t("Only the {n} selected lines are translated again.", { n })
-        : unfit.length ? t("With no line selected, only the lines cut off before they end are translated again.")
-        : t("No line is cut off. Select the lines you want translated again.")}`;
+        : unfit.length ? t("With no line selected, only the lines whose length does not fit (marked red) are translated again.")
+        : t("No line's length is off (marked red). Select the lines you want translated again.")}`;
     const all = $("scriptBox").querySelector('[data-pick="all"]');
     if (all) all.checked = n > 0 && n === lineCount;
   }

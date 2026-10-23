@@ -255,7 +255,7 @@ export const steps = [
       if (!unfit) {
         if (!rests) throw new Error("every line fits and nothing is ticked, yet the button can be pressed");
         const title = await app.inPage(() => document.querySelector("#retranslateBtn").title);
-        const want = app.tr("No line is cut off. Select the lines you want translated again.");
+        const want = app.tr("No line's length is off (marked red). Select the lines you want translated again.");
         if (!title.endsWith(want)) throw new Error(`the resting button's title is "${title}"`);
         return `every line fits, nothing ticked: the button rests, title ends "${want}"`;
       }
