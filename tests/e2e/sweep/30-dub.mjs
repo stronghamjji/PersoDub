@@ -315,9 +315,11 @@ export const steps = [
       const [, outPps] = await zoomVia(app, "#tlZoomOut", back);
       const [, end] = await zoomVia(app, "#tlZoomIn", outPps);
       if (!(inPps > pps0 && outPps < back)) throw new Error(`zoom in ${pps0.toFixed(1)} → ${inPps.toFixed(1)}, out ${back.toFixed(1)} → ${outPps.toFixed(1)} px/s`);
-      // The eye: the lane goes off and the saved style says so, then back.
+      // The eye: the lane flips and the saved style says so, then back. Subtitles
+      // start off on a new dub (owner, 2026-10-23), so the first press turns them on.
       const eye = [];
-      for (const want of [false, true]) {
+      const was = (await style(app, s.jobId)).enabled === true;
+      for (const want of [!was, was]) {
         await app.click("#tlSubEye");
         await app.waitFor(`the captions lane ${want ? "on" : "off"}`, 5000, (on) => document.querySelector("#timeline .tl-lane-caps")
           .classList.contains("off") === !on, want);
