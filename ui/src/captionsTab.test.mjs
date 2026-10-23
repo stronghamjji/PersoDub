@@ -242,7 +242,7 @@ function aloneHarness(view = {}, { upload } = {}) {
   };
   const h = harness({ screen: "done", lines: [], alone: true, from: null, files: null, ...view },
                     { alone });
-  return { ...h, said, sent, opened, held };
+  return { ...h, said, sent, opened, held, alone };
 }
 
 test("with no project open the tab takes a video and a subtitle file, the looks dim under them", () => {
@@ -362,4 +362,19 @@ test("on the erase screen the tab starts from the erased video", async () => {
   assert.deepEqual(h.held, ["erase:e1"]);
   assert.deepEqual(h.sent, [["held-e1", "paris_ko.srt"]]);
   clearDraft();
+});
+
+// A dub cut from a longer original (owner, 2026-10-23): the burn-in holds the
+// original, so its card shows the original's whole length, not the dub's.
+test("a dub's card shows the length of the original it is held from", async () => {
+  clearDraft();
+  const asked = [];
+  const h = aloneHarness({ from: { id: "j1", name: "paris_steps", duration: 12, downloadId: "d9" } });
+  h.alone.lengthOf = (id) => { asked.push(id); return Promise.resolve(95); };
+  h.tab.paint();
+  assert.match(h.$("capVideoCard").innerHTML, /00:12/, "its own length until the answer");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.match(h.$("capVideoCard").innerHTML, /01:35/);
+  h.tab.paint();
+  assert.deepEqual(asked, ["d9"], "asked once");
 });

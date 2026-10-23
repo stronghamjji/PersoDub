@@ -40,7 +40,7 @@ import { initLeftTabs } from "./leftTabs.mjs";
 import { initWorkFrame } from "./workFrame.mjs";
 import { initPlayerFoot, clockLine } from "./playerFoot.mjs";
 import { initDraftImport } from "./draftImport.mjs";
-import { openSeparated, importCaptions, eraseToDub } from "./dubApi.mjs";
+import { openSeparated, importCaptions, eraseToDub, fetchDownload } from "./dubApi.mjs";
 import { initNewProjectWindow } from "./newProjectWindow.mjs";
 import { initDraftSetup } from "./draftSetup.mjs";
 import { initLanguageRow } from "./languageRow.mjs";
@@ -2163,6 +2163,7 @@ const subtitles = initSubtitleOverlay({
     // erased video, held the way its Dubbing button holds it.
     hold: async (from) => (await (from.erase ? eraseToDub(from.id) : dubAgainSource(from.id))).download_id,
     erased: () => { const v = eraseScreen.erasedVideo(); return v && { ...v, erase: true }; },
+    lengthOf: (id) => fetchDownload(id).then((d) => d.duration_sec || 0, () => 0),
     upload: (downloadId, file) => importCaptions({ downloadId, file }),
     openJob: async (jid) => {
       draftBecameJob((getDraft() || {}).downloadId);

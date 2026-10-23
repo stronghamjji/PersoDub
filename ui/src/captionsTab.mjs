@@ -103,6 +103,9 @@ export function styleCardsHtml(styles, sample) {
  * @param {(from: object) => Promise<string>} deps.alone.hold  hold the view's
  *   `from` video again (ui/src/dubApi.mjs dubAgainSource, or eraseToDub for an
  *   erased video, `from.erase`); its download id
+ * @param {(downloadId: string) => Promise<number>} [deps.alone.lengthOf]  the
+ *   whole length of a held video, 0 when the app no longer holds it
+ *   (ui/src/dubApi.mjs fetchDownload)
  * @param {(downloadId: string, file: File) => Promise<string>} deps.alone.upload
  *   make the two a project (ui/src/dubApi.mjs importCaptions); its job id
  * @param {(jobId: string) => Promise<void>} deps.alone.openJob  open it
@@ -215,6 +218,20 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow,
     }
   }
 
+  // A project is held again from its original when the app still has it
+  // (dubAgainSource), so its card shows that whole length, asked once; else
+  // its own copy is held, which is the project's own length.
+  const lengths = new Map();
+  function lengthOf(from) {
+    const id = from.downloadId;
+    if (!id || !alone.lengthOf) return from.duration;
+    if (!lengths.has(id)) {
+      lengths.set(id, 0);
+      alone.lengthOf(id).then((s) => { lengths.set(id, s); paint(); });
+    }
+    return lengths.get(id) || from.duration;
+  }
+
   function paintAlone(v, on) {
     $("capAlone").hidden = !on;
     // The looks stay on show, dim, until the two files are there.
@@ -230,9 +247,10 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow,
     }
     if (!on) return;
     const d = v.from || getDraft();
+    const length = v.from ? lengthOf(v.from) : d && d.duration;
     $("capZone").hidden = !!d;
     $("capVideoCard").hidden = !d;
-    $("capVideoCard").innerHTML = d ? videoCardHtml({ name: d.name, kept: d.duration, total: d.duration }) : "";
+    $("capVideoCard").innerHTML = d ? videoCardHtml({ name: d.name, kept: length, total: length }) : "";
     $("capSrtSub").textContent = srtFile ? srtFile.name : t(SRT_SUB);
   }
 

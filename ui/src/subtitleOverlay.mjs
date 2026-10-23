@@ -347,7 +347,10 @@ export function initSubtitleOverlay({ $, state, doneVideo, leftTabs, timeline, g
       from: erasing() ? (alone?.erased?.() || null)
         : !burnIn() && state.jobId ? { id: state.jobId,
         name: (state.job && state.job.id === state.jobId && (state.job.title || state.job.project)) || "",
-        duration: (state.job && state.job.id === state.jobId && state.job.duration) || 0 } : null,
+        duration: (state.job && state.job.id === state.jobId && state.job.duration) || 0,
+        // The original it was cut from, which is the video held when the app
+        // still has it (dubAgainSource).
+        downloadId: (state.job && state.job.id === state.jobId && state.job.download_id) || "" } : null,
       // A project made of those two: their names over the looks.
       files: !erasing() && burnIn() ? { name: state.job.title || state.job.project, duration: state.job.duration || 0,
                           srt: state.job.srt_name || "" } : null,
