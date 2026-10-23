@@ -1643,11 +1643,11 @@ test("with no video there is no play sign over the panel and the foot's play is 
 // one order, each with its hover text (scriptTable.mjs writes it: what each
 // does depends on the lines); no menu, and no "Proofread" on screen. Beside
 // the line count, what translated the script (B15).
-test("the Script pane's head has Translate again, Remake voices and All at once, and no menu", () => {
+test("the Script pane's head has Retranslate unfit lines, Remake voices and All at once, and no menu", () => {
   const html = readPage();
   const head = html.slice(html.indexOf('id="dubbingPaneHead"'), html.indexOf('id="doneNotice"'));
   assert.match(head, /<span class="m" id="scriptCount"><\/span>\s*<span class="sc-model" id="scriptModel"><\/span>/);
-  assert.match(head, /id="retranslateBtn" type="button">[^]*Translate again<\/button>[^]*id="remakeVoicesBtn" type="button" disabled>[^]*Remake voices<span id="remakeVoicesCount"><\/span><\/button>[^]*id="allAtOnceBtn" type="button">[^]*All at once<\/button>/);
+  assert.match(head, /id="retranslateBtn" type="button">[^]*Retranslate unfit lines<\/button>[^]*id="remakeVoicesBtn" type="button" disabled>[^]*Remake voices<span id="remakeVoicesCount"><\/span><\/button>[^]*id="allAtOnceBtn" type="button">[^]*All at once<\/button>/);
   assert.match(head, /id="scriptChanged" hidden/, "the strip under the head");
   assert.ok(!html.includes("retranslateMenu") && !html.includes("retr-menu"), "no menu");
   const table = readFileSync(new URL("./scriptTable.mjs", import.meta.url), "utf8");

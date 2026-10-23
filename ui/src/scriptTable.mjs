@@ -144,6 +144,11 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
   const freshLines = new Set();
   // The lines ticked for Translate again, on the job on screen.
   const picked = new Set();
+  // The lines that do not fit (red on their row: cut off, or running past
+  // their slot), which the button translates when none is ticked; and the
+  // job whose Translate again is still under way.
+  let unfit = [];
+  let retranslating = null;
   // What the script said about editing this job through Perso (its
   // perso_edit): null on a job Perso never dubbed. While it is available a
   // line's voice is remade by Perso, in the voice Perso dubbed with.
@@ -360,6 +365,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     const clipped = (data.clipped
       || (job && job.id === jobId && job.result && job.result.clipped) || []).filter((c) => c.cut_s >= MIN_CUT);
     const clippedMap = new Map(clipped.map((c) => [c.line, c.cut_s]));
+    unfit = data.lines.filter((l) => lineVerdict(l, clippedMap).kind === "over").map((l) => l.line);
     voicedJob = !isPersoJob() && data.lines.some((l) => l.audio_sec != null);
     // Same rule as scriptRow: what follows the backtick is output, so it keeps
     // the column it had inline rather than stepping in with this file.
@@ -744,19 +750,23 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     }
   }
 
-  // Translate again: the ticked lines, or every line when none is ticked,
-  // translated once more -- by Perso on a Perso project, on any other by the
-  // translator it was dubbed with, or the one picked when ChatGPT stopped it.
-  // Words only: the voices wait for Remake voices.
+  // Translate again: the ticked lines, or the lines that do not fit when none
+  // is ticked (owner, 2026-10-23), translated once more -- by Perso on a Perso
+  // project, on any other by the translator it was dubbed with, or the one
+  // picked when ChatGPT stopped it. Words only: the voices wait for Remake
+  // voices. With nothing ticked and nothing that does not fit, it rests.
   let lineCount = 0;
   function paintPicks() {
     const n = picked.size;
     $("scriptPickCount").textContent = n ? t("{n} selected", { n }) : "";
+    const btn = $("retranslateBtn");
+    btn.disabled = retranslating === scriptJobId || (!n && !unfit.length);
     // What it does, and to which lines, before it is pressed.
-    $("retranslateBtn").title = `${t("Translates again with the same translator, so each line fits the time it has. The voices stay as they are.")} ${
-      !n ? t("With no line selected, every line is translated again.")
-        : n === 1 ? t("Only the selected line is translated again.")
-        : t("Only the {n} selected lines are translated again.", { n })}`;
+    btn.title = `${t("Translates again with the same translator, so each line fits the time it has. The voices stay as they are.")} ${
+      n === 1 ? t("Only the selected line is translated again.")
+        : n ? t("Only the {n} selected lines are translated again.", { n })
+        : unfit.length ? t("With no line selected, only the lines cut off before they end are translated again.")
+        : t("No line is cut off. Select the lines you want translated again.")}`;
     const all = $("scriptBox").querySelector('[data-pick="all"]');
     if (all) all.checked = n > 0 && n === lineCount;
   }
@@ -784,7 +794,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     paintPicks();
   }
   $("retranslateBtn").addEventListener("click", () => retranslate(
-    scriptJobId, picked.size ? [...picked].sort((a, b) => a - b) : null));
+    scriptJobId, picked.size ? [...picked].sort((a, b) => a - b) : [...unfit]));
   $("remakeVoicesBtn").addEventListener("click", () => remakeVoices(scriptJobId));
   $("allAtOnceBtn").addEventListener("click", () => allAtOnce(scriptJobId));
   // `asked`: the same press carried on from a popup or the download dialog,
@@ -800,6 +810,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
       return;
     }
     const btn = $("retranslateBtn");
+    retranslating = jobId;
     btn.disabled = true;
     const job = getJob();
     const by = withTranslator(viaPerso() ? "perso" : (translator || (job && job.id === jobId && job.translator)));
@@ -846,7 +857,8 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
     } catch (e) {
       if (!left(jobId)) scriptSaving(errorText(e));
     } finally {
-      btn.disabled = false;
+      if (retranslating === jobId) retranslating = null;
+      paintPicks();
     }
   }
 

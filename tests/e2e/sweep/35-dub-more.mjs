@@ -1,6 +1,6 @@
 // The finished-dub screen's remaining controls, on the newest local e2e- dub
 // (picked as 30-dub.mjs picks it): the engine line, reverting an edited line,
-// Translate again on every line, a line's block on the timeline, the
+// Retranslate unfit lines with nothing ticked, a line's block on the timeline, the
 // timeline's fit, fold and height, a subtitle block's end, the video pane's
 // width, a 9:16 download, the social media preview, renaming by the title,
 // dragging the subtitle on the picture, and the Audio and Erase tabs inside a
@@ -238,22 +238,34 @@ export const steps = [
         + `revert pressed: API text = the translation again in ${secs(t0)} s, edited false, voice_stale ${after.voice_stale}`;
     } },
 
-  { name: "D7 translate every line again", looks: ["#scriptBox", "#scriptSaving"],
+  { name: "D7 retranslate the unfit lines", looks: ["#scriptBox", "#scriptSaving"],
     async run(app, ctx) {
       const s = ctx.state.dub2;
       await onDub(app, s);
       const before = await script(app, s.jobId);
-      // Nothing ticked: every line goes.
+      // Nothing ticked: only the lines that do not fit (red on their row) go.
       if (await app.inPage(() => document.querySelectorAll("#scriptBox .sc-pick[data-pick]:checked").length)) {
         throw new Error("lines are ticked before Translate again; it would translate those only");
       }
       const count = await app.inPage(textOf, "#scriptPickCount");
       if (count) throw new Error(`"${count}" beside Script with nothing ticked`);
+      const unfit = await app.inPage(() => document.querySelectorAll("#scriptBox .sc-len.sc-v-over").length);
+      const rests = await app.inPage(() => document.querySelector("#retranslateBtn").disabled);
+      // Every line fits: the button rests, and its title says to tick lines.
+      if (!unfit) {
+        if (!rests) throw new Error("every line fits and nothing is ticked, yet the button can be pressed");
+        const title = await app.inPage(() => document.querySelector("#retranslateBtn").title);
+        const want = app.tr("No line is cut off. Select the lines you want translated again.");
+        if (!title.endsWith(want)) throw new Error(`the resting button's title is "${title}"`);
+        return `every line fits, nothing ticked: the button rests, title ends "${want}"`;
+      }
+      if (rests) throw new Error(`${unfit} line(s) do not fit, yet the button rests`);
       const asks = [app.tr("1 line you edited will be replaced by the new translation too. Press again to go ahead."),
         ...[2, 3].map((n) => app.tr("{n} lines you edited will be replaced by the new translation too. Press again to go ahead.", { n }))];
-      // The page's own word for it while it works: every line, not some.
-      const rx = (w) => new RegExp(`^${w.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace("{with}", ".+")}$`);
-      const allLines = [rx(app.tr("Translating all lines {with}…")), rx(app.tr("Translating all lines…"))];
+      // The page's own word for it while it works: as many lines as are red.
+      const rx = (w) => new RegExp(`^${w.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace("{with}", ".+").replace("{n}", String(unfit))}$`);
+      const allLines = unfit === 1 ? [rx(app.tr("Translating 1 line {with}…")), rx(app.tr("Translating 1 line…"))]
+        : [rx(app.tr("Translating {n} lines {with}…")), rx(app.tr("Translating {n} lines…"))];
       const t0 = Date.now();
       await app.click("#retranslateBtn");
       let presses = 1;
@@ -270,11 +282,13 @@ export const steps = [
         });
       }
       const going = said.slice(6);
-      if (!allLines.some((r) => r.test(going))) throw new Error(`Translate again with nothing ticked said "${going}", not all lines`);
-      const end = await app.waitFor("Translate again to finish", 120000, () => {
-        if (document.querySelector("#retranslateBtn").disabled) return null;
-        return document.querySelector("#scriptSaving").textContent.trim() || "(cleared)";
-      });
+      if (!allLines.some((r) => r.test(going))) throw new Error(`Translate again with nothing ticked said "${going}", not the ${unfit} unfit line(s)`);
+      // Done once the working words are gone (the button may rest after: no
+      // line left that does not fit).
+      const end = await app.waitFor("Translate again to finish", 120000, (w) => {
+        const text = document.querySelector("#scriptSaving").textContent.trim();
+        return text === w ? null : text || "(cleared)";
+      }, going);
       const after = await script(app, s.jobId);
       const changed = after.filter((l, i) => l.text !== before[i].text).map((l) => l.line);
       const n = changed.length;
@@ -294,7 +308,7 @@ export const steps = [
       const back = await script(app, s.jobId);
       const off = back.filter((l, i) => l.text !== before[i].text || l.voice_stale !== before[i].voice_stale).map((l) => l.line);
       if (off.length) throw new Error(`line(s) ${off.join(", ")} did not come back as they were`);
-      return `nothing ticked, ${presses} press(es)${presses === 2 ? " (hand-edited lines asked first)" : ""}; page said "${going}"; `
+      return `nothing ticked, ${unfit} unfit, ${presses} press(es)${presses === 2 ? " (hand-edited lines asked first)" : ""}; page said "${going}"; `
         + `${changed.length} of 3 lines changed in ${secs(t0)} s (${changed.map((ln) => `${ln}: "${before[ln - 1].text}" → "${after[ln - 1].text}"`).join("; ") || "same words"}); `
         + `end "${end}"; reverted ${changed.length}, script and voice_stale as before`;
     } },

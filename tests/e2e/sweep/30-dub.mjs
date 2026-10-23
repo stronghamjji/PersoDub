@@ -255,7 +255,7 @@ export const steps = [
         return l.text !== before.text ? l : null;
       });
       await app.waitFor("the row to show the new words", 10000, (sel, w) => document.querySelector(sel).textContent === w, `${row(2)} .sc-dst`, after.text);
-      return `ticked line 2 ("${picked}"), ${app.tr("Translate again")}${first === "ask" ? " pressed twice (it was hand-edited)" : ""}: `
+      return `ticked line 2 ("${picked}"), ${app.tr("Retranslate unfit lines")}${first === "ask" ? " pressed twice (it was hand-edited)" : ""}: `
         + `"${before.text}" → "${after.text}" in ${secs(t0)} s, voice_stale ${after.voice_stale}`;
     } },
 

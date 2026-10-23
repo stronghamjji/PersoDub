@@ -21,7 +21,7 @@ const words = () => [
   // Home and New project move between the tab row and the top bar.
   ["#homeBtn span", t("Home")],
   ["#newProjectBtn span", t("New project")],
-  ["#retranslateBtn", t("Translate again")],
+  ["#retranslateBtn", t("Retranslate unfit lines")],
   ["#remakeVoicesBtn", t("Remake voices")],
   ["#allAtOnceBtn", t("All at once")],
   ["#tabAudio .erase-desc", t("Splits the sound into voice and background.")],

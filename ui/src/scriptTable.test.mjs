@@ -959,9 +959,11 @@ test("Translate again sends the chosen lines, changes words only and says how ma
   assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":null}'));
 });
 
-test("the Translate again button sends the ticked lines, or every line when none is ticked", async (t) => {
-  const h = harness({ responses: {
-    [SCRIPT]: ok({ lines: [line(1), line(2), line(3)] }),
+test("the Translate again button sends the ticked lines, or the lines that do not fit when none is ticked", async (t) => {
+  const h = harness({ job: { id: "j1", result: { clipped: [{ line: 1, cut_s: 0.4 }] } }, responses: {
+    // Line 1 was cut off by the assembly, line 2 runs half a second past its
+    // slot, line 3 fits.
+    [SCRIPT]: ok({ lines: [line(1), line(2, { audio_sec: 1.5 }), line(3)] }),
     "/api/dub/jobs/j1/retranslate": ok({ changed: [] }),
   } });
   t.after(h.log.restore);
@@ -972,7 +974,7 @@ test("the Translate again button sends the ticked lines, or every line when none
   await h.api.renderScript("j1");
 
   await h.$("retranslateBtn").fire("click");
-  assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":null}'));
+  assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":[1,2]}'));
   assert.equal(h.$("scriptSaving").textContent, "Same words. Nothing changed.");
 
   tick.checked = true;
@@ -980,6 +982,36 @@ test("the Translate again button sends the ticked lines, or every line when none
   assert.equal(h.$("scriptPickCount").textContent, "1 selected");
   await h.$("retranslateBtn").fire("click");
   assert.ok(h.log.calls.includes('POST /api/dub/jobs/j1/retranslate {"lines":[3]}'));
+});
+
+test("with every line fitting and none ticked, Translate again rests until a line is ticked", async (t) => {
+  let answer;
+  const h = harness({ responses: {
+    [SCRIPT]: ok({ lines: [line(1), line(2)] }),
+    "/api/dub/jobs/j1/retranslate": () => new Promise((res) => { answer = res; }),
+  } });
+  t.after(h.log.restore);
+  const tick = makeButton("pick2", { pick: "2" });
+  tick.row = bindClassList(makeEl("row2"));
+  tick.row.classList.toggle = () => {};
+  h.$("scriptBox").qs[".sc-pick"] = [tick];
+  await h.api.renderScript("j1");
+  assert.equal(h.$("retranslateBtn").disabled, true);
+  assert.match(h.$("retranslateBtn").title, /No line is cut off\. Select the lines you want translated again\.$/);
+
+  tick.checked = true;
+  await tick.listeners.change.at(-1)();
+  assert.equal(h.$("retranslateBtn").disabled, false);
+  // Ticking another line while it works does not wake it.
+  const going = h.api.retranslate("j1", [2]);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(h.$("retranslateBtn").disabled, true);
+  await tick.listeners.change.at(-1)();
+  assert.equal(h.$("retranslateBtn").disabled, true);
+  answer(ok({ changed: [] }));
+  await going;
+  // Done, and the tick was cleared with the redraw: nothing to do, so it rests.
+  assert.equal(h.$("retranslateBtn").disabled, true);
 });
 
 // B2, B3: what Translate again does, and to which lines, on the button itself.
@@ -995,7 +1027,7 @@ test("Translate again says what it does and which lines it will translate", asyn
   h.$("scriptBox").qs[".sc-pick"] = ticks;
   await h.api.renderScript("j1");
   const does = "Translates again with the same translator, so each line fits the time it has. The voices stay as they are.";
-  assert.equal(h.$("retranslateBtn").title, `${does} With no line selected, every line is translated again.`);
+  assert.equal(h.$("retranslateBtn").title, `${does} No line is cut off. Select the lines you want translated again.`);
   ticks[0].checked = true;
   await ticks[0].listeners.change.at(-1)();
   assert.equal(h.$("retranslateBtn").title, `${does} Only the selected line is translated again.`);
@@ -1031,7 +1063,8 @@ test("Translate again asks once before it writes over lines edited by hand", asy
 
 test("a Translate again the server refuses says why", async (t) => {
   const h = harness({ responses: {
-    [SCRIPT]: ok({ lines: [line(1)] }),
+    // Too long, so the button has a line to translate when it comes back.
+    [SCRIPT]: ok({ lines: [line(1, { audio_sec: 1.5 })] }),
     "/api/dub/jobs/j1/retranslate": bad("Could not translate those lines again."),
   } });
   t.after(h.log.restore);
@@ -1059,7 +1092,7 @@ test("Translate again names the translator the project was dubbed with", async (
 
 test("ChatGPT at its limit opens the dubbing's popup, and a pick translates the same lines with it", async (t) => {
   const h = harness({ job: { id: "j1", translator: "chatgpt" }, responses: {
-    [SCRIPT]: ok({ lines: [line(1), line(2)] }),
+    [SCRIPT]: ok({ lines: [line(1), line(2, { audio_sec: 1.5 })] }),
     "/api/dub/jobs/j1/retranslate": answer(429, "ChatGPT usage limit reached. Resets Oct 24, 1:07 PM."),
   } });
   t.after(h.log.restore);
@@ -1615,7 +1648,7 @@ test("a Translate again that answers after another project was opened draws noth
   let answer;
   const h = harness({ responses: {
     [SCRIPT]: ok({ lines: [line(1), line(2)] }),
-    "/api/dub/jobs/j2/script": ok({ lines: [line(1, { text: "Other project" })] }),
+    "/api/dub/jobs/j2/script": ok({ lines: [line(1, { text: "Other project", audio_sec: 1.5 })] }),
     "/api/dub/jobs/j1/retranslate": () => new Promise((res) => { answer = res; }),
   } });
   t.after(h.log.restore);
