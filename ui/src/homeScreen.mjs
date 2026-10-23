@@ -379,11 +379,12 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
     btn.setAttribute("aria-expanded", String(!folded));
     btn.innerHTML = `${lucide(folded ? "chevron-down" : "chevron-up", 12)}<span>${t(folded ? "Expand" : "Collapse")}</span>`;
   }
-  $("projectFoldBtn").addEventListener("click", () => {
-    folded = !folded;
+  function setFolded(on) {
+    folded = on;
     try { if (storage) storage.setItem(FOLD_KEY, folded ? "1" : "0"); } catch { /* private window */ }
     paintFold();
-  });
+  }
+  $("projectFoldBtn").addEventListener("click", () => setFolded(!folded));
   paintFold();
 
   // -- search ------------------------------------------------------------
@@ -398,6 +399,8 @@ export function initHomeScreen({ $, langName, onOpenJob, onDeleteJob, onError = 
       const box = $("projectSearchBox");
       if (!box.hidden) { closeSearch(); return; }
       box.hidden = false;
+      // What is found has to be on show.
+      if (folded) setFolded(false);
       if ($("projectSearchInput").focus) $("projectSearchInput").focus();
     });
   }

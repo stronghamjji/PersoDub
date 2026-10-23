@@ -600,3 +600,18 @@ test("Collapse folds the grid away and Expand brings it back, remembered for the
   bare.$("projectFoldBtn").fire("click");
   assert.equal(bare.$("projectsGrid").hidden, true);
 });
+
+// Searching a folded list shows nothing to find: opening the search unfolds it.
+test("opening the search unfolds a folded grid", (t) => {
+  const kept = new Map([[FOLD_KEY, "1"]]);
+  const storage = { getItem: (k) => (kept.has(k) ? kept.get(k) : null), setItem: (k, v) => kept.set(k, v) };
+  const h = harness({ storage });
+  t.after(h.log.restore);
+  assert.equal(h.$("projectsGrid").hidden, true);
+  h.$("projectSearchBox").hidden = true;
+  h.$("projectSearchBtn").fire("click");
+  assert.equal(h.$("projectSearchBox").hidden, false);
+  assert.equal(h.$("projectsGrid").hidden, false);
+  assert.match(h.$("projectFoldBtn").innerHTML, /<span>Collapse<\/span>$/);
+  assert.equal(kept.get(FOLD_KEY), "0");
+});
