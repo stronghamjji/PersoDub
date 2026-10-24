@@ -23,7 +23,8 @@ const row2 = `#scriptBox .sc-row[data-line="2"] .sc-dst`;
 const script = (app, jid) => app.api(`/api/dub/jobs/${jid}/script`).then((d) => d.lines || []);
 const secs = (t0) => ((Date.now() - t0) / 1000).toFixed(1);
 // An address or a home folder never goes into a note; an answer is trimmed to 80.
-const clean = (s) => String(s).replace(/[^\s@"'<>]+@[^\s@"'<>]+\.[A-Za-z]{2,}/g, "<account>").replace(/\/Users\/[^/\s]+/g, "~");
+const clean = (s) => String(s).replace(/[^\s@"'<>]+@[^\s@"'<>]+\.[A-Za-z]{2,}/g, "<account>").replace(/\/Users\/[^/\s]+/g, "~")
+  .replace(/[A-Za-z]:\\Users\\[^\\\s]+/gi, "~");
 const said = (s) => { const c = clean(s).replace(/\s+/g, " ").trim(); return c.length > 80 ? `${c.slice(0, 79)}…` : c; };
 const turnOn = () => document.body.dataset.agentTurn === "on";
 

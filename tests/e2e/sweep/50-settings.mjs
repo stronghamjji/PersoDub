@@ -29,7 +29,8 @@ const USER_TEXT = [".proj-name", ".proj-rename", "#topbarTitle", "#topbarForward
   "#assistantLog", "#assistantState", "#draftPartCard", "#homeBannerLink"].join(",");
 
 // An address or a home folder never goes into a note.
-const clean = (s) => String(s).replace(/[^\s@"'<>]+@[^\s@"'<>]+\.[A-Za-z]{2,}/g, "<account>").replace(/\/Users\/[^/\s]+/g, "~");
+const clean = (s) => String(s).replace(/[^\s@"'<>]+@[^\s@"'<>]+\.[A-Za-z]{2,}/g, "<account>").replace(/\/Users\/[^/\s]+/g, "~")
+  .replace(/[A-Za-z]:\\Users\\[^\\\s]+/gi, "~");
 const either = (app, key, values) => [key.replace(/\{(\w+)\}/g, (_, k) => values?.[k] ?? `{${k}}`), app.tr(key, values)];
 
 // waitFor that lives through a page starting again: a question asked while

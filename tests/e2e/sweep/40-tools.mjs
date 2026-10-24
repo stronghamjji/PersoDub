@@ -16,7 +16,7 @@
 // someone else's ahead of it is waiting, not this tab being slow.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { homedir } from "node:os";
 import { sleep, shown, onHome, textOf } from "../lib/cdp.mjs";
 
@@ -45,18 +45,22 @@ function frame(path, at) {
   return r.stdout;
 }
 
+// Whether `p` is somewhere under Downloads, judged by path.relative, which
+// takes Windows' backslashes and drive letters (in either case) as they are.
+const inDownloads = (p) => { const r = relative(DOWNLOADS, p); return !!r && !r.startsWith("..") && !isAbsolute(r); };
+
 // Files the run saved, out of Downloads and into <out>/<into>; only files
 // under Downloads, and their folders only when that leaves them empty.
 function moveOut(ctx, paths, into) {
   mkdirSync(join(ctx.out, into), { recursive: true });
   return paths.map((p) => {
-    if (!p.startsWith(DOWNLOADS + "/")) throw new Error(`${p} is not in Downloads; left alone`);
+    if (!inDownloads(p)) throw new Error(`${p} is not in Downloads; left alone`);
     const size = statSync(p).size;
     if (!size) throw new Error(`${basename(p)} was saved empty`);
     const to = join(ctx.out, into, basename(p));
     copyFileSync(p, to);
     unlinkSync(p);
-    for (let d = dirname(p); d !== DOWNLOADS && d.startsWith(DOWNLOADS); d = dirname(d)) {
+    for (let d = dirname(p); inDownloads(d); d = dirname(d)) {
       try { rmdirSync(d); } catch { break; }
     }
     return { name: basename(p), path: to, size };
