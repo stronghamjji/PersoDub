@@ -127,9 +127,12 @@ export function initCaptionsTab({ $, styles, getView, onPick, onShow,
     styleBtn.setAttribute("aria-expanded", "false");
   }
   // Above the chip, 8px clear of it, centred on it and kept inside the panel.
+  // No taller than the room above the chip, so in a small window it scrolls
+  // inside itself rather than covering the chip (Windows 1280x800, 2026-10-24).
   function place() {
     const chip = styleBtn.getBoundingClientRect();
     const pane = pop.offsetParent.getBoundingClientRect();
+    pop.style.maxHeight = Math.max(80, chip.top - pane.top - 16) + "px";
     const left = chip.left + chip.width / 2 - pane.left - pop.offsetWidth / 2;
     pop.style.left = Math.max(8, Math.min(left, pane.width - pop.offsetWidth - 8)) + "px";
     pop.style.top = Math.max(8, chip.top - pane.top - pop.offsetHeight - 8) + "px";

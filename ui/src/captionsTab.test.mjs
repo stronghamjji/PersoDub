@@ -185,6 +185,7 @@ test("the chip's looks open above it, centred on it and inside the panel", () =>
   h.$("subStyleChip").rect = { left: 280, top: 300, width: 100, height: 26 };
   h.press("subStyleChip");
   assert.equal(h.$("videoStylePop").style.top, "92px", "300 - 200 - 8");
+  assert.equal(h.$("videoStylePop").style.maxHeight, "284px", "the room above the chip, 300 - 16");
   assert.equal(h.$("videoStylePop").style.left, "50px", "centred on the chip at 330");
   h.press("subStyleChip");
   // A chip at the panel's right edge and near its top.
@@ -192,6 +193,8 @@ test("the chip's looks open above it, centred on it and inside the panel", () =>
   h.press("subStyleChip");
   assert.equal(h.$("videoStylePop").style.left, "232px", "800 - 560 - 8");
   assert.equal(h.$("videoStylePop").style.top, "8px");
+  // Too little room for the whole window: it is cut to the room and scrolls.
+  assert.equal(h.$("videoStylePop").style.maxHeight, "104px", "120 - 16");
 });
 
 test("a look picked over the video is the tab's own pick, and it shuts the panel", () => {
