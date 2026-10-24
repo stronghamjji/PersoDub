@@ -3,8 +3,9 @@
 // the middle of a dub's voices so the dub fails (R7), Resume on that failure
 // (R8), Start over on a stopped dub (R9), the Home cards of both, and the app
 // left with its engine up. Only the voice engine of the kit the app on the
-// control port runs from is killed, found with `ps` (macOS and Linux), and
-// only while no one else's job is running or queued. Local dubs only.
+// control port runs from is killed, found with `ps` (macOS and Linux) or
+// PowerShell's process list and taskkill (Windows), and only while no one
+// else's job is running or queued. Local dubs only.
 //
 // A desktop app run from the repository has no bundled files, and its shell
 // then refuses to start a dead engine again ("no bundled files to install
@@ -17,13 +18,19 @@ import { copyFileSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { sleep, shown, onHome, textOf } from "../lib/cdp.mjs";
+import { sleep, shown, onHome, textOf, Skip } from "../lib/cdp.mjs";
 
 export const area = "recovery";
 
 const CHOICES_KEY = "persodub.lastChoices";
 const BUSY = ["running", "queued", "cancelling"];
-const BACKEND = "/app_venv/bin/uvicorn app.main:app";
+const WIN = process.platform === "win32";
+// The backend's and the voice engine's command lines after the kit's folder:
+// a venv's bin/uvicorn, or on Windows its Scripts\uvicorn.exe.
+const BACKEND = WIN ? "\\app_venv\\Scripts\\uvicorn.exe app.main:app" : "/app_venv/bin/uvicorn app.main:app";
+const ENGINE = WIN ? "\\engines_venv\\Scripts\\uvicorn.exe server:app" : "/engines_venv/bin/uvicorn server:app";
+const INSTALLED = WIN ? join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "PersoDub")
+  : join(homedir(), "Library", "Application Support", "PersoDub");
 const secs = (t0) => Math.round((Date.now() - t0) / 1000);
 
 async function until(what, ms, test) {
@@ -36,11 +43,25 @@ async function until(what, ms, test) {
   }
 }
 
+// Every process as "pid ppid command line". Windows has no ps: PowerShell
+// lists them, in UTF-8 so a Korean folder name comes through, and the quotes
+// around a path with a space are dropped so a command line reads as on macOS.
 function psLines() {
-  const r = spawnSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" });
-  if (r.status !== 0) throw new Error("ps did not run; this area needs macOS or Linux");
-  return r.stdout.split("\n").map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter(Boolean)
+  const r = WIN
+    ? spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", "[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
+      + "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, $_.CommandLine }"],
+                { encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024 })
+    : spawnSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" });
+  if (r.status !== 0) throw new Skip(WIN ? "PowerShell's process list (Get-CimInstance Win32_Process) did not run" : "ps did not run");
+  return (WIN ? r.stdout.replace(/"/g, "") : r.stdout).split(/\r?\n/).map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter(Boolean)
     .map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), cmd: m[3] }));
+}
+
+// Gone at once, the way a crash ends it. On Windows the program started is a
+// launcher (uvicorn.exe) with Python under it, so its whole tree goes.
+function killNow(pid) {
+  if (WIN) spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+  else process.kill(pid, "SIGKILL");
 }
 
 // The kit the backend on the app's port runs from (<kit>/app_venv/bin/uvicorn),
@@ -48,16 +69,19 @@ function psLines() {
 // this area's to kill in.
 function kitOf(app) {
   const port = new URL(app.origin).port;
-  const line = psLines().find(({ cmd }) => cmd.includes(BACKEND) && new RegExp(`--port ${port}(\\s|$)`).test(cmd));
-  if (!line) throw new Error(`no backend on port ${port} in ps`);
+  const lines = psLines().filter(({ cmd }) => cmd.includes(BACKEND) && new RegExp(`--port ${port}(\\s|$)`).test(cmd));
+  // The topmost of them: on Windows the launcher's Python child says the same.
+  const line = lines.find((l) => !lines.some((o) => o.pid === l.ppid));
+  if (!line) throw new Error(`no backend on port ${port} in the process list`);
   const head = line.cmd.slice(0, line.cmd.indexOf(BACKEND));
-  const kit = head.slice(head.lastIndexOf(" /") + 1);
-  if (kit === join(homedir(), "Library", "Application Support", "PersoDub")) {
-    throw new Error(`the app on port ${port} runs from the installed app's kit; this area runs against a test kit only`);
+  // The path that ends there: from its drive letter on Windows, from its "/" elsewhere.
+  const kit = WIN ? head.replace(/^.*(?:^|\s)(?=[A-Za-z]:\\)/, "") : head.slice(head.lastIndexOf(" /") + 1);
+  if (WIN ? kit.toLowerCase() === INSTALLED.toLowerCase() : kit === INSTALLED) {
+    throw new Skip(`the app on port ${port} runs from the installed app's kit; this area runs against a test kit only`);
   }
   return { kit, shell: line.ppid };
 }
-const enginePids = (kit) => psLines().filter(({ cmd }) => cmd.includes(`${kit}/engines_venv/bin/uvicorn server:app`)).map((p) => p.pid);
+const enginePids = (kit) => psLines().filter(({ cmd }) => cmd.includes(`${kit}${ENGINE}`)).map((p) => p.pid);
 function runtimeOf(kit) {
   try { return JSON.parse(readFileSync(join(kit, "runtime.json"), "utf8")); } catch { return {}; }
 }
@@ -84,7 +108,7 @@ async function killEngine(app, k, mine = []) {
   await othersIdle(app, mine);
   const { pid } = await engine(app, k);
   if (!pid || !enginePids(kit).includes(pid)) throw new Error(`runtime.json names engine ${pid || "none"}, ps shows ${enginePids(kit).join(", ") || "none"}`);
-  process.kill(pid, "SIGKILL");
+  killNow(pid);
   await until(`engine ${pid} to be gone`, 10000, () => !enginePids(kit).includes(pid));
   return pid;
 }
@@ -97,7 +121,7 @@ async function keeperStart(app, k, out) {
   if (enginePids(k.kit).length) throw new Error(`an engine of this kit is running already (${enginePids(k.kit).join(", ")})`);
   const fd = openSync(join(out, "keep-engine.log"), "a");
   spawn(process.execPath, [fileURLToPath(import.meta.url), "--keep-engine", k.kit, String(k.shell)],
-        { detached: true, stdio: ["ignore", fd, fd] }).unref();
+        { detached: true, windowsHide: true, stdio: ["ignore", fd, fd] }).unref();
   return engineUp(app, k, 180000);
 }
 
@@ -212,9 +236,11 @@ async function waitDone(app, id, ms) {
   return secs(t0);
 }
 
+// What an earlier step made; skipped when it did not get that far, since that
+// step's own failure (or skip) already says why.
 function need(ctx, key, what) {
   const s = ctx.state.recovery;
-  if (!s || !s[key]) throw new Error(`no ${what} from an earlier step`);
+  if (!s || !s[key]) throw new Skip(`no ${what} from an earlier step`);
   return s;
 }
 
@@ -385,7 +411,12 @@ async function keepEngine(kit, shellPid) {
     writeRuntime(kit, { tts_state: "starting" });
     const port = await getFreePort();
     const [cmd, ...args] = sidecarArgv(kit, port);
-    const child = spawn(cmd, args, { cwd: join(kit, "sidecar"), env, detached: true, stdio: ["ignore", "inherit", "inherit"] });
+    const child = spawn(cmd, args, { cwd: join(kit, "sidecar"), env, detached: true, windowsHide: true, stdio: ["ignore", "inherit", "inherit"] });
+    // Its process group on macOS and Linux; on Windows taskkill takes the tree.
+    const stop = (signal) => {
+      if (WIN) spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+      else try { process.kill(-child.pid, signal); } catch { /* gone */ }
+    };
     const ended = new Promise((ok) => child.once("exit", (code, signal) => ok(code ?? signal)));
     let done = null;
     ended.then((v) => { done = v; });
@@ -395,14 +426,14 @@ async function keepEngine(kit, shellPid) {
     if (!up || done !== null) {
       writeRuntime(kit, { tts_state: "failed" });
       say(`engine FAILED (${done ?? "no answer"})`);
-      try { process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ }
+      stop("SIGKILL");
       return;
     }
     writeRuntime(kit, { tts_url: `http://127.0.0.1:${port}`, tts_pid: child.pid });
     clearRuntime(kit, ["tts_state", "tts_failure"]);
     say(`engine READY pid ${child.pid}`);
     const watch = setInterval(() => {
-      try { process.kill(shellPid, 0); } catch { try { process.kill(-child.pid, "SIGTERM"); } catch { /* gone */ } }
+      try { process.kill(shellPid, 0); } catch { stop("SIGTERM"); }
     }, 10000);
     const how = await ended;
     clearInterval(watch);
