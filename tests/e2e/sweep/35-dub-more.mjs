@@ -12,6 +12,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, rmdirSync, statSync, 
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { sleep, shown, pressable, isOpen, isClosed, onHome, textOf } from "../lib/cdp.mjs";
+import { translatorLabel } from "../../../ui/src/dubApi.mjs";
 
 export const area = "dub2";
 
@@ -205,7 +206,10 @@ export const steps = [
         return by && !note.hidden && note.textContent.trim() ? { by, note: note.textContent.trim() } : null;
       });
       if (!got.by.toLowerCase().includes(String(job.translator).toLowerCase())) throw new Error(`#scriptModel says "${got.by}", the job's translator is ${job.translator}`);
-      if (job.translator_model && !got.by.includes(job.translator_model)) throw new Error(`#scriptModel says "${got.by}" without the model ${job.translator_model}`);
+      // The model as the page names it (ui/src/dubApi.mjs): its id in brackets
+      // ("ChatGPT (gpt-5.6-luna)"), or a name that says it ("Hunyuan 1.8B" for hy-mt2:1.8b).
+      const want = `${app.tr("Translation")} ${translatorLabel(job)}`;
+      if (got.by !== want) throw new Error(`#scriptModel says "${got.by}", not "${want}" for ${job.translator} ${job.translator_model || "(no model)"}`);
       const [langs, ...engines] = got.note.split(" · ");
       if (!langs.includes("→")) throw new Error(`the engine line starts "${langs}", not the two languages`);
       if (engines.length < 3) throw new Error(`the engine line names ${engines.length} engines: "${got.note}"`);
