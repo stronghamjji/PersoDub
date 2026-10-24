@@ -53,6 +53,13 @@ for (const m of modules) {
     }
     row.seconds = Math.round((Date.now() - t0) / 100) / 10;
     try { row.shot = await app.shot(tag); } catch { /* no picture */ }
+    // Pictured as it was left; then put away, so one failure is not the next step's too.
+    if (row.result !== "pass") {
+      try {
+        const left = await app.putAway();
+        if (left.length) row.note += ` (closed after it: ${left.join(", ")})`;
+      } catch (e) { row.note += ` (could not close what it left open: ${e.message})`; }
+    }
     results.push(row);
     console.log(`${{ pass: "ok  ", skip: "skip", fail: "FAIL" }[row.result]} ${m.area} · ${step.name} · ${row.seconds}s · ${row.note.slice(0, 120)}`);
     if (row.result !== "pass" && step.stopsArea) {

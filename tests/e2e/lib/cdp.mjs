@@ -161,6 +161,28 @@ export async function connect({ port = 9333, out = "." } = {}) {
     writeFileSync(join(out, `${name}.png`), Buffer.from(data, "base64"));
     return `${name}.png`;
   }
+  // What a failed step may leave open over the next step's buttons: the
+  // ChatGPT sign-in, the Download dialog, the subtitle looks. Each is closed
+  // the way a person closes it; returns the ones that were open.
+  async function putAway() {
+    const left = [];
+    if (await inPage(isOpen, "#chatgptSignInOverlay")) {
+      left.push("#chatgptSignInOverlay");
+      await click("#csCancel");
+      await waitFor("the sign-in window to close", 5000, isClosed, "#chatgptSignInOverlay");
+    }
+    if (await inPage(isOpen, "#exportOverlay")) {
+      left.push("#exportOverlay");
+      await click("#exportCloseBtn", 120000);   // dim while a download is being saved
+      await waitFor("the Download dialog to close", 5000, isClosed, "#exportOverlay");
+    }
+    if (await inPage(() => !document.querySelector("#videoStylePop").hidden)) {
+      left.push("#videoStylePop");
+      await key("Escape");
+      await waitFor("the looks to close", 5000, () => document.querySelector("#videoStylePop").hidden);
+    }
+    return left;
+  }
   // The first of the named areas that is on screen, trimmed, for a failed step's report.
   const snippet = (looks) => inPage((sels) => {
     const els = sels.map((s) => document.querySelector(s)).filter(Boolean);
@@ -177,6 +199,6 @@ export async function connect({ port = 9333, out = "." } = {}) {
     : await (await fetch(`${origin}/i18n/ui.${page.lang}.json`, { signal: AbortSignal.timeout(10000) })).json();
   const tr = (key, values = {}) => (Object.hasOwn(words, key) ? words[key] : key).replace(/\{(\w+)\}/g, (_, k) => (k in values ? values[k] : `{${k}}`));
 
-  return { origin, page, send, nextEvent, js, inPage, waitFor, api, click, key, type, choose, feed, shot, snippet, tr,
+  return { origin, page, send, nextEvent, js, inPage, waitFor, api, click, key, type, choose, feed, shot, snippet, tr, putAway,
            close: () => ws.close() };
 }
