@@ -60,7 +60,7 @@ def test_translate_failure_says_what_to_do_and_logs_the_type_not_the_message(mon
         def translate(self, *a, **kw):
             raise RuntimeError("upstream said: " + SECRET)
 
-    monkeypatch.setattr(misc_api, "translator", Broken())
+    monkeypatch.setattr(misc_api, "get_translator", lambda engine=None: Broken())
     r = client.post("/api/translate", json={"texts": ["hi"], "target_lang": "Korean"})
     assert r.status_code == 500
     assert SECRET not in r.text

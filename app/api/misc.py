@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app import engines_status, languages, room
+from app import setup as dub_setup
 from app.engines.base import (
     SynthesisRequest,
     get_engine,
@@ -41,10 +42,6 @@ from app.translate import get_translator
 logger = logging.getLogger("persodub.api.misc")
 
 router = APIRouter()
-
-# Translator (selects Ollama/Gemini based on the TRANSLATE_ENGINE setting)
-translator = get_translator()
-
 
 # --- Speaking one line, and what can speak it -------------------------------
 
@@ -259,9 +256,12 @@ class TranslateRequest(BaseModel):
 
 @router.post("/api/translate")
 def translate_api(body: TranslateRequest):
-    """Translate multiple dialogue lines into the target language (Gemini)."""
+    """Translate multiple dialogue lines into the target language, with the
+    translator a dub would use now. It was picked once at startup, from
+    TRANSLATE_ENGINE alone, so a fresh install without ChatGPT sign-in failed
+    here (500) while its dubs translated with Hunyuan (Windows e2e, 2026-10-24)."""
     try:
-        out = translator.translate(
+        out = get_translator(dub_setup.default_for("translator")).translate(
             body.texts, body.target_lang, body.source_lang, body.durations
         )
     except Exception as e:
