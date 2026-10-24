@@ -2,7 +2,8 @@
 // person does, one area module after another, against the running app. Each
 // module in tests/e2e/sweep/ exports `area` (a name) and `steps`, an array of
 // { name, run(app, ctx) } where run returns a one-line note on success and
-// throws on failure. Not part of any test suite: needs the app on a control port.
+// throws on failure, or throws Skip (lib/cdp.mjs) when this computer cannot
+// run it. Not part of any test suite: needs the app on a control port.
 //
 //   node tests/e2e/sweep.mjs --video <clip> [--srt <file>] [--out <folder>] [--port 9333] [--only home,settings]
 //
@@ -11,7 +12,7 @@ import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { connect } from "./lib/cdp.mjs";
+import { connect, Skip } from "./lib/cdp.mjs";
 
 const { values: opt } = parseArgs({ options: {
   video: { type: "string" }, srt: { type: "string" }, out: { type: "string" }, port: { type: "string", default: "9333" },
@@ -46,15 +47,15 @@ for (const m of modules) {
     try {
       row.note = (await step.run(app, ctx)) || "";
     } catch (e) {
-      row.result = "fail";
+      row.result = e instanceof Skip ? "skip" : "fail";
       row.note = e.message;
-      try { row.html = await app.snippet(step.looks || ["body"]); } catch { /* the page is gone */ }
+      if (row.result === "fail") try { row.html = await app.snippet(step.looks || ["body"]); } catch { /* the page is gone */ }
     }
     row.seconds = Math.round((Date.now() - t0) / 100) / 10;
     try { row.shot = await app.shot(tag); } catch { /* no picture */ }
     results.push(row);
-    console.log(`${row.result === "pass" ? "ok  " : "FAIL"} ${m.area} · ${step.name} · ${row.seconds}s · ${row.note.slice(0, 120)}`);
-    if (row.result === "fail" && step.stopsArea) {
+    console.log(`${{ pass: "ok  ", skip: "skip", fail: "FAIL" }[row.result]} ${m.area} · ${step.name} · ${row.seconds}s · ${row.note.slice(0, 120)}`);
+    if (row.result !== "pass" && step.stopsArea) {
       for (const rest of m.steps.slice(m.steps.indexOf(step) + 1)) results.push({ area: m.area, step: rest.name, result: "not run", seconds: 0, note: "", shot: "" });
       break;
     }
@@ -63,11 +64,12 @@ for (const m of modules) {
 app.close();
 const passed = results.filter((r) => r.result === "pass").length;
 const failed = results.filter((r) => r.result === "fail").length;
+const skipped = results.filter((r) => r.result === "skip").length;
 const md = [
   "# PersoDub functional sweep", "",
   `- Run: ${clock(startedAt)} to ${clock()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}), ${Math.round((Date.now() - startedAt) / 1000)} s`,
   `- App: ${app.origin}, page in ${app.page.lang}, ${app.page.width}x${app.page.height}`,
-  `- Result: ${failed ? "FAIL" : "PASS"}, ${passed} of ${results.length} steps passed (${failed} failed)`, "",
+  `- Result: ${failed ? "FAIL" : "PASS"}, ${passed} of ${results.length} steps passed (${failed} failed, ${skipped} skipped)`, "",
   "| # | Area | Step | Result | Seconds | Note |", "|---|---|---|---|---:|---|",
   ...results.map((r, i) => `| ${i + 1} | ${r.area} | ${r.shot ? `[${r.step}](${r.shot})` : r.step} | ${r.result} | ${r.seconds} | ${r.note.replace(/\|/g, "/")} |`),
   "",

@@ -11,6 +11,10 @@ import { join } from "node:path";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Thrown by a step this computer cannot run (not signed in, a model not
+// installed): the report says skipped, with the reason, not failed.
+export class Skip extends Error {}
+
 // Page-side predicates, sent as source: they may use only their arguments and the page's globals.
 export const shown = (s) => { const el = document.querySelector(s); return !!el && el.getClientRects().length > 0; };
 export const pressable = (s) => { const el = document.querySelector(s); return !!el && el.getClientRects().length > 0 && !el.disabled; };
