@@ -68,7 +68,7 @@
   "No file.": "No file.",
   "No script was recorded for this project, so its voices cannot be made again.": "No script was recorded for this project, so its voices cannot be made again.",
   "No script was recorded for this project.": "No script was recorded for this project.",
-  "No speech was found in this video. Check that someone is speaking in it.": "No speech was found in this video. Check that someone is speaking in it.",
+  "This video has no speech.": "This video has no speech.",
   "No subtitle file to lay on. Extract subtitles first, or name an .srt file.": "No subtitle file to lay on. Extract subtitles first, or name an .srt file.",
   "No subtitles were found in that area. Move the box and try again.": "No subtitles were found in that area. Move the box and try again.",
   "No such audio.": "No such audio.",

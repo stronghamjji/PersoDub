@@ -175,7 +175,7 @@ def test_a_video_with_no_speech_says_so_instead_of_blaming_the_file(monkeypatch,
     with pytest.raises(RuntimeError) as e:
         pipeline.run_dub(video_path=video, out_path=out, srt_path=srt,
                          language="Korean", language_code="ko", log=[].append)
-    assert str(e.value) == "No speech was found in this video. Check that someone is speaking in it."
+    assert str(e.value) == "This video has no speech."
 
 
 def test_missing_whisper_parts_send_the_user_to_the_models_not_the_video(monkeypatch, tmp_path):

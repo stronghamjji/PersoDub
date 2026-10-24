@@ -793,7 +793,7 @@ def _stage_transcribe_local(video_path, source_language_code, diar_engine, log, 
     except NoSpeech as e:
         # A music-only or silent video: said so, instead of "Speech
         # recognition failed. Check the video file." about a file that is fine.
-        msg, shown = both("No speech was found in this video. Check that someone is speaking in it.")
+        msg, shown = both("This video has no speech.")
         log(f"   Error: {msg}")
         raise shown_error(msg, shown) from e
     except Exception as e:

@@ -438,8 +438,9 @@ def test_a_speaker_who_says_it_is_kept(monkeypatch, audio_file, tmp_path):
 
 
 def test_quiet_lines_with_other_words_are_kept(monkeypatch, audio_file, tmp_path):
-    vocals = _vocals(tmp_path / "vocals.wav", 3.0)
-    lines = [{"start": 0.0, "end": 3.0, "text": "Thank you for watching my brother play."}]
+    vocals = _vocals(tmp_path / "vocals.wav", 4.0, loud_from=0.0, loud_to=1.0)
+    lines = [{"start": 0.0, "end": 1.0, "text": "Look."},
+             {"start": 1.0, "end": 4.0, "text": "Thank you for watching my brother play."}]
     _heard(monkeypatch, lines)
     assert stt_local.transcribe_local(audio_file, vocals_path=vocals) == lines
 
@@ -448,6 +449,17 @@ def test_a_clip_of_only_made_up_lines_has_no_speech(monkeypatch, audio_file, tmp
     vocals = _vocals(tmp_path / "vocals.wav", 12.0)
     _heard(monkeypatch, [{"start": 0.0, "end": 29.98, "text": "Thank you for watching!"}])
     with pytest.raises(RuntimeError, match="This video has no speech to transcribe"):
+        stt_local.transcribe_local(audio_file, video_duration=10.0, vocals_path=vocals)
+
+
+def test_a_silent_video_with_a_made_up_line_in_any_language_has_no_speech(
+        monkeypatch, audio_file, tmp_path):
+    """A silent video came back as one invented line, language "nn", and was
+    translated and voiced to "done" (Windows e2e, 2026-10-24). Every line over
+    a quiet vocals track is no speech, whatever the words."""
+    vocals = _vocals(tmp_path / "vocals.wav", 10.0)
+    _heard(monkeypatch, [{"start": 0.0, "end": 9.0, "text": "Takk for at du såg på."}])
+    with pytest.raises(stt_local.NoSpeech):
         stt_local.transcribe_local(audio_file, video_duration=10.0, vocals_path=vocals)
 
 

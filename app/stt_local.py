@@ -61,6 +61,12 @@ def _made_up(cue: dict, vocals_path: str) -> bool:
     is any line when the track cannot be read."""
     if not _MADE_UP.fullmatch(_PUNCT_RE.sub("", cue["text"].lower())):
         return False
+    return _quiet(cue, vocals_path)
+
+
+def _quiet(cue: dict, vocals_path: str) -> bool:
+    """True when the vocals track is below MIN_RMS_DBFS under this line;
+    False when the track cannot be read."""
     try:
         return _span_rms_db(vocals_path, cue["start"], cue["end"]) < MIN_RMS_DBFS
     except (OSError, EOFError, wave.Error):
@@ -189,6 +195,13 @@ def transcribe_local(
     segments = clamp_cues(result.get("segments") or [], video_duration)
     if vocals_path:
         segments = [c for c in segments if not _made_up(c, vocals_path)]
+        # Every line over a quiet vocals track: words Whisper made up over
+        # silence, in any language. A silent video came back as one line
+        # "detected" as Nynorsk and was dubbed to the end (Windows e2e,
+        # 2026-10-24). One line with a voice under it keeps them all, so a
+        # quiet line in a video that has speech still stays.
+        if all(_quiet(c, vocals_path) for c in segments):
+            segments = []
     if not segments:
         raise NoSpeech("This video has no speech to transcribe.")
     return segments
