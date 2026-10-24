@@ -20,7 +20,9 @@ const ALLOW = ["PersoDub", "Perso API", "Perso", "ChatGPT", "Claude", "Codex", "
   "A-", "A+", "Esc", "Clean", "Bold Punch", "Sticker", "Neon Yellow", "Soft Card", "Rainbow", "Broadcast", "Streaming",
   "Lower Bar", "Neon", "Black Box", "White Box",
   // Two more names, beyond the list the sweep was asked for: the agent's and the copyright holder's.
-  "Dub Agent", "ESTsoft corp."];
+  "Dub Agent", "ESTsoft corp.",
+  // The assistants' model names, shown as their makers write them ("Claude · Opus").
+  "Opus", "Sonnet", "Haiku", "Fable", "GPT"];
 // What the person put there, not the app's words: project and file names, the
 // workspace list, the conversation, the signed-in account.
 const USER_TEXT = [".proj-name", ".proj-rename", "#topbarTitle", "#topbarForwardName", "#queueRows", "#persoSpaceSelect",
@@ -119,10 +121,13 @@ async function setLanguage(app, value, lang) {
 // or ones in English alone that are no product name ("english").
 // A text the Korean table keeps in English on purpose (its value is its key) is
 // counted apart, as kept, not as left over.
+// A model id is a name too: any run of letters, dots, colons and hyphens with a
+// digit in it (gpt-5.5, hy-mt2:1.8b, claude-opus-4-5).
 const scan = (app, root, mode, kept = []) => app.inPage((rootSel, m, allow, skip, keep) => {
+  const MODEL_ID = /[\w.:-]*\d[\w.:-]*/g;
   const words = new RegExp(`(?<![A-Za-z])(?:${allow.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![A-Za-z])`, "g");
   const bad = (s) => (m === "hangul" ? /[ᄀ-ᇿ㄰-㆏가-힣]/.test(s)
-    : !/[ᄀ-ᇿ㄰-㆏가-힣]/.test(s) && /[A-Za-z]{2,}/.test(s.replace(words, " ")));
+    : !/[ᄀ-ᇿ㄰-㆏가-힣]/.test(s) && /[A-Za-z]{2,}/.test(s.replace(words, " ").replace(MODEL_ID, " ")));
   const texts = [];
   for (const top of document.querySelectorAll(rootSel)) {
     const walk = document.createTreeWalker(top, NodeFilter.SHOW_TEXT);
