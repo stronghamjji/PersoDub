@@ -226,16 +226,26 @@ const ALL = [
     const fd = new FormData();
     fd.append("download_id", s.did);
     const t0 = Date.now();
+    // A refusal is reported with the server's reason (its detail, a home folder
+    // left out) and when it came, so a one-off 503 says why the next time.
+    let refused = "";
     const asked = fetch(`${app.origin}/api/erase/suggest`, { method: "POST", body: fd, signal: AbortSignal.timeout(200000) })
-      .then(async (r) => { if (!r.ok) throw new Error(`POST /api/erase/suggest: ${r.status}`); return { ...(await r.json()), ms: Date.now() - t0 }; });
-    asked.catch(() => {});
+      .then(async (r) => {
+        if (r.ok) return { ...(await r.json()), ms: Date.now() - t0 };
+        const body = await r.text();
+        let why = body;
+        try { why = JSON.parse(body).detail ?? body; } catch { /* not JSON: the text as it came */ }
+        why = String(typeof why === "string" ? why : JSON.stringify(why)).replace(/\/Users\/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+/gi, "~");
+        throw new Error(`POST /api/erase/suggest: ${r.status} after ${((Date.now() - t0) / 1000).toFixed(1)} s: "${why.slice(0, 300)}"`);
+      });
+    asked.catch((e) => { refused = e.message; });
     const placed = await app.waitFor("the box placed where the subtitles were found", 200000, () => {
       const b = document.querySelector("#eraseBox"), err = document.querySelector("#eraseError").textContent.trim();
       if (err) return { error: err };
       return !b.hidden && b.classList.contains("found") && document.querySelector("#eraseVideo").videoWidth ? { ok: true } : null;
     });
     const boxMs = Date.now() - t0;
-    if (placed.error) throw new Error(`the Erase tab says: ${placed.error}`);
+    if (placed.error) throw new Error(`the Erase tab says: ${placed.error}${refused ? `; the same question here: ${refused}` : ""}`);
     const found = await asked;
     const before = await app.inPage(BOX);
     const close = (a, b, d = 2) => a.every((v, i) => Math.abs(v - b[i]) <= d);
