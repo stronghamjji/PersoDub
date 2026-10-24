@@ -1,7 +1,7 @@
 // Home: the project grid, folding it, its search, What's new, Help, deleting a test
 // project from its card's menu, and a finished dub's card opening its screen.
 // Only a card named e2e-click-* or e2e-dub* is ever deleted.
-import { shown, pressable, isOpen, isClosed, onHome, textOf } from "../lib/cdp.mjs";
+import { shown, pressable, isOpen, isClosed, onHome, textOf, Skip } from "../lib/cdp.mjs";
 
 export const area = "home";
 
@@ -83,16 +83,20 @@ export const steps = [
     async run(app) {
       await toHome(app);
       const before = await app.inPage(cards);
-      const want = before.filter((c) => c.name.toLowerCase().includes("e2e-")).length;
-      if (!want || want === before.length) throw new Error(`${want} of ${before.length} cards have e2e- in their name; the search would show nothing`);
+      // A word some cards have and others lack: "e2e-", else a card's whole
+      // name (a fresh workspace holds only e2e- cards). Matched as the page does.
+      const has = (term) => before.filter((c) => c.name.toLowerCase().includes(term)).length;
+      const term = ["e2e-", ...before.map((c) => c.name.toLowerCase())].find((w) => w && has(w) > 0 && has(w) < before.length);
+      if (!term) throw new Skip(`${before.length} card(s), no name that some have and others lack; nothing for a search to tell apart`);
+      const want = has(term);
       await app.click("#projectSearchBtn");
       await app.waitFor("the search box", 5000, shown, "#projectSearchInput");
-      await app.type("#projectSearchInput", "e2e-");
+      await app.type("#projectSearchInput", term);
       const found = await app.waitFor(`${want} cards`, 5000, (n) => {
         const now = [...document.querySelectorAll("#projectsGrid .proj-card")];
         return now.length === n ? now.map((c) => c.querySelector(".proj-name")?.textContent.trim() || "") : null;
       }, want);
-      const stray = found.filter((name) => !name.toLowerCase().includes("e2e-"));
+      const stray = found.filter((name) => !name.toLowerCase().includes(term));
       if (stray.length) throw new Error(`the search shows ${stray.join(", ")}`);
       const count = await app.inPage(textOf, "#projectsCount");
       const said = app.tr("{shown} of {all}", { shown: want, all: before.length });
@@ -100,7 +104,7 @@ export const steps = [
       await app.key("Escape");
       await app.waitFor(`${before.length} cards again`, 5000, (n) => document.querySelectorAll("#projectsGrid .proj-card").length === n
         && document.querySelector("#projectSearchBox").hidden, before.length);
-      return `${before.length} cards → "e2e-" → ${want} ("${count}") → Escape → ${before.length}`;
+      return `${before.length} cards → "${term}" → ${want} ("${count}") → Escape → ${before.length}`;
     } },
 
   { name: "whats new", looks: ["#updateOverlay"],
