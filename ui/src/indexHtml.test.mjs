@@ -1834,3 +1834,11 @@ test("New project on an empty project points at the Import block on screen", () 
   assert.match(readFileSync(DRAFT_IMPORT, "utf8"), /emptyTabHtml\("dubbing", "dubbingZone", "dubbingLink"\)/);
   assert.match(readFileSync(ERASE, "utf8"), /emptyTabHtml\("erase", "eraseZone", "eraseLink"\)/);
 });
+
+// A card's menu in the bottom row of Home opened under the "Updated" banner,
+// which hid its Delete (Windows, 1280x800, 2026-10-24).
+test("a project card's menu is drawn over the update banner", () => {
+  const html = readPage();
+  const z = (sel) => Number(new RegExp(sel.replace(".", "\\.") + " \\{[^}]*z-index: (\\d+)").exec(html)[1]);
+  assert.ok(z(".proj-menu") > z(".update-banner"));
+});

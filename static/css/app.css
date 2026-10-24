@@ -1119,7 +1119,8 @@
   .proj-more:hover { background: var(--secondary); color: var(--foreground); }
   .proj-card:hover .proj-more, .proj-card:focus-within .proj-more { display: inline-flex; }
 
-  .proj-menu { position: fixed; z-index: 25; min-width: 130px; background: var(--canvas);
+  /* Over the update banner (60): a card in the bottom row opens its menu under it (Windows, 2026-10-24). */
+  .proj-menu { position: fixed; z-index: 61; min-width: 130px; background: var(--canvas);
     border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
   .proj-menu button { display: block; width: 100%; text-align: left; padding: 6px 10px;
