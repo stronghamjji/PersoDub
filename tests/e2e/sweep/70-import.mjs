@@ -10,26 +10,44 @@
 // credits: every dub started runs on this computer, and a real video site
 // link is never typed.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { homedir } from "node:os";
-import { sleep, shown, pressable, isOpen, isClosed, onHome, textOf } from "../lib/cdp.mjs";
+import { sleep, shown, pressable, isOpen, isClosed, onHome, textOf, Skip } from "../lib/cdp.mjs";
 
 export const area = "import";
 
-const FIXTURES = "/Users/est/PersoDub-lab/e2e-fixtures";
 const FFPROBE = process.env.PERSODUB_FFPROBE || "ffprobe";
+// The kit's ffmpeg beside its ffprobe (ffmpeg.exe on Windows), else PATH's.
+const FFMPEG = process.env.PERSODUB_FFMPEG
+  || (process.env.PERSODUB_FFPROBE ? join(dirname(FFPROBE), basename(FFPROBE).replace("ffprobe", "ffmpeg")) : "ffmpeg");
 // What the area changes in the page's storage, put back as found at its end.
 const KEYS = ["persodub.lastChoices", "persodub.exportTicks"];
 const MINE = /^e2e-imp-/;
 // Words no person can act on: a library's or the server's own.
 const RAW = /Traceback|Exception|Errno|\bError:|stderr|\.py\b|status code|HTTP \d{3}|\b5\d\d\b/;
 
-const fixture = (name) => {
-  const p = join(FIXTURES, name);
-  if (!existsSync(p)) throw new Error(`no fixture ${p}`);
-  return p;
+// The odd inputs, in the fixtures folder (--fixtures, else --video's folder);
+// one missing is made there the way the first ones were, with ffmpeg.
+const MAKE = {
+  "silent-10s.mp4": ["-f", "lavfi", "-i", "color=c=gray:s=320x180:r=25:d=10", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "10"],
+  "long-31min.mp4": ["-f", "lavfi", "-i", "color=c=black:s=160x90:r=10:d=1860", "-f", "lavfi", "-i", "anullsrc=r=22050:cl=mono", "-t", "1860"],
 };
+function fixture(ctx, name) {
+  const p = join(ctx.fixtures, name);
+  if (existsSync(p)) return p;
+  mkdirSync(ctx.fixtures, { recursive: true });
+  if (name === "not-a-video.txt") {
+    writeFileSync(p, "This is not a video.\n");
+    return p;
+  }
+  const r = spawnSync(FFMPEG, ["-v", "error", "-y", ...MAKE[name], "-pix_fmt", "yuv420p", "-c:a", "aac", p], { encoding: "utf8" });
+  if (r.status !== 0) {
+    try { unlinkSync(p); } catch { /* not written */ }
+    throw new Skip(`no fixture ${p}, and ffmpeg (${FFMPEG}) could not make it: ${(r.stderr || r.error?.message || "").trim().slice(0, 200)}`);
+  }
+  return p;
+}
 // A copy of `src` named e2e-imp-<tag>-<stamp>, in the run's folder.
 function copyIn(ctx, tag, src) {
   const dir = join(ctx.out, "in");
@@ -265,7 +283,7 @@ export const steps = [
 
   { name: "two videos at once", looks: ["#projectOverlay", "#newProjOverlay", "#queueCard"],
     async run(app, ctx) {
-      const a = copyIn(ctx, "batchA", ctx.video), b = copyIn(ctx, "batchB", fixture("paris-copy-10s.mp4"));
+      const a = copyIn(ctx, "batchA", ctx.video), b = copyIn(ctx, "batchB", ctx.video);
       await newDraft(app, ctx, "host");
       // First the top bar's + over a project with a video: the window with
       // the Import block. Cancel goes to Home, so the second time it is the
@@ -370,8 +388,8 @@ export const steps = [
     } },
 
   { name: "not a video", looks: ["#dubbingImport", "#formError"],
-    async run(app) {
-      const txt = fixture("not-a-video.txt");
+    async run(app, ctx) {
+      const txt = fixture(ctx, "not-a-video.txt");
       await toHome(app);
       await app.click("#homeDubCard");
       await app.waitFor("the Dubbing tab's Import block", 10000, shown, "#dubbingZone .import-head");
@@ -398,7 +416,7 @@ export const steps = [
 
   { name: "silent video", looks: ["#doneFail", "#progressCard", "#scriptBox", "#draftSetup"],
     async run(app, ctx) {
-      const d = await newDraft(app, ctx, "silent", fixture("silent-10s.mp4"));
+      const d = await newDraft(app, ctx, "silent", fixture(ctx, "silent-10s.mp4"));
       if (d.len !== "00:10") throw new Error(`the card reads ${d.len}`);
       const c = await app.inPage(choices);
       assertNoCredits(c);
@@ -464,7 +482,7 @@ export const steps = [
 
   { name: "over 30 minutes", looks: ["#draftSetup", "#deleteOverlay"],
     async run(app, ctx) {
-      const d = await newDraft(app, ctx, "long", fixture("long-31min.mp4"), 180000);
+      const d = await newDraft(app, ctx, "long", fixture(ctx, "long-31min.mp4"), 180000);
       const hint = await app.waitFor("the 30-minute line", 5000, () => {
         const h = document.querySelector("#draftLongHint");
         return !h.hidden && h.getClientRects().length ? h.textContent.trim() : null;

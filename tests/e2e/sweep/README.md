@@ -7,7 +7,7 @@ Area modules for tests/e2e/sweep.mjs. Each file exports:
     ];
 
 `app` is the connection from tests/e2e/lib/cdp.mjs (click, key, type, choose, feed, waitFor, inPage, api, shot, tr).
-`ctx` has video, srt, out, stamp and a shared `state` object the steps of one run may pass things through.
+`ctx` has video, srt, out, stamp, fixtures (the import area's odd inputs) and a shared `state` object the steps of one run may pass things through.
 A step returns a one-line note with its numbers, or throws with the reason; it throws
 `Skip` (from lib/cdp.mjs) with the reason when this computer cannot run it (not signed in,
 a model not installed), and is reported as skipped.

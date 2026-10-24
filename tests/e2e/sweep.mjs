@@ -6,19 +6,21 @@
 // run it. Not part of any test suite: needs the app on a control port.
 //
 //   node tests/e2e/sweep.mjs --video <clip> [--srt <file>] [--out <folder>] [--port 9333] [--only home,settings]
+//       [--fixtures <folder>]
 //
+// --fixtures is where the import area finds (or makes) its odd inputs; --video's folder when left out.
 // Writes NN-<area>-<step>.png, report.md and report.json into <folder>; exits 1 when a step fails.
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { connect, Skip } from "./lib/cdp.mjs";
 
 const { values: opt } = parseArgs({ options: {
   video: { type: "string" }, srt: { type: "string" }, out: { type: "string" }, port: { type: "string", default: "9333" },
-  only: { type: "string" } } });
+  only: { type: "string" }, fixtures: { type: "string" } } });
 if (!opt.video || !existsSync(opt.video)) {
-  console.error("usage: node tests/e2e/sweep.mjs --video <short mp4 with speech> [--srt <file>] [--out <folder>] [--port 9333] [--only a,b]");
+  console.error("usage: node tests/e2e/sweep.mjs --video <short mp4 with speech> [--srt <file>] [--out <folder>] [--port 9333] [--only a,b] [--fixtures <folder>]");
   process.exit(2);
 }
 const startedAt = new Date();
@@ -27,7 +29,8 @@ const stamp = clock(startedAt).replace(/[-:]/g, "").replace(" ", "-");
 const out = resolve(opt.out || `e2e-sweep-${stamp}`);
 mkdirSync(out, { recursive: true });
 const app = await connect({ port: opt.port, out });
-const ctx = { video: resolve(opt.video), srt: opt.srt ? resolve(opt.srt) : "", out, stamp, state: {} };
+const ctx = { video: resolve(opt.video), srt: opt.srt ? resolve(opt.srt) : "", out, stamp, state: {},
+              fixtures: resolve(opt.fixtures || dirname(resolve(opt.video))) };
 
 const dir = join(import.meta.dirname, "sweep");
 const only = opt.only ? new Set(opt.only.split(",")) : null;
