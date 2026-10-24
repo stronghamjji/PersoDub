@@ -11,7 +11,7 @@
 // e2e-dub-home2-*, is deleted at the end.
 import { copyFileSync } from "node:fs";
 import { join } from "node:path";
-import { shown, pressable, isOpen, isClosed, onHome, textOf, sleep } from "../lib/cdp.mjs";
+import { shown, pressable, isOpen, isClosed, onHome, textOf, sleep, Skip } from "../lib/cdp.mjs";
 
 export const area = "home2";
 
@@ -464,7 +464,8 @@ export const steps = [
     async run(app, ctx) {
       await ensurePrep(app, ctx);
       const sep = (await app.api("/api/models")).models.find((m) => m.id === "vocal-separator");
-      if (!sep || sep.state === "ready") throw new Error(`Mel-Band RoFormer is ${sep ? sep.state : "not listed"}: no line to read`);
+      if (!sep) throw new Error("Mel-Band RoFormer is not listed in GET /api/models");
+      if (sep.state === "ready") throw new Skip("Mel-Band RoFormer is downloaded here: no download line to read");
       const was = await app.inPage(() => document.querySelector("#sepSelect").value);
       try {
         await pickStage(app, "sepSelect", "roformer");
@@ -475,10 +476,15 @@ export const steps = [
           });
           return all[0].text ? all : null;
         });
-        const want = app.tr("Needs {names} · {size} GB", { names: "Mel-Band RoFormer", size: (sep.bytes / 1e9).toFixed(1) });
-        if (hints[0].text !== want) throw new Error(`the line reads "${hints[0].text}", not "${want}"`);
+        // A download stopped part way (paused, its pieces kept) is named with
+        // Resume instead of the size; the dialog still counts its whole size.
+        const paused = sep.state === "paused";
+        const want = paused ? app.tr("{name} paused", { name: "Mel-Band RoFormer" })
+          : app.tr("Needs {names} · {size} GB", { names: "Mel-Band RoFormer", size: (sep.bytes / 1e9).toFixed(1) });
+        if (paused ? !hints[0].text.startsWith(want) : hints[0].text !== want) throw new Error(`the line reads "${hints[0].text}", not "${want}"`);
         const shownLines = hints.filter((h) => h.text && /GB/.test(h.text));
-        const sum = shownLines.reduce((n, h) => n + Number(h.text.match(/([\d.]+)\s*GB/)[1]), 0);
+        const sum = shownLines.reduce((n, h) => n + Number(h.text.match(/([\d.]+)\s*GB/)[1]), 0)
+          + (paused ? Number((sep.bytes / 1e9).toFixed(1)) : 0);
         await app.shot("home2-roformer-line");
         assertNoCredits(await app.inPage(choices));
         await app.click("#draftStartBtn");
@@ -494,7 +500,8 @@ export const steps = [
         const wantTitle = app.tr("Download {size} GB?", { size: sum.toFixed(1) });
         if (d.title !== wantTitle) throw new Error(`the lines add up to ${sum.toFixed(1)} GB, the dialog says "${d.title}"`);
         const engine = (await app.api("/api/models")).models.find((m) => m.id === "engine");
-        return `${shownLines.length} line(s): ${shownLines.map((h) => `${h.id} "${h.text}"`).join(", ")}; sum ${sum.toFixed(1)} GB = "${d.title}" → ${app.tr("Cancel")}`
+        return `${paused ? `RoFormer paused: "${hints[0].text}" (+${(sep.bytes / 1e9).toFixed(1)} GB); ` : ""}`
+          + `${shownLines.length} line(s): ${shownLines.map((h) => `${h.id} "${h.text}"`).join(", ")}; sum ${sum.toFixed(1)} GB = "${d.title}" → ${app.tr("Cancel")}`
           + `; Python + PyTorch ${engine.state} here, so the counted-once rule is not on show`;
       } finally {
         if (await app.inPage(onPrep)) await pickStage(app, "sepSelect", was);

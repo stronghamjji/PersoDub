@@ -6,7 +6,7 @@
 // Never typed or pressed here: an API key field, a sign-in (ChatGPT, Claude,
 // Codex), a model's Delete confirm, anything that opens an outside site.
 // Notes never carry a key, an account address or a home folder's name.
-import { isClosed, isOpen, onHome, pressable, shown, sleep, textOf } from "../lib/cdp.mjs";
+import { isClosed, isOpen, onHome, pressable, shown, sleep, textOf, Skip } from "../lib/cdp.mjs";
 
 export const area = "settings";
 
@@ -225,29 +225,34 @@ export const steps = [
       const rowBg = got.rows[0].bg;
       const flat = got.heads.filter((h) => gap(h.bg, rowBg) < 12);
       if (flat.length) throw new Error(`group bands as dark as the rows (${rowBg}): ${flat.map((h) => `${h.title} ${h.bg}`).join(", ")}`);
-      const ready = app.tr("Ready"), dl = app.tr("Download");
-      const odd = got.rows.filter((r) => !r.status.includes(ready) && r.button !== dl);
-      if (odd.length) throw new Error(`rows neither ${ready} nor ${dl}: ${odd.map((r) => `${r.name} "${r.status}" [${r.button}]`).join("; ")}`);
+      // Resume: a download stopped part way, its pieces kept (Paused).
+      const ready = app.tr("Ready"), dl = app.tr("Download"), resume = app.tr("Resume");
+      const odd = got.rows.filter((r) => !r.status.includes(ready) && r.button !== dl && r.button !== resume);
+      if (odd.length) throw new Error(`rows neither ${ready}, ${dl} nor ${resume}: ${odd.map((r) => `${r.name} "${r.status}" [${r.button}]`).join("; ")}`);
       const sizes = [...got.summary.matchAll(/([\d.]+)\s*GB/g)], counts = got.summary.match(new RegExp(String(got.rows.length)));
       if (!sizes.length || !counts) throw new Error(`the header "${got.summary}" does not say the GB and the ${got.rows.length} models`);
       const ollama = got.rows.find((r) => r.name === "Ollama");
       if (!ollama || !ollama.status || ollama.status === dl) throw new Error(`Ollama's row says nothing of what it is for: "${ollama?.status}"`);
       return `${got.heads.length} bands (${got.heads[0].bg} vs rows ${rowBg}); header "${got.summary}"; `
-        + `${got.rows.filter((r) => r.status.includes(ready)).length} ${ready}, ${got.rows.filter((r) => r.button === dl).length} ${dl}; Ollama: "${ollama.status}"`;
+        + `${got.rows.filter((r) => r.status.includes(ready)).length} ${ready}, ${got.rows.filter((r) => r.button === dl).length} ${dl}, `
+        + `${got.rows.filter((r) => r.button === resume).length} ${resume}; Ollama: "${ollama.status}"`;
     } },
 
   { name: "Models: Mel-Band RoFormer download and cancel", looks: ["#modelsError", "#modelsSummary"],
     async run(app) {
       await showTab(app, "models");
-      const name = "Mel-Band RoFormer", dl = app.tr("Download");
+      const name = "Mel-Band RoFormer", dl = app.tr("Download"), resume = app.tr("Resume");
       const before = await rowOf(app, name), was = await modelState(app, "vocal-separator");
       if (!before) throw new Error(`no ${name} row`);
-      if (before.button !== dl || !(await app.inPage(pressable, before.sel))) throw new Error(`${name} has no ${dl} button to press: [${before.button}] "${before.status}", ${was}`);
+      if (was === "ready") throw new Skip(`${name} is downloaded here: nothing to download and cancel`);
+      // Download, or Resume for one stopped part way (paused): either starts it.
+      const start = was === "paused" ? resume : dl;
+      if (before.button !== start || !(await app.inPage(pressable, before.sel))) throw new Error(`${name} has no ${start} button to press: [${before.button}] "${before.status}", ${was}`);
       // A download lands in the kit's models folder and a cancelled one leaves
       // its pieces there (Paused). On the shared test kit that folder is the
       // real app's, so the press waits for a kit of its own.
       if (process.env.SWEEP_DOWNLOADS !== "1") {
-        throw new Error(`NOT PRESSED: ${name} shows [${dl}] and the app says ${was}, but a download writes into the kit's `
+        throw new Skip(`NOT PRESSED: ${name} shows [${start}] and the app says ${was}, but a download writes into the kit's `
           + "models folder and a cancel leaves its pieces there; on a kit whose models folder is the real app's, that is the "
           + "real app. Run with SWEEP_DOWNLOADS=1 on a kit with a models folder of its own");
       }
@@ -262,10 +267,10 @@ export const steps = [
       const back = await app.waitFor(`${name} to stop`, 20000, (n, words) => {
         const r = [...document.querySelectorAll("#modelsList .model-row")].find((x) => x.children[0].textContent.trim() === n);
         return r && words.includes(r.children[3].textContent.trim()) && r.children[3].textContent.trim();
-      }, name, [dl, app.tr("Resume")]);
+      }, name, [dl, resume]);
       const now = await modelState(app, "vocal-separator");
       if (now === "ready" || now === "downloading") throw new Error(`after Cancel GET /api/models says ${now}`);
-      return `pressed ${dl}: "${clean(busy)}" in 10 s; ${app.tr("Cancel")} → [${back}], GET /api/models ${now} (pieces kept when paused)`;
+      return `pressed ${start}: "${clean(busy)}" in 10 s; ${app.tr("Cancel")} → [${back}], GET /api/models ${now} (pieces kept when paused)`;
     } },
 
   { name: "Models: Remove asks, never removes", looks: ["#deleteTitle", "#modelsError"],
