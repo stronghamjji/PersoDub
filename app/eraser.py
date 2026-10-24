@@ -15,6 +15,7 @@ pipeline, it has no stage boundary to stop at politely -- one blocking call
 does the whole video -- so a cancelled job's process is killed.
 """
 import collections
+import concurrent.futures
 import contextlib
 import json
 import os
@@ -264,6 +265,16 @@ def run_erase(input_path, out_path, area, *, log, cancel_check,
     return checked
 
 
+# One look at a time. Three requests for the same video arrived together and
+# each started its own detector: on Windows one failed with big-lama.pt "in use
+# by another process" (WinError 32), and on macOS two ran side by side at over
+# 1 GB each (e2e, 2026-10-24). A look for a file already being looked at waits
+# for that answer instead of starting another.
+_suggest_turn = threading.Lock()
+_suggest_lock = threading.Lock()
+_suggest_running = {}
+
+
 def suggest_area(input_path, *, python=None, vsr_dir=None) -> dict:
     """Where this video's subtitles sit, as the screen's opening guess.
 
@@ -271,6 +282,28 @@ def suggest_area(input_path, *, python=None, vsr_dir=None) -> dict:
     "frames"} -- found false means nothing was detected and `area` is the
     bottom quarter, which is still a sane band to start the user off in.
     """
+    key = os.path.abspath(input_path)
+    with _suggest_lock:
+        running = _suggest_running.get(key)
+        if running is None:
+            mine = _suggest_running[key] = concurrent.futures.Future()
+    if running is not None:
+        return running.result()
+    try:
+        with _suggest_turn:
+            found = _suggest_once(input_path, python, vsr_dir)
+    except BaseException as e:
+        mine.set_exception(e)
+        raise
+    else:
+        mine.set_result(found)
+        return found
+    finally:
+        with _suggest_lock:
+            del _suggest_running[key]
+
+
+def _suggest_once(input_path, python, vsr_dir) -> dict:
     py, vsr = _resolve(python, vsr_dir)
     try:
         r = subprocess.run([py, SUGGEST_SCRIPT, "--vsr-dir", vsr, "-i", input_path],

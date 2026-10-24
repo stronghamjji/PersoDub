@@ -226,6 +226,49 @@ def test_suggest_area_reads_the_answer_past_the_banners(installed, tmp_path):
     }
 
 
+SLOW_SUGGEST_STUB = '''
+import argparse, json, os, sys, time
+ap = argparse.ArgumentParser()
+ap.add_argument("--vsr-dir", dest="vsr")
+ap.add_argument("-i", "--input", dest="src")
+a = ap.parse_args()
+log = os.path.join(os.path.dirname(a.src), "runs.log")
+with open(log, "a") as f:
+    f.write("start %s\\n" % os.path.basename(a.src))
+time.sleep(0.4)
+with open(log, "a") as f:
+    f.write("end %s\\n" % os.path.basename(a.src))
+print(json.dumps({"found": True, "area": [1, 2, 3, 4], "width": 5, "height": 6,
+                  "src": os.path.basename(a.src)}))
+'''
+
+
+def test_looks_at_once_run_one_at_a_time_and_share_a_look_at_the_same_video(
+        installed, tmp_path, monkeypatch):
+    """Three looks at one video arrived together on Windows and one failed with
+    big-lama.pt in use by another process; on macOS two detectors ran side by
+    side (e2e, 2026-10-24). Now one detector runs at a time, and a look at a
+    video already being looked at gets that answer."""
+    import threading
+    slow = tmp_path / "slow.py"
+    slow.write_text(SLOW_SUGGEST_STUB, encoding="utf-8")
+    monkeypatch.setattr(eraser, "SUGGEST_SCRIPT", str(slow))
+    same = _video(tmp_path, "same.mp4")
+    other = _video(tmp_path, "other.mp4")
+    answers = []
+    looks = [threading.Thread(target=lambda p=p: answers.append(eraser.suggest_area(p)))
+             for p in (same, same, same, other)]
+    for look in looks:
+        look.start()
+    for look in looks:
+        look.join()
+    runs = (tmp_path / "runs.log").read_text().split("\n")[:-1]
+    # Two runs, one per video, each ending before the next starts.
+    assert len(runs) == 4
+    assert [r.split()[0] for r in runs] == ["start", "end", "start", "end"]
+    assert sorted(a["src"] for a in answers) == ["other.mp4"] + ["same.mp4"] * 3
+
+
 def test_suggest_area_says_so_when_the_answer_is_not_an_answer(installed, tmp_path, monkeypatch):
     bad = tmp_path / "bad.py"
     bad.write_text(BAD_SUGGEST_STUB, encoding="utf-8")
