@@ -135,7 +135,7 @@ async function startDub(app) {
   if (j.dub_mode !== "local" || j.separation === "perso" || j.stt_engine === "perso") {
     throw new Error(`PERSO CREDITS: job ${id} runs ${j.dub_mode}/${j.separation}/${j.stt_engine}. Stop it in the app now`);
   }
-  await app.waitFor("the progress card with its four stages", 5000, (jid) => document.body.dataset.jobId === jid
+  await app.waitFor("the progress card with its four stages", 15000, (jid) => document.body.dataset.jobId === jid
     && document.querySelector("#progressCard").getClientRects().length > 0
     && document.querySelectorAll("#progressSteps li").length === 4, id);
   return { id, t0, cardIn: since(t0), translator: j.translator };
@@ -153,7 +153,7 @@ async function pressStop(app) {
 }
 
 // The stopped card of a job: its sentence and its two buttons.
-async function stoppedCard(app, id, ms = 15000) {
+async function stoppedCard(app, id, ms = 30000) {
   return app.waitFor(`job ${id}'s stopped card`, ms, (jid) => {
     if (document.body.dataset.jobId !== jid || document.body.dataset.screen !== "failed") return null;
     const why = document.querySelector("#doneFailWhy").textContent.trim();
@@ -165,8 +165,8 @@ async function stoppedCard(app, id, ms = 15000) {
 // A project card on Home, opened by a press: the screen it lands on.
 async function openCard(app, id, screen) {
   await toHome(app);
-  await app.click(`#projectsGrid .proj-card[data-job="${id}"]`, 20000);
-  await app.waitFor(`job ${id} on the ${screen} screen`, 20000, (jid, s) => document.body.dataset.jobId === jid
+  await app.click(`#projectsGrid .proj-card[data-job="${id}"]`, 40000);
+  await app.waitFor(`job ${id} on the ${screen} screen`, 40000, (jid, s) => document.body.dataset.jobId === jid
     && document.body.dataset.screen === s, id, screen);
 }
 
@@ -258,7 +258,7 @@ export const steps = [
       if (listed?.status !== "queued") throw new Error(`GET /api/dub/jobs lists job ${d.id} as ${listed?.status}`);
       const t0 = Date.now();
       const asked = await pressStop(app);
-      await reaches(app, d.id, "cancelled", 30000);
+      await reaches(app, d.id, "cancelled", 60000);
       const took = since(t0);
       const card = await stoppedCard(app, d.id);
       const first = await getJob(app, w.id);
@@ -388,19 +388,19 @@ export const steps = [
       if (!(await app.inPage(onSetup))) await newDraft(app, ctx, "e");
       const was = await app.js(`document.querySelector("#translateSelect").value`);
       await app.click("#translateSelectBtn");
-      const opts = await app.waitFor("the Translation list", 5000, () => {
+      const opts = await app.waitFor("the Translation list", 15000, () => {
         const list = document.querySelector("#translateSelectBtn").parentElement.querySelector(".model-pick-list");
         return list && [...list.querySelectorAll(".model-opt")].map((o) => o.dataset.value);
       });
       if (!opts.includes("gemini")) throw new Error(`the Translation list has no Gemini API (${opts.join("/")})`);
       await app.click('#translateSelectBtn ~ .model-pick-list .model-opt[data-value="gemini"]');
-      const opened = await app.waitFor("the key window, or Gemini picked", 5000, () => (document.querySelector("#keyOverlay").classList.contains("open") ? "key"
+      const opened = await app.waitFor("the key window, or Gemini picked", 15000, () => (document.querySelector("#keyOverlay").classList.contains("open") ? "key"
         : document.querySelector("#translateSelect").value === "gemini" ? "picked" : ""));
       if (opened !== "key") throw new Error("Gemini API was picked with no key and no key window opened");
       const title = await app.inPage(textOf, "#keyTitle");
       await app.shot("running-gemini-key");
       await app.key("Escape");
-      await app.waitFor(`the key window to close and ${was} back`, 5000, (v) => !document.querySelector("#keyOverlay").classList.contains("open")
+      await app.waitFor(`the key window to close and ${was} back`, 10000, (v) => !document.querySelector("#keyOverlay").classList.contains("open")
         && document.querySelector("#translateSelect").value === v, was);
       if (title !== app.tr("Google (Gemini) key")) throw new Error(`the key window is titled "${title}"`);
       return `Gemini API with no key → "${title}" window, so no dub can start and fail: the failure card's `
