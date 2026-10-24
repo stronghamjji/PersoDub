@@ -9,7 +9,7 @@
 // The turns use the owner's own sign-ins and cost no Perso credits; a model's
 // Download button is counted, never pressed; a sign-in is never started.
 // Notes never carry an account address or a home folder's name.
-import { onHome, shown, sleep } from "../lib/cdp.mjs";
+import { onHome, shown, sleep, Skip } from "../lib/cdp.mjs";
 
 export const area = "agent";
 
@@ -64,6 +64,15 @@ async function pick(app, vendor, model) {
   if (await app.inPage(() => document.querySelector("#assistantMenu").hidden)) await app.click("#assistantModelBtn");
   const v = await app.waitFor(`${vendor} in the model menu`, 10000, rowAt, vendor, false);
   await app.click(`#assistantMenu > :nth-child(${v})`);
+  // Codex not signed in opens the ChatGPT sign-in instead of its models:
+  // closed with its Cancel, never signed in, and the pass skipped.
+  const opened = await app.waitFor(`${vendor}'s models`, 30000, () => document.querySelector("#chatgptSignInOverlay").classList.contains("open")
+    ? "sign-in" : !!document.querySelector("#assistantMenu .menu-back"));
+  if (opened === "sign-in") {
+    await app.click("#csCancel");
+    await app.waitFor("the sign-in window to close", 5000, (s) => !document.querySelector(s).classList.contains("open"), "#chatgptSignInOverlay");
+    throw new Skip(`${vendor} not signed in: its row opened the ChatGPT sign-in, closed with ${app.tr("Cancel")}`);
+  }
   const m = await app.waitFor(`${model || "a model that can be picked"} among ${vendor}'s`, 30000, rowAt, model, true);
   const name = await app.inPage((i) => document.querySelector(`#assistantMenu > :nth-child(${i}) .menu-name`).firstChild.nodeValue.trim(), m);
   await app.click(`#assistantMenu > :nth-child(${m})`);
@@ -120,12 +129,18 @@ async function putBack(app, jid, text) {
 
 function pass(who) {
   const s = (ctx) => ctx.state.agent;
-  return [
+  const steps = [
     { name: `${who}: pick the model`, looks: ["#assistantMenu", "#assistantModelWrap"],
       async run(app, ctx) {
         await ready(app, s(ctx));
         const before = await app.inPage(() => document.querySelector("#assistantModelLabel").textContent.trim());
-        const got = who === "Claude" ? await pick(app, "Claude", "Opus") : await pick(app, "Codex", "");
+        let got;
+        try {
+          got = who === "Claude" ? await pick(app, "Claude", "Opus") : await pick(app, "Codex", "");
+        } catch (e) {
+          if (e instanceof Skip) s(ctx).out = { ...s(ctx).out, [who]: e.message };
+          throw e;
+        }
         const p = await pickNow(app);
         const id = who === "Claude" ? "claude" : "codex";
         if (!p || p.agent !== id) throw new Error(`the saved pick is ${JSON.stringify(p)}, not ${id}`);
@@ -275,6 +290,12 @@ function pass(who) {
         return `${before} lines → 0 from the conversation; ${got.n ? `the page's own notice "${notice}" is the only line` : "nothing left"}`;
       } },
   ];
+  // The pass's other steps would talk to the assistant picked before: skipped with the pick's reason.
+  return steps.map((step, i) => (i === 0 ? step : { ...step, async run(app, ctx) {
+    const why = s(ctx).out?.[who];
+    if (why) throw new Skip(why);
+    return step.run(app, ctx);
+  } }));
 }
 
 export const steps = [

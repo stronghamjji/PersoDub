@@ -746,13 +746,21 @@ export const steps = [
           }
         }
       };
-      // An assistant's row by its name, pressed: its models.
+      // An assistant's row by its name, pressed: its models. Codex not signed
+      // in opens the ChatGPT sign-in instead (and the menu closes): that is
+      // closed with its Cancel, never signed in, and "sign-in" comes back.
       const into = async (name) => {
         const i = await app.inPage((n) => [...document.querySelectorAll("#assistantMenu > button.menu-item")]
           .findIndex((b) => b.querySelector(".menu-name").firstChild?.textContent.trim() === n && !b.disabled), name);
         if (i < 0) return null;
         await pressRow(`#assistantMenu > button.menu-item:nth-of-type(${i + 1})`);
-        await app.waitFor(`${name}'s models`, 15000, () => !!document.querySelector("#assistantMenu .menu-back"));
+        const got = await app.waitFor(`${name}'s models`, 15000, () => document.querySelector("#chatgptSignInOverlay").classList.contains("open") ? "sign-in"
+          : document.querySelector("#assistantMenu .menu-back") ? "models" : "");
+        if (got === "sign-in") {
+          await app.click("#csCancel");
+          await app.waitFor("the sign-in window to close", 5000, isClosed, "#chatgptSignInOverlay");
+          return got;
+        }
         // Codex's list may still be checking: up to 15 s for one to be pickable.
         await app.waitFor(`a pickable ${name} model`, 15000, () => [...document.querySelectorAll("#assistantMenu > button.menu-item")].some((b) => !b.disabled)).catch(() => {});
         return app.inPage(menuRows);
@@ -761,7 +769,7 @@ export const steps = [
         await pressRow("#assistantMenu .menu-group");
         await app.waitFor("the assistant list again", 5000, () => !document.querySelector("#assistantMenu .menu-back"));
       };
-      let note;
+      let note, codexOut = false;
       try {
         await app.inPage(() => { document.querySelector("#homeAgentOpen").scrollIntoView({ block: "center" }); return true; });
         await sleep(400);
@@ -774,12 +782,14 @@ export const steps = [
         const claude = await into("Claude");
         if (!claude) throw new Error(`Claude cannot be picked: ${JSON.stringify(top)}`);
         await back();
-        const codex = await into("Codex");
-        if (codex) await back();
+        let codex = await into("Codex");
+        codexOut = codex === "sign-in";
+        if (codexOut) { codex = []; await openMenu(); } else if (codex) await back();
         if (claude.length !== 4) throw new Error(`Claude lists ${claude.length} models (${claude.map((r) => r.name).join(", ")}), not 4`);
-        if (!codex || !codex.length) throw new Error(`Codex lists no models (${JSON.stringify(top)})`);
+        if (!codexOut && (!codex || !codex.length)) throw new Error(`Codex lists no models (${JSON.stringify(top)})`);
         // Picked: the first Claude model without the tick, then the one that had it, back.
         const wasPick = claude.find((r) => r.tick) || (codex || []).find((r) => r.tick);
+        if (codexOut && !wasPick) throw new Skip(`Codex not signed in, and "${label0}" is no Claude model, so it could not be picked back`);
         const other = claude.find((r) => !r.tick);
         await into("Claude");
         await pressRow(`#assistantMenu > button.menu-item:nth-of-type(${claude.indexOf(other) + 1})`);
@@ -797,13 +807,16 @@ export const steps = [
         const label2 = await app.inPage(textOf, "#assistantModelLabel");
         if (label2 !== label0) throw new Error(`picked back, the label reads "${label2}", not "${label0}"`);
         note = `${top.length} assistants (${top.map((r) => r.name + (r.off ? " off" : "")).join(", ")}); Claude ${claude.length} (${claude.map((r) => r.name).join("/")}), `
-          + `Codex ${codex.length} (${codex.map((r) => r.name + (r.off ? " off" : "")).join("/")}); "${label0}" → ${other.name}: "${label1}" → back: "${label2}"`;
+          + (codexOut ? `Codex opened the ChatGPT sign-in, closed with ${app.tr("Cancel")}`
+            : `Codex ${codex.length} (${codex.map((r) => r.name + (r.off ? " off" : "")).join("/")})`)
+          + `; "${label0}" → ${other.name}: "${label1}" → back: "${label2}"`;
       } finally {
         if (!(await app.inPage(() => document.querySelector("#assistantMenu").hidden))) await app.key("Escape");
         await app.inPage((k, v) => { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); return true; }, AGENT_KEY, saved);
         // After a failure the putting away must not hide the reason.
         await closeAgent(app, wasOpen).catch((e) => { if (note) throw e; });
       }
+      if (codexOut) throw new Skip(`Codex not signed in; the rest ran: ${note}; ${AGENT_KEY} put back; column closed`);
       return `${note}; ${AGENT_KEY} put back; column closed`;
     } },
 
