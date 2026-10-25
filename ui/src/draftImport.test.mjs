@@ -33,7 +33,7 @@ function makeEl(id) {
   };
 }
 
-function harness({ responses = {}, state, checkFile } = {}) {
+function harness({ responses = {}, state, checkFile, onSaveLinkReady } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -81,7 +81,7 @@ function harness({ responses = {}, state, checkFile } = {}) {
   };
 
   clearDraft();
-  const api = initDraftImport({ $, state, checkFile, onReplaced: (id) => log.replaced.push(id) });
+  const api = initDraftImport({ $, state, checkFile, onReplaced: (id) => log.replaced.push(id), onSaveLinkReady });
   return { $, api, log };
 }
 
@@ -188,6 +188,38 @@ test("a link is fetched and, once ready, becomes the draft", async () => {
   const d = getDraft();
   assert.equal(d.downloadId, "dl1");
   assert.equal(d.name, "street-food");
+  log.restore();
+});
+
+// Save video with no video: the link field alone (owner, 2026-10-24).
+test("with no video the Save video tab shows the link field alone, and a link there becomes the draft and is saved", async () => {
+  let call = 0, saved = 0;
+  const { $, api, log } = harness({
+    responses: {
+      "/api/downloads": ok({ id: "dl1" }),
+      "/api/downloads/dl1": () => (++call === 1 ? ok({ status: "downloading", percent: 40 })
+        : ok({ status: "ready", id: "dl1", title: "street-food", duration_sec: 10 })),
+    },
+    onSaveLinkReady: () => { saved += 1; },
+  });
+  assert.match($("saveImportSlot").outerHTML, /<div class="tab-empty-title">Save video<\/div><div class="tab-empty-sub">Saves a video from a link.<\/div><div class="import-block link-only" id="saveZone"><label class="import-link" id="saveLinkRow">/);
+  api.render();
+  assert.equal($("saveImport").hidden, false);
+  // No file picker and no drop on it: the link field is all it takes.
+  await $("saveZone").fire("click", {});
+  assert.equal($("draftFileInput").clicked, undefined);
+  assert.equal(($("saveZone").listeners.drop || []).length, 0);
+
+  $("saveLinkInput").value = "https://example.com/v";
+  await $("saveLinkInput").fire("keydown", { key: "Enter", preventDefault() {} });
+  await settle();
+  await log.tick();
+  assert.equal($("saveImportStatus").textContent, "Downloading… 40%");
+  assert.equal(saved, 0, "not while it is coming down");
+  await log.tick();
+  assert.equal(getDraft().downloadId, "dl1");
+  assert.equal($("saveImport").hidden, true);
+  assert.equal(saved, 1);
   log.restore();
 });
 

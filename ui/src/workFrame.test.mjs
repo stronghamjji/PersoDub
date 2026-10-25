@@ -78,6 +78,13 @@ test("a dub that starts while Captions is up moves to Dubbing", () => {
   assert.equal(h.state.tab, "dubbing");
 });
 
+// Save video's body is only for a project with no video (owner, 2026-10-24).
+test("a dub that starts while Save video's link field is up moves to Dubbing", () => {
+  const h = harness({ screen: "done", tab: "save" });
+  h.go("running");
+  assert.equal(h.state.tab, "dubbing");
+});
+
 test("the erase screen lights the Erase tab, and leaving it puts Dubbing back", () => {
   const h = harness({ screen: "done" });
   h.go("erase");

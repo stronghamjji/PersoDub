@@ -2891,6 +2891,8 @@
   .import-block.drag-over { border-color: var(--primary); outline: 2px solid var(--primary); outline-offset: -2px; }
   .import-block:focus { outline: none; }
   .import-block:focus-visible { border-color: var(--primary); }
+  /* Save video's: the link field alone, nothing to click or drop. */
+  .import-block.link-only { cursor: default; }
   .import-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
   .import-plus { width: 16px; height: 16px; border-radius: 5px; background: var(--primary); color: #fff;
     display: grid; place-items: center; flex: none; }

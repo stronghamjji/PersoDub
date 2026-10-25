@@ -1545,7 +1545,7 @@ test("the three center panels are one panel: one width, one grip, one foot", () 
   }
 });
 
-test("Dubbing, Erase and Burn in subtitles with no video draw one empty state", async () => {
+test("Dubbing, Erase, Burn in subtitles and Save video with no video draw one empty state", async () => {
   const html = readPage();
   const { emptyTabHtml, EMPTY_TABS } = await import("./importBlock.mjs");
   assert.deepEqual(EMPTY_TABS, {
@@ -1553,6 +1553,8 @@ test("Dubbing, Erase and Burn in subtitles with no video draw one empty state", 
     erase: ["Erase subtitles", "Takes burned-in subtitles out."],
     // Burn in subtitles starting a project (owner, 2026-10-22, 2026-10-23).
     captions: ["Burn in subtitles", "Burns subtitles into a video."],
+    // Save video saves a video from a link (owner, 2026-10-24).
+    save: ["Save video", "Saves a video from a link."],
   });
   // The same three pieces in the same order, whatever the tab.
   const shape = (tab) => emptyTabHtml(tab, "z", "l")
@@ -1560,10 +1562,15 @@ test("Dubbing, Erase and Burn in subtitles with no video draw one empty state", 
   assert.equal(shape("erase"), shape("dubbing"));
   assert.equal(shape("captions"), shape("dubbing"));
   assert.match(shape("dubbing"), /^<div class="tab-empty-title">H<\/div><div class="tab-empty-sub">S<\/div><div class="import-block" id="z"/);
+  // Save video's block is the link field alone: no Import head, no drop line,
+  // nothing that opens the file picker.
+  assert.match(shape("save"), /^<div class="tab-empty-title">H<\/div><div class="tab-empty-sub">S<\/div><div class="import-block link-only" id="z"><label class="import-link" id="lRow">/);
+  assert.ok(!/import-head|import-sub|tabindex/.test(shape("save")));
   // Each tab's face is the one frame: the group, the slot the module fills,
   // and what an import says hung under it.
   for (const [face, slot, says] of [["dubbingImport", "dubbingImportSlot", "dubbingImportStatus"],
-                                    ["eraseDrop", "eraseImportSlot", "eraseDropError"]]) {
+                                    ["eraseDrop", "eraseImportSlot", "eraseDropError"],
+                                    ["saveImport", "saveImportSlot", "saveImportStatus"]]) {
     const at = html.indexOf(`<div class="tab-empty" id="${face}"`);
     assert.ok(at > 0, `${face} is not the shared empty state`);
     const body = html.slice(at, html.indexOf(`id="${says}"`, at));
@@ -1574,6 +1581,7 @@ test("Dubbing, Erase and Burn in subtitles with no video draw one empty state", 
                              [fileURLToPath(new URL("./captionsTab.mjs", import.meta.url)), "captions"]]) {
     assert.match(readFileSync(file, "utf8"), new RegExp(`outerHTML = emptyTabHtml\\("${tab}", `));
   }
+  assert.match(readFileSync(DRAFT_IMPORT, "utf8"), /outerHTML = emptyTabHtml\("save", /);
   // Centred both ways, and the tab's small top-left name gives way to it.
   assert.match(html, /\.tab-empty \{[^}]*align-items: center; justify-content: center;/);
   assert.match(html, /\.erase-content:has\(> \.tab-empty:not\(\[hidden\]\)\) > :is\(\.erase-label, \.erase-desc\) \{ display: none; \}/);

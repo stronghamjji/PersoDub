@@ -711,8 +711,16 @@ const leftTabs = initLeftTabs({ $, onErase: () => {
 },
 // Save video: the project's own video as a file -- the Download dialog with
 // that one row ticked and no other (owner, 2026-10-23). A project's is its
-// original; a draft's, or the erase screen's, the video it shows.
+// original; a draft's, or the erase screen's, the video it shows, cuts and
+// all. With no video yet it is the tab of a link field that brings one in
+// (owner, 2026-10-24); the erase screen's empty face leaves for it.
 onSave: () => {
+  const erase = document.body.dataset.screen === "erase";
+  if (!state.jobId && !getDraft() && !(erase && (eraseScreen.sourceId() || eraseScreen.hasJob()))) {
+    if (erase) draftSetup.showDraftScreen();
+    leftTabs.show("save");
+    return;
+  }
   const row = state.jobId && document.body.dataset.screen !== "erase" ? ["original"] : ["video"];
   exportDialog.open(row, row);
 } });
@@ -781,6 +789,13 @@ const draftImport = initDraftImport({
   // A video replaced on the draft is let go the way one an erase was started
   // on is: its Draft card leaves Home, so drafts do not pile up (owner, 2026-10-22).
   onReplaced: (downloadId) => forgetDraft(downloadId),
+  // A link pasted on Save video is saved once it is in: the Dubbing tab
+  // under it, as for any draft, and the Download dialog's Video row.
+  onSaveLinkReady: () => {
+    if (state.jobId || document.body.dataset.screen !== "done") return;
+    leftTabs.show("dubbing");
+    exportDialog.open(["video"], ["video"]);
+  },
 });
 const draftSetup = initDraftSetup({
   $, state, showScreen, setTopbar,
@@ -2054,12 +2069,10 @@ const exportDialog = initExportDialog({
 });
 $("exportBtn").addEventListener("click", () => exportDialog.open());
 // Why Export is dim, on its tip. Three places switch it on and off, so the tip
-// follows the button itself rather than each of them. The Save video tab
-// opens the same dialog, so it is dim with it.
+// follows the button itself rather than each of them. The Save video tab is
+// never dim: with no video it is the way to bring one in (owner, 2026-10-24).
 new MutationObserver(() => {
-  const save = $("leftTabs").querySelector('[data-tab="save"]');
-  save.disabled = $("exportBtn").disabled;
-  $("exportBtn").title = save.title = $("exportBtn").disabled ? t("Nothing to download yet") : "";
+  $("exportBtn").title = $("exportBtn").disabled ? t("Nothing to download yet") : "";
 }).observe($("exportBtn"), { attributes: true, attributeFilter: ["disabled"] });
 
 // A button keeps the keyboard after the mouse presses it, and the timeline's

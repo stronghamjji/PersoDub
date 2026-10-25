@@ -2,10 +2,10 @@
 // mockup, user 2026-09-29), in Home's order (owner, 2026-10-23): Dubbing,
 // Erase, Captions (named Burn in subtitles) and Save video. Dubbing and
 // Captions each show their own body under the row -- #tabDubbing,
-// #tabCaptions -- and hide the others. Erase and Save video have no body:
-// Erase is the way to the erase screen, Save video saves the project's
-// original video, so pressing either runs onErase or onSave and leaves the
-// row as it was.
+// #tabCaptions -- and hide the others. Erase and Save video run onErase or
+// onSave and leave the row as it was: Erase is the way to the erase screen,
+// Save video saves the project's video. With no video yet onSave shows Save
+// video's own body, #tabSave, a link field (ui/src/app.mjs).
 //
 // A new tool is a new tab: a button with data-tab="<name>" in #leftTabs and a
 // body with id "tab" + <Name>. Nothing here needs to change for it.

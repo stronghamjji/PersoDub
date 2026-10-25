@@ -14,24 +14,33 @@ import { t } from "./i18n.mjs";
 export const IMPORT_VARIANT = "dark";
 
 /** The block's markup: #<id> around the words and the link field
-    #<linkId>Row > #<linkId>Input. */
-export function importBlockHtml(id, linkId, variant = IMPORT_VARIANT) {
+    #<linkId>Row > #<linkId>Input. `linkOnly`: the link field alone in the
+    same dashed block, with no words and nothing to click or drop. */
+export function importBlockHtml(id, linkId, variant = IMPORT_VARIANT, linkOnly = false) {
+  if (linkOnly) return `<div class="import-block link-only" id="${id}">` + linkFieldHtml(linkId) + `</div>`;
   return `<div class="import-block${variant === "blue" ? " import-blue" : ""}" id="${id}" tabindex="0">`
     + `<div class="import-head"><span class="import-plus">${lucide("plus", 12)}</span>${t("Import")}</div>`
     + `<div class="import-sub">${t("Drop videos here, or click to choose")}</div>`
-    + `<label class="import-link" id="${linkId}Row">${lucide("link", 14)}`
-    + `<input id="${linkId}Input" type="url" placeholder="${t("Paste a YouTube, TikTok or Reels link")}" autocomplete="off"></label>`
+    + linkFieldHtml(linkId)
     + `</div>`;
 }
 
+function linkFieldHtml(linkId) {
+  return `<label class="import-link" id="${linkId}Row">${lucide("link", 14)}`
+    + `<input id="${linkId}Input" type="url" placeholder="${t("Paste a YouTube, TikTok or Reels link")}" autocomplete="off"></label>`;
+}
+
 // A tab with no video yet says what it is for, in the Home cards' words: a
-// heading, one short sentence, and the Import block under them. The three
-// tabs draw this one group, so they are the same thing in the same place.
+// heading, one short sentence, and the Import block under them. The tabs
+// draw this one group, so they are the same thing in the same place. Save
+// video's block is its link field alone: it saves a video from a link
+// (owner, 2026-10-24).
 // Getters, so each read is in the page's language at that moment.
 export const EMPTY_TABS = {
   get dubbing() { return [t("Dubbing"), t("Voice a video in another language.")]; },
   get erase() { return [t("Erase subtitles"), t("Takes burned-in subtitles out.")]; },
   get captions() { return [t("Burn in subtitles"), t("Burns subtitles into a video.")]; },
+  get save() { return [t("Save video"), t("Saves a video from a link.")]; },
 };
 
 /** The empty tab's group: heading, sentence, then the block #<id>. */
@@ -39,7 +48,7 @@ export function emptyTabHtml(tab, id, linkId) {
   const [heading, sentence] = EMPTY_TABS[tab];
   return `<div class="tab-empty-title">${heading}</div>`
     + `<div class="tab-empty-sub">${sentence}</div>`
-    + importBlockHtml(id, linkId);
+    + importBlockHtml(id, linkId, IMPORT_VARIANT, tab === "save");
 }
 
 /**
@@ -49,7 +58,8 @@ export function emptyTabHtml(tab, id, linkId) {
  * @param {object} o
  * @param {string} o.id
  * @param {string} o.linkId
- * @param {any} o.input  the hidden <input type=file> the block opens
+ * @param {any} [o.input]  the hidden <input type=file> the block opens; none
+ *        for a link-only block, which takes no click and no drop
  * @param {(files: File[]) => void} o.onFiles  dropped files, never empty
  * @param {(url: string) => void} o.onLink  a link pasted (or typed) and left 400 ms, or Enter on one
  * @param {(message: string) => void} o.onNotLink  Enter on anything else typed
@@ -57,20 +67,22 @@ export function emptyTabHtml(tab, id, linkId) {
 export function wireImportBlock($, { id, linkId, input, onFiles, onLink, onNotLink }) {
   const block = $(id);
   if (!block) return;
-  block.addEventListener("click", () => input.click());
-  block.addEventListener("keydown", (e) => {
-    if (e.target === block && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); input.click(); }
-  });
-  for (const ev of ["dragenter", "dragover"]) {
-    block.addEventListener(ev, (e) => { e.preventDefault(); block.classList.add("drag-over"); });
+  if (input) {
+    block.addEventListener("click", () => input.click());
+    block.addEventListener("keydown", (e) => {
+      if (e.target === block && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); input.click(); }
+    });
+    for (const ev of ["dragenter", "dragover"]) {
+      block.addEventListener(ev, (e) => { e.preventDefault(); block.classList.add("drag-over"); });
+    }
+    block.addEventListener("dragleave", () => block.classList.remove("drag-over"));
+    block.addEventListener("drop", (e) => {
+      e.preventDefault();
+      block.classList.remove("drag-over");
+      const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+      if (files.length) onFiles(files);
+    });
   }
-  block.addEventListener("dragleave", () => block.classList.remove("drag-over"));
-  block.addEventListener("drop", (e) => {
-    e.preventDefault();
-    block.classList.remove("drag-over");
-    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
-    if (files.length) onFiles(files);
-  });
   // The link field sits inside the block: a click in it is for typing, not
   // for the file picker.
   const field = $(`${linkId}Input`);

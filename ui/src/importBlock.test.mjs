@@ -73,3 +73,14 @@ test("something that is not a link says nothing while typed, and says so on Ente
   h.enter();
   assert.deepEqual(h.log.notLinks, [NOT_A_LINK]);
 });
+
+test("a block wired with no file input takes the link field alone: no click, key or drop on the block", () => {
+  const els = new Map();
+  const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
+  const links = [];
+  wireImportBlock($, { id: "zone", linkId: "link", onLink: (url) => links.push(url), onNotLink: () => {} });
+  assert.deepEqual(Object.keys($("zone").listeners), []);
+  $("linkInput").value = "https://youtu.be/abc";
+  $("linkInput").fire("keydown", { key: "Enter", preventDefault() {} });
+  assert.deepEqual(links, ["https://youtu.be/abc"]);
+});

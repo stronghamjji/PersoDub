@@ -47,8 +47,9 @@ export function initWorkFrame({ $, tabs, getScreen, onLeaveErase }) {
     if (name === "home") return;
     // A job opened from the first screen starts on its own tab; so does one
     // that takes the screen from the Erase tab, or from Captions, which a
-    // running dub has nothing for.
-    if (!from || from === "home" || tabs.current() === "erase"
+    // running dub has nothing for, or from Save video, whose body is only
+    // for a project with no video.
+    if (!from || from === "home" || ["erase", "save"].includes(tabs.current())
       || (name === "running" && tabs.current() === "captions")) tabs.show("dubbing");
   }
 

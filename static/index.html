@@ -292,7 +292,8 @@
                 <button class="left-tab" type="button" role="tab" data-tab="captions" aria-selected="false">
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></svg>Burn in subtitles</button>
                 <!-- Save video: the project's own video as a file, through the
-                     Download dialog with that one row (ui/src/app.mjs). -->
+                     Download dialog with that one row (ui/src/app.mjs); with
+                     no video yet, its body's link field. -->
                 <button class="left-tab" type="button" role="tab" data-tab="save" aria-selected="false">
                   <svg class="lu" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Save video</button>
                 <button class="left-tab way-out way-new" id="newProjectBtn" type="button" aria-label="New project" data-i18n-aria-label="New project" hidden>
@@ -458,6 +459,20 @@
                     <div class="erase-card result-box" id="capResult">
                       <div data-i18n class="k">What you get</div>
                       <div data-i18n class="m">The video with subtitles burned in, and the subtitle file</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- Save video with no video yet: a link field alone, which
+                   brings the video into this project (ui/src/draftImport.mjs).
+                   With a video in, the tab opens the Download dialog instead
+                   and shows no body. -->
+              <div class="tab-body" id="tabSave" role="tabpanel" hidden>
+                <div class="tab-empty" id="saveImport" hidden>
+                  <div class="tab-empty-group">
+                    <div id="saveImportSlot"></div>
+                    <div class="tab-empty-under">
+                      <div class="import-status" id="saveImportStatus"></div>
                     </div>
                   </div>
                 </div>

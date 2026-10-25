@@ -27,12 +27,13 @@ import { t } from "./i18n.mjs";
 const DOWNLOAD_POLL_MS = 1000;
 // The line under each tab's Import block, and the one under the Before
 // dubbing card, where a video taking the card's place says how it is going.
-const STATUS_IDS = ["dubbingImportStatus", "draftImportStatus", "capImportStatus"];
+const STATUS_IDS = ["dubbingImportStatus", "draftImportStatus", "capImportStatus", "saveImportStatus"];
 
 /**
  * Wire importing to a page. The page needs: #dubbingImport, the Dubbing tab's
  * face with no video, holding #dubbingImportSlot (the block is drawn there)
- * and #dubbingImportStatus; and a hidden `<input type=file accept="video/*">`
+ * and #dubbingImportStatus; #saveImport, the Save video tab's, with
+ * #saveImportSlot and #saveImportStatus; and a hidden `<input type=file accept="video/*">`
  * at #draftFileInput.
  *
  * @param {object} deps
@@ -45,14 +46,18 @@ const STATUS_IDS = ["dubbingImportStatus", "draftImportStatus", "capImportStatus
  * @param {(downloadId: string) => void} [deps.onReplaced]  told the id of the
  *        draft a file took the place of (Replace on the card, or a drop on the
  *        timeline answered Replace), so Home lets its Draft card go
+ * @param {() => void} [deps.onSaveLinkReady]  told once a link pasted on the
+ *        Save video tab is the draft, so the page can save it
  * @returns {{ render: () => void, importSource: (source: {file?, link?,
  *   onReady?, downloadId?, name?, duration?}) => Promise<void>, cancelImport: () => void,
  *   say: (text: string, isError?: boolean) => void }}
  */
 export function initDraftImport({ $, state = {}, getScreen = () => "done",
-                                  checkFile = () => null, onReplaced = () => {} }) {
+                                  checkFile = () => null, onReplaced = () => {}, onSaveLinkReady = () => {} }) {
   const slot = $("dubbingImportSlot");
   if (slot) slot.outerHTML = emptyTabHtml("dubbing", "dubbingZone", "dubbingLink");
+  const saveSlot = $("saveImportSlot");
+  if (saveSlot) saveSlot.outerHTML = emptyTabHtml("save", "saveZone", "saveLink");
 
   let importSeq = 0;
   let downloadTimer = null;
@@ -216,11 +221,13 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
     return importSource(source);
   }
 
-  // ---- the Dubbing tab with no video: the Import block and its line --------
+  // ---- the Dubbing and Save video tabs with no video: the block and its line --
   function render() {
     const d = getDraft();
-    const face = $("dubbingImport");
-    if (face) face.hidden = !!d || !!state.jobId;
+    for (const id of ["dubbingImport", "saveImport"]) {
+      const face = $(id);
+      if (face) face.hidden = !!d || !!state.jobId;
+    }
     paintVideoPane(d);
   }
 
@@ -256,6 +263,12 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
       // A project holds one video: the first of a drop is the one taken.
       onFiles: (files) => pickOrReplace({ file: files[0] }),
       onLink: (url) => pickOrReplace({ link: url }),
+      onNotLink: (message) => setStatus(message, true),
+    });
+    // Save video with no video: the link field alone, fetched the same way.
+    wireImportBlock($, {
+      id: "saveZone", linkId: "saveLink",
+      onLink: (url) => pickOrReplace({ link: url, onReady: onSaveLinkReady }),
       onNotLink: (message) => setStatus(message, true),
     });
   }
