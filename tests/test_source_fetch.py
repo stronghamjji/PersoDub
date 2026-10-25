@@ -241,6 +241,15 @@ def test_fetch_succeeds_without_upgrading(monkeypatch, tmp_path):
     assert upgrades["n"] == 0
 
 
+def test_fetch_prefers_h264_and_aac_without_giving_up_resolution(monkeypatch, tmp_path):
+    run = _fake_run()
+    monkeypatch.setattr(source_fetch, "_run", run)
+    source_fetch.fetch("https://youtu.be/abc", str(tmp_path / "input.mp4"))
+    args = run.calls[0]
+    assert args[args.index("-f") + 1] == "bv*+ba/b"
+    assert args[args.index("-S") + 1] == "lang,res,fps,vcodec:h264,acodec:aac"
+
+
 def test_fetch_upgrades_once_then_succeeds(monkeypatch, tmp_path):
     upgrades = _count_upgrades(monkeypatch)
     seq = _Sequence(
