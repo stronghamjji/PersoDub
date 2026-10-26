@@ -30,7 +30,7 @@ export function signInFace(status) {
   return status.hasKey ? "" : "nokey";
 }
 
-export function initSignIn({ $, shell, body = document.body }) {
+export function initSignIn({ $, shell, body = document.body, pollMs = 5000 }) {
   let status = { enabled: false };
   let note = "";      // why the last sign-in did not finish, on the first face
   let keyNote = "";   // what the last "Check again" found, on the no-key face
@@ -48,6 +48,25 @@ export function initSignIn({ $, shell, body = document.body }) {
       madeInert.add(el);
     }
   }
+
+  // While the no-key face is up, the account's keys are looked at every few
+  // seconds, so a key made on the Perso site is taken without a press.
+  let polling = false;
+  function watchKey() {
+    if (polling || !auth) return;
+    polling = true;
+    const tick = async () => {
+      if (signInFace(status) !== "nokey") { polling = false; return; }
+      let r = null;
+      try { r = await auth.authCheckKey(); } catch { /* the next tick asks again */ }
+      if (r && r.key === "saved") keyNote = "";
+      await refresh();
+      if (signInFace(status) === "nokey") later(tick); else polling = false;
+    };
+    later(tick);
+  }
+  // unref: in a test on Node the pending look must not hold the process open.
+  const later = (fn) => { const timer = setTimeout(fn, pollMs); timer.unref?.(); };
 
   let shownFace = "";
   function paint() {
@@ -68,6 +87,7 @@ export function initSignIn({ $, shell, body = document.body }) {
       ({ start: $("signInBtn"), wait: $("signInReopen"), nokey: $("signInMakeKey") })[face].focus();
     }
     shownFace = face;
+    if (face === "nokey") watchKey();
   }
 
   function take(s) {
@@ -92,6 +112,9 @@ export function initSignIn({ $, shell, body = document.body }) {
     // Signed in, but the key could not be read: the no-key face says why.
     if (r && r.key === "failed") keyNote = t("Couldn't check the key. Check your connection.");
     await refresh();
+    // Signed in to an account with no key: the key page opens at once, and
+    // the screen moves on by itself once a key is made there (watchKey).
+    if (r && r.outcome === "signed_in" && r.key === "no_key") { try { await auth.authOpenKeyPage(); } catch { /* the button is still there */ } }
     return r;
   }
 

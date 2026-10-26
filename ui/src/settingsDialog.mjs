@@ -45,14 +45,14 @@ import { paintMarkupWords } from "./markupWords.mjs";
 
 // The tabs, in the order they stand. Each is #settingsTab-<name> and shows
 // #settingsPanel-<name>.
-export const SETTINGS_TABS = ["models", "keys", "storage", "privacy", "about"];
+export const SETTINGS_TABS = ["keys", "models", "storage", "privacy", "about"];
 
 export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = () => window.location.reload(),
                                  shell = null, account = null }) {
   // The tab the user last chose, for this sitting only: a new launch starts
-  // on Models again.
-  let lastTab = "models";
-  let shownTab = "models";
+  // on the first tab, the keys, again.
+  let lastTab = "keys";
+  let shownTab = "keys";
   // Whether the user has chosen a tab since the sheet opened, so a late
   // answer about the models does not pull them off the one they chose.
   let chosenSinceOpen = false;

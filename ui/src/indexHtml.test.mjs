@@ -979,11 +979,11 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
   const from = html.indexOf('<div class="modal-overlay" id="settingsOverlay">');
   const sheet = html.slice(from, html.indexOf('id="settingsSaveBtn"', from) + 200);
   assert.match(sheet, /<div class="set-tabs" id="settingsTabs" role="tablist"/);
-  const names = ["models", "keys", "storage", "privacy", "about"];
+  const names = ["keys", "models", "storage", "privacy", "about"];
   const tabs = [...sheet.matchAll(/id="settingsTab-(\w+)"[^>]*role="tab"[^>]*aria-controls="settingsPanel-(\w+)"[^>]*>([^<]+)</g)];
   assert.deepEqual(tabs.map((m) => m[1]), names);
   assert.deepEqual(tabs.map((m) => m[2]), names);
-  assert.deepEqual(tabs.map((m) => m[3]), ["Models", "API keys", "Storage", "Privacy", "About"]);
+  assert.deepEqual(tabs.map((m) => m[3]), ["API keys", "Models", "Storage", "Privacy", "About"]);
   assert.equal((sheet.match(/aria-selected="true"/g) || []).length, 1, "one tab is selected in the markup");
   // Each control sits in the panel of its own tab.
   const panel = (name) => {

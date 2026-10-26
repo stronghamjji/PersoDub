@@ -30,7 +30,7 @@ const NO_KEY = { ...SIGNED_IN, account: "c***@test.local", hasKey: false };
 
 // A shell whose answers the test sets: `status` is what authStatus says, and
 // each action answers `answers[name]` (or waits for `hold[name]`).
-function harness(status, answers = {}) {
+function harness(status, answers = {}, pollMs = 5000) {
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const calls = [];
@@ -43,7 +43,7 @@ function harness(status, answers = {}) {
   // The page under the screen: two parts, one already inert of its own.
   const body = { children: [$("signInScreen"), $("shellPart"), $("sidebar")] };
   $("sidebar").inert = true;
-  const api = initSignIn({ $, shell, body });
+  const api = initSignIn({ $, shell, body, pollMs });
   const settle = () => new Promise((r) => setImmediate(r));
   return { $, api, shell, calls, settle };
 }
@@ -194,6 +194,26 @@ test("the no-key face has a way out: Sign out brings the sign-in back", async ()
   assert.deepEqual(h.calls, ["authLogout"]);
   assert.equal(h.$("signInStart").hidden, false);
   assert.equal(h.$("signInNoKey").hidden, true);
+});
+
+test("signed in to an account with no key: the key page opens by itself, and a key made later is taken without a press", async () => {
+  const h = harness(SIGNED_OUT, {}, 5);
+  h.shell.authLogin = async () => { h.calls.push("authLogin"); h.shell.status = NO_KEY; return { outcome: "signed_in", key: "no_key" }; };
+  h.shell.authCheckKey = async () => { h.calls.push("authCheckKey"); return { key: "no_key" }; };
+  await h.settle();
+  await h.$("signInBtn").fire("click");
+  assert.deepEqual(h.calls, ["authLogin", "authOpenKeyPage"]);
+  assert.equal(h.$("signInNoKey").hidden, false);
+  // The account gets a key on the site: the next look finds it and the screen goes.
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(h.calls.filter((c) => c === "authCheckKey").length >= 1, "the keys were not looked at again");
+  h.shell.authCheckKey = async () => { h.calls.push("authCheckKey"); h.shell.status = { ...NO_KEY, hasKey: true }; return { key: "saved" }; };
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(h.$("signInScreen").hidden, true);
+  // ...and the looking stops with the face.
+  const looked = h.calls.filter((c) => c === "authCheckKey").length;
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(h.calls.filter((c) => c === "authCheckKey").length, looked);
 });
 
 test("no free port on this computer says so under the button", async () => {

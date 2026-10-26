@@ -1125,14 +1125,14 @@
            ui/src/settingsDialog.mjs shows one panel at a time and picks the
            one to open on. -->
       <div class="set-tabs" id="settingsTabs" role="tablist" aria-label="Settings" data-i18n-aria-label="Settings">
-        <button class="set-tab" id="settingsTab-models" type="button" role="tab" aria-selected="true" aria-controls="settingsPanel-models" data-i18n>Models</button>
-        <button class="set-tab" id="settingsTab-keys" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel-keys" tabindex="-1" data-i18n>API keys</button>
+        <button class="set-tab" id="settingsTab-keys" type="button" role="tab" aria-selected="true" aria-controls="settingsPanel-keys" data-i18n>API keys</button>
+        <button class="set-tab" id="settingsTab-models" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel-models" tabindex="-1" data-i18n>Models</button>
         <button class="set-tab" id="settingsTab-storage" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel-storage" tabindex="-1" data-i18n>Storage</button>
         <button class="set-tab" id="settingsTab-privacy" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel-privacy" tabindex="-1" data-i18n>Privacy</button>
         <button class="set-tab" id="settingsTab-about" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel-about" tabindex="-1" data-i18n>About</button>
       </div>
 
-      <div class="set-panel" id="settingsPanel-models" role="tabpanel" aria-labelledby="settingsTab-models">
+      <div class="set-panel" id="settingsPanel-models" role="tabpanel" aria-labelledby="settingsTab-models" hidden>
         <!-- The whole list, always open: the tab is the fold now.
              renderModelsList marks #modelsFold when a model is busy, and the
              sheet opens on this tab for it. Rows keep the App Store grammar:
@@ -1144,7 +1144,7 @@
         </div>
       </div>
 
-      <div class="set-panel" id="settingsPanel-keys" role="tabpanel" aria-labelledby="settingsTab-keys" hidden>
+      <div class="set-panel" id="settingsPanel-keys" role="tabpanel" aria-labelledby="settingsTab-keys">
         <!-- Saved values still prefill (a hidden-once-saved field just looked
              empty -- user decision 2026-08-06), but masked by default with a
              Show toggle: screen shares and screenshots were putting the keys
@@ -1544,7 +1544,7 @@
   <div class="signin-stage" id="signInNoKey" hidden>
     <img class="signin-logo sm" src="/logo.png" alt="">
     <h1 data-i18n>No API key yet</h1>
-    <p data-i18n>Make a key on the Perso site, then come back.</p>
+    <p data-i18n>The key page is open in your browser. Make a key there; PersoDub carries on by itself.</p>
     <div class="signin-acct" id="signInAccount"></div>
     <div class="signin-btns">
       <button data-i18n class="btn btn-primary signin-btn" id="signInMakeKey" type="button">Make a key</button>

@@ -54,7 +54,8 @@ allowed_grant_types authorization_code, refresh_token
 1. loopback redirect의 포트 와일드카드 지원 여부. 안 되면 위 고정 포트 3개로 갑니다.
 2. PUBLIC 클라이언트의 refresh 주소. v2/token은 refresh_token grant에 500을 줍니다. v1 auth/oauth2/token이 맞는지요.
 3. video-translator API가 Authorization: Bearer <accessToken>을 받는지, 아니면 XP-API-KEY만 받는지.
-4. /auth/api/v1/api-keys/active 가 키를 전체 값으로 주는지, 마스킹해서 주는지.
+4. /auth/api/v1/api-keys/active 가 키를 전체 값으로 주는지, 마스킹해서 주는지. (확인됨: 전체 값)
+5. 앱이 사용자 대신 API 키를 만들 수 있는 엔드포인트가 있는지 (예: POST /auth/api/v1/api-keys).
 ```
 등록이 오면 바꿀 곳: `desktop/src/auth.js`의 `clientId` 기본값 한 줄. 포트는 이미 52290~52292.
 
@@ -104,6 +105,10 @@ allowed_grant_types authorization_code, refresh_token
 **아직 실제로 안 해본 것**: 키 없는 계정(가짜 Perso 테스트로만), Windows, 패키징(dmg/exe)된 빌드, 우리 client id. 등록이 오면 마지막 둘을 합니다.
 
 **문구**: 한국어 "작업공간"은 전부 "Workspace"로 바꿨습니다(사용자 결정 2026-10-26).
+
+**키 없는 계정의 흐름(사용자 요청 2026-10-26)**: 로그인했는데 키가 없으면 키 만들기 페이지가 브라우저에 바로 열리고, 키 없음 화면이 떠 있는 동안 5초마다 키를 다시 확인해서 키가 생기면 알아서 앱으로 넘어갑니다. "키 만들기"와 "다시 확인" 버튼은 그대로 있습니다. Perso에 물어볼 것 하나 추가: 앱이 API로 키를 직접 만들 수 있는 엔드포인트가 있는지. 있으면 사이트 방문 없이 끝낼 수 있습니다.
+
+**설정 탭 순서(사용자 요청 2026-10-26)**: API 키(프로덕션에서는 "계정과 키")가 첫 탭이고 설정은 그 탭으로 열립니다. 모델에 주의가 필요할 때만 모델 탭으로 엽니다.
 
 ## 6. 참고한 저장소와 사실 확인 기록
 

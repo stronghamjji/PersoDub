@@ -473,21 +473,21 @@ const selected = (h) => SETTINGS_TABS.filter((t) => h.$(`settingsTab-${t}`).attr
 const showing = (h) => SETTINGS_TABS.filter((t) => h.$(`settingsPanel-${t}`).hidden === false);
 const tick = () => new Promise((r) => setImmediate(r));
 
-test("the tabs are Models, API keys, Storage, Privacy and About", () => {
-  assert.deepEqual(SETTINGS_TABS, ["models", "keys", "storage", "privacy", "about"]);
+test("the tabs are API keys, Models, Storage, Privacy and About", () => {
+  assert.deepEqual(SETTINGS_TABS, ["keys", "models", "storage", "privacy", "about"]);
 });
 
-test("the gear opens on Models the first time, one tab selected and one panel showing", async (t) => {
+test("the gear opens on API keys the first time, one tab selected and one panel showing", async (t) => {
   const h = harness();
   t.after(h.state.restore);
 
   // The gear hands over its click event, which is not a tab.
   await h.api.openSettings({ type: "click" });
 
-  assert.deepEqual(selected(h), ["models"]);
-  assert.deepEqual(showing(h), ["models"]);
-  assert.equal(h.$("settingsTab-models").tabIndex, 0);
-  assert.equal(h.$("settingsTab-keys").tabIndex, -1);
+  assert.deepEqual(selected(h), ["keys"]);
+  assert.deepEqual(showing(h), ["keys"]);
+  assert.equal(h.$("settingsTab-keys").tabIndex, 0);
+  assert.equal(h.$("settingsTab-models").tabIndex, -1);
 });
 
 test("clicking a tab shows its panel alone", async (t) => {
@@ -508,21 +508,21 @@ test("the arrow keys move along the tabs and wrap, Home and End go to the ends",
   await h.api.openSettings();
   const press = (from, key) => h.$(`settingsTab-${from}`).fire("keydown", { key, preventDefault() {} });
 
-  await press("models", "ArrowRight");
-  assert.deepEqual(selected(h), ["keys"]);
-  assert.equal(h.$("settingsTab-keys").focused, true);
-  await press("keys", "ArrowLeft");
+  await press("keys", "ArrowRight");
+  assert.deepEqual(selected(h), ["models"]);
+  assert.equal(h.$("settingsTab-models").focused, true);
   await press("models", "ArrowLeft");
+  await press("keys", "ArrowLeft");
   assert.deepEqual(selected(h), ["about"]);
   await press("about", "ArrowRight");
-  assert.deepEqual(selected(h), ["models"]);
-  await press("models", "End");
+  assert.deepEqual(selected(h), ["keys"]);
+  await press("keys", "End");
   assert.deepEqual(showing(h), ["about"]);
   await press("about", "Home");
-  assert.deepEqual(showing(h), ["models"]);
+  assert.deepEqual(showing(h), ["keys"]);
   // Any other key is left alone.
-  await press("models", "a");
-  assert.deepEqual(showing(h), ["models"]);
+  await press("keys", "a");
+  assert.deepEqual(showing(h), ["keys"]);
 });
 
 test("the sheet reopens on the tab last chosen", async (t) => {

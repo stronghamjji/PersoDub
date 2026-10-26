@@ -10,7 +10,7 @@ import { isClosed, isOpen, onHome, pressable, shown, sleep, textOf, Skip } from 
 
 export const area = "settings";
 
-const TABS = ["models", "keys", "storage", "privacy", "about"];
+const TABS = ["keys", "models", "storage", "privacy", "about"];
 const TAB_WORDS = ["Models", "API keys", "Storage", "Privacy", "About"];
 const GROUPS = ["Audio separation", "Speech-to-text", "Translation", "Text-to-speech", "Required programs"];
 // Names that stay English in the Korean page: products, engines, units, keys, the 12 looks.
