@@ -28,6 +28,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { readPage } from "../testlib/readPage.mjs";
 import { lucide } from "./icons.mjs";
+import { applyTranslations, setLanguage } from "./i18n.mjs";
 
 // The timeline draws its own head and lane, so their ids live in the module.
 const TIMELINE = fileURLToPath(new URL("./timeline.mjs", import.meta.url));
@@ -1696,6 +1697,26 @@ test("a script line pressed stops the video at its start and the strip is brough
 // Home's four tools, the same four in the same order on the cards and in the
 // sidebar (owner, 2026-10-23), and the banner's line naming what a video
 // can be made into.
+// A screen reader names the sidebar as the screen shows the app: PersoDub,
+// or PersoDubbing in the production edition (the shell's name, {app}).
+test("Home's sidebar is labelled with the edition's own name", () => {
+  const tag = readPage().match(/<aside class="home-side"[^>]*>/)[0];
+  assert.equal(tag, '<aside class="home-side" aria-label="PersoDub" data-i18n-aria-label="{app}">');
+  const attrs = new Map([["aria-label", "PersoDub"]]);
+  const aside = { dataset: { i18nAriaLabel: "{app}" }, setAttribute: (k, v) => attrs.set(k, v) };
+  const page = { querySelectorAll: (sel) => (sel === "[data-i18n-aria-label]" ? [aside] : []) };
+  const hadWindow = Object.hasOwn(globalThis, "window");
+  const before = globalThis.window;
+  globalThis.window = { persodubShell: { name: "PersoDubbing" } };
+  try {
+    setLanguage("en");
+    applyTranslations(page);
+    assert.equal(attrs.get("aria-label"), "PersoDubbing");
+  } finally {
+    if (hadWindow) globalThis.window = before; else delete globalThis.window;
+  }
+});
+
 test("Home's cards and sidebar are Dubbing, Erase subtitles, Burn in subtitles and Save video", () => {
   const html = readPage();
   const cards = html.slice(html.indexOf('<div class="home-cards">'), html.indexOf('id="linkCard"'));
