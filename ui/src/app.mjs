@@ -201,6 +201,8 @@ const settings = initSettingsUi({
   // The Perso account row and its buttons, production edition only.
   account: signIn,
 });
+// Home's account line (ui/src/signIn.mjs paints it) opens the account's own tab.
+$("homeAccount").addEventListener("click", () => settings.openSettings("keys"));
 
 $("settingsBtn").addEventListener("click", settings.openSettings);
 

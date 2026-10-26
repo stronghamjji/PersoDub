@@ -11,7 +11,7 @@
 // A status with enabled: false (the open-source edition) shows nothing. In a
 // plain browser there is no shell and nothing runs.
 //
-// Everything this file touches is #signInScreen.
+// Everything this file touches is #signInScreen and Home's #homeAccount.
 import { t } from "./i18n.mjs";
 
 // A failed sign-in's reason (createAuth's `error`) as one short line.
@@ -83,6 +83,11 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 5000 }) {
     $("signInHint").classList.toggle("danger", !!note);
     $("signInAccount").textContent = status.account || t("Perso account");
     $("signInKeyNote").textContent = keyNote;
+    // Home's account line: the signed-in account under the brand, or nothing.
+    const signedIn = !!status.enabled && !!status.signedIn;
+    $("homeAccount").hidden = !signedIn;
+    $("homeAccountName").textContent = signedIn ? (status.account || t("Perso account")) : "";
+    $("homeAccount").title = signedIn ? t("signed in as {account}", { account: status.account || t("Perso account") }) : "";
     holdBackground(!!face);
     // A new face takes the keyboard on its first button.
     if (face && face !== shownFace) {

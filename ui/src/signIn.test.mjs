@@ -241,3 +241,19 @@ test("an account with nothing to show it by reads as Perso account, never an emp
   await h.settle();
   assert.equal(h.$("signInAccount").textContent, "Perso account");
 });
+
+test("Home shows the signed-in account under the brand, and nothing when signed out or in the open-source edition", async () => {
+  const h = harness(SIGNED_IN);
+  await h.settle();
+  assert.equal(h.$("homeAccount").hidden, false);
+  assert.equal(h.$("homeAccountName").textContent, "a***@test.local");
+  assert.equal(h.$("homeAccount").title, "signed in as a***@test.local");
+  h.shell.hear(SIGNED_OUT);
+  assert.equal(h.$("homeAccount").hidden, true);
+  assert.equal(h.$("homeAccountName").textContent, "");
+  h.shell.hear({ ...SIGNED_IN, account: "" });
+  assert.equal(h.$("homeAccountName").textContent, "Perso account");
+  const oss = harness({ enabled: false, required: false, signedIn: false, account: "", hasKey: true, waiting: false });
+  await oss.settle();
+  assert.equal(oss.$("homeAccount").hidden, true);
+});
