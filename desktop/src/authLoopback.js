@@ -18,8 +18,8 @@ const WORDS = {
     closing: "You can close this tab.",
   },
   ko: {
-    done: (app) => [`${app}에 로그인했어요`, `이 탭을 닫고 ${app}으로 돌아가세요.`],
-    notDone: (app) => ["로그인이 끝나지 않았어요", `${app}에서 다시 시도하세요.`],
+    done: (app) => [`${app}에 로그인했어요`, `이 탭을 닫고 ${app}으로 돌아가면 돼요.`],
+    notDone: (app) => ["로그인이 끝나지 않았어요", `${app}에서 다시 해 봐요.`],
     closing: "이 탭을 닫아도 돼요.",
   },
 };

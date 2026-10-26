@@ -770,7 +770,8 @@ test("the browser's page: the app's name, the logo, one language picked from the
   assert.ok(en.includes("Signed in to PersoDubbing</span></h1>") && en.includes("go back to PersoDubbing.") && en.includes('src="data:image/png;base64,AAAA"'));
   assert.ok(!/<(button|a|input|form)\b/.test(en), "nothing to press on the page");
   const ko = callbackPage({ ok: false, lang: "ko", appName: "PersoDubbing", logo: "" });
-  assert.ok(ko.includes("로그인이 끝나지 않았어요") && ko.includes("PersoDubbing에서 다시 시도하세요.") && !ko.includes("<img"));
+  assert.ok(ko.includes("로그인이 끝나지 않았어요") && ko.includes("PersoDubbing에서 다시 해 봐요.") && !ko.includes("<img"));
+  assert.ok(callbackPage({ ok: true, lang: "ko", appName: "PersoDubbing", logo: "" }).includes("이 탭을 닫고 PersoDubbing으로 돌아가면 돼요."));
   assert.ok(callbackPage({ ok: true, lang: "en", appName: "<b>x</b>", logo: "" }).includes("&#60;b&#62;x&#60;/b&#62;"), "the name is escaped");
 
   // Over HTTP: the browser's Accept-Language picks the language.
