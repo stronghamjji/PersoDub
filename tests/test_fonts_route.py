@@ -47,6 +47,17 @@ def test_the_flag_font_is_shipped_and_sits_first_for_flags_only():
     assert len(r.content) == (FONTS / "twemoji-country-flags.woff2").stat().st_size
 
 
+def test_the_production_type_is_shipped_and_leads_its_stack():
+    # The production edition's type is Pretendard, Perso's own (static/css/app.css).
+    css = client.get("/css/app.css").text
+    assert "url(/fonts/pretendard-variable.woff2)" in css
+    assert ':root[data-edition="production"] body {\n    font-family: "Twemoji Country Flags", "Pretendard Variable", Onest,' in css
+    r = client.get("/fonts/pretendard-variable.woff2")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "font/woff2"
+    assert len(r.content) == (FONTS / "pretendard-variable.woff2").stat().st_size
+
+
 def test_only_font_names_are_served():
     assert client.get("/fonts/nope.woff2").status_code == 404
     assert client.get("/fonts/..%2Findex.html").status_code == 404

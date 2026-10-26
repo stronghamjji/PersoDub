@@ -22,8 +22,14 @@ const EDITION_ARG = "--persodub-edition=";
 const FEEDBACK_MAIL_ARG = "--persodub-feedback-mail=";
 const SYSTEM_ARG = "--persodub-system=";
 const platform = process.argv.find((a) => a.startsWith(PLATFORM_ARG))?.slice(PLATFORM_ARG.length) || "";
-if (platform) {
-  const stamp = () => { document.documentElement.dataset.platform = platform; };
+// The edition is stamped the same way, as data-edition, so the production
+// edition's palette and type are there from the first paint (static/css/app.css).
+const edition = process.argv.find((a) => a.startsWith(EDITION_ARG))?.slice(EDITION_ARG.length) || "";
+if (platform || edition) {
+  const stamp = () => {
+    if (platform) document.documentElement.dataset.platform = platform;
+    if (edition) document.documentElement.dataset.edition = edition;
+  };
   if (document.documentElement) stamp(); else document.addEventListener("DOMContentLoaded", stamp);
 }
 

@@ -103,6 +103,8 @@ test("the preload stamps the system on the page, and the bundled screens can be 
   const preload = readFileSync(join(DESKTOP, "preload.cjs"), "utf8");
   assert.match(preload, /const PLATFORM_ARG = "--persodub-platform=";/);
   assert.match(preload, /document\.documentElement\.dataset\.platform = platform;/);
+  // ...and the edition, for the production edition's palette and type.
+  assert.match(preload, /if \(edition\) document\.documentElement\.dataset\.edition = edition;/);
   for (const name of ["loading", "installing", "not-installed", "error"]) {
     const html = readFileSync(join(DESKTOP, "screens", `${name}.html`), "utf8");
     assert.match(html, /\.drag \{ position: fixed; top: 0; left: 0; right: 0; height: 36px; -webkit-app-region: drag; \}/, name);

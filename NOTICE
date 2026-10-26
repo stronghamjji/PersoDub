@@ -122,6 +122,12 @@ Onest and Noto Sans KR fonts (static/fonts)
   Licensed under the SIL Open Font License, Version 1.1; the full licence
   texts are static/fonts/OFL-Onest.txt and static/fonts/OFL-NotoSansKR.txt.
 
+Pretendard font (static/fonts/pretendard-variable.woff2)
+  The production edition's interface type: Pretendard Variable 1.3.9, from
+  the pretendard package. https://github.com/orioncactus/pretendard
+  Licensed under the SIL Open Font License, Version 1.1; the full licence
+  text is static/fonts/OFL-Pretendard.txt.
+
 Twemoji country flags font (static/fonts/twemoji-country-flags.woff2)
   Country-flag emoji glyphs for the language dropdown, because Windows' own
   emoji font draws none. A subset of Mozilla's Twemoji Mozilla font, built by

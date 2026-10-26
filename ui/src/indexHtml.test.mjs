@@ -97,6 +97,17 @@ test("there is one dark theme, and its fonts are the app's own", () => {
     ["primary-ink", "#7aacf6"], ["timeline-fit", "#49a072"], ["destructive", "#f47b74"]]) {
     assert.match(html, new RegExp(`--${name}: ${value};`), `--${name} is not ${value}`);
   }
+  // The production edition's sheet is Perso's workspace dark under the same
+  // blue, and its type Pretendard (owner, 2026-10-27).
+  const prod = html.slice(html.indexOf(':root[data-edition="production"] {'));
+  for (const [name, value] of [["desk", "#121119"], ["background", "#17161f"], ["well", "#1f1e28"],
+    ["secondary", "#26252f"], ["border", "rgba\\(255, 255, 255, 0\\.07\\)"], ["control-line", "rgba\\(255, 255, 255, 0\\.2\\)"],
+    ["foreground", "#ededf0"], ["muted-foreground", "#a3a2ad"], ["success", "#0bc673"], ["warning", "#ffa31a"],
+    ["destructive", "#f03d3d"]]) {
+    assert.match(prod.slice(0, prod.indexOf("}")), new RegExp(`--${name}: ${value};`), `production --${name} is not ${value}`);
+  }
+  assert.ok(!prod.slice(0, prod.indexOf("}")).includes("--primary"), "the production edition keeps our blue");
+  assert.match(html, /:root\[data-edition="production"\] body \{\n    font-family: "Twemoji Country Flags", "Pretendard Variable", Onest,/);
   // Timeline bars that fit are green now, never the old violet.
   assert.ok(!/#8B5CF6/i.test(html), "the violet timeline colour is back");
   // Burned-in subtitles keep the font ffmpeg draws with.

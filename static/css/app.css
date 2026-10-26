@@ -153,6 +153,47 @@
   * { box-sizing: border-box; }
   /* Plenty of the classes below set a `display`, which would otherwise beat
      the `hidden` attribute that showScreen() and setTopbar() toggle. */
+  /* The production edition's (the data-edition the shell's preload stamps on
+     the page): Perso's own workspace dark, measured off it -- a violet-grey
+     ground, white hairlines, and its green, amber and red -- under our blue,
+     which stays (owner, 2026-10-27). The open-source edition keeps the sheet
+     above. */
+  :root[data-edition="production"] {
+    --desk: #121119;
+    --background: #17161f;
+    --canvas: #17161f;
+    --agent-bg: #17161f;
+    --well: #1f1e28;
+    --trim-track: #1f1e28;
+    --head-bg: #1f1e28;
+    --agent-head-bg: #1f1e28;
+    --secondary: #26252f;
+    --agent-box: #26252f;
+    --field: #121119;
+    --agent-field: #121119;
+    --border: rgba(255, 255, 255, 0.07);
+    --agent-border: rgba(255, 255, 255, 0.07);
+    --head-line: rgba(255, 255, 255, 0.07);
+    --hair: rgba(255, 255, 255, 0.07);
+    --agent-field-line: rgba(255, 255, 255, 0.07);
+    --control-line: rgba(255, 255, 255, 0.2);
+    --divider: rgba(255, 255, 255, 0.2);
+    --well-line: rgba(255, 255, 255, 0.2);
+    --dropzone-line: rgba(255, 255, 255, 0.2);
+    --foreground: #ededf0;
+    --agent-fg: #ededf0;
+    --agent-me-fg: #ededf0;
+    --muted-foreground: #a3a2ad;
+    --agent-muted: #a3a2ad;
+    --success: #0bc673;
+    --success-ink: #0bc673;
+    --chip-done-fg: #0bc673;
+    --agent-ok: #0bc673;
+    --warning: #ffa31a;
+    --agent-warn: #ffa31a;
+    --destructive: #f03d3d;
+  }
+
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; }
 
@@ -179,6 +220,18 @@
     line-height: 1.5;
     background: var(--background);
     overflow: hidden; /* the app fills the window; only inner panes scroll */
+  }
+  /* The production edition's type is Perso's, Pretendard, from static/fonts
+     too (origin in NOTICE); after the flags only, which it does not draw. */
+  @font-face {
+    font-family: "Pretendard Variable";
+    src: url(/fonts/pretendard-variable.woff2) format("woff2");
+    font-weight: 45 920;
+    font-display: swap;
+  }
+  :root[data-edition="production"] body {
+    font-family: "Twemoji Country Flags", "Pretendard Variable", Onest, "Noto Sans KR", -apple-system, "Segoe UI",
+      "Apple SD Gothic Neo", "Malgun Gothic", Roboto, Helvetica, Arial, sans-serif;
   }
   /* Korean wraps between words, never inside one: left to itself a line may
      end mid-word, which reads as a typo. The page names its language on
