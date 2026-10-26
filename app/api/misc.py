@@ -184,12 +184,17 @@ def whats_new():
     # "notes_<code>" ("notes_ko") in each language the app speaks. The notes
     # follow the engine's language (app/i18n.py), so a Korean computer reads
     # them in Korean; a language with no notes of its own gets the English.
+    # Where the editions' words differ, the file has the production edition's
+    # own lists too ("notes_production", "notes_production_ko"), which that
+    # app file reads (PERSODUB_BUILD_EDITION, the page's edition).
     path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "whats_new.json")
     notes = []
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        notes = [str(n) for n in (data.get(f"notes_{current_language()}") or data.get("notes") or [])]
+        own = os.environ.get("PERSODUB_BUILD_EDITION") == "production" and data.get("notes_production")
+        key = "notes_production" if own else "notes"
+        notes = [str(n) for n in (data.get(f"{key}_{current_language()}") or data.get(key) or [])]
     except Exception as e:
         # No notes is fine; the popup simply never shows. Worth a line all the
         # same -- the file ships with the release, so an unreadable one is a
