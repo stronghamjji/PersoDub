@@ -646,7 +646,7 @@ test("the update's dot is on the What's new card, not in the top bar; the key wi
   assert.ok(!html.includes('id="updateBtn"'), "the top bar's update icon is gone (2026-10-21)");
   assert.match(html, /#homeWhatsNew\.live::after \{ content: ""; position: absolute;/);
   // An update with no notes links to its release, Perso's desktop app page in production.
-  assert.match(html, /wireUpdates\(\{ \$, shell: window\.persodubShell \|\| null,\n  notesPage: isProduction\(\) \? \(\) => DESKTOP_APP_URL : \(version\) => `\$\{REPO_URL\}\/releases\/tag\/v\$\{version\}` \}\);/);
+  assert.match(html, /wireUpdates\(\{ \$, shell: window\.persodubShell \|\| null,\n  \/\/[^\n]*\n  notesPage: isProduction\(\) \? \(\) => null : \(version\) => `\$\{REPO_URL\}\/releases\/tag\/v\$\{version\}` \}\);/);
   for (const id of ["updateOverlay", "updClose", "updTitle", "updCurrent", "updNext", "updGo", "updRunning", "updNotesBox", "updNotes", "updNotesLink"]) {
     assert.match(html, new RegExp(`id="${id}"`), id);
   }
@@ -729,7 +729,7 @@ test("there is no rail, and the logo in Settings > About is the way to the proje
     "the rail and its buttons are gone (mockup 2026-09-29)");
   assert.match(html, /<button class="about-logo-btn" id="brandBtn"[^>]*title="PersoDub on GitHub"[^>]*><img class="about-logo" src="\/logo.png"/);
   // ...and Perso's desktop app page in the production edition, which has no repository.
-  assert.match(html, /\$\("brandBtn"\)\.addEventListener\("click", \(\) => window\.open\(isProduction\(\) \? DESKTOP_APP_URL : REPO_URL, "_blank", "noopener"\)\)/);
+  assert.match(html, /\$\("brandBtn"\)\.addEventListener\("click", \(\) => window\.open\(isProduction\(\) \? persoLink\(DESKTOP_APP_URL, "about", savedSettings\(\)\?\.perso_utm\) : REPO_URL, "_blank", "noopener"\)\)/);
 });
 
 // Which repository the project's links open is the shell's to say: the build's
@@ -1678,7 +1678,7 @@ test("Home's Help sits above Send feedback and opens its tools and the Dub Agent
   assert.ok(!dialog.includes("—"), "no em dash in the copy");
   // The links open the repo's docs and stay off the page's own "#".
   assert.match(html, /\[\["helpGuide", "usage"\], \["helpFaq", "faq"\]\]/);
-  assert.match(html, /e\.preventDefault\(\);\n    window\.open\(isProduction\(\) \? DESKTOP_APP_URL : `\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
+  assert.match(html, /e\.preventDefault\(\);\n    window\.open\(isProduction\(\) \? persoLink\(DESKTOP_APP_URL, "help", savedSettings\(\)\?\.perso_utm\) : `\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
   // The production edition has no repository: its User guide is Perso's desktop
   // app page, and it has no FAQ link.
   assert.match(html, /\$\("helpFaqItem"\)\.hidden = isProduction\(\);/);

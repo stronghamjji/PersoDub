@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from app import i18n, state
 from app.i18n import t
-from app.perso_client import APP_VERSION, SIGNUP_LINK, WORKSPACE_LINK, list_dubbing_spaces
+from app.perso_client import APP_VERSION, SIGNUP_LINK, UTM_TAIL, WORKSPACE_LINK, list_dubbing_spaces
 from app.settings_env import (
     current_value,
     read_analytics_off,
@@ -70,6 +70,8 @@ def settings_get():
             "perso_signup_link": SIGNUP_LINK,
             # Tagged the same way; the Home sidebar's perso.ai button opens it.
             "perso_workspace_link": WORKSPACE_LINK,
+            # The tail the page puts on its own links into Perso (edition.mjs persoLink).
+            "perso_utm": UTM_TAIL,
             "analytics_off": read_analytics_off(),
             "reports_off": read_reports_off(),
             # Button and screen events: on by default in the production edition only.

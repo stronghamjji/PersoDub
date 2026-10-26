@@ -25,7 +25,9 @@ import { t } from "./i18n.mjs";
  *   dropdown `sel` (set back to `back` on Cancel), or for
  *   the workspace alone (`spaceOnly`); `then` runs once it is saved.
  */
-export function initKeyWindow({ $, keySaved, onSaved }) {
+// persoKeyLink: the tagged link to Perso's key page the app's settings carry
+// (perso_signup_link), so the visit says it came from this app; the bare page without it.
+export function initKeyWindow({ $, keySaved, onSaved, persoKeyLink = () => null }) {
   // Picking a keyed engine with no key saved opens the key window. Save keeps
   // the choice; Cancel puts the dropdown back where it was.
   const KEY_KINDS = {
@@ -91,7 +93,7 @@ export function initKeyWindow({ $, keySaved, onSaved }) {
     keyAsk = { kind, sel, back, spaceOnly, then };
     keySpacesRun += 1;
     $("keyTitle").textContent = spaceOnly ? t("Perso workspace") : KEY_KINDS[kind].title;
-    $("keyLink").href = KEY_KINDS[kind].link;
+    $("keyLink").href = (kind === "perso" && persoKeyLink()) || KEY_KINDS[kind].link;
     $("keyField").hidden = spaceOnly;
     $("keyInput").value = "";
     $("keySpace").replaceChildren();

@@ -7,6 +7,14 @@ export const DESKTOP_APP_URL = "https://perso.ai/dubbing/desktop-app";
 
 const shellOf = () => globalThis.window?.persodubShell;
 
+/** A link into Perso with the app's utm tail (GET /api/settings perso_utm)
+    and the pressed button as utm_content, so Perso's web analytics say which
+    button of which app and version brought the visit. No tail yet: the bare link. */
+export function persoLink(url, content, utm) {
+  if (!utm) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}${utm}&utm_content=${encodeURIComponent(content)}`;
+}
+
 /** True in the production edition's app. */
 export function isProduction(shell = shellOf()) {
   return shell?.edition === "production";

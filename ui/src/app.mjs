@@ -33,7 +33,7 @@ import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
 import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { initFeedbackSheet } from "./feedbackSheet.mjs";
-import { isProduction, productName, feedbackSubject, DESKTOP_APP_URL } from "./edition.mjs";
+import { isProduction, productName, feedbackSubject, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -218,7 +218,7 @@ $("helpFaqItem").hidden = isProduction();
 for (const [id, doc] of [["helpGuide", "usage"], ["helpFaq", "faq"]]) {
   $(id).addEventListener("click", (e) => {
     e.preventDefault();
-    window.open(isProduction() ? DESKTOP_APP_URL : `${REPO_URL}/blob/main/docs/${doc}.md`, "_blank", "noopener");
+    window.open(isProduction() ? persoLink(DESKTOP_APP_URL, "help", savedSettings()?.perso_utm) : `${REPO_URL}/blob/main/docs/${doc}.md`, "_blank", "noopener");
   });
 }
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
@@ -280,7 +280,8 @@ applyEngineAvailabilityToForm();
 
 // Picking a keyed engine with no key saved opens the key window (ui/src/keyWindow.mjs).
 // Save keeps the choice; Cancel puts the dropdown back where it was.
-const keyWindow = initKeyWindow({ $, keySaved, onSaved: applyEngineAvailabilityToForm });
+const keyWindow = initKeyWindow({ $, keySaved, onSaved: applyEngineAvailabilityToForm,
+  persoKeyLink: () => savedSettings()?.perso_signup_link });
 
 // Picking Hunyuan before it is downloaded shows a Download button in the
 // field's own hint -- a 1.1GB download must be asked for, never started by a
@@ -936,7 +937,7 @@ const languageRow = initLanguageRow({
 // opens Perso's desktop app page, and is named after the app rather than the
 // repository.
 const REPO_URL = `https://github.com/${window.persodubShell?.repo || "stronghamjji/PersoDub"}`;
-$("brandBtn").addEventListener("click", () => window.open(isProduction() ? DESKTOP_APP_URL : REPO_URL, "_blank", "noopener"));
+$("brandBtn").addEventListener("click", () => window.open(isProduction() ? persoLink(DESKTOP_APP_URL, "about", savedSettings()?.perso_utm) : REPO_URL, "_blank", "noopener"));
 if (isProduction()) {
   const brand = $("brandBtn");
   brand.removeAttribute("data-i18n-title");
@@ -1016,7 +1017,8 @@ uploadZone.addEventListener("drop", (e) => {
 // An update with no notes links to its release page, Perso's desktop app page
 // in the production edition.
 wireUpdates({ $, shell: window.persodubShell || null,
-  notesPage: isProduction() ? () => DESKTOP_APP_URL : (version) => `${REPO_URL}/releases/tag/v${version}` });
+  // The production edition has no release page: the window's own list is enough (owner, 2026-10-26).
+  notesPage: isProduction() ? () => null : (version) => `${REPO_URL}/releases/tag/v${version}` });
 
 // ---------------- Link source (paste a URL) ----------------
 // Probing is cheap (seconds, no download), so it runs as soon as a URL looks

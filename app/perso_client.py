@@ -93,12 +93,13 @@ PERSO_WORKSPACE_URL = os.environ.get("PERSO_WORKSPACE_URL", "https://perso.ai/wo
 # utm_source carries the exact CLIENT_HOST the API headers send, so Perso can line up
 # "API usage by this app" with "visits from this app" under one name. utm_content says WHICH
 # link was clicked, which is what separates new signups from repeat recharges in the report.
+# The tail every link into Perso carries; the page adds utm_content for the
+# button pressed (ui/src/edition.mjs persoLink), so each link says which.
+UTM_TAIL = f"utm_source={CLIENT_HOST}&utm_medium=desktop-app&utm_campaign={APP_NAME}&utm_term=v{APP_VERSION}"
+
+
 def _with_utm(url: str, content: str) -> str:
-    params = (
-        f"utm_source={CLIENT_HOST}&utm_medium=desktop-app&utm_campaign={APP_NAME}"
-        f"&utm_content={content}&utm_term=v{APP_VERSION}"
-    )
-    return url + ("&" if "?" in url else "?") + params
+    return url + ("&" if "?" in url else "?") + f"{UTM_TAIL}&utm_content={content}"
 
 
 # How long a proofread is given to show up in the project's progress before a
