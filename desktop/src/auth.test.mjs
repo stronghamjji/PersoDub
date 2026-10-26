@@ -691,6 +691,7 @@ test("switched off (the open-source edition) nothing happens: no browser, no fil
     assert.deepEqual(answer, { outcome: "disabled" });
   }
   assert.equal(await auth.handleCallback({ code: "c", state: "s" }), "disabled");
+  assert.equal(auth.signedInAccount(), null, "no account for an inquiry");
   assert.deepEqual(touched, []);
   assert.equal(readFileSync(join(kitDir, "kit.env"), "utf8"), before);
   assert.equal(existsSync(join(userData, AUTH_FILE)), false);

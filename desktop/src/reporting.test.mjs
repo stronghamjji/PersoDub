@@ -20,7 +20,7 @@ const INQUIRY_URL = "https://script.example/macros/s/abc/exec";
 // stands in for the machine's own diagnostics (diagnostics.js).
 function setup({ packaged = true, kitEnv = "PERSODUB_NO_REPORTS=0\nPERSODUB_REPORTS_DEBUG=0\n",
                  engines = null, relay = () => ok(ISSUE), probes = async () => ({}), inquiryUrl = INQUIRY_URL,
-                 base = mkdtempSync(join(tmpdir(), "odreporting-")) } = {}) {
+                 account = undefined, base = mkdtempSync(join(tmpdir(), "odreporting-")) } = {}) {
   const kitDir = join(base, "kit");
   const userData = join(base, "userData");
   mkdirSync(kitDir, { recursive: true });
@@ -39,7 +39,7 @@ function setup({ packaged = true, kitEnv = "PERSODUB_NO_REPORTS=0\nPERSODUB_REPO
   const ctx = { engines };
   const reporter = createReporter({
     app, BrowserWindow: { getAllWindows: () => [win] }, ctx,
-    shellLog: (line) => logged.push(line), inquiryUrl, fetchImpl, probeImpl: probes,
+    shellLog: (line) => logged.push(line), inquiryUrl, account, fetchImpl, probeImpl: probes,
   });
   const queued = () => (existsSync(join(kitDir, "reports")) ? readdirSync(join(kitDir, "reports")).sort() : []);
   const readQueued = (name) => JSON.parse(readFileSync(join(kitDir, "reports", name), "utf8"));
@@ -482,6 +482,17 @@ test("an inquiry of another kind carries no logs, and a form the web app would r
   assert.equal(await s.reporter.sendInquiry({ ...FORM, type: "Bug report" }, { kitDir: s.kitDir, ...FACTS }), null);
   assert.equal(await s.reporter.sendInquiry({ ...FORM, subject: "  " }, { kitDir: s.kitDir, ...FACTS }), null);
   assert.deepEqual(s.calls, []);
+});
+
+test("an inquiry carries the signed-in account's full e-mail and Perso number, and empty strings signed out", async () => {
+  let signedIn = { email: "someone@example.com", id: "1001" };
+  const s = setup({ relay: () => SENT("A1A1A1A1"), account: () => signedIn });
+  await s.reporter.sendInquiry({ ...FORM, type: "other", replyTo: "" }, { kitDir: s.kitDir, ...FACTS });
+  assert.deepEqual([posted(s.calls[0]).accountEmail, posted(s.calls[0]).accountId, posted(s.calls[0]).replyTo],
+    ["someone@example.com", "1001", ""]);
+  signedIn = null;
+  await s.reporter.sendInquiry({ ...FORM, type: "other" }, { kitDir: s.kitDir, ...FACTS });
+  assert.deepEqual([posted(s.calls[1]).accountEmail, posted(s.calls[1]).accountId], ["", ""]);
 });
 
 test("a build with no web app sends nothing, says so, and leaves a waiting inquiry where it is", async () => {

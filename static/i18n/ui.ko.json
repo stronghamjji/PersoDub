@@ -846,6 +846,7 @@
   "Subject": "제목",
   "Details": "문의 내용",
   "Reply-to email": "답장 받을 이메일",
+  "Leave it empty to be answered at your account's address.": "비워 두면 계정 이메일로 답장해요.",
   "The app version and your computer are added automatically.": "앱 버전과 컴퓨터 정보는 자동으로 붙어요.",
   "A bug report also sends the app's logs.": "버그 신고에는 앱 로그도 함께 보내요.",
   "I agree to the collection and use of my personal information for this inquiry.": "문의 처리를 위한 개인정보 수집·이용에 동의해요",

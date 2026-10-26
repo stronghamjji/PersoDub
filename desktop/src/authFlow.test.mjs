@@ -122,6 +122,8 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   assert.deepEqual(browser.pages, ["done"]);
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["a@test.local"].keys[0].apiKey);
   assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "a***@test.local", accountId: "1001", hasKey: true, waiting: false });
+  // The full address stays in the shell, for Customer support's inquiry (reporting.js accountForInquiry).
+  assert.deepEqual(auth.signedInAccount(), { email: "a@test.local", id: "1001" });
   // The port is closed again: the listener lives only while a sign-in waits.
   await assert.rejects(fetch(`http://127.0.0.1:${portOf(logs)}/callback`));
 
@@ -129,6 +131,7 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   writeFileSync(join(kitDir, "kit.env"), readFileSync(join(kitDir, "kit.env"), "utf8").replace("PERSO_SPACE_SEQ=", "PERSO_SPACE_SEQ=77"));
   const signOutsBefore = (await getStats()).signOut;
   assert.deepEqual(await auth.logout(), { outcome: "signed_out" });
+  assert.equal(auth.signedInAccount(), null);
   assert.equal((await getStats()).signOut, signOutsBefore + 1);
   assert.deepEqual([kitValues(kitDir).PERSO_API_KEY, kitValues(kitDir).PERSO_SPACE_SEQ, kitValues(kitDir).GEMINI_API_KEY], ["", "", "g-keep"]);
   assert.equal(existsSync(join(userData, AUTH_FILE)), false);

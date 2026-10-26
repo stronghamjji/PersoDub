@@ -91,7 +91,8 @@ function shellLog(line, level = "INFO") {
 const auth = createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition),
                                logoPath: join(HERE, "screens", "logo.png") });
 
-const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "" });
+const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "",
+                                  account: () => auth.signedInAccount() });
 const countUsage = usageCounter(app);
 const events = createEvents({ app, ctx, edition, shellLog });
 const updater = createUpdater({ app, dialog, ctx, shellLog, edition });

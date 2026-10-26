@@ -252,7 +252,7 @@ export function createAuth({
   log = () => {}, onChange = () => {}, onCallback = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
-  let session = null;   // {accessToken, refreshToken, userId, account}
+  let session = null;   // {accessToken, refreshToken, userId, account, email}
   let pending = null;   // the sign-in waiting for the browser
   let trading = null;   // the sign-in whose code is being traded
   let refreshing = null;
@@ -285,6 +285,14 @@ export function createAuth({
       // in your browser" instead of offering Sign in again for those seconds.
       waiting: Boolean(pending || trading),
     };
+  }
+
+  /** The signed-in account for the shell's own use, never the page's: the
+   * full e-mail and Perso's number for it, which Customer support's inquiry
+   * carries (reporting.js accountForInquiry). Null signed out or disabled. */
+  function signedInAccount() {
+    if (!isOn() || !session) return null;
+    return { email: session.email || "", id: session.userId || "" };
   }
 
   function clearKitKeys() {
@@ -446,10 +454,11 @@ export function createAuth({
     }
     try {
       const tokens = await exchangeCode(cfg, fetchFn, { code: cb.code, verifier: waiting.verifier, redirectUri: waiting.redirectUri });
-      session = { ...tokens, userId: null, account: "" };
+      session = { ...tokens, userId: null, account: "", email: "" };
       try {
         const p = parseProfile(await authedGet("profile", cfg.profileUrl));
-        session = { ...session, userId: p.userId, account: maskEmail(p.email) || p.name };
+        // The full e-mail stays in the shell (signedInAccount); the page gets the masked one.
+        session = { ...session, userId: p.userId, account: maskEmail(p.email) || p.name, email: p.email };
       } catch (err) { log(`AUTH signed in, but the profile did not load: ${err.message}`, "WARN"); }
       if (!session) throw new AuthHttpError("token", 401, "refused-at-once");
       if (!store.write(session)) log("AUTH tokens not saved (no OS encryption)", "WARN");
@@ -511,6 +520,7 @@ export function createAuth({
     logout: loadedFirst(logout),
     connectKey: loadedFirst(async () => (isOn() ? connectKey() : DISABLED)),
     handleCallback,
+    signedInAccount,
     keyPageUrl: cfg.keyPageUrl,
   };
 }

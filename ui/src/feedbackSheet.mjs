@@ -30,7 +30,8 @@ export const PRIVACY_URL = {
 export function initFeedbackSheet({ $, send, language, openUrl }) {
   const type = $("feedbackType"), subject = $("feedbackSubjectInput"), details = $("feedbackDetails"),
         consent = $("feedbackConsent"), status = $("feedbackStatus");
-  // Optional. Once the production edition signs in, the account's address fills it here.
+  // Optional: left empty, the answer goes to the signed-in account's address,
+  // which the shell adds itself (desktop/src/reporting.js accountForInquiry).
   const replyTo = $("feedbackReplyTo");
   let sending = false;
   // Subject, Details and the consent are required: Send waits for all three.

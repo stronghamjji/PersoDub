@@ -129,6 +129,8 @@ test("Customer support's form asks the kind, a subject, the details, a reply-to 
   assert.match(dialog, /<label data-i18n for="feedbackSubjectInput">Subject<\/label><input type="text" id="feedbackSubjectInput" maxlength="120" required>/);
   assert.match(dialog, /<label data-i18n for="feedbackDetails">Details<\/label><textarea id="feedbackDetails" rows="5" maxlength="4000" required><\/textarea>/);
   assert.match(dialog, /<label data-i18n for="feedbackReplyTo">Reply-to email<\/label><input type="text" id="feedbackReplyTo" inputmode="email" autocomplete="email" maxlength="254">/);
+  // Left empty, the answer goes to the signed-in account's address (desktop/src/reporting.js accountForInquiry).
+  assert.match(dialog, /maxlength="254"><div data-i18n class="settings-hint">Leave it empty to be answered at your account's address\.<\/div><\/div>/);
   assert.match(dialog, /<p data-i18n class="help-where">The app version and your computer are added automatically\.<\/p>/);
   assert.match(dialog, /<p class="help-where" id="feedbackLogsNote" hidden><span data-i18n>A bug report also sends the app's logs\.<\/span>/);
   assert.match(dialog, /<input type="checkbox" id="feedbackConsent"><label data-i18n for="feedbackConsent">I agree to the collection and use of my personal information for this inquiry\.<\/label> <a href="#" id="feedbackPrivacy" data-i18n>Privacy policy<\/a>/);
@@ -138,9 +140,10 @@ test("Customer support's form asks the kind, a subject, the details, a reply-to 
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.deepEqual(["Customer support", "Service inquiry", "Problem or inconvenience", "Bug report", "Payment or refund", "Other",
                     "Subject", "Details", "Reply-to email", "Close", "Send",
-                    "I agree to the collection and use of my personal information for this inquiry.", "Received. Reference {id}"].map((k) => ko[k]),
+                    "I agree to the collection and use of my personal information for this inquiry.", "Received. Reference {id}",
+                    "Leave it empty to be answered at your account's address."].map((k) => ko[k]),
     ["고객 지원센터", "서비스 문의", "불편사항", "버그 신고", "결제·환불", "기타", "제목", "문의 내용", "답장 받을 이메일", "닫기", "보내기",
-     "문의 처리를 위한 개인정보 수집·이용에 동의해요", "접수됐어요. 접수 번호 {id}"]);
+     "문의 처리를 위한 개인정보 수집·이용에 동의해요", "접수됐어요. 접수 번호 {id}", "비워 두면 계정 이메일로 답장해요."]);
 });
 
 // The production Home heads with the wordmark alone, white letters on the

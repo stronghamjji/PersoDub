@@ -47,10 +47,13 @@ const ENGINE_LOG_BYTES = 2 * 1024 * 1024;
 const MAX_INQUIRY_LOGS = 20 * 1024 * 1024;
 const LOGS_LEFT_OUT = "\n\n(logs too large, not attached)";
 
-// The Perso account an inquiry is from. None yet: the production edition's
-// Perso sign-in fills it in.
-function accountForInquiry() {
-  return { email: "", id: "" };
+// The Perso account an inquiry is from: the production edition's signed-in
+// account, its full e-mail and Perso's number for it (`signedIn`, src/auth.js
+// signedInAccount, which the page never sees), or empty strings signed out
+// and in the open-source edition.
+function accountForInquiry(signedIn) {
+  const account = signedIn() || {};
+  return { email: account.email || "", id: account.id || "" };
 }
 
 /** Write a queue entry (and its archive) into the kit's queue, under its base name. */
@@ -72,11 +75,13 @@ function unqueue(kitDir, base) {
  * The shell's failure reports, for this app. `ctx.engines` is read each time a
  * report is gathered: the backend's half of a report comes from engines that
  * may not be up yet, or never came up. `inquiryUrl` is the support web app
- * Customer support's inquiries go to, "" when the build names none.
+ * Customer support's inquiries go to, "" when the build names none, and
+ * `account` answers the signed-in Perso account an inquiry is from.
  * `fetchImpl` is the real fetch, and `probeImpl` the real probes, everywhere
  * but the tests.
  */
-export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl = "", fetchImpl = fetch, probeImpl = runProbes }) {
+export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl = "", account = () => null,
+                                 fetchImpl = fetch, probeImpl = runProbes }) {
   // The report's install id, which the relay's daily limit counts by, lives in
   // its own file and is minted only by a run that really reports. The id the
   // dashboard knows a computer by is analytics.json's, which the launch makes
@@ -349,10 +354,10 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
       shellLog("[persodub-report] inquiry no destination");
       return null;
     }
-    const account = accountForInquiry();
+    const from = accountForInquiry(account);
     const inquiry = buildInquiry({
       ...form, os, osVersion, version: app.getVersion(), edition: kitEdition(kitDir) || "",
-      accountEmail: account.email, accountId: account.id,
+      accountEmail: from.email, accountId: from.id,
       // The computer's id, the one the dashboard knows it by and hides the
       // owner's own computers by (EXCLUDED_DEVICES).
       installId: savedDevice(analyticsFile(app)) || loadState(REPORT_STATE()).device,
