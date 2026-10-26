@@ -112,6 +112,7 @@ const SAVED = {
   gemini_api_key: "gem-key",
   perso_space_seq: "7",
   perso_signup_link: "https://developers.perso.ai/api-keys?utm=x",
+  perso_recharge_link: "https://perso.ai/en/workspace/space-settings?tab=Subscription&utm=x",
   app_version: "0.5.0",
   analytics_off: true,
 };
@@ -126,6 +127,7 @@ test("loadSavedSetup fills the fields from GET /api/settings", async (t) => {
   assert.equal(h.$("persoKeyInput").value, SAVED.perso_api_key);
   assert.equal(h.$("geminiKeyInput").value, "gem-key");
   assert.equal(h.$("persoSignupLink").href, SAVED.perso_signup_link);
+  assert.equal(h.$("persoRechargeLink").href, SAVED.perso_recharge_link);
   assert.equal(h.$("aboutVersion").textContent, "PersoDub 0.5.0");
   // analytics_off: true means the "send counts" switch is OFF.
   assert.equal(h.$("analyticsToggle").checked, false);

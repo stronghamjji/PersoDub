@@ -19,7 +19,7 @@ import { buildDubFormData, fetchCreditsLeft, saveDownloadParts } from "./dubApi.
 import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
 import { getDraft, clearDraft, setRanges, keptSeconds, spokenSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { modelInfo } from "./persoModels.mjs";
-import { t } from "./i18n.mjs";
+import { savedSettings, t } from "./i18n.mjs";
 import { gb } from "./modelsUi.mjs";
 
 function stripExt(name) {
@@ -72,16 +72,24 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
   let creditsLeft = null;
   let leftAskedAt = -Infinity;
   const number = (n) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  // What the kept part costs in credits, or null while nothing prices it.
+  function costOf(d) {
+    const { rate } = modelInfo(newProject.persoModel());
+    const spoken = spokenSeconds(d);
+    return rate == null || !(keptSeconds(d) > 0) ? null
+      : Math.round(Math.floor(spoken ?? keptSeconds(d)) * rate * 10) / 10;
+  }
+  // Credits fall short: none left, or fewer than the price. The foot then
+  // offers the way to top up (draftRechargeLink), before a dubbing that
+  // would only stop halfway for want of them.
+  const creditsShort = (d) => creditsLeft != null && (creditsLeft === 0 || (costOf(d) != null && costOf(d) > creditsLeft));
   function persoCost(d) {
     if (Date.now() - leftAskedAt >= LEFT_FRESH_MS) {
       leftAskedAt = Date.now();
       fetchCreditsLeft().then((n) => { creditsLeft = n; paintFoot(); });
     }
-    const { rate } = modelInfo(newProject.persoModel());
-    const spoken = spokenSeconds(d);
-    const cost = rate == null || !(keptSeconds(d) > 0) ? null
-      : Math.round(Math.floor(spoken ?? keptSeconds(d)) * rate * 10) / 10;
-    const about = spoken != null;
+    const cost = costOf(d);
+    const about = spokenSeconds(d) != null;
     const price = cost == null ? ""
       : cost === 1 ? (about ? t("about {n} credit", { n: 1 }) : t("up to {n} credit", { n: 1 }))
       : about ? t("about {n} credits", { n: number(cost) }) : t("up to {n} credits", { n: number(cost) });
@@ -131,6 +139,10 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     const first = firstDownloadBytes();
     $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality }),
       ...(cloud ? persoCost(d) : first ? [t("{size} GB the first time", { size: gb(first) })] : [])].join(" · ");
+    const recharge = $("draftRechargeLink");
+    recharge.hidden = !(cloud && creditsShort(d));
+    const link = savedSettings() && savedSettings().perso_recharge_link;
+    if (link) recharge.href = link;
   }
   // The foot names the mode, so it has to follow the two choices that set it:
   // it went on saying "Fast mode" after High quality was picked (2026-09-30).

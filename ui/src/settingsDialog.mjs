@@ -244,6 +244,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
       clearTimeout(persoPreviewTimer);
       loadPersoSpaces(persoSpaceInitial); // async on purpose -- the modal opens without waiting on Perso
       if (st.perso_signup_link) $("persoSignupLink").href = st.perso_signup_link;
+      if (st.perso_recharge_link) $("persoRechargeLink").href = st.perso_recharge_link;
       if (realVersion(st.app_version)) {
         $("aboutVersion").textContent = `${t("{app}")} ${st.app_version}`;
       }

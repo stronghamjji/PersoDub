@@ -59,6 +59,7 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     body = r.json()
     # These are computed, not stored -- popped so the rest stays an exact shape check.
     assert body.pop("perso_signup_link").startswith(perso_client.PERSO_SIGNUP_URL)
+    assert body.pop("perso_recharge_link").startswith(perso_client.PERSO_RECHARGE_URL)
     assert body.pop("perso_workspace_link").startswith(perso_client.PERSO_WORKSPACE_URL)
     assert body.pop("app_version") == perso_client.APP_VERSION
     # Where the finished videos actually are. The screen used to guess at this

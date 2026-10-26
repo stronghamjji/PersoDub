@@ -565,3 +565,50 @@ test("a captions project's Dubbing tab is one card instead of the script; a dubb
   assert.equal($("dubbingPaneHead").hidden, false);
   assert.equal($("scriptBox").hidden, false);
 });
+
+// Credits that fall short of the price: the foot offers the way to top up,
+// before a dubbing that would only stop halfway (owner, 2026-10-27).
+test("a Perso dubbing whose price the workspace's credits cannot cover offers Recharge beside the foot; enough credits hide it", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  let credits = 10;
+  globalThis.fetch = async (url) => ({ ok: true, json: async () => (url === "/api/perso/spaces"
+    ? { spaces: [{ seq: 7, name: "Mine", tier: "Free", credits }] } : { perso_space_seq: "7" }) });
+  try {
+    const { $, log } = harness();
+    log.model = "ORIOLE";
+    setDraft({ downloadId: "d1", name: "paris_steps.mp4", duration: 24.7, videoUrl: "/v" });
+    $("draftRechargeLink").hidden = true;   // as the markup has it
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Perso API · up to 24 credits · 10 left");
+    assert.equal($("draftRechargeLink").hidden, false, "10 credits cannot cover 24");
+    // A cheaper model that the credits cover: the link goes.
+    log.model = "FINCH";
+    await $("persoModelPick").fire("change");
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:24 · Perso API · up to 4.8 credits · 10 left");
+    assert.equal($("draftRechargeLink").hidden, true);
+    // Dubbing on this computer never prices anything, and never offers it.
+    $("dubModeSelect").value = "local";
+    await $("dubModeSelect").fire("change");
+    assert.equal($("draftRechargeLink").hidden, true);
+  } finally { globalThis.fetch = real; clearDraft(); }
+});
+
+test("a workspace with no credits at all offers Recharge whatever the price", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url) => ({ ok: true, json: async () => (url === "/api/perso/spaces"
+    ? { spaces: [{ seq: 7, name: "Mine", tier: "Free", credits: 0 }] } : { perso_space_seq: "7" }) });
+  try {
+    const { $, log } = harness();
+    log.model = "FINCH";
+    setDraft({ downloadId: "d1", name: "paris_steps.mp4", duration: 3, videoUrl: "/v" });
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:03 · Perso API · up to 0.6 credits · 0 left");
+    assert.equal($("draftRechargeLink").hidden, false);
+  } finally { globalThis.fetch = real; clearDraft(); }
+});
