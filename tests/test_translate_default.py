@@ -27,6 +27,7 @@ def test_translate_route_uses_the_saved_default_translator(tmp_path, monkeypatch
     Hunyuan saved got a 500 from ChatGPT here while its dubs used Hunyuan
     (e2e, 2026-10-24)."""
     from fastapi.testclient import TestClient
+
     from app import main
     from app.api import misc as misc_api
 
