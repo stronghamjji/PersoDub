@@ -1020,6 +1020,12 @@
      the box and 41px tall (mockup m6-home, owner, 2026-10-23). */
   .home-side .home-perso.big { padding: 9.5px 6px; }
   .home-perso.big img { height: 22px; }
+  /* ...and on Perso's dark, the wordmark alone with white letters, 170px wide
+     from the sidebar's left edge, no box round it: the header of Perso's own
+     workspace (owner, 2026-10-27). */
+  :root[data-edition="production"] .home-gh { background: none; border: none; padding: 6px 0 4px; }
+  :root[data-edition="production"] .home-side .home-perso { justify-content: flex-start; padding: 0; background: none; }
+  :root[data-edition="production"] .home-perso img { width: 170px; height: auto; content: url(/perso-dubbing-white.svg); }
   .home-grp { color: var(--muted-foreground); font-size: 11px; font-weight: 500; margin: 10px 0 -4px; }
   .home-sep { height: 1px; background: var(--border); margin: 12px 0 0; flex: none; }
   .home-grow { flex: 1; }

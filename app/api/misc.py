@@ -137,6 +137,14 @@ def perso_logo():
                         media_type="image/svg+xml")
 
 
+@router.get("/perso-dubbing-white.svg")
+def perso_logo_white():
+    """The same wordmark with white letters (static/perso-dubbing-white.svg),
+    on the production edition's dark sidebar."""
+    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "static", "perso-dubbing-white.svg"),
+                        media_type="image/svg+xml")
+
+
 @router.get("/mascot.png")
 def mascot():
     """The mascot (static/mascot.png), at the head of the Home screen's Dub Agent card."""

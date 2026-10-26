@@ -84,6 +84,7 @@ ROUTES = [
     ('GET', '/logo.png'),
     ('GET', '/mascot.png'),
     ('GET', '/openapi.json'),
+    ('GET', '/perso-dubbing-white.svg'),
     ('GET', '/perso-dubbing.svg'),
     ('GET', '/redoc'),
     ('HEAD', '/api/dub/result/{jid}/srt'),

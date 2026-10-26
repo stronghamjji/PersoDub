@@ -17,6 +17,16 @@ def test_misc_serves_perso_wordmark_as_svg():
     assert r.content == (STATIC / "perso-dubbing.svg").read_bytes()
 
 
+def test_misc_serves_the_white_lettered_wordmark_as_svg():
+    # The production edition's sidebar shows it on its dark (2026-10-27).
+    r = client.get("/perso-dubbing-white.svg")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/svg+xml"
+    body = (STATIC / "perso-dubbing-white.svg").read_bytes()
+    assert r.content == body
+    assert b'fill="black"' not in body
+
+
 def test_misc_serves_the_mascot_as_png():
     # The Home screen's Dub Agent card heads with the mascot (2026-10-21).
     r = client.get("/mascot.png")

@@ -114,6 +114,18 @@ test("there is one dark theme, and its fonts are the app's own", () => {
   assert.match(html, /\.sub-ov-text \{[^}]*font-family: "Apple SD Gothic Neo"/);
 });
 
+// The production Home heads with the wordmark alone, white letters on the
+// sidebar's dark, 170px wide and to the left, with no box (owner, 2026-10-27);
+// the open-source one keeps its pale pill.
+test("the production sidebar's logo is the white-lettered wordmark with no box", () => {
+  const html = readPage();
+  assert.match(html, /<button class="home-perso" id="homePerso" type="button" aria-label="Perso Dubbing"><img src="\/perso-dubbing\.svg" alt="Perso Dubbing"><\/button>/);
+  assert.match(html, /:root\[data-edition="production"\] \.home-gh \{ background: none; border: none; padding: 6px 0 4px; \}/);
+  assert.match(html, /:root\[data-edition="production"\] \.home-side \.home-perso \{ justify-content: flex-start; padding: 0; background: none; \}/);
+  assert.match(html, /:root\[data-edition="production"\] \.home-perso img \{ width: 170px; height: auto; content: url\(\/perso-dubbing-white\.svg\); \}/);
+  assert.match(html, /\.home-side \.home-perso \{[^}]*background: linear-gradient\(90deg, #dfe8ff, #bfe3ff\); \}/);
+});
+
 // The shell's icons are Lucide lines that stay 1.5px on screen at any size
 // (mockup, user 2026-09-29): one rule for all of them, and the player's play
 // button drawn by the same helper as the timeline's.
