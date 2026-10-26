@@ -1705,6 +1705,8 @@ test("Home's Help sits above Send feedback and opens its tools and the Dub Agent
   // The production edition has no repository: its User guide is Perso's desktop
   // app page, and it has no FAQ link.
   assert.match(html, /\$\("helpFaqItem"\)\.hidden = isProduction\(\);/);
+  // ...and its Help opens that page in the browser instead of the dialog.
+  assert.match(html, /function openHelp\(\) \{\n  if \(isProduction\(\)\) window\.open\(persoLink\(DESKTOP_APP_URL, "help", savedSettings\(\)\?\.perso_utm\), "_blank", "noopener"\);\n  else \$\("helpOverlay"\)\.classList\.add\("open"\);\n\}/);
 });
 
 // Help's Erase subtitles says why, how and how long, a line each (owner,

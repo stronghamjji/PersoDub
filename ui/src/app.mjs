@@ -211,8 +211,12 @@ initWhatsNew({ $ });
 // and the backdrop press OK (ui/src/escapeKey.mjs). The two links open the
 // repo's docs in the system browser, the way the sidebar's links do. The
 // production edition has no repository: its User guide is Perso's desktop app
-// page, and it has no FAQ link.
-function openHelp() { $("helpOverlay").classList.add("open"); }
+// page, and it has no FAQ link. And its Home's Help is that page itself, in
+// the browser, with no dialog first (owner, 2026-10-27).
+function openHelp() {
+  if (isProduction()) window.open(persoLink(DESKTOP_APP_URL, "help", savedSettings()?.perso_utm), "_blank", "noopener");
+  else $("helpOverlay").classList.add("open");
+}
 $("helpOk").addEventListener("click", () => $("helpOverlay").classList.remove("open"));
 $("helpFaqItem").hidden = isProduction();
 for (const [id, doc] of [["helpGuide", "usage"], ["helpFaq", "faq"]]) {
