@@ -1,16 +1,16 @@
 {
   "notes": [
-    "When something fails, the screen says in one sentence why it stopped and what to do next: a broken model file, a Gemini key Google refused, a computer out of memory, a video with no speech.",
-    "The title bar is one line, with the computer's own window buttons. Home is lighter: Settings lives under Management, and the update notice on the What's new card at the bottom left.",
-    "The script table's length column reads the original and translated seconds with a red, orange or green dot, and the timeline uses the same colours.",
-    "Home has a Perso workspace button, and choosing the Perso API says the first minute after signing up is free.",
-    "A download says Getting ready… instead of 0%, Home no longer flickers, and Stop during transcription stops at once."
+    "Home opens on Create a project, with four tools: Dubbing, Erase subtitles, Burn in subtitles and Save video. The project list folds away and remembers it. Separate audio is no tool of its own any more.",
+    "Burn in subtitles is a tool: a video and a subtitle file, twelve looks. A dub's subtitles start off; turned on they sit at the foot of the picture, with Subtitle style right above them.",
+    "Before dubbing shows Local model and Perso API side by side, every stage in sight, and what each model is for and costs. The script's length column ticks lines that fit, and Retranslate unfit lines redoes only the ones that do not.",
+    "Download groups video, subtitles and audio, offers the script as a spreadsheet, and saves where you choose. Save video takes a link straight in and keeps the video in a format any player opens.",
+    "A video with no speech stops and says so. Translation follows the translator you chose. Finding subtitles to erase no longer trips over itself, and small windows keep every button in reach."
   ],
   "notes_ko": [
-    "실패하면 왜 멈췄는지 한 문장과 다음에 할 일이 떠요. 깨진 모델 파일, 거절된 Gemini 키, 메모리 부족, 말 없는 영상까지요.",
-    "창 위 제목 줄이 한 줄로 합쳐졌어요. 홈은 가벼워지고 설정은 관리 메뉴에, 업데이트 알림은 왼쪽 아래 카드에 있어요.",
-    "대본 표 길이 칸에 원본·번역 초와 빨강·주황·초록 점이 있고, 타임라인도 같은 색이에요.",
-    "홈에 Perso 작업공간 버튼이 생겼고, Perso API를 고르면 가입 뒤 1분 무료 안내가 떠요.",
-    "받기 창의 0% 대신 \"준비 중…\", 홈이 깜빡이지 않고, 받아쓰기 중 중지가 바로 먹어요."
+    "홈이 \"프로젝트 만들기\"로 열리고 도구는 더빙·자막 지우기·자막 입히기·영상 저장 넷이에요. 프로젝트 목록은 접을 수 있고 접힌 채로 기억해요. 오디오 분리는 단독 기능에서 빠졌어요.",
+    "자막 입히기가 단독 기능이 됐어요. 영상과 자막 파일을 넣으면 12가지 스타일로 입혀요. 더빙의 자막은 기본 꺼짐이고, 켜면 아래 가운데에 고정되고 바로 위에 \"자막 스타일\"이 있어요.",
+    "더빙 준비에 로컬 모델과 Perso API가 나란히 있고, 여섯 단계가 늘 보이고, 모델마다 쓰임새와 크레딧이 적혀 있어요. 대본 길이 칸에 맞는 줄은 초록 체크, \"안 맞는 줄 다시 번역\"은 안 맞는 줄만 다시 해요.",
+    "다운로드 창이 영상·자막·오디오로 묶이고, 대본을 엑셀로 받고, 저장 폴더를 고를 수 있어요. 영상 저장 탭에 링크를 바로 붙여 넣고, 받은 영상은 어디서나 열리는 형식으로 저장돼요.",
+    "말소리 없는 영상은 그렇다고 말하고 멈춰요. 번역은 고른 번역기를 따라요. 지울 자막 찾기가 서로 부딪치지 않고, 작은 창에서도 버튼이 가려지지 않아요."
   ]
 }
