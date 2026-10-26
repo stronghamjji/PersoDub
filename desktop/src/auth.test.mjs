@@ -647,7 +647,7 @@ test("`enabled` as a function is asked at every request, so a kit found after th
 
 test("the browser's page: the app's name, the logo, one language picked from the browser's, nothing to press", async () => {
   const en = callbackPage({ ok: true, lang: "en", appName: "PersoDubbing", logo: "data:image/png;base64,AAAA" });
-  assert.ok(en.includes("<h1>Signed in to PersoDubbing</h1>") && en.includes("go back to PersoDubbing.") && en.includes('src="data:image/png;base64,AAAA"'));
+  assert.ok(en.includes("Signed in to PersoDubbing</span></h1>") && en.includes("go back to PersoDubbing.") && en.includes('src="data:image/png;base64,AAAA"'));
   assert.ok(!/<(button|a|input|form)\b/.test(en), "nothing to press on the page");
   const ko = callbackPage({ ok: false, lang: "ko", appName: "PersoDubbing", logo: "" });
   assert.ok(ko.includes("로그인이 끝나지 않았어요") && ko.includes("PersoDubbing에서 다시 시도하세요.") && !ko.includes("<img"));

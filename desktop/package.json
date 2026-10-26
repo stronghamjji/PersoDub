@@ -10,8 +10,8 @@
     "dist": "node scripts/collect-payload.mjs && electron-builder --mac zip --arm64 --publish never",
     "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never && cp dist/PersoDub-*-arm64.dmg dist/PersoDub-mac.dmg",
     "dist:win": "node scripts/collect-payload.mjs && node scripts/patch-nsis-messages.mjs && electron-builder --win nsis --x64 --publish never",
-    "dist:dmg:prod": "PERSODUB_EDITION=production node scripts/collect-payload.mjs && electron-builder --mac dmg zip --arm64 --publish never -c.extraMetadata.productName=PersoDubbing && cp dist/PersoDubbing-*-arm64.dmg dist/PersoDubbing-mac.dmg",
-    "dist:win:prod": "node scripts/collect-payload.mjs && node scripts/patch-nsis-messages.mjs && electron-builder --win nsis --x64 --publish never -c.extraMetadata.productName=PersoDubbing"
+    "dist:dmg:prod": "PERSODUB_EDITION=production node scripts/collect-payload.mjs && electron-builder --mac dmg zip --arm64 --publish never -c.productName=PersoDubbing && cp dist/PersoDubbing-*-arm64.dmg dist/PersoDubbing-mac.dmg",
+    "dist:win:prod": "node scripts/collect-payload.mjs && node scripts/patch-nsis-messages.mjs && electron-builder --win nsis --x64 --publish never -c.productName=PersoDubbing"
   },
   "devDependencies": {
     "electron": "^37.0.0",

@@ -6,9 +6,9 @@ import { createServer } from "node:http";
 // value ties the one request this accepts to the sign-in that opened it, and
 // the listener closes as soon as that sign-in ends (desktop/src/auth.js).
 //
-// What the browser is shown afterwards is one page in the app's own look:
-// the logo, one line saying it is done, one line saying what to do, in the
-// browser's language (Korean or English).
+// What the browser is shown afterwards is one quiet page: the logo, a
+// headline saying it is done, one line saying what to do, in the browser's
+// language (Korean or English).
 
 const WORDS = {
   en: {
@@ -25,11 +25,12 @@ const WORDS = {
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const languageOf = (req) => (/^\s*ko\b/i.test(req.headers["accept-language"] || "") ? "ko" : "en");
 
-const CHECK = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
-const CROSS = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
+const CHECK = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
+const CROSS = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
 
-/** The page: the app's dark look by default, light when the browser is, the
- * logo when the shell handed one over (a data: URL), and nothing to press. */
+/** The page: one quiet column -- the logo, a headline with a small check or
+ * cross drawn in the app's blue, one muted line -- on a warm light page or
+ * the app's dark one, whichever the browser prefers. Nothing to press. */
 export function callbackPage({ ok, lang, appName, logo }) {
   const words = WORDS[lang] || WORDS.en;
   const [title, line] = ok ? words.done(appName) : words.notDone(appName);
@@ -38,28 +39,26 @@ export function callbackPage({ ok, lang, appName, logo }) {
 <html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${app}</title>
 <style>
-  :root { color-scheme: light dark; --bg: #0e131b; --card: #1c2129; --line: #2a3140; --fg: #eaf0fd; --muted: #9aa5b8; --ok: #34c77b; --bad: #f0725c; }
-  @media (prefers-color-scheme: light) { :root { --bg: #f4f6fa; --card: #ffffff; --line: #e3e7ee; --fg: #0e131b; --muted: #5a6477; } }
+  :root { color-scheme: light dark; --bg: #f7f6f2; --fg: #15181e; --muted: #6b7280; --accent: #166cfb; --bad: #d9534f; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0e131b; --fg: #eaf0fd; --muted: #8e9ab0; --accent: #5b9dff; --bad: #f0725c; } }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
-  body { margin: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); color: var(--fg);
-    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
-  main { width: min(420px, 100%); padding: 44px 32px 36px; text-align: center; background: var(--card); border: 1px solid var(--line);
-    border-radius: 18px; box-shadow: 0 24px 64px rgba(0, 0, 0, .28); }
-  .logo { display: block; width: 76px; height: 76px; margin: 0 auto 22px; border-radius: 19px; }
-  .mark { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 50%;
-    color: #fff; background: var(--ok); }
-  .mark.bad { background: var(--bad); }
-  h1 { margin: 0 0 8px; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
-  p { margin: 0; color: var(--muted); }
-  .app { margin-top: 30px; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  body { margin: 0; display: flex; align-items: center; justify-content: center; padding: 40px 24px; background: var(--bg); color: var(--fg);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  main { width: min(520px, 100%); text-align: center; transform: translateY(-6vh); }
+  .logo { display: block; width: 64px; height: 64px; margin: 0 auto 36px; border-radius: 16px; }
+  h1 { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 0 14px; font-size: 30px; font-weight: 600;
+    letter-spacing: -.02em; line-height: 1.25; }
+  h1 .glyph { display: inline-flex; color: var(--accent); flex: none; }
+  h1 .glyph.bad { color: var(--bad); }
+  p { margin: 0; font-size: 17px; color: var(--muted); }
+  @media (max-width: 480px) { h1 { font-size: 24px; } }
 </style></head>
 <body><main>
   ${logo ? `<img class="logo" src="${logo}" alt="">` : ""}
-  <div class="mark${ok ? "" : " bad"}">${ok ? CHECK : CROSS}</div>
-  <h1>${escapeHtml(title)}</h1>
+  <h1><span class="glyph${ok ? "" : " bad"}">${ok ? CHECK : CROSS}</span><span>${escapeHtml(title)}</span></h1>
   <p>${escapeHtml(line)}</p>
-  <div class="app">${app}</div>
 </main></body></html>`;
 }
 

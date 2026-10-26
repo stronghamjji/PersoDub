@@ -75,63 +75,20 @@ allowed_grant_types authorization_code, refresh_token
 
 코드를 두 벌로 가르지 않습니다. 이유: 업데이트, 빌드, 서명, 문서, 테스트가 전부 두 배가 되고, 가를 만한 비밀이 없습니다.
 
-## 5. 금주 배포 순서
+## 5. 내일 배포 체크리스트 (0.10.0-rc.1)
 
-1. 오늘: 3번 메일 발송. 데모 클라이언트로 실제 로그인 확인 완료(2번). 소스에서 띄운 실제 Electron 앱으로도 로그인-로그아웃-재로그인 확인(아래 7번).
-2. 키 경로 유지로 결정. 응답 모양은 코드에 반영 완료.
-3. 등록 도착: clientId 한 줄 교체, `perso-login-check.mjs --client persodub-desktop ...`로 재확인.
-4. 패키징된 Mac/Windows 빌드로 실제 로그인 각 1회. 브라우저가 127.0.0.1로 돌아오는지, Keychain 확인창, 로그아웃.
-5. 버전 올리기(desktop/package.json), whats_new.json, docs/privacy.md에 로그인 항목, 공개 main의 README 커밋(cfebb8f) 반영, PR → CI → 릴리스.
-6. 등록이 목요일까지 안 오면: production 빌드를 로그인 끈 상태(= 0.9.0 동작)로 내보내고 로그인은 다음 릴리스.
+브랜치 `feature/perso-login-loopback`, 2026-10-26 밤 기준 검증 상태: 자동 테스트 전부 통과(Python 2409, UI 1058, 데스크톱 612, relay 71, ruff), 실제 Electron 앱 + 실제 Chrome + 실제 Perso(데모 클라이언트)로 로그인·로그아웃·재로그인·재실행 통과, 오픈소스 에디션 별도 kit으로 정상.
 
-## 7. 실제 Electron 앱 E2E 결과 (2026-10-26, 데모 클라이언트)
+1. **Perso 등록 도착** → `desktop/src/auth.js`의 `clientId` 기본값을 `persodub-desktop`으로, `desktop/src/auth.test.mjs`의 같은 문자열 한 줄도. 포트 52290~52292는 이미 기본값.
+2. **라이브 확인** → `node desktop/scripts/perso-login-check.mjs --client persodub-desktop --host 127.0.0.1 --port 52290`. 1~7번이 모두 OK여야 함.
+3. **실제 앱 확인** → `tests/e2e/perso-login.mjs` 머리말의 명령으로, 환경 변수는 `PERSODUB_AUTH_CLIENT_ID=persodub-desktop PERSODUB_AUTH_REDIRECT_HOST=127.0.0.1 PERSODUB_AUTH_REDIRECT_PORTS=52290`. 설치된 PersoDub.app은 먼저 종료.
+4. **테스트 다시** → `cd desktop && node --test src/*.test.mjs smoke/*.test.mjs`, `node --test ui/src/*.test.mjs`, Python은 `pytest tests/`.
+5. **빌드** → Mac: `cd desktop && CAMPPLUS_SRC=<campplus.onnx> npm run dist:dmg:prod` (서명·notarization은 기존 방식대로). Windows: Actions의 "Build Windows installer"를 edition=production으로 실행하면 `dist:win:prod`를 씀. 결과물 이름은 PersoDubbing-mac.dmg, PersoDubbing-Setup-<버전>.exe.
+6. **설치본으로 마지막 확인** → Mac과 Windows 각 1회: Dock/시작 메뉴 이름 PersoDubbing, 로그인 벽, 로그인, 브라우저 페이지, 로그아웃, 재실행 유지. Windows는 loopback 포트에 방화벽 경고가 뜨지 않는지(127.0.0.1만 열므로 뜨지 않아야 함) 확인.
+7. **배포** → 공개 저장소에 올린다면 `v0.10.0-rc.1` 태그의 GitHub 릴리스를 **pre-release로 표시**(0.9.0 사용자가 rc로 업데이트되지 않게). 프로덕션 rc는 회사 배포 경로로.
+8. **등록이 안 오면** → 로그인 없이 내보내는 길: 오픈소스 에디션 빌드(`npm run dist:dmg`)는 로그인이 꺼져 있고 0.9.0과 같은 동작.
 
-소스에서 띄운 실제 앱 + 실제 Chrome + 실제 api.perso.ai. 사용자 kit은 건드리지 않도록 `PERSODUB_KIT_DIR`로 별도 kit을 주고, 소스 payload에서 설치부터 시켰습니다(설치 약 20초, 다운로드 캐시 덕).
-
-| 확인한 것 | 결과 |
-|---|---|
-| 로그아웃 상태 첫 실행 | 로그인 벽, 뒤 화면 inert, 키 없음 |
-| "Perso로 로그인" | Chrome 열림, 대기 화면, 돌아오면 앱 열림, 키 저장(35자) |
-| 설정 > 계정과 키 | 탭 이름 바뀜, 마스킹 이메일, "키 연결됨", 키 붙여넣기 칸 숨김 |
-| 로그아웃 | 벽 복귀, kit.env 키 비움, 토큰 파일 삭제 |
-| 재로그인 | 브라우저 세션 유지돼 0.15초, 키 재저장 |
-| 앱 종료 후 재실행 | "signed in from the last run", 벽 없이 바로 앱(토큰은 Keychain 암호화 파일에서 복원) |
-| 로그아웃 후 종료, 재실행 | 벽이 뜸. 토큰 파일 없음 |
-
-재현: `tests/e2e/perso-login.mjs` 머리말의 명령 세 줄. 등록 뒤에는 환경 변수 세 개만 바꿉니다: `PERSODUB_AUTH_CLIENT_ID=persodub-desktop PERSODUB_AUTH_REDIRECT_HOST=127.0.0.1 PERSODUB_AUTH_REDIRECT_PORTS=52290`. 패키징 빌드에서는 코드의 기본값이 그 값이라 바꿀 것이 clientId 한 줄뿐입니다.
-
-주의: 설치된 PersoDub.app과 소스 실행 앱은 단일 인스턴스 잠금을 공유해 동시에 못 띄웁니다. 테스트 전 설치된 앱을 종료하세요.
-
-**아직 실제로 안 해본 것**: 키 없는 계정(가짜 Perso 테스트로만), Windows, 패키징(dmg/exe)된 빌드, 우리 client id. 등록이 오면 마지막 둘을 합니다.
-
-**문구**: 한국어 "작업공간"은 전부 "Workspace"로 바꿨습니다(사용자 결정 2026-10-26).
-
-**키 없는 계정의 흐름(사용자 요청 2026-10-26)**: 로그인했는데 키가 없으면 키 만들기 페이지가 브라우저에 바로 열리고, 키 없음 화면이 떠 있는 동안 5초마다 키를 다시 확인해서 키가 생기면 알아서 앱으로 넘어갑니다. "키 만들기"와 "다시 확인" 버튼은 그대로 있습니다. Perso에 물어볼 것 하나 추가: 앱이 API로 키를 직접 만들 수 있는 엔드포인트가 있는지. 있으면 사이트 방문 없이 끝낼 수 있습니다.
-
-**설정 탭 순서(사용자 요청 2026-10-26)**: API 키(프로덕션에서는 "계정과 키")가 첫 탭이고 설정은 그 탭으로 열립니다. 모델에 주의가 필요할 때만 모델 탭으로 엽니다.
-
-## 8. 행동 로그와 계정 기준 대시보드: Amplitude 담당자에게 넘길 것 (2026-10-26)
-
-로그 파이프라인은 팀원이 Cloudflare에서 Amplitude로 옮기는 중이므로 여기서는 만들지 않습니다. 로그인 쪽에서 준비해 둔 것과 지켜야 할 것만 적습니다.
-
-- **계정 번호는 로그인 상태에 들어 있습니다.** 페이지에서 `window.persodubShell.authStatus()`가 돌려주는 객체의 `accountId`가 Perso의 userSeq(숫자 문자열)입니다. 로그인 상태가 바뀔 때마다 `window.persodubShell.onAuthState(cb)`로 같은 객체가 옵니다. Amplitude에서는 로그인 시 `setUserId(accountId)`, 로그아웃 시 reset 하면 됩니다. 이메일은 쓰지 않습니다. 오픈소스 에디션에서는 `enabled: false`이고 `accountId`는 빈 문자열입니다.
-- **끄기 스위치를 지켜야 합니다.** 설정 > 개인정보의 "익명 사용 집계" 스위치와 kit.env의 `PERSODUB_NO_ANALYTICS=1`. 페이지에서는 `GET /api/settings`의 `analytics_off`로 읽을 수 있습니다. 꺼져 있으면 이벤트를 보내지 않습니다.
-- **보내면 안 되는 것.** 입력한 글, 파일 이름, 링크, 프로젝트 이름, 이메일, API 키, 토큰. 보내도 되는 것은 눌린 버튼의 id, 화면 이름(`document.body.dataset.screen`), 열린 다이얼로그 id, 드롭다운에서 고른 값 정도입니다.
-- **문서.** 이벤트를 보내기 시작하면 설정의 스위치 설명 문구와 `docs/privacy.md`에 "어떤 버튼과 화면을 쓰는지, 로그인한 계정 번호와 함께"가 들어가야 합니다.
-- **비공개로만.** 실패 리포트는 공개 GitHub 이슈로 가므로 계정 번호를 거기에 넣으면 안 됩니다. 계정 번호는 Amplitude와 비공개 대시보드에만.
-
-## 9. 앱 이름: 프로덕션은 PersoDubbing (2026-10-26)
-
-정식 출시 이름이 "PersoDubbing DesktopApp"이라 사용자가 보는 곳만 프로덕션 에디션에서 "PersoDubbing"으로 바꿨습니다. "DesktopApp"은 붙이지 않습니다. 오픈소스는 "PersoDub" 그대로입니다.
-
-| 바뀌는 곳 | 어떻게 |
-|---|---|
-| 창 제목, 로그인 화면의 이름, 부팅 화면 제목, 로그인 뒤 브라우저 페이지 | 셸이 `desktop/src/edition.js`의 DISPLAY_NAMES를 페이지에 넘김 |
-| 앱 번들 이름, Dock, 메뉴 막대, Windows 시작 메뉴, 설치 파일명 | 프로덕션 빌드 명령 `npm run dist:dmg:prod`, `dist:win:prod` 가 productName을 PersoDubbing으로 덮어씀. Windows 워크플로우는 production 선택 시 자동 |
-| 문장 속의 이름 | 페이지, 셸, 백엔드의 문장 전부 `{app}` 자리표시자. 페이지는 셸이 넘긴 이름으로, 셸은 `setAppName`으로, 백엔드는 `PERSODUB_APP_NAME` 환경 변수로 채움(빅테크 방식: Chromium/Chrome, Code-OSS/VS Code). 영어 문장은 엔진이 이름을 채워 보내므로 페이지는 이름을 `{app}`으로 되돌려 번역 표를 찾음 |
-| 안 바뀌는 곳 | appId(com.persodub.desktop), kit 폴더 `Application Support/PersoDub`(모델과 프로젝트), Perso에 보내는 User-Agent, 실패 리포트 제목, "PersoDub on GitHub" 링크(오픈소스 프로젝트 이름), 프로토콜 문장 "PersoDub installs this itself." |
-
-주의 둘. (1) productName이 바뀌면 Electron의 데이터 폴더가 `Application Support/PersoDubbing`으로 새로 생깁니다. 로그와 분석용 기기 id가 새로 시작하고, kit의 모델과 프로젝트는 그대로입니다. (2) 프로덕션 전용 업데이트 피드가 생기기 전에는 자동 업데이트가 공개 오픈소스 빌드를 받아 이름이 PersoDub으로 돌아갑니다. 4번 항목의 피드 분리가 먼저입니다.
+**아직 열려 있는 것**: 프로덕션 전용 업데이트 피드(4번 항목). 없으면 다음 자동 업데이트에서 공개 오픈소스 빌드를 받아 PersoDubbing 이름이 사라짐(로그인과 Perso 기본값은 kit.env에 기억돼 유지). **팀원 담당**(2026-10-26 결정). 코드에서 바꿀 곳은 `desktop/src/edition.js`의 EDITIONS.production 한 줄.
 
 ## 6. 참고한 저장소와 사실 확인 기록
 
