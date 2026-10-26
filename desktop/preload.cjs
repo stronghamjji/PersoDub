@@ -82,6 +82,22 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // rather than promising a report nobody will receive.
   onReportSent: (cb) => ipcRenderer.on("shell:report-sent", (_e, sent) => cb(sent)),
   getLastReport: () => ipcRenderer.invoke("shell:last-report"),
+  // Perso sign-in in the browser (src/auth.js), the production edition's.
+  // authStatus answers {enabled, required, signedIn, account, hasKey, waiting}:
+  // `required` is the production edition signed out, when the page shows its
+  // sign-in screen; `account` is a masked e-mail. authLogin opens the browser
+  // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
+  // (outcomes and key answers are listed at createAuth). authCheckKey looks for
+  // the account's API key again, after authOpenKeyPage let the user make one.
+  // onAuthState hears the status whenever it changes. In the open-source
+  // edition every answer is {outcome: "disabled"} and authStatus's enabled is false.
+  authStatus: () => ipcRenderer.invoke("shell:auth-status"),
+  authLogin: () => ipcRenderer.invoke("shell:auth-login"),
+  authCancel: () => ipcRenderer.invoke("shell:auth-cancel"),
+  authLogout: () => ipcRenderer.invoke("shell:auth-logout"),
+  authCheckKey: () => ipcRenderer.invoke("shell:auth-check-key"),
+  authOpenKeyPage: () => ipcRenderer.invoke("shell:auth-open-key-page"),
+  onAuthState: (cb) => ipcRenderer.on("shell:auth-state", (_e, state) => cb(state)),
   // "owner/repo" for the page's GitHub links (src/edition.js); "" when the
   // window passed none.
   repo: process.argv.find((a) => a.startsWith(REPO_ARG))?.slice(REPO_ARG.length) || "",

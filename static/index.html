@@ -1149,7 +1149,7 @@
              empty -- user decision 2026-08-06), but masked by default with a
              Show toggle: screen shares and screenshots were putting the keys
              on other people's screens (review 2026-08-07). -->
-        <div class="set-row">
+        <div class="set-row" id="persoKeyRow">
           <label data-i18n for="persoKeyInput">Perso API key</label>
           <div class="set-ctl">
             <input type="password" id="persoKeyInput" placeholder="Not set" data-i18n-placeholder="Not set" spellcheck="false">
@@ -1159,6 +1159,19 @@
                  UTM-tagged link from /api/settings on open; this plain URL is the fallback
                  so the link still works if that request fails. -->
             <a class="settings-link" id="persoSignupLink" href="https://developers.perso.ai/api-keys" target="_blank" rel="noopener" data-i18n>Get a Perso API key…</a>
+          </div>
+        </div>
+        <!-- The production edition signs in to Perso instead of taking a
+             pasted key: the account row stands in the key row's place, which hides
+             (ui/src/settingsDialog.mjs paintAccount, mockup 2026-10-25). -->
+        <div class="set-row" id="persoAccountRow" hidden>
+          <span data-i18n>Perso account</span>
+          <div class="set-ctl">
+            <div class="set-ctl set-inline"><span class="acct-mail" id="persoAccountMail"></span><span class="status-chip acct-chip" id="persoKeyChip"></span></div>
+            <div class="set-ctl set-inline">
+              <button data-i18n class="btn btn-outline btn-sm" id="persoSignOutBtn" type="button">Sign out</button>
+            </div>
+            <div data-i18n class="settings-hint">Used when Choose a model, Voice separation or Speech-to-text is set to Perso API. Uses Perso credits.</div>
           </div>
         </div>
         <div class="set-row">
@@ -1507,6 +1520,40 @@
      Since 2026-09-01 that includes starting a dub (queue_dub), behind the
      confirm gate every spending tool has: nothing starts until the user has
      been asked and agreed. cancel_dub stops a job when the user asks. -->
+
+<!-- The production edition's sign-in (ui/src/signIn.mjs; the shell signs in
+     to Perso in the computer's browser, desktop/src/auth.js). Over the whole
+     window while signed out, while the browser is open on Perso, and while the
+     account has no API key (mockup 2026-10-25). The open-source edition never
+     shows it. The top strip moves the window, as the top bar does. -->
+<div class="signin" id="signInScreen" hidden>
+  <div class="signin-bar"></div>
+  <div class="signin-stage" id="signInStart">
+    <img class="signin-logo" src="/logo.png" alt="">
+    <div class="signin-name">PersoDub</div>
+    <button class="btn btn-primary signin-btn" id="signInBtn" type="button"></button>
+    <div class="signin-hint" id="signInHint"></div>
+  </div>
+  <div class="signin-stage" id="signInWait" hidden>
+    <img class="signin-logo sm" src="/logo.png" alt="">
+    <h1 data-i18n>Finish signing in in your browser</h1>
+    <div class="signin-prog"><b></b></div>
+    <div class="signin-btns"><button data-i18n class="btn btn-secondary signin-btn" id="signInReopen" type="button">Open the browser again</button></div>
+    <button data-i18n class="signin-link" id="signInCancel" type="button">Cancel</button>
+  </div>
+  <div class="signin-stage" id="signInNoKey" hidden>
+    <img class="signin-logo sm" src="/logo.png" alt="">
+    <h1 data-i18n>No API key yet</h1>
+    <p data-i18n>Make a key on the Perso site, then come back.</p>
+    <div class="signin-acct" id="signInAccount"></div>
+    <div class="signin-btns">
+      <button data-i18n class="btn btn-primary signin-btn" id="signInMakeKey" type="button">Make a key</button>
+      <button data-i18n class="btn btn-secondary signin-btn" id="signInCheckKey" type="button">Check again</button>
+    </div>
+    <div class="signin-hint danger" id="signInKeyNote"></div>
+    <button data-i18n class="signin-link" id="signInSignOut" type="button">Sign out</button>
+  </div>
+</div>
 
 <!-- The app's script is ui/src/app.mjs. It is imported in the "from" form
      because that is the form app/main.py stamps with the launch token: a bare

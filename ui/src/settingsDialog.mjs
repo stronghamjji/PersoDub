@@ -33,6 +33,9 @@
  *        without waiting on any of it.
  * @param {object} [deps.shell]  the desktop shell (window.persodubShell), which
  *        says where downloads go (downloadFolder); null in a browser
+ * @param {object} [deps.account]  the Perso sign-in (ui/src/signIn.mjs): its
+ *        status, a way to hear it change, and logout. Only the
+ *        production edition's status is enabled; the sheet is unchanged otherwise.
  * @returns the operations the rest of the page calls.
  */
 import { setupText, watchSetup } from "./chatgptSetup.mjs";
@@ -45,7 +48,7 @@ import { paintMarkupWords } from "./markupWords.mjs";
 export const SETTINGS_TABS = ["models", "keys", "storage", "privacy", "about"];
 
 export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = () => window.location.reload(),
-                                 shell = null }) {
+                                 shell = null, account = null }) {
   // The tab the user last chose, for this sitting only: a new launch starts
   // on Models again.
   let lastTab = "models";
@@ -335,6 +338,49 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     }
   });
 
+  // The production edition's Perso account (mockup 2026-10-25): signed in
+  // through the browser, so the account row takes the pasted key's place and
+  // the tab is "Account and keys". The open-source edition's status is not
+  // enabled, and then nothing here is touched.
+  function paintAccount(s) {
+    if (!s || !s.enabled) return;
+    $("persoAccountRow").hidden = false;
+    $("persoKeyRow").hidden = true;
+    const tab = $("settingsTab-keys");
+    if (tab.dataset.i18n !== "Account and keys") {
+      tab.dataset.i18n = "Account and keys";
+      tab.textContent = t("Account and keys");
+    }
+    $("persoAccountMail").textContent = s.account || t("Perso account");
+    $("persoKeyChip").textContent = s.hasKey ? t("Key connected") : t("No key");
+    $("persoKeyChip").classList.toggle("done", !!s.hasKey);
+  }
+  // A sign-in changes the key in kit.env (another account's, or none): the
+  // open sheet takes the new one and its workspaces, and nothing else it has.
+  async function reloadPersoKey() {
+    try {
+      const r = await fetch("/api/settings");
+      if (!r.ok) return;
+      const st = await r.json();
+      const per = st.perso_api_key || "";
+      if (per === keysInitial.per) return;
+      keysInitial.per = per;
+      $("persoKeyInput").value = per;
+      persoSpaceInitial = st.perso_space_seq || "";
+      persoPreviewedKey = per;
+      loadPersoSpaces(persoSpaceInitial);
+      paintChanges();
+    } catch { /* the next open reads it again */ }
+  }
+  if (account) {
+    paintAccount(account.status());
+    account.onChange((s) => {
+      paintAccount(s);
+      if (s.enabled && $("settingsOverlay").classList.contains("open")) reloadPersoKey();
+    });
+    $("persoSignOutBtn").addEventListener("click", () => account.logout());
+  }
+
   // Storage's line on where downloads go, the folder they go into now (the
   // one Change in the Download dialog picked, or Downloads). Said, not
   // changed here. A browser saves where it is set to, so the row stays away.
@@ -352,6 +398,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     const asked = SETTINGS_TABS.includes(tab) ? tab : "";
     chosenSinceOpen = false;
     showTab(asked || (modelsNeedAttention() ? "models" : lastTab));
+    if (account) paintAccount(account.status());
     loadChatgpt(); // async on purpose -- the sheet opens without waiting on a child process
     paintDownloadFolder(); // the same: the shell answers at once, and the sheet does not wait for it
     await loadSavedSetup();

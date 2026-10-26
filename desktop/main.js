@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, screen, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, safeStorage, screen, session, shell } from "electron";
 import { join, dirname } from "node:path";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,7 @@ import { EDITIONS, readEdition } from "./src/edition.js";
 import { useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
 import { writeTimeline } from "./src/timeline.js";
+import { createShellAuth, registerAuthIpc } from "./src/authIpc.js";
 
 // Two launches must never both start backends: the second would overwrite
 // pids.json with its own PIDs, and killStalePids on the NEXT boot (whichever
@@ -53,13 +54,14 @@ const ctx = {
 // existing window forward instead. Registered even before app.whenReady(), as
 // Electron docs ask -- but win does not exist until the app is ready, so a
 // second launch before then is simply dropped (nothing to focus yet).
-app.on("second-instance", () => {
+function focusWindow() {
   const { win } = ctx;
   if (!win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
-});
+}
+app.on("second-instance", () => focusWindow());
 
 // The shell's own lines go to a file as well as the console: a packaged app
 // has no console, and the one question a support log could not answer on
@@ -72,6 +74,11 @@ function shellLog(line, level = "INFO") {
     appendFileSync(join(dir, "shell.log"), `${logLine("shell", level, line)}\n`);
   } catch { /* logging never breaks the app */ }
 }
+
+// Perso sign-in in the browser, production edition only (src/auth.js). The
+// browser comes back through a port on this computer, so nothing is
+// registered with the system.
+const auth = createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus: focusWindow });
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog });
 const countUsage = usageCounter(app);
@@ -118,6 +125,8 @@ app.whenReady().then(() => {
   };
   registerUsageIpc({ ipcMain, ctx, countUsage, sendReport: reporter.sendReport, shellLog, lastRunClosedByUser });
   registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog });
+  registerAuthIpc({ ipcMain, shell, auth });
+  void auth.start();
 
   // What the page needs to say "Report sent - #142": whether reports are on at
   // all, and the last one that went out. A page that loads after the report

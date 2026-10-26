@@ -20,6 +20,7 @@ import { initEscapeKey } from "./escapeKey.mjs";
 // (ui/src/escapeKey.mjs). First, so it is asked before every dialog's own listener.
 initEscapeKey();
 import { initSettingsUi } from "./settingsDialog.mjs";
+import { initSignIn } from "./signIn.mjs";
 import { initWhatsNew } from "./whatsNew.mjs";
 import { initKeyWindow } from "./keyWindow.mjs";
 import { initChatgptSignIn } from "./chatgptSignIn.mjs";
@@ -186,12 +187,17 @@ window.addEventListener("resize", () => {
 // and the out-of-credits popup all call settings.openSettings()) and the two
 // things the sheet reaches back for: re-checking which engines a saved key
 // makes usable, and the Models catalog, which modelsDialog.mjs paints.
+// The production edition's Perso sign-in screen (ui/src/signIn.mjs), over the
+// whole window while signed out. The open-source edition never shows it.
+const signIn = initSignIn({ $, shell: window.persodubShell || null });
 const settings = initSettingsUi({
   $,
   onSaved: () => applyEngineAvailabilityToForm(),
   refreshModelCatalog: () => models.refreshModels(),
   // Storage says where downloads go; only the desktop shell knows.
   shell: window.persodubShell || null,
+  // The Perso account row and its buttons, production edition only.
+  account: signIn,
 });
 
 $("settingsBtn").addEventListener("click", settings.openSettings);
