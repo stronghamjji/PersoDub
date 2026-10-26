@@ -259,7 +259,7 @@ test("without the system's encryption nothing is written, and a file that does n
 test("a sign-in takes a port, opens the browser with that port's address, takes the request back, and saves the account's key", async () => {
   const { auth, opened, calls, kitDir, userData, closed } = makeAuth();
   await auth.start();
-  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
   const done = auth.login();
   await settle();
   assert.equal(opened.length, 1);
@@ -276,7 +276,7 @@ test("a sign-in takes a port, opens the browser with that port's address, takes 
     authorizationCodeRequest: { code: "c1", redirectUri: REDIRECT_URI, codeVerifier: exchange.authorizationCodeRequest.codeVerifier, clientSecret: null } });
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "pk_test_K1");
   assert.equal(kitValues(kitDir).GEMINI_API_KEY, "g-keep");
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false });
   assert.ok(existsSync(join(userData, AUTH_FILE)));
   assert.deepEqual(closed, [52390], "the port was not given back when the sign-in ended");
 });
@@ -476,7 +476,7 @@ async function signedInStore(routes, accessToken) {
 test("the next launch is signed in at once, with no request to Perso", async () => {
   const { auth, calls } = await signedInStore(persoRoutes(), later());
   await auth.start();
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false });
   assert.equal(calls.length, 0);
 });
 
@@ -550,7 +550,7 @@ test("no network or no answer while trading the code says network, not a refusal
     await settle();
     await auth.handleCallback(back(opened, "c"));
     assert.deepEqual(await done, { outcome: "failed", error: "network" });
-    assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false });
+    assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
   }
 });
 
@@ -564,7 +564,7 @@ test("signing out tells Perso, deletes the tokens and clears the key and workspa
   assert.deepEqual([kitValues(kitDir).PERSO_API_KEY, kitValues(kitDir).PERSO_SPACE_SEQ], ["", ""]);
   const signOut = calls.find((c) => c.key === `POST ${CFG.signOutUrl}`);
   assert.match(signOut.auth, /^Bearer h\./);
-  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
 });
 
 test("signing out finishes on this computer even when Perso does not answer", async () => {
@@ -614,7 +614,7 @@ test("switched off (the open-source edition) nothing happens: no browser, no fil
     listen: async () => { touched.push("port"); } });
   await auth.start();
   assert.equal(auth.enabled, false);
-  assert.deepEqual(await auth.status(), { enabled: false, required: false, signedIn: false, account: "", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: false, required: false, signedIn: false, account: "", accountId: "", hasKey: true, waiting: false });
   for (const answer of [await auth.login(), await auth.cancelLogin(), await auth.logout(), await auth.connectKey()]) {
     assert.deepEqual(answer, { outcome: "disabled" });
   }
@@ -642,5 +642,5 @@ test("`enabled` as a function is asked at every request, so a kit found after th
   assert.equal((await auth.status()).enabled, false);
   assert.equal((await auth.status()).signedIn, false, "the token file was read while switched off");
   on = true;
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false });
 });

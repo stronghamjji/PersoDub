@@ -83,9 +83,10 @@ contextBridge.exposeInMainWorld("persodubShell", {
   onReportSent: (cb) => ipcRenderer.on("shell:report-sent", (_e, sent) => cb(sent)),
   getLastReport: () => ipcRenderer.invoke("shell:last-report"),
   // Perso sign-in in the browser (src/auth.js), the production edition's.
-  // authStatus answers {enabled, required, signedIn, account, hasKey, waiting}:
+  // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting}:
   // `required` is the production edition signed out, when the page shows its
-  // sign-in screen; `account` is a masked e-mail. authLogin opens the browser
+  // sign-in screen; `account` is a masked e-mail and `accountId` Perso's number
+  // for the account, the value to key a user's analytics events by. authLogin opens the browser
   // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
   // (outcomes and key answers are listed at createAuth). authCheckKey looks for
   // the account's API key again, after authOpenKeyPage let the user make one.

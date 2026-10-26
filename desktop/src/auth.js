@@ -284,6 +284,9 @@ export function createAuth({
       required: on && !session,
       signedIn: Boolean(session),
       account: session?.account || "",
+      // Perso's number for the account (userSeq): the one value to key a
+      // user's events by in an analytics tool. Never an e-mail.
+      accountId: session?.userId || "",
       hasKey: dir ? (envWithKit(dir).PERSO_API_KEY || "").trim() !== "" : false,
       // Still waiting while the code is traded: the screen stays on "finish
       // in your browser" instead of offering Sign in again for those seconds.

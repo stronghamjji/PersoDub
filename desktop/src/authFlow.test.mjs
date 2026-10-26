@@ -121,7 +121,7 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   await until(() => browser.pages.length);
   assert.deepEqual(browser.pages, ["done"]);
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["a@test.local"].keys[0].apiKey);
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "a***@test.local", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "a***@test.local", accountId: "1001", hasKey: true, waiting: false });
   // The port is closed again: the listener lives only while a sign-in waits.
   await assert.rejects(fetch(`http://127.0.0.1:${portOf(logs)}/callback`));
 
@@ -155,7 +155,7 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   browser.typing = "c@test.local";
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "no_key" });
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "", "B's key stayed for C");
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "c***@test.local", hasKey: false, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "c***@test.local", accountId: "1003", hasKey: false, waiting: false });
 
   // Nothing secret in the log.
   const all = logs.join("\n");
@@ -195,7 +195,7 @@ test("after Perso forgets the refresh token, the next launch is signed out and t
     fake.forgetRefreshTokens();
     const second = theApp({ kitDir, browser, userData: first.userData });
     await second.auth.start();
-    assert.deepEqual(await second.auth.status(), { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false });
+    assert.deepEqual(await second.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
     assert.equal(kitValues(kitDir).PERSO_API_KEY, "");
   } finally { fake.setAccessTtl(3600); }
 });
@@ -356,7 +356,7 @@ test("a token file that is broken or from another computer reads as signed out, 
     writeFileSync(fileOf(userData), content);
     const app = theApp({ kitDir: freshKit(), browser: scriptedBrowser(), userData });
     await app.auth.start();
-    assert.deepEqual(await app.auth.status(), { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false });
+    assert.deepEqual(await app.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
   }
 });
 
@@ -451,7 +451,7 @@ test("no network, or a Perso slower than the app waits, at the code exchange: fa
     for (const how of [{ drop: ["token"] }, { delayMs: 400 }]) {
       fake.misbehave(how);
       assert.deepEqual(await app.auth.login(), { outcome: "failed", error: "network" }, JSON.stringify(how));
-      assert.deepEqual(await app.auth.status(), { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false });
+      assert.deepEqual(await app.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
       assert.equal(existsSync(fileOf(app.userData)), false);
     }
   } finally { fake.misbehave({}); }
