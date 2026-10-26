@@ -5,7 +5,12 @@ import { createUpdater } from "./updateFlow.js";
 
 // ...and tells the page, whose update window would otherwise say the app is
 // up to date: nothing was checked (ui/src/updateWindow.mjs check-off).
-test("a production build without an update address checks nothing, says so once in shell.log, and tells the page", async () => {
+test("a production build without an update address checks nothing, says so once in shell.log, and tells the page", async (t) => {
+  // A test feed in this shell's environment (updater.js resolveFeed) would
+  // give the build an address, and electron-updater a check to run.
+  const was = process.env.PERSODUB_UPDATE_URL;
+  delete process.env.PERSODUB_UPDATE_URL;
+  t.after(() => { if (was !== undefined) process.env.PERSODUB_UPDATE_URL = was; });
   const lines = [];
   const sent = [];
   const ctx = {};
