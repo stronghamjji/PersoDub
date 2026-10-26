@@ -1,7 +1,9 @@
 // Run with: node --test ui/src/feedbackSheet.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { initFeedbackSheet, PRIVACY_URL } from "./feedbackSheet.mjs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 // The form's elements, the shell's sendInquiry answering `answer`, and the
 // page's language.
@@ -108,6 +110,28 @@ test("one the shell keeps for later says it goes next launch; one it could not k
   assert.equal(lost.$("feedbackStatus").textContent, "Could not send it. Try again in a moment.");
   assert.equal(lost.$("feedbackSubjectInput").value, " Export stops ", "kept to send again");
   assert.equal(lost.$("feedbackSend").disabled, false);
+});
+
+test("asked for an address (no Reply-to and an account with no e-mail), it says so in the page's language and keeps the form", async () => {
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ko });
+  try {
+    await loadTable("ko");
+    for (const [language, line] of [["en", "Add an email so we can answer."], ["ko", "답장 받을 이메일을 적어 주세요."]]) {
+      setLanguage(language);
+      const h = harness({ answer: { needReplyTo: true }, language });
+      await fillAndSend(h);
+      assert.equal(h.$("feedbackStatus").textContent, line);
+      assert.equal(h.$("feedbackSubjectInput").value, " Export stops ", "kept to send again");
+      assert.equal(h.$("feedbackConsent").checked, true);
+      assert.equal(h.$("feedbackReplyTo").focused, true);
+      assert.equal(h.$("feedbackSend").disabled, false);
+    }
+  } finally {
+    globalThis.fetch = real;
+    setLanguage("en");
+  }
 });
 
 test("Close keeps the draft and sends nothing", () => {

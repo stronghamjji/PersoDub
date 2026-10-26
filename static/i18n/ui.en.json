@@ -853,6 +853,7 @@
   "Privacy policy": "Privacy policy",
   "Received. Reference {id}": "Received. Reference {id}",
   "Could not send it now. It is saved and goes the next time the app opens.": "Could not send it now. It is saved and goes the next time the app opens.",
+  "Add an email so we can answer.": "Add an email so we can answer.",
   "Could not send it. Try again in a moment.": "Could not send it. Try again in a moment.",
   "{app}": "{app}"
 }

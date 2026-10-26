@@ -101,7 +101,8 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // form's {type, subject, details, replyTo, locale}, which the shell sends to
   // the support web app with the app's version and this computer (src/reporting.js).
   // Resolves to {id} once it landed, {queued: true} when it waits for the next
-  // launch, and null when it could not be sent at all.
+  // launch, {needReplyTo: true} when there is no Reply-to and the account has
+  // no e-mail (nothing sent), and null when it could not be sent at all.
   sendInquiry: (form) => ipcRenderer.invoke("shell:send-inquiry", form),
   // Perso sign-in in the browser (src/auth.js), the production edition's.
   // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting}:

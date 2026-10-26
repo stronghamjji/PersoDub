@@ -22,7 +22,7 @@ export const PRIVACY_URL = {
 /**
  * @param {object} deps
  * @param {(id: string) => any} deps.$
- * @param {(form: object) => Promise<{id?: string, queued?: boolean} | null>} deps.send  persodubShell.sendInquiry
+ * @param {(form: object) => Promise<{id?: string, queued?: boolean, needReplyTo?: boolean} | null>} deps.send  persodubShell.sendInquiry
  * @param {() => string} deps.language     the page's language, "ko" or "en"
  * @param {(url: string) => void} deps.openUrl
  * @returns {() => void} opens the form
@@ -32,6 +32,7 @@ export function initFeedbackSheet({ $, send, language, openUrl }) {
         consent = $("feedbackConsent"), status = $("feedbackStatus");
   // Optional: left empty, the answer goes to the signed-in account's address,
   // which the shell adds itself (desktop/src/reporting.js accountForInquiry).
+  // An account with no e-mail has none: then the shell answers needReplyTo.
   const replyTo = $("feedbackReplyTo");
   let sending = false;
   // Subject, Details and the consent are required: Send waits for all three.
@@ -71,6 +72,10 @@ export function initFeedbackSheet({ $, send, language, openUrl }) {
       subject.value = details.value = replyTo.value = "";
       consent.checked = false;
       logsNote();
+    } else if (answer && answer.needReplyTo) {
+      // Nothing was sent: the form stays as it is, waiting for the address.
+      status.textContent = t("Add an email so we can answer.");
+      replyTo.focus();
     } else {
       status.textContent = t("Could not send it. Try again in a moment.");
     }

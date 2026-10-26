@@ -853,6 +853,7 @@
   "Privacy policy": "개인정보 처리방침",
   "Received. Reference {id}": "접수됐어요. 접수 번호 {id}",
   "Could not send it now. It is saved and goes the next time the app opens.": "지금은 보내지 못했어요. 저장해 두었다가 앱을 다음에 열 때 보내요.",
+  "Add an email so we can answer.": "답장 받을 이메일을 적어 주세요.",
   "Could not send it. Try again in a moment.": "보내지 못했어요. 잠시 뒤에 다시 보내 주세요.",
   "{app}": "{app}"
 }

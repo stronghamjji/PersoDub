@@ -495,6 +495,24 @@ test("an inquiry carries the signed-in account's full e-mail and Perso number, a
   assert.deepEqual([posted(s.calls[1]).accountEmail, posted(s.calls[1]).accountId], ["", ""]);
 });
 
+// An account signed in through Google or Microsoft may have no e-mail: with
+// no Reply-to either, nobody could answer, so the form is asked for one.
+test("with no Reply-to and no account e-mail the shell asks for an address, and sends and keeps nothing", async () => {
+  for (const account of [() => ({ email: "", id: "1001" }), () => null]) {
+    const s = setup({ relay: () => SENT("N0N0N0N0"), account });
+    for (const replyTo of ["", "   ", undefined]) {
+      assert.deepEqual(await s.reporter.sendInquiry({ ...FORM, type: "other", replyTo }, { kitDir: s.kitDir, ...FACTS }), { needReplyTo: true });
+    }
+    assert.deepEqual(s.calls, []);
+    assert.deepEqual(s.queued(), []);
+  }
+  const typed = setup({ relay: () => SENT("N1N1N1N1"), account: () => ({ email: "", id: "1001" }) });
+  assert.deepEqual(await typed.reporter.sendInquiry({ ...FORM, type: "other" }, { kitDir: typed.kitDir, ...FACTS }), { id: "N1N1N1N1" });
+  const fromAccount = setup({ relay: () => SENT("N2N2N2N2"), account: () => ({ email: "someone@example.com", id: "1001" }) });
+  assert.deepEqual(await fromAccount.reporter.sendInquiry({ ...FORM, type: "other", replyTo: "" }, { kitDir: fromAccount.kitDir, ...FACTS }),
+    { id: "N2N2N2N2" });
+});
+
 test("a build with no web app sends nothing, says so, and leaves a waiting inquiry where it is", async () => {
   const s = setup({ inquiryUrl: "" });
   assert.equal(await s.reporter.sendInquiry(FORM, { kitDir: s.kitDir, ...FACTS }), null);

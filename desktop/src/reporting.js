@@ -345,8 +345,9 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
    * (postInquiry). Written into the queue first, a bug's logs beside it as a
    * failure's are, so one that cannot land now goes with the next launch's
    * flush. Answers {id} once the web app has it, {queued: true} when it waits,
-   * and null when it could not even be built or the build names nowhere to
-   * send it.
+   * {needReplyTo: true}, sending nothing, when no one could be answered (no
+   * Reply-to, and an account with no e-mail), and null when it could not even
+   * be built or the build names nowhere to send it.
    */
   async function sendInquiry(form, { kitDir, os, osVersion }) {
     if (!kitDir) return null;
@@ -363,6 +364,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
       installId: savedDevice(analyticsFile(app)) || loadState(REPORT_STATE()).device,
     });
     if (!inquiry) return null;
+    if (!inquiry.replyTo && !inquiry.accountEmail) return { needReplyTo: true };
     const base = queueBase(randomBytes(6).toString("hex"), Date.now());
     inHand.add(base);
     try {
