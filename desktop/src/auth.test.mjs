@@ -130,14 +130,16 @@ test("the authorize address carries what Perso's PKCE demo sends, with the port'
 });
 
 test("Perso's addresses default to api.perso.ai, the ports to three of this computer's, and each can be changed by the environment", () => {
-  const live = authConfig({});
+  const live = authConfig({}, "0.9.1");
   assert.equal(live.authorizeUrl, "https://api.perso.ai/auth/api/v2/authorize");
   assert.equal(live.tokenUrl, "https://api.perso.ai/auth/api/v2/token");
   assert.equal(live.refreshUrl, "https://api.perso.ai/auth/api/v1/auth/oauth2/token");
   assert.equal(live.signOutUrl, "https://api.perso.ai/auth/api/v1/auth/sign-out");
   assert.equal(live.profileUrl, "https://api.perso.ai/user/api/v1/users/profile");
   assert.equal(live.apiKeysUrl, "https://api.perso.ai/auth/api/v1/api-keys/active");
-  assert.equal(live.keyPageUrl, "https://developers.perso.ai/api-keys");
+  // With the tail every link into Perso carries (app/perso_client.py UTM_TAIL)
+  // and the button, as the key window's link (SIGNUP_LINK).
+  assert.equal(live.keyPageUrl, "https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup");
   assert.equal(live.scope, "profile email");
   assert.equal(live.clientId, "PERSODUB-CLIENT-ID-NOT-ISSUED-YET");
   assert.deepEqual(live.redirectPorts, [52290, 52291, 52292]);
@@ -145,12 +147,12 @@ test("Perso's addresses default to api.perso.ai, the ports to three of this comp
 
   const own = authConfig({ PERSODUB_AUTH_BASE: "http://127.0.0.1:9/auth/api/", PERSODUB_AUTH_CLIENT_ID: "mine",
     PERSODUB_AUTH_REFRESH_PATH: "/r", PERSODUB_AUTH_PROFILE_PATH: "/p", PERSODUB_AUTH_API_KEYS_PATH: "/k", PERSODUB_AUTH_SIGNOUT_PATH: "/o",
-    PERSODUB_KEY_PAGE_URL: "http://keys.test/", PERSODUB_AUTH_REDIRECT_HOST: "localhost", PERSODUB_AUTH_REDIRECT_PORTS: " 5173, x, 70000, 0 " });
+    PERSODUB_KEY_PAGE_URL: "http://keys.test/?from=x", PERSODUB_AUTH_REDIRECT_HOST: "localhost", PERSODUB_AUTH_REDIRECT_PORTS: " 5173, x, 70000, 0 " }, "0.9.1");
   assert.equal(own.authorizeUrl, "http://127.0.0.1:9/auth/api/v2/authorize");
   assert.equal(own.tokenUrl, "http://127.0.0.1:9/auth/api/v2/token");
   assert.deepEqual([own.refreshUrl, own.profileUrl, own.apiKeysUrl, own.signOutUrl], ["http://127.0.0.1:9/r", "http://127.0.0.1:9/p", "http://127.0.0.1:9/k", "http://127.0.0.1:9/o"]);
   assert.equal(own.clientId, "mine");
-  assert.equal(own.keyPageUrl, "http://keys.test/");
+  assert.equal(own.keyPageUrl, "http://keys.test/?from=x&utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup");
   assert.deepEqual(own.redirectPorts, [5173]);
   assert.equal(redirectUriFor(own, 5173), "http://localhost:5173/callback");
   assert.deepEqual(authConfig({ PERSODUB_AUTH_REDIRECT_PORTS: "nonsense" }).redirectPorts, [52290, 52291, 52292]);
@@ -705,6 +707,19 @@ test("no token, key or e-mail ever reaches a log line", async () => {
 });
 
 // ---- Switched off ------------------------------------------------------------------------
+
+test("Make a key on the sign-in screen opens the key page with the app's version and utm_content=signup", async () => {
+  const { createShellAuth } = await import("./authIpc.js");
+  const opened = [];
+  const shell = { openExternal: async (u) => { opened.push(u); } };
+  const auth = createShellAuth({ app: { getPath: () => mkdtempSync(join(tmpdir(), "odauth-user-")), getVersion: () => "0.9.1" },
+    shell, safeStorage: fakeSafeStorage(), net: { fetch: async () => { throw new Error("no network here"); } },
+    ctx: { kitDir: kitWith(), win: null }, edition: "production", shellLog: () => {}, env: {} });
+  const handlers = {};
+  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell, auth });
+  await handlers["shell:auth-open-key-page"]();
+  assert.deepEqual(opened, ["https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup"]);
+});
 
 test("switched off (the open-source edition) nothing happens: no browser, no file, no port, no network", async () => {
   const userData = mkdtempSync(join(tmpdir(), "odauth-user-"));

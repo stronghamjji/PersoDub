@@ -396,7 +396,7 @@ test("the sign-in follows the build's edition only: a kit remembered as producti
     return dir;
   };
   const shellAuth = (edition, kitDir) => createShellAuth({
-    app: { getPath: () => mkdtempSync(join(tmpdir(), "odflow-user-")) }, shell: { openExternal: async () => {} },
+    app: { getPath: () => mkdtempSync(join(tmpdir(), "odflow-user-")), getVersion: () => "0.9.1" }, shell: { openExternal: async () => {} },
     safeStorage: fakeSafeStorage(), net: { fetch }, ctx: { kitDir, win: null }, edition, shellLog: () => {}, env: {},
   });
   const oss = shellAuth("opensource", kitSaying("production"));
@@ -417,7 +417,7 @@ test("the events' userId is the signed-in account's hashed number, set at the si
   browser.typing = "a@test.local";
   const ctx = { kitDir, win: null, userId: "" };
   const auth = createShellAuth({
-    app: { getPath: () => mkdtempSync(join(tmpdir(), "odflow-user-")) },
+    app: { getPath: () => mkdtempSync(join(tmpdir(), "odflow-user-")), getVersion: () => "0.9.1" },
     shell: { openExternal: async (url) => { setImmediate(() => browser.open(url)); } },
     safeStorage: fakeSafeStorage(), net: { fetch }, ctx, edition: "production", shellLog: () => {},
     env: { PERSODUB_AUTH_BASE: fake.authBase, PERSODUB_AUTH_CLIENT_ID: FAKE_CLIENT_ID, PERSODUB_AUTH_REDIRECT_PORTS: PORTS },

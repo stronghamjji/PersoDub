@@ -22,7 +22,7 @@ export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, sh
                                  appName = "PersoDub", logoPath = "", env = process.env }) {
   const auth = createAuth({
     enabled: edition === "production",
-    cfg: authConfig(env),
+    cfg: authConfig(env, app.getVersion()),
     store: tokenStore(join(app.getPath("userData"), AUTH_FILE), safeStorage),
     fetchFn: (url, opts) => net.fetch(url, opts), // the system's proxy and certificates, as the update check
     openExternal: (url) => shell.openExternal(url),

@@ -24,8 +24,9 @@ export const CALLBACK_PATH = "/callback";
  * tests point the app at the fake Perso (tests/fake-perso/server.mjs) and how
  * scripts/perso-login-check.mjs points it at a registered client. The *_PATH
  * values start at the host of AUTH_BASE: "/user/api/..." is
- * https://api.perso.ai/user/api/... */
-export function authConfig(env = process.env) {
+ * https://api.perso.ai/user/api/... `version` is the app's, for the key
+ * page's utm tail. */
+export function authConfig(env = process.env, version = "") {
   const authBase = (env.PERSODUB_AUTH_BASE || "https://api.perso.ai/auth/api").replace(/\/+$/, "");
   const at = (path) => new URL(path, authBase).href;
   const ports = String(env.PERSODUB_AUTH_REDIRECT_PORTS || "")
@@ -45,8 +46,16 @@ export function authConfig(env = process.env) {
     signOutUrl: at(env.PERSODUB_AUTH_SIGNOUT_PATH || "/auth/api/v1/auth/sign-out"),
     profileUrl: at(env.PERSODUB_AUTH_PROFILE_PATH || "/user/api/v1/users/profile"),
     apiKeysUrl: at(env.PERSODUB_AUTH_API_KEYS_PATH || "/auth/api/v1/api-keys/active"),
-    keyPageUrl: env.PERSODUB_KEY_PAGE_URL || "https://developers.perso.ai/api-keys",
+    keyPageUrl: withUtm(env.PERSODUB_KEY_PAGE_URL || "https://developers.perso.ai/api-keys", version, "signup"),
   };
+}
+
+/** A link into Perso with the tail every one carries (app/perso_client.py
+ * UTM_TAIL) and the button as utm_content: the sign-in screen's Make a key
+ * is "signup", as the key window's link is (SIGNUP_LINK). */
+export function withUtm(url, version, content) {
+  const tail = `utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v${version}&utm_content=${content}`;
+  return `${url}${url.includes("?") ? "&" : "?"}${tail}`;
 }
 
 /** The redirect address for one of the ports: exactly what Perso has registered. */
