@@ -205,7 +205,8 @@ export async function connect({ port = 9333, out = "." } = {}) {
     return urls;
   }
   // What a failed step may leave open over the next step's buttons: the
-  // ChatGPT sign-in, the Download dialog, the subtitle looks, the Help dialog.
+  // ChatGPT sign-in, the Download dialog, the subtitle looks, the Help dialog,
+  // the update window.
   // Each is closed the way a person closes it; returns the ones that were open.
   async function putAway() {
     const left = [];
@@ -213,6 +214,11 @@ export async function connect({ port = 9333, out = "." } = {}) {
       left.push("#helpOverlay");
       await key("Escape");
       await waitFor("the Help dialog to close", 5000, isClosed, "#helpOverlay");
+    }
+    if (await inPage(isOpen, "#updateOverlay")) {
+      left.push("#updateOverlay");
+      await key("Escape");
+      await waitFor("the update window to close", 5000, isClosed, "#updateOverlay");
     }
     if (await inPage(isOpen, "#chatgptSignInOverlay")) {
       left.push("#chatgptSignInOverlay");

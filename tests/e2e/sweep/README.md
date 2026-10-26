@@ -15,6 +15,6 @@ A step returns a one-line note with its numbers, or throws with the reason; it t
 `Skip` (from lib/cdp.mjs) with the reason when this computer cannot run it (not signed in,
 a model not installed), and is reported as skipped.
 After a step that did not pass, the sweep closes what it may have left open over the next
-step (the ChatGPT sign-in, the Download dialog, the subtitle looks, the Help dialog: `app.putAway()`) and says so in its note.
+step (the ChatGPT sign-in, the Download dialog, the subtitle looks, the Help dialog, the update window: `app.putAway()`) and says so in its note.
 Leave the app on Home at the end of an area.
 Modules run in file-name order: 10-home.mjs, 20-prep.mjs, 30-dub.mjs, 40-tools.mjs, 50-settings.mjs.
