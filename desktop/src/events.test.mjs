@@ -119,3 +119,11 @@ test("the production edition records with no line in kit.env", () => {
   assert.equal(setup({ kitEnv: "", edition: "production" }).events.take([press("save")]).on, true);
   assert.equal(setup({ kitEnv: "", edition: "opensource" }).events.take([press("save")]).on, false);
 });
+
+// A check of the whole road from a from-source run: the override sends even
+// where a developer's run would only count.
+test("PERSODUB_EVENTS_SEND=1 sends from a from-source run, and is nothing when unset", () => {
+  assert.equal(resolveEventsMode({ isPackaged: false, env: { PERSODUB_EVENTS: "1", PERSODUB_EVENTS_SEND: "1" }, edition: "opensource" }), "on");
+  assert.equal(resolveEventsMode({ isPackaged: false, env: { PERSODUB_EVENTS: "1" }, edition: "opensource" }), "debug");
+  assert.equal(resolveEventsMode({ isPackaged: false, env: { PERSODUB_EVENTS: "0", PERSODUB_EVENTS_SEND: "1" }, edition: "production" }), "off");
+});

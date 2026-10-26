@@ -93,7 +93,8 @@ It is on to begin with in the production edition and off in the open-source edit
 it on or off in **Settings → Privacy**, or with `PERSODUB_EVENTS=1` or `0` in `kit.env`; it
 applies to the next batch. With the usage counts off (`PERSODUB_NO_ANALYTICS=1`) nothing
 leaves, and `PERSODUB_EVENTS_DEBUG=1` writes how many would have been sent into the app's
-log instead of sending them.
+log instead of sending them. `PERSODUB_EVENTS_SEND=1` is the opposite, for checking the road end to end from a
+from-source run: it sends even where a developer's run would only count. No build sets it.
 
 ## Job logs
 

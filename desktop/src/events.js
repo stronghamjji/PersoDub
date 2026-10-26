@@ -45,10 +45,13 @@ export function eventsOn(env, edition) {
  *            but nothing leaves: a from-source run, PERSODUB_EVENTS_DEBUG=1,
  *            and a kit with PERSODUB_NO_ANALYTICS=1 -- the usage counts'
  *            switch, which the owner's own computers carry -- all stop here.
- * - "on":    kept, written down and sent.
+ * - "on":    kept, written down and sent. PERSODUB_EVENTS_SEND=1 forces it,
+ *            so a from-source run can be checked end to end in GA4 and
+ *            Amplitude (docs/privacy.md); it is never set in a build.
  */
 export function resolveEventsMode({ isPackaged, env, edition }) {
   if (!eventsOn(env, edition)) return "off";
+  if (env.PERSODUB_EVENTS_SEND === "1") return "on";
   if (!isPackaged || env.PERSODUB_NO_ANALYTICS === "1" || env.PERSODUB_EVENTS_DEBUG === "1") return "debug";
   return "on";
 }
