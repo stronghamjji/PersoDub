@@ -16,6 +16,7 @@ import {
   LANGUAGES, localeLanguage, resolveLanguage, loadTable, setLanguage, currentLanguage, systemLocale, useLanguage, t,
 } from "./i18n.js";
 import { screenKeys } from "./screenText.js";
+import { builderConfig } from "../electron-builder.js";
 
 const SRC = dirname(fileURLToPath(import.meta.url));
 const DESKTOP = join(SRC, "..");
@@ -127,6 +128,7 @@ test("every sentence the shell says is in the English table (once it has any)", 
 });
 
 test("the tables ship with the app", () => {
-  const { build } = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8"));
-  assert.ok(build.files.includes("i18n/**"), "desktop/package.json build.files leaves desktop/i18n out");
+  for (const edition of ["opensource", "production"]) {
+    assert.ok(builderConfig(edition).files.includes("i18n/**"), `desktop/electron-builder.js files leaves desktop/i18n out (${edition})`);
+  }
 });

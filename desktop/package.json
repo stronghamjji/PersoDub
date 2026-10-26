@@ -8,72 +8,12 @@
     "start": "electron .",
     "test": "node --test src/*.test.mjs smoke/*.test.mjs",
     "dist": "node scripts/collect-payload.mjs && electron-builder --mac zip --arm64 --publish never",
-    "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never && cp dist/PersoDub-*-arm64.dmg dist/PersoDub-mac.dmg",
+    "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never",
     "dist:win": "node scripts/collect-payload.mjs && node scripts/patch-nsis-messages.mjs && electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^37.0.0",
     "electron-builder": "^25.1.8"
-  },
-  "build": {
-    "appId": "com.persodub.desktop",
-    "productName": "PersoDub",
-    "copyright": "Copyright © 2026 ESTsoft corp.",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "main.js",
-      "preload.cjs",
-      "src/**",
-      "screens/**",
-      "i18n/**",
-      "fake/**",
-      "config.json"
-    ],
-    "extraResources": [
-      {
-        "from": "resources/payload",
-        "to": "payload"
-      },
-      {
-        "from": "../LICENSE",
-        "to": "LICENSE"
-      },
-      {
-        "from": "../NOTICE",
-        "to": "NOTICE"
-      }
-    ],
-    "mac": {
-      "hardenedRuntime": true,
-      "entitlements": "entitlements.mac.plist",
-      "entitlementsInherit": "entitlements.mac.plist",
-      "notarize": true
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "artifactName": "${productName}-Setup-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "stronghamjji",
-        "repo": "PersoDub"
-      }
-    ]
   },
   "dependencies": {
     "electron-updater": "^6.8.9"

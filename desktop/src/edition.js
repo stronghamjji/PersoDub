@@ -7,7 +7,8 @@ import { KIT_ENV, parseEnvFile } from "./kitEnv.js";
 // documents and release notes there. What the edition decides is where a dub
 // runs when nothing is chosen: this computer for the open-source edition (the
 // default), the Perso API for the production edition, the company's build
-// (app/setup.py; orchestrator.js startEngines hands it to the backend).
+// (app/setup.py; orchestrator.js startEngines hands it to the backend), and
+// what the app is called (PRODUCTS below).
 //
 // The packager picks the edition with PERSODUB_EDITION when the payload is
 // collected (scripts/collect-payload.mjs writes it into the payload's EDITION
@@ -16,12 +17,22 @@ import { KIT_ENV, parseEnvFile } from "./kitEnv.js";
 // from its own environment. The kit remembers the edition it first ran as
 // (rememberedEdition below), and that is the one a dub follows.
 //
-// package.json's build.publish entry stays only so electron-builder writes
+// electron-builder.js's publish entry stays only so electron-builder writes
 // latest.yml and app-update.yml; the feed itself is set at run time from the
 // edition (updater.js resolveFeed).
 export const EDITIONS = {
   opensource: "stronghamjji/PersoDub",
   production: "stronghamjji/PersoDub",
+};
+
+// What each edition is called, and so where it keeps its files: `name` is the
+// product's name (window, dock and taskbar, installer, About) and the kit's
+// folder (config.js defaultKitDir); `pkg` is the name Electron gives the app's
+// own data folder (userData: logs, ports.json). Each edition has its own, so
+// both can be installed on one computer (owner, 2026-10-26).
+export const PRODUCTS = {
+  opensource: { name: "PersoDub", appId: "com.persodub.desktop", pkg: "persodub-desktop-shell" },
+  production: { name: "Perso_DesktopApp", appId: "ai.perso.desktopapp", pkg: "perso-desktopapp-shell" },
 };
 const DEFAULT_EDITION = "opensource";
 
