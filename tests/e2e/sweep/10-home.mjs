@@ -119,9 +119,11 @@ export const steps = [
       const title = await app.inPage(textOf, "#homeWhatsNewTitle");
       await app.click("#homeWhatsNew");
       await app.waitFor("the update window", 5000, isOpen, "#updateOverlay");
+      // A production build with no update address names the version in the
+      // title alone, and no line under it (ui/src/updateWindow.mjs, check-off).
       const head = await app.waitFor("its version line", 5000, () => {
-        const v = document.querySelector("#updCurrent").textContent.trim();
-        return v ? { h: document.querySelector("#updHead").textContent.trim(), v, notes: document.querySelectorAll("#updNotes li").length } : null;
+        const v = document.querySelector("#updCurrent").textContent.trim() || document.querySelector("#updTitle").textContent.trim();
+        return /\d+\.\d+\.\d+/.test(v) ? { h: document.querySelector("#updHead").textContent.trim(), v, notes: document.querySelectorAll("#updNotes li").length } : null;
       });
       await app.shot("home-whats-new-open");
       await app.key("Escape");
