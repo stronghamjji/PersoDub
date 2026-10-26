@@ -20,7 +20,9 @@
 // misbehave({...}) makes it fail the ways a real network and a real Perso can
 // (see there); misbehave({}) puts it right again.
 // Accounts (password "test-pass"): a@test.local and b@test.local have a key
-// each, c@test.local has none. Access tokens are JWT-shaped with an "exp".
+// each, c@test.local has none. Answers have the shapes the real Perso gave on
+// 2026-10-26: {result: ...}; profile {userSeq, userName, email, provider, ...};
+// keys [{seq, apiKey, apiKeyName, status, ...}]; JWT claims sub, scope, iat, exp.
 import { createServer } from "node:http";
 import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -51,8 +53,6 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
   //   drop      the routes (stats names: "token", "refresh", "profile", "apiKeys",
   //             "authorize") whose connection is cut with no answer: no network
   //   delayMs   how long every answer waits first: a slow Perso
-  //   bare      tokens and profile without the {result: ...} wrapping
-  //   snake     tokens named access_token / refresh_token
   //   refreshStatus  every refresh answered with this HTTP status (429, 503...)
   //   keys      (email) => the whole api-keys/active answer, in place of the usual
   //   noEmail   a profile with no e-mail, only a name (a Google or Microsoft account)
@@ -60,7 +60,7 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
 
   function issue(email) {
     const exp = Math.floor(Date.now() / 1000) + ttl;
-    const accessToken = `${b64url(JSON.stringify({ alg: "none" }))}.${b64url(JSON.stringify({ sub: ACCOUNTS[email].userId, exp }))}.${rand()}`;
+    const accessToken = `${b64url(JSON.stringify({ alg: "none" }))}.${b64url(JSON.stringify({ sub: ACCOUNTS[email].userId, scope: "profile email", iat: exp - ttl, exp }))}.${rand()}`;
     const refreshToken = rand();
     access.set(accessToken, { email, exp });
     refresh.set(refreshToken, email);
@@ -83,10 +83,7 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
     "POST /auth/api/v1/auth/oauth2/token": "refresh", "GET /user/api/v1/users/profile": "profile",
     "GET /auth/api/v1/api-keys/active": "apiKeys",
   };
-  const tokenAnswer = (t) => {
-    const named = bad.snake ? { access_token: t.accessToken, refresh_token: t.refreshToken } : t;
-    return bad.bare ? named : { result: named };
-  };
+  const tokenAnswer = (t) => ({ result: t });
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://fake");
@@ -174,14 +171,17 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
         stats.profile++;
         const email = bearer(req);
         if (!email) return fail(res, 401, "UNAUTHORIZED");
-        const profile = { userId: ACCOUNTS[email].userId, email: bad.noEmail ? null : email, name: `User ${email[0].toUpperCase()}` };
-        return json(res, 200, bad.bare ? profile : { result: profile });
+        const profile = { userSeq: Number(ACCOUNTS[email].userId), userName: `User ${email[0].toUpperCase()}`, email: bad.noEmail ? null : email,
+          provider: bad.noEmail ? "google" : "email", createDate: "2026-01-01T00:00:00", isMarketingAgree: false, isPasswordExist: !bad.noEmail, isCompleteProfiling: true };
+        return json(res, 200, { result: profile });
       }
       if (route === "GET /auth/api/v1/api-keys/active") {
         stats.apiKeys++;
         const email = bearer(req);
         if (!email) return fail(res, 401, "UNAUTHORIZED");
-        return json(res, 200, bad.keys ? bad.keys(email) : { result: ACCOUNTS[email].keys });
+        const keys = ACCOUNTS[email].keys.map((k) => ({ seq: k.id, apiKey: k.apiKey, apiKeyName: k.name, status: "ACTIVE",
+          expireDate: null, lastUsedDate: null, createDate: "2026-01-01T00:00:00" }));
+        return json(res, 200, bad.keys ? bad.keys(email) : { result: keys });
       }
       if (route === "GET /__fake/stats") return json(res, 200, stats);
       if (route === "GET /__fake/last-authorize") return json(res, 200, { path: lastAuthorize });

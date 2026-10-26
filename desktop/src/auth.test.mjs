@@ -71,7 +71,7 @@ function persoRoutes({ userId = "u1", email = "someone@test.local", keys = [{ ap
   return {
     [`POST ${CFG.tokenUrl}`]: () => [200, { result: { accessToken: later(), refreshToken: "r1" } }],
     [`POST ${CFG.refreshUrl}`]: () => [200, { result: { accessToken: later(), refreshToken: "r2" } }],
-    [`GET ${CFG.profileUrl}`]: () => [200, { result: { userId, email } }],
+    [`GET ${CFG.profileUrl}`]: () => [200, { result: { userSeq: userId, userName: "", email, provider: "email" } }],
     [`GET ${CFG.apiKeysUrl}`]: () => [200, { result: keys }],
     [`POST ${CFG.signOutUrl}`]: () => [200, { result: null }],
     ...over,
@@ -162,48 +162,30 @@ test("the browser's request back is read for its code or Perso's error, and anyt
 
 // ---- Perso's answers ------------------------------------------------------------
 
-test("the API key answer: a key, no key, or only hidden keys", () => {
-  assert.deepEqual(parseActiveKey({ result: [{ id: 1, apiKey: "pk_live_abc" }] }), { status: "key", value: "pk_live_abc" });
-  assert.deepEqual(parseActiveKey({ result: { content: [{ key: "pk_live_d" }] } }), { status: "key", value: "pk_live_d" });
-  assert.deepEqual(parseActiveKey({ result: { apiKey: " pk_live_e " } }), { status: "key", value: "pk_live_e" });
-  assert.deepEqual(parseActiveKey({ result: ["pk_live_f"] }), { status: "key", value: "pk_live_f" });
-  assert.deepEqual(parseActiveKey({ result: [] }), { status: "none" });
-  assert.deepEqual(parseActiveKey({ result: null }), { status: "none" });
-  assert.deepEqual(parseActiveKey(null), { status: "none" });
-  assert.deepEqual(parseActiveKey({ result: [{ id: 1, name: "no value field" }] }), { status: "unknown_shape", fields: ["id", "name"] });
-  assert.deepEqual(parseActiveKey({ result: [{ apiKey: "pk_live_****abcd" }] }), { status: "masked" });
-  assert.deepEqual(parseActiveKey({ result: [{ apiKey: "pk_live_ab...cd" }, { apiKey: "pk_••••" }] }), { status: "masked" });
-  // A hidden key does not hide a whole one after it.
-  assert.deepEqual(parseActiveKey({ result: [{ apiKey: "pk_****" }, { apiKey: "pk_live_g" }] }), { status: "key", value: "pk_live_g" });
+test("the API key answer: the first key with a value, else none with the field names of what came", () => {
+  assert.deepEqual(parseActiveKey({ result: [{ seq: 1, apiKey: "pk_live_abc", apiKeyName: "A", status: "ACTIVE" }] }), { status: "key", value: "pk_live_abc" });
+  assert.deepEqual(parseActiveKey({ result: [{ seq: 1, apiKey: " pk_live_e " }] }), { status: "key", value: "pk_live_e" });
+  assert.deepEqual(parseActiveKey({ result: [{ seq: 1, apiKey: "" }, { seq: 2, apiKey: "pk_live_g" }] }), { status: "key", value: "pk_live_g" });
+  assert.deepEqual(parseActiveKey({ result: [] }), { status: "none", fields: [] });
+  assert.deepEqual(parseActiveKey({ result: null }), { status: "none", fields: [] });
+  assert.deepEqual(parseActiveKey(null), { status: "none", fields: [] });
+  assert.deepEqual(parseActiveKey({ result: { apiKey: "pk_live_b" } }), { status: "none", fields: [] });
+  // No key field: the field names only, never a value, and no name with a digit (a key can be a name).
+  assert.deepEqual(parseActiveKey({ result: [{ seq: 1, apiKeyName: "old", pk_live_x9: 1 }] }), { status: "none", fields: ["seq", "apiKeyName"] });
 });
 
-test("the API key answer in other shapes: unwrapped, under other list names, snake_case, an object, or one this app does not know", () => {
-  assert.deepEqual(parseActiveKey([{ apiKey: "pk_live_a" }]), { status: "key", value: "pk_live_a" });
-  assert.deepEqual(parseActiveKey({ apiKey: "pk_live_b" }), { status: "key", value: "pk_live_b" });
-  for (const list of ["content", "items", "data", "list", "apiKeys", "api_keys", "keys"]) {
-    assert.deepEqual(parseActiveKey({ result: { [list]: [{ api_key: "pk_live_c" }] } }), { status: "key", value: "pk_live_c" }, list);
+test("the token answer is {result: {accessToken, refreshToken}}; anything else names its fields, never a value", async () => {
+  const { fetchFn } = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, { result: { accessToken: "a1", refreshToken: "r9" } }] });
+  assert.deepEqual(await refreshTokens(CFG, fetchFn, "r1"), { accessToken: "a1", refreshToken: "r9" });
+  for (const answer of [{ accessToken: "a1", refreshToken: "r9" }, { result: { jwt: "secret-value", ttl: 5 } }, { result: null }, null]) {
+    const stub = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, answer] });
+    await assert.rejects(refreshTokens(CFG, stub.fetchFn, "r1"), (err) => /no-token/.test(err.message) && !/secret-value|a1/.test(err.message), JSON.stringify(answer));
   }
-  assert.deepEqual(parseActiveKey({ result: { keys: [] } }), { status: "none" });
-  assert.deepEqual(parseActiveKey({ result: [{ apiKey: null, prefix: "pk_live" }] }), { status: "masked" });
-  assert.deepEqual(parseActiveKey({ result: [{ apiKey: "pk_live_…" }] }), { status: "masked" });
-  // Not known: only the field names, never a value, and no name with a digit (a key can be a name).
-  const odd = parseActiveKey({ result: { total: 1, entries: [{ secretValue: "pk_live_hidden" }], pk_live_x9: 1 } });
-  assert.deepEqual(odd, { status: "unknown_shape", fields: ["total", "entries"] });
-  assert.ok(!JSON.stringify(odd).includes("hidden"));
-  assert.deepEqual(parseActiveKey({ result: [{ secretValue: "pk_live_hidden" }] }), { status: "unknown_shape", fields: ["secretValue"] });
+  const bare = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, { result: { jwt: "secret-value", ttl: 5 } }] });
+  await assert.rejects(refreshTokens(CFG, bare.fetchFn, "r1"), /jwt, ttl/);
 });
 
-test("the token answer with or without its wrapping, in camelCase or snake_case; with no token, its field names say what came", async () => {
-  for (const answer of [{ result: { accessToken: "a1", refreshToken: "r9" } }, { accessToken: "a1", refreshToken: "r9" },
-    { access_token: "a1", refresh_token: "r9" }, { result: { access_token: "a1", refresh_token: "r9" } }]) {
-    const { fetchFn } = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, answer] });
-    assert.deepEqual(await refreshTokens(CFG, fetchFn, "r1"), { accessToken: "a1", refreshToken: "r9" }, JSON.stringify(answer));
-  }
-  const { fetchFn } = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, { result: { jwt: "secret-value", ttl: 5 } }] });
-  await assert.rejects(refreshTokens(CFG, fetchFn, "r1"), (err) => /no-token/.test(err.message) && /jwt, ttl/.test(err.message) && !/secret-value/.test(err.message));
-});
-
-test("an API key answer this app cannot read says so in the log, with field names only, and leaves kit.env alone", async () => {
+test("a key list with no usable key says no_key, logs the field names only, and leaves kit.env alone", async () => {
   const { auth, opened, kitDir, logs } = makeAuth({
     routes: persoRoutes({ [`GET ${CFG.apiKeysUrl}`]: () => [200, { result: [{ token: "pk_live_secret", label: "mine" }] }] }),
     kitDir: kitWith("PERSO_API_KEY=pk_before\n"),
@@ -212,22 +194,20 @@ test("an API key answer this app cannot read says so in the log, with field name
   const done = auth.login();
   await settle();
   await auth.handleCallback(back(opened));
-  assert.deepEqual(await done, { outcome: "signed_in", key: "failed", keyReason: "unknown_shape" });
+  assert.deepEqual(await done, { outcome: "signed_in", key: "no_key" });
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "pk_before");
-  const line = logs.find((l) => l.includes("unknown_shape"));
+  const line = logs.find((l) => l.includes("no API key"));
   assert.ok(line && line.includes("token, label"), logs.join("\n"));
   assert.ok(!logs.join("\n").includes("pk_live_secret"));
 });
 
-test("the profile answer gives the account's id and e-mail under the likely names", () => {
-  assert.deepEqual(parseProfile({ result: { userId: 7, email: "x@y.z" } }), { userId: "7", email: "x@y.z", name: "" });
-  assert.deepEqual(parseProfile({ result: { id: "abc" } }), { userId: "abc", email: "", name: "" });
-  assert.deepEqual(parseProfile({ userSeq: 9, email: "q@w.e" }), { userId: "9", email: "q@w.e", name: "" });
+test("the profile answer gives the account's id, e-mail and name as Perso names them", () => {
+  assert.deepEqual(parseProfile({ result: { userSeq: 7, userName: "Kim", email: "x@y.z", provider: "email" } }), { userId: "7", email: "x@y.z", name: "Kim" });
+  // Signed in through Google: no e-mail, the name stands in.
+  assert.deepEqual(parseProfile({ result: { userSeq: 5, userName: " Kim ", email: null, provider: "google" } }), { userId: "5", email: "", name: "Kim" });
+  assert.deepEqual(parseProfile({ result: {} }), { userId: null, email: "", name: "" });
   assert.deepEqual(parseProfile({}), { userId: null, email: "", name: "" });
-  // An account with no e-mail (some Google or Microsoft sign-ins): its name, in snake_case too.
-  assert.deepEqual(parseProfile({ result: { user_id: 5, email: null, name: " Kim " } }), { userId: "5", email: "", name: "Kim" });
-  assert.deepEqual(parseProfile({ result: { id: 5, nickname: "k" } }).name, "k");
-  assert.deepEqual(parseProfile({ result: { id: 5, displayName: "D" } }).name, "D");
+  assert.deepEqual(parseProfile(null), { userId: null, email: "", name: "" });
 });
 
 test("the e-mail on screen is masked", () => {
@@ -380,17 +360,15 @@ test("a code Perso refuses leaves the app signed out", async () => {
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "");
 });
 
-test("an account with no key, or only a hidden one, answers no_key and leaves kit.env's key alone", async () => {
-  for (const [keys, reason] of [[[], "none"], [[{ apiKey: "pk_live_****9f" }], "masked"]]) {
-    const { auth, opened, kitDir } = makeAuth({ routes: persoRoutes({ keys }), kitDir: kitWith("PERSO_API_KEY=\n") });
-    await auth.start();
-    const done = auth.login();
-    await settle();
-    await auth.handleCallback(back(opened));
-    assert.deepEqual(await done, { outcome: "signed_in", key: "no_key", keyReason: reason });
-    assert.equal(kitValues(kitDir).PERSO_API_KEY, "");
-    assert.equal((await auth.status()).hasKey, false);
-  }
+test("an account with no key answers no_key and leaves kit.env's key alone", async () => {
+  const { auth, opened, kitDir } = makeAuth({ routes: persoRoutes({ keys: [] }), kitDir: kitWith("PERSO_API_KEY=\n") });
+  await auth.start();
+  const done = auth.login();
+  await settle();
+  await auth.handleCallback(back(opened));
+  assert.deepEqual(await done, { outcome: "signed_in", key: "no_key" });
+  assert.equal(kitValues(kitDir).PERSO_API_KEY, "");
+  assert.equal((await auth.status()).hasKey, false);
 });
 
 test("checking for the key again finds one made after the sign-in", async () => {

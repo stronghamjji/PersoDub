@@ -119,15 +119,14 @@ export async function callJson(fetchFn, what, url, { method = "GET", token, body
 export const fieldNames = (o) => (o && typeof o === "object" && !Array.isArray(o)
   ? Object.keys(o).filter((k) => /^[A-Za-z_]{1,32}$/.test(k)) : []);
 
-// The tokens, wrapped in {result} or not, in camelCase or snake_case.
+// The tokens: {result: {accessToken, refreshToken}}, as the token and the
+// refresh endpoints both answer.
 export function tokensFrom(json, what) {
-  const r = json?.result ?? json;
-  const access = r?.accessToken ?? r?.access_token;
-  const refresh = r?.refreshToken ?? r?.refresh_token;
-  if (typeof access !== "string" || !access) {
-    throw new AuthHttpError(what, 200, `no-token; fields: ${fieldNames(r).join(", ") || "none"}`);
+  const r = json?.result;
+  if (typeof r?.accessToken !== "string" || !r.accessToken) {
+    throw new AuthHttpError(what, 200, `no-token; fields: ${fieldNames(r ?? json).join(", ") || "none"}`);
   }
-  return { accessToken: access, refreshToken: typeof refresh === "string" ? refresh : "" };
+  return { accessToken: r.accessToken, refreshToken: typeof r.refreshToken === "string" ? r.refreshToken : "" };
 }
 
 /** The code from the browser, traded for tokens. `redirectUri` is the one the
@@ -164,43 +163,26 @@ export function tokenExpiry(token) {
   } catch { return null; }
 }
 
-/** {userId, email, name} from the profile answer, under the likely names. */
+/** {userId, email, name} from the profile answer:
+ * {result: {userSeq, userName, email, ...}}. An account signed in through
+ * Google or Microsoft may have no e-mail; the name stands in on screen. */
 export function parseProfile(json) {
-  const r = json?.result ?? json ?? {};
-  const id = r.userId ?? r.user_id ?? r.id ?? r.userSeq ?? r.seq ?? r.uuid ?? null;
-  const name = [r.name, r.nickname, r.displayName, r.userName].find((n) => typeof n === "string" && n.trim());
+  const r = json?.result ?? {};
   return {
-    userId: id === null || id === "" ? null : String(id),
+    userId: r.userSeq === undefined || r.userSeq === null ? null : String(r.userSeq),
     email: typeof r.email === "string" ? r.email : "",
-    name: name ? name.trim().slice(0, 40) : "",
+    name: typeof r.userName === "string" ? r.userName.trim().slice(0, 40) : "",
   };
 }
 
-// Where a key might sit in the api-keys/active answer, and what a list of
-// them might be called.
-const KEY_FIELDS = ["apiKey", "api_key", "key", "value", "secretKey", "secret_key", "apiKeyValue", "keyValue"];
-const LIST_FIELDS = ["content", "items", "data", "list", "apiKeys", "api_keys", "keys"];
-
-/** The usable key in the api-keys/active answer: {status: "key", value},
- * "none" when there is none, "masked" when every key came back hidden, or
- * "unknown_shape" with the answer's `fields` (names only) when no key field
- * was found at all. */
+/** The usable key in the api-keys/active answer, {result: [{apiKey, ...}]}:
+ * {status: "key", value}, or {status: "none", fields} with the field names
+ * (never values) of what came instead, for the log. */
 export function parseActiveKey(json) {
-  const r = json && typeof json === "object" && "result" in json ? json.result : json;
-  const listName = r && typeof r === "object" && !Array.isArray(r) ? LIST_FIELDS.find((f) => Array.isArray(r[f])) : undefined;
-  const list = Array.isArray(r) ? r : listName ? r[listName] : r ? [r] : [];
-  let masked = false;
-  let unknown = false;
-  for (const item of list) {
-    const field = item && typeof item === "object" ? KEY_FIELDS.find((f) => f in item) : undefined;
-    if (typeof item !== "string" && !field) { unknown = true; continue; }
-    const v = typeof item === "string" ? item : item[field];
-    if (typeof v !== "string" || !v.trim() || /[*•…]|\.\.\./.test(v)) { masked = true; continue; }
-    return { status: "key", value: v.trim() };
-  }
-  if (masked) return { status: "masked" };
-  if (unknown) return { status: "unknown_shape", fields: [...new Set([...fieldNames(r), ...fieldNames(list[0])])] };
-  return { status: "none" };
+  const list = Array.isArray(json?.result) ? json.result : [];
+  const item = list.find((k) => typeof k?.apiKey === "string" && k.apiKey.trim());
+  if (item) return { status: "key", value: item.apiKey.trim() };
+  return { status: "none", fields: [...new Set(list.flatMap(fieldNames))] };
 }
 
 /** "al***@example.com": enough to tell accounts apart on screen. */
@@ -268,9 +250,9 @@ export function writeKitValues(kitDir, values) {
  *               network (no answer, or too slow)
  *   signed_out  logout
  *   disabled    not enabled
- * and a sign-in's `key` says what happened to the API key: saved, no_key (with
- * keyReason none or masked), no_kit, or failed (keyReason unknown_shape when
- * Perso's answer could not be read, rather than not reached).
+ * and a sign-in's `key` says what happened to the API key: saved, no_key
+ * (the account has none), no_kit, or failed (Perso not reached, or the key
+ * could not be saved).
  */
 export function createAuth({
   enabled, cfg, store, fetchFn, openExternal, kitDir, listen = startCallbackServer,
@@ -376,13 +358,9 @@ export function createAuth({
       log(`AUTH could not read the account's API key: ${err.message}`, "WARN");
       return { key: "failed" };
     }
-    if (found.status === "unknown_shape") {
-      log(`AUTH the account's API key answer is an unknown_shape (fields: ${found.fields.join(", ") || "none"})`, "WARN");
-      return { key: "failed", keyReason: "unknown_shape" };
-    }
     if (found.status !== "key") {
-      log(`AUTH the account has no usable API key (${found.status})`);
-      return { key: "no_key", keyReason: found.status };
+      log(`AUTH the account has no API key (answer fields: ${found.fields.join(", ") || "none"})`);
+      return { key: "no_key" };
     }
     try {
       const before = (envWithKit(dir).PERSO_API_KEY || "").trim();

@@ -153,7 +153,7 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   await browser.signOutOfPerso();
   await auth.logout();
   browser.typing = "c@test.local";
-  assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "no_key", keyReason: "none" });
+  assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "no_key" });
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "", "B's key stayed for C");
   assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "c***@test.local", hasKey: false, waiting: false });
 
@@ -400,40 +400,22 @@ test("a kit remembered as production turns the sign-in on even in an open-source
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "saved" });
 });
 
-test("Perso's answers unwrapped and in snake_case, and its key list in other shapes, still sign in", async () => {
+test("a key list with no usable key: no_key, the log names its fields only, and Check again saves a key made later", async () => {
   const kitDir = freshKit();
   const browser = scriptedBrowser();
   browser.typing = "a@test.local";
   const app = theApp({ kitDir, browser });
   await app.auth.start();
-  const key = ACCOUNTS["a@test.local"].keys[0].apiKey;
-  const cases = [
-    [{ bare: true, snake: true }, { outcome: "signed_in", key: "saved" }],
-    [{ keys: () => ({ result: { apiKey: key } }) }, { outcome: "signed_in", key: "saved" }],
-    [{ keys: () => [{ id: 1, api_key: key }] }, { outcome: "signed_in", key: "saved" }],
-    [{ keys: () => ({ result: [] }) }, { outcome: "signed_in", key: "no_key", keyReason: "none" }],
-    [{ keys: () => ({ result: [{ apiKey: "pk_live_****1111" }] }) }, { outcome: "signed_in", key: "no_key", keyReason: "masked" }],
-    [{ keys: () => ({ result: { page: 1, rows: [{ k: key }] } }) }, { outcome: "signed_in", key: "failed", keyReason: "unknown_shape" }],
-  ];
+  fake.misbehave({ keys: () => ({ result: [{ seq: 9, apiKeyName: "old", status: "EXPIRED" }] }) });
   try {
-    for (const [how, want] of cases) {
-      await app.auth.logout();
-      fake.misbehave(how);
-      assert.deepEqual(await app.auth.login(), want, JSON.stringify(how));
-      assert.equal(kitValues(kitDir).PERSO_API_KEY, want.key === "saved" ? key : "", JSON.stringify(how));
-    }
-    // The refresh answered in the other shape too.
-    fake.misbehave({ bare: true, snake: true });
-    fake.setAccessTtl(1);
-    await app.auth.logout();
-    assert.equal((await app.auth.login()).outcome, "signed_in");
-    const next = theApp({ kitDir, browser, userData: app.userData });
-    await next.auth.start();
-    assert.equal((await next.auth.status()).signedIn, true);
-  } finally { fake.misbehave({}); fake.setAccessTtl(3600); }
+    assert.deepEqual(await app.auth.login(), { outcome: "signed_in", key: "no_key" });
+    assert.equal(kitValues(kitDir).PERSO_API_KEY, "");
+    assert.equal((await app.auth.status()).hasKey, false);
+  } finally { fake.misbehave({}); }
   const all = app.logs.join("\n");
-  assert.ok(all.includes("unknown_shape (fields: page, rows)"), all);
-  assert.ok(!all.includes(key));
+  assert.ok(all.includes("answer fields: seq, apiKeyName, status"), all);
+  assert.deepEqual(await app.auth.connectKey(), { key: "saved" });
+  assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["a@test.local"].keys[0].apiKey);
 });
 
 test("the system refusing its key store (a Mac's Keychain denied) still signs in for this run; the next launch asks again", async () => {
