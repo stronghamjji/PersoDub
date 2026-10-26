@@ -1448,7 +1448,7 @@ async function reopenDraft(downloadId) {
 // The Home sidebar and the cards under the banner (the mockup's first screen,
 // user 2026-09-30): each one opens a way in this page already has.
 // The production edition's Customer support: a Service inquiry form, sent
-// through the shell to our relay (ui/src/feedbackSheet.mjs).
+// through the shell to the support web app (ui/src/feedbackSheet.mjs).
 const shellInfo = window.persodubShell || {};
 const openFeedback = isProduction() && shellInfo.sendInquiry ? initFeedbackSheet({
   $, send: (form) => shellInfo.sendInquiry(form),

@@ -37,7 +37,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const payloadDir = findPayloadDir(HERE);
 const edition = readEdition({ payloadDir, env: process.env });
 // ...and what the production build was given when it was made: its update
-// address (src/edition.js readBuildEnv).
+// address and its support web app (src/edition.js readBuildEnv).
 const built = readBuildEnv({ payloadDir, env: process.env });
 // What the shell's parts share. Set as the app comes up, and read by each part
 // at the moment it needs it -- none of it exists when the parts are made.
@@ -81,7 +81,7 @@ function shellLog(line, level = "INFO") {
   } catch { /* logging never breaks the app */ }
 }
 
-const reporter = createReporter({ app, BrowserWindow, ctx, shellLog });
+const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "" });
 const countUsage = usageCounter(app);
 const events = createEvents({ app, ctx, edition, shellLog });
 const updater = createUpdater({ app, dialog, ctx, shellLog, edition, built });
@@ -139,7 +139,7 @@ app.whenReady().then(() => {
   // The page's buttons and screens, every 30 seconds (src/events.js). The
   // answer says whether recording is on, so the page knows whether to record.
   ipcMain.handle("shell:events", (_e, list) => events.take(list));
-  // The production edition's Service inquiry, straight to the relay (src/reporting.js sendInquiry).
+  // The production edition's Service inquiry, straight to the support web app (src/reporting.js sendInquiry).
   ipcMain.handle("shell:send-inquiry", (_e, form) => reporter.sendInquiry(form || {}, {
     kitDir: ctx.bootedKitDir, os: osName(), osVersion: process.getSystemVersion(),
   }));

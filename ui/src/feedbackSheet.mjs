@@ -1,9 +1,10 @@
 // Customer support in the production edition (ui/src/edition.mjs): a Service
 // inquiry form like Perso's own -- the kind, a subject, the details and an
-// address to answer -- and Send hands it to the shell, which sends it to our
-// relay with the app's version and this computer, a bug report with the app's
-// masked logs (desktop/src/reporting.js sendInquiry). No mail app: a computer
-// without a mail account left the person with nothing (owner, 2026-10-27).
+// address to answer -- and Send hands it to the shell, which sends it to the
+// support web app with the app's version and this computer, a bug report with
+// the app's masked logs (desktop/src/reporting.js sendInquiry). No mail app:
+// a computer without a mail account left the person with nothing (owner,
+// 2026-10-27).
 // The open-source edition's Send feedback opens the repository's issues
 // instead (ui/src/homeSidebar.mjs).
 //
@@ -63,7 +64,7 @@ export function initFeedbackSheet({ $, send, language, openUrl }) {
     // even keep stays in the form, to be sent again.
     if (answer && (answer.id || answer.queued)) {
       status.textContent = answer.id
-        ? t("Received. Reference {id}", { id: answer.id.slice(0, 8).toUpperCase() })
+        ? t("Received. Reference {id}", { id: answer.id })
         : t("Could not send it now. It is saved and goes the next time the app opens.");
       type.selectedIndex = 0;
       subject.value = details.value = replyTo.value = "";

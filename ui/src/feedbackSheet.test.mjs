@@ -5,7 +5,7 @@ import { initFeedbackSheet, PRIVACY_URL } from "./feedbackSheet.mjs";
 
 // The form's elements, the shell's sendInquiry answering `answer`, and the
 // page's language.
-function harness({ answer = { id: "3f9a0c12aa" }, language = "ko" } = {}) {
+function harness({ answer = { id: "7C2E91AB" }, language = "ko" } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) {
@@ -81,13 +81,20 @@ test("Send hands the shell the form, trimmed, then says the reference and starts
   await fillAndSend(h);
   assert.deepEqual(h.sent, [{ type: "bug", subject: "Export stops", details: "It stops at 90%.\nEvery time.",
                               replyTo: "me@example.com", locale: "ko" }]);
-  assert.equal(h.$("feedbackStatus").textContent, "Received. Reference 3F9A0C12");
+  assert.equal(h.$("feedbackStatus").textContent, "Received. Reference 7C2E91AB");
   for (const id of ["feedbackSubjectInput", "feedbackDetails", "feedbackReplyTo"]) assert.equal(h.$(id).value, "", id);
   assert.equal(h.$("feedbackConsent").checked, false);
   assert.equal(h.$("feedbackType").selectedIndex, 0);
   assert.equal(h.$("feedbackSend").disabled, true);
   h.open();
   assert.equal(h.$("feedbackStatus").textContent, "", "the line goes when it opens again");
+});
+
+// The support web app's id is already the reference a person reads out.
+test("the reference is the web app's id as it came, neither cut nor capitalised", async () => {
+  const h = harness({ answer: { id: "ab12cd34ef" } });
+  await fillAndSend(h);
+  assert.equal(h.$("feedbackStatus").textContent, "Received. Reference ab12cd34ef");
 });
 
 test("one the shell keeps for later says it goes next launch; one it could not keep stays in the form", async () => {

@@ -2,7 +2,7 @@
 // preload says (persodubShell.edition). The production edition, the
 // company's build, is Perso_DesktopApp: no GitHub anywhere, Perso's own page
 // for its downloads and guide, and Customer support as an inquiry form sent
-// to our relay. A plain browser has no shell and is the open-source page.
+// to the support inbox. A plain browser has no shell and is the open-source page.
 export const DESKTOP_APP_URL = "https://perso.ai/dubbing/desktop-app";
 
 const shellOf = () => globalThis.window?.persodubShell;

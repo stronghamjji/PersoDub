@@ -115,7 +115,7 @@ test("there is one dark theme, and its fonts are the app's own", () => {
 });
 
 // The production edition's Customer support is a Service inquiry form like
-// Perso's own, sent to our relay with a consent like Perso's (owner, 2026-10-27);
+// Perso's own, sent to the support inbox with a consent like Perso's (owner, 2026-10-27);
 // its words in Korean as approved.
 test("Customer support's form asks the kind, a subject, the details, a reply-to address and the consent", () => {
   const html = readPage();
@@ -123,7 +123,7 @@ test("Customer support's form asks the kind, a subject, the details, a reply-to 
   const at = html.indexOf('<div class="modal-overlay" id="feedbackOverlay">');
   const dialog = html.slice(at, html.indexOf('<div class="modal-overlay"', at + 1));
   assert.match(dialog, /<h2 data-i18n id="feedbackTitle">Service inquiry<\/h2>/);
-  // The values are the relay's kinds (relay/report-logic.js INQUIRY_TYPES), the words the form's.
+  // The values are the shell's kinds (desktop/src/report.js INQUIRY_TYPES), the words the form's.
   assert.deepEqual([...dialog.matchAll(/<option value="([^"]+)" data-i18n>([^<]+)<\/option>/g)].map((m) => [m[1], m[2]]),
     [["problem", "Problem or inconvenience"], ["bug", "Bug report"], ["payment", "Payment or refund"], ["other", "Other"]]);
   assert.match(dialog, /<label data-i18n for="feedbackSubjectInput">Subject<\/label><input type="text" id="feedbackSubjectInput" maxlength="120" required>/);

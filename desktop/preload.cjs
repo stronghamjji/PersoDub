@@ -97,7 +97,7 @@ contextBridge.exposeInMainWorld("persodubShell", {
   getLastReport: () => ipcRenderer.invoke("shell:last-report"),
   // The production edition's Service inquiry (ui/src/feedbackSheet.mjs): the
   // form's {type, subject, details, replyTo, locale}, which the shell sends to
-  // the relay with the app's version and this computer (src/reporting.js).
+  // the support web app with the app's version and this computer (src/reporting.js).
   // Resolves to {id} once it landed, {queued: true} when it waits for the next
   // launch, and null when it could not be sent at all.
   sendInquiry: (form) => ipcRenderer.invoke("shell:send-inquiry", form),

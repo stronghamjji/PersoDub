@@ -39,23 +39,24 @@ export const ENGINE_LOG_LINES = 80;
 export const MAX_MESSAGE_CHARS = 500;
 
 // Customer support's Service inquiry (the production edition,
-// ui/src/feedbackSheet.mjs), which reporting.js sends to the relay's /inquiry:
+// ui/src/feedbackSheet.mjs), which reporting.js sends to the support web app:
 // its four kinds by the value the form's select sends, and the lengths the
-// form and the relay allow (relay/report-logic.js validateInquiry).
+// form and the web app allow.
 export const INQUIRY_TYPES = new Set(["bug", "problem", "payment", "other"]);
 export const MAX_SUBJECT_CHARS = 120;
 export const MAX_DETAILS_CHARS = 4000;
 
 /**
- * The inquiry the relay will be sent, field by field from what the page gave
- * and what the shell knows, or null when the page gave no kind, subject or
- * details the form allows. What the person typed is sent as typed: they wrote
- * it to us, and agreed on the form to its collection.
+ * The inquiry the support web app will be sent, field by field from what the
+ * page gave and what the shell knows, or null when the page gave no kind,
+ * subject or details the form allows. What the person typed is sent as typed:
+ * they wrote it to us, and agreed on the form to its collection.
  */
-export function buildInquiry({ type, subject, details, replyTo, locale, installId, version, edition, os, osVersion } = {}) {
+export function buildInquiry({ type, subject, details, replyTo, accountEmail, accountId, locale, installId, version, edition, os, osVersion } = {}) {
   const text = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   const inquiry = {
     type, subject: text(subject, MAX_SUBJECT_CHARS), details: text(details, MAX_DETAILS_CHARS), replyTo: text(replyTo, 254),
+    accountEmail: text(accountEmail, 254), accountId: text(accountId, 254),
     installId, version, edition, os, osVersion: text(osVersion, 32), locale: text(locale, 5),
   };
   return INQUIRY_TYPES.has(type) && inquiry.subject && inquiry.details ? inquiry : null;
