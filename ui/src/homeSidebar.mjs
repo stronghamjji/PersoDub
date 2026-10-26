@@ -71,12 +71,27 @@ export function whatsNewTitle(version) {
  * @param {() => void} deps.onSettings
  * @param {() => void} deps.onHelp        the Help dialog: what each tool does
  * @param {() => Promise<{version?: string}>} deps.loadWhatsNew
+ * @param {boolean} [deps.production]     the production edition (ui/src/edition.mjs)
+ * @param {(() => void) | null} [deps.onFeedback]  its Send feedback sheet; null when it was built without an address
  */
 export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing, onErase,
-                                  onCaptions, onSaveVideo, onSettings, onHelp, loadWhatsNew }) {
+                                  onCaptions, onSaveVideo, onSettings, onHelp, loadWhatsNew,
+                                  production = false, onFeedback = null }) {
   const on = (id, fn) => $(id).addEventListener("click", fn);
 
-  on("homeGhName", () => openUrl(repoUrl));
+  // The production edition has no repository button: the Perso logo alone
+  // heads the sidebar, bigger, and Send feedback is a mail, or not there at
+  // all when the build has no address to send it to (owner, 2026-10-23).
+  if (production) {
+    $("homeGhName").hidden = true;
+    $("homePerso").classList.add("big");
+    if (onFeedback) on("homeFeedback", onFeedback);
+    else $("homeFeedback").hidden = true;
+  } else {
+    on("homeGhName", () => openUrl(repoUrl));
+    // The app has no feedback form of its own; the issues page is where it goes.
+    on("homeFeedback", () => openUrl(`${repoUrl}/issues`));
+  }
   on("homePerso", () => openUrl(persoUrl()));
   on("homeNavDub", onDubbing);
   on("homeNavErase", onErase);
@@ -84,8 +99,6 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
   on("homeNavSave", onSaveVideo);
   on("homeNavSettings", () => onSettings());
   on("homeHelp", onHelp);
-  // The app has no feedback form of its own; the issues page is where it goes.
-  on("homeFeedback", () => openUrl(`${repoUrl}/issues`));
   // The update module listens for this event and opens its window: the
   // running version's list, or the update on offer (ui/src/updateWindow.mjs,
   // which also marks this card while one downloads or waits).

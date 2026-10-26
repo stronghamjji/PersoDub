@@ -963,6 +963,10 @@
      150.1 of the artwork's 303 (0.4955), the label's 0.72 x 12px = 8.64px,
      and 8.64 / 0.4955 = 17.4, so 17.5px. */
   .home-perso img { display: block; height: 17.5px; width: auto; }
+  /* The production edition's: the logo alone heads the sidebar, as wide as
+     the box and 41px tall (mockup m6-home, owner, 2026-10-23). */
+  .home-side .home-perso.big { padding: 9.5px 6px; }
+  .home-perso.big img { height: 22px; }
   .home-grp { color: var(--muted-foreground); font-size: 11px; font-weight: 500; margin: 10px 0 -4px; }
   .home-sep { height: 1px; background: var(--border); margin: 12px 0 0; flex: none; }
   .home-grow { flex: 1; }

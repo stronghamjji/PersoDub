@@ -113,3 +113,15 @@ test("the build's edition goes from the window's arguments through the preload's
   assert.ok(mainCode.includes(`\`${flag}\${edition}\``), `the main process does not pass ${flag} to the window`);
   assert.match(pageCode, /shell\?\.edition\b/, "no page reads persodubShell.edition");
 });
+
+// ...and the production edition's feedback address and the system, which its
+// Send feedback mail is addressed to and names (ui/src/feedbackSheet.mjs).
+test("the feedback address and the system go from the window's arguments through the preload to the page", () => {
+  for (const [constName, field, value] of [["FEEDBACK_MAIL_ARG", "feedbackMail", "${feedbackMail}"], ["SYSTEM_ARG", "system", null]]) {
+    const flag = preload.match(new RegExp(`const ${constName} = "([^"]+)";`))?.[1];
+    assert.ok(flag, `the preload no longer names ${constName}`);
+    assert.match(preload, new RegExp(`^\\s*${field}: process\\.argv\\.find\\(\\(a\\) => a\\.startsWith\\(${constName}\\)\\)`, "m"));
+    assert.ok(mainCode.includes(`\`${flag}${value ?? ""}`), `the main process does not pass ${flag} to the window`);
+    assert.match(pageCode, new RegExp(`\\.${field}\\b`), `no page reads persodubShell.${field}`);
+  }
+});

@@ -28,6 +28,8 @@ import { initEraseScreenUi, PACK_ID as ERASER_PACK_ID } from "./eraseScreen.mjs"
 import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
 import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
+import { initFeedbackSheet } from "./feedbackSheet.mjs";
+import { isProduction, feedbackSubject } from "./edition.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -1420,8 +1422,16 @@ async function reopenDraft(downloadId) {
 
 // The Home sidebar and the cards under the banner (the mockup's first screen,
 // user 2026-09-30): each one opens a way in this page already has.
+// The production edition's Send feedback: a mail to the address it was built
+// with, on the app's version and this computer (ui/src/feedbackSheet.mjs).
+const shellInfo = window.persodubShell || {};
+const openFeedback = isProduction() && shellInfo.feedbackMail ? initFeedbackSheet({
+  $, to: shellInfo.feedbackMail,
+  subject: () => feedbackSubject(savedSettings()?.app_version || "", shellInfo.system || ""),
+  openUrl: (url) => window.open(url, "_blank", "noopener"),
+}) : null;
 initHomeSidebar({
-  $, body: document.body, repoUrl: REPO_URL,
+  $, body: document.body, repoUrl: REPO_URL, production: isProduction(), onFeedback: openFeedback,
   // The UTM-tagged link from the start-up's GET /api/settings; the plain page
   // until that has answered.
   persoUrl: () => savedSettings()?.perso_workspace_link || "https://perso.ai/workspace/vt",

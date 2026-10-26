@@ -1017,6 +1017,26 @@
   </div>
 </div>
 
+<!-- Send feedback, the production edition's (ui/src/feedbackSheet.mjs): what
+     the mail carries, then the mail app. The open-source edition's opens the
+     repository's issues instead. -->
+<div class="modal-overlay" id="feedbackOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle" style="max-width: 460px">
+    <div class="modal-head"><h2 data-i18n id="feedbackTitle">Send feedback</h2></div>
+    <div class="modal-body">
+      <div class="modal-inner">
+        <p data-i18n>Your mail app opens. The address, the app version and your computer are filled in. Write what happened and send it.</p>
+        <p class="help-where" id="feedbackTo"></p>
+        <p class="help-where" id="feedbackSubject"></p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button data-i18n class="btn btn-secondary" id="feedbackClose" type="button">Close</button>
+      <button data-i18n class="btn btn-primary" id="feedbackWrite" type="button">Write mail</button>
+    </div>
+  </div>
+</div>
+
 <!-- The update window (mockup key-update-mockup.html 3): the versions and the
      restart on the left, the release's list on the right. Filled by
      ui/src/updateWindow.mjs. -->

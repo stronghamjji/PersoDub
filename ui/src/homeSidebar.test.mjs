@@ -29,7 +29,7 @@ function makeBody(screen, classes = []) {
   };
 }
 
-function harness({ screen = "home", classes = [], version = "0.7.1" } = {}) {
+function harness({ screen = "home", classes = [], version = "0.7.1", production, onFeedback } = {}) {
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const body = makeBody(screen, classes);
@@ -50,6 +50,7 @@ function harness({ screen = "home", classes = [], version = "0.7.1" } = {}) {
     onSettings: (...args) => log.calls.push(`settings(${args.length})`),
     onHelp: () => log.calls.push("help"),
     loadWhatsNew: async () => ({ version }),
+    production, onFeedback,
   });
   return { $, body, log };
 }
@@ -73,6 +74,31 @@ test("the GitHub button opens the repo, perso.ai the workspace link, and Send fe
     "https://perso.test/workspace/vt?utm_content=home",
     "https://example.test/owner/PersoDub/issues",
   ]);
+});
+
+test("the production edition hides the repository button, shows the big logo and sends feedback by its sheet", (t) => {
+  const opened = [];
+  const h = harness({ production: true, onFeedback: () => opened.push("sheet") });
+  t.after(h.log.restore);
+  assert.equal(h.$("homeGhName").hidden, true);
+  assert.equal(h.$("homePerso").classList.contains("big"), true);
+  h.$("homeGhName").fire("click");
+  h.$("homeFeedback").fire("click");
+  assert.deepEqual(opened, ["sheet"]);
+  assert.deepEqual(h.log.urls, [], "nothing opens the repository");
+});
+
+test("a production build with no feedback address has no Send feedback", (t) => {
+  const h = harness({ production: true, onFeedback: null });
+  t.after(h.log.restore);
+  assert.equal(h.$("homeFeedback").hidden, true);
+});
+
+test("the open-source sidebar keeps its repository button and small logo", (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  assert.notEqual(h.$("homeGhName").hidden, true);
+  assert.equal(h.$("homePerso").classList.contains("big"), false);
 });
 
 test("the four tool items and the four tool cards open the same four ways in", (t) => {

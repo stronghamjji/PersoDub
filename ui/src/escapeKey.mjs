@@ -24,6 +24,7 @@ export const WAYS_OUT = {
   exportOverlay: ["exportCloseBtn"],
   whatsNewOverlay: ["wnOk"],
   helpOverlay: ["helpOk"],
+  feedbackOverlay: ["feedbackClose"],
   updateOverlay: ["updClose"],
   chatgptSignInOverlay: ["csCancel"],
   keyOverlay: ["keyCancel"],
