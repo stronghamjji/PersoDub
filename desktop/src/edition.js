@@ -47,6 +47,17 @@ export function buildEdition(env) {
   return name;
 }
 
+// Packaged builds carry the payload under Resources/; a dev checkout may have
+// one at desktop/resources/payload after running collect-payload. The boot
+// installs from it, and main.js and config.js read the build's edition from it.
+export function findPayloadDir(appDir) {
+  const candidates = [
+    process.resourcesPath ? join(process.resourcesPath, "payload") : null,
+    join(appDir, "resources", "payload"),
+  ].filter(Boolean);
+  return candidates.find((p) => existsSync(join(p, "app-repo"))) ?? null;
+}
+
 // The running app's edition: the payload's EDITION file when there is one,
 // otherwise the environment. An unknown name is the default, since a running
 // app has no build to stop.

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt, inEnglish } from "./config.js";
 import { checkKit, readKitVersion } from "./engineCheck.js";
 import { startEngines } from "./orchestrator.js";
-import { rememberedEdition, kitEdition, editionLine } from "./edition.js";
+import { rememberedEdition, kitEdition, editionLine, findPayloadDir } from "./edition.js";
 import { buildSteps, bytesStillNeeded, bootSteps, packInstallingMarker, PACKS } from "./installSpec.js";
 import { runInstall, openSteps, downloadInterrupted } from "./installer.js";
 import { classifyError } from "./analytics.js";
@@ -50,17 +50,6 @@ export function startStopText(message) {
   return /^Health check timed out/.test(message)
     ? t("Getting ready took too long. Restart your computer, then open PersoDub. If it keeps happening, security software may be blocking it.")
     : t("It stopped while starting. Press Try again. If it stops again, restart your computer, then open PersoDub.");
-}
-
-// Packaged builds carry the payload under Resources/; a dev checkout may have
-// one at desktop/resources/payload after running collect-payload. Exported
-// because main.js reads the build's edition from the same folder (edition.js).
-export function findPayloadDir(appDir) {
-  const candidates = [
-    process.resourcesPath ? join(process.resourcesPath, "payload") : null,
-    join(appDir, "resources", "payload"),
-  ].filter(Boolean);
-  return candidates.find((p) => existsSync(join(p, "app-repo"))) ?? null;
 }
 
 /**

@@ -4,8 +4,13 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { t as inUserLanguage } from "./i18n.js";
+import { PRODUCTS, findPayloadDir, readEdition } from "./edition.js";
 
 const SRC_DIR = dirname(fileURLToPath(import.meta.url));
+// The running build's edition, read the way main.js reads it: each edition
+// keeps its kit in a folder of its own name (edition.js PRODUCTS), so the
+// two can be installed on one computer.
+const EDITION = readEdition({ payloadDir: findPayloadDir(join(SRC_DIR, "..")), env: process.env });
 
 // The kit lived at ~/persodub_full_mac when macOS was the only platform. That
 // name says "mac" on a Windows machine and the folder sits in plain view in
@@ -15,20 +20,22 @@ const SRC_DIR = dirname(fileURLToPath(import.meta.url));
 const LEGACY_KIT_DIR_NAME = "persodub_full_mac";
 
 export function defaultKitDir({ env = process.env, home = homedir(), platform = process.platform,
-                                ignoreLegacy = false } = {}) {
+                                ignoreLegacy = false, edition = EDITION } = {}) {
   // ignoreLegacy is for the one caller that has decided the old kit is
   // unusable (bootFlow.js, on a version mismatch) and wants the fresh-install
-  // location rather than the one already on disk.
+  // location rather than the one already on disk. The old folder was the
+  // open-source app's: the production edition never takes it.
   const legacy = join(home, LEGACY_KIT_DIR_NAME);
-  if (!ignoreLegacy && existsSync(legacy)) return legacy;
+  if (!ignoreLegacy && edition === "opensource" && existsSync(legacy)) return legacy;
+  const name = PRODUCTS[edition].name;
   // LOCALAPPDATA, not APPDATA: on a domain-joined Windows machine the Roaming
   // half syncs to a server, and the kit is tens of gigabytes.
   if (platform === "win32") {
-    return join(env.LOCALAPPDATA || join(home, "AppData", "Local"), "PersoDub");
+    return join(env.LOCALAPPDATA || join(home, "AppData", "Local"), name);
   }
-  if (platform === "darwin") return join(home, "Library", "Application Support", "PersoDub");
-  return join(home, ".persodub");  // Linux is not supported yet; the branch is
-}                                  // here so adding it later is a one-liner.
+  if (platform === "darwin") return join(home, "Library", "Application Support", name);
+  return join(home, `.${name.toLowerCase()}`);  // Linux is not supported yet; the branch is
+}                                               // here so adding it later is a one-liner.
 
 // Windows refuses to open a path longer than this without both a manifest opt-in
 // and a machine-wide registry switch, neither of which an unprivileged install
