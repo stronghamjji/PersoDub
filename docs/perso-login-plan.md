@@ -197,6 +197,20 @@ allowed_grant_types authorization_code, refresh_token
 
 주의 둘. (1) productName이 바뀌면 Electron의 데이터 폴더가 `Application Support/PersoDubbing`으로 새로 생깁니다. 로그와 분석용 기기 id가 새로 시작하고, kit의 모델과 프로젝트는 그대로입니다. (2) `PRODUCTION_UPDATE_URL`이 비어 있는 동안은 자동 업데이트가 공개 오픈소스 빌드를 받아 이름이 PersoDub으로 돌아갑니다. 0번 항목 B.
 
+## 10. 결제(크레딧 충전) 유도: 다음 작업 (2026-10-27 결정)
+
+**지금 코드에 있는 것(코드로 확인):** 백엔드가 Perso 크레딧 소진을 감지하면 `perso_credit_exhausted` 이벤트를 보내고, 페이지는 작업당 한 번 "크레딧이 부족해요" 팝업(`#creditOverlay`)을 띄웁니다. 팝업의 "충전" 버튼은 `https://perso.ai/pricing`을 브라우저로 엽니다. 작업은 실패로 끝나고 사용자가 다시 시작해야 합니다.
+
+**바꿀 것, 우선순위 순:**
+1. **더빙 준비 화면에서 Perso API를 고른 순간** 예상 크레딧과 남은 크레딧을 보여주고, 모자라면 그 자리에 "충전하기". 백엔드의 `plan/status`(remainingQuota)를 이미 읽고 있어 데이터는 있음. 실패를 미리 막는 자리라 가장 중요.
+2. **소진 팝업**: "충전하기"를 주 버튼으로, 충전 뒤 같은 자리에서 **"다시 시도"**로 바로 이어지게. 실패 카드에도 "충전하기 · 다시 시도" 두 버튼.
+3. **계정 영역**(홈 계정 줄, 설정 > 계정과 키)에 남은 크레딧과 "충전".
+4. 피할 것: 상시 메뉴의 "결제", 로그인 직후의 결제 안내, 작업을 막는 모달.
+
+**Perso 웹 팀에 물을 것:** workspace 번호로 바로 가는 충전 페이지 주소가 있는지(예: `https://perso.ai/workspace/<seq>/billing`). 없으면 가격 페이지로 보냄. 브라우저는 이미 Perso에 로그인돼 있음.
+
+**측정:** Amplitude가 붙으면 세 자리의 "충전하기" 누름을 자리별로 기록해 어디가 결제로 이어지는지 봄.
+
 ## 6. 참고한 저장소와 사실 확인 기록
 
 - stronghamjji/external-client-demo: Perso 인증 서버의 PKCE 흐름과 토큰 요청 본문, client_info 테이블 모양(redirect_uris가 문자열 목록, `http://localhost:5173/callback` 등록 사례).
