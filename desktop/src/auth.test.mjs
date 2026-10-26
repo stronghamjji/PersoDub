@@ -639,6 +639,19 @@ test("signing out tells Perso, deletes the tokens and clears the key and workspa
   assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
 });
 
+// kit.env.bak is the file as it was before each write: the sign-out's own
+// write would leave the account's key in it, beside the cleared kit.env.
+test("signing out leaves no copy of the key in kit.env.bak", async () => {
+  const { auth, kitDir } = await signedInStore(persoRoutes(), later());
+  await auth.start();
+  await auth.logout();
+  const bak = join(kitDir, "kit.env.bak");
+  const kept = existsSync(bak) ? readFileSync(bak, "utf8") : "";
+  assert.ok(!kept.includes("pk_test_K1"), "the backup still holds the account's key");
+  assert.equal(parseEnvFile(kept).PERSO_API_KEY || "", "");
+  if (process.platform !== "win32" && existsSync(bak)) assert.equal(statSync(bak).mode & 0o777, 0o600);
+});
+
 test("signing out finishes on this computer even when Perso does not answer", async () => {
   const { auth, kitDir, userData } = await signedInStore(persoRoutes({ [`POST ${CFG.signOutUrl}`]: () => new TypeError("fetch failed") }), later());
   await auth.start();

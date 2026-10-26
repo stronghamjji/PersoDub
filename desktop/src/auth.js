@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { KIT_ENV, envWithKit, writeKitValues } from "./kitEnv.js";
 import { startCallbackServer } from "./authLoopback.js";
@@ -295,11 +295,15 @@ export function createAuth({
     return { email: session.email || "", id: session.userId || "" };
   }
 
+  // kit.env.bak is kit.env as it was before this write, the account's key in
+  // it, so it takes the cleared text too: no copy of the key stays behind.
   function clearKitKeys() {
     const dir = kit();
     if (!dir) return;
-    try { writeKitValues(dir, { PERSO_API_KEY: "", PERSO_SPACE_SEQ: "" }); }
-    catch (err) { log(`AUTH could not clear the Perso key in kit.env: ${err.message}`, "ERROR"); }
+    try {
+      writeKitValues(dir, { PERSO_API_KEY: "", PERSO_SPACE_SEQ: "" });
+      copyFileSync(join(dir, KIT_ENV), join(dir, `${KIT_ENV}.bak`));
+    } catch (err) { log(`AUTH could not clear the Perso key in kit.env: ${err.message}`, "ERROR"); }
   }
 
   // Signed out on this computer: the tokens and the account's key go.
