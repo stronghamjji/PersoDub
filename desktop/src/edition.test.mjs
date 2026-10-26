@@ -55,6 +55,9 @@ test("an unknown edition at run time is the open-source one", () => {
 test("each edition's update feed is its repository's GitHub Releases", () => {
   assert.deepEqual(editionFeed("production"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
   assert.deepEqual(editionFeed("opensource"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
+  // The production edition's own folder, once PRODUCTION_UPDATE_URL is filled in; the open-source edition never reads it.
+  assert.deepEqual(editionFeed("production", "https://downloads.test/persodubbing/"), { provider: "generic", url: "https://downloads.test/persodubbing/" });
+  assert.deepEqual(editionFeed("opensource", "https://downloads.test/persodubbing/"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
 });
 
 

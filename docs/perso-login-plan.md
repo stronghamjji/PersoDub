@@ -1,6 +1,63 @@
-# Perso 로그인: 현재 상태와 할 일 (2026-10-26 기준)
+# Perso 로그인: 현재 상태와 할 일 (2026-10-26 밤 기준, 버전 1.0.0-rc.1)
 
 이 파일은 내부 작업 메모입니다. 루트의 *.md는 .gitignore에 걸려서 docs/에 둡니다. 공개 저장소(stronghamjji/PersoDub)로 PR을 낼 때는 빼거나 위키로 옮기세요.
+
+## 0. 남은 코드 변경은 딱 두 줄. 둘 다 외부 답을 기다리는 중
+
+| # | 기다리는 것 | 누가 주나 | 바꿀 곳 | 바꾼 뒤 확인 |
+|---|---|---|---|---|
+| A | Perso OAuth client id | Perso 인증 팀 (perso-api-auth) | `desktop/src/auth.js` 38행 `clientId: env.PERSODUB_AUTH_CLIENT_ID \|\| "PERSODUB-CLIENT-ID-NOT-ISSUED-YET"` 의 문자열을 발급받은 id로. `desktop/src/auth.test.mjs`의 같은 문자열 한 줄도 | `node desktop/scripts/perso-login-check.mjs --client <id> --host 127.0.0.1 --port 52290` 가 1~7번 OK. 그다음 `tests/e2e/perso-login.mjs` |
+| B | 운영 다운로드 폴더 주소(HTTPS) | 인프라 개발자 | `desktop/src/edition.js` 의 `PRODUCTION_UPDATE_URL = ""` 에 주소를. 끝에 `/` | `cd desktop && node --test src/edition.test.mjs src/updater.test.mjs`. 빌드 뒤 `desktop/dist/latest-mac.yml`의 파일 이름들이 그 폴더에 올라갔는지 |
+
+둘 다 비어 있는 상태로도 앱은 돌아갑니다. A가 비면 운영 로그인이 Perso에서 거절되고(벽을 못 지나감), B가 비면 운영 앱이 공개 오픈소스 릴리스로 업데이트됩니다. **A 없이는 운영 rc를 내보내면 안 되고**, B 없이는 내보낼 수는 있지만 다음 오픈소스 릴리스 때 이름이 PersoDub으로 돌아갑니다.
+
+### A에게 보낼 메시지 (Perso 인증 팀)
+
+```
+제목: PersoDubbing 데스크톱 앱 OAuth 클라이언트 등록 요청 (perso-api-auth client_info)
+
+external-client-demo의 db/seed_demo_client.sql과 같은 형식으로 아래 한 줄 등록 부탁드립니다.
+데모 클라이언트(demo-pkce-client)로는 이미 실제 로그인·키 조회·refresh·로그아웃까지 확인했고,
+우리 id로 바꾸기만 하면 됩니다.
+
+client_id           persodub-desktop
+client_type         PUBLIC  (PKCE 사용, client_secret 검증 없음)
+client_status       normal
+redirect_uris       http://127.0.0.1:52290/callback
+                    http://127.0.0.1:52291/callback
+                    http://127.0.0.1:52292/callback
+allowed_scopes      profile, email
+allowed_grant_types authorization_code, refresh_token
+
+확인 부탁드리는 것:
+1. loopback 포트 와일드카드 지원 여부. 안 되면 위 고정 포트 3개로 갑니다.
+2. refresh는 v1 auth/oauth2/token으로 보냅니다(v2/token은 refresh에 500). 이 경로가 유지되는지요.
+3. 앱이 사용자 대신 API 키를 만들 수 있는 엔드포인트가 있는지(예: POST /auth/api/v1/api-keys). 있으면 키 없는 계정도 사이트 방문 없이 끝낼 수 있습니다.
+4. 이 코드는 오픈소스 저장소에 공개됩니다. client id와 인증 엔드포인트 경로가 공개돼도 되는지 확인 부탁드립니다. (PKCE public client라 secret은 없습니다.)
+```
+
+### B에게 보낼 메시지 (인프라 개발자)
+
+```
+제목: PersoDubbing 데스크톱 앱 다운로드/업데이트 폴더 요청
+
+필요한 것은 HTTPS로 누구나 읽을 수 있는 정적 폴더 주소 하나입니다. 예: https://<도메인>/persodubbing/desktop/
+앱의 자동 업데이트(electron-updater generic provider)와 사람이 받는 다운로드 링크를 같은 폴더로 씁니다.
+
+릴리스마다 올릴 파일(빌드하면 desktop/dist/에 함께 생깁니다):
+  Mac:     PersoDubbing-<버전>-arm64-mac.zip, 같은 이름.blockmap, latest-mac.yml, PersoDubbing-mac.dmg
+  Windows: PersoDubbing-Setup-<버전>.exe, 같은 이름.blockmap, latest.yml
+  앱은 zip/exe로 업데이트하고, 사람은 dmg/exe를 받습니다.
+
+조건:
+  1. latest-mac.yml 과 latest.yml 은 캐시를 짧게(또는 no-cache). 이 둘이 "최신 버전이 뭔지"를 말해 줍니다.
+  2. 버전이 들어간 파일 이름은 그대로 유지. yml이 그 이름을 가리킵니다. 링크용 버전 없는 이름이 필요하면 복사본을 하나 더.
+  3. 인증 없이 읽기 가능.
+  4. (있으면 좋음) HTTP Range 요청 지원: 바뀐 부분만 받습니다. 없어도 전체 다운로드로 동작합니다.
+
+주소를 주시면 코드 한 줄(desktop/src/edition.js PRODUCTION_UPDATE_URL)에 넣고 테스트합니다.
+```
+
 
 ## 1. 지금 브랜치 `feature/perso-login-loopback`에 들어 있는 것
 
@@ -75,7 +132,7 @@ allowed_grant_types authorization_code, refresh_token
 
 코드를 두 벌로 가르지 않습니다. 이유: 업데이트, 빌드, 서명, 문서, 테스트가 전부 두 배가 되고, 가를 만한 비밀이 없습니다.
 
-## 5. 내일 배포 체크리스트 (0.10.0-rc.1)
+## 5. 내일 배포 체크리스트 (1.0.0-rc.1)
 
 브랜치 `feature/perso-login-loopback`, 2026-10-26 밤 기준 검증 상태: 자동 테스트 전부 통과(Python 2409, UI 1058, 데스크톱 612, relay 71, ruff), 실제 Electron 앱 + 실제 Chrome + 실제 Perso(데모 클라이언트)로 로그인·로그아웃·재로그인·재실행 통과, 오픈소스 에디션 별도 kit으로 정상.
 
@@ -85,7 +142,7 @@ allowed_grant_types authorization_code, refresh_token
 4. **테스트 다시** → `cd desktop && node --test src/*.test.mjs smoke/*.test.mjs`, `node --test ui/src/*.test.mjs`, Python은 `pytest tests/`.
 5. **빌드** → Mac: `cd desktop && CAMPPLUS_SRC=<campplus.onnx> npm run dist:dmg:prod` (서명·notarization은 기존 방식대로). Windows: Actions의 "Build Windows installer"를 edition=production으로 실행하면 `dist:win:prod`를 씀. 결과물 이름은 PersoDubbing-mac.dmg, PersoDubbing-Setup-<버전>.exe.
 6. **설치본으로 마지막 확인** → Mac과 Windows 각 1회: Dock/시작 메뉴 이름 PersoDubbing, 로그인 벽, 로그인, 브라우저 페이지, 로그아웃, 재실행 유지. Windows는 loopback 포트에 방화벽 경고가 뜨지 않는지(127.0.0.1만 열므로 뜨지 않아야 함) 확인.
-7. **배포** → 공개 저장소에 올린다면 `v0.10.0-rc.1` 태그의 GitHub 릴리스를 **pre-release로 표시**(0.9.0 사용자가 rc로 업데이트되지 않게). 프로덕션 rc는 회사 배포 경로로.
+7. **배포** → 공개 저장소에 올린다면 `v1.0.0-rc.1` 태그의 GitHub 릴리스를 **pre-release로 표시**(0.9.0 사용자가 rc로 업데이트되지 않게). 프로덕션 rc는 회사 배포 경로로.
 8. **등록이 안 오면** → 로그인 없이 내보내는 길: 오픈소스 에디션 빌드(`npm run dist:dmg`)는 로그인이 꺼져 있고 0.9.0과 같은 동작.
 
 **아직 열려 있는 것**: 프로덕션 전용 업데이트 피드(4번 항목). 없으면 다음 자동 업데이트에서 공개 오픈소스 빌드를 받아 PersoDubbing 이름이 사라짐(로그인과 Perso 기본값은 kit.env에 기억돼 유지). **팀원 담당**(2026-10-26 결정). 코드에서 바꿀 곳은 `desktop/src/edition.js`의 EDITIONS.production 한 줄.

@@ -55,8 +55,17 @@ export function readEdition({ payloadDir, env }) {
   return Object.hasOwn(EDITIONS, name) ? name : DEFAULT_EDITION;
 }
 
-// electron-updater's feed for an edition's GitHub Releases.
-export function editionFeed(edition) {
+// !!! FILL IN when the company's download folder exists: the HTTPS folder
+// the production edition updates from (electron-updater's generic provider),
+// holding latest-mac.yml, latest.yml and the files they name. Ends with "/".
+// Empty, the production edition updates from the public releases like the
+// open-source edition, which are open-source builds (see docs/perso-login-plan.md).
+export const PRODUCTION_UPDATE_URL = "";
+
+// electron-updater's feed for an edition: the production edition's folder
+// once it is filled in, else the edition's GitHub Releases.
+export function editionFeed(edition, productionUrl = PRODUCTION_UPDATE_URL) {
+  if (edition === "production" && productionUrl) return { provider: "generic", url: productionUrl };
   const [owner, repo] = EDITIONS[edition].split("/");
   return { provider: "github", owner, repo };
 }
