@@ -740,6 +740,9 @@ test("the production edition's sheet shows the signed-in account in the key fiel
   assert.equal(h.$("persoAccountMail").textContent, "a@test.local");
   assert.equal(h.$("persoKeyChip").textContent, "Key connected");
   assert.ok(h.$("persoKeyChip").classList.contains("done"));
+  // A long address wraps; the chip beside it stays one line ("키 / 연결됨", re-test 2026-10-27).
+  const css = readFileSync(new URL("../../static/css/app.css", import.meta.url), "utf8");
+  assert.match(css, /\.acct-chip \{[^}]*white-space: nowrap;[^}]*\}/);
 
   await h.$("persoSignOutBtn").fire("click");
   assert.equal(account.loggedOut, 1);
