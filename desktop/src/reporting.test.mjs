@@ -427,3 +427,72 @@ test("a report queued while the counts were on still names the computer once the
   assert.equal(s.calls[0].url, `${REPORT_ENDPOINT}/report`);
   assert.equal(JSON.parse(s.calls[0].body).device, "0123456789ab");
 });
+
+// ---- a Service inquiry (production, 0.9.1) ---------------------------------
+
+const FORM = { type: "bug", subject: " Export stops ", details: "At 90%, every time.", replyTo: "me@example.com", locale: "ko" };
+const FACTS = { os: "mac", osVersion: "15.1.0" };
+
+test("a bug inquiry goes to /inquiry with the app and the computer, then the newest job's masked logs, reports off or not", async () => {
+  const s = setup({
+    kitEnv: "PERSODUB_NO_REPORTS=1\n",
+    engines: { url: "http://backend" },
+    relay: (url) => {
+      if (url === "http://backend/api/dub/jobs") return ok({ jobs: [{ id: "new1" }, { id: "old1" }] });
+      if (url === "http://backend/api/report/bundle?job=new1") return ok({ job: {}, logs: { app: "app log", job: "job log of new1" } });
+      return url.endsWith("/inquiry") ? ok({ id: "q1" }) : { ok: true, status: 200 };
+    },
+  });
+  writeFileSync(join(s.userData, "analytics.json"), JSON.stringify({ device: COUNTS_ID, lastDay: null }));
+  writeFileSync(join(s.kitDir, "kit.env"), "PERSODUB_NO_REPORTS=1\nPERSODUB_EDITION=production\n");
+  const answer = await s.reporter.sendInquiry(FORM, { kitDir: s.kitDir, ...FACTS });
+
+  assert.deepEqual(answer, { id: "q1" });
+  assert.deepEqual(s.calls.map((c) => `${c.method} ${c.url}`), [
+    "GET http://backend/api/dub/jobs",
+    "GET http://backend/api/report/bundle?job=new1",
+    `POST ${REPORT_ENDPOINT}/inquiry`,
+    `POST ${REPORT_ENDPOINT}/report/q1/logs`,
+  ]);
+  assert.deepEqual(JSON.parse(s.calls[2].body), {
+    type: "bug", subject: "Export stops", details: "At 90%, every time.", replyTo: "me@example.com",
+    installId: COUNTS_ID, version: "0.7.1", edition: "production", os: "mac", osVersion: "15.1.0", locale: "ko",
+  });
+  const archive = gunzipSync(Buffer.from(s.calls[3].body)).toString("utf8");
+  assert.match(archive, /job log of new1/);
+  assert.match(archive, /PERSODUB_VERSION 0\.7\.1/, "shell.log too");
+  assert.deepEqual(s.queued(), []);
+  assert.deepEqual(s.pushed, [], "no failure report announced");
+});
+
+test("an inquiry of another kind carries no logs, and a form the relay would refuse is not sent", async () => {
+  const s = setup({ engines: { url: "http://backend" }, relay: () => ok({ id: "q2" }) });
+  assert.deepEqual(await s.reporter.sendInquiry({ ...FORM, type: "payment" }, { kitDir: s.kitDir, ...FACTS }), { id: "q2" });
+  assert.deepEqual(s.calls.map((c) => c.url), [`${REPORT_ENDPOINT}/inquiry`]);
+  s.calls.length = 0;
+  assert.equal(await s.reporter.sendInquiry({ ...FORM, type: "Bug report" }, { kitDir: s.kitDir, ...FACTS }), null);
+  assert.equal(await s.reporter.sendInquiry({ ...FORM, subject: "  " }, { kitDir: s.kitDir, ...FACTS }), null);
+  assert.deepEqual(s.calls, []);
+});
+
+test("an inquiry the relay could not take waits in the kit and goes on the next launch, reports off, alone", async () => {
+  let up = false;
+  const s = setup({
+    kitEnv: "PERSODUB_NO_REPORTS=1\n",
+    relay: (url) => {
+      if (!up) throw new TypeError("fetch failed");
+      return ok({ id: url.endsWith("/inquiry") ? "q3" : "r9" });
+    },
+  });
+  assert.deepEqual(await s.reporter.sendInquiry({ ...FORM, type: "other" }, { kitDir: s.kitDir, ...FACTS }), { queued: true });
+  const [json] = s.queued();
+  assert.deepEqual([s.readQueued(json).inquiry.subject, s.readQueued(json).id], ["Export stops", null]);
+  // A failure report waiting beside it stays: its switch is off.
+  writeFileSync(join(s.kitDir, "reports", `aaaaaaaaaaaa-${Date.now()}.json`), JSON.stringify({ report: { kind: "dub" }, id: null }));
+
+  up = true;
+  s.calls.length = 0;
+  await s.reporter.flushReports(s.kitDir);
+  assert.deepEqual(s.calls.map((c) => c.url), [`${REPORT_ENDPOINT}/inquiry`]);
+  assert.equal(s.queued().length, 1, "the report is still there");
+});

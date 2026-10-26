@@ -52,6 +52,9 @@ test("a report from exactly the cutoff is still sent", () => {
 
 test("a report the relay has never seen is sent", () => {
   assert.equal(pendingWork({ report: { kind: "dub" }, id: null }), "send");
+  assert.equal(pendingWork({ inquiry: { type: "bug" }, id: null }), "send");
+  assert.equal(pendingWork({ inquiry: { type: "bug" }, id: "q1" }, { hasArchive: true }), "logs");
+  assert.equal(pendingWork({ inquiry: { type: "other" }, id: "q1" }), "done");
 });
 
 test("a failure written down before its report was built is built, then sent", () => {

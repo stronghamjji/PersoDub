@@ -57,7 +57,7 @@ import { readKept, keepDraft, dropKept, draftMark } from "./keptDrafts.mjs";
 import { initRatioUi } from "./ratio.mjs";
 import { wireUpdates } from "./updateWindow.mjs";
 import { fmtClock, fmtClockTenths, fmtLength, formatBytes, escapeHtml, errorText, serverText, statusParts, rawLogLines, restartFailure, restartRanOutOfMemory } from "./format.mjs";
-import { languageName, pageLanguage, savedSettings, t } from "./i18n.mjs";
+import { currentLanguage, languageName, pageLanguage, savedSettings, t } from "./i18n.mjs";
 import { paintMarkupWords } from "./markupWords.mjs";
 
 // The language before anything is drawn, so the first paint is already in it
@@ -1447,14 +1447,12 @@ async function reopenDraft(downloadId) {
 
 // The Home sidebar and the cards under the banner (the mockup's first screen,
 // user 2026-09-30): each one opens a way in this page already has.
-// The production edition's Customer support: a Service inquiry form, mailed
-// to the address it was built with, with the app's version and this computer
-// (ui/src/feedbackSheet.mjs).
+// The production edition's Customer support: a Service inquiry form, sent
+// through the shell to our relay (ui/src/feedbackSheet.mjs).
 const shellInfo = window.persodubShell || {};
-const openFeedback = isProduction() && shellInfo.feedbackMail ? initFeedbackSheet({
-  $, to: shellInfo.feedbackMail,
-  version: () => savedSettings()?.app_version || "",
-  system: shellInfo.system || "",
+const openFeedback = isProduction() && shellInfo.sendInquiry ? initFeedbackSheet({
+  $, send: (form) => shellInfo.sendInquiry(form),
+  language: currentLanguage,
   openUrl: (url) => window.open(url, "_blank", "noopener"),
 }) : null;
 initHomeSidebar({

@@ -15,6 +15,7 @@
 //                                    a finished job's record (code "ok") the
 //                                    same, with its timing
 //                   {report, id}  -- id is null until the relay has taken it
+//                   {inquiry, id} -- a Service inquiry (0.9.1), the same way
 //   <base>.tar.gz   the full logs, when there are any
 // The pair is deleted once both halves have landed. Keeping the id in the
 // json is what lets a delivered report whose LOG upload failed retry only the
@@ -70,7 +71,7 @@ export function partitionQueue(names, { now = Date.now(), maxAgeDays = MAX_AGE_D
  */
 export function pendingWork(entry, { hasArchive = false } = {}) {
   if (!entry || typeof entry !== "object") return "done";
-  if (!entry.report) return entry.failure && typeof entry.failure === "object" ? "collect" : "done";
+  if (!entry.report && !entry.inquiry) return entry.failure && typeof entry.failure === "object" ? "collect" : "done";
   if (!entry.id) return "send";
   return hasArchive ? "logs" : "done";
 }

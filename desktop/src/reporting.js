@@ -6,7 +6,7 @@ import { readKitVersion } from "./engineCheck.js";
 import { packInstalled, torchVariantFor, PACKS } from "./installSpec.js";
 import { analyticsFile, loadState, savedDevice, saveState } from "./analytics.js";
 import { probesFor, runProbes } from "./diagnostics.js";
-import { buildReport, collectEnvironment, maskText, resolveReportMode, withoutEncodedNames, worthReporting } from "./report.js";
+import { buildInquiry, buildReport, collectEnvironment, maskText, resolveReportMode, withoutEncodedNames, worthReporting } from "./report.js";
 import { buildLogArchive } from "./reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./reportQueue.js";
 import { envWithKit } from "./kitEnv.js";
@@ -24,6 +24,11 @@ import { readFileEnd } from "./fileEnd.js";
 // (code "ok", report.js): its logs and how long it took, to the relay's
 // /record, which keeps them for the private dashboard and never opens an
 // issue (owner, 2026-10-22).
+//
+// The production edition's Service inquiry goes the same way too, to the
+// relay's /inquiry, a bug report with the same masked logs a failure sends
+// (sendInquiry below). It goes whatever the switch says: the person pressed
+// Send, after agreeing to it on the form (owner, 2026-10-27).
 export const REPORT_ENDPOINT = "https://persodub-report.persodub.workers.dev";
 // Reports wait here rather than in userData: a report belongs to the kit that
 // produced it, and a user who deletes a kit is done with its failures too.
@@ -85,6 +90,18 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
       return res.ok ? await res.json() : null;
     } catch {
       return null;
+    }
+  }
+
+  // The newest job, for a bug inquiry's logs: the one the person most likely
+  // means. None when the engines are not up or there is no job yet.
+  async function latestJobId() {
+    if (!ctx.engines || !ctx.engines.url) return "";
+    try {
+      const res = await fetchImpl(`${ctx.engines.url}/api/dub/jobs`, { signal: AbortSignal.timeout(5000) });
+      return res.ok ? (((await res.json()).jobs || [])[0] || {}).id || "" : "";
+    } catch {
+      return "";
     }
   }
 
@@ -211,14 +228,13 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
    * re-queueing under a new name would restart the week a report is allowed to
    * keep trying for.
    */
-  async function deliver(report, archive) {
+  async function deliver(report, archive, door = report.outcome === "ok" ? "/record" : "/report") {
     // A finished job's record has a door of its own, which never reaches
-    // GitHub, and nothing to announce: nothing broke.
-    const record = report.outcome === "ok";
-    const answer = await postJson(REPORT_ENDPOINT + (record ? "/record" : "/report"), report);
+    // GitHub, and nothing to announce: nothing broke. An inquiry has another.
+    const answer = await postJson(REPORT_ENDPOINT + door, report);
     if (!answer || !answer.id) return { sent: false, id: null, logsSent: false };
     const logs = archive ? await postLogs(answer.id, archive) : "ok";
-    if (!record) announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
+    if (door === "/report") announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
     return { sent: true, id: answer.id, logsSent: logs !== "retry" };
   }
 
@@ -284,6 +300,40 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
   }
 
   /**
+   * Customer support's Service inquiry, from the page: to the relay's
+   * /inquiry, a bug report's logs after it the way a failure's go. Written
+   * into the queue first, so one that cannot land now goes with the next
+   * launch's flush. Answers {id} once the relay has it, {queued: true} when it
+   * waits, and null when it could not even be built.
+   */
+  async function sendInquiry(form, { kitDir, os, osVersion }) {
+    if (!kitDir) return null;
+    const inquiry = buildInquiry({
+      ...form, os, osVersion, version: app.getVersion(), edition: kitEdition(kitDir) || "",
+      // The computer's id, the one the dashboard knows it by and hides the
+      // owner's own computers by (EXCLUDED_DEVICES).
+      installId: savedDevice(analyticsFile(app)) || loadState(REPORT_STATE()).device,
+    });
+    if (!inquiry) return null;
+    const base = queueBase(randomBytes(6).toString("hex"), Date.now());
+    inHand.add(base);
+    try {
+      const archive = inquiry.type === "bug"
+        ? (await collectReport({ kind: "unknown", kitDir, code: "unknown", jobId: await latestJobId() })).archive : null;
+      queueReport(kitDir, base, { inquiry, id: null }, archive);
+      const { sent, id, logsSent } = await deliver(inquiry, archive, "/inquiry");
+      if (sent && logsSent) unqueue(kitDir, base);
+      else if (sent) queueReport(kitDir, base, { inquiry, id });
+      shellLog(`[persodub-report] inquiry ${sent ? `sent ${id}` : "queued"}`);
+      return sent ? { id } : { queued: true };
+    } catch {
+      return null;
+    } finally {
+      inHand.delete(base);
+    }
+  }
+
+  /**
    * Reports that could not be sent when they happened, and failures a launch
    * wrote down but did not live to report. Runs as a launch starts, after an
    * install that stopped, and once the app is up (bootFlow.js), and never
@@ -297,7 +347,9 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
     const { retry, expired } = partitionQueue(names);
     const remove = (base) => unqueue(kitDir, base);
     for (const base of expired) remove(base);
-    if (reportMode(kitDir) !== "on") return;   // off or debug: nothing leaves, nothing is deleted
+    // Off or debug: nothing leaves and nothing is deleted, but an inquiry,
+    // which the person sent themselves.
+    const reporting = reportMode(kitDir) === "on";
     for (const base of retry) {
       if (inHand.has(base)) continue;
       inHand.add(base);
@@ -308,6 +360,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
     async function flushOne(base) {
       let entry = null;
       try { entry = JSON.parse(readFileSync(join(dir, `${base}${REPORT_EXT}`), "utf8")); } catch { entry = null; }
+      if (!reporting && !(entry && entry.inquiry)) return;
       const archivePath = join(dir, `${base}${ARCHIVE_EXT}`);
       const hasArchive = existsSync(archivePath);
       let work = pendingWork(entry, { hasArchive });
@@ -331,17 +384,18 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, fetchImpl = 
         work = "send";
       }
       if (work === "send") {
-        const { sent, id, logsSent } = await deliver(entry.report, archive);
+        const { sent, id, logsSent } = entry.inquiry
+          ? await deliver(entry.inquiry, archive, "/inquiry") : await deliver(entry.report, archive);
         if (sent && logsSent) remove(base);
         // Sent, but its logs did not follow: keep the pair under the same name
         // (so the week it has to try in keeps running) with the id written in,
         // and only the upload is retried next launch.
-        else if (sent) writeFileSync(join(dir, `${base}${REPORT_EXT}`), JSON.stringify({ report: entry.report, id }));
+        else if (sent) writeFileSync(join(dir, `${base}${REPORT_EXT}`), JSON.stringify({ ...entry, id }));
         return;
       }
       if (await postLogs(entry.id, archive) !== "retry") remove(base);
     }
   }
 
-  return { sendReport, flushReports, reportMode, lastReport: () => lastReport };
+  return { sendReport, sendInquiry, flushReports, reportMode, lastReport: () => lastReport };
 }

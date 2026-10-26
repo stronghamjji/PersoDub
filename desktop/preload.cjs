@@ -14,13 +14,9 @@ const LOCALE_ARG = "--persodub-locale=";
 // The preload runs before the page has an element to stamp when
 // the document is still empty; then it waits for one.
 const PLATFORM_ARG = "--persodub-platform=";
-// And the build's edition ("opensource", "production"), the production
-// edition's feedback address, and the system with its version ("macOS
-// 15.1.0"), the same way: the page shows the production edition's names,
-// links and Send feedback mail from them (ui/src/edition.mjs).
+// And the build's edition ("opensource", "production"), the same way: the
+// page shows the production edition's names and links from it (ui/src/edition.mjs).
 const EDITION_ARG = "--persodub-edition=";
-const FEEDBACK_MAIL_ARG = "--persodub-feedback-mail=";
-const SYSTEM_ARG = "--persodub-system=";
 const platform = process.argv.find((a) => a.startsWith(PLATFORM_ARG))?.slice(PLATFORM_ARG.length) || "";
 // The edition is stamped the same way, as data-edition, so the production
 // edition's palette and type are there from the first paint (static/css/app.css).
@@ -99,6 +95,12 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // rather than promising a report nobody will receive.
   onReportSent: (cb) => ipcRenderer.on("shell:report-sent", (_e, sent) => cb(sent)),
   getLastReport: () => ipcRenderer.invoke("shell:last-report"),
+  // The production edition's Service inquiry (ui/src/feedbackSheet.mjs): the
+  // form's {type, subject, details, replyTo, locale}, which the shell sends to
+  // the relay with the app's version and this computer (src/reporting.js).
+  // Resolves to {id} once it landed, {queued: true} when it waits for the next
+  // launch, and null when it could not be sent at all.
+  sendInquiry: (form) => ipcRenderer.invoke("shell:send-inquiry", form),
   // "owner/repo" for the page's GitHub links (src/edition.js); "" when the
   // window passed none.
   repo: process.argv.find((a) => a.startsWith(REPO_ARG))?.slice(REPO_ARG.length) || "",
@@ -106,6 +108,4 @@ contextBridge.exposeInMainWorld("persodubShell", {
   locale: process.argv.find((a) => a.startsWith(LOCALE_ARG))?.slice(LOCALE_ARG.length) || "",
   // "" when the window passed none: the page is the open-source one.
   edition: process.argv.find((a) => a.startsWith(EDITION_ARG))?.slice(EDITION_ARG.length) || "",
-  feedbackMail: process.argv.find((a) => a.startsWith(FEEDBACK_MAIL_ARG))?.slice(FEEDBACK_MAIL_ARG.length) || "",
-  system: process.argv.find((a) => a.startsWith(SYSTEM_ARG))?.slice(SYSTEM_ARG.length) || "",
 });

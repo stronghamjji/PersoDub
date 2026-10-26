@@ -58,16 +58,16 @@ test("the open-source edition's update feed is its repository's GitHub Releases,
 });
 
 test("build.env carries the production build's set values only", () => {
-  const env = { PERSODUB_UPDATE_URL: "https://updates.example/", PERSODUB_FEEDBACK_MAIL: "", OTHER: "x" };
+  const env = { PERSODUB_UPDATE_URL: "https://updates.example/", OTHER: "x" };
   assert.equal(buildEnvText("production", env), "PERSODUB_UPDATE_URL=https://updates.example/\n");
   assert.equal(buildEnvText("opensource", env), "");
 });
 
 test("the running app reads its build values from the payload's build.env, or the environment without a payload", () => {
   const dir = payload("production");
-  writeFileSync(join(dir, "build.env"), "PERSODUB_FEEDBACK_MAIL=team@example.com\n");
+  writeFileSync(join(dir, "build.env"), "PERSODUB_UPDATE_URL=https://updates.example/\n");
   const env = { PERSODUB_UPDATE_URL: "https://elsewhere.example/" };
-  assert.deepEqual(readBuildEnv({ payloadDir: dir, env }), { PERSODUB_FEEDBACK_MAIL: "team@example.com" });
+  assert.deepEqual(readBuildEnv({ payloadDir: dir, env }), { PERSODUB_UPDATE_URL: "https://updates.example/" });
   assert.deepEqual(readBuildEnv({ payloadDir: payload("opensource"), env }), {});
   assert.deepEqual(readBuildEnv({ payloadDir: null, env: { ...env, OTHER: "x" } }), env);
 });

@@ -60,7 +60,7 @@ function main() {
   // it runs in cannot change it (src/edition.js readEdition).
   writeFileSync(join(OUT, "EDITION"), edition);
   console.log(`payload: ${edition} edition, ${EDITIONS[edition] || "no repository"}`);
-  // The production build's update address and feedback mail, from this
+  // The production build's update address, from this
   // command's environment (src/edition.js BUILD_KEYS); a production build
   // without PERSODUB_UPDATE_URL never checks for updates.
   const built = buildEnvText(edition, process.env);

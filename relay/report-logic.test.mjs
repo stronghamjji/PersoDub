@@ -27,7 +27,7 @@ import {
   withTally,
   scrubMessage,
 } from "./report-logic.js";
-import { buildReport, collectEnvironment, issueTitle as appIssueTitle, REPORT_KINDS } from "../desktop/src/report.js";
+import { buildInquiry, buildReport, collectEnvironment, issueTitle as appIssueTitle, INQUIRY_TYPES as APP_INQUIRY_TYPES, REPORT_KINDS } from "../desktop/src/report.js";
 import { ERROR_CODES as APP_ERROR_CODES } from "../desktop/src/analytics.js";
 
 // Run me: node --test relay/*.test.mjs
@@ -750,4 +750,10 @@ test("an inquiry's summary has everything but the details and the computer's twe
   assert.equal(summary.details, undefined);
   assert.ok(Object.values(summary).every((v) => typeof v === "string"), "R2 metadata is strings");
   assert.equal(inquiryObjectKey({ id: "a".repeat(32), now: Date.parse("2026-10-27T03:00:00Z") }), `2026-10/inquiry/${"a".repeat(32)}.json`);
+});
+
+test("an inquiry's kinds are the app's, word for word, and the app's inquiry passes the relay's check", () => {
+  assert.deepEqual([...APP_INQUIRY_TYPES], INQUIRY_TYPES);
+  const built = buildInquiry({ ...INQUIRY, installId: INQUIRY.installId });
+  assert.deepEqual(validateInquiry(JSON.stringify(built)).inquiry, built);
 });

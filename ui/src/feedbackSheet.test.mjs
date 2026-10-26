@@ -1,68 +1,115 @@
 // Run with: node --test ui/src/feedbackSheet.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initFeedbackSheet } from "./feedbackSheet.mjs";
+import { initFeedbackSheet, PRIVACY_URL } from "./feedbackSheet.mjs";
 
-function harness() {
+// The form's elements, the shell's sendInquiry answering `answer`, and the
+// page's language.
+function harness({ answer = { id: "3f9a0c12aa" }, language = "ko" } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) {
       const classes = new Set();
       els.set(id, {
-        value: "", selectedIndex: 0, disabled: false, focused: false, listeners: {},
+        value: "", selectedIndex: 0, checked: false, disabled: false, hidden: false, focused: false, textContent: "", listeners: {},
         classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
         addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); },
-        fire(ev) { for (const fn of this.listeners[ev] || []) fn(); },
-        click() { this.fire("click"); },
+        async fire(ev, e = {}) { for (const fn of this.listeners[ev] || []) await fn(e); },
+        click() { return this.fire("click", { preventDefault() {} }); },
         focus() { this.focused = true; },
       });
     }
     return els.get(id);
   };
-  const urls = [];
-  let version = "";
-  const open = initFeedbackSheet({ $, to: "team@example.com", version: () => version, system: "macOS 15.1.0",
-                                   openUrl: (u) => urls.push(u) });
+  $("feedbackType").value = "problem";
+  const sent = [], urls = [];
+  const open = initFeedbackSheet({ $, language: () => language, openUrl: (u) => urls.push(u),
+                                   send: async (form) => { sent.push(form); return answer; } });
   const type = (id, text) => { $(id).value = text; $(id).fire("input"); };
-  return { $, urls, open, type, setVersion: (v) => { version = v; } };
+  const agree = (on = true) => { $("feedbackConsent").checked = on; $("feedbackConsent").fire("change"); };
+  return { $, sent, urls, open, type, agree };
 }
 
-test("the form opens on its subject, and Send waits for a subject and details", () => {
+test("the form opens on its subject, and Send waits for a subject, details and the consent", () => {
   const h = harness();
   h.open();
   assert.equal(h.$("feedbackOverlay").classList.contains("open"), true);
   assert.equal(h.$("feedbackSubjectInput").focused, true);
   assert.equal(h.$("feedbackSend").disabled, true);
   h.type("feedbackSubjectInput", "Export stops");
-  assert.equal(h.$("feedbackSend").disabled, true, "no details yet");
   h.type("feedbackDetails", "   ");
+  h.agree();
   assert.equal(h.$("feedbackSend").disabled, true, "spaces are not details");
   h.type("feedbackDetails", "It stops at 90%.");
   assert.equal(h.$("feedbackSend").disabled, false);
+  h.agree(false);
+  assert.equal(h.$("feedbackSend").disabled, true, "no consent, no Send");
 });
 
-test("Close keeps the draft; Send mails the form with the app and computer added, then starts empty", () => {
+test("only a bug report says it sends the logs", () => {
   const h = harness();
-  h.setVersion("0.9.1");
   h.open();
-  h.$("feedbackType").value = "Bug report";
+  assert.equal(h.$("feedbackLogsNote").hidden, true);
+  h.$("feedbackType").value = "bug";
+  h.$("feedbackType").fire("change");
+  assert.equal(h.$("feedbackLogsNote").hidden, false);
+});
+
+test("the privacy policy opens in the browser in the page's language", () => {
+  const ko = harness();
+  ko.$("feedbackPrivacy").click();
+  const en = harness({ language: "en" });
+  en.$("feedbackPrivacy").click();
+  assert.deepEqual([...ko.urls, ...en.urls], [PRIVACY_URL.ko, PRIVACY_URL.en]);
+  assert.match(PRIVACY_URL.ko, /^https:\/\/info\.perso\.ai\/policy-perso-saas\/policy\/privacy-policy\/docs\/260619\.html$/);
+  assert.match(PRIVACY_URL.en, /^https:\/\/info\.perso\.ai\/policy-perso-saas\/policy\/privacy-policy-en\/docs\/260619\.html$/);
+});
+
+async function fillAndSend(h) {
+  h.open();
+  h.$("feedbackType").value = "bug";
   h.$("feedbackType").selectedIndex = 1;
   h.type("feedbackSubjectInput", " Export stops ");
   h.type("feedbackDetails", "It stops at 90%.\nEvery time.");
-  h.$("feedbackReplyTo").value = "me@example.com";
-  h.$("feedbackClose").click();
-  assert.equal(h.$("feedbackOverlay").classList.contains("open"), false);
-  assert.deepEqual(h.urls, []);
-  h.open();
-  assert.equal(h.$("feedbackSubjectInput").value, " Export stops ", "the draft is still there");
-  assert.equal(h.$("feedbackSend").disabled, false);
-  h.$("feedbackSend").click();
-  const body = "It stops at 90%.\r\nEvery time.\r\n\r\n---\r\nType: Bug report\r\nReply-to: me@example.com\r\n"
-    + "App: Perso_DesktopApp 0.9.1\r\nComputer: macOS 15.1.0";
-  assert.deepEqual(h.urls, [`mailto:team@example.com?subject=${encodeURIComponent("[Perso_DesktopApp 0.9.1] [Bug report] Export stops")}`
-    + `&body=${encodeURIComponent(body)}`]);
-  assert.equal(h.$("feedbackOverlay").classList.contains("open"), false);
+  h.$("feedbackReplyTo").value = " me@example.com ";
+  h.agree();
+  await h.$("feedbackSend").click();
+}
+
+test("Send hands the shell the form, trimmed, then says the reference and starts empty", async () => {
+  const h = harness();
+  await fillAndSend(h);
+  assert.deepEqual(h.sent, [{ type: "bug", subject: "Export stops", details: "It stops at 90%.\nEvery time.",
+                              replyTo: "me@example.com", locale: "ko" }]);
+  assert.equal(h.$("feedbackStatus").textContent, "Received. Reference 3F9A0C12");
   for (const id of ["feedbackSubjectInput", "feedbackDetails", "feedbackReplyTo"]) assert.equal(h.$(id).value, "", id);
+  assert.equal(h.$("feedbackConsent").checked, false);
   assert.equal(h.$("feedbackType").selectedIndex, 0);
   assert.equal(h.$("feedbackSend").disabled, true);
+  h.open();
+  assert.equal(h.$("feedbackStatus").textContent, "", "the line goes when it opens again");
+});
+
+test("one the shell keeps for later says it goes next launch; one it could not keep stays in the form", async () => {
+  const later = harness({ answer: { queued: true } });
+  await fillAndSend(later);
+  assert.equal(later.$("feedbackStatus").textContent, "Could not send it now. It is saved and goes the next time the app opens.");
+  assert.equal(later.$("feedbackSubjectInput").value, "");
+
+  const lost = harness({ answer: null });
+  await fillAndSend(lost);
+  assert.equal(lost.$("feedbackStatus").textContent, "Could not send it. Try again in a moment.");
+  assert.equal(lost.$("feedbackSubjectInput").value, " Export stops ", "kept to send again");
+  assert.equal(lost.$("feedbackSend").disabled, false);
+});
+
+test("Close keeps the draft and sends nothing", () => {
+  const h = harness();
+  h.open();
+  h.type("feedbackSubjectInput", "Export stops");
+  h.$("feedbackClose").click();
+  assert.equal(h.$("feedbackOverlay").classList.contains("open"), false);
+  assert.deepEqual(h.sent, []);
+  h.open();
+  assert.equal(h.$("feedbackSubjectInput").value, "Export stops");
 });

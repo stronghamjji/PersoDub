@@ -169,8 +169,8 @@ GitHub button, Send feedback, Help documents and release notes open there.
 The production edition, the company build, is Perso_DesktopApp: it dubs on
 the Perso API when nothing is chosen, has no GitHub button or link, opens
 `https://perso.ai/dubbing/desktop-app` for its guide and release notes, sends
-feedback as a mail, and reads its updates only from the address it was built
-with, never from the public releases.
+Customer support's inquiries to the relay (`relay/README.md`), and reads its
+updates only from the address it was built with, never from the public releases.
 
 | | open source | production |
 |---|---|---|
@@ -185,16 +185,15 @@ with, never from the public releases.
 Each edition has its own names and folders, so both can be installed on one
 computer.
 
-The production build takes two values from the environment it is built in.
-Nothing in the repository names them: `scripts/collect-payload.mjs` writes
-the ones that are set into the payload's `build.env`, and the packaged app
-reads them from there. The open-source build ignores both.
+The production build takes one value from the environment it is built in.
+Nothing in the repository names it: `scripts/collect-payload.mjs` writes it,
+when set, into the payload's `build.env`, and the packaged app reads it from
+there. The open-source build ignores it.
 
 | Variable | Used by | What it does | When it is not set |
 |---|---|---|---|
 | `PERSODUB_EDITION` | both | which edition the payload, and so the app, is | the open-source edition |
 | `PERSODUB_UPDATE_URL` | production | the address of the production update feed (an electron-updater generic feed: `latest.yml`, `latest-mac.yml` and the files beside them) | the app never checks for updates, and `shell.log` says so once a launch |
-| `PERSODUB_FEEDBACK_MAIL` | production | the address Customer support's inquiry form writes to | the Home sidebar has no Customer support |
 | `CAMPPLUS_SRC` | both | the path of your `campplus.onnx` | the build stops |
 
 Set them when the payload is collected. `electron-builder.js` reads the
@@ -211,7 +210,7 @@ npx electron-builder --mac dmg zip --arm64 --publish never
 
 # production
 CAMPPLUS_SRC=/path/to/campplus.onnx PERSODUB_EDITION=production \
-  PERSODUB_UPDATE_URL=<production update address> PERSODUB_FEEDBACK_MAIL=<feedback address> \
+  PERSODUB_UPDATE_URL=<production update address> \
   node scripts/collect-payload.mjs
 npx electron-builder --mac dmg zip --arm64 --publish never
 ```
@@ -221,8 +220,8 @@ On Windows, `npm run dist:win` with the same variables builds the installer.
 stops the build. Before a release, check what the packaged app carries:
 `cat dist/mac-arm64/<name>.app/Contents/Resources/payload/EDITION` must print
 the edition you meant, and for production `payload/build.env` must hold the
-update address and the feedback address. A development run (`npm start`, no
-payload) reads all three from its own environment. The Windows release
+update address. A development run (`npm start`, no payload) reads both from
+its own environment. The Windows release
 workflow sets the edition from its input.
 
 ## Project layout

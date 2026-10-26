@@ -7,7 +7,7 @@ import { markCleanExit, takeCleanExit } from "./src/cleanExit.js";
 import { createReporter } from "./src/reporting.js";
 import { analyticsFile, keepDevice } from "./src/analytics.js";
 import { usageCounter, registerUsageIpc } from "./src/usageIpc.js";
-import { createEvents } from "./src/events.js";
+import { createEvents, osName } from "./src/events.js";
 import { createUpdater } from "./src/updateFlow.js";
 import { createBoot } from "./src/bootFlow.js";
 import { registerDownloadIpc } from "./src/downloadsIpc.js";
@@ -37,7 +37,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const payloadDir = findPayloadDir(HERE);
 const edition = readEdition({ payloadDir, env: process.env });
 // ...and what the production build was given when it was made: its update
-// address and feedback mail (src/edition.js readBuildEnv).
+// address (src/edition.js readBuildEnv).
 const built = readBuildEnv({ payloadDir, env: process.env });
 // What the shell's parts share. Set as the app comes up, and read by each part
 // at the moment it needs it -- none of it exists when the parts are made.
@@ -116,7 +116,7 @@ app.whenReady().then(() => {
 
   session.defaultSession.on("will-download", downloads.willDownload);
   ctx.win = createWindow({ app, BrowserWindow, screen, shell, ctx, appDir: HERE, repo: EDITIONS[edition], locale: systemLocale(),
-                          edition, feedbackMail: built.PERSODUB_FEEDBACK_MAIL || "" });
+                          edition });
   // Re-entrancy guard: mashing "Try again" on the error screen used to run
   // overlapping boots, whose duplicate engines then fought over the fixed
   // sidecar port and blocked the next clean launch.
@@ -139,6 +139,10 @@ app.whenReady().then(() => {
   // The page's buttons and screens, every 30 seconds (src/events.js). The
   // answer says whether recording is on, so the page knows whether to record.
   ipcMain.handle("shell:events", (_e, list) => events.take(list));
+  // The production edition's Service inquiry, straight to the relay (src/reporting.js sendInquiry).
+  ipcMain.handle("shell:send-inquiry", (_e, form) => reporter.sendInquiry(form || {}, {
+    kitDir: ctx.bootedKitDir, os: osName(), osVersion: process.getSystemVersion(),
+  }));
   ipcMain.handle("shell:last-report", async () => ({
     mode: ctx.bootedKitDir ? reporter.reportMode(ctx.bootedKitDir) : "off",
     last: reporter.lastReport(),

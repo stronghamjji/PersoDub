@@ -40,12 +40,12 @@ export const PRODUCTS = {
 const DEFAULT_EDITION = "opensource";
 
 // What a production build takes from the packager's environment, which the
-// packaged app cannot read again: where its updates come from, and the
-// address its Send feedback writes to. Nothing in the repository names them;
-// scripts/collect-payload.mjs writes the ones that are set into the payload's
-// build.env, and the open-source build carries none (docs/development.md).
+// packaged app cannot read again: where its updates come from. Nothing in the
+// repository names it; scripts/collect-payload.mjs writes it, when set, into
+// the payload's build.env, and the open-source build carries none
+// (docs/development.md).
 export const BUILD_ENV = "build.env";
-export const BUILD_KEYS = ["PERSODUB_UPDATE_URL", "PERSODUB_FEEDBACK_MAIL"];
+export const BUILD_KEYS = ["PERSODUB_UPDATE_URL"];
 
 /** build.env's text for an edition: the production build's set values, one KEY=value a line. */
 export function buildEnvText(edition, env) {

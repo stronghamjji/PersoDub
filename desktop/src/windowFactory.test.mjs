@@ -11,7 +11,7 @@ import { currentLanguage, useLanguage } from "./i18n.js";
 
 const DESKTOP = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin", edition, feedbackMail } = {}) {
+function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin", edition } = {}) {
   const opened = [];
   const on = {};
   class BrowserWindow {
@@ -33,7 +33,7 @@ function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "
   }
   const win = createWindow({
     app: { isPackaged: true }, BrowserWindow, ctx, appDir: "/app", repo: "owner/PersoDub", locale: "ko", platform,
-    edition, feedbackMail, systemVersion: "15.1.0",
+    edition,
     screen: { getPrimaryDisplay: () => ({ workAreaSize: workArea }) },
     shell: { openExternal: (url) => opened.push(url) },
   });
@@ -56,22 +56,20 @@ test("the window opens at 1280 by 800, or at the screen's size when that is smal
     // The page's GitHub links follow the build's edition (preload.cjs repo).
     // ...and Auto's language follows the computer's (preload.cjs locale).
     // ...and the page is told which system it is on (preload.cjs platform).
-    // ...and its edition, feedback address and system (preload.cjs edition, feedbackMail, system).
+    // ...and its edition (preload.cjs edition).
     additionalArguments: ["--persodub-repo=owner/PersoDub", "--persodub-locale=ko", "--persodub-platform=darwin",
-      "--persodub-edition=opensource", "--persodub-feedback-mail=", "--persodub-system=macOS 15.1.0"] });
+      "--persodub-edition=opensource"] });
   assert.equal(big.title, undefined, "the open-source window takes each page's title");
 });
 
-test("the production window is Perso_DesktopApp whatever its page is called, and tells the page its edition and mail", () => {
-  const { win, on } = setup({ edition: "production", feedbackMail: "team@example.com", platform: "win32" });
+test("the production window is Perso_DesktopApp whatever its page is called, and tells the page its edition", () => {
+  const { win, on } = setup({ edition: "production", platform: "win32" });
   assert.equal(win.options.title, "Perso_DesktopApp");
   let kept = false;
   on["win:page-title-updated"]({ preventDefault: () => { kept = true; } });
   assert.ok(kept, "a page's own title does not replace it");
   const args = win.options.webPreferences.additionalArguments;
-  for (const a of ["--persodub-edition=production", "--persodub-feedback-mail=team@example.com", "--persodub-system=Windows 15.1.0"]) {
-    assert.ok(args.includes(a), a);
-  }
+  assert.ok(args.includes("--persodub-edition=production"));
 });
 
 // Windows hung its white system title bar over the dark app, with the app's own
@@ -151,12 +149,12 @@ test("the window moves only between the app's own pages; anything else goes to t
   assert.deepEqual(opened, ["http://127.0.0.1:5001/", "http://127.0.0.1:5001@evil.com/", "https://example.com/"]);
 });
 
-test("only http(s) and mailto: are ever handed to the system", () => {
+test("only http(s) is ever handed to the system", () => {
   const opened = [];
   for (const url of ["https://a.example/", "HTTP://b.example/", "mailto:team@example.com?subject=x", "file:///x", "ftp://c.example/", "javascript:alert(1)"]) {
     openExternally({ openExternal: (u) => opened.push(u) }, url);
   }
-  assert.deepEqual(opened, ["https://a.example/", "HTTP://b.example/", "mailto:team@example.com?subject=x"]);
+  assert.deepEqual(opened, ["https://a.example/", "HTTP://b.example/"]);
 });
 
 test("each page load reads the language off kit.env again, so a language saved in Settings reaches the shell's dialogs at once", () => {

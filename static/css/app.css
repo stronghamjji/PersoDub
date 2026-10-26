@@ -2452,6 +2452,10 @@
     border: 1px solid var(--control-line); border-radius: var(--radius-sm); background: var(--background);
     font: inherit; color: var(--foreground); }
   #feedbackOverlay textarea:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus-ring); }
+  /* The consent box and its policy link, on one line under the fields. */
+  #feedbackOverlay .feedback-consent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; font-size: var(--font-label); }
+  #feedbackOverlay .feedback-consent input { margin: 0; accent-color: var(--primary); }
+  #feedbackOverlay .feedback-consent a { color: var(--primary-ink); }
   .help-links { margin: 14px 0 0; }
   .help-links a { color: var(--primary-ink); }
   .license-list { font-size: var(--font-label); color: var(--muted-foreground); list-style: none; padding: 0; margin: 0; }

@@ -38,6 +38,29 @@ export const ENGINE_LOG_LINES = 80;
 // where a transcript belongs.
 export const MAX_MESSAGE_CHARS = 500;
 
+// Customer support's Service inquiry (the production edition,
+// ui/src/feedbackSheet.mjs), which reporting.js sends to the relay's /inquiry:
+// its four kinds by the value the form's select sends, and the lengths the
+// form and the relay allow (relay/report-logic.js validateInquiry).
+export const INQUIRY_TYPES = new Set(["bug", "problem", "payment", "other"]);
+export const MAX_SUBJECT_CHARS = 120;
+export const MAX_DETAILS_CHARS = 4000;
+
+/**
+ * The inquiry the relay will be sent, field by field from what the page gave
+ * and what the shell knows, or null when the page gave no kind, subject or
+ * details the form allows. What the person typed is sent as typed: they wrote
+ * it to us, and agreed on the form to its collection.
+ */
+export function buildInquiry({ type, subject, details, replyTo, locale, installId, version, edition, os, osVersion } = {}) {
+  const text = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const inquiry = {
+    type, subject: text(subject, MAX_SUBJECT_CHARS), details: text(details, MAX_DETAILS_CHARS), replyTo: text(replyTo, 254),
+    installId, version, edition, os, osVersion: text(osVersion, 32), locale: text(locale, 5),
+  };
+  return INQUIRY_TYPES.has(type) && inquiry.subject && inquiry.details ? inquiry : null;
+}
+
 /**
  * Should this run send reports?
  *  - "off":   never. A from-source run is always off (a developer's own
