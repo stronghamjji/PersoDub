@@ -3,8 +3,6 @@ import {
   MAX_REPORT_BYTES,
   countSighting,
   dayKey,
-  inquiryObjectKey,
-  inquirySummary,
   issueBody,
   issueTitle,
   labelsFor,
@@ -13,7 +11,6 @@ import {
   newId,
   rateDecision,
   seenAgainText,
-  validateInquiry,
   validateRecord,
   validateReport,
   withLogsLine,
@@ -27,17 +24,14 @@ import { MAX_EVENTS_BYTES, isExcluded, toAmplitude, toGa4, validateEvents } from
 // account, and asking for one loses nine reports in ten. So the app posts here
 // and this posts to GitHub with a token the app never sees.
 //
-// Four ways in, all of them inward:
+// Three ways in, all of them inward:
 //   POST /report            a failure -> a new issue, or "+1" on the one that
 //                           already describes it (same fingerprint), reopened
 //                           when it had been closed as fixed
 //   POST /record            a job that finished (0.8.8) -> kept for the private
 //                           dashboard, never an issue
-//   POST /inquiry           a Service inquiry from the production edition's
-//                           Customer support (0.9.1) -> kept for the private
-//                           dashboard, never an issue
-//   POST /report/<id>/logs  the full logs (gzipped tar) for a report, a
-//                           record or a bug inquiry just made
+//   POST /report/<id>/logs  the full logs (gzipped tar) for a report or a
+//                           record just made
 //   POST /events            the buttons pressed and screens shown (0.9.1) ->
 //                           GA4, and Amplitude once it has a key; kept nowhere
 //
@@ -257,35 +251,6 @@ async function handleRecord(request, env, ctx) {
   return json({ id });
 }
 
-// A Service inquiry (0.9.1): checked (validateInquiry), limited per machine
-// on counts of its own, and kept in the bucket beside the job records for the
-// private dashboard's 문의 page, the details in the object and the rest on it
-// as metadata. No issue, nothing GitHub sees. A bug report's logs follow on
-// the reports' upload route (handleLogs), which is told to expect them for the
-// same week a report's are.
-async function handleInquiry(request, env, ctx) {
-  const text = await request.text();
-  if (text.length > MAX_REPORT_BYTES) return json({ error: "too large" }, 413);
-  const checked = validateInquiry(text);
-  if (!checked.ok) return json({ error: checked.reason }, 400);
-  const { inquiry } = checked;
-  if (!env.LOGS) return json({ error: "no store" }, 501);
-  if (!await withinLimits(request, env, ctx, inquiry.installId, {
-    prefix: "q:", perDay: Number(env.MAX_INQUIRIES_PER_DAY || 10), totalPerDay: Number(env.MAX_INQUIRIES_TOTAL_PER_DAY || 200),
-  })) return json({ error: "rate limited" }, 429);
-
-  const id = newId();
-  const summary = inquirySummary(inquiry);
-  await env.LOGS.put(inquiryObjectKey({ id }), JSON.stringify({ ...summary, details: inquiry.details }), {
-    httpMetadata: { contentType: "application/json" },
-    customMetadata: summary,
-  });
-  if (inquiry.type === "bug") {
-    await env.REPORTS.put(`id:${id}`, JSON.stringify({ inquiry: true, summary }), { expirationTtl: 7 * 24 * 60 * 60 });
-  }
-  return json({ id });
-}
-
 async function handleLogs(request, env, id) {
   const pending = await env.REPORTS.get(`id:${id}`, "json");
   if (!pending) return json({ error: "unknown report" }, 404);
@@ -301,14 +266,12 @@ async function handleLogs(request, env, id) {
   // would be, "<yyyy-mm>/ok/<id>.tar.gz", and that is all it does: there is no
   // issue to name it in.
   const record = !!pending.summary && pending.summary.outcome === "ok";
-  // A bug inquiry's under "inquiry", beside the inquiry itself.
-  const inquiry = !!pending.inquiry;
-  const key = logObjectKey({ fingerprint: record ? "ok" : inquiry ? "inquiry" : pending.fingerprint, id, now });
+  const key = logObjectKey({ fingerprint: record ? "ok" : pending.fingerprint, id, now });
   await env.LOGS.put(key, body, {
     httpMetadata: { contentType: "application/gzip" },
     customMetadata: pending.summary || {},
   });
-  if (record || inquiry) return json({ ok: true });
+  if (record) return json({ ok: true });
   await env.REPORTS.put(`log:${id}`, key, { expirationTtl: 40 * 24 * 60 * 60 });
 
   // The issue was written before the archive arrived, so the line is added to
@@ -367,7 +330,6 @@ export default {
     try {
       if (request.method === "POST" && pathname === "/report") return await handleReport(request, env, ctx);
       if (request.method === "POST" && pathname === "/record") return await handleRecord(request, env, ctx);
-      if (request.method === "POST" && pathname === "/inquiry") return await handleInquiry(request, env, ctx);
       if (request.method === "POST" && pathname === "/events") return await handleEvents(request, env, ctx);
       const upload = /^\/report\/([0-9a-f]{32})\/logs$/.exec(pathname);
       if (request.method === "POST" && upload) return await handleLogs(request, env, upload[1]);

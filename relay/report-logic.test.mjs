@@ -7,9 +7,6 @@ import {
   commentText,
   countSighting,
   dayKey,
-  INQUIRY_TYPES,
-  inquiryObjectKey,
-  inquirySummary,
   issueBody,
   issueTitle,
   labelsFor,
@@ -21,13 +18,12 @@ import {
   rateDecision,
   seenAgainText,
   tallyLine,
-  validateInquiry,
   validateReport,
   withLogsLine,
   withTally,
   scrubMessage,
 } from "./report-logic.js";
-import { buildInquiry, buildReport, collectEnvironment, issueTitle as appIssueTitle, INQUIRY_TYPES as APP_INQUIRY_TYPES, REPORT_KINDS } from "../desktop/src/report.js";
+import { buildReport, collectEnvironment, issueTitle as appIssueTitle, REPORT_KINDS } from "../desktop/src/report.js";
 import { ERROR_CODES as APP_ERROR_CODES } from "../desktop/src/analytics.js";
 
 // Run me: node --test relay/*.test.mjs
@@ -704,56 +700,4 @@ test("a failure's summary says it failed and carries no times", () => {
   const s = logSummary(validateReport(GOOD).report, 72);
   assert.equal(s.outcome, "failed");
   for (const key of Object.values(TIMING_KEYS)) assert.equal(key in s, false, key);
-});
-
-// ---- a Service inquiry (POST /inquiry, 0.9.1) ----------------------------
-
-const INQUIRY = {
-  type: "bug", subject: "  Export stops at 90%  ", details: "Every time.\nOn the second video too.", replyTo: "me@example.com",
-  installId: "0123456789abcdef0123456789abcdef", version: "0.9.1", edition: "production",
-  os: "mac", osVersion: "15.1.0", locale: "ko", extra: "never copied",
-};
-
-test("an inquiry is rebuilt from its own fields, trimmed, and nothing else gets through", () => {
-  const { ok, inquiry } = validateInquiry(JSON.stringify(INQUIRY));
-  assert.equal(ok, true);
-  assert.deepEqual(inquiry, {
-    type: "bug", subject: "Export stops at 90%", details: "Every time.\nOn the second video too.", replyTo: "me@example.com",
-    installId: INQUIRY.installId, version: "0.9.1", edition: "production", os: "mac", osVersion: "15.1.0", locale: "ko",
-  });
-});
-
-test("an inquiry is refused for a kind, subject, details, address, version or id the form never sends", () => {
-  const reason = (over) => validateInquiry({ ...INQUIRY, ...over }).reason;
-  assert.equal(reason({ type: "Bug report" }), "no type");
-  assert.equal(reason({ subject: "   " }), "subject");
-  assert.equal(reason({ subject: "a".repeat(121) }), "subject");
-  assert.equal(reason({ details: "" }), "details");
-  assert.equal(reason({ details: "a".repeat(4001) }), "details");
-  assert.equal(reason({ replyTo: "not an address" }), "reply-to");
-  assert.equal(reason({ version: "" }), "no version");
-  assert.equal(reason({ installId: "nope" }), "no install id");
-  assert.equal(validateInquiry("x".repeat(MAX_REPORT_BYTES + 1)).reason, "too large");
-  assert.deepEqual(INQUIRY_TYPES, ["bug", "problem", "payment", "other"]);
-});
-
-test("an inquiry's address may be left empty, and an unknown edition, system or language is dropped", () => {
-  const { ok, inquiry } = validateInquiry({ ...INQUIRY, replyTo: "", edition: "x", os: "amiga", locale: "../../" });
-  assert.equal(ok, true);
-  assert.deepEqual([inquiry.replyTo, inquiry.edition, inquiry.os, inquiry.locale], ["", "", "", ""]);
-});
-
-test("an inquiry's summary has everything but the details and the computer's twelve characters, under inquiry/", () => {
-  const { inquiry } = validateInquiry(INQUIRY);
-  const summary = inquirySummary(inquiry);
-  assert.equal(summary.device, "0123456789ab");
-  assert.equal(summary.details, undefined);
-  assert.ok(Object.values(summary).every((v) => typeof v === "string"), "R2 metadata is strings");
-  assert.equal(inquiryObjectKey({ id: "a".repeat(32), now: Date.parse("2026-10-27T03:00:00Z") }), `2026-10/inquiry/${"a".repeat(32)}.json`);
-});
-
-test("an inquiry's kinds are the app's, word for word, and the app's inquiry passes the relay's check", () => {
-  assert.deepEqual([...APP_INQUIRY_TYPES], INQUIRY_TYPES);
-  const built = buildInquiry({ ...INQUIRY, installId: INQUIRY.installId });
-  assert.deepEqual(validateInquiry(JSON.stringify(built)).inquiry, built);
 });

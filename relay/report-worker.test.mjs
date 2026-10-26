@@ -132,7 +132,7 @@ const RECORD = {
 // The bucket, as a list of what was put in it.
 function bucket() {
   const stored = [];
-  return { stored, async put(key, body, opts) { stored.push({ key, body, meta: opts.customMetadata }); } };
+  return { stored, async put(key, body, opts) { stored.push({ key, meta: opts.customMetadata }); } };
 }
 
 async function post(path, body, env) {
@@ -242,45 +242,4 @@ test("a batch that does not fit is 400 and one too big is 413, and neither is pa
   assert.deepEqual([bad.status, await bad.json()], [400, { error: "installId" }]);
   assert.equal((await sendEvents(env, "x".repeat(200 * 1024))).status, 413);
   assert.equal(calls.length, 0);
-});
-
-// ---- a Service inquiry (POST /inquiry, 0.9.1) ------------------------------
-
-const INQUIRY = {
-  type: "bug", subject: "Export stops", details: "At 90%, every time.", replyTo: "me@example.com",
-  installId: REPORT.installId, version: "0.9.1", edition: "production", os: "mac", osVersion: "15.1.0", locale: "ko",
-};
-
-test("an inquiry is kept under inquiry/ with its details, a bug's logs beside it, and GitHub never hears of it", async (t) => {
-  const calls = github(t, { number: 106, state: "open", body: "An install failed." });
-  const REPORTS = reports();
-  const LOGS = bucket();
-  const env = { REPORTS, LOGS, GITHUB_REPO: "o/r", GITHUB_TOKEN: "token" };
-
-  const res = await post("/inquiry", JSON.stringify(INQUIRY), env);
-  assert.equal(res.status, 200);
-  const { id } = await res.json();
-  assert.match(id, /^[0-9a-f]{32}$/);
-  assert.equal((await post(`/report/${id}/logs`, new Uint8Array([31, 139, 8, 0]), env)).status, 200);
-
-  assert.deepEqual(calls, [], "no issue, no comment, no label");
-  assert.deepEqual(LOGS.stored.map((o) => o.key.replace(/^\d{4}-\d{2}\//, "")), [`inquiry/${id}.json`, `inquiry/${id}.tar.gz`]);
-  const [kept, logs] = LOGS.stored;
-  assert.deepEqual(JSON.parse(kept.body), { ...kept.meta, details: "At 90%, every time." });
-  assert.deepEqual([kept.meta.type, kept.meta.subject, kept.meta.replyTo, kept.meta.version, kept.meta.os, kept.meta.device],
-    ["bug", "Export stops", "me@example.com", "0.9.1", "mac", REPORT.installId.slice(0, 12)]);
-  assert.deepEqual(logs.meta, kept.meta);
-  assert.ok(![...REPORTS.map.keys()].some((k) => k.startsWith("log:")), "nothing names it for an issue");
-});
-
-test("an inquiry that is not a bug expects no logs, and a bad one or a busy machine is refused", async () => {
-  const REPORTS = reports();
-  const env = { REPORTS, LOGS: bucket(), MAX_INQUIRIES_PER_DAY: "1" };
-  const res = await post("/inquiry", JSON.stringify({ ...INQUIRY, type: "payment" }), env);
-  const { id } = await res.json();
-  assert.equal((await post(`/report/${id}/logs`, new Uint8Array([31, 139, 8, 0]), env)).status, 404);
-  assert.equal((await post("/inquiry", JSON.stringify(INQUIRY), env)).status, 429, "one a day from this machine, here");
-  const bad = await post("/inquiry", JSON.stringify({ ...INQUIRY, subject: "" }), { REPORTS: reports(), LOGS: bucket() });
-  assert.deepEqual([bad.status, await bad.json()], [400, { error: "subject" }]);
-  assert.equal((await post("/inquiry", JSON.stringify(INQUIRY), { REPORTS: reports() })).status, 501, "no bucket, no inquiry");
 });
