@@ -33,7 +33,7 @@ import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
 import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { initFeedbackSheet } from "./feedbackSheet.mjs";
-import { isProduction, productName, feedbackSubject, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
+import { isProduction, productName, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -1447,12 +1447,14 @@ async function reopenDraft(downloadId) {
 
 // The Home sidebar and the cards under the banner (the mockup's first screen,
 // user 2026-09-30): each one opens a way in this page already has.
-// The production edition's Send feedback: a mail to the address it was built
-// with, on the app's version and this computer (ui/src/feedbackSheet.mjs).
+// The production edition's Customer support: a Service inquiry form, mailed
+// to the address it was built with, with the app's version and this computer
+// (ui/src/feedbackSheet.mjs).
 const shellInfo = window.persodubShell || {};
 const openFeedback = isProduction() && shellInfo.feedbackMail ? initFeedbackSheet({
   $, to: shellInfo.feedbackMail,
-  subject: () => feedbackSubject(savedSettings()?.app_version || "", shellInfo.system || ""),
+  version: () => savedSettings()?.app_version || "",
+  system: shellInfo.system || "",
   openUrl: (url) => window.open(url, "_blank", "noopener"),
 }) : null;
 initHomeSidebar({

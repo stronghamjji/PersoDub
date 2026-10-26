@@ -76,12 +76,14 @@ test("the GitHub button opens the repo, perso.ai the workspace link, and Send fe
   ]);
 });
 
-test("the production edition hides the repository button, shows the big logo and sends feedback by its sheet", (t) => {
+test("the production edition hides the repository button, shows the big logo and opens Customer support's form", (t) => {
   const opened = [];
   const h = harness({ production: true, onFeedback: () => opened.push("sheet") });
   t.after(h.log.restore);
   assert.equal(h.$("homeGhName").hidden, true);
   assert.equal(h.$("homePerso").classList.contains("big"), true);
+  assert.equal(h.$("homeFeedbackLabel").dataset.i18n, "Customer support");
+  assert.equal(h.$("homeFeedbackLabel").textContent, "Customer support");
   h.$("homeGhName").fire("click");
   h.$("homeFeedback").fire("click");
   assert.deepEqual(opened, ["sheet"]);
@@ -99,6 +101,7 @@ test("the open-source sidebar keeps its repository button and small logo", (t) =
   t.after(h.log.restore);
   assert.notEqual(h.$("homeGhName").hidden, true);
   assert.equal(h.$("homePerso").classList.contains("big"), false);
+  assert.equal(h.$("homeFeedbackLabel").dataset.i18n, undefined, "Send feedback keeps its name");
 });
 
 test("the four tool items and the four tool cards open the same four ways in", (t) => {

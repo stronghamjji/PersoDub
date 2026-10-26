@@ -3,7 +3,7 @@
 //
 // Owns the sidebar's buttons (#homeGhName, #homePerso, #homeNavDub,
 // #homeNavErase, #homeNavCaptions, #homeNavSave, #homeNavSettings,
-// #homeHelp, #homeFeedback, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
+// #homeHelp, #homeFeedback/#homeFeedbackLabel, #homeWhatsNew/#homeWhatsNewTitle) and the row of cards under
 // the banner (#homeAgentCard with its [data-prompt] chips, #homeDubCard,
 // #homeEraseCard, #homeCaptionsCard, #homeSaveCard). Every one of them opens something the page
 // already has; this file only decides which.
@@ -72,7 +72,7 @@ export function whatsNewTitle(version) {
  * @param {() => void} deps.onHelp        the Help dialog: what each tool does
  * @param {() => Promise<{version?: string}>} deps.loadWhatsNew
  * @param {boolean} [deps.production]     the production edition (ui/src/edition.mjs)
- * @param {(() => void) | null} [deps.onFeedback]  its Send feedback sheet; null when it was built without an address
+ * @param {(() => void) | null} [deps.onFeedback]  its Customer support form; null when it was built without an address
  */
 export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing, onErase,
                                   onCaptions, onSaveVideo, onSettings, onHelp, loadWhatsNew,
@@ -85,6 +85,9 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
   if (production) {
     $("homeGhName").hidden = true;
     $("homePerso").classList.add("big");
+    // ...and Send feedback is Customer support, an inquiry form (owner, 2026-10-27).
+    $("homeFeedbackLabel").dataset.i18n = "Customer support";
+    $("homeFeedbackLabel").textContent = t("Customer support");
     if (onFeedback) on("homeFeedback", onFeedback);
     else $("homeFeedback").hidden = true;
   } else {

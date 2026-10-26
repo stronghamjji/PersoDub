@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isProduction, productName, feedbackSubject, feedbackMailto, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
+import { isProduction, productName, feedbackSubject, feedbackBody, feedbackMailto, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
 
 test("the page is the production edition only when the shell says so", () => {
   assert.equal(isProduction({ edition: "production" }), true);
@@ -15,12 +15,19 @@ test("the production edition is called Perso_DesktopApp, the open-source one Per
   assert.equal(productName(undefined), "PersoDub");
 });
 
-test("the feedback mail names the app, its version and the computer, and has no body", () => {
-  const subject = feedbackSubject("0.9.1", "macOS 15.1.0");
-  assert.equal(subject, "Perso_DesktopApp 0.9.1 · macOS 15.1.0 · 의견/Feedback");
-  const link = feedbackMailto("team@example.com", subject);
-  assert.equal(link, `mailto:team@example.com?subject=${encodeURIComponent(subject)}`);
-  assert.ok(!link.includes("body="));
+test("the inquiry mail's subject names the app and version, the kind and the person's subject", () => {
+  assert.equal(feedbackSubject("0.9.1", "Bug report", "Export stops"), "[Perso_DesktopApp 0.9.1] [Bug report] Export stops");
+});
+
+test("its body is the details, then a rule and what the app adds, in CRLF lines, all encoded in the link", () => {
+  const body = feedbackBody({ details: "It stops at 90%.\nEvery time.", type: "Bug report", replyTo: "me@example.com",
+                              version: "0.9.1", system: "macOS 15.1.0" });
+  assert.equal(body, "It stops at 90%.\r\nEvery time.\r\n\r\n---\r\nType: Bug report\r\nReply-to: me@example.com\r\n"
+    + "App: Perso_DesktopApp 0.9.1\r\nComputer: macOS 15.1.0");
+  const link = feedbackMailto("team@example.com", "[Perso_DesktopApp 0.9.1] [Bug report] A & B?", body);
+  assert.equal(link, "mailto:team@example.com?subject=%5BPerso_DesktopApp%200.9.1%5D%20%5BBug%20report%5D%20A%20%26%20B%3F"
+    + `&body=${encodeURIComponent(body)}`);
+  assert.ok(link.includes("%0D%0A---%0D%0AType%3A%20Bug%20report"));
 });
 
 test("the production links go to Perso's desktop app page", () => {

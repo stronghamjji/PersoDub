@@ -194,7 +194,7 @@ reads them from there. The open-source build ignores both.
 |---|---|---|---|
 | `PERSODUB_EDITION` | both | which edition the payload, and so the app, is | the open-source edition |
 | `PERSODUB_UPDATE_URL` | production | the address of the production update feed (an electron-updater generic feed: `latest.yml`, `latest-mac.yml` and the files beside them) | the app never checks for updates, and `shell.log` says so once a launch |
-| `PERSODUB_FEEDBACK_MAIL` | production | the address Send feedback writes to | the Home sidebar has no Send feedback |
+| `PERSODUB_FEEDBACK_MAIL` | production | the address Customer support's inquiry form writes to | the Home sidebar has no Customer support |
 | `CAMPPLUS_SRC` | both | the path of your `campplus.onnx` | the build stops |
 
 Set them when the payload is collected. `electron-builder.js` reads the

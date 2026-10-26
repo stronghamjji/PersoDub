@@ -1,8 +1,8 @@
 // Which edition the page is in (desktop/src/edition.js), as the shell's
 // preload says (persodubShell.edition). The production edition, the
 // company's build, is Perso_DesktopApp: no GitHub anywhere, Perso's own page
-// for its downloads and guide, and Send feedback as a mail to the address it
-// was built with. A plain browser has no shell and is the open-source page.
+// for its downloads and guide, and Customer support as a mail to the address
+// it was built with. A plain browser has no shell and is the open-source page.
 export const DESKTOP_APP_URL = "https://perso.ai/dubbing/desktop-app";
 
 const shellOf = () => globalThis.window?.persodubShell;
@@ -25,12 +25,20 @@ export function productName(shell = shellOf()) {
   return isProduction(shell) ? "Perso_DesktopApp" : "PersoDub";
 }
 
-/** The feedback mail's subject: the app, its version and the computer. */
-export function feedbackSubject(version, system) {
-  return `Perso_DesktopApp ${version} · ${system} · 의견/Feedback`;
+/** The inquiry mail's subject: the app and its version, the kind of inquiry
+    and the person's own subject. */
+export function feedbackSubject(version, type, subject) {
+  return `[Perso_DesktopApp ${version}] [${type}] ${subject}`;
 }
 
-/** The mailto: link that opens the mail app on that subject, with an empty body. */
-export function feedbackMailto(to, subject) {
-  return `mailto:${to}?subject=${encodeURIComponent(subject)}`;
+/** Its body: what the person wrote, then what the app adds under a rule. The
+    lines end in CRLF, as a mail's do. */
+export function feedbackBody({ details, type, replyTo, version, system }) {
+  return [details.replace(/\r?\n/g, "\r\n"), "", "---", `Type: ${type}`, `Reply-to: ${replyTo}`,
+          `App: Perso_DesktopApp ${version}`, `Computer: ${system}`].join("\r\n");
+}
+
+/** The mailto: link that opens the mail app on that subject and body. */
+export function feedbackMailto(to, subject, body) {
+  return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }

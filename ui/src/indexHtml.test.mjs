@@ -114,6 +114,28 @@ test("there is one dark theme, and its fonts are the app's own", () => {
   assert.match(html, /\.sub-ov-text \{[^}]*font-family: "Apple SD Gothic Neo"/);
 });
 
+// The production edition's Customer support is a Service inquiry form like
+// Perso's own, mailed by the mail app (owner, 2026-10-27); its words in Korean as approved.
+test("Customer support's form asks the kind, a subject, the details and a reply-to address", () => {
+  const html = readPage();
+  assert.match(html, /<span data-i18n id="homeFeedbackLabel">Send feedback<\/span>/);
+  const at = html.indexOf('<div class="modal-overlay" id="feedbackOverlay">');
+  const dialog = html.slice(at, html.indexOf('<div class="modal-overlay"', at + 1));
+  assert.match(dialog, /<h2 data-i18n id="feedbackTitle">Service inquiry<\/h2>/);
+  assert.deepEqual([...dialog.matchAll(/<option value="([^"]+)" data-i18n>\1<\/option>/g)].map((m) => m[1]),
+    ["Problem or inconvenience", "Bug report", "Payment or refund", "Other"]);
+  assert.match(dialog, /<label data-i18n for="feedbackSubjectInput">Subject<\/label><input type="text" id="feedbackSubjectInput" required>/);
+  assert.match(dialog, /<label data-i18n for="feedbackDetails">Details<\/label><textarea id="feedbackDetails" rows="5" required><\/textarea>/);
+  assert.match(dialog, /<label data-i18n for="feedbackReplyTo">Reply-to email<\/label><input type="text" id="feedbackReplyTo" inputmode="email" autocomplete="email">/);
+  assert.match(dialog, /<p data-i18n class="help-where">The app version and your computer are added automatically\.<\/p>/);
+  assert.match(dialog, /<button data-i18n class="btn btn-secondary" id="feedbackClose" type="button">Close<\/button>\s*<button data-i18n class="btn btn-primary" id="feedbackSend" type="button" disabled>Send<\/button>/);
+  assert.ok(!dialog.includes("github"), "no repository link in the production form");
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.deepEqual(["Customer support", "Service inquiry", "Problem or inconvenience", "Bug report", "Payment or refund", "Other",
+                    "Subject", "Details", "Reply-to email", "Close", "Send"].map((k) => ko[k]),
+    ["고객 지원센터", "서비스 문의", "불편사항", "버그 신고", "결제·환불", "기타", "제목", "문의 내용", "답장 받을 이메일", "닫기", "보내기"]);
+});
+
 // The production Home heads with the wordmark alone, white letters on the
 // sidebar's dark, 170px wide and to the left, with no box (owner, 2026-10-27);
 // the open-source one keeps its pale pill.

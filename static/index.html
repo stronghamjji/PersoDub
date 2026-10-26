@@ -163,7 +163,7 @@
           <button class="home-nav" id="homeNavSettings" type="button"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg><span data-i18n>Settings</span></button>
           <div class="home-grow"></div>
           <button class="home-fb" id="homeHelp" type="button"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>Help</button>
-          <button class="home-fb" id="homeFeedback" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span data-i18n>Send feedback</span></button>
+          <button class="home-fb" id="homeFeedback" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span data-i18n id="homeFeedbackLabel">Send feedback</span></button>
           <button class="home-promo" id="homeWhatsNew" type="button"><b id="homeWhatsNewTitle">What&#8217;s new</b></button>
         </aside>
         <div class="home2">
@@ -1017,22 +1017,24 @@
   </div>
 </div>
 
-<!-- Send feedback, the production edition's (ui/src/feedbackSheet.mjs): what
-     the mail carries, then the mail app. The open-source edition's opens the
-     repository's issues instead. -->
+<!-- Customer support, the production edition's (ui/src/feedbackSheet.mjs): a
+     Service inquiry form like Perso's own, sent by the mail app. The
+     open-source edition's Send feedback opens the repository's issues instead. -->
 <div class="modal-overlay" id="feedbackOverlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle" style="max-width: 460px">
-    <div class="modal-head"><h2 data-i18n id="feedbackTitle">Send feedback</h2></div>
+    <div class="modal-head"><h2 data-i18n id="feedbackTitle">Service inquiry</h2></div>
     <div class="modal-body">
       <div class="modal-inner">
-        <p data-i18n>Your mail app opens. The address, the app version and your computer are filled in. Write what happened and send it.</p>
-        <p class="help-where" id="feedbackTo"></p>
-        <p class="help-where" id="feedbackSubject"></p>
+        <div class="field"><label data-i18n for="feedbackType">Inquiry type</label><select id="feedbackType"><option value="Problem or inconvenience" data-i18n>Problem or inconvenience</option><option value="Bug report" data-i18n>Bug report</option><option value="Payment or refund" data-i18n>Payment or refund</option><option value="Other" data-i18n>Other</option></select></div>
+        <div class="field"><label data-i18n for="feedbackSubjectInput">Subject</label><input type="text" id="feedbackSubjectInput" required></div>
+        <div class="field"><label data-i18n for="feedbackDetails">Details</label><textarea id="feedbackDetails" rows="5" required></textarea></div>
+        <div class="field"><label data-i18n for="feedbackReplyTo">Reply-to email</label><input type="text" id="feedbackReplyTo" inputmode="email" autocomplete="email"></div>
+        <p data-i18n class="help-where">The app version and your computer are added automatically.</p>
       </div>
     </div>
     <div class="modal-foot">
       <button data-i18n class="btn btn-secondary" id="feedbackClose" type="button">Close</button>
-      <button data-i18n class="btn btn-primary" id="feedbackWrite" type="button">Write mail</button>
+      <button data-i18n class="btn btn-primary" id="feedbackSend" type="button" disabled>Send</button>
     </div>
   </div>
 </div>
