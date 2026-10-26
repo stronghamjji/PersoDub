@@ -15,7 +15,7 @@
 // With no video yet the tab shows the shared Import block instead; bringing
 // a video in is ui/src/draftImport.mjs, and this file only calls its
 // importSource for the shortcut above.
-import { buildDubFormData, fetchCreditsLeft, saveDownloadParts } from "./dubApi.mjs";
+import { buildDubFormData, saveDownloadParts } from "./dubApi.mjs";
 import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
 import { getDraft, clearDraft, setRanges, keptSeconds, spokenSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { modelInfo } from "./persoModels.mjs";
@@ -60,40 +60,25 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
                                   leftTabsShow, importer, newProject, submitDubStart, setDubRestart,
                                   showDraftTimeline = () => {}, getScreen = () => "done",
                                   removeDraft = () => {}, firstDownloadBytes = () => 0 }) {
-  // What a Perso API dubbing of the kept part costs and what the workspace
-  // has left, beside Start (owner, 2026-10-22). Perso charges the model's
-  // credits a second for the whole seconds spoken: until a script has heard
-  // the video that is at most every second kept, and once one has (a draft
-  // opened by + Add language) about the seconds it heard in the kept parts,
-  // whole seconds as the clock beside it counts them. What is left is what
-  // Settings' workspace list says, asked at most once a minute: it moves
-  // only when credits are spent.
-  const LEFT_FRESH_MS = 60 * 1000;
-  let creditsLeft = null;
-  let leftAskedAt = -Infinity;
+  // What a Perso API dubbing of the kept part costs, beside Start (owner,
+  // 2026-10-22). Perso charges the model's credits a second for the whole
+  // seconds spoken: until a script has heard the video that is at most every
+  // second kept, and once one has (a draft opened by + Add language) about
+  // the seconds it heard in the kept parts, whole seconds as the clock beside
+  // it counts them. What the workspace has left is not said here (owner,
+  // 2026-10-27): the Recharge credits button beside the price is the way to
+  // top up, and it is there whenever Perso API is chosen.
   const number = (n) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
-  // What the kept part costs in credits, or null while nothing prices it.
-  function costOf(d) {
+  function persoCost(d) {
     const { rate } = modelInfo(newProject.persoModel());
     const spoken = spokenSeconds(d);
-    return rate == null || !(keptSeconds(d) > 0) ? null
+    const cost = rate == null || !(keptSeconds(d) > 0) ? null
       : Math.round(Math.floor(spoken ?? keptSeconds(d)) * rate * 10) / 10;
-  }
-  // Credits fall short: none left, or fewer than the price. The foot then
-  // offers the way to top up (draftRechargeLink), before a dubbing that
-  // would only stop halfway for want of them.
-  const creditsShort = (d) => creditsLeft != null && (creditsLeft === 0 || (costOf(d) != null && costOf(d) > creditsLeft));
-  function persoCost(d) {
-    if (Date.now() - leftAskedAt >= LEFT_FRESH_MS) {
-      leftAskedAt = Date.now();
-      fetchCreditsLeft().then((n) => { creditsLeft = n; paintFoot(); });
-    }
-    const cost = costOf(d);
-    const about = spokenSeconds(d) != null;
+    const about = spoken != null;
     const price = cost == null ? ""
       : cost === 1 ? (about ? t("about {n} credit", { n: 1 }) : t("up to {n} credit", { n: 1 }))
       : about ? t("about {n} credits", { n: number(cost) }) : t("up to {n} credits", { n: number(cost) });
-    return [price, creditsLeft == null ? "" : t("{n} left", { n: number(creditsLeft) })].filter(Boolean);
+    return price ? [price] : [];
   }
 
   // The Dubbing tab's three faces: the Import block with no video yet (the
@@ -139,8 +124,9 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     const first = firstDownloadBytes();
     $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality }),
       ...(cloud ? persoCost(d) : first ? [t("{size} GB the first time", { size: gb(first) })] : [])].join(" · ");
+    // The way to top up, whenever a Perso dubbing is what is priced.
     const recharge = $("draftRechargeLink");
-    recharge.hidden = !(cloud && creditsShort(d));
+    recharge.hidden = !cloud;
     const link = savedSettings() && savedSettings().perso_recharge_link;
     if (link) recharge.href = link;
   }

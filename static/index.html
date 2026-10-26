@@ -345,8 +345,8 @@
                 <div class="form-error" id="draftError"></div>
                 <div class="draft-foot">
                   <span id="draftFootLabel"></span>
-                  <!-- Shown when the workspace's credits fall short of the price (ui/src/draftSetup.mjs paintFoot). -->
-                  <a class="settings-link" id="draftRechargeLink" href="https://perso.ai/en/workspace/space-settings?tab=Subscription" target="_blank" rel="noopener" data-i18n hidden>Recharge credits…</a>
+                  <!-- Beside a Perso dubbing's price, whenever Perso API is chosen (ui/src/draftSetup.mjs paintFoot). -->
+                  <a class="btn btn-outline btn-sm" id="draftRechargeLink" href="https://perso.ai/en/workspace/space-settings?tab=Subscription" target="_blank" rel="noopener" data-i18n hidden>Recharge credits</a>
                   <button data-i18n class="btn btn-primary" id="draftStartBtn" type="button">Start dubbing</button>
                 </div>
               </div>
@@ -1191,7 +1191,7 @@
             <div data-i18n class="job-notice danger" id="persoSpaceWarning" style="display:none">
               This workspace has 0 credits left. Perso dubbing will fail until it
               is recharged. Pick another workspace, or use Whisper (free, offline).</div>
-            <a class="settings-link" id="persoRechargeLink" href="https://perso.ai/en/workspace/space-settings?tab=Subscription" target="_blank" rel="noopener" data-i18n>Recharge credits…</a>
+            <a class="btn btn-outline btn-sm" id="persoRechargeLink" href="https://perso.ai/en/workspace/space-settings?tab=Subscription" target="_blank" rel="noopener" data-i18n style="margin-top:8px;display:inline-flex">Recharge credits</a>
           </div>
         </div>
         <div class="set-row">
