@@ -159,7 +159,13 @@ test("the list is read with a time limit, both languages kept for the page to pi
 test("a list that cannot be read is none, and the window keeps the release's own notes", async () => {
   const { lines, log } = shellLines();
   // No answer: the limit ends the wait (five seconds in the app, a moment here).
-  const silent = (url, { signal }) => new Promise((ok, no) => signal.addEventListener("abort", () => no(signal.reason)));
+  // The wait is held open by a timer of its own: AbortSignal.timeout's keeps
+  // nothing alive, and with nothing else to do Node 22's test run ended
+  // before it fired (CI, 2026-10-26).
+  const silent = (url, { signal }) => new Promise((ok, no) => {
+    const held = setTimeout(() => {}, 1000);
+    signal.addEventListener("abort", () => { clearTimeout(held); no(signal.reason); });
+  });
   assert.equal(await readWhatsNew(NOTES_URL, { fetch: silent, log, timeoutMs: 20 }), null);
   const answers = [
     async () => ({ ok: false, status: 404, text: async () => "404: Not Found" }),    // no such file at that tag
