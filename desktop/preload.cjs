@@ -74,6 +74,10 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // likeliest to fail on someone else's machine, and it was the one kind of
   // failure that sent nothing at all (user, 2026-09-11).
   countErase: (status, detail, job) => ipcRenderer.send("shell:count-erase", { status, detail, job }),
+  // The buttons pressed and screens shown, as names the page made from its
+  // own markup (ui/src/events.mjs); the shell checks them and sends them
+  // (src/events.js). Resolves to {on, kept, sent, recent}; [] only asks.
+  sendEvents: (list) => ipcRenderer.invoke("shell:events", list),
   // Automatic failure reports (src/report.js). The page neither builds nor
   // sends one -- it only gets to show what happened: the shell announces a
   // report the moment it lands, and getLastReport answers for a page that

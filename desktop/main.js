@@ -7,6 +7,7 @@ import { markCleanExit, takeCleanExit } from "./src/cleanExit.js";
 import { createReporter } from "./src/reporting.js";
 import { analyticsFile, keepDevice } from "./src/analytics.js";
 import { usageCounter, registerUsageIpc } from "./src/usageIpc.js";
+import { createEvents } from "./src/events.js";
 import { createUpdater } from "./src/updateFlow.js";
 import { createBoot, findPayloadDir } from "./src/bootFlow.js";
 import { registerDownloadIpc } from "./src/downloadsIpc.js";
@@ -47,6 +48,9 @@ const ctx = {
   // page that arrives after the check (boot) or reloads mid-download still
   // shows the right pill. Null until an update is found.
   updateState: null,
+  // The signed-in Perso account's id, for the button events (src/events.js).
+  // Empty until the production edition's sign-in fills it.
+  userId: "",
 };
 
 // Fired on the FIRST instance when a second launch is attempted; bring the
@@ -75,6 +79,7 @@ function shellLog(line, level = "INFO") {
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog });
 const countUsage = usageCounter(app);
+const events = createEvents({ app, ctx, edition, shellLog });
 const updater = createUpdater({ app, dialog, ctx, shellLog, edition });
 const boot = createBoot({
   app, ctx, appDir: HERE, edition, shellLog, countUsage,
@@ -126,6 +131,9 @@ app.whenReady().then(() => {
   // The update as last announced (src/updateFlow.js), for a page that started
   // listening after the announcement went out.
   ipcMain.handle("shell:last-update-state", () => ctx.updateState);
+  // The page's buttons and screens, every 30 seconds (src/events.js). The
+  // answer says whether recording is on, so the page knows whether to record.
+  ipcMain.handle("shell:events", (_e, list) => events.take(list));
   ipcMain.handle("shell:last-report", async () => ({
     mode: ctx.bootedKitDir ? reporter.reportMode(ctx.bootedKitDir) : "off",
     last: reporter.lastReport(),
