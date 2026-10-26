@@ -7,11 +7,11 @@
 import { copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PRODUCTS, readEdition } from "./src/edition.js";
+import { PRODUCTS, readBuildEnv, readEdition } from "./src/edition.js";
 
 const PAYLOAD = join(dirname(fileURLToPath(import.meta.url)), "resources", "payload");
 
-export function builderConfig(edition) {
+export function builderConfig(edition, built = {}) {
   const { name, appId, pkg } = PRODUCTS[edition];
   return {
     appId,
@@ -38,7 +38,12 @@ export function builderConfig(edition) {
       artifactName: "${productName}-Setup-${version}.${ext}",
     },
     nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },
-    publish: [{ provider: "github", owner: "stronghamjji", repo: "PersoDub" }],
+    // Where latest.yml and app-update.yml say the updates are: the public
+    // releases for the open-source build, the production build's own address
+    // (src/edition.js BUILD_KEYS), and none when it was built without one.
+    publish: edition === "production"
+      ? (built.PERSODUB_UPDATE_URL ? [{ provider: "generic", url: built.PERSODUB_UPDATE_URL }] : null)
+      : [{ provider: "github", owner: "stronghamjji", repo: "PersoDub" }],
     // The dmg again as <name>-mac.dmg, the name with no version in it that a
     // download button links to.
     afterAllArtifactBuild: ({ artifactPaths }) => artifactPaths.filter((p) => p.endsWith("-arm64.dmg")).map((p) => {
@@ -49,4 +54,4 @@ export function builderConfig(edition) {
   };
 }
 
-export default builderConfig(readEdition({ payloadDir: PAYLOAD, env: process.env }));
+export default builderConfig(readEdition({ payloadDir: PAYLOAD, env: process.env }), readBuildEnv({ payloadDir: PAYLOAD, env: {} }));

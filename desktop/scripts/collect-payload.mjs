@@ -4,7 +4,7 @@ import { cpSync, rmSync, mkdirSync, existsSync, readFileSync, writeFileSync } fr
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { EDITIONS, buildEdition } from "../src/edition.js";
+import { EDITIONS, BUILD_ENV, BUILD_KEYS, buildEdition, buildEnvText } from "../src/edition.js";
 
 const DESKTOP = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO = dirname(DESKTOP);
@@ -59,7 +59,15 @@ function main() {
   // EDITION carries the edition into the packaged app, where the environment
   // it runs in cannot change it (src/edition.js readEdition).
   writeFileSync(join(OUT, "EDITION"), edition);
-  console.log(`payload: ${edition} edition, ${EDITIONS[edition]}`);
+  console.log(`payload: ${edition} edition, ${EDITIONS[edition] || "no repository"}`);
+  // The production build's update address and feedback mail, from this
+  // command's environment (src/edition.js BUILD_KEYS); a production build
+  // without PERSODUB_UPDATE_URL never checks for updates.
+  const built = buildEnvText(edition, process.env);
+  if (built) writeFileSync(join(OUT, BUILD_ENV), built);
+  if (edition === "production") {
+    for (const k of BUILD_KEYS) console.log(`payload: ${k} ${process.env[k] ? "set" : "NOT set"}`);
+  }
 
   console.log(`payload ready at ${OUT}`);
 }

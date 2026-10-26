@@ -12,7 +12,7 @@ import { createBoot } from "./src/bootFlow.js";
 import { registerDownloadIpc } from "./src/downloadsIpc.js";
 import { registerPackIpc } from "./src/packIpc.js";
 import { createWindow } from "./src/windowFactory.js";
-import { EDITIONS, readEdition, findPayloadDir } from "./src/edition.js";
+import { EDITIONS, readEdition, readBuildEnv, findPayloadDir } from "./src/edition.js";
 import { useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
 import { writeTimeline } from "./src/timeline.js";
@@ -33,7 +33,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // Which build this is, and so which repository the updates come from and the
 // page's GitHub links open (src/edition.js). Read once, from the same payload
 // the boot installs from; the window is made before the boot runs.
-const edition = readEdition({ payloadDir: findPayloadDir(HERE), env: process.env });
+const payloadDir = findPayloadDir(HERE);
+const edition = readEdition({ payloadDir, env: process.env });
+// ...and what the production build was given when it was made: its update
+// address and feedback mail (src/edition.js readBuildEnv).
+const built = readBuildEnv({ payloadDir, env: process.env });
 // What the shell's parts share. Set as the app comes up, and read by each part
 // at the moment it needs it -- none of it exists when the parts are made.
 const ctx = {
@@ -75,7 +79,7 @@ function shellLog(line, level = "INFO") {
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog });
 const countUsage = usageCounter(app);
-const updater = createUpdater({ app, dialog, ctx, shellLog, edition });
+const updater = createUpdater({ app, dialog, ctx, shellLog, edition, built });
 const boot = createBoot({
   app, ctx, appDir: HERE, edition, shellLog, countUsage,
   sendReport: reporter.sendReport, flushReports: reporter.flushReports, startUpdater: updater.startUpdater,
@@ -95,7 +99,7 @@ app.whenReady().then(() => {
   // any future bug report) reads it instead of guessing from filenames.
   shellLog(`PERSODUB_VERSION ${app.getVersion()}`);
   // ...and the edition, so a support log says which repository this build updates from.
-  shellLog(`PERSODUB_EDITION ${edition} ${EDITIONS[edition]}`);
+  shellLog(`PERSODUB_EDITION ${edition} ${EDITIONS[edition] || "no repository"}`);
 
   // This computer's random id, made on the first launch and kept: every report
   // and job record names the computer by it (src/analytics.js keepDevice).

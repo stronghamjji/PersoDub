@@ -23,11 +23,17 @@ test("dev / from-source runs never update themselves", () => {
   assert.equal(resolveUpdateMode({ isPackaged: false, env: {} }), "off");
 });
 
-test("the default feed is the edition's own GitHub Releases", () => {
-  // The bundled app-update.yml names one repository for both editions, so the
-  // feed is always set from the edition (edition.js).
-  assert.deepEqual(resolveFeed({}, "production"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
+test("the open-source feed is its GitHub Releases", () => {
   assert.deepEqual(resolveFeed({}, "opensource"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
+});
+
+test("the production feed is only the address it was built with, and none without one", () => {
+  // Never the public releases: they turned a production install into an
+  // open-source one (0.8.3).
+  assert.deepEqual(resolveFeed({}, "production", { PERSODUB_UPDATE_URL: "https://updates.example/prod" }),
+    { provider: "generic", url: "https://updates.example/prod" });
+  assert.equal(resolveFeed({}, "production", {}), null);
+  assert.equal(resolveFeed({}, "production"), null);
 });
 
 test("PERSODUB_UPDATE_URL points the updater at a test feed, whatever the edition", () => {

@@ -32,3 +32,11 @@ test("the arm64 dmg is copied again as <name>-mac.dmg, and nothing else is", () 
   assert.equal(readFileSync(out[0], "utf8"), "dmg");
   assert.deepEqual(builderConfig("opensource").afterAllArtifactBuild({ artifactPaths: [zip] }), []);
 });
+
+test("the production build's publish entry is its own update address, or none", () => {
+  assert.deepEqual(builderConfig("production", { PERSODUB_UPDATE_URL: "https://updates.example/prod" }).publish,
+    [{ provider: "generic", url: "https://updates.example/prod" }]);
+  assert.equal(builderConfig("production", {}).publish, null);
+  assert.deepEqual(builderConfig("opensource", { PERSODUB_UPDATE_URL: "https://updates.example/prod" }).publish,
+    [{ provider: "github", owner: "stronghamjji", repo: "PersoDub" }]);
+});

@@ -28,14 +28,17 @@ export function resolveUpdateMode({ isPackaged, env }) {
 export const INSTALL_ON_QUIT = false;
 
 /**
- * Which feed to read: the edition's GitHub Releases (edition.js), set at run
- * time rather than taken from the bundled app-update.yml, so one build.publish
- * entry serves both editions. A PERSODUB_UPDATE_URL override points at a
- * generic HTTP feed instead -- how the update flow is tested against a local
- * server without publishing anything.
+ * Which feed to read: the open-source edition's GitHub Releases (edition.js),
+ * set at run time rather than taken from the bundled app-update.yml. A
+ * PERSODUB_UPDATE_URL points at a generic HTTP feed instead: from the
+ * environment, how the update flow is tested against a local server without
+ * publishing anything, or from the production build's build.env
+ * (edition.js readBuildEnv), the only feed that edition has. Null for a
+ * production build made without one: it does not check for updates, and never
+ * reads the public releases (0.8.3).
  */
-export function resolveFeed(env, edition) {
-  const url = env.PERSODUB_UPDATE_URL;
+export function resolveFeed(env, edition, built = {}) {
+  const url = env.PERSODUB_UPDATE_URL || built.PERSODUB_UPDATE_URL;
   if (url) return { provider: "generic", url };
   return editionFeed(edition);
 }

@@ -16,8 +16,9 @@ import { homeText, secondsSince, sizeText, urlText } from "./logLine.js";
 //
 // ctx.updateState is the update as last announced, which the window re-sends
 // on every page load; ctx.engines and ctx.win are read when they are needed.
-// `edition` is the build's (edition.js), whose repository the updates come from.
-export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
+// `edition` is the build's (edition.js), whose repository the updates come
+// from, and `built` its build.env (edition.js readBuildEnv).
+export function createUpdater({ app, dialog, ctx, shellLog, edition, built }) {
   let updaterStarted = false;
   let updateDownloaded = false;
 
@@ -33,6 +34,11 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
       shellLog(`UPDATE CHECK OFF: ${app.isPackaged ? "PERSODUB_DISABLE_UPDATE_CHECK=1" : "not a packaged app"}`);
       return;
     }
+    const feed = resolveFeed(process.env, edition, built);
+    if (!feed) {
+      shellLog("UPDATE CHECK OFF: this production build has no update address (PERSODUB_UPDATE_URL was not set when it was built)");
+      return;
+    }
     // Whether the error event below has said what went wrong: a failed check
     // also rejects checkForUpdates, and the catch at the end must not say it twice.
     let reported = false;
@@ -45,7 +51,6 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
     try {
       const { default: electronUpdater } = await import("electron-updater");
       const { autoUpdater } = electronUpdater;
-      const feed = resolveFeed(process.env, edition);
       autoUpdater.setFeedURL(feed);
       // What electron-updater's own requests met, each once: the address and
       // what answered it, a redirect and where it led (GitHub hands a release

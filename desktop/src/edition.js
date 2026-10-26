@@ -2,13 +2,16 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { KIT_ENV, parseEnvFile } from "./kitEnv.js";
 
-// One codebase, two builds, one repository. Both editions read their updates
-// from the public repository, and open the page's GitHub links, Help
-// documents and release notes there. What the edition decides is where a dub
-// runs when nothing is chosen: this computer for the open-source edition (the
-// default), the Perso API for the production edition, the company's build
-// (app/setup.py; orchestrator.js startEngines hands it to the backend), and
-// what the app is called (PRODUCTS below).
+// One codebase, two builds, one repository. The open-source edition reads its
+// updates from the public repository, and opens the page's GitHub links, Help
+// documents and release notes there. The production edition, the company's
+// build, has no repository: its updates come only from the address it was
+// built with (build.env below; updater.js resolveFeed), never from the public
+// releases, which once turned a production install into an open-source one
+// (0.8.3). The edition also decides where a dub runs when nothing is chosen:
+// this computer for the open-source edition (the default), the Perso API for
+// the production edition (app/setup.py; orchestrator.js startEngines hands it
+// to the backend), and what the app is called (PRODUCTS below).
 //
 // The packager picks the edition with PERSODUB_EDITION when the payload is
 // collected (scripts/collect-payload.mjs writes it into the payload's EDITION
@@ -22,7 +25,7 @@ import { KIT_ENV, parseEnvFile } from "./kitEnv.js";
 // edition (updater.js resolveFeed).
 export const EDITIONS = {
   opensource: "stronghamjji/PersoDub",
-  production: "stronghamjji/PersoDub",
+  production: "",
 };
 
 // What each edition is called, and so where it keeps its files: `name` is the
@@ -35,6 +38,27 @@ export const PRODUCTS = {
   production: { name: "Perso_DesktopApp", appId: "ai.perso.desktopapp", pkg: "perso-desktopapp-shell" },
 };
 const DEFAULT_EDITION = "opensource";
+
+// What a production build takes from the packager's environment, which the
+// packaged app cannot read again: where its updates come from, and the
+// address its Send feedback writes to. Nothing in the repository names them;
+// scripts/collect-payload.mjs writes the ones that are set into the payload's
+// build.env, and the open-source build carries none (docs/development.md).
+export const BUILD_ENV = "build.env";
+export const BUILD_KEYS = ["PERSODUB_UPDATE_URL", "PERSODUB_FEEDBACK_MAIL"];
+
+/** build.env's text for an edition: the production build's set values, one KEY=value a line. */
+export function buildEnvText(edition, env) {
+  if (edition !== "production") return "";
+  return BUILD_KEYS.filter((k) => env[k]).map((k) => `${k}=${env[k]}\n`).join("");
+}
+
+/** The running app's build values: the payload's build.env, or, with no
+ *  payload (npm start), the same keys from the environment. */
+export function readBuildEnv({ payloadDir, env }) {
+  if (!payloadDir) return Object.fromEntries(BUILD_KEYS.filter((k) => env[k]).map((k) => [k, env[k]]));
+  try { return parseEnvFile(readFileSync(join(payloadDir, BUILD_ENV), "utf8")); } catch { return {}; }
+}
 
 // The build's edition. An unknown name stops the build, so a typo never ships
 // an app that updates from the wrong repository; unset or empty is the default.
@@ -69,13 +93,15 @@ export function readEdition({ payloadDir, env }) {
   return Object.hasOwn(EDITIONS, name) ? name : DEFAULT_EDITION;
 }
 
-// electron-updater's feed for an edition's GitHub Releases.
+// electron-updater's feed for an edition's GitHub Releases; null for an
+// edition with no repository.
 export function editionFeed(edition) {
+  if (!EDITIONS[edition]) return null;
   const [owner, repo] = EDITIONS[edition].split("/");
   return { provider: "github", owner, repo };
 }
 
-// The edition a kit runs as. Every packaged app updates from the public
+// The edition a kit runs as. Every packaged app updated from the public
 // releases, which are the open-source build, so a production install turned
 // into an open-source one at its first update (2026-10-14). The kit now
 // remembers the edition it first ran as in kit.env, next to the user's other

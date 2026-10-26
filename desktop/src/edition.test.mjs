@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { EDITIONS, buildEdition, readEdition, editionFeed, rememberedEdition, kitEdition, editionLine } from "./edition.js";
+import { EDITIONS, buildEdition, readEdition, editionFeed, rememberedEdition, kitEdition, editionLine, buildEnvText, readBuildEnv } from "./edition.js";
 
 // A payload folder, with an EDITION file when `edition` is given.
 function payload(edition) {
@@ -14,8 +14,8 @@ function payload(edition) {
   return dir;
 }
 
-test("both editions name the public repository", () => {
-  assert.deepEqual(EDITIONS, { opensource: "stronghamjji/PersoDub", production: "stronghamjji/PersoDub" });
+test("only the open-source edition names a repository", () => {
+  assert.deepEqual(EDITIONS, { opensource: "stronghamjji/PersoDub", production: "" });
 });
 
 test("the build takes a known edition, and unset or empty is the open-source one", () => {
@@ -52,9 +52,24 @@ test("an unknown edition at run time is the open-source one", () => {
   assert.equal(readEdition({ payloadDir: null, env: { PERSODUB_EDITION: "constructor" } }), "opensource");
 });
 
-test("each edition's update feed is its repository's GitHub Releases", () => {
-  assert.deepEqual(editionFeed("production"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
+test("the open-source edition's update feed is its repository's GitHub Releases, and production has none there", () => {
   assert.deepEqual(editionFeed("opensource"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
+  assert.equal(editionFeed("production"), null);
+});
+
+test("build.env carries the production build's set values only", () => {
+  const env = { PERSODUB_UPDATE_URL: "https://updates.example/", PERSODUB_FEEDBACK_MAIL: "", OTHER: "x" };
+  assert.equal(buildEnvText("production", env), "PERSODUB_UPDATE_URL=https://updates.example/\n");
+  assert.equal(buildEnvText("opensource", env), "");
+});
+
+test("the running app reads its build values from the payload's build.env, or the environment without a payload", () => {
+  const dir = payload("production");
+  writeFileSync(join(dir, "build.env"), "PERSODUB_FEEDBACK_MAIL=team@example.com\n");
+  const env = { PERSODUB_UPDATE_URL: "https://elsewhere.example/" };
+  assert.deepEqual(readBuildEnv({ payloadDir: dir, env }), { PERSODUB_FEEDBACK_MAIL: "team@example.com" });
+  assert.deepEqual(readBuildEnv({ payloadDir: payload("opensource"), env }), {});
+  assert.deepEqual(readBuildEnv({ payloadDir: null, env: { ...env, OTHER: "x" } }), env);
 });
 
 
