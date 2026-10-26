@@ -19,6 +19,10 @@ import { initEscapeKey } from "./escapeKey.mjs";
 // Escape closes what is on top, and one menu is open at a time
 // (ui/src/escapeKey.mjs). First, so it is asked before every dialog's own listener.
 initEscapeKey();
+import { startEvents } from "./events.mjs";
+// The buttons pressed and screens shown, while Settings > Privacy allows it
+// (ui/src/events.mjs). Early, so no press goes unseen.
+startEvents();
 import { initSettingsUi } from "./settingsDialog.mjs";
 import { initWhatsNew } from "./whatsNew.mjs";
 import { initKeyWindow } from "./keyWindow.mjs";

@@ -25,6 +25,8 @@
   "All lines": "All lines",
   "All {n} languages are deleted. This can’t be undone.": "All {n} languages are deleted. This can’t be undone.",
   "Anonymous usage counts": "Anonymous usage counts",
+  "Button and screen use": "Button and screen use",
+  "Sends only the names of the buttons you press and the screens you open, never what you type, your files or links.": "Sends only the names of the buttons you press and the screens you open, never what you type, your files or links.",
   "Area": "Area",
   "Ask anything": "Ask anything",
   "Ask for a fix": "Ask for a fix",

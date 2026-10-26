@@ -10,6 +10,9 @@ way as the usage-count worker `persodub-count`.
 - From 0.8.8 the app also sends the record of a job that finished (`POST /record`, then its
   logs the same way). Its logs go into the bucket under `<yyyy-mm>/ok/<id>.tar.gz` for the
   private dashboard, and GitHub never hears of it.
+- From 0.9.1 the app sends the buttons pressed and the screens shown (`POST /events`) while
+  the Settings switch for them is on. The relay passes them to GA4, and to Amplitude once
+  it has a key, and keeps nothing itself. See "Button and screen events" below.
 
 ## Files
 
@@ -19,6 +22,8 @@ way as the usage-count worker `persodub-count`.
 | `report-logic.js` | Decisions only: checks, labels, body, signing, rate limits |
 | `report-logic.test.mjs` | Tests for those decisions |
 | `report-worker.test.mjs` | Tests for the handler, with stand-ins for KV and GitHub |
+| `events-logic.js` | `POST /events` decisions: what a batch may hold, excluded computers, the GA4 and Amplitude bodies |
+| `events-logic.test.mjs` | Tests for those decisions |
 
 Tests, from the repository root: `node --test relay/*.test.mjs`
 
@@ -79,6 +84,16 @@ Worker → **Settings** → **Variables and Secrets**
 | Variable | `MAX_RECORDS_PER_DAY` | `50`: finished jobs one machine (and one address) may send per day, counted apart from the reports |
 | Variable | `MAX_RECORDS_TOTAL_PER_DAY` | `500`: the day's total of finished jobs |
 
+For `POST /events` (all optional: without them the route answers 204 and passes nothing on)
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `GA4_MEASUREMENT_ID` | the GA4 web stream's measurement id, `G-...` |
+| Secret | `GA4_API_SECRET` | Admin → Data streams → the stream → *Measurement Protocol API secrets* → Create |
+| Variable | `GA4_DEBUG` | `1` marks every event for GA4 **DebugView**; remove it once checked |
+| Secret | `AMPLITUDE_API_KEY` | the Amplitude project's API key; set it and the same events go there too |
+| Secret | `EXCLUDED_DEVICES` | the owner's computers, the same value the dashboard has: install ids or their first 12 characters, comma separated |
+
 Changing `LOG_SIGNING_KEY` breaks every log link handed out before it (including the
 links left in issues). Keep that in mind if it ever has to change.
 
@@ -118,6 +133,41 @@ curl -s -X POST https://persodub-report.persodub.workers.dev/report \
 ```
 
 Close the test issue once you have checked it.
+
+## Button and screen events
+
+What one request carries (`desktop/src/events.js` builds it, at most 500 events):
+
+```json
+{"installId":"<32 hex>","userId":"","version":"0.9.1","edition":"production","os":"mac",
+ "osVersion":"15.5","sessionId":1793000000000,
+ "events":[{"name":"app_screen","screen":"home","t":1793000001000},
+           {"name":"home_nav_settings","screen":"home","t":1793000002000}]}
+```
+
+`name` is an element's id (or its English label key) in snake case, never what a person
+typed; `app_screen` means the screen changed to `screen`. GA4 and Amplitude each get two
+event names: `app_screen`, and `button_press` with the button in the `button` parameter.
+`installId` is the client id (GA4) and device id (Amplitude); `userId` becomes `user_id`
+once the production edition signs in. Register `button`, `screen`, `edition` and
+`app_version` as custom dimensions in GA4 to chart them.
+
+Checking it in DebugView:
+
+```sh
+wrangler secret put GA4_MEASUREMENT_ID   # G-...
+wrangler secret put GA4_API_SECRET
+# GA4_DEBUG=1 under vars in wrangler.jsonc (or the dashboard), then
+wrangler deploy
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://persodub-report.persodub.workers.dev/events \
+  -H 'content-type: application/json' \
+  -d "{\"installId\":\"00000000000000000000000000000001\",\"version\":\"0.9.1\",\"edition\":\"production\",
+       \"os\":\"mac\",\"sessionId\":$(date +%s)000,
+       \"events\":[{\"name\":\"relay_check\",\"screen\":\"home\",\"t\":$(date +%s)000}]}"
+# -> 204; GA4 → Admin → DebugView shows button_press with button=relay_check within a minute
+```
+
+Then take `GA4_DEBUG` out and deploy again.
 
 ## What it never does
 

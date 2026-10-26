@@ -1264,6 +1264,16 @@
           </div>
         </div>
         <div class="set-row">
+          <label data-i18n for="eventsToggle">Button and screen use</label>
+          <div class="set-ctl">
+            <!-- Checked from GET /api/settings' events_enabled: with nothing
+                 saved, on in the production edition and off in the
+                 open-source one (desktop/src/events.js). -->
+            <input type="checkbox" class="switch" id="eventsToggle">
+            <div class="settings-hint" id="eventsHint"><span data-i18n>Sends only the names of the buttons you press and the screens you open, never what you type, your files or links.</span></div>
+          </div>
+        </div>
+        <div class="set-row">
           <label data-i18n for="reportsToggle">Send job logs</label>
           <div class="set-ctl">
             <input type="checkbox" class="switch" id="reportsToggle" checked>

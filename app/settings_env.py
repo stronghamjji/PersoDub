@@ -28,6 +28,11 @@ ANALYTICS_OFF_KEY = "PERSODUB_NO_ANALYTICS"
 # someone who does not want their logs sent still shows up in the count.
 REPORTS_OFF_KEY = "PERSODUB_NO_REPORTS"
 
+# Whether the buttons pressed and screens shown are recorded and sent
+# (desktop/src/events.js reads the same line before every batch). "1" or "0";
+# with no line the edition decides: on for production, off for open source.
+EVENTS_KEY = "PERSODUB_EVENTS"
+
 # The app's language ("auto", "en" or "ko"), from Settings > About. One line
 # for all three parts: the engine (app/i18n.py), the page (through
 # GET /api/settings) and the desktop shell (desktop/src/i18n.js) all read it.
@@ -226,6 +231,21 @@ def write_reports_off(off: bool) -> None:
     """Turn automatic failure reports off, or back on. Like the counts' switch,
     it takes effect on the next failure rather than the next restart."""
     _write_env({REPORTS_OFF_KEY: "1" if off else "0"})
+
+
+def read_events_enabled() -> bool:
+    """Whether button and screen events are recorded: kit.env's line, or with
+    none the edition's default, as the desktop shell decides (events.js)."""
+    value = read_value(EVENTS_KEY)
+    if value in ("0", "1"):
+        return value == "1"
+    return os.environ.get("PERSODUB_EDITION") == "production"
+
+
+def write_events_enabled(on: bool) -> None:
+    """Turn button and screen events on or off. The shell re-reads kit.env
+    with every batch, so the next one already obeys it."""
+    _write_env({EVENTS_KEY: "1" if on else "0"})
 
 
 def write_language(value: str) -> None:

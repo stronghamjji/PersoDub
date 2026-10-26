@@ -278,9 +278,9 @@ next dub, no restart needed.
 **Storage** opens the folder your finished videos are saved in (**Show in Finder**, or
 **Show in Explorer** on Windows).
 
-**Privacy** has two switches, both on to begin with: *Anonymous usage counts* and
-*Send job logs*. Keys and folder names are removed from a job's logs before they
-leave.
+**Privacy** has three switches: *Anonymous usage counts* and *Send job logs*, both on to
+begin with, and *Button and screen use*, on to begin with in the production edition only.
+Keys and folder names are removed from a job's logs before they leave.
 
 **About** has the version (press it to see what is new) and, under
 **Acknowledgements**, the licences of the open-source components. The full text

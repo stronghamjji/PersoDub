@@ -37,6 +37,7 @@
  */
 import { setupText, watchSetup } from "./chatgptSetup.mjs";
 import { productName } from "./edition.mjs";
+import { refreshEvents } from "./events.mjs";
 import { errorText } from "./format.mjs";
 import { t, useLanguage } from "./i18n.mjs";
 import { paintMarkupWords } from "./markupWords.mjs";
@@ -215,7 +216,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
 
   // What was saved when the modal opened, so Save only posts actual edits.
   let keysInitial = { gem: "", per: "" };
-  let togglesInitial = { analytics: true, reports: true };
+  let togglesInitial = { analytics: true, reports: true, events: false };
   // The saved language setting ("auto", "en", "ko"); null until the saved
   // setup has been read, so a sheet that could not read it has no change to
   // count in a picker it never filled.
@@ -248,7 +249,8 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
       }
       $("analyticsToggle").checked = !st.analytics_off;
       $("reportsToggle").checked = !st.reports_off;
-      togglesInitial = { analytics: !st.analytics_off, reports: !st.reports_off };
+      $("eventsToggle").checked = !!st.events_enabled;
+      togglesInitial = { analytics: !st.analytics_off, reports: !st.reports_off, events: !!st.events_enabled };
       languageInitial = st.ui_language || "auto";
       $("uiLanguageSelect").value = languageInitial;
     } catch {
@@ -388,6 +390,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
       !keyChanged && !spaceSel.disabled && spaceSel.value !== persoSpaceInitial,
       $("analyticsToggle").checked !== togglesInitial.analytics,
       $("reportsToggle").checked !== togglesInitial.reports,
+      $("eventsToggle").checked !== togglesInitial.events,
       languageInitial !== null && $("uiLanguageSelect").value !== languageInitial,
     ].filter(Boolean).length;
   }
@@ -398,7 +401,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     $("settingsSaveBtn").title = n ? "" : t("No changes to save");
   }
   for (const id of ["geminiKeyInput", "persoKeyInput"]) $(id).addEventListener("input", paintChanges);
-  for (const id of ["persoSpaceSelect", "analyticsToggle", "reportsToggle", "uiLanguageSelect"]) {
+  for (const id of ["persoSpaceSelect", "analyticsToggle", "reportsToggle", "eventsToggle", "uiLanguageSelect"]) {
     $(id).addEventListener("change", paintChanges);
   }
 
@@ -411,6 +414,10 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     }
     if ($("reportsToggle").checked !== togglesInitial.reports) {
       if (await setFailureReports($("reportsToggle").checked)) togglesInitial.reports = $("reportsToggle").checked;
+      else ok = false;
+    }
+    if ($("eventsToggle").checked !== togglesInitial.events) {
+      if (await setEvents($("eventsToggle").checked)) togglesInitial.events = $("eventsToggle").checked;
       else ok = false;
     }
     const language = $("uiLanguageSelect").value;
@@ -557,6 +564,19 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reports_off: !on }),
       });
+      return r.ok;
+    } catch { return false; }
+  }
+
+  // Button and screen events: one POST, then the page asks the shell again,
+  // which reads the line straight back (ui/src/events.mjs).
+  async function setEvents(on) {
+    try {
+      const r = await fetch("/api/settings", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ events_enabled: on }),
+      });
+      if (r.ok) await refreshEvents();
       return r.ok;
     } catch { return false; }
   }

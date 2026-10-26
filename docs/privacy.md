@@ -79,6 +79,22 @@ The random install ID is made the first time the app starts, whether the counts 
 or off, and kept on this computer. With the counts off it is not sent here; its first 12
 characters still go with the job logs below while they are on.
 
+## Button and screen use
+
+From 0.9.1 the app can record which buttons, links, tabs and menu items you press and which
+screens you open, to see which parts of it people use. Each press is a name taken from the
+app's own markup (for example `home_nav_settings`), the screen's name and the time; each
+batch also carries the random install ID, the app version, the edition, and your operating
+system and its version. Never what you type, your video, files, filenames, paths, links,
+scripts or account address. The batches go to the same relay as the job logs, every 30
+seconds, which passes them to Google Analytics (and later Amplitude) and keeps nothing itself.
+
+It is on to begin with in the production edition and off in the open-source edition. Turn
+it on or off in **Settings → Privacy**, or with `PERSODUB_EVENTS=1` or `0` in `kit.env`; it
+applies to the next batch. With the usage counts off (`PERSODUB_NO_ANALYTICS=1`) nothing
+leaves, and `PERSODUB_EVENTS_DEBUG=1` writes how many would have been sent into the app's
+log instead of sending them.
+
 ## Job logs
 
 With this switch on, the full logs of every job, finished or failed, are kept for 30 days
