@@ -14,6 +14,13 @@ const LOCALE_ARG = "--persodub-locale=";
 // The preload runs before the page has an element to stamp when
 // the document is still empty; then it waits for one.
 const PLATFORM_ARG = "--persodub-platform=";
+// And the build's edition ("opensource", "production"), the production
+// edition's feedback address, and the system with its version ("macOS
+// 15.1.0"), the same way: the page shows the production edition's names,
+// links and Send feedback mail from them (ui/src/edition.mjs).
+const EDITION_ARG = "--persodub-edition=";
+const FEEDBACK_MAIL_ARG = "--persodub-feedback-mail=";
+const SYSTEM_ARG = "--persodub-system=";
 const platform = process.argv.find((a) => a.startsWith(PLATFORM_ARG))?.slice(PLATFORM_ARG.length) || "";
 if (platform) {
   const stamp = () => { document.documentElement.dataset.platform = platform; };
@@ -87,4 +94,8 @@ contextBridge.exposeInMainWorld("persodubShell", {
   repo: process.argv.find((a) => a.startsWith(REPO_ARG))?.slice(REPO_ARG.length) || "",
   // "ko" or "en" (ui/src/i18n.mjs); "" when the window passed none.
   locale: process.argv.find((a) => a.startsWith(LOCALE_ARG))?.slice(LOCALE_ARG.length) || "",
+  // "" when the window passed none: the page is the open-source one.
+  edition: process.argv.find((a) => a.startsWith(EDITION_ARG))?.slice(EDITION_ARG.length) || "",
+  feedbackMail: process.argv.find((a) => a.startsWith(FEEDBACK_MAIL_ARG))?.slice(FEEDBACK_MAIL_ARG.length) || "",
+  system: process.argv.find((a) => a.startsWith(SYSTEM_ARG))?.slice(SYSTEM_ARG.length) || "",
 });

@@ -103,3 +103,13 @@ test("the computer's language goes from the window's arguments through the prelo
   assert.ok(mainCode.includes(`\`${flag}\${locale}\``), `the main process does not pass ${flag} to the window`);
   assert.match(pageCode, /window\?\.persodubShell\?\.locale\b/, "no page reads persodubShell.locale");
 });
+
+// The build's edition the same way: the window passes it, the preload reads it
+// back as `edition`, and the page asks for it (ui/src/edition.mjs).
+test("the build's edition goes from the window's arguments through the preload's edition to the page", () => {
+  const flag = preload.match(/const EDITION_ARG = "([^"]+)";/)?.[1];
+  assert.ok(flag, "the preload no longer names the flag it reads the edition from");
+  assert.match(preload, /^\s*edition: process\.argv\.find\(\(a\) => a\.startsWith\(EDITION_ARG\)\)/m);
+  assert.ok(mainCode.includes(`\`${flag}\${edition}\``), `the main process does not pass ${flag} to the window`);
+  assert.match(pageCode, /shell\?\.edition\b/, "no page reads persodubShell.edition");
+});

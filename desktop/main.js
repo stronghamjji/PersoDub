@@ -110,7 +110,8 @@ app.whenReady().then(() => {
   useLanguage({ osLocale: app.getLocale() });
 
   session.defaultSession.on("will-download", downloads.willDownload);
-  ctx.win = createWindow({ app, BrowserWindow, screen, shell, ctx, appDir: HERE, repo: EDITIONS[edition], locale: systemLocale() });
+  ctx.win = createWindow({ app, BrowserWindow, screen, shell, ctx, appDir: HERE, repo: EDITIONS[edition], locale: systemLocale(),
+                          edition, feedbackMail: built.PERSODUB_FEEDBACK_MAIL || "" });
   // Re-entrancy guard: mashing "Try again" on the error screen used to run
   // overlapping boots, whose duplicate engines then fought over the fixed
   // sidecar port and blocked the next clean launch.
