@@ -9,7 +9,7 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync, existsSync, statSy
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  AUTH_FILE, authConfig, authorizeUrl, callbackParams, challengeFor, createAuth, maskEmail, newPkce,
+  AUTH_FILE, authConfig, authorizeUrl, callbackParams, challengeFor, createAuth, newPkce,
   parseActiveKey, parseProfile, redirectUriFor, refreshTokens, tokenExpiry, tokenStore,
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
@@ -218,12 +218,23 @@ test("the profile answer gives the account's id, e-mail and name as Perso names 
   assert.deepEqual(parseProfile(null), { userId: null, email: "", name: "" });
 });
 
-test("the e-mail on screen is masked", () => {
-  assert.equal(maskEmail("alice@example.com"), "al***@example.com");
-  assert.equal(maskEmail("a@test.local"), "a***@test.local");
-  assert.equal(maskEmail("ab@test.local"), "a***@test.local");
-  assert.equal(maskEmail(""), "");
-  assert.equal(maskEmail("nobody"), "");
+// The owner saw the real sign-in and wants the account shown in full
+// (2026-10-27): the e-mail as Perso has it, the name for an account with none.
+test("the account on screen is the full e-mail, a kept sign-in's included, and the name without one", async () => {
+  const userData = mkdtempSync(join(tmpdir(), "odauth-user-"));
+  // What a sign-in of the first 0.9.1 builds kept: the e-mail masked beside it in full.
+  tokenStore(join(userData, AUTH_FILE), fakeSafeStorage()).write({ accessToken: later(), refreshToken: "r1", userId: "u1",
+    account: "so***@test.local", email: "someone@test.local" });
+  const kept = makeAuth({ userData });
+  assert.equal((await kept.auth.status()).account, "someone@test.local");
+
+  const named = makeAuth({ routes: persoRoutes({ email: null, [`GET ${CFG.profileUrl}`]: () => [200, { result: { userSeq: "u3", userName: "Kim", email: null } }] }) });
+  await named.auth.start();
+  const done = named.auth.login();
+  await settle();
+  await named.auth.handleCallback(back(named.opened));
+  await done;
+  assert.equal((await named.auth.status()).account, "Kim");
 });
 
 test("an access token's expiry is read from its JWT exp, and anything else has none", () => {
@@ -294,7 +305,8 @@ test("a sign-in takes a port, opens the browser with that port's address, takes 
     authorizationCodeRequest: { code: "c1", redirectUri: REDIRECT_URI, codeVerifier: exchange.authorizationCodeRequest.codeVerifier, clientSecret: null } });
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "pk_test_K1");
   assert.equal(kitValues(kitDir).GEMINI_API_KEY, "g-keep");
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false });
+  // The account in full on screen (owner, 2026-10-27).
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "someone@test.local", accountId: "u1", hasKey: true, waiting: false });
   assert.ok(existsSync(join(userData, AUTH_FILE)));
   assert.deepEqual(closed, [52390], "the port was not given back when the sign-in ended");
 });

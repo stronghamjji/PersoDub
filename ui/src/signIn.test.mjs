@@ -25,8 +25,8 @@ function makeEl(id) {
 
 const SIGNED_OUT = { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false };
 const WAITING = { ...SIGNED_OUT, waiting: true };
-const SIGNED_IN = { enabled: true, required: false, signedIn: true, account: "a***@test.local", hasKey: true, waiting: false };
-const NO_KEY = { ...SIGNED_IN, account: "c***@test.local", hasKey: false };
+const SIGNED_IN = { enabled: true, required: false, signedIn: true, account: "a@test.local", hasKey: true, waiting: false };
+const NO_KEY = { ...SIGNED_IN, account: "c@test.local", hasKey: false };
 
 // The window and the document as far as the screen listens to them: their
 // events, fired by the test, and the document's visibilityState.
@@ -156,7 +156,7 @@ test("an account with no key: the key page, then Check again until it has one", 
   const h = harness(NO_KEY, { authCheckKey: { key: "no_key", keyReason: "none" } });
   await h.settle();
   assert.equal(h.$("signInNoKey").hidden, false);
-  assert.equal(h.$("signInAccount").textContent, "c***@test.local");
+  assert.equal(h.$("signInAccount").textContent, "c@test.local");
   assert.equal(h.$("signInMakeKey").focused, 1);
 
   await h.$("signInMakeKey").fire("click");
@@ -190,11 +190,11 @@ test("the page hears every status, and logout goes through the shell", async () 
   const heard = [];
   h.api.onChange((s) => heard.push(s.account));
   await h.settle();
-  h.shell.hear({ ...SIGNED_IN, account: "b***@test.local" });
+  h.shell.hear({ ...SIGNED_IN, account: "b@test.local" });
   await h.api.logout();
   assert.deepEqual(h.calls, ["authLogout"]);
-  assert.equal(heard[0], "a***@test.local");
-  assert.equal(heard[1], "b***@test.local");
+  assert.equal(heard[0], "a@test.local");
+  assert.equal(heard[1], "b@test.local");
 });
 
 test("the no-key face has a way out: Sign out brings the sign-in back", async () => {
@@ -310,8 +310,8 @@ test("Home shows the signed-in account under the brand, and nothing when signed 
   const h = harness(SIGNED_IN);
   await h.settle();
   assert.equal(h.$("homeAccount").hidden, false);
-  assert.equal(h.$("homeAccountName").textContent, "a***@test.local");
-  assert.equal(h.$("homeAccount").title, "signed in as a***@test.local");
+  assert.equal(h.$("homeAccountName").textContent, "a@test.local");
+  assert.equal(h.$("homeAccount").title, "signed in as a@test.local");
   h.shell.hear(SIGNED_OUT);
   assert.equal(h.$("homeAccount").hidden, true);
   assert.equal(h.$("homeAccountName").textContent, "");

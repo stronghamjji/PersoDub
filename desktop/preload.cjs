@@ -107,7 +107,8 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // Perso sign-in in the browser (src/auth.js), the production edition's.
   // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting}:
   // `required` is the production edition signed out, when the page shows its
-  // sign-in screen; `account` is a masked e-mail and `accountId` Perso's number
+  // sign-in screen; `account` is the account's full e-mail (its name without
+  // one), shown on Home and in Settings, and `accountId` Perso's number
   // for the account; the events key it by a hash of it (src/events.js eventsUserId). authLogin opens the browser
   // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
   // (outcomes and key answers are listed at createAuth). authCheckKey looks for

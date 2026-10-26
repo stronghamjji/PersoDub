@@ -728,7 +728,7 @@ test("the open-source edition's sheet keeps the key field and its tab name, and 
 });
 
 test("the production edition's sheet shows the signed-in account in the key field's place", async (t) => {
-  const account = fakeAccount({ enabled: true, required: false, signedIn: true, account: "a***@test.local", hasKey: true });
+  const account = fakeAccount({ enabled: true, required: false, signedIn: true, account: "a@test.local", hasKey: true });
   const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) }, account });
   t.after(h.state.restore);
   h.$("persoAccountRow").hidden = true;
@@ -737,7 +737,7 @@ test("the production edition's sheet shows the signed-in account in the key fiel
   assert.equal(h.$("persoAccountRow").hidden, false);
   assert.equal(h.$("persoKeyRow").hidden, true);
   assert.equal(h.$("settingsTab-keys").textContent, "Account and keys");
-  assert.equal(h.$("persoAccountMail").textContent, "a***@test.local");
+  assert.equal(h.$("persoAccountMail").textContent, "a@test.local");
   assert.equal(h.$("persoKeyChip").textContent, "Key connected");
   assert.ok(h.$("persoKeyChip").classList.contains("done"));
 
@@ -747,7 +747,7 @@ test("the production edition's sheet shows the signed-in account in the key fiel
 
 test("another account signed in while the sheet is open shows there, with its key and workspaces", async (t) => {
   let saved = SAVED;
-  const account = fakeAccount({ enabled: true, signedIn: true, account: "a***@test.local", hasKey: true });
+  const account = fakeAccount({ enabled: true, signedIn: true, account: "a@test.local", hasKey: true });
   const h = harness({ responses: { "/api/settings": () => ok(saved), "/api/perso/spaces": ok(SPACES) }, account });
   t.after(h.state.restore);
   await h.api.openSettings();
@@ -755,18 +755,18 @@ test("another account signed in while the sheet is open shows there, with its ke
   const spacesAsked = h.state.calls.filter((c) => c === "GET /api/perso/spaces").length;
 
   saved = { ...SAVED, perso_api_key: "the-other-accounts-key", perso_space_seq: "" };
-  account.set({ enabled: true, signedIn: true, account: "b***@test.local", hasKey: true });
+  account.set({ enabled: true, signedIn: true, account: "b@test.local", hasKey: true });
   await new Promise((r) => setImmediate(r));
   await new Promise((r) => setImmediate(r));
 
-  assert.equal(h.$("persoAccountMail").textContent, "b***@test.local");
+  assert.equal(h.$("persoAccountMail").textContent, "b@test.local");
   assert.equal(h.$("persoKeyInput").value, "the-other-accounts-key");
   assert.equal(h.state.calls.filter((c) => c === "GET /api/perso/spaces").length, spacesAsked + 1);
   assert.equal(h.$("settingsChanges").textContent, "", "a key the sign-in saved is no change to save");
 
   account.set({ enabled: true, signedIn: true, account: "", hasKey: false });
   assert.equal(h.$("persoAccountMail").textContent, "Perso account", "an account with no e-mail or name");
-  account.set({ enabled: true, signedIn: true, account: "c***@test.local", hasKey: false });
+  account.set({ enabled: true, signedIn: true, account: "c@test.local", hasKey: false });
   assert.equal(h.$("persoKeyChip").textContent, "No key");
   assert.ok(!h.$("persoKeyChip").classList.contains("done"));
 });

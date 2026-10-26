@@ -49,8 +49,7 @@ const LOGS_LEFT_OUT = "\n\n(logs too large, not attached)";
 
 // The Perso account an inquiry is from: the production edition's signed-in
 // account, its full e-mail and Perso's number for it (`signedIn`, src/auth.js
-// signedInAccount, which the page never sees), or empty strings signed out
-// and in the open-source edition.
+// signedInAccount), or empty strings signed out and in the open-source edition.
 function accountForInquiry(signedIn) {
   const account = signedIn() || {};
   return { email: account.email || "", id: account.id || "" };

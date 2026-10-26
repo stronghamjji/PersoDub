@@ -13,7 +13,8 @@
 // The payload the from-source app installs its kit from is made with
 // CAMPPLUS_SRC=<campplus.onnx> PERSODUB_EDITION=production node desktop/scripts/collect-payload.mjs.
 // Prints one line per step and writes NN-<step>.png into --out; never a token,
-// key or e-mail value (the account on screen is masked by the app itself).
+// key or e-mail value. The app shows the account's full e-mail, so the line
+// says only whether one is there, and the pictures in --out show it.
 import { parseArgs } from "node:util";
 import { mkdirSync, readFileSync } from "node:fs";
 import { connect, shown, textOf } from "./lib/cdp.mjs";
@@ -81,7 +82,8 @@ if (pressed) {
     await openAccountTab();
     await app.waitFor("the account row", 10000, shown, "#persoAccountRow");
     await app.shot("04-settings-account");
-    return `tab="${await app.inPage(textOf, "#settingsTab-keys")}" account="${await app.inPage(textOf, "#persoAccountMail")}" `
+    const account = await app.inPage(textOf, "#persoAccountMail");
+    return `tab="${await app.inPage(textOf, "#settingsTab-keys")}" account=${account.includes("@") ? "an e-mail" : "no e-mail"} `
       + `chip="${await app.inPage(textOf, "#persoKeyChip")}" pasted-key row hidden=${await app.inPage(hidden, "#persoKeyRow")}`;
   });
   await step("5 Sign out brings the wall back and clears the key", async () => {

@@ -194,14 +194,6 @@ export function parseActiveKey(json) {
   return { status: "none", fields: [...new Set(list.flatMap(fieldNames))] };
 }
 
-/** "al***@example.com": enough to tell accounts apart on screen. */
-export function maskEmail(email) {
-  const at = String(email || "").lastIndexOf("@");
-  if (at < 1) return "";
-  const local = email.slice(0, at);
-  return `${local.slice(0, local.length > 2 ? 2 : 1)}***${email.slice(at)}`;
-}
-
 // ---- Where things are kept ---------------------------------------------------
 
 /** The tokens, encrypted with the operating system's key store (Electron
@@ -287,7 +279,9 @@ export function createAuth({
       // Not usable signed out: the page shows its sign-in screen while true.
       required: on && !session,
       signedIn: Boolean(session),
-      account: session?.account || "",
+      // The account in full, as the page shows it (owner, 2026-10-27): its
+      // e-mail, or its name for an account with none. Never in a log line.
+      account: session?.email || session?.account || "",
       // Perso's number for the account (userSeq). The button events carry a
       // one-way hash of it (events.js eventsUserId), never it or an e-mail.
       accountId: session?.userId || "",
@@ -298,9 +292,9 @@ export function createAuth({
     };
   }
 
-  /** The signed-in account for the shell's own use, never the page's: the
-   * full e-mail and Perso's number for it, which Customer support's inquiry
-   * carries (reporting.js accountForInquiry). Null signed out or disabled. */
+  /** The signed-in account for the shell's own use: the full e-mail and
+   * Perso's number for it, which Customer support's inquiry carries
+   * (reporting.js accountForInquiry). Null signed out or disabled. */
   function signedInAccount() {
     if (!isOn() || !session) return null;
     return { email: session.email || "", id: session.userId || "" };
@@ -474,8 +468,8 @@ export function createAuth({
       session = { ...tokens, userId: null, account: "", email: "" };
       try {
         const p = parseProfile(await authedGet("profile", cfg.profileUrl));
-        // The full e-mail stays in the shell (signedInAccount); the page gets the masked one.
-        session = { ...session, userId: p.userId, account: maskEmail(p.email) || p.name, email: p.email };
+        // `account` is the name, shown in place of an e-mail the account lacks.
+        session = { ...session, userId: p.userId, account: p.name, email: p.email };
       } catch (err) { log(`AUTH signed in, but the profile did not load: ${err.message}`, "WARN"); }
       if (!session) throw new AuthHttpError("token", 401, "refused-at-once");
       if (!store.write(session)) log("AUTH tokens not saved (no OS encryption)", "WARN");

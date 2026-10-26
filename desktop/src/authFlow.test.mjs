@@ -121,7 +121,7 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   await until(() => browser.pages.length);
   assert.deepEqual(browser.pages, ["done"]);
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["a@test.local"].keys[0].apiKey);
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "a***@test.local", accountId: "1001", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "a@test.local", accountId: "1001", hasKey: true, waiting: false });
   // The full address stays in the shell, for Customer support's inquiry (reporting.js accountForInquiry).
   assert.deepEqual(auth.signedInAccount(), { email: "a@test.local", id: "1001" });
   // The port is closed again: the listener lives only while a sign-in waits.
@@ -139,7 +139,7 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   // Signed in again without typing: the browser still holds A's Perso session.
   browser.typing = null;
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "saved" });
-  assert.equal((await auth.status()).account, "a***@test.local");
+  assert.equal((await auth.status()).account, "a@test.local");
 
   // Another account: sign out of Perso in the browser, sign out here, sign in as B.
   writeFileSync(join(kitDir, "kit.env"), readFileSync(join(kitDir, "kit.env"), "utf8").replace(/PERSO_SPACE_SEQ=.*/, "PERSO_SPACE_SEQ=77"));
@@ -150,7 +150,7 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   assert.equal(browser.forms, 2);
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["b@test.local"].keys[0].apiKey);
   assert.equal(kitValues(kitDir).PERSO_SPACE_SEQ, "", "A's workspace survived the change of account");
-  assert.equal((await auth.status()).account, "b***@test.local");
+  assert.equal((await auth.status()).account, "b@test.local");
 
   // C, who has no key.
   await browser.signOutOfPerso();
@@ -158,7 +158,7 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   browser.typing = "c@test.local";
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "no_key" });
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "", "B's key stayed for C");
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "c***@test.local", accountId: "1003", hasKey: false, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "c@test.local", accountId: "1003", hasKey: false, waiting: false });
 
   // Nothing secret in the log.
   const all = logs.join("\n");

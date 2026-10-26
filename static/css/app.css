@@ -3031,8 +3031,9 @@
   .home-account:hover .home-account-name { color: var(--foreground); }
   .home-account-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #34c77b; }
   .home-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* Settings > Account and keys: the account's masked e-mail and its key chip. */
-  .acct-mail { font-size: 11.5px; color: var(--foreground); }
+  /* Settings > Account and keys: the account's e-mail, in full and wrapped
+     anywhere when it is long, and its key chip. */
+  .acct-mail { font-size: 11.5px; color: var(--foreground); min-width: 0; overflow-wrap: anywhere; }
   .acct-chip { font-size: 11px; }
   /* The account row stands first once the key row above it hides: no line over it. */
   #persoKeyRow[hidden] + .set-row { border-top: none; }
