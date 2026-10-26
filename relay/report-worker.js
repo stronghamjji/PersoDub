@@ -16,6 +16,7 @@ import {
   withLogsLine,
   withTally,
 } from "./report-logic.js";
+import { MAX_EVENTS_BYTES, isExcluded, toAmplitude, toGa4, validateEvents } from "./events-logic.js";
 
 // The relay between a broken PersoDub and this repository's issues.
 //
@@ -31,6 +32,8 @@ import {
 //                           dashboard, never an issue
 //   POST /report/<id>/logs  the full logs (gzipped tar) for a report or a
 //                           record just made
+//   POST /events            the buttons pressed and screens shown (0.9.1) ->
+//                           GA4, and Amplitude once it has a key; kept nowhere
 //
 // What it never does: log an IP (only a salted daily hash of one, for the rate
 // limit), trust the report it was given (report-logic.js rebuilds it field by
@@ -285,12 +288,49 @@ async function handleLogs(request, env, id) {
   return json({ ok: true });
 }
 
+const GA4 = "https://www.google-analytics.com/mp/collect";
+const AMPLITUDE = "https://api2.amplitude.com/2/httpapi";
+
+// A copy that did not land is a number missing from a chart, never a reason to
+// make the app send again: the status is logged and nothing else.
+async function forward(name, url, body) {
+  try {
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) console.log(`relay ${name} ${res.status}`);
+  } catch (err) {
+    console.log(`relay ${name} error: ${err && err.name}`);
+  }
+}
+
+// One computer's batch of presses and screens (desktop/src/events.js). Checked
+// (events-logic.js), the owner's own computers dropped the way the dashboard
+// drops them (EXCLUDED_DEVICES), and passed on after the answer: the app is
+// told 204 at once, and waits for neither GA4 nor Amplitude. No rate limit in
+// KV -- a batch every 30 seconds from every open app would spend its writes.
+async function handleEvents(request, env, ctx) {
+  const text = await request.text();
+  if (text.length > MAX_EVENTS_BYTES) return json({ error: "too large" }, 413);
+  const checked = validateEvents(text);
+  if (!checked.ok) return json({ error: checked.reason }, 400);
+  const { batch } = checked;
+  if (isExcluded(batch.installId, env.EXCLUDED_DEVICES) || batch.events.length === 0) return new Response(null, { status: 204 });
+  if (env.GA4_MEASUREMENT_ID && env.GA4_API_SECRET) {
+    const url = `${GA4}?measurement_id=${encodeURIComponent(env.GA4_MEASUREMENT_ID)}&api_secret=${encodeURIComponent(env.GA4_API_SECRET)}`;
+    for (const body of toGa4(batch, { debug: env.GA4_DEBUG === "1" })) ctx.waitUntil(forward("ga4", url, body));
+  }
+  if (env.AMPLITUDE_API_KEY) {
+    ctx.waitUntil(forward("amplitude", AMPLITUDE, { api_key: env.AMPLITUDE_API_KEY, events: toAmplitude(batch) }));
+  }
+  return new Response(null, { status: 204 });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
     try {
       if (request.method === "POST" && pathname === "/report") return await handleReport(request, env, ctx);
       if (request.method === "POST" && pathname === "/record") return await handleRecord(request, env, ctx);
+      if (request.method === "POST" && pathname === "/events") return await handleEvents(request, env, ctx);
       const upload = /^\/report\/([0-9a-f]{32})\/logs$/.exec(pathname);
       if (request.method === "POST" && upload) return await handleLogs(request, env, upload[1]);
       // No way out for an archive: the relay only takes logs in. Reading one

@@ -180,3 +180,66 @@ test("records count against limits of their own, so finished jobs never use up a
     `rl:ok:a:<address>:${day}`, `rl:ok:i:${REPORT.installId}:${day}`, `rl:ok:t:${day}`, `rl:t:${day}`,
   ]);
 });
+
+// POST /events: the buttons pressed and the screens shown (relay/events-logic.js).
+const EVENTS = {
+  installId: "0123456789abcdef0123456789abcdef", userId: "", version: "0.9.1", edition: "opensource",
+  os: "windows", osVersion: "10.0.26100", sessionId: Date.now() - 60000,
+  events: [{ name: "home_nav_settings", screen: "home", t: Date.now() - 1000 }],
+};
+
+// Every outward request, kept: GA4 and Amplitude are stand-ins too.
+function outward(t) {
+  const calls = [];
+  const real = globalThis.fetch;
+  t.after(() => { globalThis.fetch = real; });
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: new URL(url), body: JSON.parse(init.body) });
+    return new Response(null, { status: 204 });
+  };
+  return calls;
+}
+
+async function sendEvents(env, body = EVENTS) {
+  const waits = [];
+  const request = new Request("https://relay.test/events", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
+  const res = await worker.fetch(request, env, { waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+  return res;
+}
+
+test("events go to GA4 with the secret in the query and to Amplitude with its key, and the app gets 204", async (t) => {
+  const calls = outward(t);
+  const res = await sendEvents({ GA4_MEASUREMENT_ID: "G-TEST", GA4_API_SECRET: "s3cret", AMPLITUDE_API_KEY: "amp" });
+  assert.equal(res.status, 204);
+  const ga4 = calls.find((c) => c.url.hostname === "www.google-analytics.com");
+  assert.equal(ga4.url.pathname, "/mp/collect");
+  assert.deepEqual([ga4.url.searchParams.get("measurement_id"), ga4.url.searchParams.get("api_secret")], ["G-TEST", "s3cret"]);
+  assert.equal(ga4.body.client_id, EVENTS.installId);
+  assert.deepEqual(ga4.body.events.map((e) => [e.name, e.params.button]), [["button_press", "home_nav_settings"]]);
+  const amp = calls.find((c) => c.url.hostname === "api2.amplitude.com");
+  assert.equal(amp.body.api_key, "amp");
+  assert.equal(amp.body.events[0].device_id, EVENTS.installId);
+});
+
+test("without its keys a destination is not called, and the app still gets 204", async (t) => {
+  const calls = outward(t);
+  assert.equal((await sendEvents({ GA4_MEASUREMENT_ID: "G-TEST" })).status, 204);
+  assert.equal(calls.length, 0);
+});
+
+test("the owner's computers are dropped before anything leaves", async (t) => {
+  const calls = outward(t);
+  const res = await sendEvents({ GA4_MEASUREMENT_ID: "G-TEST", GA4_API_SECRET: "s", AMPLITUDE_API_KEY: "a", EXCLUDED_DEVICES: "fedcba987654, 0123456789ab" });
+  assert.equal(res.status, 204);
+  assert.equal(calls.length, 0);
+});
+
+test("a batch that does not fit is 400 and one too big is 413, and neither is passed on", async (t) => {
+  const calls = outward(t);
+  const env = { GA4_MEASUREMENT_ID: "G-TEST", GA4_API_SECRET: "s" };
+  const bad = await sendEvents(env, { ...EVENTS, installId: "nope" });
+  assert.deepEqual([bad.status, await bad.json()], [400, { error: "installId" }]);
+  assert.equal((await sendEvents(env, "x".repeat(200 * 1024))).status, 413);
+  assert.equal(calls.length, 0);
+});

@@ -26,5 +26,8 @@
     // Finished jobs' records (POST /record), counted apart from the reports.
     "MAX_RECORDS_PER_DAY": "50",
     "MAX_RECORDS_TOTAL_PER_DAY": "500"
+    // POST /events reads GA4_MEASUREMENT_ID, GA4_API_SECRET, AMPLITUDE_API_KEY
+    // and EXCLUDED_DEVICES as secrets; "GA4_DEBUG": "1" here while checking
+    // DebugView (relay/README.md).
   }
 }
