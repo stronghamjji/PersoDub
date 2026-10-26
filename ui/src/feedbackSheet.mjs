@@ -9,7 +9,7 @@
 // instead (ui/src/homeSidebar.mjs).
 //
 // Owns #feedbackOverlay, #feedbackType, #feedbackSubjectInput,
-// #feedbackDetails, #feedbackReplyTo, #feedbackLogsNote, #feedbackConsent,
+// #feedbackDetails, #feedbackReplyTo, #feedbackReplyToHint, #feedbackLogsNote, #feedbackConsent,
 // #feedbackPrivacy, #feedbackStatus, #feedbackClose and #feedbackSend.
 import { t } from "./i18n.mjs";
 
@@ -24,10 +24,12 @@ export const PRIVACY_URL = {
  * @param {(id: string) => any} deps.$
  * @param {(form: object) => Promise<{id?: string, queued?: boolean, needReplyTo?: boolean} | null>} deps.send  persodubShell.sendInquiry
  * @param {() => string} deps.language     the page's language, "ko" or "en"
+ * @param {() => string} deps.account      the signed-in account's line (ui/src/signIn.mjs status):
+ *        its e-mail, or its name when it has none
  * @param {(url: string) => void} deps.openUrl
  * @returns {() => void} opens the form
  */
-export function initFeedbackSheet({ $, send, language, openUrl }) {
+export function initFeedbackSheet({ $, send, language, openUrl, account }) {
   const type = $("feedbackType"), subject = $("feedbackSubjectInput"), details = $("feedbackDetails"),
         consent = $("feedbackConsent"), status = $("feedbackStatus");
   // Optional: left empty, the answer goes to the signed-in account's address,
@@ -83,6 +85,8 @@ export function initFeedbackSheet({ $, send, language, openUrl }) {
   });
   return function openFeedback() {
     status.textContent = "";
+    // The line under Reply-to promises the account's address: only an account that has one.
+    $("feedbackReplyToHint").hidden = !String(account() || "").includes("@");
     logsNote();
     ready();
     $("feedbackOverlay").classList.add("open");

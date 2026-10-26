@@ -1464,6 +1464,7 @@ const openFeedback = isProduction() && shellInfo.sendInquiry ? initFeedbackSheet
   $, send: (form) => shellInfo.sendInquiry(form),
   language: currentLanguage,
   openUrl: (url) => window.open(url, "_blank", "noopener"),
+  account: () => signIn.status().account,
 }) : null;
 initHomeSidebar({
   $, body: document.body, repoUrl: REPO_URL, production: isProduction(), onFeedback: openFeedback,

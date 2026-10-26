@@ -5,9 +5,9 @@ import { readFileSync } from "node:fs";
 import { initFeedbackSheet, PRIVACY_URL } from "./feedbackSheet.mjs";
 import { loadTable, setLanguage } from "./i18n.mjs";
 
-// The form's elements, the shell's sendInquiry answering `answer`, and the
-// page's language.
-function harness({ answer = { id: "7C2E91AB" }, language = "ko" } = {}) {
+// The form's elements, the shell's sendInquiry answering `answer`, the
+// page's language, and the signed-in account's line (an e-mail, or a name).
+function harness({ answer = { id: "7C2E91AB" }, language = "ko", account = "a@test.local" } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) {
@@ -25,7 +25,7 @@ function harness({ answer = { id: "7C2E91AB" }, language = "ko" } = {}) {
   };
   $("feedbackType").value = "problem";
   const sent = [], urls = [];
-  const open = initFeedbackSheet({ $, language: () => language, openUrl: (u) => urls.push(u),
+  const open = initFeedbackSheet({ $, language: () => language, openUrl: (u) => urls.push(u), account: () => account,
                                    send: async (form) => { sent.push(form); return answer; } });
   const type = (id, text) => { $(id).value = text; $(id).fire("input"); };
   const agree = (on = true) => { $("feedbackConsent").checked = on; $("feedbackConsent").fire("change"); };
@@ -55,6 +55,16 @@ test("only a bug report says it sends the logs", () => {
   h.$("feedbackType").value = "bug";
   h.$("feedbackType").fire("change");
   assert.equal(h.$("feedbackLogsNote").hidden, false);
+});
+
+// An account with no e-mail has no address to answer at: the line under
+// Reply-to would promise one (re-test, 2026-10-27).
+test("the line under Reply-to says an empty one is answered at the account's address only when the account has an e-mail", () => {
+  for (const [account, hidden] of [["a@test.local", false], ["Perso user", true], ["", true]]) {
+    const h = harness({ account });
+    h.open();
+    assert.equal(h.$("feedbackReplyToHint").hidden, hidden, JSON.stringify(account));
+  }
 });
 
 test("the privacy policy opens in the browser in the page's language", () => {
