@@ -229,7 +229,10 @@ must print the edition you meant, and for production `payload/build.env` must
 hold the support web app's address. A development run (`npm start`, no
 payload) reads them from its own environment. The Windows workflows set the
 edition from their input, and the public release workflow refuses a
-production build.
+production build. `build-windows.yml` gives a production build
+`PERSODUB_INQUIRY_URL` from the repository secret of that name, so the secret
+must exist in the repository (Settings > Secrets and variables > Actions);
+without it the installer is built with nowhere to send an inquiry.
 
 ## Project layout
 
