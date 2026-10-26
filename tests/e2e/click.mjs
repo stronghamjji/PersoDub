@@ -135,7 +135,9 @@ async function homeStep() {
   if (dialog) throw new Error(`#${dialog} is open; the run starts with no dialog in the way`);
   if (!(await inPage(onHome))) await click("#homeBtn");
   await waitFor("the Home screen", 10000, onHome);
-  for (const sel of ["#homePerso", "#homeGhName", "#homeDubCard", "#homeEraseCard", "#homeCaptionsCard", "#homeSaveCard"]) {
+  // The production edition has no repository button.
+  const repo = app.production ? [] : ["#homeGhName"];
+  for (const sel of ["#homePerso", ...repo, "#homeDubCard", "#homeEraseCard", "#homeCaptionsCard", "#homeSaveCard"]) {
     await waitFor(`${sel} on show`, 5000, shown, sel);
   }
   if (!(await js(`document.querySelector("#homePerso img").naturalWidth`))) throw new Error("the Perso pill's wordmark did not load");
@@ -144,7 +146,7 @@ async function homeStep() {
     const n = g.querySelectorAll(".proj-card").length;
     return n ? `${n} cards` : g.querySelector(".projects-empty") ? "no projects yet" : "";
   });
-  return { note: `Perso pill, GitHub button, four tool cards; grid ${grid}` };
+  return { note: `Perso pill, ${app.production ? "no GitHub button (production)" : "GitHub button"}, four tool cards; grid ${grid}` };
 }
 
 async function settingsStep(snap) {

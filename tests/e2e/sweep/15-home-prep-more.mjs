@@ -229,6 +229,9 @@ const lines = (s) => String(s || "").split("\n").filter((l) => l.trim()).length;
 export const steps = [
   { name: "H1-H5 GitHub and Send feedback", looks: [".home-side", "#settingsOverlay"],
     async run(app) {
+      // The production edition has no repository button, and its Send
+      // feedback opens the Service inquiry form (ui/src/feedbackSheet.mjs).
+      if (app.production) throw new Skip("the production edition has no GitHub button, and Send feedback opens the inquiry form");
       await toHome(app);
       // Every press lands in a list instead of the system browser.
       await app.js(`(() => { window.__e2eOpen = window.open; window.__e2eUrls = [];

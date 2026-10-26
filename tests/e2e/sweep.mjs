@@ -78,7 +78,7 @@ const skipped = results.filter((r) => r.result === "skip").length;
 const md = [
   "# PersoDub functional sweep", "",
   `- Run: ${clock(startedAt)} to ${clock()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}), ${Math.round((Date.now() - startedAt) / 1000)} s`,
-  `- App: ${app.origin}, page in ${app.page.lang}, ${app.page.width}x${app.page.height}`,
+  `- App: ${app.origin} (${app.page.edition} edition), page in ${app.page.lang}, ${app.page.width}x${app.page.height}`,
   `- Result: ${failed ? "FAIL" : "PASS"}, ${passed} of ${results.length} steps passed (${failed} failed, ${skipped} skipped)`, "",
   "| # | Area | Step | Result | Seconds | Note |", "|---|---|---|---|---:|---|",
   ...results.map((r, i) => `| ${i + 1} | ${r.area} | ${r.shot ? `[${r.step}](${r.shot})` : r.step} | ${r.result} | ${r.seconds} | ${r.note.replace(/\|/g, "/")} |`),
@@ -86,6 +86,6 @@ const md = [
   ...results.filter((r) => r.result === "fail").flatMap((r) => [`## ${r.area} · ${r.step} failed`, "", r.note, "", "```html", r.html || "", "```", ""]),
 ];
 writeFileSync(join(out, "report.md"), md.join("\n"));
-writeFileSync(join(out, "report.json"), JSON.stringify({ startedAt, app: app.origin, lang: app.page.lang, results }, null, 2));
+writeFileSync(join(out, "report.json"), JSON.stringify({ startedAt, app: app.origin, edition: app.page.edition, lang: app.page.lang, results }, null, 2));
 console.log(`\n${failed ? "FAIL" : "PASS"}: ${passed}/${results.length}; ${out}/report.md`);
 process.exit(failed ? 1 : 0);

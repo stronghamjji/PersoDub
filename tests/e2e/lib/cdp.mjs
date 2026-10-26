@@ -23,6 +23,21 @@ export const isClosed = (s) => !document.querySelector(s).classList.contains("op
 export const onHome = () => document.body.dataset.screen === "home" && !document.querySelector("#screen-home").hidden;
 export const textOf = (s) => (document.querySelector(s)?.textContent || "").replace(/\s+/g, " ").trim();
 
+/** The page's words looked up the way its own t() does -- the English is the
+ *  key -- with {app} the name the page shows the app by, unless given. */
+export const translator = (words, appName) => (key, values = {}) => (Object.hasOwn(words, key) ? words[key] : key)
+  .replace(/\{(\w+)\}/g, (_, k) => (k in values ? values[k] : k === "app" ? appName : `{${k}}`));
+
+/** Whether `url` is the production edition's Help: Perso's desktop app page
+ *  with the app's utm tail and utm_content=help (ui/src/app.mjs openHelp). */
+export function isProductionHelp(url) {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}` === "https://perso.ai/dubbing/desktop-app" && u.searchParams.has("utm_source")
+      && u.searchParams.get("utm_content") === "help";
+  } catch { return false; }
+}
+
 // What a person would hit at (x, y): a dialog or a toast over the button takes the click instead.
 const HIT = function (x, y) {
   const hit = document.elementFromPoint(x, y);
@@ -177,11 +192,28 @@ export async function connect({ port = 9333, out = "." } = {}) {
     writeFileSync(join(out, `${name}.png`), Buffer.from(data, "base64"));
     return `${name}.png`;
   }
+  // The addresses `presses` opened with window.open, caught in a list instead
+  // of the system browser; window.open is put back however the presses end.
+  async function opened(presses) {
+    await js(`(() => { window.__e2eOpen = window.open; window.__e2eUrls = [];
+      window.open = (u) => { window.__e2eUrls.push(String(u)); return null; }; return true; })()`);
+    let urls = [];
+    try { await presses(); } finally {
+      urls = await js(`(() => { const u = window.__e2eUrls || []; if (window.__e2eOpen) window.open = window.__e2eOpen;
+        delete window.__e2eOpen; delete window.__e2eUrls; return u; })()`);
+    }
+    return urls;
+  }
   // What a failed step may leave open over the next step's buttons: the
-  // ChatGPT sign-in, the Download dialog, the subtitle looks. Each is closed
-  // the way a person closes it; returns the ones that were open.
+  // ChatGPT sign-in, the Download dialog, the subtitle looks, the Help dialog.
+  // Each is closed the way a person closes it; returns the ones that were open.
   async function putAway() {
     const left = [];
+    if (await inPage(isOpen, "#helpOverlay")) {
+      left.push("#helpOverlay");
+      await key("Escape");
+      await waitFor("the Help dialog to close", 5000, isClosed, "#helpOverlay");
+    }
     if (await inPage(isOpen, "#chatgptSignInOverlay")) {
       left.push("#chatgptSignInOverlay");
       await click("#csCancel");
@@ -208,13 +240,18 @@ export async function connect({ port = 9333, out = "." } = {}) {
   }, looks);
 
   await send("Page.enable");
+  // The edition, as the preload stamps it on the page, and the name the page
+  // calls the app: the production edition has no GitHub button, and its Help
+  // opens Perso's desktop app page instead of the Help dialog.
   const page = await inPage(() => ({ lang: document.documentElement.lang || "en", width: innerWidth, height: innerHeight,
-                                     visibility: document.visibilityState, screen: document.body.dataset.screen }));
-  // The page's words, looked up the way its own t() does: the English is the key.
+                                     visibility: document.visibilityState, screen: document.body.dataset.screen,
+                                     edition: document.documentElement.dataset.edition || window.persodubShell?.edition || "opensource",
+                                     name: window.persodubShell?.name || "PersoDub" }));
+  const production = page.edition === "production";
   const words = page.lang === "en" ? {}
     : await (await fetch(`${origin}/i18n/ui.${page.lang}.json`, { signal: AbortSignal.timeout(10000) })).json();
-  const tr = (key, values = {}) => (Object.hasOwn(words, key) ? words[key] : key).replace(/\{(\w+)\}/g, (_, k) => (k in values ? values[k] : `{${k}}`));
+  const tr = translator(words, page.name);
 
-  return { origin, page, send, nextEvent, js, inPage, waitFor, api, click, key, type, choose, feed, shot, snippet, tr, putAway,
-           close: () => ws.close() };
+  return { origin, page, production, send, nextEvent, js, inPage, waitFor, api, click, key, type, choose, feed, shot, snippet, tr,
+           opened, putAway, close: () => ws.close() };
 }

@@ -6,7 +6,7 @@
 // Never typed or pressed here: an API key field, a sign-in (ChatGPT, Claude,
 // Codex), a model's Delete confirm, anything that opens an outside site.
 // Notes never carry a key, an account address or a home folder's name.
-import { isClosed, isOpen, onHome, pressable, shown, sleep, textOf, Skip } from "../lib/cdp.mjs";
+import { isClosed, isOpen, isProductionHelp, onHome, pressable, shown, sleep, textOf, Skip } from "../lib/cdp.mjs";
 
 export const area = "settings";
 
@@ -28,7 +28,7 @@ const ALLOW = ["PersoDub", "Perso API", "Perso", "ChatGPT", "Claude", "Codex", "
 // What the person put there, not the app's words: project and file names, the
 // workspace list, the conversation, the signed-in account.
 const USER_TEXT = [".proj-name", ".proj-rename", "#topbarTitle", "#topbarForwardName", "#queueRows", "#persoSpaceSelect",
-  "#assistantLog", "#assistantState", "#draftPartCard", "#homeBannerLink"].join(",");
+  "#assistantLog", "#assistantState", "#draftPartCard", "#homeBannerLink", "#homeAccount", "#persoAccountMail", "#signInAccount"].join(",");
 
 // An address or a home folder never goes into a note.
 const clean = (s) => String(s).replace(/[^\s@"'<>]+@[^\s@"'<>]+\.[A-Za-z]{2,}/g, "<account>").replace(/\/Users\/[^/\s]+/g, "~")
@@ -371,7 +371,7 @@ export const steps = [
       const tangled = lines.slice(1).filter((l, i) => l.top < lines[i].bottom - 1);
       if (tangled.length) throw new Error(`sentences share a line: ${tangled.map((l) => l.text).join(" / ")}`);
       const all = lines.map((l) => l.text).join(" ");
-      const need = app.page.lang === "ko" ? ["실패한 작업만", "PersoDub을 더 좋게 만드는 데"] : ["Only failed jobs", "make PersoDub better"];
+      const need = app.page.lang === "ko" ? ["실패한 작업만", `${app.page.name}을 더 좋게 만드는 데`] : ["Only failed jobs", `make ${app.page.name} better`];
       const absent = need.filter((w) => !all.includes(w));
       if (absent.length) throw new Error(`the job-logs text lacks ${absent.join(", ")}`);
       const was = (await app.api("/api/settings")).analytics_off;
@@ -403,7 +403,7 @@ export const steps = [
       const v = (await app.api("/api/settings")).app_version;
       await showTab(app, "about");
       const said = await app.inPage(textOf, "#aboutVersion");
-      if (said !== `PersoDub ${v}`) throw new Error(`the version reads "${said}", GET /api/settings says ${v}`);
+      if (said !== `${app.page.name} ${v}`) throw new Error(`the version reads "${said}", GET /api/settings says ${v}`);
       await app.click("#aboutVersion");
       await app.waitFor("the What's new window", 5000, isOpen, "#whatsNewOverlay");
       const title = await app.inPage(textOf, "#wnTitle");
@@ -472,18 +472,27 @@ export const steps = [
       await app.waitFor("the Dubbing tab", 10000, shown, "#homeBtn");
       await app.click("#homeBtn");
       await app.waitFor("Home", 10000, onHome);
-      await app.click("#homeHelp");
-      await app.waitFor("Help", 5000, isOpen, "#helpOverlay");
-      const help = await app.inPage(textOf, "#helpTitle");
-      await app.key("Escape");
-      await app.waitFor("Escape to close Help", 5000, isClosed, "#helpOverlay");
+      // The production edition's Help is Perso's desktop app page in the browser, not the dialog.
+      let help;
+      if (app.production) {
+        const urls = await app.opened(() => app.click("#homeHelp"));
+        if (urls.length !== 1 || !isProductionHelp(urls[0])) throw new Error(`Help opened ${urls.join(", ") || "nothing"}`);
+        help = "Perso's desktop app page in the browser";
+      } else {
+        await app.click("#homeHelp");
+        await app.waitFor("Help", 5000, isOpen, "#helpOverlay");
+        help = `"${await app.inPage(textOf, "#helpTitle")}"`;
+        await app.key("Escape");
+        await app.waitFor("Escape to close Help", 5000, isClosed, "#helpOverlay");
+        help += ", Escape closed it";
+      }
       await app.click("#homeWhatsNew");
       await app.waitFor("the update window", 5000, isOpen, "#updateOverlay");
       const upd = await app.inPage(() => `${document.querySelector("#updTitle").textContent.trim()} · ${document.querySelectorAll("#updNotes li").length} notes`);
       await app.key("Escape");
       await app.waitFor("Escape to close the update window", 5000, isClosed, "#updateOverlay");
-      return `${app.tr("Home")} (from the Dubbing tab, ${1 + (ctx.state.homeBtn || 0)} presses) back to Home; [${words[0]}] → "${help}", Escape closed it; `
-        + `[${words[2]}] → "${upd}", Escape closed it; [${words[1]}] pressable, not pressed (opens GitHub in the browser)`;
+      return `${app.tr("Home")} (from the Dubbing tab, ${1 + (ctx.state.homeBtn || 0)} presses) back to Home; [${words[0]}] → ${help}; `
+        + `[${words[2]}] → "${upd}", Escape closed it; [${words[1]}] pressable, not pressed (${app.production ? "opens the inquiry form" : "opens GitHub in the browser"})`;
     } },
 
   { name: "Dub Agent panel: who is signed in", looks: ["#homeAgentOpen"],
