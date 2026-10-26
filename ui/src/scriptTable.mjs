@@ -487,7 +487,7 @@ export function initScriptTableUi({ $, scriptLangNames, isPersoJob, renderTimeli
         }
         await renderScript(jobId);
       } catch {
-        note.textContent = t("Could not fetch it. Is PersoDub running?") + " ";
+        note.textContent = t("Could not fetch it. Is {app} running?") + " ";
         btn.disabled = false;
       }
     });

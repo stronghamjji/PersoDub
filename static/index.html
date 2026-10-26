@@ -75,7 +75,7 @@
   <div class="topbar" id="topbar">
     <span class="topbar-ways" id="topbarWays"></span>
     <div class="topbar-titles">
-      <span class="topbar-title" id="topbarTitle">PersoDub</span>
+      <span class="topbar-title" id="topbarTitle" data-i18n>{app}</span>
       <input class="topbar-title topbar-rename" id="topbarRename" hidden
              maxlength="80" spellcheck="false" aria-label="Project name" data-i18n-aria-label="Project name">
       <!-- Written by setTopbar still, but not shown: the mockup's bar carries
@@ -1003,7 +1003,7 @@
      Brief help where it is asked for, not a tour (Apple's HIG; owner, 2026-10-09). -->
 <div class="modal-overlay" id="helpOverlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" style="max-width: 480px">
-    <div class="modal-head"><h2 id="helpTitle">What PersoDub does</h2></div>
+    <div class="modal-head"><h2 id="helpTitle">What {app} does</h2></div>
     <div class="modal-body">
       <div class="modal-inner">
         <div class="help-item"><b>Dubbing</b><p>Voices a video in another language, in each speaker&#8217;s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.</p><div class="help-where">Local model (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).</div></div>
@@ -1220,7 +1220,7 @@
         </div>
         <div class="settings-alert" id="settingsSaveError" style="display:none">
           <svg class="icon" viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-          <span data-i18n id="settingsSaveErrorText">Saving the key(s) failed. Is PersoDub running?</span>
+          <span data-i18n id="settingsSaveErrorText">Saving the key(s) failed. Is {app} running?</span>
         </div>
       </div>
 
@@ -1270,7 +1270,7 @@
               <span data-i18n>Keeps a record of finished and failed jobs (masked logs, time per step, device ID) on a private dashboard for 30 days.</span>
               <span data-i18n>Only failed jobs go into a public GitHub issue, as a summary of the cause.</span>
               <span data-i18n>Titles, file names, links and dialogue are not sent.</span>
-              <span data-i18n>What you send helps make PersoDub better.</span>
+              <span data-i18n>What you send helps make {app} better.</span>
             </div>
           </div>
         </div>
@@ -1530,7 +1530,7 @@
   <div class="signin-bar"></div>
   <div class="signin-stage" id="signInStart">
     <img class="signin-logo" src="/logo.png" alt="">
-    <div class="signin-name" id="signInName">PersoDub</div>
+    <div class="signin-name" id="signInName" data-i18n>{app}</div>
     <button class="btn btn-primary signin-btn" id="signInBtn" type="button"></button>
     <div class="signin-hint" id="signInHint"></div>
   </div>
@@ -1544,7 +1544,7 @@
   <div class="signin-stage" id="signInNoKey" hidden>
     <img class="signin-logo sm" src="/logo.png" alt="">
     <h1 data-i18n>No API key yet</h1>
-    <p data-i18n>The key page is open in your browser. Make a key there; PersoDub carries on by itself.</p>
+    <p data-i18n>The key page is open in your browser. Make a key there; {app} carries on by itself.</p>
     <div class="signin-acct" id="signInAccount"></div>
     <div class="signin-btns">
       <button data-i18n class="btn btn-primary signin-btn" id="signInMakeKey" type="button">Make a key</button>

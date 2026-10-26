@@ -37,7 +37,7 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 5000 }) {
   const listeners = [];
   const auth = shell && shell.authStatus ? shell : null;
   // The name under the logo is the edition's (PersoDubbing in production).
-  $("signInName").textContent = (shell && shell.name) || "PersoDub";
+  $("signInName").textContent = t("{app}");
   // The elements made inert while the screen is up, so nothing under it can
   // be reached by Tab or a shortcut. Only these are given back.
   const madeInert = new Set();

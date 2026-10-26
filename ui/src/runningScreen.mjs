@@ -330,7 +330,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
   function failedAt(job) {
     const progress = parseProgress(job.logs);
     if (!progress.stage) {
-      return t("It stopped while getting the dubbing ready. Press Start over. If it stops again, quit and reopen PersoDub, then try again.");
+      return t("It stopped while getting the dubbing ready. Press Start over. If it stops again, quit and reopen {app}, then try again.");
     }
     if (job.dub_mode === "perso") return t("It stopped while dubbing with the Perso API. Press Start over.");
     return (STOPPED_AT[progress.raw] || STOPPED_AT[4])();

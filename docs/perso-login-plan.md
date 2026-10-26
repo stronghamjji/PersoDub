@@ -128,7 +128,8 @@ allowed_grant_types authorization_code, refresh_token
 |---|---|
 | 창 제목, 로그인 화면의 이름, 부팅 화면 제목, 로그인 뒤 브라우저 페이지 | 셸이 `desktop/src/edition.js`의 DISPLAY_NAMES를 페이지에 넘김 |
 | 앱 번들 이름, Dock, 메뉴 막대, Windows 시작 메뉴, 설치 파일명 | 프로덕션 빌드 명령 `npm run dist:dmg:prod`, `dist:win:prod` 가 productName을 PersoDubbing으로 덮어씀. Windows 워크플로우는 production 선택 시 자동 |
-| 안 바뀌는 곳 | appId(com.persodub.desktop), kit 폴더 `Application Support/PersoDub`(모델과 프로젝트), Perso에 보내는 User-Agent, 실패 리포트 제목, 문장 속의 "PersoDub" 약 240곳 |
+| 문장 속의 이름 | 페이지, 셸, 백엔드의 문장 전부 `{app}` 자리표시자. 페이지는 셸이 넘긴 이름으로, 셸은 `setAppName`으로, 백엔드는 `PERSODUB_APP_NAME` 환경 변수로 채움(빅테크 방식: Chromium/Chrome, Code-OSS/VS Code). 영어 문장은 엔진이 이름을 채워 보내므로 페이지는 이름을 `{app}`으로 되돌려 번역 표를 찾음 |
+| 안 바뀌는 곳 | appId(com.persodub.desktop), kit 폴더 `Application Support/PersoDub`(모델과 프로젝트), Perso에 보내는 User-Agent, 실패 리포트 제목, "PersoDub on GitHub" 링크(오픈소스 프로젝트 이름), 프로토콜 문장 "PersoDub installs this itself." |
 
 주의 둘. (1) productName이 바뀌면 Electron의 데이터 폴더가 `Application Support/PersoDubbing`으로 새로 생깁니다. 로그와 분석용 기기 id가 새로 시작하고, kit의 모델과 프로젝트는 그대로입니다. (2) 프로덕션 전용 업데이트 피드가 생기기 전에는 자동 업데이트가 공개 오픈소스 빌드를 받아 이름이 PersoDub으로 돌아갑니다. 4번 항목의 피드 분리가 먼저입니다.
 

@@ -55,7 +55,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
   let packFailed = null;   // { id, reason } until the next attempt or refresh clears it
   // A pack in a plain browser: the desktop app installs it. Read when drawn,
   // so it is in the page's language; the sentences below say it whole.
-  const packHint = () => t("Installed by PersoDub");
+  const packHint = () => t("Installed by {app}");
 
   const modelRow = (id) => modelRows.find((m) => m.id === id) || null;
 
@@ -137,8 +137,8 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
   async function installPack(id) {
     const name = (modelRow(id) || {}).name || id;
     if (!shell || !shell.installPack) {
-      showPackError(t("{name}: Installed by PersoDub.", { name }));
-      tellPack({ id, error: t("{name}: Installed by PersoDub.", { name }) });
+      showPackError(t("{name}: Installed by {app}.", { name }));
+      tellPack({ id, error: t("{name}: Installed by {app}.", { name }) });
       return false;
     }
     if (packBusy) {
@@ -174,7 +174,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
   }
   async function removePack(id) {
     $("modelsError").textContent = "";
-    if (!shell || !shell.removePack) { $("modelsError").textContent = t("Installed by PersoDub."); return; }
+    if (!shell || !shell.removePack) { $("modelsError").textContent = t("Installed by {app}."); return; }
     // The engine knows whether a dub is running; its DELETE refuses a pack
     // either way, and the sentence tells which reason. Only "PersoDub installs
     // this itself" (app/models.py, in English on purpose) means the coast is clear.
@@ -183,7 +183,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
       const body = await r.json().catch(() => null);
       const why = String((body && body.detail) || "");
       if (why !== "PersoDub installs this itself.") { $("modelsError").textContent = why || t("Could not remove it."); return; }
-    } catch { $("modelsError").textContent = t("Could not remove it. Is PersoDub running?"); return; }
+    } catch { $("modelsError").textContent = t("Could not remove it. Is {app} running?"); return; }
     const res = await shell.removePack(id).catch((e) => ({ ok: false, reason: String((e && e.message) || e) }));
     if (!res || !res.ok) $("modelsError").textContent = (res && res.reason) || t("Could not remove it.");
     await fetchModels();
@@ -301,7 +301,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
         const body = await r.json().catch(() => null);
         $("modelsError").textContent = String((body && body.detail) || t("Could not remove it."));
       }
-    } catch { $("modelsError").textContent = t("Could not remove it. Is PersoDub running?"); }
+    } catch { $("modelsError").textContent = t("Could not remove it. Is {app} running?"); }
     await fetchModels();
     repaint();
   }

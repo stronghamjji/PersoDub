@@ -239,15 +239,15 @@ def _engine_words(which: str, state: str, failure: str = "") -> str:
                     "Dubbing with the Perso API uses almost no memory.")
         return {
             "starting": i18n.t("The voice engine is still starting. Try again in a minute."),
-            "failed": "The voice engine is not running because it could not start, so this computer "
-                      "cannot dub. Quit and reopen PersoDub, or use the Perso API.",
-            "stopped": "The voice engine is not running. Quit and reopen PersoDub.",
+            "failed": i18n.english("The voice engine is not running because it could not start, so this computer "
+                                   "cannot dub. Quit and reopen {app}, or use the Perso API."),
+            "stopped": i18n.english("The voice engine is not running. Quit and reopen {app}."),
         }[state]
     return {
         "starting": i18n.t("The translation runtime is still starting. Try again in a minute."),
         "failed": i18n.t("The translation runtime is not running because it could not start. "
-                         "Quit and reopen PersoDub, or choose another translator."),
-        "stopped": i18n.t("The translation runtime is not running. Quit and reopen PersoDub."),
+                         "Quit and reopen {app}, or choose another translator."),
+        "stopped": i18n.t("The translation runtime is not running. Quit and reopen {app}."),
     }[state]
 
 

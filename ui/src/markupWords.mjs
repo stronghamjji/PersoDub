@@ -36,7 +36,7 @@ const words = () => [
   ["#mediaReplaceOverlay .modal-body p", t("Cuts are reset.")],
   // Help (the Home sidebar's): its title, the three tools, the links and OK.
   // The fourth item is the Dub Agent, whose name is not translated.
-  ["#helpTitle", t("What PersoDub does")],
+  ["#helpTitle", t("What {app} does")],
   ["#helpOverlay .help-item:nth-child(1) b", t("Dubbing")],
   ["#helpOverlay .help-item:nth-child(1) p", t("Voices a video in another language, in each speaker’s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.")],
   ["#helpOverlay .help-item:nth-child(1) .help-where", t("Local model (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).")],

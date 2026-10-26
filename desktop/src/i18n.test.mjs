@@ -13,8 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  LANGUAGES, localeLanguage, resolveLanguage, loadTable, setLanguage, currentLanguage, systemLocale, useLanguage, t,
-} from "./i18n.js";
+  LANGUAGES, localeLanguage, resolveLanguage, loadTable, setLanguage, currentLanguage, systemLocale, useLanguage, t, setAppName } from "./i18n.js";
 import { screenKeys } from "./screenText.js";
 
 const SRC = dirname(fileURLToPath(import.meta.url));
@@ -108,7 +107,8 @@ test("every language's table has the same sentences as the English one", () => {
 });
 
 test("every translation fills the same {placeholders} as its English sentence", () => {
-  const names = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+  // {app} is the app's name, not a value: a translation may leave it out.
+  const names = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((n) => n !== "app").sort();
   for (const code of LANGUAGES.filter((c) => c !== "en")) {
     const wrong = Object.entries(table(code)).filter(([key, text]) => names(key).join() !== names(text).join());
     assert.deepEqual(wrong, [], `desktop.${code}.json says other {names} than the English`);
@@ -129,4 +129,14 @@ test("every sentence the shell says is in the English table (once it has any)", 
 test("the tables ship with the app", () => {
   const { build } = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf8"));
   assert.ok(build.files.includes("i18n/**"), "desktop/package.json build.files leaves desktop/i18n out");
+});
+
+test("{app} in a sentence is the name the edition shows, PersoDub until it is set", () => {
+  setLanguage("en");
+  setAppName(null);
+  assert.equal(t("{app} could not start"), "PersoDub could not start");
+  setAppName("PersoDubbing");
+  assert.equal(t("Updating {app}"), "Updating PersoDubbing");
+  assert.equal(t("{app}: {what}", { what: "Installing" }), "PersoDubbing: Installing");
+  setAppName(null);
 });

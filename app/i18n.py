@@ -89,6 +89,12 @@ def t(key: str, **values) -> str:
     return _fill(_table(code).get(key, key) if code != "en" else key, values)
 
 
+def english(key: str, **values) -> str:
+    """The sentence in English, {app} and `values` filled: for a sentence the
+    page translates itself by matching it (app/engines_status.py)."""
+    return _fill(key, values)
+
+
 def both(key: str, **values) -> Tuple[str, str]:
     """(English, the user's language): the sentence `key` filled both ways.
 
@@ -100,7 +106,17 @@ def both(key: str, **values) -> Tuple[str, str]:
     return _fill(key, values), t(key, **values)
 
 
+APP_NAME_ENV = "PERSODUB_APP_NAME"
+
+
+def app_name() -> str:
+    """What the sentences call the app: the desktop shell passes the edition's
+    name (desktop/src/edition.js displayName); a plain server run is PersoDub."""
+    return os.environ.get(APP_NAME_ENV, "").strip() or "PersoDub"
+
+
 def _fill(text: str, values) -> str:
+    text = text.replace("{app}", app_name())
     if not values:
         return text
     return _PLACEHOLDER.sub(lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0), text)

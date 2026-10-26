@@ -12,7 +12,7 @@ import {
   AUTH_FILE, authConfig, authorizeUrl, callbackParams, challengeFor, createAuth, maskEmail, newPkce,
   parseActiveKey, parseProfile, redirectUriFor, refreshTokens, tokenExpiry, tokenStore,
 } from "./auth.js";
-import { startCallbackServer } from "./authLoopback.js";
+import { callbackPage, startCallbackServer } from "./authLoopback.js";
 import { registerAuthIpc } from "./authIpc.js";
 import { parseEnvFile } from "./kitEnv.js";
 
@@ -643,4 +643,23 @@ test("`enabled` as a function is asked at every request, so a kit found after th
   assert.equal((await auth.status()).signedIn, false, "the token file was read while switched off");
   on = true;
   assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false });
+});
+
+test("the browser's page: the app's name, the logo, one language picked from the browser's, nothing to press", async () => {
+  const en = callbackPage({ ok: true, lang: "en", appName: "PersoDubbing", logo: "data:image/png;base64,AAAA" });
+  assert.ok(en.includes("<h1>Signed in to PersoDubbing</h1>") && en.includes("go back to PersoDubbing.") && en.includes('src="data:image/png;base64,AAAA"'));
+  assert.ok(!/<(button|a|input|form)\b/.test(en), "nothing to press on the page");
+  const ko = callbackPage({ ok: false, lang: "ko", appName: "PersoDubbing", logo: "" });
+  assert.ok(ko.includes("로그인이 끝나지 않았어요") && ko.includes("PersoDubbing에서 다시 시도하세요.") && !ko.includes("<img"));
+  assert.ok(callbackPage({ ok: true, lang: "en", appName: "<b>x</b>", logo: "" }).includes("&#60;b&#62;x&#60;/b&#62;"), "the name is escaped");
+
+  // Over HTTP: the browser's Accept-Language picks the language.
+  const server = await startCallbackServer({ ports: [52390, 52391], onRequest: async () => "signed_in", appName: "PersoDubbing", logo: "data:image/png;base64,AAAA" });
+  try {
+    const url = `http://127.0.0.1:${server.port}/callback?code=c&state=s`;
+    const korean = await (await fetch(url, { headers: { "accept-language": "ko-KR,ko;q=0.9,en;q=0.8" } })).text();
+    assert.ok(korean.includes('<html lang="ko">') && korean.includes("PersoDubbing에 로그인했어요") && korean.includes("base64,AAAA"));
+    const english = await (await fetch(url)).text();
+    assert.ok(english.includes('<html lang="en">') && english.includes("Signed in to PersoDubbing"));
+  } finally { server.close(); }
 });

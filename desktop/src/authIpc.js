@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AUTH_FILE, authConfig, createAuth, tokenStore } from "./auth.js";
 import { kitEdition } from "./edition.js";
@@ -9,7 +10,12 @@ import { kitEdition } from "./edition.js";
  * the boot has found the kit (edition.js, kept in kit.env across updates),
  * this build's edition before that. `focus` brings the window forward when
  * the browser comes back. */
-export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus = () => {}, appName = "PersoDub", env = process.env }) {
+/** The app's logo as a data: URL for the browser's page, or "" without one. */
+export function logoDataUrl(path) {
+  try { return `data:image/png;base64,${readFileSync(path).toString("base64")}`; } catch { return ""; }
+}
+
+export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus = () => {}, appName = "PersoDub", logoPath = "", env = process.env }) {
   const auth = createAuth({
     enabled: () => (kitEdition(ctx.kitDir) || edition) === "production",
     cfg: authConfig(env),
@@ -20,6 +26,7 @@ export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, sh
     log: shellLog,
     onCallback: focus,
     appName,
+    logo: logoPath ? logoDataUrl(logoPath) : "",
     onChange: () => {
       const { win } = ctx;
       if (!win || win.isDestroyed()) return;

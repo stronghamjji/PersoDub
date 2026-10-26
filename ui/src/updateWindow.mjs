@@ -92,11 +92,11 @@ export function updateWindowView(state, { current = "", currentNotes = [], dubRu
   // It checks once a launch, so opening PersoDub again is what checks again.
   if (state?.phase === "check-failed") {
     return { title: t("Could not check for updates."), current: shownCurrent,
-      next: t("Check your internet connection, then open PersoDub again."), released: "", button: null,
+      next: t("Check your internet connection, then open {app} again."), released: "", button: null,
       running: "", notes: currentNotes, notesLink: null };
   }
   if (!updateLive(state)) {
-    return { title: t("PersoDub is up to date"), current: shownCurrent, next: "", released: "", button: null,
+    return { title: t("{app} is up to date"), current: shownCurrent, next: "", released: "", button: null,
       running: "", notes: currentNotes, notesLink: null };
   }
   const day = releaseDay(state.releaseDate);
@@ -117,7 +117,7 @@ export function updateWindowView(state, { current = "", currentNotes = [], dubRu
     // A restart stops the dub: the job comes back as interrupted, with Resume
     // for a local one (app/jobs.py, app/api/dub.py) -- it does not carry on
     // by itself, so the line says only what is true for every dub.
-    running: failed ? t("Could not download the update. Check your internet connection, then open PersoDub again and it downloads anew.")
+    running: failed ? t("Could not download the update. Check your internet connection, then open {app} again and it downloads anew.")
       : dubRunning ? t("Dubbing is running. Restarting stops it.") : "",
     notes,
     notesLink: notes.length ? null : `${releases}/tag/v${state.version}`,

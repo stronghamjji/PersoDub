@@ -13,7 +13,7 @@ import { registerDownloadIpc } from "./src/downloadsIpc.js";
 import { registerPackIpc } from "./src/packIpc.js";
 import { createWindow } from "./src/windowFactory.js";
 import { EDITIONS, displayName, readEdition } from "./src/edition.js";
-import { useLanguage, systemLocale } from "./src/i18n.js";
+import { setAppName, useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
 import { writeTimeline } from "./src/timeline.js";
 import { createShellAuth, registerAuthIpc } from "./src/authIpc.js";
@@ -35,6 +35,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // page's GitHub links open (src/edition.js). Read once, from the same payload
 // the boot installs from; the window is made before the boot runs.
 const edition = readEdition({ payloadDir: findPayloadDir(HERE), env: process.env });
+// Every sentence that names the app says this edition's name (src/edition.js).
+setAppName(displayName(edition));
 // What the shell's parts share. Set as the app comes up, and read by each part
 // at the moment it needs it -- none of it exists when the parts are made.
 const ctx = {
@@ -78,7 +80,8 @@ function shellLog(line, level = "INFO") {
 // Perso sign-in in the browser, production edition only (src/auth.js). The
 // browser comes back through a port on this computer, so nothing is
 // registered with the system.
-const auth = createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition) });
+const auth = createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition),
+                               logoPath: join(HERE, "screens", "logo.png") });
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog });
 const countUsage = usageCounter(app);

@@ -73,9 +73,15 @@ export function useLanguage({ osLocale, kitDir } = {}) {
 }
 
 /** The sentence `key` in the current language, `{name}` filled from `vars`. */
+// The product's name in every sentence that says {app}: set once from the
+// edition (src/edition.js displayName), "PersoDub" until then.
+let appName = "PersoDub";
+export function setAppName(name) { appName = name || "PersoDub"; }
+
 export function t(key, vars) {
   const table = tables[language];
-  const text = table && Object.hasOwn(table, key) ? table[key] : key;
+  const text0 = table && Object.hasOwn(table, key) ? table[key] : key;
+  const text = text0.replace(/\{app\}/g, appName);
   if (!vars) return text;
   return text.replace(/\{(\w+)\}/g, (m, name) => (Object.hasOwn(vars, name) ? String(vars[name]) : m));
 }

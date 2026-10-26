@@ -173,9 +173,9 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
         ctx.win.focus();
         const { response } = await dialog.showMessageBox(ctx.win, {
           type: "warning",
-          title: t("PersoDub update"),
+          title: t("{app} update"),
           message: t("Close {names} first, then update", { names }),
-          detail: t("That program is using files in PersoDub's installation folder, so the update may stall halfway through. Close it and click \"Restart to update\" again, or update anyway and PersoDub will try regardless."),
+          detail: t("That program is using files in {app}'s installation folder, so the update may stall halfway through. Close it and click \"Restart to update\" again, or update anyway and {app} will try regardless."),
           // Update anyway leads, because it is the one that finishes: the
           // other button asks the user to go and close something first, and
           // they came here to update.

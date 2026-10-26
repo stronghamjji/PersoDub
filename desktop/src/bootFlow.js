@@ -37,19 +37,19 @@ export function installStopText(message) {
       `${t("You can also ask your company's IT team to open these addresses.")}\n${INSTALL_HOSTS.join(" · ")}`];
   }
   if (code === "disk-full") return [t("There is not enough storage space. Free some up, then press Try again to pick up where it stopped."), ""];
-  if (code === "permission") return [t("Another program is using PersoDub's files. Restart your computer, then press Try again."), ""];
+  if (code === "permission") return [t("Another program is using {app}'s files. Restart your computer, then press Try again."), ""];
   if (code === "network" || downloadInterrupted(message)) {
     return [t("The internet connection dropped. Check it, then press Try again to pick up where it stopped."), ""];
   }
-  return [t("Press Try again to go on from where it stopped. If it stops again, restart your computer, then open PersoDub."), ""];
+  return [t("Press Try again to go on from where it stopped. If it stops again, restart your computer, then open {app}."), ""];
 }
 
 /** What a start that failed says under its title: the backend gave no answer
  * in time (health.js), or it stopped on the way up. */
 export function startStopText(message) {
   return /^Health check timed out/.test(message)
-    ? t("Getting ready took too long. Restart your computer, then open PersoDub. If it keeps happening, security software may be blocking it.")
-    : t("It stopped while starting. Press Try again. If it stops again, restart your computer, then open PersoDub.");
+    ? t("Getting ready took too long. Restart your computer, then open {app}. If it keeps happening, security software may be blocking it.")
+    : t("It stopped while starting. Press Try again. If it stops again, restart your computer, then open {app}.");
 }
 
 // Packaged builds carry the payload under Resources/; a dev checkout may have
@@ -296,6 +296,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         appVersion: app.getVersion(), // desktop/package.json -- the one place the version lives
         locale: systemLocale(),
         edition: runEdition, // where a dub runs by default (app/setup.py)
+        appName: displayName(edition), // the name its sentences call the app (app/i18n.py)
         preferredBackendPort: readRememberedPorts().backend,
         log: shellLog,
         onExit: logMemory,

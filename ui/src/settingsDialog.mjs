@@ -245,7 +245,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
       loadPersoSpaces(persoSpaceInitial); // async on purpose -- the modal opens without waiting on Perso
       if (st.perso_signup_link) $("persoSignupLink").href = st.perso_signup_link;
       if (realVersion(st.app_version)) {
-        $("aboutVersion").textContent = `PersoDub ${st.app_version}`;
+        $("aboutVersion").textContent = `${t("{app}")} ${st.app_version}`;
       }
       $("analyticsToggle").checked = !st.analytics_off;
       $("reportsToggle").checked = !st.reports_off;
@@ -477,7 +477,7 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
     if (ok) { closeSettings(); return; }
     // Beside the button that was pressed, where the eye already is.
     paintChanges();
-    $("settingsChanges").textContent = t("Could not save. Is PersoDub running?");
+    $("settingsChanges").textContent = t("Could not save. Is {app} running?");
   }
   $("settingsSaveBtn").addEventListener("click", saveSettings);
   $("settingsCancelBtn").addEventListener("click", leaveSettings);

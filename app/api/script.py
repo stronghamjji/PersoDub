@@ -376,7 +376,7 @@ def _remake_one_voice(work_dir: str, data: dict, line: int, text: str, language:
         # status uses (app/engines_status.py).
         if isinstance(e, (httpx.ConnectError, VoiceEngineDown)) and not dub_in_progress():
             raise HTTPException(status_code=503, detail=t(
-                "The voice engine is not running. Quit and reopen PersoDub."))
+                "The voice engine is not running. Quit and reopen {app}."))
         # The engine did not answer in time or answered with an error: on a
         # machine that is also dubbing, that is the dub holding it. A 500 here
         # read to the agent as "still waiting" (2026-09-16).

@@ -601,7 +601,7 @@ function showHome() {
   saveVideoNext = false;
   paintDraftBack();
   showScreen("home");
-  setTopbar({ title: "PersoDub", subtitle: t("Local dubbing") });
+  setTopbar({ title: t("{app}"), subtitle: t("Local dubbing") });
   projects.renderQueueCard().catch(() => {});
   noteLastScreen("");
 }
@@ -1502,7 +1502,7 @@ async function resumeJob(jobId) {
     // Another project was clicked (or Home) while this one was being read:
     // the last click is the one on screen, and this answer is dropped whole.
     if (myGeneration !== state.pollGeneration) return;
-    if (job.detail) throw new Error(t("This project is no longer available. PersoDub may have restarted."));
+    if (job.detail) throw new Error(t("This project is no longer available. {app} may have restarted."));
     // Erasing subtitles is the other work this app does, and it has a screen of
     // its own: the same row, the same click, a different place to land.
     if (job.kind === "erase") { eraseScreen.openEraseJob(job); return; }
@@ -1722,7 +1722,7 @@ function runPollLoop(jobId, myGeneration) {
     // takes the red away again the moment the server is back.
     onUnreachable: (e) => {
       if (myGeneration !== state.pollGeneration) return;
-      runningScreen.showNoticeError(t("PersoDub is not answering. Still trying."));
+      runningScreen.showNoticeError(t("{app} is not answering. Still trying."));
     },
   }).catch((e) => {
     // Leaving the job settles the loop without a word (it resolves, it does not

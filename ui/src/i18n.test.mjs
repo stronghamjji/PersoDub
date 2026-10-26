@@ -13,8 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   t, setLanguage, currentLanguage, loadTable, applyTranslations, pickLanguage, markupKey, LANGUAGES,
-  languageName, pageLanguage, savedSettings,
-} from "./i18n.mjs";
+  languageName, pageLanguage, savedSettings, setAppName } from "./i18n.mjs";
 
 const SRC = fileURLToPath(new URL("./", import.meta.url));
 const STATIC = fileURLToPath(new URL("../../static/", import.meta.url));
@@ -237,7 +236,8 @@ test("every language's table has the same sentences as the English one", () => {
 });
 
 test("every translation fills the same {placeholders} as its English sentence", () => {
-  const names = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+  // {app} is the app's name, not a value: a translation may leave it out.
+  const names = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((n) => n !== "app").sort();
   for (const code of LANGUAGES.filter((c) => c !== "en")) {
     const wrong = Object.entries(table(code)).filter(([key, text]) => names(key).join() !== names(text).join());
     assert.deepEqual(wrong, [], `ui.${code}.json says other {names} than the English`);
@@ -253,4 +253,43 @@ test("every sentence the page asks for is in the English table (once it has any)
   if (!Object.keys(en).length) return;   // not filled yet: nothing to hold the page to
   const missing = [...keysInPage()].filter((k) => !Object.hasOwn(en, k));
   assert.deepEqual(missing, [], "asked for by the page, missing from static/i18n/ui.en.json");
+});
+
+test("{app} in a sentence is the app's name: PersoDub with no shell, the shell's name with one, in every language", async () => {
+  setLanguage("en");
+  assert.equal(t("Quit and reopen {app}."), "Quit and reopen PersoDub.");
+  assert.equal(t("{app}"), "PersoDub");
+  const hadWindow = Object.hasOwn(globalThis, "window");
+  const before = globalThis.window;
+  globalThis.window = { persodubShell: { name: "PersoDubbing" } };
+  try {
+    assert.equal(t("Quit and reopen {app}."), "Quit and reopen PersoDubbing.");
+    assert.equal(t("{app} answered {status}.", { status: 500 }), "PersoDubbing answered 500.");
+    await withTable("ko", { "Quit and reopen {app}.": "{app}을 껐다 켜 주세요." }, () => {
+      setLanguage("ko");
+      assert.equal(t("Quit and reopen {app}."), "PersoDubbing을 껐다 켜 주세요.");
+      setLanguage("en");
+    });
+    setAppName("Other");
+    assert.equal(t("{app}"), "Other");
+    setAppName(null);
+    assert.equal(t("{app}"), "PersoDubbing");
+  } finally {
+    if (hadWindow) globalThis.window = before; else delete globalThis.window;
+  }
+});
+
+test("a sentence the engine sent with the app's name filled in is translated under its {app} key", async () => {
+  await withTable("ko", { "Quit and reopen {app}.": "{app}을 껐다 켜 주세요." }, () => {
+    setLanguage("ko");
+    assert.equal(t("Quit and reopen PersoDub."), "PersoDub을 껐다 켜 주세요.");
+    const hadWindow = Object.hasOwn(globalThis, "window");
+    const before = globalThis.window;
+    globalThis.window = { persodubShell: { name: "PersoDubbing" } };
+    try {
+      assert.equal(t("Quit and reopen PersoDubbing."), "PersoDubbing을 껐다 켜 주세요.");
+      assert.equal(t("Quit and reopen PersoDub."), "Quit and reopen PersoDub.", "another name is not this app's");
+    } finally { if (hadWindow) globalThis.window = before; else delete globalThis.window; }
+    setLanguage("en");
+  });
 });
