@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { release } from "node:os";
 import { join } from "node:path";
@@ -63,6 +63,13 @@ export function cleanEvents(list) {
     .map((e) => ({ name: e.name, screen: e.screen || "", t: e.t }));
 }
 
+/** The signed-in account as analytics know it: a one-way hash of Perso's
+ *  number for it, which nobody can read back to the account, or "" signed
+ *  out. Never the number itself or the e-mail (owner, 2026-10-25). */
+export function eventsUserId(accountId) {
+  return accountId ? createHash("sha256").update(`persodub:${accountId}`).digest("hex").slice(0, 32) : "";
+}
+
 /** "mac", "windows" or "linux", as the relay names them. */
 export const osName = (platform = process.platform) =>
   (platform === "win32" ? "windows" : platform === "darwin" ? "mac" : "linux");
@@ -70,8 +77,8 @@ export const osName = (platform = process.platform) =>
 /**
  * The shell's half, for this app: take(list) answers the page's
  * persodubShell.sendEvents -- {on, kept, sent, recent} -- and an empty list
- * only asks. `ctx.userId` is the signed-in account's id, empty until the
- * production edition signs in.
+ * only asks. `ctx.userId` is the signed-in account's eventsUserId, empty
+ * until the production edition signs in (authIpc.js keeps it).
  */
 export function createEvents({ app, ctx, edition, shellLog, fetchImpl = fetch, now = Date.now }) {
   const dir = () => join(app.getPath("userData"), "events");

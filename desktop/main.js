@@ -55,8 +55,8 @@ const ctx = {
   // page that arrives after the check (boot) or reloads mid-download still
   // shows the right pill. Null until an update is found.
   updateState: null,
-  // The signed-in Perso account's id, for the button events (src/events.js).
-  // Empty until the production edition's sign-in fills it.
+  // The signed-in Perso account, hashed, for the button events (src/events.js
+  // eventsUserId). Empty until the production edition's sign-in fills it.
   userId: "",
 };
 

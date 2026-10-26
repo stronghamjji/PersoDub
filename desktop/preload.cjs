@@ -107,7 +107,7 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting}:
   // `required` is the production edition signed out, when the page shows its
   // sign-in screen; `account` is a masked e-mail and `accountId` Perso's number
-  // for the account, the value to key a user's analytics events by. authLogin opens the browser
+  // for the account; the events key it by a hash of it (src/events.js eventsUserId). authLogin opens the browser
   // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
   // (outcomes and key answers are listed at createAuth). authCheckKey looks for
   // the account's API key again, after authOpenKeyPage let the user make one.

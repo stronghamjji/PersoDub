@@ -277,8 +277,8 @@ export function createAuth({
       required: on && !session,
       signedIn: Boolean(session),
       account: session?.account || "",
-      // Perso's number for the account (userSeq): the one value to key a
-      // user's events by in an analytics tool. Never an e-mail.
+      // Perso's number for the account (userSeq). The button events carry a
+      // one-way hash of it (events.js eventsUserId), never it or an e-mail.
       accountId: session?.userId || "",
       hasKey: dir ? (envWithKit(dir).PERSO_API_KEY || "").trim() !== "" : false,
       // Still waiting while the code is traded: the screen stays on "finish

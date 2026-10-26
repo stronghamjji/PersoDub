@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { EVENTS_ENDPOINT, MAX_PER_POST, cleanEvents, createEvents, eventsOn, osName, resolveEventsMode } from "./events.js";
+import { createHash } from "node:crypto";
+import { EVENTS_ENDPOINT, MAX_PER_POST, cleanEvents, createEvents, eventsOn, eventsUserId, osName, resolveEventsMode } from "./events.js";
 
 const DEVICE = "0123456789abcdef0123456789abcdef";
 const press = (name, t = 1793000000000) => ({ name, screen: "home", t });
@@ -83,6 +84,17 @@ test("the signed-in account goes as userId once the login fills it", async () =>
   s.events.take([press("save")]);
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(s.posts[0].body.userId, "u-42");
+});
+
+// The owner's rule (2026-10-25): analytics key a user by a value nobody can
+// read back to the account, never Perso's number or the e-mail.
+test("the account goes to analytics as a one-way hash of Perso's number, and as nothing signed out", () => {
+  const expected = createHash("sha256").update("persodub:1001").digest("hex").slice(0, 32);
+  assert.equal(eventsUserId("1001"), expected);
+  assert.match(eventsUserId("1001"), /^[0-9a-f]{32}$/);
+  assert.ok(!eventsUserId("1001").includes("1001"));
+  assert.notEqual(eventsUserId("1002"), expected);
+  for (const none of ["", null, undefined]) assert.equal(eventsUserId(none), "");
 });
 
 test("offline keeps the batch for the next one, and a refusal is dropped rather than retried forever", async () => {

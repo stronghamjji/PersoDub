@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AUTH_FILE, authConfig, createAuth, tokenStore } from "./auth.js";
+import { eventsUserId } from "./events.js";
 
 // The wiring of src/auth.js into the app: the controller and the page's channels.
 
@@ -9,7 +10,8 @@ import { AUTH_FILE, authConfig, createAuth, tokenStore } from "./auth.js";
  * kit remembers in kit.env (edition.js), which an open-source app updated
  * from a 0.8.4 or 0.8.5 production install still says is production, and
  * which only a dub's default follows. `focus` brings the window forward when
- * the browser comes back. */
+ * the browser comes back. Every change of the sign-in sets ctx.userId, so
+ * the next batch of button events carries the account, hashed, or nothing. */
 /** The app's logo as a data: URL for the browser's page, or "" without one. */
 export function logoDataUrl(path) {
   try { return `data:image/png;base64,${readFileSync(path).toString("base64")}`; } catch { return ""; }
@@ -28,6 +30,7 @@ export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, sh
     appName,
     logo: logoPath ? logoDataUrl(logoPath) : "",
     onChange: () => {
+      ctx.userId = eventsUserId(auth.signedInAccount()?.id);
       const { win } = ctx;
       if (!win || win.isDestroyed()) return;
       void auth.status().then((s) => win.webContents.send("shell:auth-state", s));

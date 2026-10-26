@@ -178,7 +178,7 @@ allowed_grant_types authorization_code, refresh_token
 
 로그 파이프라인은 팀원이 Cloudflare에서 Amplitude로 옮기는 중이므로 여기서는 만들지 않습니다. 로그인 쪽에서 준비해 둔 것과 지켜야 할 것만 적습니다.
 
-- **계정 번호는 로그인 상태에 들어 있습니다.** 페이지에서 `window.persodubShell.authStatus()`가 돌려주는 객체의 `accountId`가 Perso의 userSeq(숫자 문자열)입니다. 로그인 상태가 바뀔 때마다 `window.persodubShell.onAuthState(cb)`로 같은 객체가 옵니다. Amplitude에서는 로그인 시 `setUserId(accountId)`, 로그아웃 시 reset 하면 됩니다. 이메일은 쓰지 않습니다. 오픈소스 에디션에서는 `enabled: false`이고 `accountId`는 빈 문자열입니다.
+- **계정 번호는 로그인 상태에 들어 있습니다.** 페이지에서 `window.persodubShell.authStatus()`가 돌려주는 객체의 `accountId`가 Perso의 userSeq(숫자 문자열)입니다. 로그인 상태가 바뀔 때마다 `window.persodubShell.onAuthState(cb)`로 같은 객체가 옵니다. 분석 도구에는 번호를 그대로 쓰지 않고, 셸이 버튼 기록에 넣는 해시(`desktop/src/events.js` eventsUserId: `persodub:` + 번호의 sha256 앞 32자)를 씁니다(2026-10-25 결정). 이메일은 쓰지 않습니다. 오픈소스 에디션에서는 `enabled: false`이고 `accountId`는 빈 문자열입니다.
 - **끄기 스위치를 지켜야 합니다.** 설정 > 개인정보의 "익명 사용 집계" 스위치와 kit.env의 `PERSODUB_NO_ANALYTICS=1`. 페이지에서는 `GET /api/settings`의 `analytics_off`로 읽을 수 있습니다. 꺼져 있으면 이벤트를 보내지 않습니다.
 - **보내면 안 되는 것.** 입력한 글, 파일 이름, 링크, 프로젝트 이름, 이메일, API 키, 토큰. 보내도 되는 것은 눌린 버튼의 id, 화면 이름(`document.body.dataset.screen`), 열린 다이얼로그 id, 드롭다운에서 고른 값 정도입니다.
 - **문서.** 이벤트를 보내기 시작하면 설정의 스위치 설명 문구와 `docs/privacy.md`에 "어떤 버튼과 화면을 쓰는지, 로그인한 계정 번호와 함께"가 들어가야 합니다.

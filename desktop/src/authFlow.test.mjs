@@ -409,6 +409,30 @@ test("the sign-in follows the build's edition only: a kit remembered as producti
   assert.equal((await prod.status()).enabled, true, "the production build signs in whatever kit.env says");
 });
 
+test("the events' userId is the signed-in account's hashed number, set at the sign-in and emptied at the sign-out", async () => {
+  const { createShellAuth } = await import("./authIpc.js");
+  const { eventsUserId } = await import("./events.js");
+  const kitDir = freshKit();
+  const browser = scriptedBrowser();
+  browser.typing = "a@test.local";
+  const ctx = { kitDir, win: null, userId: "" };
+  const auth = createShellAuth({
+    app: { getPath: () => mkdtempSync(join(tmpdir(), "odflow-user-")) },
+    shell: { openExternal: async (url) => { setImmediate(() => browser.open(url)); } },
+    safeStorage: fakeSafeStorage(), net: { fetch }, ctx, edition: "production", shellLog: () => {},
+    env: { PERSODUB_AUTH_BASE: fake.authBase, PERSODUB_AUTH_CLIENT_ID: FAKE_CLIENT_ID, PERSODUB_AUTH_REDIRECT_PORTS: PORTS },
+  });
+  await auth.start();
+  assert.equal(ctx.userId, "");
+  assert.equal((await auth.login()).outcome, "signed_in");
+  const { accountId } = await auth.status();
+  assert.ok(accountId);
+  assert.equal(ctx.userId, eventsUserId(accountId));
+  assert.notEqual(ctx.userId, accountId, "never Perso's number itself");
+  await auth.logout();
+  assert.equal(ctx.userId, "");
+});
+
 test("a key list with no usable key: no_key, the log names its fields only, and Check again saves a key made later", async () => {
   const kitDir = freshKit();
   const browser = scriptedBrowser();

@@ -85,8 +85,9 @@ From 0.9.1 the app can record which buttons, links, tabs and menu items you pres
 screens you open, to see which parts of it people use. Each press is a name taken from the
 app's own markup (for example `home_nav_settings`), the screen's name and the time; each
 batch also carries the random install ID, the app version, the edition, and your operating
-system and its version. Never what you type, your video, files, filenames, paths, links,
-scripts or account address. The batches go to the same relay as the job logs, every 30
+system and its version, and, signed in to the production edition, the account as a one-way
+hash of its Perso number that cannot be turned back into the account. Never what you type,
+your video, files, filenames, paths, links, scripts, the account's number or its address. The batches go to the same relay as the job logs, every 30
 seconds, which passes them to Google Analytics (and later Amplitude) and keeps nothing itself.
 
 It is on to begin with in the production edition and off in the open-source edition. Turn

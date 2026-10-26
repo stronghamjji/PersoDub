@@ -23,7 +23,7 @@
 
 ## 4. 작은 것
 - 설정이 API 키 탭으로 열리고 그 탭이 첫 번째. 한국어 "작업공간" → "Workspace".
-- 로그인 상태에 계정 번호(accountId = Perso userSeq)가 있어 Amplitude user id로 쓸 수 있습니다. 화면과 실패 리포트엔 안 나갑니다.
+- 로그인 상태에 계정 번호(accountId = Perso userSeq)가 있습니다. 버튼 기록에는 번호 대신 되돌릴 수 없는 해시(events.js eventsUserId)가 userId로 갑니다. 화면과 실패 리포트엔 안 나갑니다.
 - 버전 1.0.0-rc.1. rc 버전은 main에 안 보내고, 정식 릴리스 때 rc를 뗍니다. 업데이터는 allowPrerelease=false (rc 버전이 "rc" 채널만 보고 정식 릴리스를 못 찾는 electron-updater 동작을 막음).
 - 코드 리뷰 지적 13건 수정(마지막 커밋 'Review fixes: …'): 코드 교환 중 중복 로그인 차단, kit.env 원자적 쓰기, 키 저장 실패 사유 표시 등.
 
