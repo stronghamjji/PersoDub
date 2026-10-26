@@ -11,13 +11,15 @@ import { eventsUserId } from "./events.js";
  * from a 0.8.4 or 0.8.5 production install still says is production, and
  * which only a dub's default follows. `focus` brings the window forward when
  * the browser comes back. Every change of the sign-in sets ctx.userId, so
- * the next batch of button events carries the account, hashed, or nothing. */
+ * the next batch of button events carries the account, hashed, or nothing;
+ * `onSignOut` runs at every sign-out (auth.js createAuth). */
 /** The app's logo as a data: URL for the browser's page, or "" without one. */
 export function logoDataUrl(path) {
   try { return `data:image/png;base64,${readFileSync(path).toString("base64")}`; } catch { return ""; }
 }
 
-export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus = () => {}, appName = "PersoDub", logoPath = "", env = process.env }) {
+export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus = () => {}, onSignOut = () => {},
+                                 appName = "PersoDub", logoPath = "", env = process.env }) {
   const auth = createAuth({
     enabled: edition === "production",
     cfg: authConfig(env),
@@ -27,6 +29,7 @@ export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, sh
     kitDir: () => ctx.kitDir,
     log: shellLog,
     onCallback: focus,
+    onSignOut,
     appName,
     logo: logoPath ? logoDataUrl(logoPath) : "",
     onChange: () => {

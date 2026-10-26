@@ -535,6 +535,25 @@ test("an inquiry the web app did not take waits in the kit and goes to the web a
   ]);
 });
 
+// A waiting inquiry holds the signed-in account's full e-mail: once the
+// account has left this computer, so has every inquiry still waiting.
+test("signing out drops the inquiries still waiting, their logs too, and keeps the failure reports", async () => {
+  const s = setup({ engines: { url: "http://backend" }, account: () => ({ email: "someone@example.com", id: "1001" }),
+    relay: (url) => (url === INQUIRY_URL ? (() => { throw new TypeError("fetch failed"); })() : ok({ jobs: [] })) });
+  assert.deepEqual(await s.reporter.sendInquiry(FORM, { kitDir: s.kitDir, ...FACTS }), { queued: true });
+  assert.deepEqual(await s.reporter.sendInquiry({ ...FORM, type: "other" }, { kitDir: s.kitDir, ...FACTS }), { queued: true });
+  writeFileSync(join(s.kitDir, "reports", `aaaaaaaaaaaa-${Date.now()}.json`), JSON.stringify({ report: { kind: "dub" }, id: null }));
+  assert.ok(s.queued().some((n) => n.endsWith(".tar.gz")), "the bug inquiry's logs wait beside it");
+  assert.equal(s.queued().length, 4);
+
+  s.reporter.dropInquiries(s.kitDir);
+  assert.equal(s.queued().length, 1);
+  assert.ok(s.queued()[0].startsWith("aaaaaaaaaaaa-"), "the failure report stays");
+  assert.ok(!s.logged.join("\n").includes("someone@example.com"));
+  s.reporter.dropInquiries(null);
+  s.reporter.dropInquiries(join(s.base, "no-kit"));
+});
+
 // What 0.9.1's first cut queued, for the relay: no account fields and a bug's
 // logs beside it -- and one the relay had taken whose logs had not followed.
 test("an inquiry queued for the relay goes to the web app with its logs as base64, and one the relay took is dropped", async () => {

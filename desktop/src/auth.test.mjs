@@ -85,7 +85,7 @@ function persoRoutes({ userId = "u1", email = "someone@test.local", keys = [{ ap
 
 // createAuth with everything on disk in fresh temp folders, the browser
 // replaced by a list of the addresses it was asked to open.
-function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), userData, safe = fakeSafeStorage(), now, listen, loginTimeoutMs } = {}) {
+function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), userData, safe = fakeSafeStorage(), now, listen, loginTimeoutMs, onSignOut } = {}) {
   const dir = userData || mkdtempSync(join(tmpdir(), "odauth-user-"));
   const opened = [];
   const logs = [];
@@ -95,6 +95,7 @@ function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), 
     enabled, cfg: CFG, store: tokenStore(join(dir, AUTH_FILE), safe), fetchFn, listen: listen || stub.listen,
     openExternal: async (url) => { opened.push(url); }, kitDir: () => kitDir,
     log: (line) => logs.push(line), ...(now ? { now } : {}), ...(loginTimeoutMs ? { loginTimeoutMs } : {}),
+    ...(onSignOut ? { onSignOut } : {}),
   });
   return { auth, opened, logs, calls, kitDir, userData: dir, closed: stub.closed, listened: stub.listened };
 }
@@ -500,10 +501,10 @@ test("the door answers only its own path, and a request with the wrong state kee
 
 // ---- Signed in from the last run, and refreshing ----------------------------------
 
-async function signedInStore(routes, accessToken) {
+async function signedInStore(routes, accessToken, more = {}) {
   const userData = mkdtempSync(join(tmpdir(), "odauth-user-"));
   tokenStore(join(userData, AUTH_FILE), fakeSafeStorage()).write({ accessToken, refreshToken: "r1", userId: "u1", account: "so***@test.local" });
-  return makeAuth({ routes, userData, kitDir: kitWith("PERSO_API_KEY=pk_test_K1\nPERSO_SPACE_SEQ=42\n") });
+  return makeAuth({ routes, userData, kitDir: kitWith("PERSO_API_KEY=pk_test_K1\nPERSO_SPACE_SEQ=42\n"), ...more });
 }
 
 test("the next launch is signed in at once, with no request to Perso", async () => {
@@ -650,6 +651,24 @@ test("signing out leaves no copy of the key in kit.env.bak", async () => {
   assert.ok(!kept.includes("pk_test_K1"), "the backup still holds the account's key");
   assert.equal(parseEnvFile(kept).PERSO_API_KEY || "", "");
   if (process.platform !== "win32" && existsSync(bak)) assert.equal(statSync(bak).mode & 0o777, 0o600);
+});
+
+// What the shell keeps for the account beside the tokens -- an inquiry still
+// waiting holds its full e-mail (reporting.js dropInquiries) -- goes with it.
+test("every sign-out, pressed or a refused refresh, tells the shell; a refresh lost on the network does not", async () => {
+  const signedOut = [];
+  const onSignOut = () => signedOut.push("out");
+  const pressed = await signedInStore(persoRoutes(), later(), { onSignOut });
+  await pressed.auth.start();
+  assert.deepEqual(signedOut, []);
+  await pressed.auth.logout();
+  assert.deepEqual(signedOut, ["out"]);
+  const refused = await signedInStore(persoRoutes({ [`POST ${CFG.refreshUrl}`]: () => [400, { code: "A0002" }] }), gone(), { onSignOut });
+  await refused.auth.start();
+  assert.deepEqual(signedOut, ["out", "out"]);
+  const offline = await signedInStore(persoRoutes({ [`POST ${CFG.refreshUrl}`]: () => new TypeError("fetch failed") }), gone(), { onSignOut });
+  await offline.auth.start();
+  assert.deepEqual(signedOut, ["out", "out"]);
 });
 
 test("signing out finishes on this computer even when Perso does not answer", async () => {

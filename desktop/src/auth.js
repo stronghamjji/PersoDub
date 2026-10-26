@@ -246,10 +246,12 @@ export function tokenStore(file, safeStorage) {
  * and a sign-in's `key` says what happened to the API key: saved, no_key
  * (the account has none), no_kit, or failed: Perso not reached, or, with
  * `keyReason: "save"`, the key could not be written into kit.env.
+ * `onSignOut` runs at every sign-out, pressed or a refresh Perso refused,
+ * for what the shell keeps for the account elsewhere.
  */
 export function createAuth({
   enabled, cfg, store, fetchFn, openExternal, kitDir, listen = startCallbackServer, appName = "PersoDub", logo = "",
-  log = () => {}, onChange = () => {}, onCallback = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
+  log = () => {}, onChange = () => {}, onCallback = () => {}, onSignOut = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
   let session = null;   // {accessToken, refreshToken, userId, account, email}
@@ -306,11 +308,13 @@ export function createAuth({
     } catch (err) { log(`AUTH could not clear the Perso key in kit.env: ${err.message}`, "ERROR"); }
   }
 
-  // Signed out on this computer: the tokens and the account's key go.
+  // Signed out on this computer: the tokens and the account's key go, and
+  // whatever else the shell kept for the account.
   function dropSession() {
     session = null;
     store.clear();
     clearKitKeys();
+    try { onSignOut(); } catch (err) { log(`AUTH could not tidy up after the sign-out: ${err.message}`, "ERROR"); }
     onChange();
   }
 

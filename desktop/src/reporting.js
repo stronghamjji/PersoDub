@@ -380,6 +380,26 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
   }
 
   /**
+   * Signed out: every inquiry still waiting goes, its logs with it. Each
+   * holds the account's full e-mail, which must not outlive the sign-in on
+   * this computer. Failure reports stay.
+   */
+  function dropInquiries(kitDir) {
+    const dir = kitDir ? reportsDir(kitDir) : "";
+    let names = [];
+    try { names = readdirSync(dir); } catch { return; }
+    let dropped = 0;
+    for (const name of names.filter((n) => n.endsWith(REPORT_EXT))) {
+      let entry = null;
+      try { entry = JSON.parse(readFileSync(join(dir, name), "utf8")); } catch { continue; }
+      if (!entry || !entry.inquiry) continue;
+      unqueue(kitDir, name.slice(0, -REPORT_EXT.length));
+      dropped++;
+    }
+    if (dropped) shellLog(`[persodub-report] inquiry dropped at sign-out: ${dropped}`);
+  }
+
+  /**
    * Reports that could not be sent when they happened, and failures a launch
    * wrote down but did not live to report. Runs as a launch starts, after an
    * install that stopped, and once the app is up (bootFlow.js), and never
@@ -447,5 +467,5 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
     }
   }
 
-  return { sendReport, sendInquiry, flushReports, reportMode, lastReport: () => lastReport };
+  return { sendReport, sendInquiry, dropInquiries, flushReports, reportMode, lastReport: () => lastReport };
 }

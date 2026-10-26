@@ -87,9 +87,10 @@ function shellLog(line, level = "INFO") {
 
 // Perso sign-in in the browser, production edition only (src/auth.js). The
 // browser comes back through a port on this computer, so nothing is
-// registered with the system.
+// registered with the system. A sign-out drops the inquiries still waiting:
+// each holds the account's full e-mail (src/reporting.js dropInquiries).
 const auth = createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition),
-                               logoPath: join(HERE, "screens", "logo.png") });
+                               logoPath: join(HERE, "screens", "logo.png"), onSignOut: () => reporter.dropInquiries(ctx.kitDir) });
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "",
                                   account: () => auth.signedInAccount() });
