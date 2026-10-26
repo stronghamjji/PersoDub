@@ -664,6 +664,8 @@ export const steps = [
     async run(app, ctx) {
       await ensurePrep(app, ctx);
       const engines = await app.api("/api/engines");
+      // Signed in, the production edition always has the account's key: the app is behind its sign-in screen without one.
+      if (app.production) throw new Skip("the production edition is signed in with the account's key, so Perso API never asks for one");
       if (engines.perso_available) throw new Error("this kit has a Perso key saved; the step needs none");
       const read = () => app.inPage(() => {
         const el = document.querySelector("#draftResult");

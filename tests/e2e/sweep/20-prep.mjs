@@ -6,7 +6,7 @@
 // the one dub it starts runs on this computer and is stopped at once.
 import { copyFileSync } from "node:fs";
 import { join } from "node:path";
-import { shown, isOpen, isClosed, onHome, textOf, sleep } from "../lib/cdp.mjs";
+import { shown, isOpen, isClosed, onHome, textOf, sleep, Skip } from "../lib/cdp.mjs";
 
 export const area = "prep";
 
@@ -146,6 +146,8 @@ export const steps = [
     async run(app) {
       await needPrep(app);
       const engines = await app.api("/api/engines");
+      // Signed in, the production edition always has the account's key: the app is behind its sign-in screen without one.
+      if (app.production) throw new Skip("the production edition is signed in with the account's key, so Perso API never asks for one");
       if (engines.perso_available) throw new Error("this kit has a Perso key saved; the step needs none");
       await intoView(app, "#dubModePerso");
       await app.click("#dubModePerso");
