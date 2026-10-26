@@ -103,6 +103,11 @@ export async function connect({ port = 9333, out = "." } = {}) {
   // first: on a window that another one covers, the page takes a move only
   // with its next frame, which does not come (5 s a move, measured 2026-10-21),
   // while a press and a release are taken at once.
+  // True once the page draws a frame within 1.5 s; false when it is hidden.
+  const frameSoon = () => inPage(() => new Promise((ok) => {
+    const id = requestAnimationFrame(() => ok(true));
+    setTimeout(() => { cancelAnimationFrame(id); ok(false); }, 1500);
+  }));
   async function click(sel, ms = 10000) {
     await waitFor(`${sel} to be pressable`, ms, pressable, sel);
     const { result } = await send("Runtime.evaluate", { expression: `document.querySelector(${JSON.stringify(sel)})`, objectGroup: "e2e" });
@@ -112,6 +117,17 @@ export async function connect({ port = 9333, out = "." } = {}) {
     const over = (await send("Runtime.callFunctionOn", { objectId: result.objectId, functionDeclaration: HIT,
                                                          arguments: [{ value: x }, { value: y }], returnByValue: true })).result.value;
     if (over) throw new Error(`${sel} is covered by ${over}`);
+    // Only while the page is on show: a window covered whole or minimised is
+    // "hidden" to the browser, which then draws no frame and drops a press,
+    // so nothing reached the page and the step waited for nothing (Mac,
+    // 2026-10-26). Brought to the front once; still hidden, the run says so
+    // instead of failing step after step. Then the pointer goes there first,
+    // as a hand moves a mouse.
+    if (!(await frameSoon())) {
+      await send("Page.bringToFront", {});
+      if (!(await frameSoon())) throw new Error("the app's window is hidden (covered or minimised), so a press would be dropped: keep it on show");
+    }
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
     for (const type of ["mousePressed", "mouseReleased"]) {
       await send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons: type === "mousePressed" ? 1 : 0, clickCount: 1 });
     }
