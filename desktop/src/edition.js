@@ -25,6 +25,14 @@ export const EDITIONS = {
 };
 const DEFAULT_EDITION = "opensource";
 
+// What the user sees the app called: the window title, the sign-in screen,
+// the boot screens, the browser's page after a sign-in. The production
+// build's bundle, Dock and Start menu get the same name at package time
+// (package.json dist:*:prod). The app's identity -- appId, the data folders,
+// the kit folder -- keeps its name whatever the edition.
+export const DISPLAY_NAMES = { opensource: "PersoDub", production: "PersoDubbing" };
+export const displayName = (edition) => DISPLAY_NAMES[edition] || DISPLAY_NAMES[DEFAULT_EDITION];
+
 // The build's edition. An unknown name stops the build, so a typo never ships
 // an app that updates from the wrong repository; unset or empty is the default.
 export function buildEdition(env) {

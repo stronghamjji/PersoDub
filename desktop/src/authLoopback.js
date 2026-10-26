@@ -8,9 +8,9 @@ import { createServer } from "node:http";
 
 const page = (title, line) => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head>
 <body style="font-family:system-ui,sans-serif;margin:48px;color:#222"><h1 style="font-size:20px;margin:0 0 12px">${title}</h1><p style="margin:0">${line}</p></body></html>`;
-const DONE = page("PersoDub에 로그인했습니다 · Signed in to PersoDub",
-  "이 탭을 닫고 PersoDub으로 돌아가세요. · You can close this tab and go back to PersoDub.");
-const NOT_DONE = page("PersoDub", "로그인이 끝나지 않았습니다. PersoDub에서 다시 시도하세요. · The sign-in did not finish. Try again in PersoDub.");
+const done = (app) => page(`${app}에 로그인했습니다 · Signed in to ${app}`,
+  `이 탭을 닫고 ${app}으로 돌아가세요. · You can close this tab and go back to ${app}.`);
+const notDone = (app) => page(app, `로그인이 끝나지 않았습니다. ${app}에서 다시 시도하세요. · The sign-in did not finish. Try again in ${app}.`);
 
 /**
  * Listen for the browser's one request. `ports` are tried in order and the
@@ -21,7 +21,7 @@ const NOT_DONE = page("PersoDub", "로그인이 끝나지 않았습니다. Perso
  * free. "localhost" as the host is served on 127.0.0.1: browsers fall back
  * to it from ::1 on their own.
  */
-export async function startCallbackServer({ host = "127.0.0.1", ports, path = "/callback", onRequest }) {
+export async function startCallbackServer({ host = "127.0.0.1", ports, path = "/callback", onRequest, appName = "PersoDub" }) {
   const handler = async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     if (req.method !== "GET" || url.pathname.replace(/\/+$/, "") !== path) {
@@ -35,7 +35,7 @@ export async function startCallbackServer({ host = "127.0.0.1", ports, path = "/
     // Connection: close -- a browser's kept-alive socket would otherwise
     // outlive server.close() and still be answered after the sign-in ended.
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", Connection: "close" });
-    res.end(outcome === "signed_in" ? DONE : NOT_DONE);
+    res.end(outcome === "signed_in" ? done(appName) : notDone(appName));
   };
   const address = host === "localhost" ? "127.0.0.1" : host;
   const tried = [];

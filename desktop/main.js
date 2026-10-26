@@ -12,7 +12,7 @@ import { createBoot, findPayloadDir } from "./src/bootFlow.js";
 import { registerDownloadIpc } from "./src/downloadsIpc.js";
 import { registerPackIpc } from "./src/packIpc.js";
 import { createWindow } from "./src/windowFactory.js";
-import { EDITIONS, readEdition } from "./src/edition.js";
+import { EDITIONS, displayName, readEdition } from "./src/edition.js";
 import { useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
 import { writeTimeline } from "./src/timeline.js";
@@ -78,7 +78,7 @@ function shellLog(line, level = "INFO") {
 // Perso sign-in in the browser, production edition only (src/auth.js). The
 // browser comes back through a port on this computer, so nothing is
 // registered with the system.
-const auth = createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus: focusWindow });
+const auth = createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition) });
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog });
 const countUsage = usageCounter(app);
@@ -113,7 +113,7 @@ app.whenReady().then(() => {
   useLanguage({ osLocale: app.getLocale() });
 
   session.defaultSession.on("will-download", downloads.willDownload);
-  ctx.win = createWindow({ app, BrowserWindow, screen, shell, ctx, appDir: HERE, repo: EDITIONS[edition], locale: systemLocale() });
+  ctx.win = createWindow({ app, BrowserWindow, screen, shell, ctx, appDir: HERE, repo: EDITIONS[edition], locale: systemLocale(), name: displayName(edition) });
   // Re-entrancy guard: mashing "Try again" on the error screen used to run
   // overlapping boots, whose duplicate engines then fought over the fixed
   // sidecar port and blocked the next clean launch.

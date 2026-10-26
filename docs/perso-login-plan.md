@@ -120,6 +120,18 @@ allowed_grant_types authorization_code, refresh_token
 - **문서.** 이벤트를 보내기 시작하면 설정의 스위치 설명 문구와 `docs/privacy.md`에 "어떤 버튼과 화면을 쓰는지, 로그인한 계정 번호와 함께"가 들어가야 합니다.
 - **비공개로만.** 실패 리포트는 공개 GitHub 이슈로 가므로 계정 번호를 거기에 넣으면 안 됩니다. 계정 번호는 Amplitude와 비공개 대시보드에만.
 
+## 9. 앱 이름: 프로덕션은 PersoDubbing (2026-10-26)
+
+정식 출시 이름이 "PersoDubbing DesktopApp"이라 사용자가 보는 곳만 프로덕션 에디션에서 "PersoDubbing"으로 바꿨습니다. "DesktopApp"은 붙이지 않습니다. 오픈소스는 "PersoDub" 그대로입니다.
+
+| 바뀌는 곳 | 어떻게 |
+|---|---|
+| 창 제목, 로그인 화면의 이름, 부팅 화면 제목, 로그인 뒤 브라우저 페이지 | 셸이 `desktop/src/edition.js`의 DISPLAY_NAMES를 페이지에 넘김 |
+| 앱 번들 이름, Dock, 메뉴 막대, Windows 시작 메뉴, 설치 파일명 | 프로덕션 빌드 명령 `npm run dist:dmg:prod`, `dist:win:prod` 가 productName을 PersoDubbing으로 덮어씀. Windows 워크플로우는 production 선택 시 자동 |
+| 안 바뀌는 곳 | appId(com.persodub.desktop), kit 폴더 `Application Support/PersoDub`(모델과 프로젝트), Perso에 보내는 User-Agent, 실패 리포트 제목, 문장 속의 "PersoDub" 약 240곳 |
+
+주의 둘. (1) productName이 바뀌면 Electron의 데이터 폴더가 `Application Support/PersoDubbing`으로 새로 생깁니다. 로그와 분석용 기기 id가 새로 시작하고, kit의 모델과 프로젝트는 그대로입니다. (2) 프로덕션 전용 업데이트 피드가 생기기 전에는 자동 업데이트가 공개 오픈소스 빌드를 받아 이름이 PersoDub으로 돌아갑니다. 4번 항목의 피드 분리가 먼저입니다.
+
 ## 6. 참고한 저장소와 사실 확인 기록
 
 - stronghamjji/external-client-demo: Perso 인증 서버의 PKCE 흐름과 토큰 요청 본문, client_info 테이블 모양(redirect_uris가 문자열 목록, `http://localhost:5173/callback` 등록 사례).

@@ -9,7 +9,7 @@ import { kitEdition } from "./edition.js";
  * the boot has found the kit (edition.js, kept in kit.env across updates),
  * this build's edition before that. `focus` brings the window forward when
  * the browser comes back. */
-export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus = () => {}, env = process.env }) {
+export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus = () => {}, appName = "PersoDub", env = process.env }) {
   const auth = createAuth({
     enabled: () => (kitEdition(ctx.kitDir) || edition) === "production",
     cfg: authConfig(env),
@@ -19,6 +19,7 @@ export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, sh
     kitDir: () => ctx.kitDir,
     log: shellLog,
     onCallback: focus,
+    appName,
     onChange: () => {
       const { win } = ctx;
       if (!win || win.isDestroyed()) return;

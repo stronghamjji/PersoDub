@@ -46,5 +46,6 @@
   // The version comes in on the query string (desktop/src/bootFlow.js), so every launch
   // screen names the build the user is on without asking anyone.
   const v = new URLSearchParams(location.search).get("v");
+  document.title = new URLSearchParams(location.search).get("name") || document.title;
   if (v) document.getElementById("ver").textContent = "v" + v;
 </script>

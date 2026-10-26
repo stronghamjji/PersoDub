@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { EDITIONS, buildEdition, readEdition, editionFeed, rememberedEdition, kitEdition, editionLine } from "./edition.js";
+import { DISPLAY_NAMES, displayName, EDITIONS, buildEdition, readEdition, editionFeed, rememberedEdition, kitEdition, editionLine } from "./edition.js";
 
 // A payload folder, with an EDITION file when `edition` is given.
 function payload(edition) {
@@ -105,4 +105,11 @@ test("the EDITION line says what the edition decides and where it came from", ()
     "EDITION production: dubs default to the Perso API (kept in kit.env; app file: opensource build)");
   assert.equal(editionLine("opensource", "opensource", "first run of this kit, written to kit.env"),
     "EDITION opensource: dubs default to this computer (first run of this kit, written to kit.env; app file: opensource build)");
+});
+
+test("the name on screen: PersoDub for the open-source edition, PersoDubbing for the production edition", () => {
+  assert.equal(displayName("opensource"), "PersoDub");
+  assert.equal(displayName("production"), "PersoDubbing");
+  assert.equal(displayName("nonsense"), "PersoDub");
+  assert.deepEqual(Object.keys(DISPLAY_NAMES).sort(), ["opensource", "production"]);
 });

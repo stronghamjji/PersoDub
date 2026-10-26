@@ -255,7 +255,7 @@ export function writeKitValues(kitDir, values) {
  * could not be saved).
  */
 export function createAuth({
-  enabled, cfg, store, fetchFn, openExternal, kitDir, listen = startCallbackServer,
+  enabled, cfg, store, fetchFn, openExternal, kitDir, listen = startCallbackServer, appName = "PersoDub",
   log = () => {}, onChange = () => {}, onCallback = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
@@ -395,7 +395,7 @@ export function createAuth({
     const pkce = newPkce();
     let server;
     try {
-      server = await listen({ host: cfg.redirectHost, ports: cfg.redirectPorts, path: CALLBACK_PATH, onRequest: handleCallback });
+      server = await listen({ host: cfg.redirectHost, ports: cfg.redirectPorts, path: CALLBACK_PATH, onRequest: handleCallback, appName });
     } catch (err) {
       log(`AUTH no port to listen on for the sign-in: ${err.message}`, "ERROR");
       return { outcome: "failed", error: "port" };

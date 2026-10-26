@@ -189,6 +189,8 @@ window.addEventListener("resize", () => {
 // makes usable, and the Models catalog, which modelsDialog.mjs paints.
 // The production edition's Perso sign-in screen (ui/src/signIn.mjs), over the
 // whole window while signed out. The open-source edition never shows it.
+// The window's title is the name this edition shows (desktop/src/edition.js); a plain browser keeps the page's own.
+if (window.persodubShell?.name) document.title = window.persodubShell.name;
 const signIn = initSignIn({ $, shell: window.persodubShell || null });
 const settings = initSettingsUi({
   $,

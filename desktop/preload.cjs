@@ -7,6 +7,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 const REPO_ARG = "--persodub-repo=";
 // The computer's language the same way (src/i18n.js): what Auto means.
 const LOCALE_ARG = "--persodub-locale=";
+// The name this edition shows the user (src/edition.js displayName).
+const NAME_ARG = "--persodub-name=";
 // And which system the window is on ("win32", "darwin"), the same way. Stamped
 // on the page as data-platform before its stylesheet is read, so Windows gets
 // its own scrollbars drawn (static/css/app.css) and the Mac keeps the system's,
@@ -104,4 +106,6 @@ contextBridge.exposeInMainWorld("persodubShell", {
   repo: process.argv.find((a) => a.startsWith(REPO_ARG))?.slice(REPO_ARG.length) || "",
   // "ko" or "en" (ui/src/i18n.mjs); "" when the window passed none.
   locale: process.argv.find((a) => a.startsWith(LOCALE_ARG))?.slice(LOCALE_ARG.length) || "",
+  // What the app is called on screen: "PersoDub", or "PersoDubbing" in the production edition.
+  name: process.argv.find((a) => a.startsWith(NAME_ARG))?.slice(NAME_ARG.length) || "PersoDub",
 });

@@ -54,7 +54,8 @@ test("the window opens at 1280 by 800, or at the screen's size when that is smal
     // The page's GitHub links follow the build's edition (preload.cjs repo).
     // ...and Auto's language follows the computer's (preload.cjs locale).
     // ...and the page is told which system it is on (preload.cjs platform).
-    additionalArguments: ["--persodub-repo=owner/PersoDub", "--persodub-locale=ko", "--persodub-platform=darwin"] });
+    // ...and the name this edition shows, PersoDub unless the caller says otherwise (preload.cjs name).
+    additionalArguments: ["--persodub-repo=owner/PersoDub", "--persodub-locale=ko", "--persodub-platform=darwin", "--persodub-name=PersoDub"] });
 });
 
 // Windows hung its white system title bar over the dark app, with the app's own

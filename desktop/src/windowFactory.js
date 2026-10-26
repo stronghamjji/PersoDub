@@ -14,7 +14,7 @@ export function openExternally(shell, url) {
  * `ctx.updateState`, `ctx.engines` and `ctx.kitDir` are read as each page
  * loads or navigates, since none of them exists yet when the window is made.
  */
-export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, repo, locale, platform = process.platform }) {
+export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, repo, locale, platform = process.platform, name = "PersoDub" }) {
   // The finished screen is a table beside a video with a strip under both, and
   // it needs 1280 to show the table's full set of columns. Clamped to the screen
   // the window opens on, so a small laptop gets a window that fits it rather
@@ -69,7 +69,8 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
       // on the page as data-platform: the stylesheet draws Windows' scrollbars
       // itself and leaves the Mac's to the system, and makes its top bar what
       // the window is moved by on both.
-      additionalArguments: [`--persodub-repo=${repo}`, `--persodub-locale=${locale}`, `--persodub-platform=${platform}`],
+      // And the name this edition shows (src/edition.js displayName), for the window title and the sign-in screen.
+      additionalArguments: [`--persodub-repo=${repo}`, `--persodub-locale=${locale}`, `--persodub-platform=${platform}`, `--persodub-name=${name}`],
     },
   });
   // Every page load -- the app page arriving after boot, or a reload mid
