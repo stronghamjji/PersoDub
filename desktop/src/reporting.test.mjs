@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { gunzipSync } from "node:zlib";
 import { createReporter, REPORT_ENDPOINT } from "./reporting.js";
@@ -338,7 +338,8 @@ test("a finished job sends its record to /record with its timings and its masked
   const archive = gunzipSync(Buffer.from(s.calls[2].body)).toString("utf8");
   assert.ok(archive.includes("JOB ALL DONE (80.2s)"), "the job's own log is in the archive");
   for (const name of ["Secret Show", "Movies", "watch?v", "abcdefghijk"]) assert.ok(!archive.includes(name), name);
-  assert.ok(archive.includes("~/…/*.mp4") && archive.includes("https://www.youtube.com/..."), "masked as a failure's logs are");
+  // The mask is spelled with the path's own separator, so on Windows it reads ~\…\*.mp4.
+  assert.ok(archive.includes(`~${sep}…${sep}*.mp4`) && archive.includes("https://www.youtube.com/..."), "masked as a failure's logs are");
   assert.deepEqual(s.pushed, [], "nothing broke, nothing to announce");
   assert.equal(s.reporter.lastReport(), null);
   assert.deepEqual(s.queued(), []);
