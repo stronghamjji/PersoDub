@@ -748,6 +748,31 @@ test("the production edition's sheet shows the signed-in account in the key fiel
   assert.equal(account.loggedOut, 1);
 });
 
+// Signed out, the sign-in screen takes the window; the sheet left open under
+// it was still there after signing in again (re-test, 2026-10-27).
+test("signing out closes the sheet, from its Sign out button or from anywhere else", async (t) => {
+  const signedIn = { enabled: true, required: false, signedIn: true, account: "a@test.local", hasKey: true };
+  const signedOut = { enabled: true, required: true, signedIn: false, account: "", hasKey: false };
+  const account = fakeAccount(signedIn);
+  account.logout = async () => { account.loggedOut += 1; account.set(signedOut); };
+  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) }, account });
+  t.after(h.state.restore);
+  await h.api.openSettings();
+  h.$("geminiKeyInput").value = "typed-and-not-saved";
+  await h.$("geminiKeyInput").fire("input");
+  await h.$("persoSignOutBtn").fire("click");
+  assert.equal(account.loggedOut, 1);
+  assert.equal(h.$("settingsOverlay").classList.contains("open"), false);
+  assert.equal(h.$("settingsDiscardOverlay").classList.contains("open"), false, "nothing is asked: the sign-in screen is up");
+
+  account.set(signedIn);
+  await h.api.openSettings();
+  account.set(signedIn);
+  assert.equal(h.$("settingsOverlay").classList.contains("open"), true, "a status that is still signed in leaves it open");
+  account.set(signedOut);   // a sign-in Perso no longer takes
+  assert.equal(h.$("settingsOverlay").classList.contains("open"), false);
+});
+
 test("another account signed in while the sheet is open shows there, with its key and workspaces", async (t) => {
   let saved = SAVED;
   const account = fakeAccount({ enabled: true, signedIn: true, account: "a@test.local", hasKey: true });

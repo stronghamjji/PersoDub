@@ -385,6 +385,9 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
       // that repeats them (the sign-in's waiting, a quiet look) asks for nothing.
       const before = lastAccountStatus;
       paintAccount(s);
+      // Signed out, from Sign out here or anywhere else: the sign-in screen
+      // takes the window, and the sheet is not left open under it.
+      if (s.enabled && s.required) { closeSettings(); return; }
       const changed = !before || before.hasKey !== s.hasKey || before.account !== s.account;
       if (s.enabled && changed && $("settingsOverlay").classList.contains("open")) reloadPersoKey();
     });
