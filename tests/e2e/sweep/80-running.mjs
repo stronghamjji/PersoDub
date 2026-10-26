@@ -165,6 +165,12 @@ async function stoppedCard(app, id, ms = 30000) {
 // A project card on Home, opened by a press: the screen it lands on.
 async function openCard(app, id, screen) {
   await toHome(app);
+  // Home shows the Up next card only after it has asked for the jobs again,
+  // and the card pushes the grid down about 100 px when it appears: a click
+  // measured before that lands on the card above (seen on Windows and on this
+  // Mac, 0.9.0 too). Wait for the card to match the line first.
+  const live = (await app.api("/api/dub/jobs")).jobs.some((j) => LIVE.includes(j.status));
+  await app.waitFor("the Up next card to settle", 10000, (on) => document.querySelector("#queueCard").hidden !== on, live);
   await app.click(`#projectsGrid .proj-card[data-job="${id}"]`, 40000);
   await app.waitFor(`job ${id} on the ${screen} screen`, 40000, (jid, s) => document.body.dataset.jobId === jid
     && document.body.dataset.screen === s, id, screen);
