@@ -5,7 +5,8 @@
 // title. The shell downloads a new
 // version in the background and announces {version, phase: "downloading" |
 // "ready" | "download-failed", pct, releaseDate?, releaseNotes?, whatsNew?} as it goes (desktop/src/updater.js
-// nextUpdateState); this file turns that into what the card and the window
+// nextUpdateState), or {phase: "check-failed" | "check-off"} when it found
+// nothing or did not look (desktop/src/updateFlow.js); this file turns that into what the card and the window
 // show. A shell built before releaseDate/releaseNotes existed sends only the
 // first three -- the window then leaves out the date and links to the release
 // page. Outside the desktop shell nothing is announced and the card stays
@@ -93,6 +94,12 @@ export function updateWindowView(state, { current = "", currentNotes = [], dubRu
   if (state?.phase === "check-failed") {
     return { title: t("Could not check for updates."), current: shownCurrent,
       next: t("Check your internet connection, then open {app} again."), released: "", button: null,
+      running: "", notes: currentNotes, notesLink: null };
+  }
+  // The production edition with no update address checks nothing
+  // (desktop/src/updateFlow.js): the version, and no word on whether it is the latest.
+  if (state?.phase === "check-off") {
+    return { title: shownCurrent || t("{app}"), current: "", next: "", released: "", button: null,
       running: "", notes: currentNotes, notesLink: null };
   }
   if (!updateLive(state)) {

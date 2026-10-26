@@ -38,6 +38,10 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition, load = (nam
     const feed = resolveFeed(process.env, edition);
     if (!feed) {
       shellLog("UPDATE CHECK OFF: this production build has no update address (desktop/src/edition.js PRODUCTION_UPDATE_URL is empty)");
+      // The page's update window then names the version and nothing more: it
+      // cannot say the app is up to date (ui/src/updateWindow.mjs).
+      ctx.updateState = { phase: "check-off" };
+      if (!win.isDestroyed()) win.webContents.send("shell:update-state", ctx.updateState);
       return;
     }
     // Whether the error event below has said what went wrong: a failed check

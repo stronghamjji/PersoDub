@@ -4,7 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { updateLive, updateCardView, updateWindowView, noteLines, releaseDay, wireUpdates, whatsNewLines } from "./updateWindow.mjs";
 import { DESKTOP_APP_URL } from "./edition.mjs";
-import { setLanguage } from "./i18n.mjs";
+import { readFileSync } from "node:fs";
+import { loadTable, setLanguage } from "./i18n.mjs";
 
 const DOWNLOADING = { version: "0.7.1", phase: "downloading", pct: 42 };
 const READY = { version: "0.7.1", phase: "ready", pct: 100,
@@ -40,6 +41,29 @@ test("a check that found no answer says so, not that PersoDub is up to date", ()
   assert.equal(v.button, null);
   assert.deepEqual(v.notes, ["One"]);
   assert.equal(updateCardView({ phase: "check-failed" }).live, false);
+});
+
+// The production edition with no update address checks nothing
+// (desktop/src/updateFlow.js): "up to date" would be a guess.
+test("an app that did not check says only its version, never that it is up to date", async () => {
+  const v = updateWindowView({ phase: "check-off" }, { current: "0.9.1", currentNotes: ["One"] });
+  assert.equal(v.title, "Current version: 0.9.1");
+  assert.deepEqual([v.current, v.next, v.running, v.button, v.notesLink], ["", "", "", null, null]);
+  assert.deepEqual(v.notes, ["One"]);
+  assert.equal(updateCardView({ phase: "check-off" }).live, false);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ko });
+  try {
+    await loadTable("ko");
+    setLanguage("ko");
+    const kv = updateWindowView({ phase: "check-off" }, { current: "0.9.1" });
+    assert.equal(kv.title, "현재 버전: 0.9.1");
+    assert.ok(!kv.title.includes("최신"));
+  } finally {
+    globalThis.fetch = real;
+    setLanguage("en");
+  }
 });
 
 test("a download that broke shows no button and says what to do, and the card still has its dot", () => {
