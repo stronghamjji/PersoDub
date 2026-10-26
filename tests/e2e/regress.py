@@ -45,7 +45,7 @@ LOG_TAIL = 20
 ENGINE_FIELDS = ("gemma_available", "qwen_available", "hunyuan_available", "gemini_available",
                  "perso_available", "voice_models", "eraser_available", "local_engines", "ram_ok")
 SETTINGS_FIELDS = ("gemini_key_set", "perso_key_set", "gemini_api_key", "perso_api_key", "perso_space_seq",
-                   "perso_signup_link", "perso_workspace_link", "analytics_off", "reports_off",
+                   "perso_signup_link", "perso_workspace_link", "analytics_off", "reports_off", "events_enabled",
                    "ui_language", "workspace", "app_version")
 # What the script table's length column and the timeline read off each line
 # (ui/src/scriptTable.mjs lineVerdict).

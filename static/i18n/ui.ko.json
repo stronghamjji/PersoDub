@@ -25,6 +25,8 @@
   "All lines": "모든 줄",
   "All {n} languages are deleted. This can’t be undone.": "언어 {n}개가 모두 삭제돼요. 되돌릴 수 없어요.",
   "Anonymous usage counts": "익명 사용 통계",
+  "Button and screen use": "버튼·화면 사용 기록",
+  "Sends only the names of the buttons you press and the screens you open, never what you type, your files or links.": "누른 버튼과 연 화면의 이름만 보내고, 입력한 글·파일·링크는 보내지 않아요.",
   "Area": "영역",
   "Ask anything": "무엇이든 물어보세요",
   "Ask for a fix": "고칠 점을 말해 주세요",

@@ -450,6 +450,20 @@ test("the two switches are saved with Save, each as its own setting", async (t) 
     [{ analytics_off: true }, { reports_off: true }]);
 });
 
+test("the button events switch shows events_enabled and is saved as its own setting", async (t) => {
+  const h = harness({ responses: { "/api/settings": ok({ analytics_off: false, reports_off: false, events_enabled: true }) } });
+  t.after(h.state.restore);
+  await h.api.openSettings();
+  assert.equal(h.$("eventsToggle").checked, true);
+
+  h.$("eventsToggle").checked = false;
+  await h.$("eventsToggle").fire("change");
+  assert.equal(h.$("settingsChanges").textContent, "1 change");
+  await h.$("settingsSaveBtn").fire("click");
+
+  assert.deepEqual(h.state.bodies.map((b) => b.body), [{ events_enabled: false }]);
+});
+
 test("Acknowledgements folds open and shut", async (t) => {
   const h = harness();
   t.after(h.state.restore);

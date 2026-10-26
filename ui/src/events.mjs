@@ -54,10 +54,13 @@ export function createCollector({ send, now = Date.now }) {
   return { record, flush, isOn: () => on };
 }
 
+let current = null;
+
 /** Start recording, when the page runs inside the desktop shell. */
 export function startEvents({ doc = document, win = window, shell = win.persodubShell, every = 30000 } = {}) {
   if (!shell || !shell.sendEvents) return null;
   const collector = createCollector({ send: (list) => shell.sendEvents(list) });
+  current = collector;
   // Capture: a handler that stops the click from going further must not hide it.
   doc.addEventListener("click", (e) => collector.record(pressedName(e.target), doc.body.dataset.screen), true);
   let screen = doc.body.dataset.screen;
@@ -73,3 +76,6 @@ export function startEvents({ doc = document, win = window, shell = win.persodub
   void collector.flush().then(() => { if (screen) collector.record(SCREEN_EVENT, screen); });
   return collector;
 }
+
+/** Send what is held and ask again: Settings calls it once the switch is saved. */
+export const refreshEvents = () => (current ? current.flush() : Promise.resolve());
