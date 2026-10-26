@@ -645,7 +645,8 @@ test("the update's dot is on the What's new card, not in the top bar; the key wi
   const html = readPage();
   assert.ok(!html.includes('id="updateBtn"'), "the top bar's update icon is gone (2026-10-21)");
   assert.match(html, /#homeWhatsNew\.live::after \{ content: ""; position: absolute;/);
-  assert.match(html, /wireUpdates\(\{ \$, shell: window\.persodubShell \|\| null, releases: `\$\{REPO_URL\}\/releases` \}\);/);
+  // An update with no notes links to its release, Perso's desktop app page in production.
+  assert.match(html, /wireUpdates\(\{ \$, shell: window\.persodubShell \|\| null,\n  notesPage: isProduction\(\) \? \(\) => DESKTOP_APP_URL : \(version\) => `\$\{REPO_URL\}\/releases\/tag\/v\$\{version\}` \}\);/);
   for (const id of ["updateOverlay", "updClose", "updTitle", "updCurrent", "updNext", "updGo", "updRunning", "updNotesBox", "updNotes", "updNotesLink"]) {
     assert.match(html, new RegExp(`id="${id}"`), id);
   }
@@ -727,7 +728,8 @@ test("there is no rail, and the logo in Settings > About is the way to the proje
   assert.ok(!/class="rail|id="(dubToggle|eraseToggle|historyToggle)"/.test(html),
     "the rail and its buttons are gone (mockup 2026-09-29)");
   assert.match(html, /<button class="about-logo-btn" id="brandBtn"[^>]*title="PersoDub on GitHub"[^>]*><img class="about-logo" src="\/logo.png"/);
-  assert.match(html, /\$\("brandBtn"\)\.addEventListener\("click", \(\) => window\.open\(REPO_URL, "_blank", "noopener"\)\)/);
+  // ...and Perso's desktop app page in the production edition, which has no repository.
+  assert.match(html, /\$\("brandBtn"\)\.addEventListener\("click", \(\) => window\.open\(isProduction\(\) \? DESKTOP_APP_URL : REPO_URL, "_blank", "noopener"\)\)/);
 });
 
 // Which repository the project's links open is the shell's to say: the build's
@@ -1670,13 +1672,16 @@ test("Home's Help sits above Send feedback and opens its tools and the Dub Agent
   const names = [...dialog.matchAll(/<div class="help-item"><b>([^<]+)<\/b>(?:<p>[^<]+<\/p>)+<div class="help-where">[^<]+<\/div><\/div>/g)].map((m) => m[1]);
   // Separate audio is no tool of its own (owner, 2026-10-23).
   assert.deepEqual(names, ["Dubbing", "Erase subtitles", "Save video", "Dub Agent"]);
-  assert.match(dialog, /<p class="help-links"><a href="#" id="helpGuide">User guide<\/a> · <a href="#" id="helpFaq">FAQ<\/a><\/p>/);
+  assert.match(dialog, /<p class="help-links"><a href="#" id="helpGuide">User guide<\/a><span id="helpFaqItem"> · <a href="#" id="helpFaq">FAQ<\/a><\/span><\/p>/);
   assert.match(dialog, /<div class="modal-foot"><button class="btn btn-primary" id="helpOk" type="button">OK<\/button><\/div>/);
   assert.ok(!dialog.includes("modal-close"), "no corner X");
   assert.ok(!dialog.includes("—"), "no em dash in the copy");
   // The links open the repo's docs and stay off the page's own "#".
   assert.match(html, /\[\["helpGuide", "usage"\], \["helpFaq", "faq"\]\]/);
-  assert.match(html, /e\.preventDefault\(\);\n    window\.open\(`\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
+  assert.match(html, /e\.preventDefault\(\);\n    window\.open\(isProduction\(\) \? DESKTOP_APP_URL : `\$\{REPO_URL\}\/blob\/main\/docs\/\$\{doc\}\.md`, "_blank", "noopener"\);/);
+  // The production edition has no repository: its User guide is Perso's desktop
+  // app page, and it has no FAQ link.
+  assert.match(html, /\$\("helpFaqItem"\)\.hidden = isProduction\(\);/);
 });
 
 // Help's Erase subtitles says why, how and how long, a line each (owner,

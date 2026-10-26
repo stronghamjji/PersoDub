@@ -131,6 +131,17 @@ test("loadSavedSetup fills the fields from GET /api/settings", async (t) => {
   assert.ok(h.state.calls.includes("GET /api/settings"));
 });
 
+test("the production edition's About names Perso_DesktopApp", async (t) => {
+  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
+  const realWindow = globalThis.window;
+  globalThis.window = { ...realWindow, persodubShell: { edition: "production" } };
+  t.after(() => { globalThis.window = realWindow; h.state.restore(); });
+
+  await h.api.loadSavedSetup();
+
+  assert.equal(h.$("aboutVersion").textContent, "Perso_DesktopApp 0.5.0");
+});
+
 test("a version of 0.0.0 is not put on screen", async (t) => {
   const h = harness({ responses: { "/api/settings": ok({ ...SAVED, app_version: "0.0.0" }) } });
   t.after(h.state.restore);

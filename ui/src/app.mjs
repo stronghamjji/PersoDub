@@ -29,7 +29,7 @@ import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
 import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { initFeedbackSheet } from "./feedbackSheet.mjs";
-import { isProduction, feedbackSubject } from "./edition.mjs";
+import { isProduction, productName, feedbackSubject, DESKTOP_APP_URL } from "./edition.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -205,13 +205,16 @@ initWhatsNew({ $ });
 
 // Help, from the Home sidebar: what each tool does and where it runs. Escape
 // and the backdrop press OK (ui/src/escapeKey.mjs). The two links open the
-// repo's docs in the system browser, the way the sidebar's links do.
+// repo's docs in the system browser, the way the sidebar's links do. The
+// production edition has no repository: its User guide is Perso's desktop app
+// page, and it has no FAQ link.
 function openHelp() { $("helpOverlay").classList.add("open"); }
 $("helpOk").addEventListener("click", () => $("helpOverlay").classList.remove("open"));
+$("helpFaqItem").hidden = isProduction();
 for (const [id, doc] of [["helpGuide", "usage"], ["helpFaq", "faq"]]) {
   $(id).addEventListener("click", (e) => {
     e.preventDefault();
-    window.open(`${REPO_URL}/blob/main/docs/${doc}.md`, "_blank", "noopener");
+    window.open(isProduction() ? DESKTOP_APP_URL : `${REPO_URL}/blob/main/docs/${doc}.md`, "_blank", "noopener");
   });
 }
 // The way out of a greyed-out "needs API key" option, inside Advanced options.
@@ -925,9 +928,18 @@ const languageRow = initLanguageRow({
 // rather than an <a>: the shell hands every http(s) open to the OS browser
 // (desktop/src/windowFactory.js), and in a plain browser it is a new tab either way.
 // The shell's edition decides it (desktop/src/edition.js); a plain browser has
-// no shell and shows the public repository.
+// no shell and shows the public repository. The production edition's logo
+// opens Perso's desktop app page, and is named after the app rather than the
+// repository.
 const REPO_URL = `https://github.com/${window.persodubShell?.repo || "stronghamjji/PersoDub"}`;
-$("brandBtn").addEventListener("click", () => window.open(REPO_URL, "_blank", "noopener"));
+$("brandBtn").addEventListener("click", () => window.open(isProduction() ? DESKTOP_APP_URL : REPO_URL, "_blank", "noopener"));
+if (isProduction()) {
+  const brand = $("brandBtn");
+  brand.removeAttribute("data-i18n-title");
+  brand.removeAttribute("data-i18n-aria-label");
+  brand.title = productName();
+  brand.setAttribute("aria-label", productName());
+}
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
 const uploadZone = $("uploadZone");
@@ -997,7 +1009,10 @@ uploadZone.addEventListener("drop", (e) => {
 // The top bar's update icon and the update window (ui/src/updateWindow.mjs).
 // Outside Electron (plain browser, tests) persodubShell is absent: the icon
 // stays grey and the window says the app is up to date.
-wireUpdates({ $, shell: window.persodubShell || null, releases: `${REPO_URL}/releases` });
+// An update with no notes links to its release page, Perso's desktop app page
+// in the production edition.
+wireUpdates({ $, shell: window.persodubShell || null,
+  notesPage: isProduction() ? () => DESKTOP_APP_URL : (version) => `${REPO_URL}/releases/tag/v${version}` });
 
 // ---------------- Link source (paste a URL) ----------------
 // Probing is cheap (seconds, no download), so it runs as soon as a URL looks

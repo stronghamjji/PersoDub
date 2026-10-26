@@ -36,6 +36,7 @@
  * @returns the operations the rest of the page calls.
  */
 import { setupText, watchSetup } from "./chatgptSetup.mjs";
+import { productName } from "./edition.mjs";
 import { errorText } from "./format.mjs";
 import { t, useLanguage } from "./i18n.mjs";
 import { paintMarkupWords } from "./markupWords.mjs";
@@ -241,8 +242,9 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
       clearTimeout(persoPreviewTimer);
       loadPersoSpaces(persoSpaceInitial); // async on purpose -- the modal opens without waiting on Perso
       if (st.perso_signup_link) $("persoSignupLink").href = st.perso_signup_link;
+      // The app's name is the edition's: Perso_DesktopApp in production (ui/src/edition.mjs).
       if (realVersion(st.app_version)) {
-        $("aboutVersion").textContent = `PersoDub ${st.app_version}`;
+        $("aboutVersion").textContent = `${productName()} ${st.app_version}`;
       }
       $("analyticsToggle").checked = !st.analytics_off;
       $("reportsToggle").checked = !st.reports_off;

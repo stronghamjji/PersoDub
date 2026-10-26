@@ -83,9 +83,9 @@ export function whatsNewLines(whatsNew, language) {
  * @param currentNotes  the running version's own list (GET /api/whats-new),
  *                   shown when there is nothing newer
  * @param dubRunning whether a dub is running right now
- * @param releases   the releases page of the repository the build points at
+ * @param notesPage  (version) => the page of that release, for an update with no notes
  */
-export function updateWindowView(state, { current = "", currentNotes = [], dubRunning = false, releases } = {}) {
+export function updateWindowView(state, { current = "", currentNotes = [], dubRunning = false, notesPage = () => null } = {}) {
   const shownCurrent = current && current !== "0.0.0" ? t("Current version: {version}", { version: current }) : "";
   // The shell could not reach the releases (desktop/src/updater.js): saying
   // "up to date" then was a guess, and a wrong one when an update was out.
@@ -120,18 +120,18 @@ export function updateWindowView(state, { current = "", currentNotes = [], dubRu
     running: failed ? t("Could not download the update. Check your internet connection, then open PersoDub again and it downloads anew.")
       : dubRunning ? t("Dubbing is running. Restarting stops it.") : "",
     notes,
-    notesLink: notes.length ? null : `${releases}/tag/v${state.version}`,
+    notesLink: notes.length ? null : notesPage(state.version),
   };
 }
 
 /**
  * Wire the card's mark and the window. `shell` is window.persodubShell or
- * null, and `releases` the releases page the window links to when an update
+ * null, and `notesPage(version)` the page the window links to when an update
  * has no notes. The window opens by itself once per session, the first time
  * an update is announced while no other dialog is open; after that from the
  * `persodub:open-update` event (the card's click, ui/src/homeSidebar.mjs).
  */
-export function wireUpdates({ $, shell, releases }) {
+export function wireUpdates({ $, shell, notesPage }) {
   let state = null;
   let current = "";
   let currentNotes = [];
@@ -150,7 +150,7 @@ export function wireUpdates({ $, shell, releases }) {
     if (v.title) $("homeWhatsNewTitle").textContent = v.title;
   }
   function paint() {
-    const v = updateWindowView(state, { current, currentNotes, dubRunning, releases });
+    const v = updateWindowView(state, { current, currentNotes, dubRunning, notesPage });
     $("updTitle").textContent = v.title;
     $("updCurrent").textContent = v.current;
     // The day in a span that does not wrap, so "2026-09-30" never breaks at a hyphen.
