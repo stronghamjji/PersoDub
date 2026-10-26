@@ -13,6 +13,8 @@ way as the usage-count worker `persodub-count`.
 - From 0.9.1 the app sends the buttons pressed and the screens shown (`POST /events`) while
   the Settings switch for them is on. The relay passes them to GA4, and to Amplitude once
   it has a key, and keeps nothing itself. See "Button and screen events" below.
+- From 0.9.1 the production edition's Customer support sends a Service inquiry (`POST /inquiry`).
+  See "Service inquiries" below.
 
 ## Files
 
@@ -168,6 +170,30 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST https://persodub-report.persodu
 ```
 
 Then take `GA4_DEBUG` out and deploy again.
+
+## Service inquiries
+
+The production edition's Customer support form (`ui/src/feedbackSheet.mjs`), sent by the
+shell (`desktop/src/reporting.js` `sendInquiry`) whatever the failure reports' switch says:
+the person pressed Send and agreed to the collection on the form.
+
+```json
+{"type":"bug","subject":"Export stops","details":"At 90%, every time.","replyTo":"me@example.com",
+ "installId":"<32 hex>","version":"0.9.1","edition":"production","os":"mac","osVersion":"15.1.0","locale":"ko"}
+```
+
+- `type` is one of `bug`, `problem`, `payment`, `other`; `subject` 1 to 120 characters,
+  `details` 1 to 4,000; `replyTo` an address or empty. Anything else is 400. The answer is `{"id"}`.
+- Kept in the bucket as `<yyyy-mm>/inquiry/<id>.json` (the details and the rest), with the
+  rest also on the object as metadata, so the dashboard's 문의 page lists them without
+  opening one. The computer is its first twelve characters (`device`).
+- A `bug` inquiry's logs follow on `POST /report/<id>/logs`, the same masked archive a
+  failure sends, and land as `<yyyy-mm>/inquiry/<id>.tar.gz`. Any other kind has no logs.
+- Ten a day from one computer or address, 200 a day in all (`MAX_INQUIRIES_PER_DAY`,
+  `MAX_INQUIRIES_TOTAL_PER_DAY`), counted apart from the reports.
+- The bucket's 30-day rule deletes inquiries like everything else in it.
+- The owner's computers are not dropped here: the dashboard hides them (`EXCLUDED_DEVICES`
+  there), so a test inquiry can still be found.
 
 ## What it never does
 

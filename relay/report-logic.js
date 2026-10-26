@@ -280,6 +280,65 @@ export function validateRecord(raw, opts = {}) {
   };
 }
 
+// --- a Service inquiry (0.9.1) -------------------------------------------
+
+// The production edition's Customer support form (ui/src/feedbackSheet.mjs):
+// its four kinds by the value the form sends, and the lengths it allows.
+export const INQUIRY_TYPES = ["bug", "problem", "payment", "other"];
+export const MAX_SUBJECT_CHARS = 120;
+export const MAX_DETAILS_CHARS = 4000;
+const INQUIRY_OSES = ["mac", "windows", "linux"];
+// Looks like an address: something, one @, a domain with a dot. Whether it
+// reaches anybody is for the reply to find out.
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
+
+/**
+ * An inquiry, rebuilt field by field the way a report is. What the person
+ * typed is kept as typed, not masked: they wrote it to us and agreed on the
+ * form to its collection, and it goes to the private dashboard only, never to
+ * GitHub (report-worker.js handleInquiry).
+ */
+export function validateInquiry(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
+  if (typeof raw === "string") {
+    if (raw.length > maxBytes) return { ok: false, reason: "too large" };
+    try { raw = JSON.parse(raw); } catch { return { ok: false, reason: "not JSON" }; }
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, reason: "not an object" };
+  const text = (v) => (typeof v === "string" ? v.trim() : "");
+  const subject = text(raw.subject), details = text(raw.details), replyTo = text(raw.replyTo);
+  if (!INQUIRY_TYPES.includes(raw.type)) return { ok: false, reason: "no type" };
+  if (!subject || subject.length > MAX_SUBJECT_CHARS) return { ok: false, reason: "subject" };
+  if (!details || details.length > MAX_DETAILS_CHARS) return { ok: false, reason: "details" };
+  if (replyTo && (replyTo.length > 254 || !EMAIL_RE.test(replyTo))) return { ok: false, reason: "reply-to" };
+  if (!VERSION_RE.test(raw.version || "")) return { ok: false, reason: "no version" };
+  if (!ID_RE.test(raw.installId || "")) return { ok: false, reason: "no install id" };
+  return {
+    ok: true,
+    inquiry: {
+      type: raw.type, subject, details, replyTo, installId: raw.installId, version: raw.version,
+      edition: oneOf(raw.edition, EDITIONS, ""),
+      os: oneOf(raw.os, INQUIRY_OSES, ""),
+      osVersion: text(raw.osVersion).slice(0, 32),
+      locale: /^[a-z]{2}(-[A-Za-z]{2})?$/.test(raw.locale || "") ? raw.locale : "",
+    },
+  };
+}
+
+/** What the dashboard's 문의 list reads off the stored object without opening
+ *  it: everything but the details, and the computer by its first twelve
+ *  characters, the number the dashboard tells desktops apart by. */
+export function inquirySummary(inquiry) {
+  const { type, subject, replyTo, version, edition, os, osVersion, locale } = inquiry;
+  return { type, subject, replyTo, version, edition, os, osVersion, locale, device: inquiry.installId.slice(0, 12) };
+}
+
+/** Where one inquiry lives in the bucket: "2026-10/inquiry/<id>.json", beside
+ *  the job records. A bug report's logs follow as "<month>/inquiry/<id>.tar.gz"
+ *  (logObjectKey with "inquiry" in the fingerprint's place). */
+export function inquiryObjectKey({ id, now = Date.now() }) {
+  return `${dayKey(now).slice(0, 7)}/inquiry/${id}.json`;
+}
+
 /** "An" before erase, install, agent and unknown; "A" before dub. Three of
  *  the five kinds begin with a vowel, and the line read "A erase failed"
  *  (2026-09-10). */
