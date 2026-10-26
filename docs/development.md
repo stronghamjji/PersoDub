@@ -162,35 +162,68 @@ contracts a refactor must not change, are listed in
 
 ## Building an edition
 
-The desktop app is built as one of two editions. They differ only in where
-a dub runs when nothing is chosen: this computer for open source, the Perso
-API for production. Both point at the same GitHub repository: where updates
-come from, and where the page's GitHub and feedback links, the Help window's
-User guide and FAQ, and the update window's release notes open.
+The desktop app is built as one of two editions from the same code. The
+open-source edition is PersoDub: it dubs on this computer when nothing is
+chosen, reads its updates from the public repository's releases, and its
+GitHub button, Send feedback, Help documents and release notes open there.
+The production edition, the company build, is Perso_DesktopApp: it dubs on
+the Perso API when nothing is chosen, has no GitHub button or link, opens
+`https://perso.ai/dubbing/desktop-app` for its guide and release notes, sends
+feedback as a mail, and reads its updates only from the address it was built
+with, never from the public releases.
 
-| Edition | `PERSODUB_EDITION` | Repository |
+| | open source | production |
 |---|---|---|
-| open source | unset (or `opensource`) | `stronghamjji/PersoDub` |
-| production, the company build | `production` | `stronghamjji/PersoDub` |
+| `PERSODUB_EDITION` | unset (or `opensource`) | `production` |
+| Name (window, dock, taskbar, installer, About) | `PersoDub` | `Perso_DesktopApp` |
+| App id | `com.persodub.desktop` | `ai.perso.desktopapp` |
+| Installers | `PersoDub-Setup-<version>.exe`, `PersoDub-mac.dmg` | `Perso_DesktopApp-Setup-<version>.exe`, `Perso_DesktopApp-mac.dmg` |
+| Kit folder | `~/Library/Application Support/PersoDub`, `%LOCALAPPDATA%\PersoDub` | `~/Library/Application Support/Perso_DesktopApp`, `%LOCALAPPDATA%\Perso_DesktopApp` |
+| Electron's data folder (logs) | `persodub-desktop-shell` | `perso-desktopapp-shell` |
+| Updates | the repository's GitHub Releases | `PERSODUB_UPDATE_URL`, or none |
 
-Set it when the payload is collected. A Mac release needs the dmg, the zip
-and `latest-mac.yml` (auto-update reads the last two), so collect the payload
-and build both targets in one run, in `desktop/`:
+Each edition has its own names and folders, so both can be installed on one
+computer.
+
+The production build takes two values from the environment it is built in.
+Nothing in the repository names them: `scripts/collect-payload.mjs` writes
+the ones that are set into the payload's `build.env`, and the packaged app
+reads them from there. The open-source build ignores both.
+
+| Variable | Used by | What it does | When it is not set |
+|---|---|---|---|
+| `PERSODUB_EDITION` | both | which edition the payload, and so the app, is | the open-source edition |
+| `PERSODUB_UPDATE_URL` | production | the address of the production update feed (an electron-updater generic feed: `latest.yml`, `latest-mac.yml` and the files beside them) | the app never checks for updates, and `shell.log` says so once a launch |
+| `PERSODUB_FEEDBACK_MAIL` | production | the address Send feedback writes to | the Home sidebar has no Send feedback |
+| `CAMPPLUS_SRC` | both | the path of your `campplus.onnx` | the build stops |
+
+Set them when the payload is collected. `electron-builder.js` reads the
+collected payload's edition and update address, so `electron-builder` needs
+no variables of its own. A Mac release needs the dmg, the zip and
+`latest-mac.yml` (auto-update reads the last two), so collect the payload and
+build both targets in one run, in `desktop/`. The build copies the dmg as
+`<name>-mac.dmg`, the name a download button links to.
 
 ```bash
-CAMPPLUS_SRC=/path/to/campplus.onnx PERSODUB_EDITION=production node scripts/collect-payload.mjs
+# open source
+CAMPPLUS_SRC=/path/to/campplus.onnx node scripts/collect-payload.mjs
 npx electron-builder --mac dmg zip --arm64 --publish never
-cp dist/PersoDub-*-arm64.dmg dist/PersoDub-mac.dmg   # the name the README's download button links to
+
+# production
+CAMPPLUS_SRC=/path/to/campplus.onnx PERSODUB_EDITION=production \
+  PERSODUB_UPDATE_URL=<production update address> PERSODUB_FEEDBACK_MAIL=<feedback address> \
+  node scripts/collect-payload.mjs
+npx electron-builder --mac dmg zip --arm64 --publish never
 ```
 
-`npm run dist:dmg` would build the dmg alone. `scripts/collect-payload.mjs`
-writes the edition into the payload's `EDITION` file, so the packaged app
-keeps it whatever its own environment says, and an unknown value stops the
-build. Before a release, check that file in the packaged app:
-`cat dist/mac-arm64/PersoDub.app/Contents/Resources/payload/EDITION` must
-print the edition you meant (`production` for the company build). A development run (`npm start`, no payload) reads
-`PERSODUB_EDITION` from its own environment. The Windows release workflow
-sets it from the repository it runs in.
+On Windows, `npm run dist:win` with the same variables builds the installer.
+`npm run dist:dmg` would build the dmg alone. An unknown `PERSODUB_EDITION`
+stops the build. Before a release, check what the packaged app carries:
+`cat dist/mac-arm64/<name>.app/Contents/Resources/payload/EDITION` must print
+the edition you meant, and for production `payload/build.env` must hold the
+update address and the feedback address. A development run (`npm start`, no
+payload) reads all three from its own environment. The Windows release
+workflow sets the edition from its input.
 
 ## Project layout
 
