@@ -756,7 +756,7 @@ masks read them:
 <a id="ipc-channels"></a>**Preload IPC.** `window.persodubShell` exposes
 `retry`, `rememberJob`, `onDownloadDone`, `revealPath`, `relaunch`,
 `onInstallProgress`, `installPack`, `cancelPack`, `removePack`, `packStatus`,
-`onUpdateState`, `getUpdateState`, `restartToUpdate`, `countDub`, `countErase`, `separateDone`,
+`onUpdateState`, `getUpdateState`, `restartToUpdate`, `countDub`, `countErase`,
 `onReportSent` and `getLastReport`, over the channels `shell:retry`, `shell:remember-job`,
 `shell:download-done`, `shell:reveal`, `shell:relaunch`,
 `shell:install-progress`, `shell:install-pack`, `shell:cancel-pack`,

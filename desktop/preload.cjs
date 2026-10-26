@@ -74,9 +74,6 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // likeliest to fail on someone else's machine, and it was the one kind of
   // failure that sent nothing at all (user, 2026-09-11).
   countErase: (status, detail, job) => ipcRenderer.send("shell:count-erase", { status, detail, job }),
-  // A separation that finished, for its job record (src/reporting.js). The
-  // Audio tab follows its own job too, and nothing is counted for one.
-  separateDone: (job) => ipcRenderer.send("shell:separate-done", { job }),
   // Automatic failure reports (src/report.js). The page neither builds nor
   // sends one -- it only gets to show what happened: the shell announces a
   // report the moment it lands, and getLastReport answers for a page that
