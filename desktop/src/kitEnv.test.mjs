@@ -108,6 +108,7 @@ test("setKitEnvValue writes kit.env, keeps the file as it was beside it, and tak
   setKitEnvValue(d, "PERSODUB_DOWNLOAD_DIR", "/Volumes/작업용 SSD");
   assert.equal(readFileSync(join(d, KIT_ENV), "utf8"), "PERSO_API_KEY=secret-value\nPERSODUB_DOWNLOAD_DIR=/Volumes/작업용 SSD\n");
   assert.equal(readFileSync(join(d, `${KIT_ENV}.bak`), "utf8"), "PERSO_API_KEY=secret-value\n");
+  assert.equal(existsSync(join(d, `${KIT_ENV}.tmp`)), false, "written through a copy that is renamed into place");
   assert.equal(envWithKit(d).PERSODUB_DOWNLOAD_DIR, "/Volumes/작업용 SSD");
   // A line break would write a line of its own into the engine's settings.
   assert.throws(() => setKitEnvValue(d, "PERSODUB_DOWNLOAD_DIR", "/a\nPERSO_API_KEY=stolen"), /one line of text/);

@@ -25,11 +25,28 @@ export function buildKitVersion(version, gitSha) {
   return gitSha ? `${version}+${gitSha}` : version;
 }
 
+// `--edition <name>` (or `--edition=<name>`) on the command line, which wins
+// over PERSODUB_EDITION in the environment: package.json's dist:*:prod
+// scripts pass it, so a production build never depends on how the shell sets
+// a variable. Undefined when not given; a flag without a name stops the build.
+export function editionFromArgs(args) {
+  for (const [i, arg] of args.entries()) {
+    let name;
+    if (arg === "--edition") name = args[i + 1];
+    else if (arg.startsWith("--edition=")) name = arg.slice("--edition=".length);
+    else continue;
+    if (!name || name.startsWith("--")) throw new Error("--edition needs a name: opensource or production.");
+    return name;
+  }
+  return undefined;
+}
+
 function main() {
   const campplusSrc = resolveCampplusSrc(process.env);
-  // Checked before the old payload is deleted: an unknown PERSODUB_EDITION
-  // stops the build here.
-  const edition = buildEdition(process.env);
+  // Checked before the old payload is deleted: an unknown edition stops the
+  // build here.
+  const named = editionFromArgs(process.argv.slice(2));
+  const edition = buildEdition(named === undefined ? process.env : { ...process.env, PERSODUB_EDITION: named });
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(join(OUT, "app-repo"), { recursive: true });
 

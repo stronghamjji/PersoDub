@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { localeLanguage } from "./i18n.js";
 
 // The door the browser comes back through after a Perso sign-in: a one-shot
 // HTTP listener on this computer only, at http://127.0.0.1:<port>/callback.
@@ -23,7 +24,6 @@ const WORDS = {
   },
 };
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const languageOf = (req) => (/^\s*ko\b/i.test(req.headers["accept-language"] || "") ? "ko" : "en");
 
 const CHECK = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
 const CROSS = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
@@ -85,7 +85,8 @@ export async function startCallbackServer({ host = "127.0.0.1", ports, path = "/
     // Connection: close -- a browser's kept-alive socket would otherwise
     // outlive server.close() and still be answered after the sign-in ended.
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", Connection: "close" });
-    res.end(callbackPage({ ok: outcome === "signed_in", lang: languageOf(req), appName, logo }));
+    // The browser's first language: Korean for "ko...", English for any other.
+    res.end(callbackPage({ ok: outcome === "signed_in", lang: localeLanguage(req.headers["accept-language"]), appName, logo }));
   };
   const address = host === "localhost" ? "127.0.0.1" : host;
   const tried = [];
@@ -97,7 +98,8 @@ export async function startCallbackServer({ host = "127.0.0.1", ports, path = "/
       server.listen(port, address, () => resolve(null));
     });
     if (taken) { tried.push(`${port} (${taken})`); continue; }
-    return { port, close: () => server.close() };
+    // The port the server really has: the one asked for, or the system's pick for 0.
+    return { port: server.address().port, close: () => server.close() };
   }
   throw new Error(`no free port for the sign-in: tried ${tried.join(", ")}`);
 }

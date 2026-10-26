@@ -8,7 +8,7 @@
 // The defaults are the demo client Perso's external-client-demo registered,
 // whose redirect address is http://localhost:5173/callback. With PersoDub's
 // own client registered: --client persodub-desktop --host 127.0.0.1 --port 52290
-import { spawn } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import {
   AuthHttpError, authConfig, authorizeUrl, callJson, exchangeCode, fieldNames, newPkce, parseActiveKey,
   parseProfile, redirectUriFor, tokenExpiry,
@@ -28,8 +28,11 @@ const explain = (e) => (e instanceof AuthHttpError ? `HTTP ${e.status}${e.code ?
 const claims = (jwt) => { try { return Object.keys(JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"))); } catch { return []; } };
 const minutesLeft = (jwt) => { const exp = tokenExpiry(jwt); return exp === null ? "not a JWT" : `${Math.round((exp - Date.now()) / 60000)} min`; };
 const openBrowser = (url) => {
-  const [cmd, args] = process.platform === "darwin" ? ["open", [url]]
-    : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
+  // Windows: cmd's start, with the address in double quotes. Unquoted, cmd
+  // reads each & in the address as the end of one command and the start of
+  // another, and the browser opens on a cut-off address.
+  if (process.platform === "win32") { exec(`start "" "${url}"`); return; }
+  const [cmd, args] = process.platform === "darwin" ? ["open", [url]] : ["xdg-open", [url]];
   spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
 };
 

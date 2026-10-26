@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { KIT_ENV, envWithKit, withKitEnvValue } from "./kitEnv.js";
+import { KIT_ENV, envWithKit, writeKitValues } from "./kitEnv.js";
 import { startCallbackServer } from "./authLoopback.js";
 
 // Signing in to Perso from the production edition: the computer's own browser
@@ -200,6 +200,11 @@ export function maskEmail(email) {
  * encryption is not available, or the system refuses it, nothing is written
  * and an older file goes, so the sign-in lasts until the app quits. */
 export function tokenStore(file, safeStorage) {
+  // The file and a half-written copy of it, each gone whatever the other does.
+  const removeAll = () => {
+    try { rmSync(file, { force: true }); } catch { /* left for the next try */ }
+    try { rmSync(`${file}.tmp`, { force: true }); } catch { /* left for the next try */ }
+  };
   return {
     read() {
       try {
@@ -214,27 +219,12 @@ export function tokenStore(file, safeStorage) {
         renameSync(`${file}.tmp`, file);
         return true;
       } catch {
-        rmSync(file, { force: true });
+        removeAll();
         return false;
       }
     },
-    clear() { rmSync(file, { force: true }); },
+    clear() { removeAll(); },
   };
-}
-
-/** Set several kit.env lines at once, the old file kept as kit.env.bak and
- * both owner-only, as the engine's own writer does (app/settings_env.py). */
-export function writeKitValues(kitDir, values) {
-  const path = join(kitDir, KIT_ENV);
-  let text = readFileSync(path, "utf8");
-  for (const [key, value] of Object.entries(values)) {
-    if (/[\u0000-\u001f\u007f]/.test(value)) throw new Error(`${key} must be one line of text`);
-    text = withKitEnvValue(text, key, value);
-  }
-  copyFileSync(path, `${path}.bak`);
-  writeFileSync(path, text);
-  chmodSync(path, 0o600);
-  chmodSync(`${path}.bak`, 0o600);
 }
 
 // ---- The sign-in itself --------------------------------------------------------
@@ -248,11 +238,14 @@ export function writeKitValues(kitDir, values) {
  *   failed      with `error`: timeout, browser, port (no free port to listen
  *               on), denied (Perso's error), token (Perso refused the code),
  *               network (no answer, or too slow)
+ *   busy        login or cancelLogin while the browser's code is being
+ *               traded: nothing is started or stopped, and that sign-in
+ *               answers on its own in a moment
  *   signed_out  logout
  *   disabled    not enabled
  * and a sign-in's `key` says what happened to the API key: saved, no_key
- * (the account has none), no_kit, or failed (Perso not reached, or the key
- * could not be saved).
+ * (the account has none), no_kit, or failed: Perso not reached, or, with
+ * `keyReason: "save"`, the key could not be written into kit.env.
  */
 export function createAuth({
   enabled, cfg, store, fetchFn, openExternal, kitDir, listen = startCallbackServer, appName = "PersoDub", logo = "",
@@ -370,7 +363,8 @@ export function createAuth({
       writeKitValues(dir, found.value === before ? { PERSO_API_KEY: found.value } : { PERSO_API_KEY: found.value, PERSO_SPACE_SEQ: "" });
     } catch (err) {
       log(`AUTH could not save the API key in kit.env: ${err.message}`, "ERROR");
-      return { key: "failed" };
+      // This computer's own failure, not the network's.
+      return { key: "failed", keyReason: "save" };
     }
     log("AUTH the account's API key is saved in kit.env");
     onChange();
@@ -391,6 +385,9 @@ export function createAuth({
    * user cancels, or ten minutes pass. */
   async function login() {
     if (!isOn()) return DISABLED;
+    // The browser is back and its code is being traded: that sign-in ends on
+    // its own in a moment, and a new one now would only open a second door.
+    if (trading) return { outcome: "busy" };
     if (pending) finish(pending, { outcome: "cancelled" });
     const pkce = newPkce();
     let server;
@@ -419,6 +416,7 @@ export function createAuth({
 
   function cancelLogin() {
     if (!isOn()) return DISABLED;
+    if (trading) return { outcome: "busy" };
     if (!pending) return { outcome: "idle" };
     log("AUTH sign-in cancelled");
     finish(pending, { outcome: "cancelled" });
@@ -437,6 +435,9 @@ export function createAuth({
     if (cb.state !== waiting.state) { log("AUTH the browser came back with the wrong state: ignored", "WARN"); return "bad_state"; }
     pending = null; // taken: the same request twice is not traded twice
     trading = waiting;
+    // The browser is back: the ten minutes it had are over, and the trade
+    // below ends this sign-in however it goes.
+    clearTimeout(waiting.timer);
     onCallback();
     if (cb.error) {
       log(`AUTH Perso refused the sign-in: ${cb.error.slice(0, 60)}`, "WARN");

@@ -163,6 +163,11 @@ let started = null;
 let startSettings = null;
 export const savedSettings = () => startSettings;
 export function pageLanguage() {
+  // The markup's {app} is filled at once, in English, without waiting on the
+  // settings answer below: the first paint names the app instead of "{app}".
+  if (!started) {
+    try { applyTranslations(document); } catch { /* no page to fill */ }
+  }
   started ??= (async () => {
     let setting = "";
     try {

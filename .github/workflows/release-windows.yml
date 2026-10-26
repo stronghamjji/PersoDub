@@ -34,6 +34,15 @@ jobs:
     permissions:
       contents: write  # to upload the asset onto the release
     steps:
+      # Stopped first, before anything is fetched or built: a production
+      # build never goes onto the public release.
+      - name: Refuse a production build for the public release
+        if: github.event.inputs.edition == 'production'
+        shell: bash
+        run: |
+          echo "::error::Production builds are not published to the public release: they go to the production download folder. Build one with the 'Build Windows installer' workflow (build-windows.yml) instead."
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}

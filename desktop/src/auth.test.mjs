@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -60,10 +60,15 @@ const CFG = authConfig({ PERSODUB_AUTH_BASE: "https://fake.test/auth/api", PERSO
 const REDIRECT_URI = redirectUriFor(CFG, 52390);
 
 // The listener's stand-in: no port is opened, and the test hands the browser's
-// request to auth.handleCallback itself. `closed` counts the sign-ins that ended.
+// request to auth.handleCallback itself. `listened` counts the doors opened,
+// `closed` the sign-ins that ended.
 function stubListen() {
   const closed = [];
-  return { closed, listen: async ({ ports }) => ({ port: ports[0], close: () => closed.push(ports[0]) }) };
+  const listened = [];
+  return {
+    closed, listened,
+    listen: async ({ ports }) => { listened.push(ports[0]); return { port: ports[0], close: () => closed.push(ports[0]) }; },
+  };
 }
 
 // A signed-in Perso with one account. Overrides replace single routes.
@@ -80,7 +85,7 @@ function persoRoutes({ userId = "u1", email = "someone@test.local", keys = [{ ap
 
 // createAuth with everything on disk in fresh temp folders, the browser
 // replaced by a list of the addresses it was asked to open.
-function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), userData, safe = fakeSafeStorage(), now, listen } = {}) {
+function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), userData, safe = fakeSafeStorage(), now, listen, loginTimeoutMs } = {}) {
   const dir = userData || mkdtempSync(join(tmpdir(), "odauth-user-"));
   const opened = [];
   const logs = [];
@@ -89,9 +94,9 @@ function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), 
   const auth = createAuth({
     enabled, cfg: CFG, store: tokenStore(join(dir, AUTH_FILE), safe), fetchFn, listen: listen || stub.listen,
     openExternal: async (url) => { opened.push(url); }, kitDir: () => kitDir,
-    log: (line) => logs.push(line), ...(now ? { now } : {}),
+    log: (line) => logs.push(line), ...(now ? { now } : {}), ...(loginTimeoutMs ? { loginTimeoutMs } : {}),
   });
-  return { auth, opened, logs, calls, kitDir, userData: dir, closed: stub.closed };
+  return { auth, opened, logs, calls, kitDir, userData: dir, closed: stub.closed, listened: stub.listened };
 }
 const stateOf = (url) => new URL(url).searchParams.get("state");
 const settle = () => new Promise((r) => setImmediate(r));
@@ -246,6 +251,16 @@ test("the tokens are written encrypted, read back, and deleted", () => {
   store.clear(); // twice is fine
 });
 
+test("clearing the tokens also deletes a copy a write left half-done", () => {
+  const file = join(mkdtempSync(join(tmpdir(), "odauth-store-")), AUTH_FILE);
+  const store = tokenStore(file, fakeSafeStorage());
+  assert.equal(store.write({ accessToken: "secret-access", refreshToken: "secret-refresh" }), true);
+  writeFileSync(`${file}.tmp`, "ENC:half-written");
+  store.clear();
+  assert.equal(existsSync(file), false);
+  assert.equal(existsSync(`${file}.tmp`), false, "the half-written copy was left behind");
+});
+
 test("without the system's encryption nothing is written, and a file that does not decrypt reads as signed out", () => {
   const file = join(mkdtempSync(join(tmpdir(), "odauth-store-")), AUTH_FILE);
   assert.equal(tokenStore(file, fakeSafeStorage(false)).write({ accessToken: "a" }), false);
@@ -384,6 +399,22 @@ test("checking for the key again finds one made after the sign-in", async () => 
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "pk_live_new");
 });
 
+// A folder made read-only stops nothing on Windows, nor for root.
+const cannotLockFolders = process.platform === "win32" || process.getuid?.() === 0;
+
+test("a key that cannot be written into kit.env answers keyReason save, not a network failure", { skip: cannotLockFolders && "no read-only folders here" }, async () => {
+  const { auth, kitDir, logs } = await signedInStore(persoRoutes({ keys: [{ apiKey: "pk_test_K9" }] }), later());
+  await auth.start();
+  chmodSync(kitDir, 0o500);
+  let answer;
+  try { answer = await auth.connectKey(); } finally { chmodSync(kitDir, 0o700); }
+  assert.deepEqual(answer, { key: "failed", keyReason: "save" });
+  assert.equal(kitValues(kitDir).PERSO_API_KEY, "pk_test_K1", "kit.env changed");
+  assert.equal(existsSync(join(kitDir, "kit.env.tmp")), false);
+  assert.ok(logs.some((l) => l.includes("could not save the API key")), logs.join("\n"));
+  assert.ok(!logs.join("\n").includes("pk_test_K9"));
+});
+
 test("a new key clears the workspace picked for the old one; the same key keeps it", async () => {
   const run = async (kitText) => {
     const { auth, opened, kitDir } = makeAuth({ kitDir: kitWith(kitText) });
@@ -433,22 +464,24 @@ test("the first free port of the list is taken, a busy one skipped, and the brow
   } finally { await release(); }
 });
 
-test("with no free port the sign-in fails as port, opens no browser, and the next try after a port frees works", async () => {
-  const releases = [await occupy(52390), await occupy(52391)];
+test("with no free port the sign-in fails as port, opens no browser, and the next try after a port frees works", async (t) => {
+  // Both ports are given back however the test ends, a failed assertion
+  // included (an occupied port would hold the run open); closing one twice is
+  // harmless.
+  const releases = [];
+  t.after(() => Promise.all(releases.map((release) => release())));
+  for (const port of [52390, 52391]) releases.push(await occupy(port));
   const { auth, opened } = makeAuth({ listen: startCallbackServer });
   await auth.start();
-  try {
-    assert.deepEqual(await auth.login(), { outcome: "failed", error: "port" });
-    assert.equal(opened.length, 0);
-    assert.equal((await auth.status()).waiting, false);
-  } finally { await releases[0](); }
-  try {
-    const done = auth.login();
-    await settle();
-    assert.equal(new URL(opened[0]).searchParams.get("redirect_uri"), REDIRECT_URI);
-    await fetch(`${REDIRECT_URI}?code=c1&state=${stateOf(opened[0])}`);
-    assert.equal((await done).outcome, "signed_in");
-  } finally { await releases[1](); }
+  assert.deepEqual(await auth.login(), { outcome: "failed", error: "port" });
+  assert.equal(opened.length, 0);
+  assert.equal((await auth.status()).waiting, false);
+  await releases[0]();
+  const done = auth.login();
+  await settle();
+  assert.equal(new URL(opened[0]).searchParams.get("redirect_uri"), REDIRECT_URI);
+  await fetch(`${REDIRECT_URI}?code=c1&state=${stateOf(opened[0])}`);
+  assert.equal((await done).outcome, "signed_in");
 });
 
 test("the door answers only its own path, and a request with the wrong state keeps the sign-in waiting", async () => {
@@ -540,6 +573,45 @@ test("while the code is being traded the sign-in still shows as waiting, and a s
   assert.equal(await trading, "signed_in");
   assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
   assert.equal((await auth.status()).waiting, false);
+});
+
+test("Sign in or Cancel pressed while the code is being traded answers busy: no second door, no second browser", async () => {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const { auth, opened, listened, closed } = makeAuth({ routes: persoRoutes({ [`POST ${CFG.tokenUrl}`]: async () => { await held; return [200, { result: { accessToken: later(), refreshToken: "r1" } }]; } }) });
+  await auth.start();
+  const done = auth.login();
+  await settle();
+  const trading = auth.handleCallback(back(opened, "c"));
+  await settle();
+  const again = auth.login();
+  await settle();
+  assert.equal(listened.length, 1, "a second door was opened while the code was traded");
+  assert.equal(opened.length, 1, "a second browser was opened while the code was traded");
+  assert.deepEqual(await again, { outcome: "busy" });
+  assert.deepEqual(await auth.cancelLogin(), { outcome: "busy" });
+  assert.equal((await auth.status()).waiting, true);
+  release();
+  assert.equal(await trading, "signed_in");
+  assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
+  assert.deepEqual(closed, [52390]);
+});
+
+test("the sign-in's time limit stops once the browser is back: a slow trade still signs in, never as a timeout", async () => {
+  const { auth, opened } = makeAuth({
+    loginTimeoutMs: 50,
+    routes: persoRoutes({ [`POST ${CFG.tokenUrl}`]: async () => {
+      await new Promise((r) => setTimeout(r, 120));
+      return [200, { result: { accessToken: later(), refreshToken: "r1" } }];
+    } }),
+  });
+  await auth.start();
+  const done = auth.login();
+  await settle();
+  const trading = auth.handleCallback(back(opened, "c"));
+  assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
+  assert.equal(await trading, "signed_in");
+  assert.equal((await auth.status()).signedIn, true);
 });
 
 test("no network or no answer while trading the code says network, not a refusal", async () => {

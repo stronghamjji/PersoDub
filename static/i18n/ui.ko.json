@@ -147,6 +147,7 @@
   "Couldn't check the key. Check your connection.": "키를 확인하지 못했어요. 인터넷 연결을 확인해요.",
   "Couldn't open the browser.": "브라우저를 열지 못했어요.",
   "Couldn't reach Perso. Check your connection.": "Perso에 연결하지 못했어요. 인터넷 연결을 확인해요.",
+  "Couldn't save the key on this computer.": "이 컴퓨터에 키를 저장하지 못했어요.",
   "Couldn't sign in.": "로그인하지 못했어요.",
   "Couldn't start the sign-in. Try again.": "로그인을 시작하지 못했어요. 다시 시도해요.",
   "Create project": "프로젝트 만들기",

@@ -17,7 +17,8 @@ import { homeText, secondsSince, sizeText, urlText } from "./logLine.js";
 // ctx.updateState is the update as last announced, which the window re-sends
 // on every page load; ctx.engines and ctx.win are read when they are needed.
 // `edition` is the build's (edition.js), whose repository the updates come from.
-export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
+// `load` imports electron-updater and electron; a test hands it stand-ins.
+export function createUpdater({ app, dialog, ctx, shellLog, edition, load = (name) => import(name) }) {
   let updaterStarted = false;
   let updateDownloaded = false;
 
@@ -43,9 +44,14 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
       if (!win.isDestroyed()) win.webContents.send("shell:update-state", ctx.updateState);
     };
     try {
-      const { default: electronUpdater } = await import("electron-updater");
+      const { default: electronUpdater } = await load("electron-updater");
       const { autoUpdater } = electronUpdater;
       const feed = resolveFeed(process.env, edition);
+      // Stable releases only, said outright. electron-updater turns
+      // prereleases on by itself for a version like 1.0.0-rc.1, and then its
+      // GitHub feed takes only tags on that version's own channel ("rc"):
+      // the check finds no release, and v1.0.0 itself is never offered.
+      autoUpdater.allowPrerelease = false;
       autoUpdater.setFeedURL(feed);
       // What electron-updater's own requests met, each once: the address and
       // what answered it, a redirect and where it led (GitHub hands a release
@@ -53,7 +59,7 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition }) {
       // cuts), or why there was no answer. They run on a session of their own
       // (electron-updater's NET_SESSION_NAME); an abort is electron-updater
       // dropping a request it no longer needs, not a failure.
-      const { session, net } = await import("electron");
+      const { session, net } = await load("electron");
       const said = new Set();
       const once = (line, level) => { if (!said.has(line)) { said.add(line); shellLog(line, level); } };
       const web = session.fromPartition("electron-updater", { cache: false }).webRequest;

@@ -22,6 +22,12 @@ const FAILED = {
   network: "Couldn't reach Perso. Check your connection.",
 };
 
+// Why a key that did not arrive did not, as one short line: this computer
+// could not write it (the shell's keyReason "save"), or Perso was not reached.
+const keyTrouble = (r) => (r && r.keyReason === "save"
+  ? t("Couldn't save the key on this computer.")
+  : t("Couldn't check the key. Check your connection."));
+
 /** Which face the screen shows for a status: "start", "wait", "nokey", or
  * "" for none (the app itself). */
 export function signInFace(status) {
@@ -30,7 +36,7 @@ export function signInFace(status) {
   return status.hasKey ? "" : "nokey";
 }
 
-export function initSignIn({ $, shell, body = document.body, pollMs = 5000 }) {
+export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win = globalThis.window, doc = globalThis.document }) {
   let status = { enabled: false };
   let note = "";      // why the last sign-in did not finish, on the first face
   let keyNote = "";   // what the last "Check again" found, on the no-key face
@@ -51,18 +57,34 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 5000 }) {
     }
   }
 
-  // While the no-key face is up, the account's keys are looked at every few
-  // seconds, so a key made on the Perso site is taken without a press.
+  // The account's keys looked at again. Loud is the Check again button: it
+  // says what it found. Quiet is a look nobody pressed for, which says
+  // nothing and only moves the screen on once there is a key.
+  async function checkKey({ loud }) {
+    let r;
+    try { r = await auth.authCheckKey(); } catch { r = { key: "failed" }; }
+    if (r && r.key === "saved") keyNote = "";
+    else if (loud) keyNote = r && r.key === "no_key" ? t("Still no API key. Make one, then check again.") : keyTrouble(r);
+    await refresh();
+  }
+
+  // While the no-key face is up, the keys are looked at quietly when the
+  // user comes back to the app (from the browser, where a key is made) and
+  // every pollMs while the app is in view, so a key made on the Perso site
+  // is taken without a press. One quiet look at a time.
+  let looking = false;
+  async function lookQuietly() {
+    if (looking || !auth || signInFace(status) !== "nokey") return;
+    looking = true;
+    try { await checkKey({ loud: false }); } finally { looking = false; }
+  }
   let polling = false;
   function watchKey() {
     if (polling || !auth) return;
     polling = true;
     const tick = async () => {
       if (signInFace(status) !== "nokey") { polling = false; return; }
-      let r = null;
-      try { r = await auth.authCheckKey(); } catch { /* the next tick asks again */ }
-      if (r && r.key === "saved") keyNote = "";
-      await refresh();
+      if (doc?.visibilityState !== "hidden") await lookQuietly();
       if (signInFace(status) === "nokey") later(tick); else polling = false;
     };
     later(tick);
@@ -116,8 +138,8 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 5000 }) {
     let r;
     try { r = await action(); } catch { r = { outcome: "failed" }; }
     if (r && r.outcome === "failed") note = t(FAILED[r.error] || "Couldn't sign in.");
-    // Signed in, but the key could not be read: the no-key face says why.
-    if (r && r.key === "failed") keyNote = t("Couldn't check the key. Check your connection.");
+    // Signed in, but the key did not arrive: the no-key face says why.
+    if (r && r.key === "failed") keyNote = keyTrouble(r);
     await refresh();
     // Signed in to an account with no key: the key page opens at once, and
     // the screen moves on by itself once a key is made there (watchKey).
@@ -134,14 +156,11 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 5000 }) {
     $("signInCheckKey").addEventListener("click", async () => {
       const btn = $("signInCheckKey");
       btn.disabled = true;
-      let r;
-      try { r = await auth.authCheckKey(); } catch { r = { key: "failed" }; }
-      keyNote = r && r.key === "saved" ? ""
-        : r && r.key === "no_key" ? t("Still no API key. Make one, then check again.")
-        : t("Couldn't check the key. Check your connection.");
-      btn.disabled = false;
-      await refresh();
+      try { await checkKey({ loud: true }); } finally { btn.disabled = false; }
     });
+    // Back from the browser: the window has the focus again, or is in view again.
+    win?.addEventListener?.("focus", () => lookQuietly());
+    doc?.addEventListener?.("visibilitychange", () => (doc?.visibilityState === "visible" ? lookQuietly() : undefined));
     // The no-key face's way out: sign out, and sign in as an account that has a key.
     $("signInSignOut").addEventListener("click", () => run(() => auth.authLogout()));
     if (auth.onAuthState) auth.onAuthState(take);

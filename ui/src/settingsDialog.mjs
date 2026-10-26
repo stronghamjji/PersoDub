@@ -343,8 +343,10 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
   // through the browser, so the account row takes the pasted key's place and
   // the tab is "Account and keys". The open-source edition's status is not
   // enabled, and then nothing here is touched.
+  let lastAccountStatus = null;   // the status last painted, to tell a real change from a repeat
   function paintAccount(s) {
     if (!s || !s.enabled) return;
+    lastAccountStatus = s;
     $("persoAccountRow").hidden = false;
     $("persoKeyRow").hidden = true;
     const tab = $("settingsTab-keys");
@@ -376,8 +378,12 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
   if (account) {
     paintAccount(account.status());
     account.onChange((s) => {
+      // The key in kit.env changes only with the account or its key; a status
+      // that repeats them (the sign-in's waiting, a quiet look) asks for nothing.
+      const before = lastAccountStatus;
       paintAccount(s);
-      if (s.enabled && $("settingsOverlay").classList.contains("open")) reloadPersoKey();
+      const changed = !before || before.hasKey !== s.hasKey || before.account !== s.account;
+      if (s.enabled && changed && $("settingsOverlay").classList.contains("open")) reloadPersoKey();
     });
     $("persoSignOutBtn").addEventListener("click", () => account.logout());
   }

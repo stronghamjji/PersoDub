@@ -1,4 +1,5 @@
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { t } from "./i18n.js";
@@ -38,22 +39,31 @@ export function translateScreen(html, say = t) {
  * the screens folder sits inside app.asar in a packaged app, where nothing can
  * be written. The copy's <base> points back at `dir`, so its logo.png still
  * loads; the query string the shell adds is the copy's own, as before.
- * A copy that cannot be written (the disk-full screen is one of these) shows
- * the screen in English rather than no screen at all.
+ * A copy that cannot be written to `outDir` is written to the system's temp
+ * folder instead: the screens themselves say {app}, so the original is the
+ * last resort. Only when neither can be written (the disk-full screen may be
+ * one of these) is the original shown, rather than no screen at all.
  */
 export function screenFile(dir, name, outDir, say = t) {
   const original = join(dir, name);
+  let copy;
   try {
     const html = readFileSync(original, "utf8");
     const said = translateScreen(html, say);
     if (said === html) return original;
     const base = `<base href="${pathToFileURL(dir + sep).href}">`;
-    const out = join(outDir, name);
-    mkdirSync(outDir, { recursive: true });
     // After the doctype, which must stay first or the screen renders in quirks mode.
-    writeFileSync(out, said.replace(/^<!doctype html>/i, (doctype) => doctype + base));
-    return out;
+    copy = said.replace(/^<!doctype html>/i, (doctype) => doctype + base);
   } catch {
     return original;
   }
+  for (const folder of [outDir, join(tmpdir(), "persodub-screens")]) {
+    try {
+      const out = join(folder, name);
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(out, copy);
+      return out;
+    } catch { /* the next folder */ }
+  }
+  return original;
 }

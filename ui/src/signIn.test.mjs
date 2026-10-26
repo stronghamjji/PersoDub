@@ -28,9 +28,21 @@ const WAITING = { ...SIGNED_OUT, waiting: true };
 const SIGNED_IN = { enabled: true, required: false, signedIn: true, account: "a***@test.local", hasKey: true, waiting: false };
 const NO_KEY = { ...SIGNED_IN, account: "c***@test.local", hasKey: false };
 
+// The window and the document as far as the screen listens to them: their
+// events, fired by the test, and the document's visibilityState.
+function eventTarget(more = {}) {
+  const listeners = {};
+  return {
+    ...more,
+    addEventListener(ev, fn) { (listeners[ev] ||= []).push(fn); },
+    async fire(ev) { for (const fn of listeners[ev] || []) await fn(); },
+  };
+}
+
 // A shell whose answers the test sets: `status` is what authStatus says, and
-// each action answers `answers[name]` (or waits for `hold[name]`).
-function harness(status, answers = {}, pollMs = 5000) {
+// each action answers `answers[name]` (or waits for `hold[name]`). `page` is
+// the window and document the screen listens to: none, as on Node, unless given.
+function harness(status, answers = {}, pollMs = 5000, page = {}) {
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const calls = [];
@@ -43,7 +55,7 @@ function harness(status, answers = {}, pollMs = 5000) {
   // The page under the screen: two parts, one already inert of its own.
   const body = { children: [$("signInScreen"), $("shellPart"), $("sidebar")] };
   $("sidebar").inert = true;
-  const api = initSignIn({ $, shell, body, pollMs });
+  const api = initSignIn({ $, shell, body, pollMs, ...page });
   const settle = () => new Promise((r) => setImmediate(r));
   return { $, api, shell, calls, settle };
 }
@@ -214,6 +226,58 @@ test("signed in to an account with no key: the key page opens by itself, and a k
   const looked = h.calls.filter((c) => c === "authCheckKey").length;
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(h.calls.filter((c) => c === "authCheckKey").length, looked);
+});
+
+test("coming back to the app on the no-key face looks for a key once, quietly", async () => {
+  const win = eventTarget();
+  const doc = eventTarget({ visibilityState: "visible" });
+  // A slow timer: only the way back to the app looks here.
+  const h = harness(NO_KEY, { authCheckKey: { key: "no_key" } }, 60_000, { win, doc });
+  await h.settle();
+  assert.deepEqual(h.calls, []);
+  await win.fire("focus");
+  assert.deepEqual(h.calls, ["authCheckKey"], "the window's focus did not look exactly once");
+  assert.equal(h.$("signInKeyNote").textContent, "", "a look nobody pressed for says nothing");
+  // In view again: one more look. Going out of view is no reason to look.
+  doc.visibilityState = "hidden";
+  await doc.fire("visibilitychange");
+  assert.deepEqual(h.calls, ["authCheckKey"]);
+  doc.visibilityState = "visible";
+  await doc.fire("visibilitychange");
+  assert.deepEqual(h.calls, ["authCheckKey", "authCheckKey"]);
+  // A key found that way moves the screen on; after that, focus looks for nothing.
+  h.shell.authCheckKey = async () => { h.calls.push("authCheckKey"); h.shell.status = SIGNED_IN; return { key: "saved" }; };
+  await win.fire("focus");
+  assert.equal(h.$("signInScreen").hidden, true);
+  await win.fire("focus");
+  assert.equal(h.calls.length, 3);
+});
+
+test("the slow look waits while the app is out of view", async () => {
+  const doc = eventTarget({ visibilityState: "hidden" });
+  const h = harness(NO_KEY, { authCheckKey: { key: "no_key" } }, 5, { doc });
+  await h.settle();
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(h.calls, [], "the keys were looked at while the app was hidden");
+  doc.visibilityState = "visible";
+  await new Promise((r) => setTimeout(r, 30));
+  assert.ok(h.calls.length >= 1, "the keys were not looked at once the app was in view");
+  h.shell.status = SIGNED_IN;   // the face goes, and the looking with it
+  h.shell.hear(SIGNED_IN);
+});
+
+test("a key this computer could not save says so, on Check again and after signing in", async () => {
+  const h = harness(NO_KEY, { authCheckKey: { key: "failed", keyReason: "save" } });
+  await h.settle();
+  await h.$("signInCheckKey").fire("click");
+  assert.equal(h.$("signInKeyNote").textContent, "Couldn't save the key on this computer.");
+
+  const s = harness(SIGNED_OUT);
+  s.shell.authLogin = async () => { s.shell.status = NO_KEY; return { outcome: "signed_in", key: "failed", keyReason: "save" }; };
+  await s.settle();
+  await s.$("signInBtn").fire("click");
+  assert.equal(s.$("signInNoKey").hidden, false);
+  assert.equal(s.$("signInKeyNote").textContent, "Couldn't save the key on this computer.");
 });
 
 test("no free port on this computer says so under the button", async () => {
