@@ -285,6 +285,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         appVersion: app.getVersion(), // desktop/package.json -- the one place the version lives
         locale: systemLocale(),
         edition: runEdition, // where a dub runs by default (app/setup.py)
+        buildEdition: edition, // what the events switch defaults by (app/settings_env.py)
         appName: displayName(edition), // the name its sentences call the app (app/i18n.py)
         preferredBackendPort: readRememberedPorts().backend,
         log: shellLog,

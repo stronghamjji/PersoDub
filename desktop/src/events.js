@@ -3,7 +3,6 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { release } from "node:os";
 import { join } from "node:path";
 import { analyticsFile, savedDevice } from "./analytics.js";
-import { kitEdition } from "./edition.js";
 import { envWithKit } from "./kitEnv.js";
 import { REPORT_ENDPOINT } from "./reporting.js";
 import { REPORT_EXT, partitionQueue, queueBase } from "./reportQueue.js";
@@ -20,8 +19,9 @@ import { REPORT_EXT, partitionQueue, queueBase } from "./reportQueue.js";
 // names are checked again here against the shape the relay accepts.
 //
 // The switch is PERSODUB_EVENTS in kit.env (Settings > Privacy writes it).
-// With no line, the production edition records and the open-source one does
-// not (owner, 2026-10-25).
+// With no line, the production build records and the open-source one does
+// not (owner, 2026-10-25): the build's own edition, never the one a kit
+// remembers (edition.js), which is a dub's default only.
 export const EVENTS_ENDPOINT = `${REPORT_ENDPOINT}/events`;
 export const EVENTS_KEY = "PERSODUB_EVENTS";
 export const MAX_PER_POST = 500;
@@ -83,8 +83,7 @@ export function createEvents({ app, ctx, edition, shellLog, fetchImpl = fetch, n
   let flushing = false;
 
   function mode() {
-    const kitDir = ctx.bootedKitDir;
-    return resolveEventsMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir), edition: kitEdition(kitDir) || edition });
+    return resolveEventsMode({ isPackaged: app.isPackaged, env: envWithKit(ctx.bootedKitDir), edition });
   }
 
   // Written down before it is sent, as a failure report is: the last batch
@@ -96,7 +95,7 @@ export function createEvents({ app, ctx, edition, shellLog, fetchImpl = fetch, n
       mkdirSync(dir(), { recursive: true });
       for (let i = 0; i < events.length; i += MAX_PER_POST) {
         const batch = {
-          installId: device, userId: ctx.userId || "", version: app.getVersion(), edition: kitEdition(ctx.bootedKitDir) || edition,
+          installId: device, userId: ctx.userId || "", version: app.getVersion(), edition,
           os: osName(), osVersion, sessionId, events: events.slice(i, i + MAX_PER_POST),
         };
         writeFileSync(join(dir(), `${queueBase(randomBytes(6).toString("hex"), now())}${REPORT_EXT}`), JSON.stringify(batch));

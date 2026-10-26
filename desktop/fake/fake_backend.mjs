@@ -20,6 +20,7 @@ createServer((req, res) => {
       PERSODUB_APP_VERSION: process.env.PERSODUB_APP_VERSION ?? null,
       PERSODUB_LOCALE: process.env.PERSODUB_LOCALE ?? null,
       PERSODUB_EDITION: process.env.PERSODUB_EDITION ?? null,
+      PERSODUB_BUILD_EDITION: process.env.PERSODUB_BUILD_EDITION ?? null,
       PERSODUB_LOG_DIR: process.env.PERSODUB_LOG_DIR ?? null,
     }));
     return;

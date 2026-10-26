@@ -231,7 +231,7 @@ export function tokenStore(file, safeStorage) {
 
 /**
  * One account's sign-in, for the shell. `enabled` is a boolean or a function
- * read at every request (the kit's edition may be known only after boot).
+ * read at every request.
  * Every request answers with an object the page can read; `outcome` is one of:
  *   signed_in   the browser came back and the tokens are kept
  *   cancelled   cancelLogin, or a newer login replaced this one

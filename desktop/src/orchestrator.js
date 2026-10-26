@@ -255,7 +255,7 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
 
 // log(line, level) gets shell.log's engine lines, the level left out for INFO
 // and "ERROR" for a failure; onExit() runs after any of the processes ends.
-export async function startEngines(cfg, { logDir, appVersion, locale, edition, appName, preferredBackendPort,
+export async function startEngines(cfg, { logDir, appVersion, locale, edition, buildEdition, appName, preferredBackendPort,
                                           log = () => {}, onExit = () => {} }) {
   mkdirSync(logDir, { recursive: true });
   await killStalePids(logDir);
@@ -274,11 +274,12 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, a
   // after the kit env, so a stale kit.env can never override what this build actually is.
   // The computer's language goes the same way: what a language setting of "auto" means to
   // the backend (app/i18n.py), a fact of this computer and not a setting. The edition
-  // decides where a dub runs by default (app/setup.py). And the log folder: the
-  // backend's persodub.log and job-<id>.log go beside shell.log and the engines'
-  // console logs, so everything a support request needs is in one folder.
+  // decides where a dub runs by default (app/setup.py); the app file's own edition is
+  // what the events switch defaults by (app/settings_env.py read_events_enabled). And the
+  // log folder: the backend's persodub.log and job-<id>.log go beside shell.log and the
+  // engines' console logs, so everything a support request needs is in one folder.
   env = { ...env, PERSODUB_CLIENT: "desktop", PERSODUB_APP_VERSION: appVersion ?? "",
-          PERSODUB_LOCALE: locale ?? "en", PERSODUB_EDITION: edition ?? "", PERSODUB_APP_NAME: appName ?? "PersoDub", PERSODUB_LOG_DIR: logDir };
+          PERSODUB_LOCALE: locale ?? "en", PERSODUB_EDITION: edition ?? "", PERSODUB_BUILD_EDITION: buildEdition ?? "", PERSODUB_APP_NAME: appName ?? "PersoDub", PERSODUB_LOG_DIR: logDir };
 
   const children = [];
   const packChildren = new Map();   // pack id -> the processes it owns

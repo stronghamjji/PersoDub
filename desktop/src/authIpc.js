@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AUTH_FILE, authConfig, createAuth, tokenStore } from "./auth.js";
-import { kitEdition } from "./edition.js";
 
 // The wiring of src/auth.js into the app: the controller and the page's channels.
 
 /** The sign-in controller, made before the app is ready; it reads nothing
- * until start(). On for the production edition: the kit's own edition once
- * the boot has found the kit (edition.js, kept in kit.env across updates),
- * this build's edition before that. `focus` brings the window forward when
+ * until start(). On for the production build only: never from the edition a
+ * kit remembers in kit.env (edition.js), which an open-source app updated
+ * from a 0.8.4 or 0.8.5 production install still says is production, and
+ * which only a dub's default follows. `focus` brings the window forward when
  * the browser comes back. */
 /** The app's logo as a data: URL for the browser's page, or "" without one. */
 export function logoDataUrl(path) {
@@ -17,7 +17,7 @@ export function logoDataUrl(path) {
 
 export function createShellAuth({ app, shell, safeStorage, net, ctx, edition, shellLog, focus = () => {}, appName = "PersoDub", logoPath = "", env = process.env }) {
   const auth = createAuth({
-    enabled: () => (kitEdition(ctx.kitDir) || edition) === "production",
+    enabled: edition === "production",
     cfg: authConfig(env),
     store: tokenStore(join(app.getPath("userData"), AUTH_FILE), safeStorage),
     fetchFn: (url, opts) => net.fetch(url, opts), // the system's proxy and certificates, as the update check

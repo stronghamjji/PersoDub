@@ -385,22 +385,28 @@ test("after an update the same file signs in; the open-source edition on that co
   assert.equal((await updated.auth.status()).signedIn, true);
 });
 
-test("a kit remembered as production turns the sign-in on even in an open-source build, once the kit is known", async () => {
-  const kitDir = freshKit();
-  writeFileSync(join(kitDir, "kit.env"), readFileSync(join(kitDir, "kit.env"), "utf8") + "PERSODUB_EDITION=production\n");
-  const browser = scriptedBrowser();
-  browser.typing = "a@test.local";
-  let known = null; // the kit, found by the boot after the app started
-  const { kitEdition } = await import("./edition.js");
-  const auth = createAuth({ enabled: () => (kitEdition(known) || "opensource") === "production",
-    cfg: cfgFor(fake.authBase), store: tokenStore(fileOf(mkdtempSync(join(tmpdir(), "odflow-user-"))), fakeSafeStorage()), fetchFn: fetch,
-    openExternal: async (url) => { setImmediate(() => browser.open(url)); }, kitDir: () => known });
-  await auth.start();
-  assert.equal((await auth.status()).enabled, false);
-  assert.deepEqual(await auth.login(), { outcome: "disabled" });
-  known = kitDir;
-  assert.equal((await auth.status()).enabled, true);
-  assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "saved" });
+// An open-source build whose kit says production -- a 0.8.4 or 0.8.5
+// production install later updated from the public releases -- has no
+// sign-in: only the build's own edition turns it on, never kit.env.
+test("the sign-in follows the build's edition only: a kit remembered as production does not turn it on in an open-source build", async () => {
+  const { createShellAuth } = await import("./authIpc.js");
+  const kitSaying = (edition) => {
+    const dir = freshKit();
+    writeFileSync(join(dir, "kit.env"), readFileSync(join(dir, "kit.env"), "utf8") + `PERSODUB_EDITION=${edition}\n`);
+    return dir;
+  };
+  const shellAuth = (edition, kitDir) => createShellAuth({
+    app: { getPath: () => mkdtempSync(join(tmpdir(), "odflow-user-")) }, shell: { openExternal: async () => {} },
+    safeStorage: fakeSafeStorage(), net: { fetch }, ctx: { kitDir, win: null }, edition, shellLog: () => {}, env: {},
+  });
+  const oss = shellAuth("opensource", kitSaying("production"));
+  await oss.start();
+  assert.equal((await oss.status()).enabled, false);
+  assert.equal((await oss.status()).required, false, "no sign-in wall");
+  assert.deepEqual(await oss.login(), { outcome: "disabled" });
+  const prod = shellAuth("production", kitSaying("opensource"));
+  await prod.start();
+  assert.equal((await prod.status()).enabled, true, "the production build signs in whatever kit.env says");
 });
 
 test("a key list with no usable key: no_key, the log names its fields only, and Check again saves a key made later", async () => {

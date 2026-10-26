@@ -120,6 +120,21 @@ test("the production edition records with no line in kit.env", () => {
   assert.equal(setup({ kitEnv: "", edition: "opensource" }).events.take([press("save")]).on, false);
 });
 
+// A 0.8.4 or 0.8.5 production install later updated to the public build
+// keeps PERSODUB_EDITION=production in kit.env, for its dubs' default only:
+// what records, and the edition a batch names, is the build's.
+test("the build's edition decides the default and the batch's edition, never the kit's remembered one", async () => {
+  assert.equal(setup({ kitEnv: "PERSODUB_EDITION=production\n", edition: "opensource" }).events.take([press("save")]).on, false);
+  const s = setup({ kitEnv: "PERSODUB_EDITION=opensource\n", edition: "production" });
+  assert.equal(s.events.take([press("save")]).on, true);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(s.posts[0].body.edition, "production");
+  const chosen = setup({ kitEnv: "PERSODUB_EDITION=production\nPERSODUB_EVENTS=1\n", edition: "opensource" });
+  chosen.events.take([press("save")]);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(chosen.posts[0].body.edition, "opensource");
+});
+
 // A check of the whole road from a from-source run: the override sends even
 // where a developer's run would only count.
 test("PERSODUB_EVENTS_SEND=1 sends from a from-source run, and is nothing when unset", () => {
