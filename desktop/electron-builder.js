@@ -1,17 +1,17 @@
 // electron-builder's settings, for the edition the collected payload carries
 // (scripts/collect-payload.mjs writes its EDITION file; src/edition.js): the
 // app is named after the edition it ships, whatever this command's own
-// environment says. The production edition is Perso_DesktopApp, with its own
+// environment says. The production edition is PersoDubbing, with its own
 // app id, installer names and data folders (src/edition.js PRODUCTS), so it
 // installs beside the open-source PersoDub rather than over it.
 import { copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PRODUCTS, readBuildEnv, readEdition } from "./src/edition.js";
+import { PRODUCTS, PRODUCTION_UPDATE_URL, readEdition } from "./src/edition.js";
 
 const PAYLOAD = join(dirname(fileURLToPath(import.meta.url)), "resources", "payload");
 
-export function builderConfig(edition, built = {}) {
+export function builderConfig(edition, productionUrl = PRODUCTION_UPDATE_URL) {
   const { name, appId, pkg } = PRODUCTS[edition];
   return {
     appId,
@@ -40,9 +40,9 @@ export function builderConfig(edition, built = {}) {
     nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },
     // Where latest.yml and app-update.yml say the updates are: the public
     // releases for the open-source build, the production build's own address
-    // (src/edition.js BUILD_KEYS), and none when it was built without one.
+    // (src/edition.js PRODUCTION_UPDATE_URL), and none while that is empty.
     publish: edition === "production"
-      ? (built.PERSODUB_UPDATE_URL ? [{ provider: "generic", url: built.PERSODUB_UPDATE_URL }] : null)
+      ? (productionUrl ? [{ provider: "generic", url: productionUrl }] : null)
       : [{ provider: "github", owner: "stronghamjji", repo: "PersoDub" }],
     // The dmg again as <name>-mac.dmg, the name with no version in it that a
     // download button links to.
@@ -54,4 +54,4 @@ export function builderConfig(edition, built = {}) {
   };
 }
 
-export default builderConfig(readEdition({ payloadDir: PAYLOAD, env: process.env }), readBuildEnv({ payloadDir: PAYLOAD, env: {} }));
+export default builderConfig(readEdition({ payloadDir: PAYLOAD, env: process.env }));

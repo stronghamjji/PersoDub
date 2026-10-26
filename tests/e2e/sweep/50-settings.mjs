@@ -10,8 +10,8 @@ import { isClosed, isOpen, onHome, pressable, shown, sleep, textOf, Skip } from 
 
 export const area = "settings";
 
-const TABS = ["models", "keys", "storage", "privacy", "about"];
-const TAB_WORDS = ["Models", "API keys", "Storage", "Privacy", "About"];
+const TABS = ["keys", "models", "storage", "privacy", "about"];
+const TAB_WORDS = ["API keys", "Models", "Storage", "Privacy", "About"];
 const GROUPS = ["Audio separation", "Speech-to-text", "Translation", "Text-to-speech", "Required programs"];
 // Names that stay English in the Korean page: products, engines, units, keys, the 12 looks.
 const ALLOW = ["PersoDub", "Perso API", "Perso", "ChatGPT", "Claude", "Codex", "Whisper", "Demucs", "Mel-Band RoFormer",
@@ -21,6 +21,8 @@ const ALLOW = ["PersoDub", "Perso API", "Perso", "ChatGPT", "Claude", "Codex", "
   "Lower Bar", "Neon", "Black Box", "White Box",
   // Two more names, beyond the list the sweep was asked for: the agent's and the copyright holder's.
   "Dub Agent", "ESTsoft corp.",
+  // The Perso workspace picker's label (kept English in Korean too), and the production edition's name.
+  "Workspace", "PersoDubbing",
   // The assistants' model names, shown as their makers write them ("Claude · Opus").
   "Opus", "Sonnet", "Haiku", "Fable", "GPT"];
 // What the person put there, not the app's words: project and file names, the
@@ -200,7 +202,11 @@ export const steps = [
       await app.waitFor("the Settings dialog", 10000, isOpen, "#settingsOverlay");
       const names = await app.inPage(() => [...document.querySelectorAll("#settingsTabs .set-tab")].map((b) => b.textContent.trim()));
       const want = TAB_WORDS.map((k) => app.tr(k));
-      if (names.join("|") !== want.join("|")) throw new Error(`the tabs read ${names.join(", ")}, not ${want.join(", ")}`);
+      // The production edition names the first tab "Account and keys" (ui/src/settingsDialog.mjs paintAccount).
+      const production = [app.tr("Account and keys"), ...want.slice(1)];
+      if (names.join("|") !== want.join("|") && names.join("|") !== production.join("|")) {
+        throw new Error(`the tabs read ${names.join(", ")}, not ${want.join(", ")}`);
+      }
       return `opened from the gear; ${names.length} tabs: ${names.join(", ")}`;
     } },
 

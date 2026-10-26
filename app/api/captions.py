@@ -44,7 +44,7 @@ def captions_import(download_id: str = Form(...), srt: UploadFile = File(...),
         cues = []
     cues = [c for c in cues if c["text"] and c["end"] > c["start"]]
     if not cues:
-        raise HTTPException(422, t("This subtitle file has no lines PersoDub can read."))
+        raise HTTPException(422, t("This subtitle file has no lines {app} can read."))
     title, _path, copy_into = _source(None, download_id)
 
     project = project_name(project or "") or project_name(title or "")

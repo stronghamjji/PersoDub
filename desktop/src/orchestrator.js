@@ -255,7 +255,7 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
 
 // log(line, level) gets shell.log's engine lines, the level left out for INFO
 // and "ERROR" for a failure; onExit() runs after any of the processes ends.
-export async function startEngines(cfg, { logDir, appVersion, locale, edition, preferredBackendPort,
+export async function startEngines(cfg, { logDir, appVersion, locale, edition, appName, preferredBackendPort,
                                           log = () => {}, onExit = () => {} }) {
   mkdirSync(logDir, { recursive: true });
   await killStalePids(logDir);
@@ -278,7 +278,7 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, p
   // backend's persodub.log and job-<id>.log go beside shell.log and the engines'
   // console logs, so everything a support request needs is in one folder.
   env = { ...env, PERSODUB_CLIENT: "desktop", PERSODUB_APP_VERSION: appVersion ?? "",
-          PERSODUB_LOCALE: locale ?? "en", PERSODUB_EDITION: edition ?? "", PERSODUB_LOG_DIR: logDir };
+          PERSODUB_LOCALE: locale ?? "en", PERSODUB_EDITION: edition ?? "", PERSODUB_APP_NAME: appName ?? "PersoDub", PERSODUB_LOG_DIR: logDir };
 
   const children = [];
   const packChildren = new Map();   // pack id -> the processes it owns

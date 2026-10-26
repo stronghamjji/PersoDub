@@ -1,4 +1,4 @@
-<!doctype html><meta charset="utf-8"><title data-i18n>PersoDub: Startup failed</title>
+<!doctype html><meta charset="utf-8"><title data-i18n>{app}: Startup failed</title>
 <style>
   /* On Windows and the Mac the shell hides the system title bar
      (src/windowFactory.js), so a strip along the top edge is what this screen
@@ -28,8 +28,8 @@
   .brand .ver { color: #9ea5b0; font-size: 12px; }
 </style>
 <div class="drag"></div>
-<div class="brand"><img src="logo.png" alt=""><b>PersoDub</b><span class="ver" id="ver"></span></div>
-<h2 id="title" data-i18n>PersoDub could not start</h2>
+<div class="brand"><img src="logo.png" alt=""><b data-i18n>{app}</b><span class="ver" id="ver"></span></div>
+<h2 id="title" data-i18n>{app} could not start</h2>
 <p id="where" class="sub"></p>
 <p id="message"></p>
 <p id="note" class="sub"></p>
@@ -46,7 +46,7 @@
   const title = document.getElementById("title");
   if (q.get("title")) title.textContent = q.get("title");
   const heading = title.textContent;
-  document.title = `PersoDub: ${heading}`;  // the window title, which said
+  document.title = `${q.get("name") || "PersoDub"}: ${heading}`;  // the window title, which said
                                             // "Startup failed" either way
   // Each line only when there is something to say: where an install stopped,
   // the sentence saying why and what to press, a note under it, and the

@@ -27,9 +27,9 @@ const ENGINE_SENTENCES = [
   // app/engines_status.py, app/api/dub.py, app/api/separate.py, app/api/script.py).
   "Select a Perso workspace in Settings.",
   "ChatGPT translation needs a ChatGPT sign-in. Open Settings and press Sign in with ChatGPT first.",
-  "The voice engine is not running because it could not start, so this computer cannot dub. Quit and reopen PersoDub, or use the Perso API.",
+  "The voice engine is not running because it could not start, so this computer cannot dub. Quit and reopen {app}, or use the Perso API.",
   "The voice engine is not running: this computer ran out of memory. Close other programs, then press Start dubbing and it will start again. Dubbing with the Perso API uses almost no memory.",
-  "The voice engine is not running. Quit and reopen PersoDub.",
+  "The voice engine is not running. Quit and reopen {app}.",
   "Perso separation needs an API key. Open Settings and save your Perso API key, or choose Local model.",
   "Sign in to ChatGPT first.",
   "ChatGPT usage limit reached for now. Try again after it resets.",

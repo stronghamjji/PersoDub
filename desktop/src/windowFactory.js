@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { zoomResetter } from "./zoomReset.js";
 import { useLanguage } from "./i18n.js";
-import { PRODUCTS } from "./edition.js";
+import { displayName } from "./edition.js";
 
 // Outbound links (the credit popup's Recharge button, Settings' "get a key") belong in
 // the user's own browser. Only http(s) is handed to the OS, so a page can never make
@@ -17,6 +17,8 @@ export function openExternally(shell, url) {
  */
 export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, repo, locale, platform = process.platform,
                               edition = "opensource" }) {
+  // What this edition is called on screen (src/edition.js displayName).
+  const name = displayName(edition);
   // The finished screen is a table beside a video with a strip under both, and
   // it needs 1280 to show the table's full set of columns. Clamped to the screen
   // the window opens on, so a small laptop gets a window that fits it rather
@@ -72,13 +74,14 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
       // itself and leaves the Mac's to the system, and makes its top bar what
       // the window is moved by on both.
       // And the build's edition, which the page shows the production
-      // edition's names and links for (ui/src/edition.mjs).
+      // edition's names and links for (ui/src/edition.mjs), and the name it
+      // shows, for the window title and the sign-in screen.
       additionalArguments: [`--persodub-repo=${repo}`, `--persodub-locale=${locale}`, `--persodub-platform=${platform}`,
-        `--persodub-edition=${edition}`],
+        `--persodub-edition=${edition}`, `--persodub-name=${name}`],
     },
-    // The production edition's window is Perso_DesktopApp whatever page is in
+    // The production edition's window is PersoDubbing whatever page is in
     // it (the event below); the open-source window takes each page's title.
-    ...(edition === "production" ? { title: PRODUCTS.production.name } : {}),
+    ...(edition === "production" ? { title: name } : {}),
   });
   if (edition === "production") win.on("page-title-updated", (e) => e.preventDefault());
   // Every page load -- the app page arriving after boot, or a reload mid

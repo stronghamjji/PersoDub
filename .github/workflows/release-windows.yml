@@ -34,6 +34,15 @@ jobs:
     permissions:
       contents: write  # to upload the asset onto the release
     steps:
+      # Stopped first, before anything is fetched or built: a production
+      # build never goes onto the public release.
+      - name: Refuse a production build for the public release
+        if: github.event.inputs.edition == 'production'
+        shell: bash
+        run: |
+          echo "::error::Production builds are not published to the public release: they go to the production download folder. Build one with the 'Build Windows installer' workflow (build-windows.yml) instead."
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
@@ -63,7 +72,8 @@ jobs:
           # Open source unless a hand-started run picks production
           # (desktop/src/edition.js); a release build is the open-source one.
           PERSODUB_EDITION: ${{ github.event.inputs.edition || 'opensource' }}
-        run: npm run dist:win
+        # The production build is PersoDubbing on screen (desktop/src/edition.js displayName).
+        run: npm run ${{ github.event.inputs.edition == 'production' && 'dist:win:prod' || 'dist:win' }}
 
       # A second copy under a name that carries no version, because the README's
       # download button has to name a file exactly: releases/latest/download only

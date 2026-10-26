@@ -241,7 +241,7 @@ _NOTICE_ERRORS = {
     ),
     VoiceEngineDown: (
         "voice_engine_down",
-        lambda: both("The voice engine stopped responding. Quit and reopen PersoDub, then Resume."),
+        lambda: both("The voice engine stopped responding. Quit and reopen {app}, then Resume."),
         None,
         None,
     ),

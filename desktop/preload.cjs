@@ -7,6 +7,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 const REPO_ARG = "--persodub-repo=";
 // The computer's language the same way (src/i18n.js): what Auto means.
 const LOCALE_ARG = "--persodub-locale=";
+// The name this edition shows the user (src/edition.js displayName).
+const NAME_ARG = "--persodub-name=";
 // And which system the window is on ("win32", "darwin"), the same way. Stamped
 // on the page as data-platform before its stylesheet is read, so Windows gets
 // its own scrollbars drawn (static/css/app.css) and the Mac keeps the system's,
@@ -101,6 +103,23 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // Resolves to {id} once it landed, {queued: true} when it waits for the next
   // launch, and null when it could not be sent at all.
   sendInquiry: (form) => ipcRenderer.invoke("shell:send-inquiry", form),
+  // Perso sign-in in the browser (src/auth.js), the production edition's.
+  // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting}:
+  // `required` is the production edition signed out, when the page shows its
+  // sign-in screen; `account` is a masked e-mail and `accountId` Perso's number
+  // for the account, the value to key a user's analytics events by. authLogin opens the browser
+  // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
+  // (outcomes and key answers are listed at createAuth). authCheckKey looks for
+  // the account's API key again, after authOpenKeyPage let the user make one.
+  // onAuthState hears the status whenever it changes. In the open-source
+  // edition every answer is {outcome: "disabled"} and authStatus's enabled is false.
+  authStatus: () => ipcRenderer.invoke("shell:auth-status"),
+  authLogin: () => ipcRenderer.invoke("shell:auth-login"),
+  authCancel: () => ipcRenderer.invoke("shell:auth-cancel"),
+  authLogout: () => ipcRenderer.invoke("shell:auth-logout"),
+  authCheckKey: () => ipcRenderer.invoke("shell:auth-check-key"),
+  authOpenKeyPage: () => ipcRenderer.invoke("shell:auth-open-key-page"),
+  onAuthState: (cb) => ipcRenderer.on("shell:auth-state", (_e, state) => cb(state)),
   // "owner/repo" for the page's GitHub links (src/edition.js); "" when the
   // window passed none.
   repo: process.argv.find((a) => a.startsWith(REPO_ARG))?.slice(REPO_ARG.length) || "",
@@ -108,4 +127,6 @@ contextBridge.exposeInMainWorld("persodubShell", {
   locale: process.argv.find((a) => a.startsWith(LOCALE_ARG))?.slice(LOCALE_ARG.length) || "",
   // "" when the window passed none: the page is the open-source one.
   edition: process.argv.find((a) => a.startsWith(EDITION_ARG))?.slice(EDITION_ARG.length) || "",
+  // What the app is called on screen: "PersoDub", or "PersoDubbing" in the production edition.
+  name: process.argv.find((a) => a.startsWith(NAME_ARG))?.slice(NAME_ARG.length) || "PersoDub",
 });

@@ -27,12 +27,9 @@ test("the open-source feed is its GitHub Releases", () => {
   assert.deepEqual(resolveFeed({}, "opensource"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
 });
 
-test("the production feed is only the address it was built with, and none without one", () => {
+test("the production feed is none while PRODUCTION_UPDATE_URL is empty", () => {
   // Never the public releases: they turned a production install into an
-  // open-source one (0.8.3).
-  assert.deepEqual(resolveFeed({}, "production", { PERSODUB_UPDATE_URL: "https://updates.example/prod" }),
-    { provider: "generic", url: "https://updates.example/prod" });
-  assert.equal(resolveFeed({}, "production", {}), null);
+  // open-source one (0.8.3). The address itself: edition.test.mjs editionFeed.
   assert.equal(resolveFeed({}, "production"), null);
 });
 
@@ -218,4 +215,37 @@ test("an update failure is one line: no response headers, no query, its code kep
   assert.equal(updateErrorText(new Error("\n\n")), "unknown error");
   assert.equal(updateErrorText("plain words"), "plain words");
   assert.ok(updateErrorText(new Error("x".repeat(900))).length <= 300);
+});
+
+// The update check itself (updateFlow.js startUpdater), with electron-updater
+// and electron played by stand-ins handed in through its `load`.
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createUpdater } from "./updateFlow.js";
+
+test("a prerelease build (1.0.0-rc.1) still looks for stable releases: prereleases are off before the feed is set", async () => {
+  const kitDir = mkdtempSync(join(tmpdir(), "pd-update-"));
+  writeFileSync(join(kitDir, "kit.env"), "PERSODUB_DISABLE_UPDATE_CHECK=0\n");   // whatever this shell has
+  const seen = {};
+  // On, as electron-updater sets it for a version with a prerelease part.
+  const autoUpdater = {
+    allowPrerelease: true,
+    on() {},
+    setFeedURL() { seen.atFeed = this.allowPrerelease; },
+    async checkForUpdates() { seen.atCheck = this.allowPrerelease; },
+  };
+  const webRequest = { onResponseStarted() {}, onBeforeRedirect() {}, onErrorOccurred() {} };
+  const modules = {
+    "electron-updater": { default: { autoUpdater } },
+    electron: { session: { fromPartition: () => ({ webRequest }) }, net: {} },
+  };
+  const lines = [];
+  const updater = createUpdater({
+    app: { isPackaged: true, getVersion: () => "1.0.0-rc.1" }, dialog: {}, ctx: {}, edition: "opensource",
+    shellLog: (line) => lines.push(line), load: async (name) => modules[name],
+  });
+  await updater.startUpdater({ isDestroyed: () => false, webContents: { send() {} } }, kitDir);
+  assert.deepEqual(seen, { atFeed: false, atCheck: false }, lines.join("\n"));
+  assert.equal(autoUpdater.allowPrerelease, false);
 });

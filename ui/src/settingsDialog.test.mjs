@@ -43,7 +43,7 @@ function makeEl(id) {
 
 /** A page, a fetch log and a stopped clock. `responses` answers per URL;
     `shell` stands in for the desktop shell, none for a browser. */
-function harness({ responses = {}, refreshModelCatalog = null, shell = null } = {}) {
+function harness({ responses = {}, refreshModelCatalog = null, shell = null, account = null } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -101,6 +101,7 @@ function harness({ responses = {}, refreshModelCatalog = null, shell = null } = 
     refreshModelCatalog: () => { state.models += 1; return refreshModelCatalog && refreshModelCatalog($); },
     startAgain: () => { state.startedAgain += 1; },
     shell,
+    account,
   });
   return { $, api, state };
 }
@@ -111,6 +112,7 @@ const SAVED = {
   gemini_api_key: "gem-key",
   perso_space_seq: "7",
   perso_signup_link: "https://developers.perso.ai/api-keys?utm=x",
+  perso_recharge_link: "https://perso.ai/en/workspace/space-settings?tab=Subscription&utm=x",
   app_version: "0.5.0",
   analytics_off: true,
 };
@@ -125,21 +127,22 @@ test("loadSavedSetup fills the fields from GET /api/settings", async (t) => {
   assert.equal(h.$("persoKeyInput").value, SAVED.perso_api_key);
   assert.equal(h.$("geminiKeyInput").value, "gem-key");
   assert.equal(h.$("persoSignupLink").href, SAVED.perso_signup_link);
+  assert.equal(h.$("persoRechargeLink").href, SAVED.perso_recharge_link);
   assert.equal(h.$("aboutVersion").textContent, "PersoDub 0.5.0");
   // analytics_off: true means the "send counts" switch is OFF.
   assert.equal(h.$("analyticsToggle").checked, false);
   assert.ok(h.state.calls.includes("GET /api/settings"));
 });
 
-test("the production edition's About names Perso_DesktopApp", async (t) => {
+test("the production edition's About names PersoDubbing, the name the shell passes", async (t) => {
   const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) } });
   const realWindow = globalThis.window;
-  globalThis.window = { ...realWindow, persodubShell: { edition: "production" } };
+  globalThis.window = { ...realWindow, persodubShell: { edition: "production", name: "PersoDubbing" } };
   t.after(() => { globalThis.window = realWindow; h.state.restore(); });
 
   await h.api.loadSavedSetup();
 
-  assert.equal(h.$("aboutVersion").textContent, "Perso_DesktopApp 0.5.0");
+  assert.equal(h.$("aboutVersion").textContent, "PersoDubbing 0.5.0");
 });
 
 test("a version of 0.0.0 is not put on screen", async (t) => {
@@ -497,21 +500,21 @@ const selected = (h) => SETTINGS_TABS.filter((t) => h.$(`settingsTab-${t}`).attr
 const showing = (h) => SETTINGS_TABS.filter((t) => h.$(`settingsPanel-${t}`).hidden === false);
 const tick = () => new Promise((r) => setImmediate(r));
 
-test("the tabs are Models, API keys, Storage, Privacy and About", () => {
-  assert.deepEqual(SETTINGS_TABS, ["models", "keys", "storage", "privacy", "about"]);
+test("the tabs are API keys, Models, Storage, Privacy and About", () => {
+  assert.deepEqual(SETTINGS_TABS, ["keys", "models", "storage", "privacy", "about"]);
 });
 
-test("the gear opens on Models the first time, one tab selected and one panel showing", async (t) => {
+test("the gear opens on API keys the first time, one tab selected and one panel showing", async (t) => {
   const h = harness();
   t.after(h.state.restore);
 
   // The gear hands over its click event, which is not a tab.
   await h.api.openSettings({ type: "click" });
 
-  assert.deepEqual(selected(h), ["models"]);
-  assert.deepEqual(showing(h), ["models"]);
-  assert.equal(h.$("settingsTab-models").tabIndex, 0);
-  assert.equal(h.$("settingsTab-keys").tabIndex, -1);
+  assert.deepEqual(selected(h), ["keys"]);
+  assert.deepEqual(showing(h), ["keys"]);
+  assert.equal(h.$("settingsTab-keys").tabIndex, 0);
+  assert.equal(h.$("settingsTab-models").tabIndex, -1);
 });
 
 test("clicking a tab shows its panel alone", async (t) => {
@@ -532,21 +535,21 @@ test("the arrow keys move along the tabs and wrap, Home and End go to the ends",
   await h.api.openSettings();
   const press = (from, key) => h.$(`settingsTab-${from}`).fire("keydown", { key, preventDefault() {} });
 
-  await press("models", "ArrowRight");
-  assert.deepEqual(selected(h), ["keys"]);
-  assert.equal(h.$("settingsTab-keys").focused, true);
-  await press("keys", "ArrowLeft");
+  await press("keys", "ArrowRight");
+  assert.deepEqual(selected(h), ["models"]);
+  assert.equal(h.$("settingsTab-models").focused, true);
   await press("models", "ArrowLeft");
+  await press("keys", "ArrowLeft");
   assert.deepEqual(selected(h), ["about"]);
   await press("about", "ArrowRight");
-  assert.deepEqual(selected(h), ["models"]);
-  await press("models", "End");
+  assert.deepEqual(selected(h), ["keys"]);
+  await press("keys", "End");
   assert.deepEqual(showing(h), ["about"]);
   await press("about", "Home");
-  assert.deepEqual(showing(h), ["models"]);
+  assert.deepEqual(showing(h), ["keys"]);
   // Any other key is left alone.
-  await press("models", "a");
-  assert.deepEqual(showing(h), ["models"]);
+  await press("keys", "a");
+  assert.deepEqual(showing(h), ["keys"]);
 });
 
 test("the sheet reopens on the tab last chosen", async (t) => {
@@ -697,4 +700,73 @@ test("a sheet that could not read the settings has no language change to save", 
   h.$("uiLanguageSelect").value = "ko";
   await h.$("uiLanguageSelect").fire("change");
   assert.equal(h.$("settingsChanges").textContent, before);
+});
+
+// The Perso sign-in's stand-in (ui/src/signIn.mjs): a status, its listeners,
+// and the Sign out button's calls counted.
+function fakeAccount(status) {
+  const a = { current: status, listeners: [], loggedOut: 0 };
+  a.status = () => a.current;
+  a.onChange = (cb) => a.listeners.push(cb);
+  a.logout = async () => { a.loggedOut += 1; };
+  a.set = (s) => { a.current = s; for (const cb of a.listeners) cb(s); };
+  return a;
+}
+
+test("the open-source edition's sheet keeps the key field and its tab name, and shows no account", async (t) => {
+  const account = fakeAccount({ enabled: false });
+  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) }, account });
+  t.after(h.state.restore);
+  h.$("persoAccountRow").hidden = true;   // as the markup has it
+  await h.api.openSettings();
+  account.set({ enabled: false });
+
+  assert.equal(h.$("persoAccountRow").hidden, true);
+  assert.equal(h.$("persoKeyRow").hidden, false);
+  assert.equal(h.$("settingsTab-keys").dataset.i18n, undefined, "the tab's words are not touched");
+  assert.equal(h.$("persoKeyChip").textContent, "");
+});
+
+test("the production edition's sheet shows the signed-in account in the key field's place", async (t) => {
+  const account = fakeAccount({ enabled: true, required: false, signedIn: true, account: "a***@test.local", hasKey: true });
+  const h = harness({ responses: { "/api/settings": ok(SAVED), "/api/perso/spaces": ok(SPACES) }, account });
+  t.after(h.state.restore);
+  h.$("persoAccountRow").hidden = true;
+  await h.api.openSettings();
+
+  assert.equal(h.$("persoAccountRow").hidden, false);
+  assert.equal(h.$("persoKeyRow").hidden, true);
+  assert.equal(h.$("settingsTab-keys").textContent, "Account and keys");
+  assert.equal(h.$("persoAccountMail").textContent, "a***@test.local");
+  assert.equal(h.$("persoKeyChip").textContent, "Key connected");
+  assert.ok(h.$("persoKeyChip").classList.contains("done"));
+
+  await h.$("persoSignOutBtn").fire("click");
+  assert.equal(account.loggedOut, 1);
+});
+
+test("another account signed in while the sheet is open shows there, with its key and workspaces", async (t) => {
+  let saved = SAVED;
+  const account = fakeAccount({ enabled: true, signedIn: true, account: "a***@test.local", hasKey: true });
+  const h = harness({ responses: { "/api/settings": () => ok(saved), "/api/perso/spaces": ok(SPACES) }, account });
+  t.after(h.state.restore);
+  await h.api.openSettings();
+  h.$("settingsOverlay").classList.add("open");
+  const spacesAsked = h.state.calls.filter((c) => c === "GET /api/perso/spaces").length;
+
+  saved = { ...SAVED, perso_api_key: "the-other-accounts-key", perso_space_seq: "" };
+  account.set({ enabled: true, signedIn: true, account: "b***@test.local", hasKey: true });
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(h.$("persoAccountMail").textContent, "b***@test.local");
+  assert.equal(h.$("persoKeyInput").value, "the-other-accounts-key");
+  assert.equal(h.state.calls.filter((c) => c === "GET /api/perso/spaces").length, spacesAsked + 1);
+  assert.equal(h.$("settingsChanges").textContent, "", "a key the sign-in saved is no change to save");
+
+  account.set({ enabled: true, signedIn: true, account: "", hasKey: false });
+  assert.equal(h.$("persoAccountMail").textContent, "Perso account", "an account with no e-mail or name");
+  account.set({ enabled: true, signedIn: true, account: "c***@test.local", hasKey: false });
+  assert.equal(h.$("persoKeyChip").textContent, "No key");
+  assert.ok(!h.$("persoKeyChip").classList.contains("done"));
 });

@@ -1,7 +1,7 @@
 {
   "name": "persodub-desktop-shell",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.9.1",
   "type": "module",
   "main": "main.js",
   "scripts": {
@@ -9,7 +9,9 @@
     "test": "node --test src/*.test.mjs smoke/*.test.mjs",
     "dist": "node scripts/collect-payload.mjs && electron-builder --mac zip --arm64 --publish never",
     "dist:dmg": "node scripts/collect-payload.mjs && electron-builder --mac dmg --arm64 --publish never",
-    "dist:win": "node scripts/collect-payload.mjs && node scripts/patch-nsis-messages.mjs && electron-builder --win nsis --x64 --publish never"
+    "dist:win": "node scripts/collect-payload.mjs && node scripts/patch-nsis-messages.mjs && electron-builder --win nsis --x64 --publish never",
+    "dist:dmg:prod": "node scripts/collect-payload.mjs --edition production && electron-builder --mac dmg zip --arm64 --publish never",
+    "dist:win:prod": "node scripts/collect-payload.mjs --edition production && node scripts/patch-nsis-messages.mjs && electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^37.0.0",

@@ -1046,7 +1046,7 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        throw new Error(detail.detail || t("PersoDub answered {status}.", { status: res.status }));
+        throw new Error(detail.detail || t("{app} answered {status}.", { status: res.status }));
       }
 
       // The body is one JSON event per line, arriving as the turn runs.

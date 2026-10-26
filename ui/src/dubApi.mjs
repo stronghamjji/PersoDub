@@ -231,7 +231,7 @@ export function applyEngineAvailability(av, current) {
   const runtime = (av.local_engines || {}).translation || {};
   const name = RUNTIME_TRANSLATORS[current.translate];
   const translatorOff = local && name && runtime.state === "failed"
-    ? t("The translation engine could not start, so {name} cannot translate. Choose another translator, or quit and reopen PersoDub.", { name })
+    ? t("The translation engine could not start, so {name} cannot translate. Choose another translator, or quit and reopen {app}.", { name })
     : null;
   const slow = local && av.ram_gb && (av.ram_slow || []).includes(current.translate)
     ? t("This computer has {n} GB of memory, so dubbing may take a while. Dubbing with the Perso API uses almost no memory.", { n: av.ram_gb })

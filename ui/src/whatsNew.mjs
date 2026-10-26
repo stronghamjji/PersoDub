@@ -24,7 +24,7 @@ export function initWhatsNew({ $ }) {
     if (!whatsNew || !whatsNew.notes.length) return;
     // "in PersoDub 0.4.4", the way Chrome and Adobe name a release: alone, the
     // number said nothing (user, 2026-09-02).
-    $("wnTitle").textContent = t("What\u2019s new in PersoDub {version}", { version: whatsNew.version });
+    $("wnTitle").textContent = t("What\u2019s new in {app} {version}", { version: whatsNew.version });
     $("wnList").replaceChildren(...whatsNew.notes.map((n) => {
       const li = document.createElement("li");
       li.textContent = n;

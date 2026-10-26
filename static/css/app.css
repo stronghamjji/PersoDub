@@ -2991,3 +2991,48 @@
   .import-blue .import-link input::placeholder { color: #5a6477; }
   .np-window { width: min(520px, 92vw); }
   #newProjError { margin-top: 10px; }
+
+  /* ---------------- Perso sign-in (production edition) ---------------- */
+  /* The whole window, over everything (ui/src/signIn.mjs), measured off the
+     mockup (2026-10-25): a 36px strip that moves the window, then one centred
+     column -- the logo, a 240px-wide pair of 40px buttons, short grey lines. */
+  .signin { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column;
+    background: var(--desk); color: var(--foreground); }
+  .signin-bar { height: 36px; flex: none; -webkit-app-region: drag; }
+  .signin-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 0 24px; }
+  .signin-logo { width: 96px; height: 96px; border-radius: 22px; margin: 0 0 18px; }
+  .signin-logo.sm { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 16px; }
+  .signin-name { font-size: 24px; font-weight: 600; letter-spacing: .01em; margin: 0 0 34px; }
+  .signin h1 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
+  .signin p { margin: 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.5; }
+  .signin-acct { margin-top: 14px; font-size: 13px; color: var(--muted-foreground); }
+  .signin-acct:empty { display: none; }
+  .signin .signin-btn { height: 40px; min-width: 240px; padding: 0 24px; border-radius: 8px; font-size: 15px; }
+  .signin .btn-secondary.signin-btn { font-weight: 500; }
+  .signin-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
+  .signin-hint { margin-top: 14px; font-size: 13px; color: var(--muted-foreground); }
+  .signin-hint.danger { color: var(--destructive); }
+  .signin-hint:empty { display: none; }
+  .signin-link { margin-top: 18px; padding: 0; border: none; background: none; font: inherit; font-size: 13px;
+    color: var(--primary-ink); cursor: pointer; }
+  .signin-prog { position: relative; width: 240px; height: 4px; margin: 22px 0 0; border-radius: 2px;
+    background: var(--secondary); overflow: hidden; }
+  .signin-prog b { position: absolute; left: 0; top: 0; width: 38%; height: 100%; border-radius: 2px;
+    background: var(--primary); animation: signin-wait 1.4s ease-in-out infinite alternate; }
+  @keyframes signin-wait { from { transform: translateX(0); } to { transform: translateX(163px); } }
+  @media (prefers-reduced-motion: reduce) { .signin-prog b { animation: none; transform: translateX(60px); } }
+  /* A link dressed as a button (the Recharge credits buttons) wears no underline. */
+  a.btn, a.btn:hover { text-decoration: none; }
+  /* Home: the signed-in account under the brand (production edition). */
+  .home-account { display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 0; border: none; background: none;
+    font-size: 12px; color: var(--muted-foreground); max-width: 100%; }
+  .home-account[hidden] { display: none; }
+  .home-account:hover .home-account-name { color: var(--foreground); }
+  .home-account-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #34c77b; }
+  .home-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Settings > Account and keys: the account's masked e-mail and its key chip. */
+  .acct-mail { font-size: 11.5px; color: var(--foreground); }
+  .acct-chip { font-size: 11px; }
+  /* The account row stands first once the key row above it hides: no line over it. */
+  #persoKeyRow[hidden] + .set-row { border-top: none; }

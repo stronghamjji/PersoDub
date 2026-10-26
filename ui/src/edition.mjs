@@ -1,6 +1,6 @@
 // Which edition the page is in (desktop/src/edition.js), as the shell's
 // preload says (persodubShell.edition). The production edition, the
-// company's build, is Perso_DesktopApp: no GitHub anywhere, Perso's own page
+// company's build, is PersoDubbing ({app}, ui/src/i18n.mjs): no GitHub anywhere, Perso's own page
 // for its downloads and guide, and Customer support as an inquiry form sent
 // to the support inbox. A plain browser has no shell and is the open-source page.
 export const DESKTOP_APP_URL = "https://perso.ai/dubbing/desktop-app";
@@ -18,9 +18,4 @@ export function persoLink(url, content, utm) {
 /** True in the production edition's app. */
 export function isProduction(shell = shellOf()) {
   return shell?.edition === "production";
-}
-
-/** The app's name as the window and About show it. */
-export function productName(shell = shellOf()) {
-  return isProduction(shell) ? "Perso_DesktopApp" : "PersoDub";
 }

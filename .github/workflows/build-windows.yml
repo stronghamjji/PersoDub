@@ -55,7 +55,8 @@ jobs:
           # Open source unless a hand-started run picks production
           # (desktop/src/edition.js); a release build is the open-source one.
           PERSODUB_EDITION: ${{ github.event.inputs.edition || 'opensource' }}
-        run: npm run dist:win
+        # The production build is PersoDubbing on screen (desktop/src/edition.js displayName).
+        run: npm run ${{ github.event.inputs.edition == 'production' && 'dist:win:prod' || 'dist:win' }}
 
       - uses: actions/upload-artifact@v4
         with:

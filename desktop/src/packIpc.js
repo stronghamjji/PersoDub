@@ -28,7 +28,7 @@ export function registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog }) {
   const offerVcRuntime = () => {
     if (!ctx.win.isDestroyed()) {
       dialog.showMessageBox(ctx.win, {
-        type: "warning", title: "PersoDub", message: vcRuntimeMissingReason(),
+        type: "warning", title: t("{app}"), message: vcRuntimeMissingReason(),
         buttons: [t("Download"), t("Not now")], defaultId: 0, cancelId: 1,
       }).then(({ response }) => { if (response === 0) openExternally(shell, VC_RUNTIME_URL); }).catch(() => {});
     }

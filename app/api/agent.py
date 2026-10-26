@@ -365,7 +365,7 @@ def agent_login(body: AgentLoginRequest):
         # The type name for the log only: on screen it is a program's word.
         logger.warning("Could not start the sign-in (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail=t("Could not start the sign-in. "
-                                                      "Quit and reopen PersoDub, then press it again."))
+                                                      "Quit and reopen {app}, then press it again."))
     # Every assistant that reads this same sign-in is asked afresh.
     with _login_lock:
         for key, other in AGENTS.items():

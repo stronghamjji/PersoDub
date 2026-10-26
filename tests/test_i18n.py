@@ -183,7 +183,8 @@ def test_every_language_has_the_sentences_of_the_english_table():
 
 def test_every_translation_fills_the_same_placeholders_as_its_english_sentence():
     def names(s):
-        return sorted(i18n._PLACEHOLDER.findall(s))
+        # {app} is the app's name, not a value: a translation may leave it out.
+        return sorted(n for n in i18n._PLACEHOLDER.findall(s) if n != "app")
     for code in i18n.LANGUAGES:
         if code == "en":
             continue
@@ -314,3 +315,12 @@ def test_the_advice_under_a_stage_that_stopped_is_said_in_both(korean_computer):
     assert advice[1] == _table("ko")[advice[0]]
     assert advice_for("local STT timed out after 900 seconds", "Check the video file.") == advice[0]
     assert advice_both("moov atom not found", ("Check the video file.", "x")) == ("Check the video file.", "x")
+
+
+def test_app_in_a_sentence_is_the_name_the_shell_passed(monkeypatch):
+    monkeypatch.delenv(i18n.APP_NAME_ENV, raising=False)
+    assert i18n.t("Quit and reopen {app}.") == "Quit and reopen PersoDub."
+    monkeypatch.setenv(i18n.APP_NAME_ENV, "PersoDubbing")
+    assert i18n.t("Quit and reopen {app}.") == "Quit and reopen PersoDubbing."
+    assert i18n.t("{app} answered {status}.", status=500) == "PersoDubbing answered 500."
+    assert i18n.both("Quit and reopen {app}.")[0] == "Quit and reopen PersoDubbing."

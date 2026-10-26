@@ -20,9 +20,26 @@ const tables = {};   // code -> its table, once loadTable has read it
 let language = "en";
 
 /** The sentence `key` in the current language, `{name}` filled from `vars`. */
+// The product's name, in every sentence that says {app}: the name this
+// edition shows (desktop/src/edition.js displayName, through the shell),
+// "PersoDub" with no shell. Filled in every language, English too.
+let appName = null;
+export function setAppName(name) { appName = name || null; }
+const productName = () => appName || globalThis.window?.persodubShell?.name || "PersoDub";
+
+// A table's sentence for `key`, or the key itself. The engine fills {app}
+// before it answers, so its sentence is also looked up with the name turned
+// back into {app}.
+function lookup(table, key) {
+  if (!table) return key;
+  if (Object.hasOwn(table, key)) return table[key];
+  const name = productName();
+  const asApp = key.includes(name) ? key.split(name).join("{app}") : key;
+  return Object.hasOwn(table, asApp) ? table[asApp] : key;
+}
+
 export function t(key, vars) {
-  const table = tables[language];
-  const text = table && Object.hasOwn(table, key) ? table[key] : key;
+  const text = lookup(tables[language], key).replace(/\{app\}/g, productName());
   if (!vars) return text;
   // A {name} the caller gave no value for stays as written: a visible hole
   // is easier to notice than a silent "undefined".
@@ -146,6 +163,11 @@ let started = null;
 let startSettings = null;
 export const savedSettings = () => startSettings;
 export function pageLanguage() {
+  // The markup's {app} is filled at once, in English, without waiting on the
+  // settings answer below: the first paint names the app instead of "{app}".
+  if (!started) {
+    try { applyTranslations(document); } catch { /* no page to fill */ }
+  }
   started ??= (async () => {
     let setting = "";
     try {

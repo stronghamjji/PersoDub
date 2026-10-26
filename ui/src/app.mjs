@@ -24,6 +24,7 @@ import { startEvents } from "./events.mjs";
 // (ui/src/events.mjs). Early, so no press goes unseen.
 startEvents();
 import { initSettingsUi } from "./settingsDialog.mjs";
+import { initSignIn } from "./signIn.mjs";
 import { initWhatsNew } from "./whatsNew.mjs";
 import { initKeyWindow } from "./keyWindow.mjs";
 import { initChatgptSignIn } from "./chatgptSignIn.mjs";
@@ -33,7 +34,7 @@ import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
 import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { initFeedbackSheet } from "./feedbackSheet.mjs";
-import { isProduction, productName, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
+import { isProduction, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -192,13 +193,22 @@ window.addEventListener("resize", () => {
 // and the out-of-credits popup all call settings.openSettings()) and the two
 // things the sheet reaches back for: re-checking which engines a saved key
 // makes usable, and the Models catalog, which modelsDialog.mjs paints.
+// The production edition's Perso sign-in screen (ui/src/signIn.mjs), over the
+// whole window while signed out. The open-source edition never shows it.
+// The window's title is the name this edition shows (desktop/src/edition.js); a plain browser keeps the page's own.
+if (window.persodubShell?.name) document.title = window.persodubShell.name;
+const signIn = initSignIn({ $, shell: window.persodubShell || null });
 const settings = initSettingsUi({
   $,
   onSaved: () => applyEngineAvailabilityToForm(),
   refreshModelCatalog: () => models.refreshModels(),
   // Storage says where downloads go; only the desktop shell knows.
   shell: window.persodubShell || null,
+  // The Perso account row and its buttons, production edition only.
+  account: signIn,
 });
+// Home's account line (ui/src/signIn.mjs paints it) opens the account's own tab.
+$("homeAccount").addEventListener("click", () => settings.openSettings("keys"));
 
 $("settingsBtn").addEventListener("click", settings.openSettings);
 
@@ -607,7 +617,7 @@ function showHome() {
   saveVideoNext = false;
   paintDraftBack();
   showScreen("home");
-  setTopbar({ title: "PersoDub", subtitle: t("Local dubbing") });
+  setTopbar({ title: t("{app}"), subtitle: t("Local dubbing") });
   projects.renderQueueCard().catch(() => {});
   noteLastScreen("");
 }
@@ -946,8 +956,8 @@ if (isProduction()) {
   const brand = $("brandBtn");
   brand.removeAttribute("data-i18n-title");
   brand.removeAttribute("data-i18n-aria-label");
-  brand.title = productName();
-  brand.setAttribute("aria-label", productName());
+  brand.title = t("{app}");
+  brand.setAttribute("aria-label", t("{app}"));
 }
 
 // ---------------- Upload zone (drag & drop + click to browse) ----------------
@@ -1529,7 +1539,7 @@ async function resumeJob(jobId) {
     // Another project was clicked (or Home) while this one was being read:
     // the last click is the one on screen, and this answer is dropped whole.
     if (myGeneration !== state.pollGeneration) return;
-    if (job.detail) throw new Error(t("This project is no longer available. PersoDub may have restarted."));
+    if (job.detail) throw new Error(t("This project is no longer available. {app} may have restarted."));
     // Erasing subtitles is the other work this app does, and it has a screen of
     // its own: the same row, the same click, a different place to land.
     if (job.kind === "erase") { eraseScreen.openEraseJob(job); return; }
@@ -1749,7 +1759,7 @@ function runPollLoop(jobId, myGeneration) {
     // takes the red away again the moment the server is back.
     onUnreachable: (e) => {
       if (myGeneration !== state.pollGeneration) return;
-      runningScreen.showNoticeError(t("PersoDub is not answering. Still trying."));
+      runningScreen.showNoticeError(t("{app} is not answering. Still trying."));
     },
   }).catch((e) => {
     // Leaving the job settles the loop without a word (it resolves, it does not

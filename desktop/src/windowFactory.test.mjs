@@ -56,20 +56,21 @@ test("the window opens at 1280 by 800, or at the screen's size when that is smal
     // The page's GitHub links follow the build's edition (preload.cjs repo).
     // ...and Auto's language follows the computer's (preload.cjs locale).
     // ...and the page is told which system it is on (preload.cjs platform).
-    // ...and its edition (preload.cjs edition).
+    // ...and its edition (preload.cjs edition), and the name it shows (preload.cjs name).
     additionalArguments: ["--persodub-repo=owner/PersoDub", "--persodub-locale=ko", "--persodub-platform=darwin",
-      "--persodub-edition=opensource"] });
+      "--persodub-edition=opensource", "--persodub-name=PersoDub"] });
   assert.equal(big.title, undefined, "the open-source window takes each page's title");
 });
 
-test("the production window is Perso_DesktopApp whatever its page is called, and tells the page its edition", () => {
+test("the production window is PersoDubbing whatever its page is called, and tells the page its edition and name", () => {
   const { win, on } = setup({ edition: "production", platform: "win32" });
-  assert.equal(win.options.title, "Perso_DesktopApp");
+  assert.equal(win.options.title, "PersoDubbing");
   let kept = false;
   on["win:page-title-updated"]({ preventDefault: () => { kept = true; } });
   assert.ok(kept, "a page's own title does not replace it");
   const args = win.options.webPreferences.additionalArguments;
   assert.ok(args.includes("--persodub-edition=production"));
+  assert.ok(args.includes("--persodub-name=PersoDubbing"));
 });
 
 // Windows hung its white system title bar over the dark app, with the app's own

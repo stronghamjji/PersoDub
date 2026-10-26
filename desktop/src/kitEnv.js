@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // The kit's single settings file. It was mac.env while macOS was the only
@@ -78,14 +78,41 @@ export function withKitEnvValue(text, key, value) {
   return `${out.join("\n")}\n`;
 }
 
-/** Set KEY=value in the kit's kit.env, the file as it was kept beside it as
- * kit.env.bak, as the engine's writer keeps it. Throws without a kit.env, and
- * for a value that is not one line of text: a line break in it would write
- * lines of its own into the engine's settings. */
-export function setKitEnvValue(kitDir, key, value) {
-  if (/[\u0000-\u001f\u007f]/.test(value)) throw new Error(`${key} must be one line of text`);
+/** Set several KEY=value lines in the kit's kit.env at once, the file as it
+ * was kept beside it as kit.env.bak, both owner-only, as the engine's own
+ * writer does (app/settings_env.py). The new text is written to kit.env.tmp
+ * and renamed over kit.env, so the file is never seen half-written. Throws
+ * without a kit.env, and for a value that is not one line of text: a line
+ * break in it would write lines of its own into the engine's settings. */
+export function writeKitValues(kitDir, values) {
+  for (const [key, value] of Object.entries(values)) {
+    if (/[\u0000-\u001f\u007f]/.test(value)) throw new Error(`${key} must be one line of text`);
+  }
   const path = join(kitDir, KIT_ENV);
-  const text = readFileSync(path, "utf8");
+  let text = readFileSync(path, "utf8");
+  for (const [key, value] of Object.entries(values)) text = withKitEnvValue(text, key, value);
   copyFileSync(path, `${path}.bak`);
-  writeFileSync(path, withKitEnvValue(text, key, value));
+  const tmp = `${path}.tmp`;
+  try {
+    writeFileSync(tmp, text, { mode: 0o600 });
+    chmodSync(tmp, 0o600);
+    chmodSync(`${path}.bak`, 0o600);
+    try {
+      renameSync(tmp, path);
+    } catch {
+      // Windows will not replace a file another program has open at that
+      // moment (the engine reading it, a virus scanner): then it is written
+      // in place, as it always was before.
+      writeFileSync(path, text);
+      chmodSync(path, 0o600);
+    }
+  } finally {
+    // No copy of the keys is left lying beside them, whatever happened.
+    try { rmSync(tmp, { force: true }); } catch { /* nothing to tidy */ }
+  }
+}
+
+/** Set KEY=value in the kit's kit.env (writeKitValues, for one key). */
+export function setKitEnvValue(kitDir, key, value) {
+  writeKitValues(kitDir, { [key]: value });
 }

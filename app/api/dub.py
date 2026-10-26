@@ -65,7 +65,7 @@ from app.api._shared import (
 from app.config import QWEN_N_TAKES, default_stt_engine
 from app.downloads import Download
 from app.dub_script import EDITED_NAME, script_path
-from app.i18n import t
+from app.i18n import english, t
 from app.jobs import JobKind, JobStatus, kind_of
 from app.pipeline import run_dub
 from app.source_fetch import fetch as fetch_source
@@ -122,7 +122,7 @@ def _ollama_unavailable_message(engine_name: str, status: str) -> str:
             # A desktop user cannot "make sure Ollama is running": the app owns it.
             return t(
                 "Local {engine} translation is not available right now: the "
-                "translation runtime is not running. Quit and reopen PersoDub, or "
+                "translation runtime is not running. Quit and reopen {app}, or "
                 "choose Gemini in the Translation dropdown.", engine=engine_name)
         return t(
             "Local {engine} translation is not available on this machine "
@@ -213,7 +213,7 @@ def _require_voice_engine_running() -> None:
         # "voice engine is not running" stays in English: the page asks the
         # desktop app to start the engine when it reads it (ui/src/app.mjs).
         told = engines_status.local_engine("voice")["message"]
-        raise HTTPException(422, told or "The voice engine is not running. Quit and reopen PersoDub.")
+        raise HTTPException(422, told or english("The voice engine is not running. Quit and reopen {app}."))
 
 
 def _pack_ready(pack_id: str) -> bool:

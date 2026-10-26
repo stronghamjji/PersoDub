@@ -58,10 +58,36 @@ test("a translated screen is a copy whose <base> points back at the screens, rig
   assert.match(html, /<h2 data-i18n>STARTING ENGINES…<\/h2>/);
 });
 
-test("a copy that cannot be written shows the screen in English", () => {
+// The system's temp folder moved for the length of `fn`: os.tmpdir() reads
+// TMPDIR (TEMP and TMP on Windows) at every call.
+function withTempFolder(path, fn) {
+  const names = ["TMPDIR", "TMP", "TEMP"];
+  const saved = names.map((name) => [name, process.env[name]]);
+  for (const name of names) process.env[name] = path;
+  try { return fn(); } finally {
+    for (const [name, value] of saved) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  }
+}
+
+test("a copy that cannot be written where it goes is written to the system's temp folder, translated", () => {
   const blocker = join(mkdtempSync(join(tmpdir(), "pd-screens-")), "a-file");
   writeFileSync(blocker, "");   // a file where the folder should go: mkdir fails
-  assert.equal(screenFile(SCREENS, "error.html", join(blocker, "screens"), shout), join(SCREENS, "error.html"));
+  const temp = mkdtempSync(join(tmpdir(), "pd-screens-temp-"));
+  const named = (key) => key.replaceAll("{app}", "PersoDubbing");
+  const file = withTempFolder(temp, () => screenFile(SCREENS, "error.html", join(blocker, "screens"), named));
+  assert.equal(file, join(temp, "persodub-screens", "error.html"));
+  const html = readFileSync(file, "utf8");
+  assert.match(html, /<h2 id="title" data-i18n>PersoDubbing could not start<\/h2>/);
+  assert.ok(html.startsWith(`<!doctype html><base href="${pathToFileURL(SCREENS + sep).href}">`), html.slice(0, 200));
+});
+
+test("a copy that cannot be written there either shows the screen as it is", () => {
+  const blocker = join(mkdtempSync(join(tmpdir(), "pd-screens-")), "a-file");
+  writeFileSync(blocker, "");   // a file where the folder should go: mkdir fails
+  const file = withTempFolder(join(blocker, "temp"), () => screenFile(SCREENS, "error.html", join(blocker, "screens"), shout));
+  assert.equal(file, join(SCREENS, "error.html"));
 });
 
 test("every language keeps a screen sentence's markup, and the screens keep every id their scripts look up", (ctx) => {

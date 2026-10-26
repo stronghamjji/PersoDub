@@ -235,7 +235,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
     try {
       jobs = (await (await fetch("/api/dub/jobs")).json()).jobs || [];
     } catch {
-      if (!folded()) container.innerHTML = `<div class="history-empty">${t("The connection to PersoDub dropped for a moment. If it stays this way, quit and reopen PersoDub.")}</div>`;
+      if (!folded()) container.innerHTML = `<div class="history-empty">${t("The connection to {app} dropped for a moment. If it stays this way, quit and reopen {app}.")}</div>`;
       return;
     }
     if (onJobs) onJobs(jobs);

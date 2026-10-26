@@ -1033,11 +1033,11 @@ test("Settings is five tabs, each with its panel, and keeps every control it had
   const from = html.indexOf('<div class="modal-overlay" id="settingsOverlay">');
   const sheet = html.slice(from, html.indexOf('id="settingsSaveBtn"', from) + 200);
   assert.match(sheet, /<div class="set-tabs" id="settingsTabs" role="tablist"/);
-  const names = ["models", "keys", "storage", "privacy", "about"];
+  const names = ["keys", "models", "storage", "privacy", "about"];
   const tabs = [...sheet.matchAll(/id="settingsTab-(\w+)"[^>]*role="tab"[^>]*aria-controls="settingsPanel-(\w+)"[^>]*>([^<]+)</g)];
   assert.deepEqual(tabs.map((m) => m[1]), names);
   assert.deepEqual(tabs.map((m) => m[2]), names);
-  assert.deepEqual(tabs.map((m) => m[3]), ["Models", "API keys", "Storage", "Privacy", "About"]);
+  assert.deepEqual(tabs.map((m) => m[3]), ["API keys", "Models", "Storage", "Privacy", "About"]);
   assert.equal((sheet.match(/aria-selected="true"/g) || []).length, 1, "one tab is selected in the markup");
   // Each control sits in the panel of its own tab.
   const panel = (name) => {
@@ -1127,14 +1127,14 @@ test("Send job logs says what goes where, what never goes and why, a sentence a 
     "Keeps a record of finished and failed jobs (masked logs, time per step, device ID) on a private dashboard for 30 days.",
     "Only failed jobs go into a public GitHub issue, as a summary of the cause.",
     "Titles, file names, links and dialogue are not sent.",
-    "What you send helps make PersoDub better.",
+    "What you send helps make {app} better.",
   ]);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.deepEqual(sentences.map((s) => ko[s]), [
     "끝난 작업과 실패한 작업의 기록(가린 로그, 단계별 시간, 기기 번호)을 비공개 대시보드에 30일 보관해요.",
     "실패한 작업만 깃헙 공개 이슈에 원인 요약으로 올라가요.",
     "제목·파일 이름·링크·대사는 안 보내요.",
-    "보내 주시면 PersoDub을 더 좋게 만드는 데 써요.",
+    "보내 주시면 {app}을 더 좋게 만드는 데 써요.",
   ]);
   // Each sentence starts a line of its own, and the label stays by the switch.
   assert.match(html, /#reportsHint > span \{ display: block; \}/);
@@ -1720,7 +1720,7 @@ test("Home's Help sits above Send feedback and opens its tools and the Dub Agent
   const at = html.indexOf('<div class="modal-overlay" id="helpOverlay">');
   assert.ok(at > 0, "the Help dialog is in the page");
   const dialog = html.slice(at, html.indexOf('<div class="modal-overlay"', at + 1));
-  assert.match(dialog, /aria-labelledby="helpTitle"[^>]*>\s*<div class="modal-head"><h2 id="helpTitle">What PersoDub does<\/h2>/);
+  assert.match(dialog, /aria-labelledby="helpTitle"[^>]*>\s*<div class="modal-head"><h2 id="helpTitle">What {app} does<\/h2>/);
   const names = [...dialog.matchAll(/<div class="help-item"><b>([^<]+)<\/b>(?:<p>[^<]+<\/p>)+<div class="help-where">[^<]+<\/div><\/div>/g)].map((m) => m[1]);
   // Separate audio is no tool of its own (owner, 2026-10-23).
   assert.deepEqual(names, ["Dubbing", "Erase subtitles", "Save video", "Dub Agent"]);

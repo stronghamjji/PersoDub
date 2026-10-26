@@ -157,7 +157,7 @@ export function initKeyWindow({ $, keySaved, onSaved, persoKeyLink = () => null 
       onSaved();
       if (then) then();
     } catch {
-      $("keyError").textContent = t("Could not save the key. Is PersoDub running?");
+      $("keyError").textContent = t("Could not save the key. Is {app} running?");
       $("keySave").disabled = false;
     }
   });

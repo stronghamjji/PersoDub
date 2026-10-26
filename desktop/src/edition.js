@@ -5,8 +5,8 @@ import { KIT_ENV, parseEnvFile } from "./kitEnv.js";
 // One codebase, two builds, one repository. The open-source edition reads its
 // updates from the public repository, and opens the page's GitHub links, Help
 // documents and release notes there. The production edition, the company's
-// build, has no repository: its updates come only from the address it was
-// built with (build.env below; updater.js resolveFeed), never from the public
+// build, has no repository: its updates come only from its own address
+// (PRODUCTION_UPDATE_URL below; updater.js resolveFeed), never from the public
 // releases, which once turned a production install into an open-source one
 // (0.8.3). The edition also decides where a dub runs when nothing is chosen:
 // this computer for the open-source edition (the default), the Perso API for
@@ -28,25 +28,29 @@ export const EDITIONS = {
   production: "",
 };
 
-// What each edition is called, and so where it keeps its files: `name` is the
-// product's name (window, dock and taskbar, installer, About) and the kit's
-// folder (config.js defaultKitDir); `pkg` is the name Electron gives the app's
-// own data folder (userData: logs, ports.json). Each edition has its own, so
-// both can be installed on one computer (owner, 2026-10-26).
+// What each edition is called, and so where it keeps its files: `name` is
+// what the user sees the app called (the window title, the sign-in screen, the
+// boot screens, the browser's page after a sign-in, every sentence's {app},
+// the dock and taskbar, the installer, About) and the kit's folder (config.js
+// defaultKitDir); `pkg` is the name Electron gives the app's own data folder
+// (userData: logs, ports.json). Each edition has its own, so both can be
+// installed on one computer (owner, 2026-10-26).
 export const PRODUCTS = {
   opensource: { name: "PersoDub", appId: "com.persodub.desktop", pkg: "persodub-desktop-shell" },
-  production: { name: "Perso_DesktopApp", appId: "ai.perso.desktopapp", pkg: "perso-desktopapp-shell" },
+  production: { name: "PersoDubbing", appId: "ai.perso.desktopapp", pkg: "perso-desktopapp-shell" },
 };
 const DEFAULT_EDITION = "opensource";
 
+/** The name on screen for an edition; the open-source one's for an unknown name. */
+export const displayName = (edition) => (PRODUCTS[edition] || PRODUCTS[DEFAULT_EDITION]).name;
+
 // What a production build takes from the packager's environment, which the
-// packaged app cannot read again: where its updates come from, and the support
-// web app Customer support's inquiries go to. Nothing in the repository names
-// them; scripts/collect-payload.mjs writes the ones that are set into the
-// payload's build.env, and the open-source build carries none
-// (docs/development.md).
+// packaged app cannot read again: the support web app Customer support's
+// inquiries go to. Nothing in the repository names it; scripts/collect-payload.mjs
+// writes it, when set, into the payload's build.env, and the open-source build
+// carries none (docs/development.md).
 export const BUILD_ENV = "build.env";
-export const BUILD_KEYS = ["PERSODUB_UPDATE_URL", "PERSODUB_INQUIRY_URL"];
+export const BUILD_KEYS = ["PERSODUB_INQUIRY_URL"];
 
 /** build.env's text for an edition: the production build's set values, one KEY=value a line. */
 export function buildEnvText(edition, env) {
@@ -94,9 +98,18 @@ export function readEdition({ payloadDir, env }) {
   return Object.hasOwn(EDITIONS, name) ? name : DEFAULT_EDITION;
 }
 
-// electron-updater's feed for an edition's GitHub Releases; null for an
-// edition with no repository.
-export function editionFeed(edition) {
+// !!! FILL IN when the company's download folder exists: the HTTPS folder
+// the production edition updates from (electron-updater's generic provider),
+// holding latest-mac.yml, latest.yml and the files they name. Ends with "/".
+// Empty, the production edition does not check for updates at all: the public
+// releases are open-source builds, under another app id (0.8.3; updater.js resolveFeed).
+export const PRODUCTION_UPDATE_URL = "";
+
+// electron-updater's feed for an edition: the production edition's folder
+// once it is filled in, else the edition's GitHub Releases; null for an
+// edition with neither.
+export function editionFeed(edition, productionUrl = PRODUCTION_UPDATE_URL) {
+  if (edition === "production" && productionUrl) return { provider: "generic", url: productionUrl };
   if (!EDITIONS[edition]) return null;
   const [owner, repo] = EDITIONS[edition].split("/");
   return { provider: "github", owner, repo };

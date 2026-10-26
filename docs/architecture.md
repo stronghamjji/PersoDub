@@ -155,7 +155,7 @@ after the packaged `package.json`'s `name` (`desktop/electron-builder.js`
 sets it per edition):
 `~/Library/Application Support/persodub-desktop-shell` on macOS,
 `%APPDATA%\persodub-desktop-shell` on Windows, and `perso-desktopapp-shell`
-for the production edition, whose kit is in a `Perso_DesktopApp` folder.
+for the production edition, whose kit is in a `PersoDubbing` folder.
 
 ### 1.3 Boot
 

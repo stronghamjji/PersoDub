@@ -1,18 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isProduction, productName, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
+import { isProduction, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
 
 test("the page is the production edition only when the shell says so", () => {
   assert.equal(isProduction({ edition: "production" }), true);
   assert.equal(isProduction({ edition: "opensource" }), false);
   assert.equal(isProduction({ edition: "" }), false);
   assert.equal(isProduction(undefined), false, "a plain browser is the open-source page");
-});
-
-test("the production edition is called Perso_DesktopApp, the open-source one PersoDub", () => {
-  assert.equal(productName({ edition: "production" }), "Perso_DesktopApp");
-  assert.equal(productName({ edition: "opensource" }), "PersoDub");
-  assert.equal(productName(undefined), "PersoDub");
 });
 
 test("the production links go to Perso's desktop app page", () => {

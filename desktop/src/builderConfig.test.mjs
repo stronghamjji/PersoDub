@@ -1,5 +1,5 @@
 // The packaged app's names follow the edition it carries (electron-builder.js):
-// the production edition installs as Perso_DesktopApp beside PersoDub.
+// the production edition installs as PersoDubbing beside PersoDub.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
@@ -15,28 +15,28 @@ test("the open-source build keeps PersoDub's names", () => {
   assert.equal(c.win.artifactName, "${productName}-Setup-${version}.${ext}");
 });
 
-test("the production build is Perso_DesktopApp, with its own app id and data folder", () => {
+test("the production build is PersoDubbing, with its own app id and data folder", () => {
   const c = builderConfig("production");
-  assert.equal(c.productName, "Perso_DesktopApp");
+  assert.equal(c.productName, "PersoDubbing");
   assert.equal(c.appId, "ai.perso.desktopapp");
   assert.deepEqual(c.extraMetadata, { name: "perso-desktopapp-shell" });
 });
 
 test("the arm64 dmg is copied again as <name>-mac.dmg, and nothing else is", () => {
   const dir = mkdtempSync(join(tmpdir(), "odbuilder-"));
-  const dmg = join(dir, "Perso_DesktopApp-0.9.0-arm64.dmg");
+  const dmg = join(dir, "PersoDubbing-0.9.1-arm64.dmg");
   writeFileSync(dmg, "dmg");
-  const zip = join(dir, "Perso_DesktopApp-0.9.0-arm64-mac.zip");
+  const zip = join(dir, "PersoDubbing-0.9.1-arm64-mac.zip");
   const out = builderConfig("production").afterAllArtifactBuild({ artifactPaths: [dmg, zip] });
-  assert.deepEqual(out, [join(dir, "Perso_DesktopApp-mac.dmg")]);
+  assert.deepEqual(out, [join(dir, "PersoDubbing-mac.dmg")]);
   assert.equal(readFileSync(out[0], "utf8"), "dmg");
   assert.deepEqual(builderConfig("opensource").afterAllArtifactBuild({ artifactPaths: [zip] }), []);
 });
 
-test("the production build's publish entry is its own update address, or none", () => {
-  assert.deepEqual(builderConfig("production", { PERSODUB_UPDATE_URL: "https://updates.example/prod" }).publish,
-    [{ provider: "generic", url: "https://updates.example/prod" }]);
-  assert.equal(builderConfig("production", {}).publish, null);
-  assert.deepEqual(builderConfig("opensource", { PERSODUB_UPDATE_URL: "https://updates.example/prod" }).publish,
+test("the production build's publish entry is its own update address, or none while PRODUCTION_UPDATE_URL is empty", () => {
+  assert.deepEqual(builderConfig("production", "https://updates.example/prod/").publish,
+    [{ provider: "generic", url: "https://updates.example/prod/" }]);
+  assert.equal(builderConfig("production").publish, null);
+  assert.deepEqual(builderConfig("opensource", "https://updates.example/prod/").publish,
     [{ provider: "github", owner: "stronghamjji", repo: "PersoDub" }]);
 });

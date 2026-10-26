@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt, inEnglish } from "./config.js";
 import { checkKit, readKitVersion } from "./engineCheck.js";
 import { startEngines } from "./orchestrator.js";
-import { rememberedEdition, kitEdition, editionLine, findPayloadDir } from "./edition.js";
+import { rememberedEdition, kitEdition, editionLine, findPayloadDir, displayName } from "./edition.js";
 import { buildSteps, bytesStillNeeded, bootSteps, packInstallingMarker, PACKS } from "./installSpec.js";
 import { runInstall, openSteps, downloadInterrupted } from "./installer.js";
 import { classifyError } from "./analytics.js";
@@ -37,19 +37,19 @@ export function installStopText(message) {
       `${t("You can also ask your company's IT team to open these addresses.")}\n${INSTALL_HOSTS.join(" · ")}`];
   }
   if (code === "disk-full") return [t("There is not enough storage space. Free some up, then press Try again to pick up where it stopped."), ""];
-  if (code === "permission") return [t("Another program is using PersoDub's files. Restart your computer, then press Try again."), ""];
+  if (code === "permission") return [t("Another program is using {app}'s files. Restart your computer, then press Try again."), ""];
   if (code === "network" || downloadInterrupted(message)) {
     return [t("The internet connection dropped. Check it, then press Try again to pick up where it stopped."), ""];
   }
-  return [t("Press Try again to go on from where it stopped. If it stops again, restart your computer, then open PersoDub."), ""];
+  return [t("Press Try again to go on from where it stopped. If it stops again, restart your computer, then open {app}."), ""];
 }
 
 /** What a start that failed says under its title: the backend gave no answer
  * in time (health.js), or it stopped on the way up. */
 export function startStopText(message) {
   return /^Health check timed out/.test(message)
-    ? t("Getting ready took too long. Restart your computer, then open PersoDub. If it keeps happening, security software may be blocking it.")
-    : t("It stopped while starting. Press Try again. If it stops again, restart your computer, then open PersoDub.");
+    ? t("Getting ready took too long. Restart your computer, then open {app}. If it keeps happening, security software may be blocking it.")
+    : t("It stopped while starting. Press Try again. If it stops again, restart your computer, then open {app}.");
 }
 
 /**
@@ -89,7 +89,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
   // through a translated copy in userData when there is one (screenText.js).
   function showScreen(win, name, query = {}) {
     const file = screenFile(join(appDir, "screens"), name, join(app.getPath("userData"), "screens"));
-    return win.loadFile(file, { query: { v: app.getVersion(), ...query } });
+    return win.loadFile(file, { query: { v: app.getVersion(), name: displayName(edition), ...query } });
   }
 
   // One line of memory figures in shell.log (memoryLine.js): once the engines
@@ -285,6 +285,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         appVersion: app.getVersion(), // desktop/package.json -- the one place the version lives
         locale: systemLocale(),
         edition: runEdition, // where a dub runs by default (app/setup.py)
+        appName: displayName(edition), // the name its sentences call the app (app/i18n.py)
         preferredBackendPort: readRememberedPorts().backend,
         log: shellLog,
         onExit: logMemory,
