@@ -70,7 +70,9 @@ export const STEPS = {
   dub_started: { mode: MODES, target_lang: L, minutes: N, video_seconds: N, speakers: N, again: B },
   dub_stage: { stage: STAGES, state: ["start", "done", "failed"], seconds: N, mode: MODES },
   dub_cancelled: { stage: STAGES, mode: MODES },
-  dub_finished: { outcome: OUTCOMES, stage: STAGES, reason: REASONS, mode: MODES, minutes: N,
+  // on_perso: a free-plan workspace's Perso dubbing, made and seen on Perso's
+  // site (desktop/src/usageIpc.js dubFinishedProps).
+  dub_finished: { outcome: [...OUTCOMES, "on_perso"], stage: STAGES, reason: REASONS, mode: MODES, minutes: N,
     video_seconds: N, seconds: N },
   tool_started: { tool: TOOLS, from: ["draft", "dub", "erase", "captions"], files: N },
   tool_finished: { tool: TOOLS, outcome: OUTCOMES, files: N },

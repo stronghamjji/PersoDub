@@ -140,7 +140,15 @@ class PersoInvalidKeyError(RuntimeError):
 
 class PersoUnavailableError(RuntimeError):
     """Perso's servers are down or overloaded (HTTP 5xx). Not the user's fault
-    and nothing to fix on their side -- retrying later is the only remedy."""
+    and nothing to fix on their side -- retrying later is the only remedy.
+
+    A 5xx Perso explains carries its sentence and code (reason, code), which
+    the notice shows as a failed project's are; a bare one has neither."""
+
+    def __init__(self, message: str = "Perso server error", reason: str = "", code: str = ""):
+        super().__init__(message)
+        self.reason = reason
+        self.code = code
 
 
 class PersoProjectFailedError(RuntimeError):
@@ -213,6 +221,20 @@ class PersoPlanRequiredError(RuntimeError):
         self.code = code
         self.link = link
         super().__init__(f"Perso refused the voice model for this plan: {reason or code}")
+
+
+# What Perso answers a free-plan workspace's download of a finished dubbing
+# with: HTTP 500, {"code": "VT5003", "detailCode": "FREE_USER_CAN_NOT_DOWNLOAD"},
+# while download-info says hasTranslatedVideo (seen live 2026-10-27).
+FREE_DOWNLOAD_CODE = "FREE_USER_CAN_NOT_DOWNLOAD"
+
+
+class PersoFreePlanError(RuntimeError):
+    """Perso made the dubbing, took its credits, and will not hand the video
+    over: a free-plan workspace cannot download the result (FREE_DOWNLOAD_CODE).
+    Not an outage, which the 500 it comes as read as, and nothing to retry:
+    the dubbing is on Perso's site, and that is where the job sends the user
+    (app/dub_launch.py)."""
 
 
 class PersoModelRefusedError(RuntimeError):
@@ -402,6 +424,29 @@ def perso_failure(res):
     return True, (reason, code)
 
 
+def _perso_answer(r: httpx.Response) -> tuple:
+    """(code, sentence) of a refusal in Perso's own words: "VT5003 /
+    FREE_USER_CAN_NOT_DOWNLOAD" and "Free user cannot download" (seen
+    2026-10-27), each "" when the answer has none -- a gateway's bare 502, an
+    empty 500."""
+    try:
+        body = r.json()
+    except ValueError:
+        return "", ""
+    if not isinstance(body, dict):
+        return "", ""
+    code = " / ".join(str(body[k]) for k in _CODE_FIELDS + ("detailCode",) if body.get(k) not in (None, ""))
+    return code, str(body.get("message") or "")
+
+
+def _from(r: httpx.Response, e: Exception) -> Exception:
+    """`e`, carrying the answer it was made from: the job's log writes that
+    answer's status, address and body under the step that failed
+    (app/jobs.py _failure_lines)."""
+    e.response = r
+    return e
+
+
 def _raise_for_status(r: httpx.Response) -> None:
     """r.raise_for_status(), except statuses the UI reacts to specifically get
     their dedicated exception: 402 -> credits, 401/403 -> bad key, 5xx -> Perso
@@ -411,27 +456,44 @@ def _raise_for_status(r: httpx.Response) -> None:
     HTTP 402" approach) rather than by inspecting which exception type
     r.raise_for_status() happens to throw.
     """
+    if r.status_code >= 400 and FREE_DOWNLOAD_CODE in _perso_answer(r)[0]:
+        # Before the 5xx below, which it comes as.
+        raise _from(r, PersoFreePlanError("Perso does not let a free-plan workspace download the result "
+                                          "(HTTP %d, %s)" % (r.status_code, _perso_answer(r)[0])))
     if r.status_code == 402:
-        raise PersoCreditExhaustedError()
+        raise _from(r, PersoCreditExhaustedError())
     if r.status_code == 403 and PLAN_REQUIRED_CODE in _perso_said(r):
         # Perso's sentence without its code, which the notice adds back once.
-        raise PersoPlanRequiredError(reason=_perso_said(r).replace(PLAN_REQUIRED_CODE, "").strip(" ./"))
+        raise _from(r, PersoPlanRequiredError(reason=_perso_said(r).replace(PLAN_REQUIRED_CODE, "").strip(" ./")))
     if r.status_code in (401, 403):
-        raise PersoInvalidKeyError(f"Perso rejected the API key (HTTP {r.status_code})")
+        raise _from(r, PersoInvalidKeyError(f"Perso rejected the API key (HTTP {r.status_code})"))
     if r.status_code >= 500:
-        raise PersoUnavailableError(f"Perso server error (HTTP {r.status_code})")
+        code, said = _perso_answer(r)
+        raise _from(r, PersoUnavailableError(
+            f"Perso server error (HTTP {r.status_code}" + (f", {code})" if code else ")"), reason=said, code=code))
     if r.status_code >= 400:
         # httpx's own text says only "400 Bad Request", and seven refusals
         # reached the issue tracker with nothing to go on (2026-09-28). Perso's
         # answer says why, so it rides along -- without the address.
         said = _perso_said(r)
         if r.status_code == 400 and DURATION_LIMIT_CODE in said:
-            raise PersoDurationLimitError.from_said(said)
+            raise _from(r, PersoDurationLimitError.from_said(said))
         if said:
             raise httpx.HTTPStatusError(
                 f"Client error '{r.status_code} {r.reason_phrase}': Perso said {said}",
                 request=r.request, response=r)
     r.raise_for_status()
+
+
+# The waits before a Perso read is asked again when it failed without a
+# reason: a 5xx with no code of Perso's, a 429, a timeout, a dropped
+# connection (owner, 2026-10-28). A refusal Perso explains with a code is
+# taken at its word: asking again would only be refused again.
+RETRY_WAITS = (5, 15, 45)
+
+
+def _worth_asking_again(r: httpx.Response) -> bool:
+    return r.status_code == 429 or (r.status_code >= 500 and not _perso_answer(r)[0])
 
 
 # Where Perso has been seen to put its reason. Read in this order, all kept.
@@ -738,7 +800,7 @@ class PersoClient:
                   space_seq: Optional[int] = None, log=None,
                   target_tag: Optional[str] = None,
                   tts_model: str = DEFAULT_TTS_MODEL,
-                  title: Optional[str] = None) -> str:
+                  title: Optional[str] = None, on_project=None) -> str:
         """Full cloud dub: upload -> translate project -> poll -> download.
 
         The whole pipeline runs on Perso's side (translation, voices, mix);
@@ -750,6 +812,9 @@ class PersoClient:
         requestTranslation does; without one Perso names it after the
         uploaded file, which here is always input.mp4 (sheet feedback 4,
         2026-10-21).
+
+        on_project(project_seq, space) is called the moment Perso has taken
+        the dubbing, before the wait, as proofread's on_asked is.
         """
         from app.jobs import timed_step  # late, as _wait_completed's JobCancelled
 
@@ -784,9 +849,11 @@ class PersoClient:
             )
             _raise_for_status(r)
             project_seq = r.json()["result"]["startGenerateProjectIdList"][0]
-            # Kept on the client so the caller can stamp it on the job record --
-            # the script viewer reads the project back through it later.
-            self.last_dub_project_seq = project_seq
+            # Handed over before the wait: from here on the credits are spent
+            # and the project is where the result is, whatever happens to the
+            # download (Windows, 2026-10-27).
+            if on_project:
+                on_project(project_seq, space)
             logger.info("Perso dubbing project %s (workspace %s)", project_seq, space)
 
             self._wait_completed(project_seq, space, what="Perso dubbing")
@@ -801,20 +868,14 @@ class PersoClient:
         # The gate the plugin checks before asking for a link: a completed
         # project whose video is not served yet must fail loudly, not save
         # an empty file.
-        r = httpx.get(
-            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/download-info",
-            headers=self._headers, timeout=60,
-        )
-        _raise_for_status(r)
+        project = f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}"
+        r = self._read("perso download info", f"{project}/download-info", timeout=60)
         info = (r.json() or {}).get("result") or {}
         if info.get("hasTranslatedVideo") is False:
             raise RuntimeError("Perso dubbing finished but the video is not ready to download")
 
-        r = httpx.get(
-            f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/spaces/{space}/download",
-            params={"target": "dubbingVideo"}, headers=self._headers, timeout=120,
-        )
-        _raise_for_status(r)
+        r = self._read("perso download link", f"{project}/download", params={"target": "dubbingVideo"},
+                       timeout=120)
         link = r.json()["result"]["videoFile"]["videoDownloadLink"]
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         # A storage link, fetched like every other one: identity only, no API
@@ -1050,6 +1111,43 @@ class PersoClient:
         self._say(netlog.done(what, time.monotonic() - began, len(r.content)))
         return out_path
 
+    def _read(self, what: str, url: str, quiet: bool = False, **kw) -> httpx.Response:
+        """GET one Perso API address and check the answer (_raise_for_status),
+        asked again after each of RETRY_WAITS while it fails without a reason
+        (_worth_asking_again). Written as a download is (app/netlog.py):
+        START, CONNECTED, a RETRY before each new try, then DONE or FAILED.
+        `quiet` is for the progress poll, asked every few seconds for
+        minutes: its lines start with the first try that went wrong."""
+        began = time.monotonic()
+        loud = not quiet
+        if loud:
+            self._say(netlog.start(what, url))
+        tries = len(RETRY_WAITS) + 1
+        try:
+            for n, wait in enumerate(RETRY_WAITS + (None,), start=1):
+                try:
+                    r = httpx.get(url, headers=self._headers, **kw)
+                except httpx.TransportError as e:   # a timeout is one too
+                    if wait is None:
+                        raise
+                    why = netlog.described(e)
+                else:
+                    if loud:
+                        self._say(netlog.connected(what, r.status_code, url, len(r.content)))
+                    if wait is None or not _worth_asking_again(r):
+                        _raise_for_status(r)
+                        break
+                    why = f"HTTP {r.status_code} with no reason given"
+                loud = True
+                self._say(netlog.retry(what, n + 1, tries, time.monotonic() - began, why), "WARNING")
+                time.sleep(wait)
+        except Exception as e:
+            self._say(netlog.failed(what, time.monotonic() - began, netlog.described(e), url), "ERROR")
+            raise
+        if loud:
+            self._say(netlog.done(what, time.monotonic() - began, len(r.content)))
+        return r
+
     def download_target(self, project_seq: int, target: str, out_path: str,
                         space_seq: Optional[int] = None) -> str:
         """Download one of a project's named artifacts (e.g. backgroundAudio).
@@ -1120,11 +1218,9 @@ class PersoClient:
             if self.cancel_check and self.cancel_check():
                 from app.jobs import JobCancelled
                 raise JobCancelled(f"cancelled while waiting for {what}")
-            r = httpx.get(
-                f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/space/{space}/progress",
-                headers=self._headers, timeout=60,
-            )
-            _raise_for_status(r)
+            r = self._read(f"{what} progress",
+                           f"{self.base_url}/video-translator/api/v1/projects/{project_seq}/space/{space}/progress",
+                           quiet=True, timeout=60)
             res = r.json().get("result", {}) or {}
             # Every change of mind, written down. This loop used to run for up
             # to an hour saying nothing at all, so when the user saw "failed"

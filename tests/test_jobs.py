@@ -690,6 +690,25 @@ def test_run_async_lifts_perso_credits_and_duration_onto_the_record():
     assert saved["perso_credits"] == 7 and saved["duration"] == 150.2
 
 
+def test_a_dubbing_perso_will_not_hand_over_ends_on_perso_with_what_it_spent(caplog):
+    # A free-plan workspace's Perso API dubbing: made and paid for, no file
+    # home. Its own ending, not "done" (no out_path to open) and not "error".
+    store = JobStore()
+    with caplog.at_level(logging.INFO, logger="persodub.jobs"):
+        jid = store.run_async(lambda log: {"out_path": "/nowhere/dubbed.mp4", "on_perso": True,
+                                           "perso_credits": 7, "duration": 150.2})
+        j = _wait(store, jid)
+        for _ in range(100):
+            if "JOB DONE ON PERSO (" in caplog.text:
+                break
+            time.sleep(0.02)
+    assert j["status"] == "on_perso"
+    assert j["result"] is None and not j.get("error")
+    assert j["perso_credits"] == 7 and j["duration"] == 150.2
+    assert JobStore._saved(j)["status"] == "on_perso"
+    assert "job-%s: JOB DONE ON PERSO (" % jid in caplog.text
+
+
 def test_a_finished_or_failed_job_says_when_it_started_and_how_long_each_step_took():
     # Whole numbers for the usage count (desktop/src/analytics.js dubFacts),
     # on the record before the status flips; a step that did not run is not

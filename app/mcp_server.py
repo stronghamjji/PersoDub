@@ -360,6 +360,10 @@ def get_job_status(job_id: str) -> dict:
     its own work -- how many sampled frames of the finished video still hold
     writing, at what seconds, and how many it had to paint again. frames_with_text
     0 is the answer the user is after; anything else names the moments to look at.
+
+    status "on_perso": a Perso API dubbing a free-plan workspace cannot
+    download. It is done, not failed, and the user sees it on Perso's site
+    (the screen's Open in Perso button).
     """
     job = _job(job_id)
     info = {
@@ -1289,14 +1293,14 @@ def cancel_dub(job_id: str) -> dict:
     Never ask the user to confirm first -- "cancel it" IS the confirmation,
     and a cancel is urgent (asking again meant the job sometimes finished
     before the user could answer). A job that already ended
-    (done/error/cancelled) has nothing left to stop. Job ids come from
+    (done/on_perso/error/cancelled) has nothing left to stop. Job ids come from
     queue_dub, erase_subtitles and list_jobs -- and list_jobs is the one to
     use when the user says "stop it" about work they started on the screen,
     whose id they have never seen.
     """
     job = _job(job_id)
     status = job.get("status")
-    if status in (JobStatus.DONE, JobStatus.ERROR, JobStatus.CANCELLED):
+    if status in (JobStatus.DONE, JobStatus.ON_PERSO, JobStatus.ERROR, JobStatus.CANCELLED):
         raise Refusal("nothing to cancel: this job is already %s" % status)
     r = _api_post("/api/dub/jobs/%s/cancel" % job_id, timeout=30.0)
     if r.status_code in (404, 409):

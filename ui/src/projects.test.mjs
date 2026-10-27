@@ -135,6 +135,7 @@ test("every job state is a shape as well as a colour", () => {
   assert.match(marks.running, /fill:currentColor/, "running fills that ring");
   assert.equal((marks.error.match(/<path/g) || []).length, 2, "a failure is a cross");
   assert.match(marks.cancelled, /<circle[\s\S]*<path/, "cancelled is the ring struck through");
+  assert.equal(jobMark("on_perso"), marks.done, "done on Perso is done, its file on Perso's site");
   // Anything the server has no mark for is still going.
   assert.equal(jobMark("separating"), marks.running);
 });

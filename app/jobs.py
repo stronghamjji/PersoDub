@@ -149,6 +149,10 @@ class JobStatus(StrEnum):
     CANCELLING = "cancelling"
     CANCELLED = "cancelled"
     DONE = "done"
+    # A Perso API dubbing a free-plan workspace cannot download: over and
+    # paid for, its result on Perso's site instead of in the folder (owner,
+    # 2026-10-28). The work says so in its result ({"on_perso": True}).
+    ON_PERSO = "on_perso"
     ERROR = "error"
 
 
@@ -838,6 +842,7 @@ class JobStore:
                 # the shell reads them off the job the moment it sees "done".
                 spent = {k: result[k] for k in ("perso_credits", "duration", "separation_model")
                          if isinstance(result, dict) and result.get(k) is not None}
+                on_perso = isinstance(result, dict) and bool(result.get("on_perso"))
                 # The memory line before the status flips, as on the other two
                 # endings: measuring takes a moment, and a job that reads "done"
                 # while it still holds the air leaves the next one queued behind it.
@@ -848,12 +853,14 @@ class JobStore:
                         self._jobs[jid]["status"] = JobStatus.CANCELLED
                     else:
                         self._jobs[jid].update(spent, **timing())
-                        self._jobs[jid]["status"] = JobStatus.DONE
-                        self._jobs[jid]["result"] = result
+                        self._jobs[jid]["status"] = JobStatus.ON_PERSO if on_perso else JobStatus.DONE
+                        # No file came home: nothing to read the result's out_path for.
+                        self._jobs[jid]["result"] = None if on_perso else result
                         if detected and not self._jobs[jid].get("source_lang"):
                             self._jobs[jid]["source_lang"] = detected
                 # Cancel pressed while the work ran to its end: still a cancel.
-                trace("JOB %s (%.1fs)" % ("CANCELLED" if cancelled else "ALL DONE", time.monotonic() - began))
+                trace("JOB %s (%.1fs)" % ("CANCELLED" if cancelled else "DONE ON PERSO" if on_perso else "ALL DONE",
+                                          time.monotonic() - began))
             except JobCancelled:
                 _trace_memory(trace)
                 trace("JOB CANCELLED (%.1fs)" % (time.monotonic() - began))

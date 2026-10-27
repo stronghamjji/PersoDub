@@ -114,6 +114,11 @@ test("a step keeps the properties STEPS lists, of the kind it lists, and nothing
   ]);
 });
 
+test("a dubbing done on Perso has its own outcome, which only the dubbing's step takes", () => {
+  assert.deepEqual(stepProps("dub_finished", { outcome: "on_perso", mode: "perso" }), { outcome: "on_perso", mode: "perso" });
+  assert.deepEqual(stepProps("tool_finished", { tool: "erase", outcome: "on_perso" }), { tool: "erase" });
+});
+
 test("a step's text, file name, link or address has no way through: only words off its list", () => {
   assert.deepEqual(stepProps("media_added", { source: "my_video.mp4", kind: "video", title: "My wedding" }), { kind: "video" });
   assert.deepEqual(stepProps("dub_started", { target_lang: "Korean", minutes: -1, speakers: 2.5, mode: "cloud" }), {});
