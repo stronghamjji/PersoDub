@@ -191,9 +191,8 @@ test("a browser signed in to Perso as another account: the hand-off still signs 
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["b@test.local"].keys[0].apiKey);
 });
 
-// A new Google account's sign-up drops callbackUrl and ends on Perso's workspace
-// (2026-10-27); the account exists by then, so Perso's Google start comes back at once.
-test("a browser left on Perso's home after Google: Open the browser again runs Perso's Google start again with this sign-in's way back, which comes straight back", async () => {
+// A new Google account's sign-up drops callbackUrl and ends on Perso's workspace (2026-10-27), signed in by then.
+test("a browser left on Perso's home after Google: Open the browser again opens this sign-in's authorize address, which comes straight back", async () => {
   const kitDir = freshKit();
   const signInWin = scriptedBrowser();
   signInWin.press = "google";
@@ -204,7 +203,7 @@ test("a browser left on Perso's home after Google: Open the browser again runs P
   const browser = scriptedBrowser();
   await assert.rejects(browser.open(pressed[0]), /Perso's home/);
   assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  assert.equal(handedOff[1], `${fake.url}/auth/oauth2/authorization/google?redirect_uri=${fake.url}/oauth/callback&callbackUrl=${encodeURIComponent(windows[0].url)}`);
+  assert.equal(handedOff[1], windows[0].url);
   await browser.open(handedOff[1]);
   assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
   assert.deepEqual(browser.pages, ["done"]);

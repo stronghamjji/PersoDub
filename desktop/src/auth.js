@@ -3,22 +3,8 @@ import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSy
 import { join } from "node:path";
 import { KIT_ENV, envWithKit, writeKitValues } from "./kitEnv.js";
 import { startCallbackServer } from "./authLoopback.js";
-import { handOffUrl } from "./signInWindow.js";
 
-// Signing in to Perso from the production edition: a window of the app's own,
-// with cookies of its own (signInWindow.js), opens Perso's sign-in page (OAuth
-// 2 authorization code with PKCE, RFC 7636), Perso sends that window back to
-// http://127.0.0.1:<port>/callback, where this app listens for that one
-// request (authLoopback.js), and the app trades the code for tokens. Google
-// and Microsoft take the whole sign-in to the computer's browser instead
-// (signInNavigation below), which comes back to the same address. The
-// password stays in Perso's page; the app never reads it. Once signed in, the
-// account's active Perso API key is written into kit.env as PERSO_API_KEY, the
-// line the backend reads (app/settings_env.py current_value).
-//
-// Nothing here runs while `enabled` is false: every request answers
-// "disabled" and no file, window, port or network is touched. Tokens, keys
-// and e-mail addresses never reach a log line.
+// Perso sign-in for the production edition (the model is atop signInWindow.js); off unless enabled; no token, key or e-mail in a log line.
 
 export const AUTH_FILE = "perso-auth.bin";
 export const CALLBACK_PATH = "/callback";
@@ -92,27 +78,11 @@ export function authorizeUrl(cfg, { challenge, state, redirectUri }) {
   return `${cfg.authorizeUrl}?${q}`;
 }
 
-// Google refuses a sign-in in an app's own window ("400 malformed" after the e-mail), so Perso's
-// Google and Microsoft starts, and the providers' own pages, go on in the computer's browser.
+// Google refuses an app's own window ("400 malformed"): Perso's Google and Microsoft starts, and their own pages, go to the browser.
 const SOCIAL_START = "/auth/oauth2/authorization/";
 const SIGN_IN_PROVIDERS = ["accounts.google.com", "login.microsoftonline.com", "login.live.com"];
 
-// Perso's name for the provider of a hand-off address, "google" or "azure"; null for one it does not know.
-export function signInProvider(to) {
-  let u;
-  try { u = new URL(to); } catch { return null; }
-  const name = u.pathname.startsWith(SOCIAL_START) ? u.pathname.slice(SOCIAL_START.length) : "";
-  if (name === "google" || u.hostname === "accounts.google.com") return "google";
-  if (name === "azure" || u.hostname === "login.microsoftonline.com" || u.hostname === "login.live.com") return "azure";
-  return null;
-}
-
-/** Where the sign-in window may go: "allow" for Perso's pages over https
- * (perso.ai and its subdomains), wherever the authorize address is (the fake
- * Perso in the tests) and exactly this sign-in's way back; "hand-off" for
- * Google and Microsoft, where the sign-in goes on in the computer's browser;
- * "browser" for any other https page, opened in the computer's browser while
- * the window stays; "deny" for the rest. Hosts are compared parsed, never as text. */
+// "allow" (Perso over https, the authorize origin, this way back), "hand-off" (Google, Microsoft), "browser" (other https), else "deny".
 function signInNavigation(url, { authorizeUrl: start, redirectUri }) {
   let u;
   try { u = new URL(url); } catch { return "deny"; }
@@ -126,8 +96,7 @@ function signInNavigation(url, { authorizeUrl: start, redirectUri }) {
   return host === "perso.ai" || host.endsWith(".perso.ai") ? "allow" : "browser";
 }
 
-/** {code, state} or {error, state} from the request's query, or null when it
- * carries neither a code nor an error. */
+// {code, state} or {error, state} from the way back's query, or null with neither.
 export function callbackParams({ code, state, error } = {}) {
   const s = typeof state === "string" ? state : "";
   if (typeof error === "string" && error) return { error, state: s };
@@ -279,37 +248,7 @@ export function tokenStore(file, safeStorage) {
 
 // ---- The sign-in itself --------------------------------------------------------
 
-/**
- * One account's sign-in, for the shell. `enabled` is a boolean or a function
- * read at every request.
- * Every request answers with an object the page can read; `outcome` is one of:
- *   signed_in   the sign-in window came back and the tokens are kept
- *   cancelled   cancelLogin, the sign-in window closed (other than by its
- *               hand-off to the browser), or a newer login replaced this one
- *   failed      with `error`: timeout, window (it did not open), port (no
- *               free port to listen on), denied (Perso's error), token
- *               (Perso refused the code), network (no answer, too slow, or
- *               the window could not load Perso's page)
- *   busy        login, cancelLogin or showLogin while the window's code is
- *               being traded: nothing is started or stopped, and that
- *               sign-in answers on its own in a moment
- *   shown       showLogin: the waiting sign-in's window is brought forward,
- *               or, handed to the browser, Perso's Google or Microsoft start
- *               opened there again
- *   idle        cancelLogin or showLogin with no sign-in waiting
- *   wait        showLogin({auto: true}) that opened nothing: at most twice
- *               per sign-in, 20 seconds after the browser last opened
- *   signed_out  logout
- *   disabled    not enabled
- * and a sign-in's `key` says what happened to the API key: saved, no_key
- * (the account has none), no_kit, or failed: Perso not reached, or, with
- * `keyReason: "save"`, the key could not be written into kit.env.
- * `onSignOut` runs at every sign-out, pressed or a refresh Perso refused,
- * for what the shell keeps for the account elsewhere. `makeSignInWindow`
- * opens the sign-in window (signInWindow.js signInWindowFactory),
- * `clearSignInSession` wipes what it kept, waited for at every sign-out, and
- * `openExternal` opens the computer's browser at an address.
- */
+// One account's sign-in. {outcome}: signed_in, cancelled, failed (error), busy, shown, wait, idle, signed_out, disabled; {key}: saved, no_key, no_kit, failed.
 export function createAuth({
   enabled, cfg, store, fetchFn, makeSignInWindow, clearSignInSession = async () => {}, openExternal = () => {}, kitDir, listen = startCallbackServer, appName = "PersoDub", logo = "",
   log = () => {}, onChange = () => {}, onCallback = () => {}, onSignOut = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
@@ -341,37 +280,28 @@ export function createAuth({
       // Not usable signed out: the page shows its sign-in screen while true.
       required: on && !session,
       signedIn: Boolean(session),
-      // The account in full, as the page shows it (owner, 2026-10-27): its
-      // e-mail, or its name for an account with none. Never in a log line.
+      // The account in full on screen (owner, 2026-10-27): its e-mail, or its name; never in a log line.
       account: session?.email || session?.account || "",
-      // Perso's number for the account (userSeq). The button events carry a
-      // one-way hash of it (events.js eventsUserId), never it or an e-mail.
+      // Perso's userSeq; the button events carry only a one-way hash of it (events.js eventsUserId).
       accountId: session?.userId || "",
       hasKey: dir ? (envWithKit(dir).PERSO_API_KEY || "").trim() !== "" : false,
-      // Still waiting while the code is traded: the screen stays on "finish
-      // in the sign-in window" instead of offering Sign in again for those seconds.
+      // Still waiting while the code is traded, so the screen does not offer Sign in again meanwhile.
       waiting: Boolean(open),
-      // Where the waiting sign-in goes on: "window", the app's sign-in window,
-      // or "browser", the computer's, once Google or Microsoft took it there;
-      // "" with none waiting.
+      // Where the waiting sign-in goes on: "window", "browser" after a Google or Microsoft hand-off, or "".
       where: open ? open.where : "",
     };
   }
 
-  // The key page needs the account's cookies: the sign-in window's for an account signed in there.
-  // A kept sign-in from before `via` was kept opens it in the browser, as it did.
+  // The key page needs the account's cookies: the window's if it signed in there; a kept session without `via`, the browser.
   const keyPageTarget = () => (isOn() && session?.via === "window" ? "window" : "browser");
 
-  /** The signed-in account for the shell's own use: the full e-mail and
-   * Perso's number for it, which Customer support's inquiry carries
-   * (reporting.js accountForInquiry). Null signed out or disabled. */
+  // The full e-mail and Perso number for Customer support's inquiry (reporting.js); null signed out or disabled.
   function signedInAccount() {
     if (!isOn() || !session) return null;
     return { email: session.email || "", id: session.userId || "" };
   }
 
-  // kit.env.bak is kit.env as it was before this write, the account's key in
-  // it, so it takes the cleared text too: no copy of the key stays behind.
+  // kit.env.bak takes the cleared text too, so no copy of the key stays behind.
   function clearKitKeys() {
     const dir = kit();
     if (!dir) return;
@@ -381,10 +311,7 @@ export function createAuth({
     } catch (err) { log(`AUTH could not clear the Perso key in kit.env: ${err.message}`, "ERROR"); }
   }
 
-  // Signed out on this computer: the tokens and the account's key go, and
-  // whatever else the shell kept for the account. The sign-in window's
-  // cookies go too, before the screen hears of it: Perso would otherwise let
-  // the next sign-in through as the same account without asking.
+  // Signed out here: tokens, key, the shell's account data and the window's cookies, before the screen hears of it.
   async function dropSession() {
     session = null;
     sessionId++;
@@ -395,9 +322,7 @@ export function createAuth({
     onChange();
   }
 
-  /** New tokens, once at a time. A refusal (4xx: the refresh token is spent
-   * or revoked) signs out; no network, a server error, or Perso too busy
-   * (408, 429) keeps the session for the next try. */
+  // New tokens, once at a time; a 4xx other than 408/429 signs out, anything else keeps the session for the next try.
   function refresh() {
     if (!session) return Promise.resolve(false);
     refreshing ??= (async () => {
@@ -422,8 +347,7 @@ export function createAuth({
     return refreshing;
   }
 
-  /** GET with the access token, refreshed first when it has run out, and
-   * once more after a 401. */
+  // GET with the access token, refreshed first when it has run out, and once more after a 401.
   async function authedGet(what, url) {
     if (expired(session.accessToken)) await refresh();
     if (!session) throw new AuthHttpError(what, 401, "signed-out");
@@ -435,8 +359,7 @@ export function createAuth({
     }
   }
 
-  /** The account's active key into kit.env. A different key than the one
-   * there also clears PERSO_SPACE_SEQ: the workspace picked belonged to it. */
+  // The account's active key into kit.env; a different key also clears PERSO_SPACE_SEQ, the old key's workspace.
   async function connectKey() {
     if (!session) return { key: "failed" };
     const dir = kit();
@@ -480,13 +403,10 @@ export function createAuth({
     onChange();
   }
 
-  /** Open the sign-in window on Perso's sign-in page, with a port of this
-   * computer listening for the way back; answers once the window comes back,
-   * the user cancels or closes the window, or ten minutes pass. */
+  // Perso's sign-in in the window, a port listening for the way back; answers when it comes back, is cancelled or times out.
   async function login() {
     if (!isOn()) return DISABLED;
-    // The window is back and its code is being traded: that sign-in ends on
-    // its own in a moment, and a new one now would only open a second door.
+    // The code is being traded: that sign-in ends by itself, and a new one would only open a second door.
     if (trading) return { outcome: "busy" };
     if (pending) finish(pending, { outcome: "cancelled" });
     const pkce = newPkce();
@@ -513,14 +433,12 @@ export function createAuth({
           onHandOff: (to) => {
             if (pending !== waiting) return;
             waiting.where = "browser";
-            waiting.handOff = to;
             waiting.browserAt = now();
             const u = new URL(to);
             log(`AUTH Google or Microsoft in the sign-in window: the whole sign-in goes on in the computer's browser at ${u.host}${u.pathname}`);
             onChange();
           },
-          // Closed by the user, its close button or Esc: as Cancel. Closed
-          // by the hand-off above, it is not.
+          // Closed by the user, its close button or Esc: as Cancel; closed by the hand-off, not.
           onClosed: () => {
             if (pending !== waiting || waiting.where === "browser") return;
             log("AUTH sign-in window closed: cancelled");
@@ -539,27 +457,8 @@ export function createAuth({
     });
   }
 
-  // After a hand-off: Perso's start for that provider afresh, with this sign-in's authorize address as the way back,
-  // which an account made by then (a sign-up that ended on Perso's workspace) answers at once. Without Perso's
-  // answer, or for a provider it does not know, the first hand-off's address again.
-  async function openHandOffAgain(waiting) {
-    waiting.browserAt = now();
-    const back = authorizeUrl(cfg, waiting);
-    const provider = signInProvider(waiting.handOff);
-    let address = handOffUrl(waiting.handOff, back);
-    if (provider) {
-      try {
-        const loginUrl = (await callJson(fetchFn, "social sign-in", `${cfg.authBase}/v1/auth/sign-in/social?provider=${provider}`, { timeoutMs: 10_000 }))?.result?.loginUrl;
-        if (typeof loginUrl !== "string" || !loginUrl) throw new Error("no loginUrl in the answer");
-        address = `${new URL(cfg.authorizeUrl).origin}${SOCIAL_START}${provider}?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(back)}`;
-      } catch (err) { log(`AUTH Perso's ${provider} start was not read (${err.message}): the first hand-off's address opens again`, "WARN"); }
-    }
-    if (pending === waiting) openExternal(address);
-  }
-
-  /** Open again: the window reopened on the authorize address, or after a hand-off the browser's sign-in run again.
-   * `auto` is the person back in the app: only after a hand-off, at most twice, 20 seconds after the browser opened. */
-  async function showLogin({ auto = false } = {}) {
+  // Open again: the window reloaded, or after a hand-off the authorize address in the browser; `auto` at most twice, 20 s apart.
+  function showLogin({ auto = false } = {}) {
     if (!isOn()) return DISABLED;
     if (trading) return { outcome: "busy" };
     if (!pending) return { outcome: "idle" };
@@ -568,8 +467,10 @@ export function createAuth({
       if (waiting.where !== "browser" || waiting.autoOpens >= 2 || now() - waiting.browserAt < 20_000) return { outcome: "wait" };
       waiting.autoOpens += 1;
     }
-    if (waiting.where === "browser") await openHandOffAgain(waiting);
-    else waiting.window.show();
+    if (waiting.where === "browser") {
+      waiting.browserAt = now();
+      openExternal(authorizeUrl(cfg, waiting));
+    } else waiting.window.show();
     return { outcome: "shown" };
   }
 
@@ -582,9 +483,7 @@ export function createAuth({
     return { outcome: "cancelled" };
   }
 
-  /** The sign-in window's request back, {code, state} or {error, state}.
-   * Answers what it did with it, for the window's page, the log and the
-   * tests; the page hears through login's answer. */
+  // The way back's request, {code, state} or {error, state}; the answer is for its page, the log and the tests.
   async function handleCallback(params) {
     if (!isOn()) return "disabled";
     const cb = callbackParams(params);
@@ -594,8 +493,7 @@ export function createAuth({
     if (cb.state !== waiting.state) { log("AUTH a sign-in came back with the wrong state: ignored", "WARN"); return "bad_state"; }
     pending = null; // taken: the same request twice is not traded twice
     trading = waiting;
-    // The window is back: the ten minutes it had are over, and the trade
-    // below ends this sign-in however it goes, closing the window.
+    // Back: the ten minutes are over, and the trade below ends this sign-in, closing the window.
     clearTimeout(waiting.timer);
     onCallback();
     if (cb.error) {
@@ -626,8 +524,7 @@ export function createAuth({
     }
   }
 
-  /** Sign out: the tokens and the account's key leave this computer first,
-   * then Perso is told (and not waited on if it does not answer). */
+  // Sign out: tokens and key leave this computer first, then Perso is told, not waited on.
   async function logout() {
     if (!isOn()) return DISABLED;
     if (pending) finish(pending, { outcome: "cancelled" });
@@ -644,10 +541,7 @@ export function createAuth({
     return { outcome: "signed_out" };
   }
 
-  /** The kept sign-in, read once, on the first request after the app is
-   * ready (safeStorage needs that), and refreshed at once when its access
-   * token has run out. Read only while enabled: a disabled run never touches
-   * the file. */
+  // The kept sign-in, read once after the app is ready (safeStorage), refreshed if expired; never while disabled.
   async function load() {
     if (loaded || !isOn()) return;
     loaded = true;
