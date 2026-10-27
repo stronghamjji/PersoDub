@@ -146,8 +146,19 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
   };
 }
 
-/** main.js's openKeyWindow(url): one window over `parent()` on the sign-in's cookies, so Perso's pages
- * in it are the account signed in there. Perso's https pages stay in it; anything else opens in the browser. */
+// The app's own tokens (auth.js sessionCookies) as Perso's session cookies; one that cannot be set is left out.
+async function setSessionCookies(jar, tokens) {
+  for (const name of SESSION_COOKIES) {
+    if (!tokens[name]) continue;
+    try {
+      await jar.set({ url: "https://perso.ai/", name, value: tokens[name], domain: ".perso.ai", path: "/", secure: true, sameSite: "lax" });
+    } catch { /* the page then asks for the account */ }
+  }
+}
+
+/** main.js's openKeyWindow(url, cookies): one window over `parent()` on the sign-in's cookies, the app's
+ * tokens set there first, so Perso's pages in it are the app's account wherever it signed in.
+ * Perso's https pages stay in it; anything else opens in the browser. */
 export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
   let win = null;
   const stay = (e, to) => {
@@ -156,12 +167,14 @@ export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, ti
     e.preventDefault();
     openExternally(shell, to);
   };
-  return (url) => {
+  return async (url, cookies) => {
     if (!win || win.isDestroyed()) {
       win = persoWindow({ BrowserWindow, shell, parent, title, width: 1000, height: 760 });
       win.webContents.on("will-navigate", stay);
       win.webContents.on("will-redirect", stay);
     }
+    if (cookies?.accessToken) await setSessionCookies(win.webContents.session.cookies, cookies);
+    if (win.isDestroyed()) return;
     win.loadURL(url).catch(() => { /* the window shows the error */ });
     if (win.isMinimized()) win.restore();
     win.show();

@@ -145,7 +145,7 @@ app.whenReady().then(() => {
   };
   registerUsageIpc({ ipcMain, ctx, countUsage, sendReport: reporter.sendReport, shellLog, lastRunClosedByUser });
   registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog });
-  registerAuthIpc({ ipcMain, shell, auth,
+  registerAuthIpc({ ipcMain, auth,
                     openKeyWindow: keyWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) }) });
   void auth.start();
 

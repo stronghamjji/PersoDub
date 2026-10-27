@@ -315,7 +315,7 @@ export function createAuth({
   log = () => {}, onChange = () => {}, onCallback = () => {}, onSignOut = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
-  let session = null;   // {accessToken, refreshToken, userId, account, email, via: where it signed in, "window" or "browser"}
+  let session = null;   // {accessToken, refreshToken, userId, account, email}
   let sessionId = 0;    // a new one at every sign-in and sign-out; a token refresh keeps it
   let pending = null;   // the sign-in waiting for its window
   let trading = null;   // the sign-in whose code is being traded
@@ -357,10 +357,6 @@ export function createAuth({
       where: open ? open.where : "",
     };
   }
-
-  // The key page needs the account's cookies: the sign-in window's for an account signed in there.
-  // A kept sign-in from before `via` was kept opens it in the browser, as it did.
-  const keyPageTarget = () => (isOn() && session?.via === "window" ? "window" : "browser");
 
   /** The signed-in account for the shell's own use: the full e-mail and
    * Perso's number for it, which Customer support's inquiry carries
@@ -433,6 +429,15 @@ export function createAuth({
       if (!(err instanceof AuthHttpError) || err.status !== 401 || !(await refresh())) throw err;
       return callJson(fetchFn, what, url, { token: session.accessToken });
     }
+  }
+
+  /** The session's tokens for the key window, which Perso's pages read from their accessToken and
+   * refreshToken cookies; the access token refreshed first when it runs out within a minute.
+   * Null signed out or disabled. */
+  async function sessionCookies() {
+    if (!isOn() || !session) return null;
+    if (expired(session.accessToken)) await refresh();
+    return session ? { accessToken: session.accessToken, refreshToken: session.refreshToken } : null;
   }
 
   /** The account's active key into kit.env. A different key than the one
@@ -605,7 +610,7 @@ export function createAuth({
     }
     try {
       const tokens = await exchangeCode(cfg, fetchFn, { code: cb.code, verifier: waiting.verifier, redirectUri: waiting.redirectUri });
-      session = { ...tokens, userId: null, account: "", email: "", via: waiting.where };
+      session = { ...tokens, userId: null, account: "", email: "" };
       sessionId++;
       try {
         const p = parseProfile(await authedGet("profile", cfg.profileUrl));
@@ -674,7 +679,7 @@ export function createAuth({
     connectKey: loadedFirst(async () => (isOn() ? connectKey() : DISABLED)),
     handleCallback,
     signedInAccount,
-    keyPageTarget,
+    sessionCookies: loadedFirst(sessionCookies),
     keyPageUrl: cfg.keyPageUrl,
   };
 }

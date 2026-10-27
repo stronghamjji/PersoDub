@@ -47,16 +47,17 @@ export function createShellAuth({ app, safeStorage, net, shell, ctx, edition, sh
 }
 
 /** The page's channels. Answered in both editions; a disabled sign-in says
- * "disabled" and does nothing. `openKeyWindow` opens the key page in the sign-in's cookies (signInWindow.js). */
-export function registerAuthIpc({ ipcMain, shell, auth, openKeyWindow }) {
+ * "disabled" and does nothing. `openKeyWindow` opens the key page in the app's key window, signed in
+ * with the session's own tokens (signInWindow.js keyWindowFactory). */
+export function registerAuthIpc({ ipcMain, auth, openKeyWindow }) {
   ipcMain.handle("shell:auth-status", () => auth.status());
   ipcMain.handle("shell:auth-login", () => auth.login());
   ipcMain.handle("shell:auth-cancel", () => auth.cancelLogin());
   ipcMain.handle("shell:auth-show", (_e, opts) => auth.showLogin({ auto: opts?.auto === true }));
   ipcMain.handle("shell:auth-logout", () => auth.logout());
   ipcMain.handle("shell:auth-check-key", () => auth.connectKey());
-  ipcMain.handle("shell:auth-open-key-page", () => {
+  ipcMain.handle("shell:auth-open-key-page", async () => {
     if (!auth.enabled) return undefined;
-    return auth.keyPageTarget() === "window" ? openKeyWindow(auth.keyPageUrl) : shell.openExternal(auth.keyPageUrl);
+    return openKeyWindow(auth.keyPageUrl, await auth.sessionCookies());
   });
 }
