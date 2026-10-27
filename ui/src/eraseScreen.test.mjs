@@ -65,6 +65,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1100] },
                    erase = { status: "running", percent: 35 }, projectOpen = false, platform = "mac",
                    pickedFolder, savedAt = "/Users/me/Downloads/2026-09-30/Street food/Street food.mp4" } = {}) {
+  const steps = [];
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -110,8 +111,9 @@ function harness({ suggest = { width: 1280, height: 720, area: [560, 680, 180, 1
     projectOpen: () => projectOpen,
     onEraseStarted: (downloadId) => log.started.push(downloadId),
     pickedFolder,
+    record: (name, props) => steps.push([name, props]),
   });
-  return { $, api, log, app };
+  return { $, api, log, app, steps };
 }
 
 const HELD = { downloadId: "D1", title: "Street food", duration_sec: 10, trim: { start: 2, end: 8 } };
@@ -350,6 +352,21 @@ test("an erase that stopped says why, and offers Try again, Back and the log", a
   assert.equal(h.$("eraseVideo").src, "/api/downloads/D1/video");
   assert.equal(h.log.timeline.strip, "draft");
   assert.deepEqual(getDraft().ranges, [[2, 8]]);
+});
+
+// The charts' tool steps (ui/src/events.mjs): an erase started here, and how it ended.
+test("an erase started here is a tool step, and its end too, once; Try again starts another", async () => {
+  clearDraft();
+  const h = harness({ erase: { status: "error", percent: 35, error: "The eraser ran out of memory.", logs: [] } });
+  h.api.openEraseWith(HELD);
+  await settle();
+  await h.$("eraseRunBtn").fire("click");
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.deepEqual(h.steps, [["tool_started", { tool: "erase", from: "erase" }], ["tool_finished", { tool: "erase", outcome: "failed" }]]);
+  h.app.erase = { status: "done", percent: 100 };
+  await h.$("eraseRetryBtn").fire("click");
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.deepEqual(h.steps.slice(2), [["tool_started", { tool: "erase", from: "erase" }], ["tool_finished", { tool: "erase", outcome: "done" }]]);
 });
 
 test("an erase that stopped says why in the page's language when the engine sent it (error_shown)", async () => {

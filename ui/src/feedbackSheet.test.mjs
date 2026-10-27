@@ -24,12 +24,13 @@ function harness({ answer = { id: "7C2E91AB" }, language = "ko", account = "a@te
     return els.get(id);
   };
   $("feedbackType").value = "problem";
-  const sent = [], urls = [];
+  const sent = [], urls = [], steps = [];
   const open = initFeedbackSheet({ $, language: () => language, openUrl: (u) => urls.push(u), account: () => account,
-                                   send: async (form) => { sent.push(form); return answer; } });
+                                   send: async (form) => { sent.push(form); return answer; },
+                                   record: (name, props) => steps.push([name, props]) });
   const type = (id, text) => { $(id).value = text; $(id).fire("input"); };
   const agree = (on = true) => { $("feedbackConsent").checked = on; $("feedbackConsent").fire("change"); };
-  return { $, sent, urls, open, type, agree };
+  return { $, sent, urls, open, type, agree, steps };
 }
 
 test("the form opens on its subject, and Send waits for a subject, details and the consent", () => {
@@ -153,4 +154,26 @@ test("Close keeps the draft and sends nothing", () => {
   assert.deepEqual(h.sent, []);
   h.open();
   assert.equal(h.$("feedbackSubjectInput").value, "Export stops");
+});
+
+// The charts' inquiry steps (ui/src/events.mjs): the kind and whether it went
+// now, never the subject, the details or the address.
+test("an inquiry sent, kept for later, or not sent is a step with its kind and nothing it says", async () => {
+  const outcomes = [];
+  for (const answer of [{ id: "7C2E91AB" }, { queued: true }, { needReplyTo: true }, null]) {
+    const h = harness({ answer });
+    h.open();
+    h.$("feedbackType").value = "bug";
+    h.type("feedbackSubjectInput", "Export stops");
+    h.type("feedbackDetails", "It stops at 90% on my wedding video.");
+    h.$("feedbackReplyTo").value = "me@test.local";
+    h.agree();
+    await h.$("feedbackSend").click();
+    outcomes.push(...h.steps);
+    assert.ok(!JSON.stringify(h.steps).match(/wedding|Export stops|test\.local/), "nothing typed in a step");
+  }
+  assert.deepEqual(outcomes, [
+    ["inquiry_sent", { kind: "bug", queued: false }], ["inquiry_sent", { kind: "bug", queued: true }],
+    ["inquiry_failed", { reason: "need_reply_to" }], ["inquiry_failed", { reason: "failed" }],
+  ]);
 });

@@ -45,6 +45,7 @@
 import { downloadsLabel, escapeHtml, errorText, folderName } from "./format.mjs";
 import { withRatio } from "./ratio.mjs";
 import { t } from "./i18n.mjs";
+import { record as recordStep } from "./events.mjs";
 
 export const AUDIO_KEY = "persodub.exportAudio";
 export const TICKS_KEY = "persodub.exportTicks";
@@ -266,10 +267,12 @@ function followLink(href, name) {
  * @param {(href: string, init?: object) => Promise<Response>} [deps.fetchFn]
  * @param {(href: string, name: string) => void} [deps.follow]  hand a link to
  *        the browser to download
+ * @param {(name: string, props: object) => void} [deps.record]  a step in the
+ *        charts (ui/src/events.mjs): a download started, and how it ended
  * @returns {{ open: (tick?: string[], only?: string[]) => Promise<void>, close: () => void }}
  */
 export function initExportDialog({ $, getContext, storage = null, shell = null,
-                                   fetchFn = (...a) => fetch(...a), follow = followLink }) {
+                                   fetchFn = (...a) => fetch(...a), follow = followLink, record = recordStep }) {
   const list = $("exportList");
   const where = $("exportWhere");
   const go = $("exportGoBtn");
@@ -353,11 +356,16 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
     const todo = rows().filter((r) => ticked.includes(r.id));
     saved = saved.filter((id) => !ticked.includes(id));
     paint();
+    // A Burn in subtitles project's download is the burn itself.
+    const tool = ctx.kind === "captions" ? "burn" : "export";
+    record("tool_started", { tool, from: ctx.kind, files: todo.length });
     let last = "";
+    let went = 0;
     try {
       for (const [i, row] of todo.entries()) {
         where.textContent = t("Downloading {i} of {n}…", { i: i + 1, n: todo.length });
         last = await saveOne(row);
+        went += 1;
         saved.push(row.id);
         paint();
       }
@@ -370,7 +378,9 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
       // A picked folder that was gone is said once, ahead of where the files went.
       where.textContent = last && folder && folder.missing
         ? `${t("Cannot find {folder}.", { folder: folderName(folder.chosen) })} ${said}` : said;
+      record("tool_finished", { tool, outcome: "done", files: todo.length });
     } catch (e) {
+      record("tool_finished", { tool, outcome: "failed", files: went });
       where.textContent = errorText(e);
     } finally {
       saving = false;

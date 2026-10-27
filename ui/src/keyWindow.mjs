@@ -10,6 +10,7 @@
 // #keyCancel), and the dropdowns that need a key: #dubModeSelect, #sepSelect,
 // #sttSelect and #translateSelect.
 import { t } from "./i18n.mjs";
+import { record as recordStep } from "./events.mjs";
 
 /**
  * @param {object} deps
@@ -27,7 +28,7 @@ import { t } from "./i18n.mjs";
  */
 // persoKeyLink: the tagged link to Perso's key page the app's settings carry
 // (perso_signup_link), so the visit says it came from this app; the bare page without it.
-export function initKeyWindow({ $, keySaved, onSaved, persoKeyLink = () => null }) {
+export function initKeyWindow({ $, keySaved, onSaved, persoKeyLink = () => null, record = recordStep }) {
   // Picking a keyed engine with no key saved opens the key window. Save keeps
   // the choice; Cancel puts the dropdown back where it was.
   const KEY_KINDS = {
@@ -151,12 +152,14 @@ export function initKeyWindow({ $, keySaved, onSaved, persoKeyLink = () => null 
         body: JSON.stringify(body),
       });
       if (!r.ok) throw new Error();
+      record("key_saved", { ok: true, kind: keyAsk.kind });
       keySaved[keyAsk.kind] = true;
       const then = keyAsk.then;
       closeKey(true);
       onSaved();
       if (then) then();
     } catch {
+      if (keyAsk) record("key_saved", { ok: false, kind: keyAsk.kind });
       $("keyError").textContent = t("Could not save the key. Is {app} running?");
       $("keySave").disabled = false;
     }

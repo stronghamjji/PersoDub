@@ -8,6 +8,7 @@
 // #updatedWhatsNew, #updatedClose), #whatsNewOverlay (#wnTitle, #wnList,
 // #wnOk) and #aboutVersion.
 import { t } from "./i18n.mjs";
+import { record as recordStep } from "./events.mjs";
 
 /**
  * Wire the notice and the notes window, and ask the app which version this is.
@@ -15,10 +16,13 @@ import { t } from "./i18n.mjs";
  * @param {object} deps
  * @param {(id: string) => any} deps.$   the page's getElementById helper
  */
-export function initWhatsNew({ $ }) {
+export function initWhatsNew({ $, record = recordStep }) {
   // What's new: shown once after an update. A fresh install only records the
   // version (everything is new to a new user); Settings > About reopens it.
   const WHATS_NEW_SEEN = "pd.whatsNewSeen";
+  // The last version update_installed was recorded for (the charts,
+  // ui/src/events.mjs): the notice stays launch after launch, the step once.
+  const UPDATE_RECORDED = "pd.updateRecorded";
   let whatsNew = null;
   function showWhatsNew() {
     if (!whatsNew || !whatsNew.notes.length) return;
@@ -46,6 +50,12 @@ export function initWhatsNew({ $ }) {
       return;
     }
     if (seen === whatsNew.version) return;
+    try {
+      if (localStorage.getItem(UPDATE_RECORDED) !== whatsNew.version) {
+        localStorage.setItem(UPDATE_RECORDED, whatsNew.version);
+        record("update_installed", { version: whatsNew.version });
+      }
+    } catch { /* private window: no step */ }
     // Not marked seen here: the banner stays, launch after launch, until the
     // person closes it or opens the list (user, 2026-09-08 -- the six-second
     // version was gone before anyone looked up from the Updating screen).
