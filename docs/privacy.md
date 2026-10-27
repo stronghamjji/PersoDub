@@ -79,7 +79,7 @@ The random install ID is made the first time the app starts, whether the counts 
 or off, and kept on this computer. With the counts off it is not sent here; its first 12
 characters still go with the job logs below while they are on.
 
-## Button and screen use
+## Share App Analytics
 
 From 0.9.1 the app can record which buttons, links, tabs and menu items you press and which
 screens you open, to see which parts of it people use. Each press is a name taken from the
@@ -162,7 +162,7 @@ not its words, and a Perso job by the credits it used, never your balance (from 
 earlier versions could quote a translation in an error sentence). The relay that posts the
 issue does not store your IP address, and applies the same rules a second time.
 
-Turn it off in **Settings → Privacy** (**Send job logs**) or with `PERSODUB_NO_REPORTS=1`
+Turn it off in **Settings → Privacy** (**Help improve PersoDub**) or with `PERSODUB_NO_REPORTS=1`
 in the kit's `kit.env`; it applies to the next job, no restart. This is a separate switch from
 the usage counts above — turning one off leaves the other alone.
 `PERSODUB_REPORTS_DEBUG=1` prints what would be sent instead of sending it, and a
