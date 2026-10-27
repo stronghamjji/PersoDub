@@ -2,11 +2,10 @@
 // port: the sign-in wall, Sign in (the real browser opens Perso), the way
 // back, Settings > Account and keys, Sign out, and signing in again. Not part
 // of any test suite: it needs the app running with a control port, a Perso
-// account signed in to the browser, and a client Perso has registered.
+// account signed in to the browser, and a client Perso has registered: the
+// app's own, perso-dubbing-desktop, unless PERSODUB_AUTH_CLIENT_ID says another.
 //
-//   cd desktop && PERSODUB_KIT_DIR=/tmp/persodub-e2e-kit \
-//     PERSODUB_AUTH_CLIENT_ID=demo-pkce-client PERSODUB_AUTH_REDIRECT_HOST=localhost PERSODUB_AUTH_REDIRECT_PORTS=5173 \
-//     npx electron . --remote-debugging-port=9333
+//   cd desktop && PERSODUB_KIT_DIR=/tmp/persodub-e2e-kit npx electron . --remote-debugging-port=9333
 //   node tests/e2e/perso-login.mjs --kit-env /tmp/persodub-e2e-kit/kit.env --out <folder>
 //   node tests/e2e/perso-login.mjs --signout            # only sign out, for a clean end
 //

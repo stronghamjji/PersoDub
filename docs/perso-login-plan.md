@@ -2,39 +2,18 @@
 
 이 파일은 내부 작업 메모입니다. 루트의 *.md는 .gitignore에 걸려서 docs/에 둡니다. 공개 저장소(stronghamjji/PersoDub)로 PR을 낼 때는 빼거나 위키로 옮기세요.
 
-## 0. 남은 코드 변경은 딱 두 줄. 둘 다 외부 답을 기다리는 중
+## 0. 남은 코드 변경은 B 한 줄. A(client id)는 2026-10-27에 들어감
 
 | # | 기다리는 것 | 누가 주나 | 바꿀 곳 | 바꾼 뒤 확인 |
 |---|---|---|---|---|
-| A | Perso OAuth client id | Perso 인증 팀 (perso-api-auth) | `desktop/src/auth.js` 38행 `clientId: env.PERSODUB_AUTH_CLIENT_ID \|\| "PERSODUB-CLIENT-ID-NOT-ISSUED-YET"` 의 문자열을 발급받은 id로. `desktop/src/auth.test.mjs`의 같은 문자열 한 줄도 | `node desktop/scripts/perso-login-check.mjs --client <id> --host 127.0.0.1 --port 52290` 가 1~7번 OK. 그다음 `tests/e2e/perso-login.mjs` |
+| A | Perso OAuth client id | Perso 인증 팀 (perso-api-auth) | **들어감(2026-10-27)**: `desktop/src/auth.js`의 `clientId` 기본값이 `perso-dubbing-desktop`. 등록 내용은 3절 | `node desktop/scripts/perso-login-check.mjs`(기본값이 이 클라이언트)가 1~7번 OK. 그다음 `tests/e2e/perso-login.mjs` |
 | B | 운영 다운로드 폴더 주소(HTTPS) | 인프라 개발자 | `desktop/src/edition.js` 의 `PRODUCTION_UPDATE_URL = ""` 에 주소를. 끝에 `/` | `cd desktop && node --test src/edition.test.mjs src/updater.test.mjs`. 빌드 뒤 `desktop/dist/latest-mac.yml`의 파일 이름들이 그 폴더에 올라갔는지 |
 
-둘 다 비어 있는 상태로도 앱은 돌아갑니다. A가 비면 운영 로그인이 Perso에서 거절되고(벽을 못 지나감), B가 비면 운영 앱이 공개 오픈소스 릴리스로 업데이트됩니다. **A 없이는 운영 rc를 내보내면 안 되고**, B 없이는 내보낼 수는 있지만 다음 오픈소스 릴리스 때 이름이 PersoDub으로 돌아갑니다.
+B가 비어 있어도 앱은 돌아갑니다. 운영 앱이 공개 오픈소스 릴리스로 업데이트될 뿐이라 내보낼 수는 있지만, 다음 오픈소스 릴리스 때 이름이 PersoDub으로 돌아갑니다.
 
-### A에게 보낼 메시지 (Perso 인증 팀)
+### A: Perso 인증 팀
 
-```
-제목: PersoDubbing 데스크톱 앱 OAuth 클라이언트 등록 요청 (perso-api-auth client_info)
-
-external-client-demo의 db/seed_demo_client.sql과 같은 형식으로 아래 한 줄 등록 부탁드립니다.
-데모 클라이언트(demo-pkce-client)로는 이미 실제 로그인·키 조회·refresh·로그아웃까지 확인했고,
-우리 id로 바꾸기만 하면 됩니다.
-
-client_id           persodub-desktop
-client_type         PUBLIC  (PKCE 사용, client_secret 검증 없음)
-client_status       normal
-redirect_uris       http://127.0.0.1:52290/callback
-                    http://127.0.0.1:52291/callback
-                    http://127.0.0.1:52292/callback
-allowed_scopes      profile, email
-allowed_grant_types authorization_code, refresh_token
-
-확인 부탁드리는 것:
-1. loopback 포트 와일드카드 지원 여부. 안 되면 위 고정 포트 3개로 갑니다.
-2. refresh는 v1 auth/oauth2/token으로 보냅니다(v2/token은 refresh에 500). 이 경로가 유지되는지요.
-3. 앱이 사용자 대신 API 키를 만들 수 있는 엔드포인트가 있는지(예: POST /auth/api/v1/api-keys). 있으면 키 없는 계정도 사이트 방문 없이 끝낼 수 있습니다.
-4. 이 코드는 오픈소스 저장소에 공개됩니다. client id와 인증 엔드포인트 경로가 공개돼도 되는지 확인 부탁드립니다. (PKCE public client라 secret은 없습니다.)
-```
+등록 요청을 보냈고 2026-10-27에 등록됐습니다. 등록 내용과 답은 3절.
 
 ### B에게 보낼 메시지 (인프라 개발자)
 
@@ -84,37 +63,30 @@ allowed_grant_types authorization_code, refresh_token
 | 프로필 | `{result: {userSeq, userName, email, provider, ...}}` |
 | 활성 키 | `{result: [{seq, apiKey, apiKeyName, status, expireDate, lastUsedDate, createDate}]}`. **키는 전체 값**(35자) |
 | 더빙 API에 Bearer 토큰 | portal spaces 엔드포인트는 200. 단 video-translator 엔드포인트는 미확인 |
-| refresh | v2/token은 500. **v1 auth/oauth2/token이 됨**, `{result: {accessToken, refreshToken}}` |
+| refresh | v2/token은 500. v1 auth/oauth2/token이 됨, `{result: {accessToken, refreshToken}}`. **2026-10-27 Perso 답: 500은 JSON 본문 때문. v2/token에 form으로 보내야 하고, v1은 옛 경로라 쓰지 않음**(3절) |
 | sign-out | 200 |
 
 **결정: API 키 경로를 유지합니다.** 토큰 수명이 30분이라 백엔드가 토큰을 직접 쓰려면 셸이 30분마다 갱신해 백엔드에 넘기는 장치가 필요합니다. 키는 만료가 없어서 더 단순합니다. 코드의 응답 추측 표는 위 실제 모양으로 줄였습니다(parseProfile, parseActiveKey, tokensFrom).
 
-다시 돌리는 법: 같은 명령. 우리 등록이 오면 `--client persodub-desktop --host 127.0.0.1 --port 52290`.
+다시 돌리는 법: 같은 명령. 기본값이 이제 우리 클라이언트(`--client perso-dubbing-desktop --host 127.0.0.1 --port 52290`)라 옵션 없이 돌리면 됩니다. 데모 클라이언트는 `--client demo-pkce-client --host localhost --port 5173`.
 
-## 3. Perso 팀에 보낼 등록 요청 (이게 유일하게 우리 손 밖의 일)
+## 3. Perso 등록 (2026-10-27, Perso 인증 팀 답)
 
-```
-제목: PersoDub 데스크톱 앱 OAuth 클라이언트 등록 요청 (perso-api-auth client_info)
+| 항목 | 내용 |
+|---|---|
+| client_id | `perso-dubbing-desktop`. PUBLIC(PKCE, secret 없음). dev, qa, prod 모두 등록 |
+| redirect | `http://127.0.0.1/callback`, 포트 없이 등록. 127.0.0.1과 localhost는 포트를 보지 않음(RFC 8252). 호스트는 반드시 127.0.0.1, localhost는 안 됨. 앱의 52290~52292 그대로 |
+| refresh | `POST /auth/api/v2/token`, `Content-Type: application/x-www-form-urlencoded`, 본문 `grant_type=refresh_token&client_id=perso-dubbing-desktop&refresh_token=...`. 지금까지 v2가 500을 준 건 JSON 본문 때문 |
+| refresh 답 | RFC 6749 표준 모양: `access_token`, `refresh_token`, `expires_in`, `token_type`. 이 클라이언트는 refresh token을 바꾸지 않음(같은 값이 돌아옴). 없으면 쓰던 것을 계속 씀 |
+| v1 `/auth/api/v1/auth/oauth2/token` | 옛 경로. 더는 쓰지 않음 |
+| 실서버 확인(새 client id, Perso 답과 함께 전달) | 로그인, 프로필, api-keys/active, 로그아웃 통과. refresh만 JSON 본문 때문에 실패 → 앱 코드를 form으로 고침(2026-10-27). 실서버 refresh 재확인은 아직 |
 
-external-client-demo의 db/seed_demo_client.sql과 같은 형식으로 아래 한 줄 등록 부탁드립니다.
+코드에 들어간 곳: `desktop/src/auth.js`의 `clientId` 기본값과 `refreshTokens`(form으로 v2/token), `desktop/scripts/perso-login-check.mjs`의 기본값과 6번(refresh). 가짜 Perso(`tests/fake-perso/server.mjs`)도 같은 모양으로 답합니다.
 
-client_id           persodub-desktop
-client_type         PUBLIC  (PKCE 사용, client_secret 검증 없음)
-client_status       normal
-redirect_uris       http://127.0.0.1:52290/callback
-                    http://127.0.0.1:52291/callback
-                    http://127.0.0.1:52292/callback
-allowed_scopes      profile, email
-allowed_grant_types authorization_code, refresh_token
-
-확인 부탁드리는 것:
-1. loopback redirect의 포트 와일드카드 지원 여부. 안 되면 위 고정 포트 3개로 갑니다.
-2. PUBLIC 클라이언트의 refresh 주소. v2/token은 refresh_token grant에 500을 줍니다. v1 auth/oauth2/token이 맞는지요.
-3. video-translator API가 Authorization: Bearer <accessToken>을 받는지, 아니면 XP-API-KEY만 받는지.
-4. /auth/api/v1/api-keys/active 가 키를 전체 값으로 주는지, 마스킹해서 주는지. (확인됨: 전체 값)
-5. 앱이 사용자 대신 API 키를 만들 수 있는 엔드포인트가 있는지 (예: POST /auth/api/v1/api-keys).
-```
-등록이 오면 바꿀 곳: `desktop/src/auth.js`의 `clientId` 기본값 한 줄. 포트는 이미 52290~52292.
+이번 답에 없던 것(전에 물어본 것):
+1. video-translator API가 Authorization: Bearer <accessToken>을 받는지, 아니면 XP-API-KEY만 받는지.
+2. 앱이 사용자 대신 API 키를 만들 수 있는 엔드포인트가 있는지 (예: POST /auth/api/v1/api-keys).
+3. client id와 인증 엔드포인트 경로가 오픈소스 저장소에 공개돼도 되는지. (PKCE public client라 secret은 없음)
 
 ## 4. 운영(production)과 오픈소스를 같은 저장소에서 관리하는 방법
 
@@ -136,9 +108,9 @@ allowed_grant_types authorization_code, refresh_token
 
 브랜치 `feature/perso-login-loopback`, 2026-10-26 밤 기준 검증 상태: 자동 테스트 전부 통과(Python 2409, UI 1058, 데스크톱 612, relay 71, ruff), 실제 Electron 앱 + 실제 Chrome + 실제 Perso(데모 클라이언트)로 로그인·로그아웃·재로그인·재실행 통과, 오픈소스 에디션 별도 kit으로 정상.
 
-1. **Perso 등록 도착** → `desktop/src/auth.js`의 `clientId` 기본값을 `persodub-desktop`으로, `desktop/src/auth.test.mjs`의 같은 문자열 한 줄도. 포트 52290~52292는 이미 기본값.
-2. **라이브 확인** → `node desktop/scripts/perso-login-check.mjs --client persodub-desktop --host 127.0.0.1 --port 52290`. 1~7번이 모두 OK여야 함.
-3. **실제 앱 확인** → `tests/e2e/perso-login.mjs` 머리말의 명령으로, 환경 변수는 `PERSODUB_AUTH_CLIENT_ID=persodub-desktop PERSODUB_AUTH_REDIRECT_HOST=127.0.0.1 PERSODUB_AUTH_REDIRECT_PORTS=52290`. 설치된 PersoDub.app은 먼저 종료.
+1. **Perso 등록 도착** → 끝남(2026-10-27). `desktop/src/auth.js`의 `clientId` 기본값이 `perso-dubbing-desktop`, refresh는 v2/token에 form. 포트 52290~52292는 그대로.
+2. **라이브 확인** → `node desktop/scripts/perso-login-check.mjs`(옵션 없이, 기본값이 등록된 클라이언트). 1~7번이 모두 OK여야 함. 6번은 `refresh at /auth/api/v2/token as a form: OK`.
+3. **실제 앱 확인** → `tests/e2e/perso-login.mjs` 머리말의 명령으로. 로그인 환경 변수는 필요 없음(기본값이 등록된 클라이언트). 설치된 PersoDub.app은 먼저 종료.
 4. **테스트 다시** → `cd desktop && node --test src/*.test.mjs smoke/*.test.mjs`, `node --test ui/src/*.test.mjs`, Python은 `pytest tests/`.
 5. **빌드** → Mac: `cd desktop && CAMPPLUS_SRC=<campplus.onnx> npm run dist:dmg:prod` (서명·notarization은 기존 방식대로). Windows: Actions의 "Build Windows installer"를 edition=production으로 실행하면 `dist:win:prod`를 씀. 결과물 이름은 PersoDubbing-mac.dmg, PersoDubbing-Setup-<버전>.exe.
 6. **설치본으로 마지막 확인** → Mac과 Windows 각 1회: Dock/시작 메뉴 이름 PersoDubbing, 로그인 벽, 로그인, 브라우저 페이지, 로그아웃, 재실행 유지. Windows는 loopback 포트에 방화벽 경고가 뜨지 않는지(127.0.0.1만 열므로 뜨지 않아야 함) 확인.
@@ -162,11 +134,11 @@ allowed_grant_types authorization_code, refresh_token
 | 앱 종료 후 재실행 | "signed in from the last run", 벽 없이 바로 앱(토큰은 Keychain 암호화 파일에서 복원) |
 | 로그아웃 후 종료, 재실행 | 벽이 뜸. 토큰 파일 없음 |
 
-재현: `tests/e2e/perso-login.mjs` 머리말의 명령 세 줄. 등록 뒤에는 환경 변수 세 개만 바꿉니다: `PERSODUB_AUTH_CLIENT_ID=persodub-desktop PERSODUB_AUTH_REDIRECT_HOST=127.0.0.1 PERSODUB_AUTH_REDIRECT_PORTS=52290`. 패키징 빌드에서는 코드의 기본값이 그 값이라 바꿀 것이 clientId 한 줄뿐입니다.
+재현: `tests/e2e/perso-login.mjs` 머리말의 명령. 이 표는 데모 클라이언트(`PERSODUB_AUTH_CLIENT_ID=demo-pkce-client PERSODUB_AUTH_REDIRECT_HOST=localhost PERSODUB_AUTH_REDIRECT_PORTS=5173`)로 돌린 결과입니다. 2026-10-27부터는 코드의 기본값이 등록된 클라이언트라 로그인 환경 변수 없이 돌립니다.
 
 주의: 설치된 PersoDub.app과 소스 실행 앱은 단일 인스턴스 잠금을 공유해 동시에 못 띄웁니다. 테스트 전 설치된 앱을 종료하세요.
 
-**아직 실제로 안 해본 것**: 키 없는 계정(가짜 Perso 테스트로만), Windows, 패키징(dmg/exe)된 빌드, 우리 client id. 등록이 오면 마지막 둘을 합니다.
+**아직 실제로 안 해본 것**: 키 없는 계정(가짜 Perso 테스트로만), Windows, 패키징(dmg/exe)된 빌드, 우리 client id로 실제 앱. 우리 client id는 확인 스크립트로 로그인·프로필·키·로그아웃까지 통과했고, refresh는 form으로 고친 뒤 다시 확인해야 합니다.
 
 **문구**: 한국어 "작업공간"은 전부 "Workspace"로 바꿨습니다(사용자 결정 2026-10-26).
 
