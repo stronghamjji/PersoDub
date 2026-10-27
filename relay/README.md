@@ -15,6 +15,7 @@ way as the usage-count worker `persodub-count`.
   with `userSide: true`. Its summary and logs are kept as a reported failure's are
   (`<yyyy-mm>/<fingerprint>/<id>.tar.gz`, `userSide: "true"` in the summary), on rate limits of
   their own (`rl:us:`), and GitHub never hears of it.
+- From 0.9.1 a report's `env.device` (`describeDevice` in `desktop/src/report.js`, e.g. "Windows 11 25H2 (build 26200) · ...") is the issue's first Environment row.
 - From 0.9.1 the app sends the buttons pressed, the screens shown and the steps of a person's
   way through it (`POST /events`) while the Settings switch for them is on. The relay passes them to GA4, and to Amplitude once
   it has a key, and keeps nothing itself. See "Button and screen events" below.

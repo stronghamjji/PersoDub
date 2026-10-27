@@ -8,6 +8,7 @@ import { dirname, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { createReporter, REPORT_ENDPOINT } from "./reporting.js";
+import { describeDevice } from "./report.js";
 
 const ok = (body) => ({ ok: true, status: 200, json: async () => body });
 const ISSUE = { id: "r1", issue: 142, url: "https://github.com/o/r/issues/142" };
@@ -473,8 +474,10 @@ test("a bug inquiry goes to the support web app with the app, the computer and t
   assert.deepEqual(fields, {
     type: "bug", subject: "Export stops", details: "At 90%, every time.", replyTo: "me@example.com",
     accountEmail: "", accountId: "",
-    installId: COUNTS_ID, version: "0.7.1", edition: "production", os: "mac", osVersion: "15.1.0", locale: "ko",
+    installId: COUNTS_ID, version: "0.7.1", edition: "production", os: "mac", osVersion: "15.1.0",
+    device: describeDevice({ installed: true, edition: "production" }), locale: "ko",
   });
+  assert.match(fields.device, / · installed · production$/);
   const archive = gunzipSync(Buffer.from(logs, "base64")).toString("utf8");
   assert.match(archive, /job log of new1/);
   assert.match(archive, /PERSODUB_VERSION 0\.7\.1/, "shell.log too");

@@ -6,7 +6,7 @@ import { readKitVersion } from "./engineCheck.js";
 import { packInstalled, torchVariantFor, PACKS } from "./installSpec.js";
 import { analyticsFile, loadState, savedDevice, saveState } from "./analytics.js";
 import { probesFor, runProbes } from "./diagnostics.js";
-import { buildInquiry, buildReport, collectEnvironment, maskText, MAX_DETAILS_CHARS, resolveReportMode, withoutEncodedNames } from "./report.js";
+import { buildInquiry, buildReport, collectEnvironment, describeDevice, maskText, MAX_DETAILS_CHARS, resolveReportMode, withoutEncodedNames } from "./report.js";
 import { buildLogArchive } from "./reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./reportQueue.js";
 import { envWithKit } from "./kitEnv.js";
@@ -209,6 +209,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
         packs,
         freeDiskBytes: await freeSpaceAt(kitDir),
         edition: kitEdition(kitDir) || "",
+        installed: app.isPackaged,
       }),
       timing,
       logTails: {
@@ -357,6 +358,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
     const from = accountForInquiry(account);
     const inquiry = buildInquiry({
       ...form, os, osVersion, version: app.getVersion(), edition: kitEdition(kitDir) || "",
+      device: describeDevice({ installed: app.isPackaged, edition: kitEdition(kitDir) || "" }),
       accountEmail: from.email, accountId: from.id,
       // The computer's id, the one the dashboard knows it by and hides the
       // owner's own computers by (EXCLUDED_DEVICES).

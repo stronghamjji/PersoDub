@@ -228,6 +228,8 @@ export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
     env: {
       platformKey: oneOf(env.platformKey, PLATFORM_KEYS, "unknown"),
       os: str(env.os, 60),
+      // One line a person can read (desktop/src/report.js describeDevice); a table cell, so no | or line break.
+      device: str(env.device, 200).replace(/[|\r\n]/g, " "),
       arch: str(env.arch, 20),
       cpu: str(env.cpu, 80),
       cores: Number.isInteger(env.cores) ? env.cores : 0,
@@ -476,6 +478,7 @@ export function issueBody(report, { logsRef = "" } = {}) {
   const e = report.env;
   const packs = Object.entries(report.packs);
   const rows = [
+    ...(e.device ? [["Device", e.device]] : []),
     ["OS", `${e.os || "?"} (${e.arch || "?"})`],
     ["CPU", `${e.cpu || "?"} · ${e.cores || "?"} cores`],
     ["RAM", e.ramGb == null ? "?" : `${e.ramGb} GB`],
