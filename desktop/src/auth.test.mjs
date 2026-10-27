@@ -313,11 +313,12 @@ test("without the system's encryption nothing is written, and a file that does n
 test("a sign-in takes a port, opens the sign-in window with that port's address, takes the request back, and saves the account's key", async () => {
   const { auth, opened, calls, kitDir, userData, closed } = makeAuth();
   await auth.start();
-  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false, where: "" });
   const done = auth.login();
   await settle();
   assert.equal(opened.length, 1);
   assert.equal((await auth.status()).waiting, true);
+  assert.equal((await auth.status()).where, "window");
   const url = new URL(opened[0]);
   assert.equal(url.searchParams.get("redirect_uri"), REDIRECT_URI);
   assert.equal(await auth.handleCallback(back(opened)), "signed_in");
@@ -331,7 +332,7 @@ test("a sign-in takes a port, opens the sign-in window with that port's address,
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "pk_test_K1");
   assert.equal(kitValues(kitDir).GEMINI_API_KEY, "g-keep");
   // The account in full on screen (owner, 2026-10-27).
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "someone@test.local", accountId: "u1", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "someone@test.local", accountId: "u1", hasKey: true, waiting: false, where: "" });
   assert.ok(existsSync(join(userData, AUTH_FILE)));
   assert.deepEqual(closed, [52390], "the port was not given back when the sign-in ended");
 });
@@ -475,7 +476,7 @@ test("a sign-in window that cannot load Perso's page ends the sign-in as network
   assert.equal((await auth.status()).waiting, false);
 });
 
-test("the sign-in window goes only to Perso, the sign-in providers Perso offers and this sign-in's own way back; another https page opens in the browser", async () => {
+test("the sign-in window keeps Perso's pages and this sign-in's way back, hands Google and Microsoft to the browser, opens another https page there, and denies the rest", async () => {
   const { auth, windows } = makeAuth();
   await auth.start();
   const done = auth.login();
@@ -484,19 +485,61 @@ test("the sign-in window goes only to Perso, the sign-in providers Perso offers 
   for (const url of [
     "https://perso.ai/en/login?continue=x", "https://api.perso.ai/auth/api/v2/authorize?client_id=x", "https://developers.perso.ai/api-keys",
     "https://fake.test/somewhere", // where the authorize address is: the fake Perso in the flow tests
-    // Perso's sign-in page offers Google and Microsoft beside the e-mail (perso.ai/login, 2026-10-27).
-    "https://accounts.google.com/o/oauth2/v2/auth?x", "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", "https://login.live.com/oauth20_authorize.srf",
+    "https://perso.ai/auth/oauth2/authorization/google", // Perso's site, not its sign-in server
     "http://127.0.0.1:52390/callback?code=c&state=s",
   ]) assert.equal(go(url), "allow", url);
-  for (const url of ["https://example.com/terms", "https://perso.ai.evil.test/login", "https://evilperso.ai/", "https://perso.ai@evil.test/", "https://accounts.google.com.evil.test/"]) {
+  // Perso's Google and Microsoft buttons start at its sign-in server (perso.ai/login,
+  // 2026-10-27); Google refuses a sign-in inside an app's window. The providers'
+  // own pages are handed over too, should one be reached another way.
+  for (const url of [
+    "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=https%3A%2F%2Fperso.ai%2Fx&callbackUrl=y",
+    "https://api.perso.ai/auth/oauth2/authorization/azure?redirect_uri=x",
+    "https://fake.test/auth/oauth2/authorization/google?callbackUrl=y",
+    "https://accounts.google.com/o/oauth2/v2/auth?x", "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", "https://login.live.com/oauth20_authorize.srf",
+  ]) assert.equal(go(url), "hand-off", url);
+  for (const url of ["https://example.com/terms", "https://perso.ai.evil.test/login", "https://evilperso.ai/", "https://perso.ai@evil.test/", "https://accounts.google.com.evil.test/",
+    "https://api.perso.ai.evil.test/auth/oauth2/authorization/google"]) {
     assert.equal(go(url), "browser", url);
   }
-  for (const url of ["http://perso.ai/login", "http://127.0.0.1:52391/callback", "http://localhost:52390/callback", "http://127.0.0.1:5001/",
+  for (const url of ["http://perso.ai/login", "http://api.perso.ai/auth/oauth2/authorization/google", "http://accounts.google.com/o/oauth2/v2/auth",
+    "http://127.0.0.1:52391/callback", "http://localhost:52390/callback", "http://127.0.0.1:5001/",
     "file:///etc/hosts", "javascript:alert(1)", "data:text/html,x", "persodub://signed-in", "about:blank", "not an address"]) {
     assert.equal(go(url), "deny", url);
   }
   await auth.cancelLogin();
   await done;
+});
+
+test("handed to the browser, the sign-in keeps waiting there: its window closing is no cancel, Open again opens the browser again, and the way back signs in", async () => {
+  const { auth, opened, windows, closed, logs } = makeAuth();
+  await auth.start();
+  const done = auth.login();
+  await settle();
+  const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x&callbackUrl=y";
+  // What the window does at a hand-off (signInWindow.js): the browser opened, then it closes.
+  windows[0].onHandOff(google);
+  windows[0].onClosed();
+  assert.equal((await auth.status()).where, "browser");
+  assert.equal((await auth.status()).waiting, true);
+  assert.deepEqual(closed, [], "the port was given back while the browser was still on its way");
+  assert.ok(logs.includes("AUTH the sign-in goes on in the computer's browser at api.perso.ai/auth/oauth2/authorization/google"), logs.join("\n"));
+  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
+  assert.equal(windows[0].shown, 1);
+  assert.equal(await auth.handleCallback(back(opened)), "signed_in");
+  assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
+  assert.equal((await auth.status()).where, "");
+  windows[0].onHandOff(google); // late: changes nothing
+  assert.equal((await auth.status()).where, "");
+
+  // Cancel still ends one handed to the browser, and gives its port back.
+  const next = auth.login();
+  await settle();
+  windows[1].onHandOff(google);
+  windows[1].onClosed();
+  assert.deepEqual(await auth.cancelLogin(), { outcome: "cancelled" });
+  assert.deepEqual(await next, { outcome: "cancelled" });
+  assert.equal(closed.length, 2);
+  assert.equal((await auth.status()).where, "");
 });
 
 test("a sign-in nobody finishes times out, and its window closes", async () => {
@@ -654,7 +697,7 @@ async function signedInStore(routes, accessToken, more = {}) {
 test("the next launch is signed in at once, with no request to Perso", async () => {
   const { auth, calls } = await signedInStore(persoRoutes(), later());
   await auth.start();
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false, where: "" });
   assert.equal(calls.length, 0);
 });
 
@@ -768,7 +811,7 @@ test("no network or no answer while trading the code says network, not a refusal
     await settle();
     await auth.handleCallback(back(opened, "c"));
     assert.deepEqual(await done, { outcome: "failed", error: "network" });
-    assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
+    assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false, where: "" });
   }
 });
 
@@ -782,7 +825,7 @@ test("signing out tells Perso, deletes the tokens and clears the key and workspa
   assert.deepEqual([kitValues(kitDir).PERSO_API_KEY, kitValues(kitDir).PERSO_SPACE_SEQ], ["", ""]);
   const signOut = calls.find((c) => c.key === `POST ${CFG.signOutUrl}`);
   assert.match(signOut.auth, /^Bearer h\./);
-  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false, where: "" });
 });
 
 // kit.env.bak is the file as it was before each write: the sign-out's own
@@ -927,7 +970,7 @@ test("switched off (the open-source edition) nothing happens: no window, no file
     listen: async () => { touched.push("port"); } });
   await auth.start();
   assert.equal(auth.enabled, false);
-  assert.deepEqual(await auth.status(), { enabled: false, required: false, signedIn: false, account: "", accountId: "", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: false, required: false, signedIn: false, account: "", accountId: "", hasKey: true, waiting: false, where: "" });
   for (const answer of [await auth.login(), await auth.cancelLogin(), await auth.showLogin(), await auth.logout(), await auth.connectKey()]) {
     assert.deepEqual(answer, { outcome: "disabled" });
   }
@@ -957,17 +1000,18 @@ test("`enabled` as a function is asked at every request, so a kit found after th
   assert.equal((await auth.status()).enabled, false);
   assert.equal((await auth.status()).signedIn, false, "the token file was read while switched off");
   on = true;
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "so***@test.local", accountId: "u1", hasKey: true, waiting: false, where: "" });
 });
 
 test("the way-back page: the app's name, the logo, one language picked from the window's, nothing to press", async () => {
   const en = callbackPage({ ok: true, lang: "en", appName: "PersoDubbing", logo: "data:image/png;base64,AAAA" });
-  assert.ok(en.includes("Signed in to PersoDubbing</span></h1>") && en.includes("This window closes by itself. Go back to PersoDubbing.") && en.includes('src="data:image/png;base64,AAAA"'));
-  assert.ok(!/\btab\b/.test(en), "the page still speaks of a browser tab");
+  assert.ok(en.includes("Signed in to PersoDubbing</span></h1>") && en.includes("Close this tab and go back to PersoDubbing.") && en.includes('src="data:image/png;base64,AAAA"'));
+  // Only a browser shows it: the app's own window is closed before the page comes (auth.js finish).
+  assert.ok(!/window/.test(en), "the page speaks of a window");
   assert.ok(!/<(button|a|input|form)\b/.test(en), "nothing to press on the page");
   const ko = callbackPage({ ok: false, lang: "ko", appName: "PersoDubbing", logo: "" });
   assert.ok(ko.includes("로그인이 끝나지 않았어요") && ko.includes("PersoDubbing에서 다시 해 봐요.") && !ko.includes("<img"));
-  assert.ok(callbackPage({ ok: true, lang: "ko", appName: "PersoDubbing", logo: "" }).includes("이 창은 저절로 닫혀요. PersoDubbing으로 돌아가면 돼요."));
+  assert.ok(callbackPage({ ok: true, lang: "ko", appName: "PersoDubbing", logo: "" }).includes("이 탭을 닫고 PersoDubbing으로 돌아가면 돼요."));
   assert.ok(callbackPage({ ok: true, lang: "en", appName: "<b>x</b>", logo: "" }).includes("&#60;b&#62;x&#60;/b&#62;"), "the name is escaped");
 
   // Over HTTP: the browser's Accept-Language picks the language.
@@ -1016,9 +1060,9 @@ function fakeWindows() {
   return { made, external, parent, make };
 }
 const openOne = (f, { navigation = () => "allow" } = {}) => {
-  const seen = { closed: 0, failed: 0 };
+  const seen = { closed: 0, failed: 0, handedOff: [] };
   const handle = f.make({ url: "https://api.perso.ai/auth/api/v2/authorize?x=1", navigation,
-    onClosed: () => { seen.closed++; }, onFailed: () => { seen.failed++; } });
+    onClosed: () => { seen.closed++; }, onFailed: () => { seen.failed++; }, onHandOff: (to) => { seen.handedOff.push(to); } });
   return { handle, seen, win: f.made.at(-1) };
 };
 
@@ -1053,6 +1097,30 @@ test("the sign-in window goes only where navigation lets it: the browser gets wh
   assert.deepEqual(win.openHandler({ url: "https://perso.ai/terms" }), { action: "deny" });
   assert.deepEqual(win.openHandler({ url: "file:///etc/hosts" }), { action: "deny" });
   assert.deepEqual(f.external.slice(2), ["https://perso.ai/terms"]);
+});
+
+test("a hand-off: the window does not go, the browser opens that exact address, the window closes after the event, and Open again opens the browser again", async () => {
+  const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x&callbackUrl=y";
+  for (const name of ["wc:will-navigate", "wc:will-redirect"]) {
+    const f = fakeWindows();
+    const { win, seen, handle } = openOne(f, { navigation: (url) => (url === google ? "hand-off" : "allow") });
+    assert.equal(win.fire(name, google).prevented, true, name);
+    assert.deepEqual(f.external, [google], name);
+    assert.deepEqual(seen.handedOff, [google], name);
+    // Not inside the navigation's own event, which Electron is still handling.
+    assert.equal(win.destroyed, false, name);
+    // A second press before it closes opens no second tab.
+    assert.equal(win.fire(name, google).prevented, true, name);
+    await settle();
+    assert.equal(win.destroyed, true, name);
+    assert.equal(seen.closed, 1, name);
+    assert.deepEqual(f.external, [google], name);
+    handle.show();
+    assert.deepEqual(f.external, [google, google], name);
+    assert.deepEqual(win.did, [], name);
+    handle.close();
+    assert.equal(seen.closed, 1, name);
+  }
 });
 
 test("Esc, the window's close button or the shell closing it: onClosed once, and a page asking to stay cannot keep it open", () => {

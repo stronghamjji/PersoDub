@@ -9,6 +9,9 @@
 //   GET  /auth/api/v2/authorize   no browser session -> /login?continue=...
 //                                 with one -> 302 <registered redirect_uri>?code&state
 //   GET  /login, POST /login      the sign-in form; sets the browser's session cookie
+//   GET  /auth/oauth2/authorization/<provider>?callbackUrl=...
+//                                 the form's Google button, as Perso's: the browser comes back
+//                                 signed in as b@test.local and goes on to callbackUrl
 //   GET  /logout                  signs the browser out
 //   POST /auth/api/v2/token       JSON: authorization_code (PKCE S256, one-use code); refresh_token -> 500,
 //                                 as the real one. A form (RFC 6749): refresh_token, answered
@@ -121,7 +124,15 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
         stats.loginForm++;
         return html(res, 200, `<!doctype html><title>Fake Perso sign-in</title><form method="post" action="/login">
 <input type="hidden" name="continue" value="${esc(q.get("continue") || "/")}">
-<input name="email" placeholder="email"><input name="password" type="password"><button>Sign in</button></form>`);
+<input name="email" placeholder="email"><input name="password" type="password"><button>Sign in</button></form>
+<a href="/auth/oauth2/authorization/google?callbackUrl=${encodeURIComponent(q.get("continue") || "/")}">Google</a>`);
+      }
+      if (req.method === "GET" && url.pathname.startsWith("/auth/oauth2/authorization/")) {
+        const sid = rand();
+        browserSessions.set(sid, "b@test.local");
+        const next = q.get("callbackUrl") || "/";
+        res.writeHead(302, { Location: next.startsWith("/") ? next : "/", "Set-Cookie": `fake_session=${sid}; Path=/; HttpOnly` });
+        return res.end();
       }
       if (route === "POST /login") {
         const form = new URLSearchParams(await readBody(req));

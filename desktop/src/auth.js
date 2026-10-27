@@ -8,7 +8,9 @@ import { startCallbackServer } from "./authLoopback.js";
 // with cookies of its own (signInWindow.js), opens Perso's sign-in page (OAuth
 // 2 authorization code with PKCE, RFC 7636), Perso sends that window back to
 // http://127.0.0.1:<port>/callback, where this app listens for that one
-// request (authLoopback.js), and the app trades the code for tokens. The
+// request (authLoopback.js), and the app trades the code for tokens. Google
+// and Microsoft go on in the computer's browser instead (signInNavigation
+// below), which comes back to the same address. The
 // password stays in Perso's page; the app never reads it. Once signed in, the
 // account's active Perso API key is written into kit.env as PERSO_API_KEY, the
 // line the backend reads (app/settings_env.py current_value).
@@ -90,21 +92,31 @@ export function authorizeUrl(cfg, { challenge, state, redirectUri }) {
 }
 
 // Perso's sign-in page offers Google and Microsoft beside the e-mail
-// (perso.ai/login, 2026-10-27): their pages are part of signing in.
+// (perso.ai/login, 2026-10-27), and its buttons go to its sign-in server at
+// /auth/oauth2/authorization/google or /azure. Google refuses a sign-in in a
+// window of an app's own ("400 malformed" after the e-mail), so both go on in
+// the computer's browser from that address; the providers' own pages are
+// handed over the same way, should one be reached some other way.
+const SOCIAL_START = "/auth/oauth2/authorization/";
 const SIGN_IN_PROVIDERS = ["accounts.google.com", "login.microsoftonline.com", "login.live.com"];
 
 /** Where the sign-in window may go: "allow" for Perso's pages over https
- * (perso.ai and its subdomains), the providers above, wherever the authorize
- * address is (the fake Perso in the tests) and exactly this sign-in's way
- * back; "browser" for any other https page, opened in the computer's browser
- * instead; "deny" for the rest. Hosts are compared parsed, never as text. */
+ * (perso.ai and its subdomains), wherever the authorize address is (the fake
+ * Perso in the tests) and exactly this sign-in's way back; "hand-off" for
+ * Google and Microsoft, where the sign-in goes on in the computer's browser;
+ * "browser" for any other https page, opened in the computer's browser while
+ * the window stays; "deny" for the rest. Hosts are compared parsed, never as text. */
 function signInNavigation(url, { authorizeUrl: start, redirectUri }) {
   let u;
   try { u = new URL(url); } catch { return "deny"; }
-  if (u.origin === new URL(redirectUri).origin || u.origin === new URL(start).origin) return "allow";
+  if (u.origin === new URL(redirectUri).origin) return "allow";
+  const persoServer = u.origin === "https://api.perso.ai" || u.origin === new URL(start).origin;
+  if (persoServer && u.pathname.startsWith(SOCIAL_START)) return "hand-off";
+  if (u.origin === new URL(start).origin) return "allow";
   if (u.protocol !== "https:") return "deny";
   const host = u.hostname;
-  return host === "perso.ai" || host.endsWith(".perso.ai") || SIGN_IN_PROVIDERS.includes(host) ? "allow" : "browser";
+  if (SIGN_IN_PROVIDERS.includes(host)) return "hand-off";
+  return host === "perso.ai" || host.endsWith(".perso.ai") ? "allow" : "browser";
 }
 
 /** {code, state} or {error, state} from the request's query, or null when it
@@ -265,8 +277,8 @@ export function tokenStore(file, safeStorage) {
  * read at every request.
  * Every request answers with an object the page can read; `outcome` is one of:
  *   signed_in   the sign-in window came back and the tokens are kept
- *   cancelled   cancelLogin, the sign-in window closed, or a newer login
- *               replaced this one
+ *   cancelled   cancelLogin, the sign-in window closed (other than by its
+ *               hand-off to the browser), or a newer login replaced this one
  *   failed      with `error`: timeout, window (it did not open), port (no
  *               free port to listen on), denied (Perso's error), token
  *               (Perso refused the code), network (no answer, too slow, or
@@ -274,7 +286,8 @@ export function tokenStore(file, safeStorage) {
  *   busy        login, cancelLogin or showLogin while the window's code is
  *               being traded: nothing is started or stopped, and that
  *               sign-in answers on its own in a moment
- *   shown       showLogin: the waiting sign-in's window is brought forward
+ *   shown       showLogin: the waiting sign-in's window is brought forward,
+ *               or, handed to the browser, the browser opened there again
  *   idle        cancelLogin or showLogin with no sign-in waiting
  *   signed_out  logout
  *   disabled    not enabled
@@ -310,6 +323,7 @@ export function createAuth({
   function status() {
     const on = isOn();
     const dir = kit();
+    const open = pending || trading;
     return {
       enabled: on,
       // Not usable signed out: the page shows its sign-in screen while true.
@@ -324,7 +338,11 @@ export function createAuth({
       hasKey: dir ? (envWithKit(dir).PERSO_API_KEY || "").trim() !== "" : false,
       // Still waiting while the code is traded: the screen stays on "finish
       // in the sign-in window" instead of offering Sign in again for those seconds.
-      waiting: Boolean(pending || trading),
+      waiting: Boolean(open),
+      // Where the waiting sign-in goes on: "window", the app's sign-in window,
+      // or "browser", the computer's, once Google or Microsoft took it there;
+      // "" with none waiting.
+      where: open ? open.where : "",
     };
   }
 
@@ -459,7 +477,7 @@ export function createAuth({
     }
     const redirectUri = redirectUriFor(cfg, server.port);
     return new Promise((resolve) => {
-      const waiting = { ...pkce, redirectUri, server, resolve };
+      const waiting = { ...pkce, redirectUri, server, resolve, where: "window" };
       waiting.timer = setTimeout(() => finish(waiting, { outcome: "failed", error: "timeout" }), loginTimeoutMs);
       waiting.timer.unref?.();
       pending = waiting;
@@ -469,9 +487,20 @@ export function createAuth({
         waiting.window = makeSignInWindow({
           url: authorizeUrl(cfg, { challenge: pkce.challenge, state: pkce.state, redirectUri }),
           navigation: (url) => signInNavigation(url, { authorizeUrl: cfg.authorizeUrl, redirectUri }),
-          // Closed by the user, its close button or Esc: as Cancel.
-          onClosed: () => {
+          // Google or Microsoft: the window has opened the computer's browser
+          // at that address and closes. The sign-in waits on, for the same
+          // way back, the port and the ten minutes as before.
+          onHandOff: (to) => {
             if (pending !== waiting) return;
+            waiting.where = "browser";
+            const u = new URL(to);
+            log(`AUTH the sign-in goes on in the computer's browser at ${u.host}${u.pathname}`);
+            onChange();
+          },
+          // Closed by the user, its close button or Esc: as Cancel. Closed
+          // by the hand-off above, it is not.
+          onClosed: () => {
+            if (pending !== waiting || waiting.where === "browser") return;
             log("AUTH sign-in window closed: cancelled");
             finish(waiting, { outcome: "cancelled" });
           },
@@ -488,7 +517,9 @@ export function createAuth({
     });
   }
 
-  /** Open again: the waiting sign-in's window brought forward. */
+  /** Open again: the waiting sign-in's window brought forward, or, handed
+   * to the browser, the browser opened at the same address again
+   * (signInWindow.js). */
   function showLogin() {
     if (!isOn()) return DISABLED;
     if (trading) return { outcome: "busy" };

@@ -1,24 +1,27 @@
 import { createServer } from "node:http";
 import { localeLanguage } from "./i18n.js";
 
-// The door the sign-in window comes back through after a Perso sign-in: a
+// The door the sign-in window, or for Google and Microsoft the computer's
+// browser, comes back through after a Perso sign-in: a
 // one-shot HTTP listener on this computer only, at http://127.0.0.1:<port>/callback.
 // Nothing outside this computer can reach 127.0.0.1, the sign-in's state
 // value ties the one request this accepts to the sign-in that opened it, and
 // the listener closes as soon as that sign-in ends (desktop/src/auth.js).
 //
-// What the window shows afterwards, for the moment before the app closes it,
-// is one quiet page: the logo, a headline saying it is done, one line saying
-// what comes next, in the window's language (Korean or English).
+// What comes back afterwards is one quiet page: the logo, a headline saying
+// it is done, one line saying what comes next, in the page's language (Korean
+// or English). Only a browser shows it: the app's own sign-in window is
+// closed before the answer goes (auth.js finish), and Google and Microsoft
+// come back through the computer's browser, whose tab stays.
 
 const WORDS = {
   en: {
-    done: (app) => [`Signed in to ${app}`, `This window closes by itself. Go back to ${app}.`],
+    done: (app) => [`Signed in to ${app}`, `Close this tab and go back to ${app}.`],
     notDone: (app) => ["The sign-in did not finish", `Try again in ${app}.`],
     closing: "You can close this tab.",
   },
   ko: {
-    done: (app) => [`${app}에 로그인했어요`, `이 창은 저절로 닫혀요. ${app}으로 돌아가면 돼요.`],
+    done: (app) => [`${app}에 로그인했어요`, `이 탭을 닫고 ${app}으로 돌아가면 돼요.`],
     notDone: (app) => ["로그인이 끝나지 않았어요", `${app}에서 다시 해 봐요.`],
     closing: "이 탭을 닫아도 돼요.",
   },

@@ -33,7 +33,10 @@ const paramsOf = (u) => { const q = new URL(u).searchParams; return { code: q.ge
 
 // A window with its own cookies, as the app's sign-in window
 // (src/signInWindow.js). `typing` is the account a person would type into
-// Perso's form; null means nobody does (the test fails if a form shows). It
+// Perso's form; null means nobody does (the test fails if a form shows).
+// `press` is the button pressed on that form in place of typing ("google"),
+// whose address the sign-in hands to the computer's browser: open answers
+// {handOff: <that address>} there, as the real window stops there. It
 // follows every redirect until it lands on the app's own port and asks that
 // page, as the real window does; `pages` keeps what each one said. With
 // `hold` it stops short of that last request and returns its address instead.
@@ -41,12 +44,14 @@ const paramsOf = (u) => { const q = new URL(u).searchParams; return { code: q.ge
 // real window would go to.
 function scriptedBrowser() {
   let cookie = "";
-  const b = { typing: null, forms: 0, pages: [] };
+  const b = { typing: null, press: null, forms: 0, pages: [] };
   const remember = (res) => { const c = res.headers.get("set-cookie"); if (c) cookie = c.split(";")[0]; };
   b.open = async (start, { hold = false, navigation } = {}) => {
     let url = start;
     for (let hop = 0; hop < 10; hop++) {
-      if (navigation && navigation(url) !== "allow") throw new Error(`the sign-in window would not go to ${url}`);
+      const where = navigation ? navigation(url) : "allow";
+      if (where === "hand-off") return { handOff: url };
+      if (where !== "allow") throw new Error(`the sign-in window would not go to ${url}`);
       if (isCallback(url)) {
         if (hold) return url;
         const res = await fetch(url);
@@ -58,6 +63,7 @@ function scriptedBrowser() {
       if (res.status === 302) { url = new URL(res.headers.get("location"), url).href; continue; }
       const page = await res.text();
       if (res.status !== 200 || !page.includes('action="/login"')) throw new Error(`the browser stopped on HTTP ${res.status}`);
+      if (b.press) { url = new URL(new RegExp(`href="([^"]*/oauth2/authorization/${b.press}\\?[^"]*)"`).exec(page)[1], url).href; continue; }
       if (!b.typing) throw new Error("Perso showed its sign-in form and nobody was there to type");
       b.forms++;
       const post = await fetch(new URL("/login", url), {
@@ -79,30 +85,40 @@ function scriptedBrowser() {
 // made. `hold` keeps its last address in `held` for the test to deliver
 // itself; a window that could not reach Perso puts its error in
 // `browserErrors` and says so as the real one does (onFailed). `windows`
-// keeps whether each was closed.
+// keeps whether each was closed. A hand-off goes as the real window does it:
+// the address to the computer's browser (`handedOff`, for the test to open),
+// onHandOff, then the window closes.
 function scriptedWindows(browser, { hold = false } = {}) {
   const held = [];
   const browserErrors = [];
+  const handedOff = [];
   const windows = [];
-  const make = ({ url, navigation, onClosed, onFailed }) => {
+  const make = ({ url, navigation, onClosed, onFailed, onHandOff }) => {
     const win = { closed: false, onClosed };
     windows.push(win);
     setImmediate(async () => {
       try {
         const end = await browser.open(url, { hold, navigation });
+        if (end.handOff) {
+          handedOff.push(end.handOff);
+          onHandOff(end.handOff);
+          win.closed = true;
+          onClosed();
+          return;
+        }
         if (hold) held.push(end);
       } catch (err) { browserErrors.push(err); onFailed(); }
     });
     return { show() {}, close() { win.closed = true; } };
   };
-  return { held, browserErrors, windows, make };
+  return { held, browserErrors, handedOff, windows, make };
 }
 
 // The app as main.js wires it, with scriptedWindows for its sign-in window.
 function theApp({ userData = mkdtempSync(join(tmpdir(), "odflow-user-")), kitDir, browser, hold = false,
                   fetchFn = fetch, safe = fakeSafeStorage(), authBase = fake.authBase }) {
   const logs = [];
-  const { held, browserErrors, windows, make } = scriptedWindows(browser, { hold });
+  const { held, browserErrors, handedOff, windows, make } = scriptedWindows(browser, { hold });
   const auth = createAuth({
     enabled: true,
     cfg: cfgFor(authBase),
@@ -113,7 +129,7 @@ function theApp({ userData = mkdtempSync(join(tmpdir(), "odflow-user-")), kitDir
     kitDir: () => kitDir,
     log: (line) => logs.push(line),
   });
-  return { auth, logs, userData, held, browserErrors, windows };
+  return { auth, logs, userData, held, browserErrors, handedOff, windows };
 }
 const until = async (check) => { for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 10)); };
 const fileOf = (userData) => join(userData, AUTH_FILE);
@@ -124,6 +140,29 @@ function freshKit() {
   writeFileSync(join(dir, "kit.env"), "GEMINI_API_KEY=g-keep\nPERSO_API_KEY=\nPERSO_SPACE_SEQ=\n");
   return dir;
 }
+
+test("Google pressed in the sign-in window goes on in the computer's browser: the window closes, the status says browser, and the browser's way back signs in", async () => {
+  const kitDir = freshKit();
+  const signInWin = scriptedBrowser();
+  signInWin.press = "google";
+  const { auth, handedOff, windows } = theApp({ kitDir, browser: signInWin });
+  await auth.start();
+  const done = auth.login();
+  await until(() => handedOff.length);
+  assert.equal(new URL(handedOff[0]).pathname, "/auth/oauth2/authorization/google");
+  assert.equal(windows[0].closed, true);
+  assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: true, where: "browser" });
+  // The computer's browser, with cookies of its own: from that address, through
+  // the fake Google, back to the app's port.
+  const browser = scriptedBrowser();
+  await browser.open(handedOff[0]);
+  assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
+  assert.equal(signInWin.forms + browser.forms, 0, "a password was typed");
+  assert.deepEqual(browser.pages, ["done"]);
+  assert.equal((await auth.status()).account, "b@test.local");
+  assert.equal((await auth.status()).where, "");
+  assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["b@test.local"].keys[0].apiKey);
+});
 
 test("A signs in and out, and the next sign-in asks for the account again: A again, then B, then C with no key", async () => {
   const kitDir = freshKit();
@@ -141,7 +180,7 @@ test("A signs in and out, and the next sign-in asks for the account again: A aga
   assert.deepEqual(browser.pages, ["done"]);
   assert.equal(windows[0].closed, true);
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["a@test.local"].keys[0].apiKey);
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "a@test.local", accountId: "1001", hasKey: true, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "a@test.local", accountId: "1001", hasKey: true, waiting: false, where: "" });
   // The full address stays in the shell, for Customer support's inquiry (reporting.js accountForInquiry).
   assert.deepEqual(auth.signedInAccount(), { email: "a@test.local", id: "1001" });
   // The port is closed again: the listener lives only while a sign-in waits.
@@ -178,7 +217,7 @@ test("A signs in and out, and the next sign-in asks for the account again: A aga
   browser.typing = "c@test.local";
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "no_key" });
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "", "B's key stayed for C");
-  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "c@test.local", accountId: "1003", hasKey: false, waiting: false });
+  assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "c@test.local", accountId: "1003", hasKey: false, waiting: false, where: "" });
 
   // Nothing secret in the log.
   const all = logs.join("\n");
@@ -223,7 +262,7 @@ test("after Perso forgets the refresh token, the next launch is signed out and t
     fake.forgetRefreshTokens();
     const second = theApp({ kitDir, browser, userData: first.userData });
     await second.auth.start();
-    assert.deepEqual(await second.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
+    assert.deepEqual(await second.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false, where: "" });
     assert.equal(kitValues(kitDir).PERSO_API_KEY, "");
   } finally { fake.setAccessTtl(3600); }
 });
@@ -397,7 +436,7 @@ test("a token file that is broken or from another computer reads as signed out, 
     writeFileSync(fileOf(userData), content);
     const app = theApp({ kitDir: freshKit(), browser: scriptedBrowser(), userData });
     await app.auth.start();
-    assert.deepEqual(await app.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
+    assert.deepEqual(await app.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false, where: "" });
   }
 });
 
@@ -522,7 +561,7 @@ test("no network, or a Perso slower than the app waits, at the code exchange: fa
     for (const how of [{ drop: ["token"] }, { delayMs: 400 }]) {
       fake.misbehave(how);
       assert.deepEqual(await app.auth.login(), { outcome: "failed", error: "network" }, JSON.stringify(how));
-      assert.deepEqual(await app.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false });
+      assert.deepEqual(await app.auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: false, where: "" });
       assert.equal(existsSync(fileOf(app.userData)), false);
     }
   } finally { fake.misbehave({}); }

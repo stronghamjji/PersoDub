@@ -105,14 +105,16 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // no e-mail (nothing sent), and null when it could not be sent at all.
   sendInquiry: (form) => ipcRenderer.invoke("shell:send-inquiry", form),
   // Perso sign-in in a window of the app's (src/auth.js), the production edition's.
-  // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting}:
+  // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting, where}:
   // `required` is the production edition signed out, when the page shows its
   // sign-in screen; `account` is the account's full e-mail (its name without
   // one), shown on Home and in Settings, and `accountId` Perso's number
-  // for the account; the events key it by a hash of it (src/events.js eventsUserId). authLogin opens the sign-in window
+  // for the account; the events key it by a hash of it (src/events.js eventsUserId). `where` is where a
+  // waiting sign-in goes on: "window", or "browser" once Google or Microsoft
+  // took it to the computer's browser ("" with none waiting). authLogin opens the sign-in window
   // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
   // (outcomes and key answers are listed at createAuth); authShow brings that
-  // window forward again. authCheckKey looks for
+  // window forward again, or opens the browser there again. authCheckKey looks for
   // the account's API key again, after authOpenKeyPage let the user make one.
   // onAuthState hears the status whenever it changes. In the open-source
   // edition every answer is {outcome: "disabled"} and authStatus's enabled is false.
