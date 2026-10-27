@@ -4,8 +4,9 @@
 //
 // A batch is one computer's, and every event in it is a name and a screen the
 // app made from its own markup -- an element's id, never what a person typed
-// or opened -- so the relay checks each against the shape the app writes and
-// drops one that does not fit, rather than passing on whatever arrived.
+// or opened -- or one of the app's steps (STEPS) with its few properties, so
+// the relay checks each against the shape the app writes and drops one that
+// does not fit, rather than passing on whatever arrived.
 //
 // Web APIs only, like report-logic.js: the same code runs inside a Worker.
 
@@ -14,9 +15,75 @@ export const MAX_EVENTS = 500;
 export const OSES = ["mac", "windows", "linux"];
 export const EDITIONS = ["opensource", "production"];
 // The page's own word for "the screen changed" (ui/src/events.mjs); every
-// other name is a button, link, tab or menu item that was pressed.
+// other name is a button, link, tab or menu item that was pressed, unless it
+// is one of the steps below.
 export const SCREEN_EVENT = "app_screen";
 export const PRESS_EVENT = "button_press";
+
+// The steps of a person's way through the app (0.9.1): the launch, the
+// sign-in, a video brought in, a dubbing and its stages, the tools, credits
+// and keys, support, updates and the quit. Each arrives with `props` and goes
+// to GA4 and Amplitude under its own name, with exactly the properties listed
+// here: true or false (B), a whole number (N), a screen's name (S), a version
+// (V), a two-letter language (L), or one word of a list. Anything else in
+// `props` is dropped, so a title, a file name, a link or an address has no
+// way through.
+const B = "bool", N = "count", S = "screen", V = "version", L = "lang";
+const METHODS = ["window", "browser"];
+const MODES = ["local", "perso"];
+const OUTCOMES = ["done", "failed", "cancelled"];
+// A dubbing's stages by the engine's own names (app/stages.py), and a Perso
+// API dubbing's three (app/perso_client.py).
+const STAGES = ["separate", "transcribe", "translate", "synthesize", "check", "build",
+  "upload", "perso-dubbing", "download"];
+// The one word for why a job or an install stopped: desktop/src/analytics.js
+// ERROR_CODES, word for word (desktop/src/events.test.mjs keeps them together).
+export const REASONS = ["path-too-long", "disk-full", "network", "permission", "engine-start",
+  "out-of-memory", "timeout", "unsupported-format", "engine-crash", "step-failed", "cloud-refused",
+  "perso-busy", "perso-credits", "perso-key", "perso-failed", "perso-length", "perso-plan",
+  "gemini-busy", "gemini-quota", "model-download", "engine-500", "perso-bad-request",
+  "translate-parse", "interrupted", "certificate", "unknown"];
+// The popups ui/src/runningScreen.mjs opens, by the notice that opened them.
+const NOTICES = ["perso_credit_exhausted", "perso_duration_limit", "perso_plan_required",
+  "perso_invalid_key", "perso_unavailable", "gemini_quota_exhausted", "chatgpt_signed_out",
+  "chatgpt_limit", "gemini_unavailable"];
+const TOOLS = ["erase", "burn", "export"];
+export const STEPS = {
+  app_screen: { previous_screen: S, seconds_on_previous: N },
+  app_launch: { first_run: B },
+  app_quit: { last_screen: S, signed_in: B, session_seconds: N },
+  kit_install_started: { mode: ["install", "update"], gigabytes: N },
+  kit_install_finished: { outcome: OUTCOMES, reason: REASONS, seconds: N },
+  error_shown: { code: REASONS, where: ["install", "start"] },
+  sign_in_shown: { face: ["start", "wait", "nokey"] },
+  sign_in_started: { method: METHODS },
+  sign_in_handoff: { provider: ["google", "microsoft", "other"] },
+  sign_in_succeeded: { method: METHODS, new_account: B, has_key: B },
+  sign_in_cancelled: { method: METHODS },
+  sign_in_failed: { method: METHODS, reason: ["timeout", "window", "port", "denied", "token", "network"] },
+  sign_out: { reason: ["user", "refresh_refused"] },
+  key_fetched: { present: B, ok: B },
+  key_page_opened: {},
+  key_saved: { ok: B, kind: ["perso", "gemini"] },
+  media_added: { source: ["file", "link", "drop"], kind: ["video", "audio"] },
+  draft_opened: {},
+  dub_started: { mode: MODES, target_lang: L, minutes: N, video_seconds: N, speakers: N },
+  dub_stage: { stage: STAGES, state: ["start", "done", "failed"], seconds: N, mode: MODES },
+  dub_cancelled: { stage: STAGES, mode: MODES },
+  dub_finished: { outcome: OUTCOMES, stage: STAGES, reason: REASONS, mode: MODES, minutes: N,
+    video_seconds: N, seconds: N },
+  tool_started: { tool: TOOLS, from: ["draft", "dub", "erase", "captions"], files: N },
+  tool_finished: { tool: TOOLS, outcome: OUTCOMES, files: N },
+  credit_popup_shown: { reason: NOTICES },
+  recharge_opened: { from: ["draft", "settings", "popup"] },
+  signup_link_opened: { from: ["settings", "key_window"] },
+  inquiry_sent: { kind: ["problem", "bug", "payment", "other"], queued: B },
+  inquiry_failed: { reason: ["need_reply_to", "failed"] },
+  update_available: { version: V },
+  update_installed: { version: V },
+};
+// A whole number this large is a clock or a bug, not a count of anything.
+const MAX_COUNT = 10_000_000;
 
 // GA4 takes 25 events a request and nothing older than 72 hours.
 const GA4_PER_REQUEST = 25;
@@ -33,6 +100,36 @@ const OS_VERSION = /^[\w. -]{0,32}$/;
 // The signed-in account's id, filled once the production edition signs in;
 // empty until then.
 const USER = /^[\w.-]{0,64}$/;
+const LANG = /^[a-z]{2}$/;
+
+/** One value against its kind in STEPS: the value, or undefined. */
+function propValue(kind, v) {
+  if (Array.isArray(kind)) return kind.includes(v) ? v : undefined;
+  if (kind === B) return typeof v === "boolean" ? v : undefined;
+  if (kind === N) return Number.isInteger(v) && v >= 0 && v <= MAX_COUNT ? v : undefined;
+  if (kind === S) return typeof v === "string" && SCREEN.test(v) ? v : undefined;
+  if (kind === V) return typeof v === "string" && VERSION.test(v) ? v : undefined;
+  return typeof v === "string" && LANG.test(v) ? v : undefined;
+}
+
+/** A step's properties as STEPS lists them: the rest, and a value of the
+ *  wrong kind, left out. */
+export function stepProps(name, props) {
+  const out = {};
+  for (const [key, kind] of Object.entries(STEPS[name])) {
+    const v = propValue(kind, props[key]);
+    if (v !== undefined) out[key] = v;
+  }
+  return out;
+}
+
+// A step is a name in STEPS that came with its props; anything else is a
+// press, or the screen as an app before 0.9.1 sends it.
+const isStep = (e) => Object.hasOwn(STEPS, e.name) && !!e.props && typeof e.props === "object" && !Array.isArray(e.props);
+// The name GA4 and Amplitude chart an event under: a step's own, the screen's,
+// or one name for every press.
+const chartName = (e) => (e.props ? e.name : e.name === SCREEN_EVENT ? SCREEN_EVENT : PRESS_EVENT);
+const isPress = (e) => chartName(e) === PRESS_EVENT;
 
 /**
  * The batch rebuilt field by field, or why it was refused. The envelope must
@@ -55,7 +152,7 @@ export function validateEvents(raw, { now = Date.now() } = {}) {
   const kept = events
     .filter((e) => e && NAME.test(String(e.name)) && SCREEN.test(String(e.screen ?? ""))
       && Number.isInteger(e.t) && e.t > now - MAX_AGE_MS && e.t < now + MAX_AHEAD_MS)
-    .map((e) => ({ name: e.name, screen: e.screen || "", t: e.t }));
+    .map((e) => ({ name: e.name, screen: e.screen || "", t: e.t, ...(isStep(e) ? { props: stepProps(e.name, e.props) } : {}) }));
   return { ok: true, batch: { installId, userId, version, edition, os, osVersion, sessionId, events: kept } };
 }
 
@@ -72,14 +169,17 @@ export const isExcluded = (installId, value) => excludedPrefixes(value).some((p)
  * GA4 Measurement Protocol bodies, 25 events each: the install id is the
  * client, the account the user when there is one. A press is one event name
  * with the button in a parameter, so the property's 500 event names are never
- * spent on buttons. `debug` marks them for DebugView.
+ * spent on buttons; a step goes under its own name with its props as
+ * parameters, true and false as the words (GA4 takes no booleans). `debug`
+ * marks them for DebugView.
  */
 export function toGa4(batch, { now = Date.now(), debug = false } = {}) {
   const events = batch.events.filter((e) => e.t > now - GA4_MAX_AGE_MS).map((e) => ({
-    name: e.name === SCREEN_EVENT ? SCREEN_EVENT : PRESS_EVENT,
+    name: chartName(e),
     timestamp_micros: e.t * 1000,
     params: {
-      ...(e.name === SCREEN_EVENT ? {} : { button: e.name }),
+      ...Object.fromEntries(Object.entries(e.props || {}).map(([k, v]) => [k, typeof v === "boolean" ? String(v) : v])),
+      ...(isPress(e) ? { button: e.name } : {}),
       screen: e.screen,
       app_version: batch.version,
       edition: batch.edition,
@@ -102,10 +202,10 @@ export function toGa4(batch, { now = Date.now(), debug = false } = {}) {
 }
 
 /** Amplitude's HTTP API events, the 2026-10-12 trial's shape (persodub-analytics
- *  src/amplitude.js): the same two event names and the same facts. */
+ *  src/amplitude.js): the same event names and the same facts as GA4's. */
 export function toAmplitude(batch) {
   return batch.events.map((e) => ({
-    event_type: e.name === SCREEN_EVENT ? SCREEN_EVENT : PRESS_EVENT,
+    event_type: chartName(e),
     device_id: batch.installId,
     ...(batch.userId ? { user_id: batch.userId } : {}),
     session_id: batch.sessionId,
@@ -115,7 +215,8 @@ export function toAmplitude(batch) {
     os_version: batch.osVersion,
     app_version: batch.version,
     event_properties: {
-      ...(e.name === SCREEN_EVENT ? {} : { button: e.name }),
+      ...e.props,
+      ...(isPress(e) ? { button: e.name } : {}),
       screen: e.screen,
       edition: batch.edition,
     },
