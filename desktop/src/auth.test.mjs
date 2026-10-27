@@ -514,42 +514,26 @@ test("the sign-in window keeps Perso's pages and this sign-in's way back, hands 
   await done;
 });
 
-// A new account's sign-up through Google ends on Perso's workspace without the way back (2026-10-27).
-test("Open again after a hand-off runs Perso's start for that provider afresh, this sign-in's authorize address as the way back; without Perso's answer, or for a provider it does not know, the first hand-off's address", async () => {
-  const loginUrl = "https://perso.ai/ko/oauth/callback?lang=ko&next=/x";
-  const social = (provider) => `GET ${CFG.authBase}/v1/auth/sign-in/social?provider=${provider}`;
-  let answer = () => [200, { result: { loginUrl } }];
-  const { auth, opened, windows, browser, calls } = makeAuth({ routes: persoRoutes({ [social("google")]: () => answer(), [social("azure")]: () => answer() }) });
+// A new account's sign-up through Google leaves the browser signed in on Perso's workspace (2026-10-27).
+test("Open again after a hand-off opens this sign-in's authorize address in the browser, which a browser signed in by then answers at once", async () => {
+  const { auth, opened, windows, browser, calls } = makeAuth();
   await auth.start();
-  const handedOff = async (to) => {
-    void auth.login();
-    await settle();
-    windows.at(-1).onHandOff(to);
-    assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-    assert.equal(windows.at(-1).shown, 0);
-    return browser.at(-1);
-  };
-  assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/google"),
-    `https://fake.test/auth/oauth2/authorization/google?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
-  assert.equal(calls.find((c) => c.key === social("google")).auth, "", "Perso's start was asked with a token");
-  assert.equal(await handedOff("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x"),
-    `https://fake.test/auth/oauth2/authorization/azure?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
-  for (const bad of [() => [500, { code: "E" }], () => [200, { result: {} }], () => new Error("offline")]) {
-    answer = bad;
-    assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/google"),
-      `https://fake.test/auth/oauth2/authorization/google?callbackUrl=${encodeURIComponent(opened.at(-1))}`);
-  }
+  const done = auth.login();
+  await settle();
+  windows[0].onHandOff("https://fake.test/auth/oauth2/authorization/google");
   const asked = calls.length;
-  assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/apple?x=1"),
-    `https://fake.test/auth/oauth2/authorization/apple?x=1&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
-  assert.equal(calls.length, asked, "Perso was asked for a start it has none of");
+  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
+  assert.deepEqual(browser, [opened[0]]);
+  assert.equal(new URL(browser[0]).pathname, "/auth/api/v2/authorize");
+  assert.equal(windows[0].shown, 0);
+  assert.equal(calls.length, asked, "Perso was asked something before the browser opened");
   await auth.cancelLogin();
+  await done;
 });
 
 test("back in the app, the browser's sign-in runs again by itself only after a hand-off, 20 seconds after the browser last opened, at most twice; Open again always runs it", async () => {
   let clock = Date.now();
-  const social = `GET ${CFG.authBase}/v1/auth/sign-in/social?provider=google`;
-  const { auth, windows, browser } = makeAuth({ now: () => clock, routes: persoRoutes({ [social]: () => [200, { result: { loginUrl: "https://perso.ai/ko/oauth/callback" } }] }) });
+  const { auth, windows, browser } = makeAuth({ now: () => clock });
   await auth.start();
   assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "idle" });
   const done = auth.login();
@@ -604,7 +588,7 @@ test("handed to the browser, the sign-in keeps waiting there: its window closing
   assert.equal(new URL(windows[0].url).pathname, "/auth/api/v2/authorize");
   assert.equal(stateOf(windows[0].url), stateOf(opened[0]));
   assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  assert.deepEqual([windows[0].shown, browser.length], [0, 1]);
+  assert.deepEqual([windows[0].shown, browser], [0, [opened[0]]]);
   assert.equal(await auth.handleCallback(back(opened)), "signed_in");
   assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
   assert.equal((await auth.status()).where, "");

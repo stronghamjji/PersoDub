@@ -1,18 +1,11 @@
 import { openExternally } from "./windowFactory.js";
 
-// The Perso sign-in's own window (src/auth.js login): Perso's sign-in page in
-// a window of the app's, with cookies of its own, apart from the computer's
-// browser and from the app's page. Perso keeps a person signed in by a cookie
-// and cannot be asked for the password again, so a sign-in in the computer's
-// browser went straight through after the app signed out; this window's
-// cookies go at every sign-out instead (clearSignInStorage below). No
-// preload, no Node, sandboxed: the page in it is Perso's, and it reaches
-// nothing of the app. Google and Microsoft, which refuse a window like this,
-// take the whole sign-in to the computer's browser (auth.js signInNavigation).
-//
-// Over the app's window but not modal: the app's Cancel and Open again stay
-// pressable, and the window keeps its own close button on a Mac, where a modal
-// one is a sheet without one.
+// The sign-in is one window on Perso's page. Perso's pages stay in it; Google and Microsoft go to the computer's
+// browser, at Perso's start for them with the return address (handOffUrl).
+// Three rules keep the way back: a Perso sign-in/sign-up page without the return address gets it (wayBackUrl);
+// a window left elsewhere on Perso while signed in goes back to the start address once (landedOnPerso);
+// after a browser hand-off, coming back to the app (or Open again) opens the start address again (auth.js showLogin).
+// Sign-out clears the window's cookies. For an account signed in here, the key page opens in a window of the same partition.
 
 export const SIGN_IN_PARTITION = "persist:perso-sign-in";
 const WIDTH = 520;
@@ -80,10 +73,7 @@ function persoWindow({ BrowserWindow, shell, parent, title, width, height }) {
   return win;
 }
 
-/** createAuth's makeSignInWindow: Perso's sign-in on `url` in a window over `parent()`.
- * navigation(to) answers "allow" (the window goes), "browser" (the computer's browser opens `to`),
- * "hand-off" (the browser opens handOffUrl(to, url) and the window closes) or "deny".
- * show() opens `url` again in the window; after a hand-off it does nothing. */
+// createAuth's makeSignInWindow: navigation(to) answers allow, browser, hand-off (handOffUrl, then it closes) or deny; show() reloads `url`, not after a hand-off.
 export function signInWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
   return ({ url, navigation, onClosed, onFailed, onHandOff }) => {
     const win = persoWindow({ BrowserWindow, shell, parent, title, width: WIDTH, height: HEIGHT });
@@ -146,8 +136,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
   };
 }
 
-/** main.js's openKeyWindow(url): one window over `parent()` on the sign-in's cookies, so Perso's pages
- * in it are the account signed in there. Perso's https pages stay in it; anything else opens in the browser. */
+// main.js's openKeyWindow(url): one window on the sign-in's cookies; Perso's https pages stay in it, the rest go to the browser.
 export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
   let win = null;
   const stay = (e, to) => {
@@ -169,8 +158,7 @@ export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, ti
   };
 }
 
-/** Everything the sign-in window kept, Perso's cookie first, gone: the next
- * sign-in asks for the account again. */
+// Everything the sign-in window kept, Perso's cookie first, gone: the next sign-in asks for the account again.
 export async function clearSignInStorage(session) {
   const kept = session.fromPartition(SIGN_IN_PARTITION);
   await kept.clearStorageData();
