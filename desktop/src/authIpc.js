@@ -50,14 +50,22 @@ export function createShellAuth({ app, safeStorage, net, shell, ctx, edition, sh
 
 /** The page's channels. Answered in both editions; a disabled sign-in says
  * "disabled" and does nothing. `openKeyWindow` opens the key page in the key window, signed in with the
- * session's own tokens (signInWindow.js); opening it is a step (`track`). */
-export function registerAuthIpc({ ipcMain, auth, openKeyWindow, track = () => {} }) {
+ * session's own tokens (signInWindow.js); opening it is a step (`track`). `closeKeyWindow` closes it once
+ * a key is saved, by Check again or the page's quiet look, and at sign-out. */
+export function registerAuthIpc({ ipcMain, auth, openKeyWindow, closeKeyWindow, track = () => {} }) {
   ipcMain.handle("shell:auth-status", () => auth.status());
   ipcMain.handle("shell:auth-login", () => auth.login());
   ipcMain.handle("shell:auth-cancel", () => auth.cancelLogin());
   ipcMain.handle("shell:auth-show", (_e, opts) => auth.showLogin({ auto: opts?.auto === true }));
-  ipcMain.handle("shell:auth-logout", () => auth.logout());
-  ipcMain.handle("shell:auth-check-key", () => auth.connectKey());
+  ipcMain.handle("shell:auth-logout", () => {
+    closeKeyWindow();
+    return auth.logout();
+  });
+  ipcMain.handle("shell:auth-check-key", async () => {
+    const r = await auth.connectKey();
+    if (r.key === "saved") closeKeyWindow();
+    return r;
+  });
   ipcMain.handle("shell:auth-open-key-page", async () => {
     if (!auth.enabled) return undefined;
     track("key_page_opened", {});

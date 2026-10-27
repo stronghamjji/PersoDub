@@ -1086,6 +1086,25 @@ test("the key window's cookies are the session's two tokens, the access token re
   assert.equal(await off.auth.sessionCookies(), null);
 });
 
+// After the key was made in the key window, the app moved on to Home and the window stayed open (2026-10-27).
+test("the key window closes once a key is saved, by Check again or the page's quiet look, and at sign-out; any other answer leaves it", async () => {
+  const handlers = {};
+  const closed = [];
+  let answer;
+  const auth = { enabled: true, connectKey: async () => answer, logout: async () => ({ outcome: "signed_out" }) };
+  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, auth, openKeyWindow: async () => {}, closeKeyWindow: () => closed.push("closed") });
+  for (const r of [{ key: "no_key" }, { key: "failed" }, { key: "failed", keyReason: "save" }, { key: "no_kit" }, { outcome: "disabled" }]) {
+    answer = r;
+    assert.deepEqual(await handlers["shell:auth-check-key"](), r);
+  }
+  assert.deepEqual(closed, []);
+  answer = { key: "saved" };
+  assert.deepEqual(await handlers["shell:auth-check-key"](), { key: "saved" });
+  assert.deepEqual(closed, ["closed"]);
+  assert.deepEqual(await handlers["shell:auth-logout"](), { outcome: "signed_out" });
+  assert.deepEqual(closed, ["closed", "closed"]);
+});
+
 test("switched off (the open-source edition) nothing happens: no window, no file, no port, no network", async () => {
   const userData = mkdtempSync(join(tmpdir(), "odauth-user-"));
   const kitDir = kitWith("PERSO_API_KEY=pk_user_typed\nPERSO_SPACE_SEQ=42\n");
@@ -1196,8 +1215,8 @@ function fakeWindows({ setCookie = async () => {} } = {}) {
   const parent = { isDestroyed: () => false, getBounds: () => ({ x: 100, y: 40, width: 1280, height: 800 }) };
   const shell = { openExternal: (u) => external.push(u) };
   const make = signInWindowFactory({ BrowserWindow, shell, parent: () => parent, title: "PersoDubbing" });
-  const openKey = keyWindowFactory({ BrowserWindow, shell, parent: () => parent, title: "PersoDubbing" });
-  return { made, external, parent, make, openKey };
+  const keyWindow = keyWindowFactory({ BrowserWindow, shell, parent: () => parent, title: "PersoDubbing" });
+  return { made, external, parent, make, openKey: keyWindow.open, closeKey: keyWindow.close };
 }
 const openOne = (f, { navigation = () => "allow" } = {}) => {
   const seen = { closed: 0, failed: 0, handedOff: [] };
@@ -1505,6 +1524,20 @@ test("the key window sets the app's tokens as Perso's session cookies, then load
   release();
   await opening;
   assert.deepEqual(closed.made[0].loaded, []);
+});
+
+test("the key window's close() closes the open one, and does nothing when none is open", async () => {
+  const page = "https://developers.perso.ai/api-keys?utm_content=signup";
+  const f = fakeWindows();
+  f.closeKey();
+  assert.equal(f.made.length, 0);
+  await f.openKey(page);
+  f.closeKey();
+  assert.equal(f.made[0].destroyed, true);
+  f.closeKey();
+  await f.openKey(page);
+  assert.equal(f.made.length, 2);
+  assert.equal(f.made[1].destroyed, false);
 });
 
 // ---- The steps of a sign-in, for the charts (events.js track) ----------------

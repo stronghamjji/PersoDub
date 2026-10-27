@@ -160,8 +160,8 @@ app.whenReady().then(() => {
   };
   registerUsageIpc({ ipcMain, ctx, countUsage, sendReport: reporter.sendReport, shellLog, lastRunClosedByUser, track: events.track });
   registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog });
-  registerAuthIpc({ ipcMain, auth, track: events.track,
-                    openKeyWindow: keyWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) }) });
+  const keyWindow = keyWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) });
+  registerAuthIpc({ ipcMain, auth, track: events.track, openKeyWindow: keyWindow.open, closeKeyWindow: keyWindow.close });
   void auth.start();
 
   // What the page needs to say "Report sent - #142": whether reports are on at

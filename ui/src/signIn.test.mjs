@@ -202,18 +202,27 @@ test("a failed sign-in says why in one line, and its button tries again", async 
   assert.equal(h.$("signInHint").textContent, "Couldn't sign in.");
 });
 
-test("an account with no key: the key page, then Check again until it has one", async () => {
+// The app restored signed in to an account with no key showed the no-key face without the key page (2026-10-27).
+test("an account with no key: the key page opens once as the face comes, then Check again until it has one", async () => {
   const h = harness(NO_KEY, { authCheckKey: { key: "no_key", keyReason: "none" } });
   await h.settle();
   assert.equal(h.$("signInNoKey").hidden, false);
   assert.equal(h.$("signInAccount").textContent, "c@test.local");
   assert.equal(h.$("signInMakeKey").focused, 1);
+  assert.deepEqual(h.calls, ["authOpenKeyPage"]);
+  // The same face painted again opens nothing more.
+  h.shell.hear(NO_KEY);
+  h.shell.hear({ ...NO_KEY });
+  assert.deepEqual(h.calls, ["authOpenKeyPage"]);
 
-  await h.$("signInMakeKey").fire("click");
+  // Check again that still finds no key keeps the face, and opens nothing.
   await h.$("signInCheckKey").fire("click");
   assert.deepEqual(h.calls, ["authOpenKeyPage", "authCheckKey"]);
   assert.equal(h.$("signInKeyNote").textContent, "Still no API key. Make one, then check again.");
   assert.equal(h.$("signInCheckKey").disabled, false);
+  // Make a key still opens it.
+  await h.$("signInMakeKey").fire("click");
+  assert.deepEqual(h.calls, ["authOpenKeyPage", "authCheckKey", "authOpenKeyPage"]);
 
   h.shell.authCheckKey = async () => ({ key: "failed" });
   await h.$("signInCheckKey").fire("click");
@@ -253,9 +262,13 @@ test("the no-key face has a way out: Sign out brings the sign-in back", async ()
   await h.settle();
   assert.equal(h.$("signInNoKey").hidden, false);
   await h.$("signInSignOut").fire("click");
-  assert.deepEqual(h.calls, ["authLogout"]);
+  assert.deepEqual(h.calls, ["authOpenKeyPage", "authLogout"]);
   assert.equal(h.$("signInStart").hidden, false);
   assert.equal(h.$("signInNoKey").hidden, true);
+  // Back on the no-key face later: the key page opens again, once.
+  h.shell.hear(NO_KEY);
+  h.shell.hear(NO_KEY);
+  assert.deepEqual(h.calls, ["authOpenKeyPage", "authLogout", "authOpenKeyPage"]);
 });
 
 test("signed in to an account with no key: the key page opens by itself, and a key made later is taken without a press", async () => {
@@ -284,23 +297,23 @@ test("coming back to the app on the no-key face looks for a key once, quietly", 
   // A slow timer: only the way back to the app looks here.
   const h = harness(NO_KEY, { authCheckKey: { key: "no_key" } }, 60_000, { win, doc });
   await h.settle();
-  assert.deepEqual(h.calls, []);
+  assert.deepEqual(h.calls, ["authOpenKeyPage"]);
   await win.fire("focus");
-  assert.deepEqual(h.calls, ["authCheckKey"], "the window's focus did not look exactly once");
+  assert.deepEqual(h.calls, ["authOpenKeyPage", "authCheckKey"], "the window's focus did not look exactly once");
   assert.equal(h.$("signInKeyNote").textContent, "", "a look nobody pressed for says nothing");
   // In view again: one more look. Going out of view is no reason to look.
   doc.visibilityState = "hidden";
   await doc.fire("visibilitychange");
-  assert.deepEqual(h.calls, ["authCheckKey"]);
+  assert.deepEqual(h.calls, ["authOpenKeyPage", "authCheckKey"]);
   doc.visibilityState = "visible";
   await doc.fire("visibilitychange");
-  assert.deepEqual(h.calls, ["authCheckKey", "authCheckKey"]);
+  assert.deepEqual(h.calls, ["authOpenKeyPage", "authCheckKey", "authCheckKey"]);
   // A key found that way moves the screen on; after that, focus looks for nothing.
   h.shell.authCheckKey = async () => { h.calls.push("authCheckKey"); h.shell.status = SIGNED_IN; return { key: "saved" }; };
   await win.fire("focus");
   assert.equal(h.$("signInScreen").hidden, true);
   await win.fire("focus");
-  assert.equal(h.calls.length, 3);
+  assert.equal(h.calls.length, 4);
 });
 
 test("back in the app while the sign-in waits in the browser, the screen asks the shell to run it again quietly; waiting in the window, or not waiting, it does not", async () => {
@@ -345,10 +358,10 @@ test("the slow look waits while the app is out of view", async () => {
   const h = harness(NO_KEY, { authCheckKey: { key: "no_key" } }, 5, { doc });
   await h.settle();
   await new Promise((r) => setTimeout(r, 30));
-  assert.deepEqual(h.calls, [], "the keys were looked at while the app was hidden");
+  assert.deepEqual(h.calls, ["authOpenKeyPage"], "the keys were looked at while the app was hidden");
   doc.visibilityState = "visible";
   await new Promise((r) => setTimeout(r, 30));
-  assert.ok(h.calls.length >= 1, "the keys were not looked at once the app was in view");
+  assert.ok(h.calls.includes("authCheckKey"), "the keys were not looked at once the app was in view");
   h.shell.status = SIGNED_IN;   // the face goes, and the looking with it
   h.shell.hear(SIGNED_IN);
 });

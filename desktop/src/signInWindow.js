@@ -146,7 +146,8 @@ async function setSessionCookies(jar, tokens) {
   }
 }
 
-// main.js's openKeyWindow(url, cookies): one window on the sign-in's cookies, the app's tokens set there first; Perso's https pages stay in it, the rest go to the browser.
+// main.js's key window on the sign-in's cookies: open(url, cookies) sets the app's tokens there first, then shows `url`;
+// Perso's https pages stay in it, the rest go to the browser. close() closes it, if it is open.
 export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
   let win = null;
   const stay = (e, to) => {
@@ -155,18 +156,21 @@ export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, ti
     e.preventDefault();
     openExternally(shell, to);
   };
-  return async (url, cookies) => {
-    if (!win || win.isDestroyed()) {
-      win = persoWindow({ BrowserWindow, shell, parent, title, width: 1000, height: 760 });
-      win.webContents.on("will-navigate", stay);
-      win.webContents.on("will-redirect", stay);
-    }
-    if (cookies?.accessToken) await setSessionCookies(win.webContents.session.cookies, cookies);
-    if (win.isDestroyed()) return;
-    win.loadURL(url).catch(() => { /* the window shows the error */ });
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
+  return {
+    async open(url, cookies) {
+      if (!win || win.isDestroyed()) {
+        win = persoWindow({ BrowserWindow, shell, parent, title, width: 1000, height: 760 });
+        win.webContents.on("will-navigate", stay);
+        win.webContents.on("will-redirect", stay);
+      }
+      if (cookies?.accessToken) await setSessionCookies(win.webContents.session.cookies, cookies);
+      if (win.isDestroyed()) return;
+      win.loadURL(url).catch(() => { /* the window shows the error */ });
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    },
+    close() { if (win && !win.isDestroyed()) win.destroy(); },
   };
 }
 

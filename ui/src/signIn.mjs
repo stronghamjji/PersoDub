@@ -71,7 +71,7 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, ret
   }
 
   // While the no-key face is up, the keys are looked at quietly when the
-  // user comes back to the app (from the browser, where a key is made) and
+  // user comes back to the app (from the key window, where a key is made) and
   // every pollMs while the app is in view, so a key made on the Perso site
   // is taken without a press. One quiet look at a time.
   let looking = false;
@@ -113,6 +113,10 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, ret
   // unref: in a test on Node the pending look must not hold the process open.
   const later = (fn, ms = pollMs) => { const timer = setTimeout(fn, ms); timer.unref?.(); };
 
+  async function openKeyPage() {
+    try { await auth.authOpenKeyPage(); } catch { /* Make a key is still there */ }
+  }
+
   let shownFace = "";
   function paint() {
     const face = signInFace(status);
@@ -144,6 +148,9 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, ret
     if (face && face !== shownFace) {
       record("sign_in_shown", { face });
       ({ start: $("signInBtn"), wait: $("signInReopen"), nokey: $("signInMakeKey") })[face].focus();
+      // Come to the no-key face, after a sign-in or at a launch signed in to an account with no key: the key page
+      // opens, once; the screen moves on by itself once a key is made there (watchKey).
+      if (face === "nokey") void openKeyPage();
     }
     shownFace = face;
     if (face === "nokey") watchKey();
@@ -172,9 +179,6 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, ret
     // Signed in, but the key did not arrive: the no-key face says why.
     if (r && r.key === "failed") keyNote = keyTrouble(r);
     await refresh();
-    // Signed in to an account with no key: the key page opens at once, and
-    // the screen moves on by itself once a key is made there (watchKey).
-    if (r && r.outcome === "signed_in" && r.key === "no_key") { try { await auth.authOpenKeyPage(); } catch { /* the button is still there */ } }
     return r;
   }
 
