@@ -2,25 +2,26 @@
 // Electron, to see what Perso actually answers. Prints statuses, field names
 // and shapes only: never a token, a key or an e-mail address.
 //
-//   node desktop/scripts/perso-login-check.mjs [--client <id>] [--host localhost] [--port 5173]
+//   node desktop/scripts/perso-login-check.mjs [--client <id>] [--host 127.0.0.1] [--port 52290]
 //                                              [--base https://api.perso.ai/auth/api]
 //
-// The defaults are the demo client Perso's external-client-demo registered,
-// whose redirect address is http://localhost:5173/callback. With PersoDub's
-// own client registered: --client persodub-desktop --host 127.0.0.1 --port 52290
+// The defaults are PersoDub's own client as Perso registered it:
+// --client perso-dubbing-desktop --host 127.0.0.1 --port 52290. Perso ignores
+// the port of the 127.0.0.1 redirect, but not the host: never localhost.
+// Perso's demo client (external-client-demo): --client demo-pkce-client --host localhost --port 5173
 import { exec, spawn } from "node:child_process";
 import {
   AuthHttpError, authConfig, authorizeUrl, callJson, exchangeCode, fieldNames, newPkce, parseActiveKey,
-  parseProfile, redirectUriFor, tokenExpiry,
+  parseProfile, redirectUriFor, refreshTokens, tokenExpiry,
 } from "../src/auth.js";
 import { startCallbackServer } from "../src/authLoopback.js";
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i === -1 ? fallback : process.argv[i + 1]; };
 const cfg = authConfig({
   ...process.env,
-  PERSODUB_AUTH_CLIENT_ID: arg("--client", "demo-pkce-client"),
-  PERSODUB_AUTH_REDIRECT_HOST: arg("--host", "localhost"),
-  PERSODUB_AUTH_REDIRECT_PORTS: arg("--port", "5173"),
+  PERSODUB_AUTH_CLIENT_ID: arg("--client", "perso-dubbing-desktop"),
+  PERSODUB_AUTH_REDIRECT_HOST: arg("--host", "127.0.0.1"),
+  PERSODUB_AUTH_REDIRECT_PORTS: arg("--port", "52290"),
   ...(arg("--base") ? { PERSODUB_AUTH_BASE: arg("--base") } : {}),
 });
 const say = (...a) => console.log(...a);
@@ -82,14 +83,17 @@ try {
   say("5. dubbing API with Authorization: Bearer <access token>: OK (200) -- the token can replace the API key");
 } catch (e) { say(`5. dubbing API with Authorization: Bearer <access token>: ${explain(e)} -- ${e instanceof AuthHttpError && e.status === 401 ? "the API wants an API key, not the token" : "unclear"}`); }
 
-for (const [name, u] of [["v2/token", cfg.tokenUrl], ["v1 oauth2/token", cfg.refreshUrl]]) {
-  try {
-    const raw = await callJson(fetch, "refresh", u, { method: "POST", body: { clientId: cfg.clientId, grantType: "refresh_token", tokenReissueRequest: { refreshToken: tokens.refreshToken } } });
-    const r = raw?.result ?? raw;
-    say(`6. refresh at ${name}: OK; fields: ${fieldNames(r).join(", ")}`);
-    if (typeof r?.accessToken === "string") tokens = { accessToken: r.accessToken, refreshToken: r.refreshToken || tokens.refreshToken };
-  } catch (e) { say(`6. refresh at ${name}: ${explain(e)}`); }
-}
+// The refresh as the app sends it (refreshTokens): a form to v2/token. The
+// answer's field names are read on the way past.
+const refreshAt = `${new URL(cfg.refreshUrl).pathname} as a form`;
+try {
+  let raw = null;
+  const tap = async (u, o) => { const res = await fetch(u, o); raw = await res.clone().json().catch(() => null); return res; };
+  const t = await refreshTokens(cfg, tap, tokens.refreshToken);
+  const back = !raw?.refresh_token ? "not sent (old one kept)" : raw.refresh_token === tokens.refreshToken ? "the same" : "a new one";
+  say(`6. refresh at ${refreshAt}: OK; fields: ${fieldNames(raw).join(", ") || "none"}; refresh token back: ${back}; runs out in ${minutesLeft(t.accessToken)}`);
+  tokens = t;
+} catch (e) { say(`6. refresh at ${refreshAt}: ${explain(e)}`); }
 
 try {
   await fetch(cfg.signOutUrl, { method: "POST", headers: { Authorization: `Bearer ${tokens.accessToken}` } }).then((r) => say(`7. sign-out: HTTP ${r.status}`));
