@@ -37,6 +37,8 @@ export const FOLD_KEY = "persodub.home.projectsFolded";
 const CHIP = {
   get error() { return [t("Failed"), "bad"]; },
   get cancelled() { return [t("Cancelled"), "muted"]; },
+  // Made, its file on Perso's site: a free-plan workspace cannot download it.
+  get on_perso() { return [t("See it on Perso"), "muted"]; },
   get queued() { return [t("Queued"), "queued"]; },
 };
 

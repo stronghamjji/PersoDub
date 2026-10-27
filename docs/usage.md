@@ -246,7 +246,9 @@ card.
 
 Click one to reopen it. A finished job comes back on the finished screen; a failed or
 cancelled one shows the reason, with **Resume**, which carries on from where it
-stopped, and **Start over** (a Perso API dub has only **Start over**). The **...**
+stopped, and **Start over** (a Perso API dub has only **Start over**). A Perso API dub
+on a free-plan workspace ends as **See it on Perso**: Perso made it but does not let a
+free plan download it, and **Open in Perso** opens it on Perso's site. The **...**
 menu on a card has **Rename** and **Delete** (a draft's, **Delete** alone); **Delete**
 removes the project's folders, with the video, the script and the voices, and cannot
 be undone.

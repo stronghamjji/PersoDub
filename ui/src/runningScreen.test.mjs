@@ -572,6 +572,7 @@ test("a stopped job wears a mark: a stop square cancelled, an exclamation failed
   assert.doesNotMatch(cancelled, /<path /);
   assert.match(failed, /<path d="M12 7\.5v5\.5"\/><path d="M12 16\.6h\.01"\/>/,
     "a failure is a stroke and the dot under it");
+  assert.match(stoppedMark("on_perso"), /<path d="M7 12\.5l3\.2 3\.2L17 9"\/>/, "done on Perso is a tick");
   // Anything the server did not call cancelled has failed.
   assert.equal(stoppedMark("interrupted"), failed);
   assert.equal(stoppedMark(undefined), failed);

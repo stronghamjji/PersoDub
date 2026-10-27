@@ -54,12 +54,13 @@ const STOPPED_AT = {
 // The mark above that sentence on a job that stopped. Two states share the one
 // screen and only the words told them apart, so a stopped job read the same as
 // a finished one until it was read: a stop square when someone cancelled it, an
-// exclamation when it failed on its own.
+// exclamation when it failed on its own. A tick on a dubbing done on Perso.
 const STOPPED_MARKS = {
   cancelled: '<rect x="6.5" y="6.5" width="11" height="11" rx="2"/>',
   error: '<path d="M12 7.5v5.5"/><path d="M12 16.6h.01"/>',
+  on_perso: '<path d="M7 12.5l3.2 3.2L17 9"/>',
 };
-/** The mark for a job that stopped -- anything not cancelled has failed. */
+/** The mark for a job that stopped -- anything not cancelled or done on Perso has failed. */
 export function stoppedMark(status) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${STOPPED_MARKS[status] || STOPPED_MARKS.error}</svg>`;
 }
@@ -308,7 +309,9 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     const message = failed
       ? (ERROR_SENTENCES[job.error] || (detail && job.error_shown)
          || plainFailure(job.error_shown || job.error) || said || failedAt(job))
-      : said;
+      : job.status === "on_perso"
+        ? t("A free-plan workspace cannot download the result. The dubbing is done; see it in your Perso workspace.")
+        : said;
     const linkText = n && CREDIT_MODALS[n.type] ? CREDIT_MODALS[n.type].button : t("Recharge");
     const html = ((n && n.link && linkText)
       ? `${escapeHtml(message)} <a href="${escapeHtml(n.link)}" target="_blank" rel="noopener">${linkText}</a>`

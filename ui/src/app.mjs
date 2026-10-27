@@ -34,7 +34,7 @@ import { initProjectsUi, shownName } from "./projects.mjs";
 import { initHomeScreen } from "./homeScreen.mjs";
 import { initHomeSidebar, homeAgentHidden, openHomeAgent, pointAtLink } from "./homeSidebar.mjs";
 import { initFeedbackSheet } from "./feedbackSheet.mjs";
-import { isProduction, persoLink, DESKTOP_APP_URL } from "./edition.mjs";
+import { isProduction, persoLink, persoResultLink, DESKTOP_APP_URL } from "./edition.mjs";
 import { countedOnce } from "./reportedOnce.mjs";
 import { initRunningScreenUi, stoppedMark } from "./runningScreen.mjs";
 import { translatorChoices } from "./translatorChoice.mjs";
@@ -1242,6 +1242,7 @@ function jobStatusLine(job, progress) {
   if (job.status === "cancelling") return t("Cancelling…");
   if (job.status === "cancelled") return t("Cancelled");
   if (job.status === "error") return t("Dubbing failed");
+  if (job.status === "on_perso") return t("See it on Perso");
   if (job.status !== "running") {
     // What made it rides on this same line (quality, then the engines), in
     // place of the chip row that used to sit under the top bar: one muted
@@ -1946,12 +1947,15 @@ async function renderDone(job) {
     // Cancelled and failed are two different stories, and neither has a screen
     // of its own: the back chevron in the top bar is the way out of both. The
     // reason itself is the notice line's job -- it is the copy that carries the
-    // Recharge link, and one sentence said twice reads as a bug.
+    // Recharge link, and one sentence said twice reads as a bug. A dubbing done
+    // on Perso is a third: made, its file on Perso's site (a free-plan
+    // workspace cannot download it), never worded as a failure.
+    const onPerso = job.status === "on_perso";
     runningScreen.paintStopped(job);
     $("doneFailMark").innerHTML = stoppedMark(job.status);
-    $("doneFailWhy").textContent = job.status === "cancelled"
-      ? t("This dubbing was stopped.")
-      : t("Dubbing didn't finish.");
+    $("doneFailWhy").textContent = onPerso ? t("See it on Perso")
+      : job.status === "cancelled" ? t("This dubbing was stopped.")
+        : t("Dubbing didn't finish.");
     // Appended in the order they should read -- why it stopped, what to do
     // about it, and the log last. moveInto leaves a borrowed element where it
     // already is, which put the log above the button the second time round.
@@ -1964,6 +1968,9 @@ async function renderDone(job) {
     // A cloud dub was made on Perso's side: nothing here to pick up from.
     $("doneResume").hidden = job.dub_mode === "perso";
     $("doneRetry").className = job.dub_mode === "perso" ? "btn btn-primary" : "btn btn-secondary";
+    // Nothing to make again there, only the way to it.
+    $("doneRetry").hidden = onPerso;
+    $("doneOpenPerso").hidden = !onPerso;
     return;
   }
   homeNoticeAndLog();
@@ -2014,6 +2021,10 @@ async function retryStopped(jobId) {
   }
 }
 $("doneRetry").addEventListener("click", () => { if (state.job) retryStopped(state.job.id); });
+// The project's own page on Perso's site, in the browser.
+$("doneOpenPerso").addEventListener("click", () => {
+  if (state.job) window.open(persoResultLink(state.job.perso_project_seq, savedSettings()?.perso_utm), "_blank", "noopener");
+});
 
 // Resume: the same job carries on in its own folder, keeping every stage the
 // earlier run finished -- separation, the transcript, the translation, each

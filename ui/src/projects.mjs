@@ -22,16 +22,17 @@ import { erasePercent } from "./eraseArea.mjs";
 import { t } from "./i18n.mjs";
 
 // Anything that is not finished, failed or cancelled is still going.
-const JOB_DOT = { done: "dot-done", error: "dot-error", cancelled: "dot-cancelled",
+const JOB_DOT = { done: "dot-done", on_perso: "dot-done", error: "dot-error", cancelled: "dot-cancelled",
                   queued: "dot-queued" };
 
 // The same five states, said in shape as well as in colour: five coloured dots
 // are one dot to anyone who does not see colour the way the palette assumes.
 // Drawn at 12px in the page's own inline-SVG way -- no icon font, still offline.
-// Done is a tick, waiting is an empty ring, running is that ring filled, a
-// failure is a cross and a cancelled job is the ring struck through.
+// Done is a tick (done on Perso too), waiting is an empty ring, running is that
+// ring filled, a failure is a cross and a cancelled job is the ring struck through.
 const JOB_MARK = {
   done: '<path d="M2.6 6.4l2.4 2.4 4.5-5"/>',
+  on_perso: '<path d="M2.6 6.4l2.4 2.4 4.5-5"/>',
   error: '<path d="M3.2 3.2l5.6 5.6"/><path d="M8.8 3.2l-5.6 5.6"/>',
   cancelled: '<circle cx="6" cy="6" r="3.6"/><path d="M3.5 8.5l5-5"/>',
   queued: '<circle cx="6" cy="6" r="3.6"/>',

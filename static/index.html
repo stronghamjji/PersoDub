@@ -528,10 +528,12 @@
                   <!-- Resume carries on in the same folder from the first stage
                        with no result (POST /api/dub/jobs/{id}/resume); Start
                        over is a new job from the top. A cloud dub has only
-                       Start over. -->
+                       Start over. A dubbing done on Perso (a free-plan
+                       workspace cannot download it) has only Open in Perso. -->
                   <div class="done-fail-actions" id="doneFailActions">
                     <button data-i18n class="btn btn-primary" id="doneResume" type="button">Resume</button>
                     <button data-i18n class="btn btn-secondary" id="doneRetry" type="button">Start over</button>
+                    <button data-i18n class="btn btn-primary" id="doneOpenPerso" type="button" hidden>Open in Perso</button>
                   </div>
                   <!-- Only if the retry itself cannot start (the folder was
                        deleted since). Kept apart from the reason above, which
