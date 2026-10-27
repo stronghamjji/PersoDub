@@ -577,6 +577,29 @@ test("back in the app, the browser's sign-in runs again by itself only after a h
   await done;
 });
 
+test("every opening of the browser after a hand-off leaves one log line: automatic or pressed, and which start, never the address", async () => {
+  let clock = Date.now();
+  const social = `GET ${CFG.authBase}/v1/auth/sign-in/social?provider=google`;
+  let answer = () => [200, { result: { loginUrl: "https://perso.ai/ko/oauth/callback" } }];
+  const { auth, windows, browser, logs } = makeAuth({ now: () => clock, routes: persoRoutes({ [social]: () => answer() }) });
+  await auth.start();
+  const done = auth.login();
+  await settle();
+  windows[0].onHandOff("https://fake.test/auth/oauth2/authorization/google");
+  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
+  clock += 20_000;
+  answer = () => [500, { code: "E" }];
+  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "shown" });
+  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "wait" });
+  assert.deepEqual(logs.filter((l) => l.startsWith("AUTH browser opened again")),
+    ["AUTH browser opened again (pressed, google start)", "AUTH browser opened again (automatic, fallback start)"]);
+  assert.equal(browser.length, 2);
+  const all = logs.join("\n");
+  for (const secret of [...browser, stateOf(windows[0].url), "perso.ai/ko/oauth"]) assert.ok(!all.includes(secret), `the log has ${secret}`);
+  await auth.cancelLogin();
+  await done;
+});
+
 test("the page's Open again reaches showLogin with auto only when the page asks for it", async () => {
   const seen = [];
   const handlers = {};

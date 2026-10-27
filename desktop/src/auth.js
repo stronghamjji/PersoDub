@@ -516,19 +516,24 @@ export function createAuth({
   // After a hand-off, Perso's start for that provider afresh, this sign-in's authorize address as the way back: a sign-up
   // leaves the browser signed out, and the authorize address would sign in its old account. Without Perso's answer, or
   // for a provider it has no start for, the first hand-off's address again.
-  async function openHandOffAgain(waiting) {
+  async function openHandOffAgain(waiting, auto) {
     waiting.browserAt = now();
     const back = authorizeUrl(cfg, waiting);
     const provider = PERSO_PROVIDERS[signInProvider(waiting.handOff)];
     let address = handOffUrl(waiting.handOff, back);
+    let start = "fallback";
     if (provider) {
       try {
         const loginUrl = (await callJson(fetchFn, "social sign-in", `${cfg.authBase}/v1/auth/sign-in/social?provider=${provider}`, { timeoutMs: 10_000 }))?.result?.loginUrl;
         if (typeof loginUrl !== "string" || !loginUrl) throw new Error("no loginUrl in the answer");
         address = `${new URL(cfg.authorizeUrl).origin}${SOCIAL_START}${provider}?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(back)}`;
+        start = provider;
       } catch (err) { log(`AUTH Perso's ${provider} start was not read (${err.message}): the first hand-off's address opens again`, "WARN"); }
     }
-    if (pending === waiting) openExternal(address);
+    if (pending !== waiting) return;
+    openExternal(address);
+    // Never the address: it carries this sign-in's state and Perso's login URL.
+    log(`AUTH browser opened again (${auto ? "automatic" : "pressed"}, ${start} start)`);
   }
 
   // Open again: the window reloaded, or after a hand-off Perso's start again in the browser; `auto` at most twice, 20 s apart.
@@ -541,7 +546,7 @@ export function createAuth({
       if (waiting.where !== "browser" || waiting.autoOpens >= 2 || now() - waiting.browserAt < 20_000) return { outcome: "wait" };
       waiting.autoOpens += 1;
     }
-    if (waiting.where === "browser") await openHandOffAgain(waiting);
+    if (waiting.where === "browser") await openHandOffAgain(waiting, auto);
     else waiting.window.show();
     return { outcome: "shown" };
   }
