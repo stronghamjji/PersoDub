@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { killStalePids } from "./src/orchestrator.js";
 import { markCleanExit, takeCleanExit } from "./src/cleanExit.js";
 import { createReporter } from "./src/reporting.js";
-import { analyticsFile, keepDevice } from "./src/analytics.js";
+import { analyticsFile, keepDevice, savedDevice } from "./src/analytics.js";
 import { usageCounter, registerUsageIpc } from "./src/usageIpc.js";
 import { createEvents, osName } from "./src/events.js";
 import { createUpdater } from "./src/updateFlow.js";
@@ -86,6 +86,11 @@ function shellLog(line, level = "INFO") {
   } catch { /* logging never breaks the app */ }
 }
 
+// The page's buttons and screens, and the steps of a person's way through the
+// app (src/events.js): made first, since the sign-in, the boot and the
+// updater each record theirs.
+const events = createEvents({ app, ctx, edition, shellLog });
+
 // Perso sign-in in a window of the app's own, over the app's window,
 // production edition only (src/auth.js, src/signInWindow.js). The window
 // comes back through a port on this computer, so nothing is registered with
@@ -95,15 +100,22 @@ function shellLog(line, level = "INFO") {
 const auth = createShellAuth({ app, safeStorage, net, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition),
                                makeSignInWindow: signInWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) }),
                                clearSignInSession: () => clearSignInStorage(session),
-                               logoPath: join(HERE, "screens", "logo.png"), onSignOut: () => reporter.dropInquiries(ctx.kitDir) });
+                               logoPath: join(HERE, "screens", "logo.png"), onSignOut: () => reporter.dropInquiries(ctx.kitDir),
+                               track: events.track });
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "",
                                   account: () => auth.signedInAccount() });
 const countUsage = usageCounter(app);
-const events = createEvents({ app, ctx, edition, shellLog });
-const updater = createUpdater({ app, dialog, ctx, shellLog, edition });
+// The last batch of events, sent once as the app goes (src/events.js quit):
+// before Restart to update quits, or at the first will-quit, which waits for it.
+let eventsSent = false;
+function sendLastEvents() {
+  eventsSent = true;
+  return events.quit({ signed_in: Boolean(auth.signedInAccount()) });
+}
+const updater = createUpdater({ app, dialog, ctx, shellLog, edition, track: events.track, beforeQuit: sendLastEvents });
 const boot = createBoot({
-  app, ctx, appDir: HERE, edition, shellLog, countUsage,
+  app, ctx, appDir: HERE, edition, shellLog, countUsage, track: events.track,
   sendReport: reporter.sendReport, flushReports: reporter.flushReports, startUpdater: updater.startUpdater,
 });
 
@@ -125,7 +137,10 @@ app.whenReady().then(() => {
 
   // This computer's random id, made on the first launch and kept: every report
   // and job record names the computer by it (src/analytics.js keepDevice).
+  // None saved yet is this computer's first launch.
+  const firstRun = !savedDevice(analyticsFile(app));
   keepDevice(analyticsFile(app));
+  events.track("app_launch", { first_run: firstRun });
 
   // The computer's language, read once it can be (app.getLocale needs the app
   // ready); the kit's own setting is laid over it when the boot finds the kit.
@@ -143,9 +158,9 @@ app.whenReady().then(() => {
     bootInFlight = true;
     try { await boot(ctx.win); } finally { bootInFlight = false; }
   };
-  registerUsageIpc({ ipcMain, ctx, countUsage, sendReport: reporter.sendReport, shellLog, lastRunClosedByUser });
+  registerUsageIpc({ ipcMain, ctx, countUsage, sendReport: reporter.sendReport, shellLog, lastRunClosedByUser, track: events.track });
   registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog });
-  registerAuthIpc({ ipcMain, shell, auth });
+  registerAuthIpc({ ipcMain, shell, auth, track: events.track });
   void auth.start();
 
   // What the page needs to say "Report sent - #142": whether reports are on at
@@ -176,11 +191,19 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => app.quit());
-app.on("will-quit", () => {
+app.on("will-quit", (e) => {
   // A second launch quits without ever starting an engine of its own; the
   // pids.json here is the FIRST instance's, not a stale leftover, so this
   // must not touch it -- that was the double-launch bug (2026-09-18).
   if (!gotLock) return;
+  // The last batch first: app_quit, and what the page and the shell still
+  // hold, three seconds at most (src/events.js quit); then the quit again,
+  // which comes back here and goes on.
+  if (!eventsSent) {
+    e.preventDefault();
+    void sendLastEvents().finally(() => app.quit());
+    return;
+  }
   markCleanExit(join(app.getPath("userData"), "logs"));
   shellLog("QUIT: stopping engines");
   // The merged timeline.log, with the line above in it, before the engines go.
