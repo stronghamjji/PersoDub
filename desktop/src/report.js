@@ -506,6 +506,8 @@ export function buildReport({
       outcome: "ok", timing: timingSeconds(timing),
     });
   }
+  // The user's own situation goes to the dashboard and never to an issue (relay/report-worker.js).
+  if (!worthReporting(report.code)) report.userSide = true;
   report.fingerprint = fingerprint({
     platformKey: machine.platformKey || "",
     step: report.step || report.stage,

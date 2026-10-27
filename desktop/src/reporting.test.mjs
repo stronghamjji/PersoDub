@@ -75,6 +75,7 @@ test("a failure goes to the relay with the backend's half, then its logs, and th
   assert.deepEqual(s.pushed, [["shell:report-sent", announced]]);
   assert.deepEqual(s.reporter.lastReport(), announced);
   assert.deepEqual(s.queued(), [], "nothing left to retry");
+  assert.ok(s.logged.includes(`[persodub-report] sent id r1 issue #142 (${ISSUE.url})`), s.logged.join("\n"));
 });
 
 // The backend's tail of a long job has lost the job's opening; its whole log,
@@ -277,11 +278,20 @@ test("a failure no probe speaks to runs none", async () => {
   assert.deepEqual(JSON.parse(s.calls[0].body).diagnostics, {});
 });
 
-test("a failure that is the user's own situation is logged, never sent", async () => {
-  const s = setup();
-  await s.reporter.sendReport({ kind: "install", kitDir: s.kitDir, code: "disk-full", message: "Needs 9 GB" });
-  assert.deepEqual(s.calls, []);
-  assert.deepEqual(s.logged, ["[persodub-report] not sent (disk-full): the user's own situation"]);
+test("a failure that is the user's own situation is sent with its logs, marked userSide, for the dashboard; the page hears of no issue", async () => {
+  for (const code of ["disk-full", "cloud-refused", "perso-busy", "perso-credits", "perso-key", "perso-length", "perso-plan", "gemini-busy", "gemini-quota"]) {
+    const s = setup({ relay: (url) => (url.endsWith("/report") ? ok({ id: "u1" }) : { ok: true, status: 200 }) });
+    await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code, message: "Needs 9 GB" });
+    assert.deepEqual(s.calls.map((c) => `${c.method} ${c.url}`), [`POST ${REPORT_ENDPOINT}/report`, `POST ${REPORT_ENDPOINT}/report/u1/logs`], code);
+    const sent = JSON.parse(s.calls[0].body);
+    assert.deepEqual([sent.code, sent.userSide], [code, true], code);
+    assert.deepEqual(s.logged, ["[persodub-report] sent (no issue: the user's own situation) id u1"], code);
+    assert.deepEqual(s.pushed, [], code);
+    assert.deepEqual(s.queued(), [], code);
+  }
+  const fixable = setup();
+  await fixable.reporter.sendReport({ kind: "dub", kitDir: fixable.kitDir, code: "unknown", message: "boom" });
+  assert.equal(JSON.parse(fixable.calls[0].body).userSide, undefined);
 });
 
 test("with reports off nothing is gathered, sent, queued or minted", async () => {

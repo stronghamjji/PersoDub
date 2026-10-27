@@ -6,7 +6,7 @@ import { readKitVersion } from "./engineCheck.js";
 import { packInstalled, torchVariantFor, PACKS } from "./installSpec.js";
 import { analyticsFile, loadState, savedDevice, saveState } from "./analytics.js";
 import { probesFor, runProbes } from "./diagnostics.js";
-import { buildInquiry, buildReport, collectEnvironment, maskText, MAX_DETAILS_CHARS, resolveReportMode, withoutEncodedNames, worthReporting } from "./report.js";
+import { buildInquiry, buildReport, collectEnvironment, maskText, MAX_DETAILS_CHARS, resolveReportMode, withoutEncodedNames } from "./report.js";
 import { buildLogArchive } from "./reportLogs.js";
 import { ARCHIVE_EXT, REPORT_EXT, partitionQueue, pendingWork, queueBase } from "./reportQueue.js";
 import { envWithKit } from "./kitEnv.js";
@@ -255,7 +255,11 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
     const answer = await postJson(REPORT_ENDPOINT + (record ? "/record" : "/report"), report);
     if (!answer || !answer.id) return { sent: false, id: null, logsSent: false };
     const logs = archive ? await postLogs(answer.id, archive) : "ok";
-    if (!record) announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
+    if (report.userSide) shellLog(`[persodub-report] sent (no issue: the user's own situation) id ${answer.id}`);
+    else if (!record) {
+      shellLog(`[persodub-report] sent id ${answer.id} issue #${answer.issue ?? "?"}${answer.url ? ` (${answer.url})` : ""}`);
+      announceReport({ id: answer.id, issue: answer.issue ?? null, url: answer.url ?? null, dedup: !!answer.dedup });
+    }
     return { sent: true, id: answer.id, logsSent: logs !== "retry" };
   }
 
@@ -288,15 +292,11 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
         if (!kitDir) return;
         const mode = reportMode(kitDir);
         if (mode === "off") return;
-        // Every failure is classified and counted; only the ones somebody here
-        // could act on become an issue. A full disk and a refused cloud key are
-        // the user's own situation -- they are told on screen, and an issue
-        // about them is one more thing for a person to read and close
-        // (user, 2026-09-11).
-        if (!worthReporting(opts.code)) {
-          shellLog(`[persodub-report] not sent (${opts.code}): the user's own situation`);
-          return;
-        }
+        // Every failure is sent; only the ones somebody here could act on
+        // become an issue. A full disk and a refused cloud key are the user's
+        // own situation (report.js userSide) -- told on screen, kept for the
+        // private dashboard, and never one more issue for a person to read and
+        // close (user, 2026-09-11; owner, 2026-10-28).
         // The install id is minted (and written) only on a run that really
         // reports -- the same rule the counts follow, so a machine that never
         // reports never gets one, and no file appears claiming otherwise. It has

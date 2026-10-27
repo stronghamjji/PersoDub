@@ -681,7 +681,7 @@ test("the app's record passes the relay's check and becomes the summary the dash
   assert.deepEqual(logSummary(record, ""), {
     issue: "", kind: "dub", stage: "done", marker: "", code: "ok", platform: "mac", os: "mac 24.6.0",
     cpu: "Apple M4", ram: "24", disk: "180", version: "0.8.8", device: DEVICE, priorState: "", reopened: "",
-    outcome: "ok", elapsed: "80", sep: "10", stt: "20", translate: "5", voice: "40",
+    outcome: "ok", userSide: "", elapsed: "80", sep: "10", stt: "20", translate: "5", voice: "40",
   });
 });
 

@@ -166,6 +166,30 @@ test("a finished job's record is kept under ok/ with the summary the dashboard r
   assert.ok(![...REPORTS.map.keys()].some((k) => k.startsWith("log:")), "nothing names it for an issue");
 });
 
+test("a failure that is the user's own situation is kept with its logs and summary for the dashboard, never an issue, on counts of its own", async (t) => {
+  const calls = github(t, { number: 106, state: "open", body: "An install failed." });
+  const REPORTS = reports();
+  const tally = REPORTS.map.get("fp:0123456789ab");
+  const LOGS = bucket();
+  const env = { REPORTS, LOGS, GITHUB_REPO: "o/r", GITHUB_TOKEN: "token", MAX_PER_DAY: "1" };
+
+  const res = await post("/report", JSON.stringify({ ...REPORT, code: "disk-full", userSide: true }), env);
+  assert.equal(res.status, 200);
+  const answer = await res.json();
+  assert.deepEqual(Object.keys(answer), ["id"]);
+  assert.equal((await post(`/report/${answer.id}/logs`, new Uint8Array([31, 139, 8, 0]), env)).status, 200);
+
+  assert.deepEqual(calls, [], "no issue, no comment, no label");
+  assert.equal(LOGS.stored.length, 1);
+  assert.match(LOGS.stored[0].key, new RegExp(`^\\d{4}-\\d{2}/0123456789ab/${answer.id}\\.tar\\.gz$`));
+  const meta = LOGS.stored[0].meta;
+  assert.deepEqual([meta.outcome, meta.code, meta.userSide, meta.issue, meta.device], ["failed", "disk-full", "true", "", DEVICE]);
+  assert.equal(REPORTS.map.get(`log:${answer.id}`), LOGS.stored[0].key);
+  assert.equal(REPORTS.map.get("fp:0123456789ab"), tally, "the failure's issue and tally are untouched");
+  assert.equal((await post("/report", JSON.stringify({ ...REPORT, code: "disk-full", userSide: true }), env)).status, 429, "one a day from this machine, here");
+  assert.equal((await post("/report", JSON.stringify(REPORT), env)).status, 200, "a failure we can fix still goes");
+});
+
 test("records count against limits of their own, so finished jobs never use up a failure's", async (t) => {
   github(t, { number: 106, state: "open", body: "An install failed." });
   const REPORTS = reports();

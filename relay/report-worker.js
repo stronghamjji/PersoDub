@@ -16,7 +16,7 @@ import {
   withLogsLine,
   withTally,
 } from "./report-logic.js";
-import { MAX_EVENTS_BYTES, isExcluded, toAmplitude, toGa4, validateEvents } from "./events-logic.js";
+import { MAX_EVENTS_BYTES, isExcluded, keyedUserId, toAmplitude, toGa4, validateEvents } from "./events-logic.js";
 
 // The relay between a broken PersoDub and this repository's issues.
 //
@@ -28,6 +28,8 @@ import { MAX_EVENTS_BYTES, isExcluded, toAmplitude, toGa4, validateEvents } from
 //   POST /report            a failure -> a new issue, or "+1" on the one that
 //                           already describes it (same fingerprint), reopened
 //                           when it had been closed as fixed
+//                           (a failure marked userSide -> kept for the private
+//                           dashboard, never an issue)
 //   POST /record            a job that finished (0.8.8) -> kept for the private
 //                           dashboard, never an issue
 //   POST /report/<id>/logs  the full logs (gzipped tar) for a report or a
@@ -136,11 +138,20 @@ async function handleReport(request, env, ctx) {
 
   // Over the limit is answered, not explained: the app keeps its copy and
   // stops, and nobody learns how close they were to the line.
+  // The user's own situation ("us:") is counted apart, so a full disk tried
+  // five times cannot spend the day's allowance of the failures we can fix.
   if (!await withinLimits(request, env, ctx, report.installId, {
-    prefix: "", perDay: Number(env.MAX_PER_DAY || 5), totalPerDay: Number(env.MAX_TOTAL_PER_DAY || 200),
+    prefix: report.userSide ? "us:" : "", perDay: Number(env.MAX_PER_DAY || 5), totalPerDay: Number(env.MAX_TOTAL_PER_DAY || 200),
   })) return json({ error: "rate limited" }, 429);
 
   const id = newId();
+  // A full disk, a refused key, Perso out of credits: the user's own
+  // situation, told on screen. Kept for the private dashboard with its logs
+  // (handleLogs), as a reported failure is, and nothing GitHub ever sees.
+  if (report.userSide) {
+    await env.REPORTS.put(`id:${id}`, JSON.stringify({ fingerprint: report.fingerprint, summary: logSummary(report, "") }), { expirationTtl: 7 * 24 * 60 * 60 });
+    return json({ id });
+  }
   const known = await env.REPORTS.get(`fp:${report.fingerprint}`, "json");
   let issue = known && known.issue;
   let url = known && known.url;
@@ -273,6 +284,7 @@ async function handleLogs(request, env, id) {
   });
   if (record) return json({ ok: true });
   await env.REPORTS.put(`log:${id}`, key, { expirationTtl: 40 * 24 * 60 * 60 });
+  if (pending.summary?.userSide === "true") return json({ ok: true });
 
   // The issue was written before the archive arrived, so the line is added to
   // whichever piece of writing this report produced. It names the archive and
@@ -313,13 +325,14 @@ async function handleEvents(request, env, ctx) {
   const checked = validateEvents(text);
   if (!checked.ok) return json({ error: checked.reason }, 400);
   const { batch } = checked;
+  const userId = await keyedUserId(batch.userId, env.EVENTS_USER_KEY);
   if (isExcluded(batch.installId, env.EXCLUDED_DEVICES) || batch.events.length === 0) return new Response(null, { status: 204 });
   if (env.GA4_MEASUREMENT_ID && env.GA4_API_SECRET) {
     const url = `${GA4}?measurement_id=${encodeURIComponent(env.GA4_MEASUREMENT_ID)}&api_secret=${encodeURIComponent(env.GA4_API_SECRET)}`;
-    for (const body of toGa4(batch, { debug: env.GA4_DEBUG === "1" })) ctx.waitUntil(forward("ga4", url, body));
+    for (const body of toGa4(batch, { debug: env.GA4_DEBUG === "1", userId })) ctx.waitUntil(forward("ga4", url, body));
   }
   if (env.AMPLITUDE_API_KEY) {
-    ctx.waitUntil(forward("amplitude", AMPLITUDE, { api_key: env.AMPLITUDE_API_KEY, events: toAmplitude(batch) }));
+    ctx.waitUntil(forward("amplitude", AMPLITUDE, { api_key: env.AMPLITUDE_API_KEY, events: toAmplitude(batch, { userId }) }));
   }
   return new Response(null, { status: 204 });
 }

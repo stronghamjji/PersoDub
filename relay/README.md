@@ -10,6 +10,11 @@ way as the usage-count worker `persodub-count`.
 - From 0.8.8 the app also sends the record of a job that finished (`POST /record`, then its
   logs the same way). Its logs go into the bucket under `<yyyy-mm>/ok/<id>.tar.gz` for the
   private dashboard, and GitHub never hears of it.
+- From 0.9.1 a failure that is the user's own situation (a full disk, a refused or out-of-credit
+  Perso or Gemini key: `USER_SIDE_CODES` in `desktop/src/report.js`) is sent too, to `POST /report`
+  with `userSide: true`. Its summary and logs are kept as a reported failure's are
+  (`<yyyy-mm>/<fingerprint>/<id>.tar.gz`, `userSide: "true"` in the summary), on rate limits of
+  their own (`rl:us:`), and GitHub never hears of it.
 - From 0.9.1 the app sends the buttons pressed, the screens shown and the steps of a person's
   way through it (`POST /events`) while the Settings switch for them is on. The relay passes them to GA4, and to Amplitude once
   it has a key, and keeps nothing itself. See "Button and screen events" below.
