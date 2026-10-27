@@ -18,7 +18,7 @@ import { setAppName, useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
 import { writeTimeline } from "./src/timeline.js";
 import { createShellAuth, registerAuthIpc } from "./src/authIpc.js";
-import { signInWindowFactory } from "./src/signInWindow.js";
+import { clearSignInStorage, signInWindowFactory } from "./src/signInWindow.js";
 
 // Two launches must never both start backends: the second would overwrite
 // pids.json with its own PIDs, and killStalePids on the NEXT boot (whichever
@@ -89,10 +89,12 @@ function shellLog(line, level = "INFO") {
 // Perso sign-in in a window of the app's own, over the app's window,
 // production edition only (src/auth.js, src/signInWindow.js). The window
 // comes back through a port on this computer, so nothing is registered with
-// the system. A sign-out drops the inquiries still waiting: each holds the
-// account's full e-mail (src/reporting.js dropInquiries).
+// the system. A sign-out wipes that window's cookies, so the next sign-in asks
+// Perso for the account again, and drops the inquiries still waiting: each
+// holds the account's full e-mail (src/reporting.js dropInquiries).
 const auth = createShellAuth({ app, safeStorage, net, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition),
                                makeSignInWindow: signInWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) }),
+                               clearSignInSession: () => clearSignInStorage(session),
                                logoPath: join(HERE, "screens", "logo.png"), onSignOut: () => reporter.dropInquiries(ctx.kitDir) });
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "",

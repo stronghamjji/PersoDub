@@ -11,7 +11,7 @@ import { eventsUserId } from "./events.js";
  * from a 0.8.4 or 0.8.5 production install still says is production, and
  * which only a dub's default follows. `focus` brings the app's window forward
  * when the sign-in window comes back; `makeSignInWindow` opens that window
- * (signInWindow.js). Every change of the sign-in sets ctx.userId, so the next
+ * and `clearSignInSession` wipes its cookies (signInWindow.js). Every change of the sign-in sets ctx.userId, so the next
  * batch of button events carries the account, hashed, or nothing;
  * `onSignOut` runs at every sign-out (auth.js createAuth). */
 /** The app's logo as a data: URL for the sign-in's way-back page, or "" without one. */
@@ -19,7 +19,7 @@ export function logoDataUrl(path) {
   try { return `data:image/png;base64,${readFileSync(path).toString("base64")}`; } catch { return ""; }
 }
 
-export function createShellAuth({ app, safeStorage, net, ctx, edition, shellLog, makeSignInWindow, focus = () => {}, onSignOut = () => {},
+export function createShellAuth({ app, safeStorage, net, ctx, edition, shellLog, makeSignInWindow, clearSignInSession, focus = () => {}, onSignOut = () => {},
                                  appName = "PersoDub", logoPath = "", env = process.env }) {
   const auth = createAuth({
     enabled: edition === "production",
@@ -27,6 +27,7 @@ export function createShellAuth({ app, safeStorage, net, ctx, edition, shellLog,
     store: tokenStore(join(app.getPath("userData"), AUTH_FILE), safeStorage),
     fetchFn: (url, opts) => net.fetch(url, opts), // the system's proxy and certificates, as the update check
     makeSignInWindow,
+    clearSignInSession,
     kitDir: () => ctx.kitDir,
     log: shellLog,
     onCallback: focus,

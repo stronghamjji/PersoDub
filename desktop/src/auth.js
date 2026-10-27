@@ -283,10 +283,11 @@ export function tokenStore(file, safeStorage) {
  * `keyReason: "save"`, the key could not be written into kit.env.
  * `onSignOut` runs at every sign-out, pressed or a refresh Perso refused,
  * for what the shell keeps for the account elsewhere. `makeSignInWindow`
- * opens the sign-in window (signInWindow.js signInWindowFactory).
+ * opens the sign-in window (signInWindow.js signInWindowFactory), and
+ * `clearSignInSession` wipes what it kept, waited for at every sign-out.
  */
 export function createAuth({
-  enabled, cfg, store, fetchFn, makeSignInWindow, kitDir, listen = startCallbackServer, appName = "PersoDub", logo = "",
+  enabled, cfg, store, fetchFn, makeSignInWindow, clearSignInSession = async () => {}, kitDir, listen = startCallbackServer, appName = "PersoDub", logo = "",
   log = () => {}, onChange = () => {}, onCallback = () => {}, onSignOut = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
@@ -347,12 +348,15 @@ export function createAuth({
   }
 
   // Signed out on this computer: the tokens and the account's key go, and
-  // whatever else the shell kept for the account.
-  function dropSession() {
+  // whatever else the shell kept for the account. The sign-in window's
+  // cookies go too, before the screen hears of it: Perso would otherwise let
+  // the next sign-in through as the same account without asking.
+  async function dropSession() {
     session = null;
     store.clear();
     clearKitKeys();
     try { onSignOut(); } catch (err) { log(`AUTH could not tidy up after the sign-out: ${err.message}`, "ERROR"); }
+    try { await clearSignInSession(); } catch (err) { log(`AUTH could not clear the sign-in window's cookies: ${err.message}`, "ERROR"); }
     onChange();
   }
 
@@ -373,7 +377,7 @@ export function createAuth({
       } catch (err) {
         if (err instanceof AuthHttpError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
           log(`AUTH refresh refused (${err.message}): signed out`, "WARN");
-          if (session === before) dropSession();
+          if (session === before) await dropSession();
         } else {
           log(`AUTH refresh failed, kept signed in: ${err.message}`, "WARN");
         }
@@ -551,7 +555,7 @@ export function createAuth({
     if (!isOn()) return DISABLED;
     if (pending) finish(pending, { outcome: "cancelled" });
     const was = session;
-    dropSession();
+    await dropSession();
     log("AUTH signed out");
     if (was) {
       try {

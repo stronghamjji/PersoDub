@@ -5,8 +5,9 @@ import { openExternally } from "./windowFactory.js";
 // browser and from the app's page. Perso keeps a person signed in by a cookie
 // and cannot be asked for the password again, so a sign-in in the computer's
 // browser went straight through after the app signed out; this window's
-// cookies go at every sign-out instead (clearSignInStorage). No preload, no
-// Node, sandboxed: the page in it is Perso's, and it reaches nothing of the app.
+// cookies go at every sign-out instead (clearSignInStorage below). No
+// preload, no Node, sandboxed: the page in it is Perso's, and it reaches
+// nothing of the app.
 //
 // Over the app's window but not modal: the app's Cancel and Open again stay
 // pressable, and the window keeps its own close button on a Mac, where a modal
@@ -68,4 +69,12 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
       close() { if (!win.isDestroyed()) win.destroy(); },
     };
   };
+}
+
+/** Everything the sign-in window kept, Perso's cookie first, gone: the next
+ * sign-in asks for the account again. */
+export async function clearSignInStorage(session) {
+  const kept = session.fromPartition(SIGN_IN_PARTITION);
+  await kept.clearStorageData();
+  await kept.clearCache();
 }

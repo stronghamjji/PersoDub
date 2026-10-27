@@ -15,7 +15,7 @@ import {
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
 import { registerAuthIpc } from "./authIpc.js";
-import { SIGN_IN_PARTITION, signInWindowFactory } from "./signInWindow.js";
+import { SIGN_IN_PARTITION, clearSignInStorage, signInWindowFactory } from "./signInWindow.js";
 import { parseEnvFile } from "./kitEnv.js";
 
 // safeStorage's stand-in: reversible, and never the plain text on disk.
@@ -106,7 +106,7 @@ function persoRoutes({ userId = "u1", email = "someone@test.local", keys = [{ ap
 
 // createAuth with everything on disk in fresh temp folders, the sign-in
 // window replaced by stubWindows.
-function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), userData, safe = fakeSafeStorage(), now, listen, loginTimeoutMs, onSignOut } = {}) {
+function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), userData, safe = fakeSafeStorage(), now, listen, loginTimeoutMs, onSignOut, clearSignInSession } = {}) {
   const dir = userData || mkdtempSync(join(tmpdir(), "odauth-user-"));
   const { opened, windows, make } = stubWindows();
   const logs = [];
@@ -116,12 +116,13 @@ function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), 
     enabled, cfg: CFG, store: tokenStore(join(dir, AUTH_FILE), safe), fetchFn, listen: listen || stub.listen,
     makeSignInWindow: make, kitDir: () => kitDir,
     log: (line) => logs.push(line), ...(now ? { now } : {}), ...(loginTimeoutMs ? { loginTimeoutMs } : {}),
-    ...(onSignOut ? { onSignOut } : {}),
+    ...(onSignOut ? { onSignOut } : {}), ...(clearSignInSession ? { clearSignInSession } : {}),
   });
   return { auth, opened, windows, logs, calls, kitDir, userData: dir, closed: stub.closed, listened: stub.listened };
 }
 const stateOf = (url) => new URL(url).searchParams.get("state");
 const settle = () => new Promise((r) => setImmediate(r));
+const until = async (check) => { for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 5)); };
 // The browser back, as the listener would hand it over.
 const back = (opened, code = "c1") => ({ code, state: stateOf(opened.at(-1)) });
 
@@ -813,6 +814,57 @@ test("every sign-out, pressed or a refused refresh, tells the shell; a refresh l
   const offline = await signedInStore(persoRoutes({ [REFRESH]: () => new TypeError("fetch failed") }), gone(), { onSignOut });
   await offline.auth.start();
   assert.deepEqual(signedOut, ["out", "out"]);
+});
+
+// Perso keeps a person signed in by a cookie and cannot be asked for the
+// password again (no prompt=login): the sign-in window's cookies are the only
+// thing that makes the next sign-in ask (Perso's auth team, 2026-10-27).
+test("every sign-out, pressed or a refused refresh, clears the sign-in window's cookies before it answers; a refresh lost on the network does not", async () => {
+  const cleared = [];
+  let release;
+  const clearSignInSession = () => new Promise((r) => { cleared.push("asked"); release = () => { cleared.push("done"); r(); }; });
+  const pressed = await signedInStore(persoRoutes(), later(), { clearSignInSession });
+  await pressed.auth.start();
+  let answered = false;
+  const out = pressed.auth.logout().then((r) => { answered = true; return r; });
+  await settle();
+  assert.deepEqual(cleared, ["asked"]);
+  assert.equal(answered, false, "the sign-out answered before the window's cookies were cleared");
+  release();
+  assert.deepEqual(await out, { outcome: "signed_out" });
+  assert.deepEqual(cleared, ["asked", "done"]);
+
+  const refused = await signedInStore(persoRoutes({ [REFRESH]: () => [400, { error: "invalid_grant" }] }), gone(), { clearSignInSession });
+  let started = false;
+  const up = refused.auth.start().then(() => { started = true; });
+  await until(() => cleared.length === 3);
+  assert.equal(started, false, "the refused refresh's sign-out went on before the cookies were cleared");
+  release();
+  await up;
+  assert.equal((await refused.auth.status()).signedIn, false);
+  assert.deepEqual(cleared, ["asked", "done", "asked", "done"]);
+
+  const offline = await signedInStore(persoRoutes({ [REFRESH]: () => new TypeError("fetch failed") }), gone(), { clearSignInSession });
+  await offline.auth.start();
+  assert.equal(cleared.length, 4);
+});
+
+test("cookies that cannot be cleared still sign out, and the log says so", async () => {
+  const { auth, userData, logs } = await signedInStore(persoRoutes(), later(), { clearSignInSession: async () => { throw new Error("busy"); } });
+  await auth.start();
+  assert.deepEqual(await auth.logout(), { outcome: "signed_out" });
+  assert.equal(existsSync(join(userData, AUTH_FILE)), false);
+  assert.ok(logs.some((l) => l.includes("could not clear the sign-in window")), logs.join("\n"));
+});
+
+test("the sign-in window's storage is its own partition's, cookies and cache, each waited for", async () => {
+  const done = [];
+  const later = (what) => () => new Promise((r) => setTimeout(() => { done.push(what); r(); }, 5));
+  const asked = [];
+  const session = { fromPartition: (name) => { asked.push(name); return { clearStorageData: later("storage"), clearCache: later("cache") }; } };
+  await clearSignInStorage(session);
+  assert.deepEqual(asked, ["persist:perso-sign-in"]);
+  assert.deepEqual(done, ["storage", "cache"]);
 });
 
 test("signing out finishes on this computer even when Perso does not answer", async () => {

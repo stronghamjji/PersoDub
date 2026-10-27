@@ -70,7 +70,8 @@ function scriptedBrowser() {
     }
     throw new Error("too many redirects");
   };
-  b.signOutOfPerso = async () => { await fetch(`${fake.url}/logout`, { headers: { cookie } }); cookie = ""; };
+  // What the app does to its sign-in window at a sign-out (signInWindow.js clearSignInStorage).
+  b.clearCookies = () => { cookie = ""; };
   return b;
 }
 
@@ -108,6 +109,7 @@ function theApp({ userData = mkdtempSync(join(tmpdir(), "odflow-user-")), kitDir
     store: tokenStore(join(userData, AUTH_FILE), safe),
     fetchFn,
     makeSignInWindow: make,
+    clearSignInSession: async () => browser.clearCookies(),
     kitDir: () => kitDir,
     log: (line) => logs.push(line),
   });
@@ -123,7 +125,7 @@ function freshKit() {
   return dir;
 }
 
-test("A signs in, signs out, signs in again without typing, then B after signing out of Perso, then C with no key", async () => {
+test("A signs in and out, and the next sign-in asks for the account again: A again, then B, then C with no key", async () => {
   const kitDir = freshKit();
   const browser = scriptedBrowser();
   const { auth, logs, userData, windows } = theApp({ kitDir, browser });
@@ -154,24 +156,24 @@ test("A signs in, signs out, signs in again without typing, then B after signing
   assert.deepEqual([kitValues(kitDir).PERSO_API_KEY, kitValues(kitDir).PERSO_SPACE_SEQ, kitValues(kitDir).GEMINI_API_KEY], ["", "", "g-keep"]);
   assert.equal(existsSync(join(userData, AUTH_FILE)), false);
 
-  // Signed in again without typing: the browser still holds A's Perso session.
-  browser.typing = null;
+  // Signed in again: Perso's form again, since the sign-in window's cookies
+  // went with the sign-out (Perso has no way to be asked to show it).
+  browser.typing = "a@test.local";
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "saved" });
+  assert.equal(browser.forms, 2, "the sign-in passed without asking for the account");
   assert.equal((await auth.status()).account, "a@test.local");
 
-  // Another account: sign out of Perso in the browser, sign out here, sign in as B.
+  // Another account: sign out here, sign in as B, nothing else to do.
   writeFileSync(join(kitDir, "kit.env"), readFileSync(join(kitDir, "kit.env"), "utf8").replace(/PERSO_SPACE_SEQ=.*/, "PERSO_SPACE_SEQ=77"));
-  await browser.signOutOfPerso();
   await auth.logout();
   browser.typing = "b@test.local";
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "saved" });
-  assert.equal(browser.forms, 2);
+  assert.equal(browser.forms, 3);
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["b@test.local"].keys[0].apiKey);
   assert.equal(kitValues(kitDir).PERSO_SPACE_SEQ, "", "A's workspace survived the change of account");
   assert.equal((await auth.status()).account, "b@test.local");
 
   // C, who has no key.
-  await browser.signOutOfPerso();
   await auth.logout();
   browser.typing = "c@test.local";
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "no_key" });
