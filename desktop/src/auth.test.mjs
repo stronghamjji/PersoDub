@@ -309,7 +309,8 @@ test("the tokens are written encrypted, read back, and deleted", () => {
   assert.equal(store.read(), null);
   assert.equal(store.write({ accessToken: "secret-access", refreshToken: "secret-refresh" }), true);
   assert.ok(!readFileSync(file, "utf8").includes("secret-access"), "the token is on disk in plain text");
-  assert.equal(statSync(file).mode & 0o777, 0o600);
+  // Windows keeps no such mode (the same allowance as the kit.env.bak check below).
+  if (process.platform !== "win32") assert.equal(statSync(file).mode & 0o777, 0o600);
   assert.deepEqual(store.read(), { accessToken: "secret-access", refreshToken: "secret-refresh" });
   store.clear();
   assert.equal(existsSync(file), false);
