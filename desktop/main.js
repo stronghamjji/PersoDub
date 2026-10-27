@@ -92,7 +92,7 @@ function shellLog(line, level = "INFO") {
 // the system. A sign-out wipes that window's cookies, so the next sign-in asks
 // Perso for the account again, and drops the inquiries still waiting: each
 // holds the account's full e-mail (src/reporting.js dropInquiries).
-const auth = createShellAuth({ app, safeStorage, net, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition),
+const auth = createShellAuth({ app, safeStorage, net, shell, ctx, edition, shellLog, focus: focusWindow, appName: displayName(edition),
                                makeSignInWindow: signInWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) }),
                                clearSignInSession: () => clearSignInStorage(session),
                                logoPath: join(HERE, "screens", "logo.png"), onSignOut: () => reporter.dropInquiries(ctx.kitDir) });

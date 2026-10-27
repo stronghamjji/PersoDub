@@ -90,8 +90,7 @@ function scriptedBrowser() {
 // `browserErrors` and says so as the real one does (onFailed). `windows`
 // keeps whether each was closed. A hand-off goes as the real window's: the
 // browser gets handOffUrl (`handedOff`, for the test to open), onHandOff the
-// address it was going to (`pressed`), the window closes, and Open again opens
-// the authorize address there.
+// address it was going to (`pressed`), and the window closes.
 function scriptedWindows(browser, { hold = false } = {}) {
   const held = [];
   const browserErrors = [];
@@ -99,14 +98,13 @@ function scriptedWindows(browser, { hold = false } = {}) {
   const pressed = [];
   const windows = [];
   const make = ({ url, navigation, onClosed, onFailed, onHandOff }) => {
-    const win = { url, closed: false, handedOff: null, onClosed };
+    const win = { url, closed: false, onClosed };
     windows.push(win);
     setImmediate(async () => {
       try {
         const end = await browser.open(url, { hold, navigation });
         if (end.handOff) {
-          win.handedOff = handOffUrl(end.handOff, url);
-          handedOff.push(win.handedOff);
+          handedOff.push(handOffUrl(end.handOff, url));
           pressed.push(end.handOff);
           onHandOff(end.handOff);
           win.closed = true;
@@ -116,12 +114,13 @@ function scriptedWindows(browser, { hold = false } = {}) {
         if (hold) held.push(end);
       } catch (err) { browserErrors.push(err); onFailed(); }
     });
-    return { show() { if (win.handedOff) handedOff.push(url); }, close() { win.closed = true; } };
+    return { show() {}, close() { win.closed = true; } };
   };
   return { held, browserErrors, handedOff, pressed, windows, make };
 }
 
-// The app as main.js wires it, with scriptedWindows for its sign-in window.
+// The app as main.js wires it, with scriptedWindows for its sign-in window;
+// what the app opens in the computer's browser goes into `handedOff` too.
 function theApp({ userData = mkdtempSync(join(tmpdir(), "odflow-user-")), kitDir, browser, hold = false,
                   fetchFn = fetch, safe = fakeSafeStorage(), authBase = fake.authBase }) {
   const logs = [];
@@ -132,6 +131,7 @@ function theApp({ userData = mkdtempSync(join(tmpdir(), "odflow-user-")), kitDir
     store: tokenStore(join(userData, AUTH_FILE), safe),
     fetchFn,
     makeSignInWindow: make,
+    openExternal: (u) => handedOff.push(u),
     clearSignInSession: async () => browser.clearCookies(),
     kitDir: () => kitDir,
     log: (line) => logs.push(line),
@@ -192,8 +192,8 @@ test("a browser signed in to Perso as another account: the hand-off still signs 
 });
 
 // A new Google account's sign-up drops callbackUrl and ends on Perso's workspace
-// (2026-10-27), signed in by then: the authorize address answers at once.
-test("a browser left on Perso's home after Google: Open the browser again opens this sign-in's authorize address, which comes straight back", async () => {
+// (2026-10-27); the account exists by then, so Perso's Google start comes back at once.
+test("a browser left on Perso's home after Google: Open the browser again runs Perso's Google start again with this sign-in's way back, which comes straight back", async () => {
   const kitDir = freshKit();
   const signInWin = scriptedBrowser();
   signInWin.press = "google";
@@ -204,7 +204,7 @@ test("a browser left on Perso's home after Google: Open the browser again opens 
   const browser = scriptedBrowser();
   await assert.rejects(browser.open(pressed[0]), /Perso's home/);
   assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  assert.equal(handedOff[1], windows[0].url);
+  assert.equal(handedOff[1], `${fake.url}/auth/oauth2/authorization/google?redirect_uri=${fake.url}/oauth/callback&callbackUrl=${encodeURIComponent(windows[0].url)}`);
   await browser.open(handedOff[1]);
   assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
   assert.deepEqual(browser.pages, ["done"]);

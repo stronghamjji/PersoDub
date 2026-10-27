@@ -14,6 +14,8 @@
 //                                 signed in as b@test.local, whoever it was signed in as, and goes
 //                                 on to callbackUrl in the address, else to where the form it was
 //                                 pressed on was going (that browser keeps it), else to GET /
+//   GET  /auth/api/v1/auth/sign-in/social?provider=<provider>
+//                                 {result: {loginUrl}}, the redirect_uri Perso's page gives its Google start
 //   GET  /logout                  signs the browser out
 //   POST /auth/api/v2/token       JSON: authorization_code (PKCE S256, one-use code); refresh_token -> 500,
 //                                 as the real one. A form (RFC 6749): refresh_token, answered
@@ -146,6 +148,7 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
         return res.end();
       }
       if (route === "GET /") return html(res, 200, "<!doctype html><title>Fake Perso home</title><h1>Perso</h1>");
+      if (route === "GET /auth/api/v1/auth/sign-in/social") return json(res, 200, { result: { loginUrl: `http://${req.headers.host}/oauth/callback` } });
       if (route === "POST /login") {
         const form = new URLSearchParams(await readBody(req));
         const email = form.get("email");

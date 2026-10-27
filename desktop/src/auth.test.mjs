@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   AUTH_FILE, authConfig, authorizeUrl, callbackParams, challengeFor, createAuth, newPkce,
-  parseActiveKey, parseProfile, redirectUriFor, refreshTokens, tokenExpiry, tokenStore,
+  parseActiveKey, parseProfile, redirectUriFor, refreshTokens, signInProvider, tokenExpiry, tokenStore,
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
 import { registerAuthIpc } from "./authIpc.js";
@@ -112,13 +112,14 @@ function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), 
   const logs = [];
   const { fetchFn, calls } = stubFetch(CFG, routes);
   const stub = stubListen();
+  const browser = [];
   const auth = createAuth({
     enabled, cfg: CFG, store: tokenStore(join(dir, AUTH_FILE), safe), fetchFn, listen: listen || stub.listen,
-    makeSignInWindow: make, kitDir: () => kitDir,
+    makeSignInWindow: make, openExternal: (u) => browser.push(u), kitDir: () => kitDir,
     log: (line) => logs.push(line), ...(now ? { now } : {}), ...(loginTimeoutMs ? { loginTimeoutMs } : {}),
     ...(onSignOut ? { onSignOut } : {}), ...(clearSignInSession ? { clearSignInSession } : {}),
   });
-  return { auth, opened, windows, logs, calls, kitDir, userData: dir, closed: stub.closed, listened: stub.listened };
+  return { auth, opened, windows, logs, calls, kitDir, userData: dir, closed: stub.closed, listened: stub.listened, browser };
 }
 const stateOf = (url) => new URL(url).searchParams.get("state");
 const settle = () => new Promise((r) => setImmediate(r));
@@ -510,8 +511,53 @@ test("the sign-in window keeps Perso's pages and this sign-in's way back, hands 
   await done;
 });
 
+test("signInProvider: Perso's name for a hand-off's provider, from its start's path or the provider's own host", () => {
+  for (const [to, name] of [
+    ["https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x", "google"],
+    ["https://api.perso.ai/auth/oauth2/authorization/azure", "azure"],
+    ["https://accounts.google.com/o/oauth2/v2/auth?x", "google"],
+    ["https://login.microsoftonline.com/common/oauth2/v2.0/authorize", "azure"],
+    ["https://login.live.com/oauth20_authorize.srf", "azure"],
+    ["https://api.perso.ai/auth/oauth2/authorization/apple", null],
+    ["https://example.com/", null],
+    ["not an address", null],
+  ]) assert.equal(signInProvider(to), name, to);
+});
+
+// A new account's sign-up through Google ends on Perso's workspace without the way back (2026-10-27).
+test("Open again after a hand-off runs Perso's start for that provider afresh, this sign-in's authorize address as the way back; without Perso's answer, or for a provider it does not know, the first hand-off's address", async () => {
+  const loginUrl = "https://perso.ai/ko/oauth/callback?lang=ko&next=/x";
+  const social = (provider) => `GET ${CFG.authBase}/v1/auth/sign-in/social?provider=${provider}`;
+  let answer = () => [200, { result: { loginUrl } }];
+  const { auth, opened, windows, browser, calls } = makeAuth({ routes: persoRoutes({ [social("google")]: () => answer(), [social("azure")]: () => answer() }) });
+  await auth.start();
+  const handedOff = async (to) => {
+    void auth.login();
+    await settle();
+    windows.at(-1).onHandOff(to);
+    assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
+    assert.equal(windows.at(-1).shown, 0);
+    return browser.at(-1);
+  };
+  assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/google"),
+    `https://fake.test/auth/oauth2/authorization/google?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
+  assert.equal(calls.find((c) => c.key === social("google")).auth, "", "Perso's start was asked with a token");
+  assert.equal(await handedOff("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x"),
+    `https://fake.test/auth/oauth2/authorization/azure?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
+  for (const bad of [() => [500, { code: "E" }], () => [200, { result: {} }], () => new Error("offline")]) {
+    answer = bad;
+    assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/google"),
+      `https://fake.test/auth/oauth2/authorization/google?callbackUrl=${encodeURIComponent(opened.at(-1))}`);
+  }
+  const asked = calls.length;
+  assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/apple?x=1"),
+    `https://fake.test/auth/oauth2/authorization/apple?x=1&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
+  assert.equal(calls.length, asked, "Perso was asked for a start it has none of");
+  await auth.cancelLogin();
+});
+
 test("handed to the browser, the sign-in keeps waiting there: its window closing is no cancel, Open again opens the browser again, and the way back signs in", async () => {
-  const { auth, opened, windows, closed, logs } = makeAuth();
+  const { auth, opened, windows, closed, logs, browser } = makeAuth();
   await auth.start();
   const done = auth.login();
   await settle();
@@ -528,7 +574,7 @@ test("handed to the browser, the sign-in keeps waiting there: its window closing
   assert.equal(new URL(windows[0].url).pathname, "/auth/api/v2/authorize");
   assert.equal(stateOf(windows[0].url), stateOf(opened[0]));
   assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  assert.equal(windows[0].shown, 1);
+  assert.deepEqual([windows[0].shown, browser.length], [0, 1]);
   assert.equal(await auth.handleCallback(back(opened)), "signed_in");
   assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
   assert.equal((await auth.status()).where, "");
@@ -1182,9 +1228,7 @@ test("the sign-in window goes only where navigation lets it: the browser gets wh
 
 // Perso's Google start with callbackUrl, opened in the browser, comes back as the account chosen at
 // Google, whoever the browser was signed in to Perso as (2026-10-27); the authorize address did not.
-// Open again opens the authorize address: a new account's sign-up drops callbackUrl, and by then the
-// browser is signed in.
-test("a hand-off: the window does not go, the browser opens Perso's Google start with the way back, the window closes after the event, and Open again opens this sign-in's authorize address there", async () => {
+test("a hand-off: the window does not go, the browser opens Perso's Google start with the way back, the window closes after the event, and show() then does nothing", async () => {
   const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=https://perso.ai/ko/oauth?a=1&b=2";
   const opened = `${google}&callbackUrl=https%3A%2F%2Fapi.perso.ai%2Fauth%2Fapi%2Fv2%2Fauthorize%3Fx%3D1`;
   const start = "https://api.perso.ai/auth/api/v2/authorize?x=1";
@@ -1203,7 +1247,7 @@ test("a hand-off: the window does not go, the browser opens Perso's Google start
     assert.equal(seen.closed, 1, name);
     assert.deepEqual(f.external, [opened], name);
     handle.show();
-    assert.deepEqual(f.external, [opened, start], name);
+    assert.deepEqual(f.external, [opened], name);
     assert.deepEqual(win.did, [], name);
     assert.deepEqual(win.loaded, [start], name);
     handle.close();

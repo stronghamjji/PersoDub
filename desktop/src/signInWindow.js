@@ -83,7 +83,7 @@ function persoWindow({ BrowserWindow, shell, parent, title, width, height }) {
 /** createAuth's makeSignInWindow: Perso's sign-in on `url` in a window over `parent()`.
  * navigation(to) answers "allow" (the window goes), "browser" (the computer's browser opens `to`),
  * "hand-off" (the browser opens handOffUrl(to, url) and the window closes) or "deny".
- * show() opens `url` again: in the window, or after a hand-off in the browser, which answers it at once when signed in. */
+ * show() opens `url` again in the window; after a hand-off it does nothing. */
 export function signInWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
   return ({ url, navigation, onClosed, onFailed, onHandOff }) => {
     const win = persoWindow({ BrowserWindow, shell, parent, title, width: WIDTH, height: HEIGHT });
@@ -134,8 +134,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     win.loadURL(url).catch(() => { /* did-fail-load has said it */ });
     return {
       show() {
-        if (handedOff) { openExternally(shell, url); return; }
-        if (win.isDestroyed()) return;
+        if (handedOff || win.isDestroyed()) return;
         // From the start: Perso's sign-in page, or, signed in, the code at once.
         load(url);
         if (win.isMinimized()) win.restore();
