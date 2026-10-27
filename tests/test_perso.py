@@ -296,6 +296,8 @@ def test_pick_speaker_spans_respects_max_total():
 
 # ── 5. PersoClient.transcribe() HTTP flow (mocked httpx, no network) ──────
 class _FakeHttpxResponse:
+    content = b""   # what the CONNECTED and DONE lines measure
+
     def __init__(self, json_data=None, status_code=200):
         self._json = json_data
         self.status_code = status_code
@@ -1283,6 +1285,9 @@ def _no_seconds(text):
     return re.sub(r"(in|after) \d+\.\ds( \([^)]*/s\))?", r"\1 Ns", text)
 
 
+PROJECT_888 = "https://api.perso.ai/video-translator/api/v1/projects/888/spaces/999"
+
+
 def test_a_cloud_dubs_upload_and_download_go_into_the_jobs_file(monkeypatch, tmp_path, caplog):
     _install_fake_perso_dub_http(
         monkeypatch, progress_sequence=[{"progressReason": "Completed", "hasFailed": False}])
@@ -1300,6 +1305,14 @@ def test_a_cloud_dubs_upload_and_download_go_into_the_jobs_file(monkeypatch, tmp
         ("INFO", f"UPLOAD START perso media from {video} to https://blob.example.com/x?… (10 B)"),
         ("INFO", "UPLOAD CONNECTED perso media: HTTP 200 from blob.example.com, 10 B"),
         ("INFO", "UPLOAD DONE perso media: 10 B in Ns, not checked"),
+        # The two questions before the file, with their addresses: where a
+        # refusal came from is in the job's file (2026-10-28).
+        ("INFO", f"DOWNLOAD START perso download info from {PROJECT_888}/download-info"),
+        ("INFO", "DOWNLOAD CONNECTED perso download info: HTTP 200 from api.perso.ai, 0 B"),
+        ("INFO", "DOWNLOAD DONE perso download info: 0 B in Ns, not checked"),
+        ("INFO", f"DOWNLOAD START perso download link from {PROJECT_888}/download"),
+        ("INFO", "DOWNLOAD CONNECTED perso download link: HTTP 200 from api.perso.ai, 0 B"),
+        ("INFO", "DOWNLOAD DONE perso download link: 0 B in Ns, not checked"),
         ("INFO", f"DOWNLOAD START perso dubbing from https://media.example.com/perso-storage/dubbed_en.mp4 to {out}"),
         ("INFO", "DOWNLOAD CONNECTED perso dubbing: HTTP 200 from media.example.com, 15 B"),
         ("INFO", "DOWNLOAD DONE perso dubbing: 15 B in Ns, not checked"),
@@ -1377,3 +1390,129 @@ def test_separations_tracks_are_fetched_like_every_storage_file(monkeypatch, tmp
         f"DOWNLOAD START perso background from https://media.example.com/perso-storage/background.wav "
         f"to {tmp_path / 'work' / 'background.wav'}",
     ]
+
+
+# ── Asking Perso again (owner, 2026-10-28) ──────────────────────────────────
+# A read whose failure has no reason -- a 5xx with no code of Perso's, a 429,
+# a timeout, a dropped connection -- is asked again after 5, 15 and 45 s. A
+# refusal Perso explains with a code is taken at its word.
+LINK_URL = PROJECT_888 + "/download"
+
+
+def _answering(monkeypatch, answers):
+    """httpx.get answers these in turn (an exception is raised); the waits
+    between tries are kept instead of slept."""
+    waits = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        status, body = answer
+        kind = {"json": body} if isinstance(body, dict) else {"content": body}
+        return httpx.Response(status, request=httpx.Request("GET", url), **kind)
+
+    monkeypatch.setattr(perso_client_module.httpx, "get", fake_get)
+    monkeypatch.setattr(perso_client_module.time, "sleep", waits.append)
+    return waits
+
+
+def _link_lines(caplog):
+    return [(r.levelname, _no_seconds(r.getMessage())) for r in caplog.records]
+
+
+GOT_LINK = {"result": {"videoFile": {"videoDownloadLink": "/x.mp4"}}}
+
+
+def test_a_bodiless_server_error_is_asked_again_and_the_answer_that_comes_is_used(monkeypatch, caplog):
+    waits = _answering(monkeypatch, [(500, b""), (502, b"<html>Bad Gateway</html>"), (200, GOT_LINK)])
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    with caplog.at_level(logging.INFO, logger="persodub.perso_client"):
+        r = client._read("perso download link", LINK_URL)
+    assert r.json() == GOT_LINK
+    assert waits == [5, 15]
+    assert _link_lines(caplog) == [
+        ("INFO", f"DOWNLOAD START perso download link from {LINK_URL}"),
+        ("INFO", "DOWNLOAD CONNECTED perso download link: HTTP 500 from api.perso.ai, 0 B"),
+        ("WARNING", "DOWNLOAD RETRY perso download link (2/4) after Ns: HTTP 500 with no reason given"),
+        ("INFO", "DOWNLOAD CONNECTED perso download link: HTTP 502 from api.perso.ai, 24 B"),
+        ("WARNING", "DOWNLOAD RETRY perso download link (3/4) after Ns: HTTP 502 with no reason given"),
+        ("INFO", "DOWNLOAD CONNECTED perso download link: HTTP 200 from api.perso.ai, 55 B"),
+        ("INFO", "DOWNLOAD DONE perso download link: 55 B in Ns, not checked"),
+    ]
+
+
+def test_a_read_that_keeps_failing_is_tried_four_times_then_fails_as_persos_outage(monkeypatch, caplog):
+    waits = _answering(monkeypatch, [httpx.ReadTimeout("timed out"), (429, {"message": "slow down"}),
+                                     httpx.ConnectError("no route"), (503, b"")])
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    with caplog.at_level(logging.INFO, logger="persodub.perso_client"), \
+            pytest.raises(PersoUnavailableError) as caught:
+        client._read("perso download link", LINK_URL)
+    assert waits == [5, 15, 45]
+    assert str(caught.value) == "Perso server error (HTTP 503)"
+    assert [m for _, m in _link_lines(caplog) if " RETRY " in m] == [
+        "DOWNLOAD RETRY perso download link (2/4) after Ns: ReadTimeout: timed out",
+        "DOWNLOAD RETRY perso download link (3/4) after Ns: HTTP 429 with no reason given",
+        "DOWNLOAD RETRY perso download link (4/4) after Ns: ConnectError: no route",
+    ]
+    assert _link_lines(caplog)[-1] == (
+        "ERROR", "DOWNLOAD FAILED perso download link after Ns: PersoUnavailableError: "
+                 "Perso server error (HTTP 503) (api.perso.ai)")
+
+
+def test_a_refusal_perso_explains_with_a_code_is_not_asked_again(monkeypatch, caplog):
+    waits = _answering(monkeypatch, [(503, {"code": "VT5034", "message": "Queue full"})])
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    with pytest.raises(PersoUnavailableError) as caught:
+        client._read("perso download link", LINK_URL)
+    assert waits == []
+    # Perso's words and code for the notice, the status and the code in the log.
+    assert (caught.value.reason, caught.value.code) == ("Queue full", "VT5034")
+    assert str(caught.value) == "Perso server error (HTTP 503, VT5034)"
+
+
+def test_a_timeout_on_the_last_try_is_raised_as_it_came(monkeypatch):
+    _answering(monkeypatch, [httpx.ReadTimeout("timed out")] * 4)
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    with pytest.raises(httpx.ReadTimeout):
+        client._read("perso download link", LINK_URL)
+
+
+def test_the_progress_poll_says_nothing_until_a_try_goes_wrong(monkeypatch, caplog):
+    done = {"result": {"progressReason": "Completed"}}
+    waits = _answering(monkeypatch, [(200, {"result": {"progressReason": "Processing"}}),
+                                     httpx.RemoteProtocolError("peer closed connection"), (200, done)])
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    with caplog.at_level(logging.INFO, logger="persodub.perso_client"):
+        client.wait_for_project(888, what="Perso dubbing")
+    assert waits == [0, 5]   # the poll's own interval, then the retry's wait
+    assert [line for line in _link_lines(caplog) if "DOWNLOAD" in line[1]] == [
+        ("WARNING", "DOWNLOAD RETRY Perso dubbing progress (2/4) after Ns: "
+                    "RemoteProtocolError: peer closed connection"),
+        ("INFO", "DOWNLOAD CONNECTED Perso dubbing progress: HTTP 200 from api.perso.ai, 41 B"),
+        ("INFO", "DOWNLOAD DONE Perso dubbing progress: 41 B in Ns, not checked"),
+    ]
+
+
+def test_a_refused_download_names_its_step_address_status_and_code_in_the_jobs_file(monkeypatch):
+    """The owner keeps this app from its logs: the step, the address it
+    called, the status and Perso's own code, under the FAILED line."""
+    from app.jobs import timed_step
+
+    _answering(monkeypatch, [(200, {"result": {"hasTranslatedVideo": True}}),
+                             (500, {"code": "VT5099", "detailCode": "SOMETHING_ELSE", "message": "Odd"})])
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    traced = []
+
+    def log(msg):
+        pass
+
+    log.trace = lambda msg, level="INFO": traced.append(msg)
+    with pytest.raises(PersoUnavailableError), timed_step(log, "3/3", "download"):
+        client.download_dub(888, "/nowhere/out.mp4")
+    failed = next(i for i, m in enumerate(traced) if " FAILED (" in m)
+    assert traced[failed].startswith("[Step 3/3] download FAILED (")
+    assert traced[failed].endswith("PersoUnavailableError: Perso server error (HTTP 500, VT5099 / SOMETHING_ELSE)")
+    assert traced[failed + 1] == (
+        f'  HTTP 500 GET {LINK_URL}: {{"code":"VT5099","detailCode":"SOMETHING_ELSE","message":"Odd"}}')
