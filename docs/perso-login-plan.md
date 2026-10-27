@@ -42,7 +42,7 @@ B가 비어 있어도 앱은 돌아갑니다. 운영 앱이 공개 오픈소스 
 
 0.9.0(커밋 5b08782)에서 새로 땄고, 기존 `feature/perso-login`에서 검증된 코드만 가져와 바꿨습니다.
 
-- 브라우저 로그인 + PKCE + state. 토큰 교환은 Electron 메인 프로세스에서.
+- 로그인 창(11절) + PKCE + state. 토큰 교환은 Electron 메인 프로세스에서.
 - **돌아오는 길은 loopback**: 앱이 `http://127.0.0.1:52290/callback`(바쁘면 52291, 52292)에 요청 하나만 받는 리스너를 열고, 끝나면 닫습니다. `desktop/src/authLoopback.js`, 51줄.
   - 삭제된 것: `persodub://` 스킴 등록, NSIS 설치 스크립트, package.json의 protocols, second-instance 링크 처리, open-url 처리, 계정 전환(prompt=login)과 "같은 계정" 다이얼로그.
 - 토큰은 OS 키 저장소(safeStorage)로 암호화해 `perso-auth.bin`에 저장. 만료 1분 전 refresh. refresh 거절(4xx, 408/429 제외)이면 로그아웃.
@@ -183,6 +183,16 @@ B가 비어 있어도 앱은 돌아갑니다. 운영 앱이 공개 오픈소스 
 **Perso 웹 팀에 물을 것:** workspace 번호로 바로 가는 충전 페이지 주소가 있는지(예: `https://perso.ai/workspace/<seq>/billing`). 없으면 가격 페이지로 보냄. 브라우저는 이미 Perso에 로그인돼 있음.
 
 **측정:** Amplitude가 붙으면 세 자리의 "충전하기" 누름을 자리별로 기록해 어디가 결제로 이어지는지 봄.
+
+## 11. 로그인은 앱이 띄우는 로그인 창에서, 쿠키는 따로 (2026-10-27)
+
+Perso는 브라우저의 perso.ai 쿠키로 "이미 로그인됨"을 판단하고 prompt=login도 로그아웃 주소도 없어서, 컴퓨터 브라우저로 로그인하면 앱에서 로그아웃해도 다음 로그인이 비밀번호 없이 통과했습니다. Perso 인증 팀 권고대로 앱 쪽에서 고쳤습니다.
+
+- "Perso로 로그인"은 앱 창 위에 로그인 창(520x720, 모달 아님: 앱의 취소·다시 열기 버튼이 눌리고 Mac에서도 닫기 버튼이 있음)을 띄웁니다. 쿠키 저장소는 앱 전용 `persist:perso-sign-in`, sandbox, preload 없음. PKCE와 127.0.0.1 loopback은 그대로입니다.
+- 로그아웃(직접 누름, refresh 거절 둘 다) 때 그 저장소를 비우고(`clearStorageData` + `clearCache`) 끝난 뒤에 답합니다. 다음 로그인은 Perso 로그인 폼을 다시 보여 줍니다.
+- 창이 갈 수 있는 곳: perso.ai와 그 하위 주소, Perso 로그인 화면에 있는 Google·Microsoft 로그인(accounts.google.com, login.microsoftonline.com, login.live.com), 이번 로그인의 127.0.0.1 포트. 다른 https는 컴퓨터 브라우저로, 나머지는 막습니다. 창을 닫거나 Esc = 취소. 페이지를 못 불러오면 network 실패로 끝내고 창을 닫습니다.
+- 코드: `desktop/src/signInWindow.js`, `desktop/src/auth.js`(signInNavigation, showLogin, dropSession).
+- 사람이 확인할 것: 실제 Perso 계정으로 창 안 로그인과 로그아웃 뒤 폼 다시 뜨는지, Google로 로그인(Google은 앱 안 창 로그인을 막는 경우가 있음), Keychain 묻는 창. 키 만들기·크레딧 충전 페이지는 여전히 컴퓨터 브라우저로 열리므로, 거기엔 Perso 로그인이 없어 한 번 더 로그인해야 할 수 있습니다(10절의 "브라우저는 이미 로그인돼 있음"은 이제 맞지 않을 수 있음).
 
 ## 6. 참고한 저장소와 사실 확인 기록
 
