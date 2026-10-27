@@ -1565,8 +1565,20 @@ def test_a_free_plan_cloud_job_ends_on_perso_with_its_project_and_no_failure(mon
     assert (j["perso_project_seq"], j["perso_space_seq"]) == (435920, 625615)
     assert not j.get("error") and not j.get("notices")
     assert any("done on Perso" in line for line in j["logs"])
-    with open(os.path.join(state.job_store.get(j["id"])["work_dir"], "job.json"), encoding="utf-8") as f:
-        assert json.load(f)["status"] == "on_perso"
+    # job.json lands a beat after the in-memory status flips (the same wait as
+    # test_a_finished_job_writes_job_json_next_to_the_video; a Windows runner
+    # read "running" off the file, 2026-10-28).
+    saved = None
+    for _ in range(100):
+        try:
+            with open(os.path.join(state.job_store.get(j["id"])["work_dir"], "job.json"), encoding="utf-8") as f:
+                saved = json.load(f)
+            if saved["status"] == "on_perso":
+                break
+        except (FileNotFoundError, PermissionError, json.JSONDecodeError):
+            pass
+        time.sleep(0.02)
+    assert saved["status"] == "on_perso"
     assert client.post(f"/api/dub/jobs/{j['id']}/cancel").status_code == 409
 
 
