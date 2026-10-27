@@ -5,6 +5,7 @@
 // Run with: node --test ui/src/signIn.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { initSignIn, signInFace } from "./signIn.mjs";
 
 function makeEl(id) {
@@ -141,6 +142,20 @@ test("a sign-in cancelled by closing its window says nothing about it", async ()
   await h.$("signInBtn").fire("click");
   assert.equal(h.$("signInHint").textContent, "");
   assert.equal(h.$("signInBtn").textContent, "Sign in with Perso");
+});
+
+// Perso's sign-in is in a window of the app's own since 2026-10-27, not the
+// computer's browser: the waiting face says so, in English and in Korean.
+test("the waiting face names the sign-in window, not the browser", () => {
+  const html = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
+  const wait = html.slice(html.indexOf('id="signInWait"'), html.indexOf('id="signInNoKey"'));
+  assert.ok(wait.includes(">Finish signing in in the sign-in window<"), wait);
+  assert.ok(wait.includes(">Open the sign-in window again<"), wait);
+  assert.ok(!/browser/i.test(wait), wait);
+  const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
+  assert.equal(ko["Finish signing in in the sign-in window"], "로그인 창에서 로그인을 마쳐요");
+  assert.equal(ko["Open the sign-in window again"], "로그인 창 다시 열기");
+  assert.equal(ko["Couldn't open the sign-in window."], "로그인 창을 열지 못했어요.");
 });
 
 test("a failed sign-in says why in one line, and its button tries again", async () => {

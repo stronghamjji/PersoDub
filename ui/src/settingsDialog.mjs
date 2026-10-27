@@ -343,9 +343,9 @@ export function initSettingsUi({ $, onSaved, refreshModelCatalog, startAgain = (
   });
 
   // The production edition's Perso account (mockup 2026-10-25): signed in
-  // through the browser, so the account row takes the pasted key's place and
-  // the tab is "Account and keys". The open-source edition's status is not
-  // enabled, and then nothing here is touched.
+  // through Perso's sign-in window, so the account row takes the pasted
+  // key's place and the tab is "Account and keys". The open-source
+  // edition's status is not enabled, and then nothing here is touched.
   let lastAccountStatus = null;   // the status last painted, to tell a real change from a repeat
   function paintAccount(s) {
     if (!s || !s.enabled) return;

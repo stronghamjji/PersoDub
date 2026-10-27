@@ -1563,8 +1563,8 @@
      been asked and agreed. cancel_dub stops a job when the user asks. -->
 
 <!-- The production edition's sign-in (ui/src/signIn.mjs; the shell signs in
-     to Perso in the computer's browser, desktop/src/auth.js). Over the whole
-     window while signed out, while the browser is open on Perso, and while the
+     to Perso in a window of its own, desktop/src/auth.js). Over the whole
+     window while signed out, while that window is open on Perso, and while the
      account has no API key (mockup 2026-10-25). The open-source edition never
      shows it. The top strip moves the window, as the top bar does. -->
 <div class="signin" id="signInScreen" hidden>
@@ -1577,9 +1577,9 @@
   </div>
   <div class="signin-stage" id="signInWait" hidden>
     <img class="signin-logo sm" src="/logo.png" alt="">
-    <h1 data-i18n>Finish signing in in your browser</h1>
+    <h1 data-i18n>Finish signing in in the sign-in window</h1>
     <div class="signin-prog"><b></b></div>
-    <div class="signin-btns"><button data-i18n class="btn btn-secondary signin-btn" id="signInReopen" type="button">Open the browser again</button></div>
+    <div class="signin-btns"><button data-i18n class="btn btn-secondary signin-btn" id="signInReopen" type="button">Open the sign-in window again</button></div>
     <button data-i18n class="signin-link" id="signInCancel" type="button">Cancel</button>
   </div>
   <div class="signin-stage" id="signInNoKey" hidden>
