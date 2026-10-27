@@ -79,6 +79,17 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
     # be made (no key, or the workspace lookup offline or refused) is worded
     # like a failed call. ws is set first because the `finally` reads it.
     ws = None
+
+    def project_known(seq, space):
+        # The Perso project number is how the script viewer (and later the
+        # agent) finds this job's sentences again, and where its result is:
+        # kept with the job the moment Perso takes the dubbing, so a download
+        # that fails cannot lose it. The workspace beside it: the project
+        # lives in that one, and editing it later must not follow a workspace
+        # changed since.
+        state.job_store.update(jid, perso_project_seq=seq, perso_space_seq=space)
+        state.job_store.persist(jid, os.path.dirname(out_path))
+
     try:
         pc = perso_client.PersoClient()
         pc.cancel_check = lambda: state.job_store.is_cancel_requested(jid)
@@ -92,16 +103,8 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
         entry = languages.lookup("perso", target_code) or {"code": target_code, "tag": None}
         tag = {"target_tag": entry["tag"]} if entry.get("tag") else {}
         pc.dub_video(video_path, out_path, source_code, entry["code"], num_speakers=num_speakers, log=log,
-                     tts_model=tts_model or languages.model_for(entry), title=title, **tag)
-        # The Perso project number is how the script viewer (and later the
-        # agent) finds this job's sentences again -- persist it with the job.
-        seq = getattr(pc, "last_dub_project_seq", None)
-        if seq:
-            # The workspace beside it: the project lives in that one, and
-            # editing it later must not follow a workspace changed since.
-            state.job_store.update(jid, perso_project_seq=seq,
-                                   perso_space_seq=getattr(pc, "space_seq", None))
-            state.job_store.persist(jid, os.path.dirname(out_path))
+                     tts_model=tts_model or languages.model_for(entry), title=title,
+                     on_project=project_known, **tag)
         perso_client.note_credits(ws, pc, log, "the Perso cloud dub")
     except JobCancelled:
         raise

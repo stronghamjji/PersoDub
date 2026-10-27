@@ -771,6 +771,25 @@ def test_perso_client_dub_video_happy_path(monkeypatch, tmp_path):
     assert any(p.get("target") == "dubbingVideo" for _, p in calls["get"])
 
 
+def test_dub_video_hands_the_project_over_before_the_wait(monkeypatch, tmp_path):
+    """The caller keeps it with the job at once: a download that fails after
+    the wait must not lose the project the result is in (2026-10-27)."""
+    calls = _install_fake_perso_dub_http(
+        monkeypatch, progress_sequence=[{"progressReason": "Completed", "hasFailed": False}])
+    monkeypatch.setattr(perso_client_module.time, "sleep", lambda s: None)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+    client = PersoClient(api_key="dummy-key", space_seq=999, poll_interval=0)
+    told = []
+    client.dub_video(str(video), str(tmp_path / "out.mp4"), "ko", "en",
+                     on_project=lambda seq, space: told.append((seq, space, [u for u, _ in calls["get"]])))
+    # The project and its workspace, with nothing asked of Perso since the
+    # upload's token: no progress, no download yet.
+    [(seq, space, asked)] = told
+    assert (seq, space) == (888, 999)
+    assert [u.rsplit("/", 1)[-1] for u in asked] == ["sas-token"]
+
+
 def test_perso_client_dub_video_defaults_source_auto_and_one_speaker(monkeypatch, tmp_path):
     calls = _install_fake_perso_dub_http(
         monkeypatch, progress_sequence=[{"progressReason": "Completed", "hasFailed": False}])

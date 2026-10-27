@@ -738,7 +738,7 @@ class PersoClient:
                   space_seq: Optional[int] = None, log=None,
                   target_tag: Optional[str] = None,
                   tts_model: str = DEFAULT_TTS_MODEL,
-                  title: Optional[str] = None) -> str:
+                  title: Optional[str] = None, on_project=None) -> str:
         """Full cloud dub: upload -> translate project -> poll -> download.
 
         The whole pipeline runs on Perso's side (translation, voices, mix);
@@ -750,6 +750,9 @@ class PersoClient:
         requestTranslation does; without one Perso names it after the
         uploaded file, which here is always input.mp4 (sheet feedback 4,
         2026-10-21).
+
+        on_project(project_seq, space) is called the moment Perso has taken
+        the dubbing, before the wait, as proofread's on_asked is.
         """
         from app.jobs import timed_step  # late, as _wait_completed's JobCancelled
 
@@ -784,9 +787,11 @@ class PersoClient:
             )
             _raise_for_status(r)
             project_seq = r.json()["result"]["startGenerateProjectIdList"][0]
-            # Kept on the client so the caller can stamp it on the job record --
-            # the script viewer reads the project back through it later.
-            self.last_dub_project_seq = project_seq
+            # Handed over before the wait: from here on the credits are spent
+            # and the project is where the result is, whatever happens to the
+            # download (Windows, 2026-10-27).
+            if on_project:
+                on_project(project_seq, space)
             logger.info("Perso dubbing project %s (workspace %s)", project_seq, space)
 
             self._wait_completed(project_seq, space, what="Perso dubbing")
