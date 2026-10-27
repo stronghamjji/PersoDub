@@ -20,7 +20,7 @@ export const EDITIONS = ["opensource", "production"];
 export const SCREEN_EVENT = "app_screen";
 export const PRESS_EVENT = "button_press";
 
-// The steps of a person's way through the app (0.9.1): the launch, the
+// The steps of a person's way through the app (0.9.2): the launch, the
 // sign-in, a video brought in, a dubbing and its stages, the tools, credits
 // and keys, support, updates and the quit. Each arrives with `props` and goes
 // to GA4 and Amplitude under its own name, with exactly the properties listed
@@ -126,7 +126,7 @@ export function stepProps(name, props) {
 }
 
 // A step is a name in STEPS that came with its props; anything else is a
-// press, or the screen as an app before 0.9.1 sends it.
+// press, or the screen as an app before 0.9.2 sends it.
 const isStep = (e) => Object.hasOwn(STEPS, e.name) && !!e.props && typeof e.props === "object" && !Array.isArray(e.props);
 // The name GA4 and Amplitude chart an event under: a step's own, the screen's,
 // or one name for every press.

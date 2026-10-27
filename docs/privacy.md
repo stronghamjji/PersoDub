@@ -81,7 +81,7 @@ characters still go with the job logs below while they are on.
 
 ## Share App Analytics
 
-From 0.9.1 the app can record which buttons, links, tabs and menu items you press and which
+From 0.9.2 the app can record which buttons, links, tabs and menu items you press and which
 screens you open, to see which parts of it people use. Each press is a name taken from the
 app's own markup (for example `home_nav_settings`), the screen's name and the time; each
 batch also carries the random install ID, the app version, the edition, and your operating

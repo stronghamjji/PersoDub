@@ -15,7 +15,7 @@
 //                                    a finished job's record (code "ok") the
 //                                    same, with its timing
 //                   {report, id}  -- id is null until the relay has taken it
-//                   {inquiry, id} -- a Service inquiry (0.9.1), id null until
+//                   {inquiry, id} -- a Service inquiry (0.9.2), id null until
 //                                    the support web app has it; its logs go
 //                                    inside it, so there is no second half
 //   <base>.tar.gz   the full logs, when there are any

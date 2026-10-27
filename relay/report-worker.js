@@ -34,7 +34,7 @@ import { MAX_EVENTS_BYTES, isExcluded, keyedUserId, toAmplitude, toGa4, validate
 //                           dashboard, never an issue
 //   POST /report/<id>/logs  the full logs (gzipped tar) for a report or a
 //                           record just made
-//   POST /events            the buttons pressed and screens shown (0.9.1) ->
+//   POST /events            the buttons pressed and screens shown (0.9.2) ->
 //                           GA4, and Amplitude once it has a key; kept nowhere
 //
 // What it never does: log an IP (only a salted daily hash of one, for the rate

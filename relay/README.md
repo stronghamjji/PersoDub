@@ -10,13 +10,13 @@ way as the usage-count worker `persodub-count`.
 - From 0.8.8 the app also sends the record of a job that finished (`POST /record`, then its
   logs the same way). Its logs go into the bucket under `<yyyy-mm>/ok/<id>.tar.gz` for the
   private dashboard, and GitHub never hears of it.
-- From 0.9.1 a failure that is the user's own situation (a full disk, a refused or out-of-credit
+- From 0.9.2 a failure that is the user's own situation (a full disk, a refused or out-of-credit
   Perso or Gemini key: `USER_SIDE_CODES` in `desktop/src/report.js`) is sent too, to `POST /report`
   with `userSide: true`. Its summary and logs are kept as a reported failure's are
   (`<yyyy-mm>/<fingerprint>/<id>.tar.gz`, `userSide: "true"` in the summary), on rate limits of
   their own (`rl:us:`), and GitHub never hears of it.
-- From 0.9.1 a report's `env.device` (`describeDevice` in `desktop/src/report.js`, e.g. "Windows 11 25H2 (build 26200) · ...") is the issue's first Environment row.
-- From 0.9.1 the app sends the buttons pressed, the screens shown and the steps of a person's
+- From 0.9.2 a report's `env.device` (`describeDevice` in `desktop/src/report.js`, e.g. "Windows 11 25H2 (build 26200) · ...") is the issue's first Environment row.
+- From 0.9.2 the app sends the buttons pressed, the screens shown and the steps of a person's
   way through it (`POST /events`) while the Settings switch for them is on. The relay passes them to GA4, and to Amplitude once
   it has a key, and keeps nothing itself. See "Button and screen events" below.
 
@@ -146,7 +146,7 @@ Close the test issue once you have checked it.
 What one request carries (`desktop/src/events.js` builds it, at most 500 events):
 
 ```json
-{"installId":"<32 hex>","userId":"","version":"0.9.1","edition":"production","os":"mac",
+{"installId":"<32 hex>","userId":"","version":"0.9.2","edition":"production","os":"mac",
  "osVersion":"15.5","sessionId":1793000000000,
  "events":[{"name":"app_screen","screen":"home","t":1793000001000},
            {"name":"home_nav_settings","screen":"home","t":1793000002000}]}
@@ -166,7 +166,7 @@ HMAC-SHA256 under `EVENTS_USER_KEY` (`keyedUserId` in `events-logic.js`), a secr
 relay holds. Without that secret no user id is sent at all, and the install id still counts
 the computer. Changing the key starts every account over as a new user in both.
 
-### Steps (0.9.1)
+### Steps (0.9.2)
 
 The steps of a person's way through the app come with `props` and go to GA4 and Amplitude
 under their own names, with the properties below and nothing else (`STEPS` in
@@ -228,7 +228,7 @@ wrangler secret put GA4_API_SECRET
 wrangler deploy
 curl -s -o /dev/null -w '%{http_code}\n' -X POST https://persodub-report.persodub.workers.dev/events \
   -H 'content-type: application/json' \
-  -d "{\"installId\":\"00000000000000000000000000000001\",\"version\":\"0.9.1\",\"edition\":\"production\",
+  -d "{\"installId\":\"00000000000000000000000000000001\",\"version\":\"0.9.2\",\"edition\":\"production\",
        \"os\":\"mac\",\"sessionId\":$(date +%s)000,
        \"events\":[{\"name\":\"relay_check\",\"screen\":\"home\",\"t\":$(date +%s)000}]}"
 # -> 204; GA4 → Admin → DebugView shows button_press with button=relay_check within a minute
