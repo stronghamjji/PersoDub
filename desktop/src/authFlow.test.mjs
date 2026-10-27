@@ -192,7 +192,7 @@ test("a browser signed in to Perso as another account: the hand-off still signs 
 });
 
 // A new Google account's sign-up leaves the browser signed out, without the way back (2026-10-27).
-test("a browser left on Perso's home after Google: Open the browser again runs Perso's Google start again with this sign-in's way back, which signs in", async () => {
+test("a browser left on Perso's home after Google: Continue runs Perso's Google start again with this sign-in's way back, which signs in", async () => {
   const kitDir = freshKit();
   const signInWin = scriptedBrowser();
   signInWin.press = "google";

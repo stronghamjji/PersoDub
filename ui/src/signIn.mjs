@@ -37,7 +37,7 @@ export function signInFace(status) {
   return status.hasKey ? "" : "nokey";
 }
 
-export function initSignIn({ $, shell, body = document.body, pollMs = 10000, retryMs = 5000, win = globalThis.window, doc = globalThis.document,
+export function initSignIn({ $, shell, body = document.body, pollMs = 10000, win = globalThis.window, doc = globalThis.document,
                              record = recordStep }) {
   let status = { enabled: false };
   let note = "";      // why the last sign-in did not finish, on the first face
@@ -91,27 +91,8 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 10000, ret
     };
     later(tick);
   }
-
-  // Waiting in the browser: the person back in the app (the window's focus, or every retryMs while it has it)
-  // asks the shell to run the browser's sign-in again, which it does at most twice, 20 seconds apart.
-  const waitingInBrowser = () => !!status.waiting && status.where === "browser";
-  async function retryBrowser() {
-    if (!waitingInBrowser()) return;
-    try { await auth.authShow({ auto: true }); } catch { /* Open the browser again is still there */ }
-  }
-  let retrying = false;
-  function watchBrowser() {
-    if (retrying || !auth) return;
-    retrying = true;
-    const tick = async () => {
-      if (!waitingInBrowser()) { retrying = false; return; }
-      if (doc?.hasFocus?.()) await retryBrowser();
-      later(tick, retryMs);
-    };
-    later(tick, retryMs);
-  }
   // unref: in a test on Node the pending look must not hold the process open.
-  const later = (fn, ms = pollMs) => { const timer = setTimeout(fn, ms); timer.unref?.(); };
+  const later = (fn) => { const timer = setTimeout(fn, pollMs); timer.unref?.(); };
 
   async function openKeyPage() {
     try { await auth.authOpenKeyPage(); } catch { /* Make a key is still there */ }
@@ -129,8 +110,8 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 10000, ret
     const inBrowser = status.where === "browser";
     $("signInWaitTitle").textContent = inBrowser ? t("Finish signing in in your browser") : t("Finish signing in in the sign-in window");
     $("signInWaitNote").hidden = !inBrowser;
-    $("signInWaitNote").textContent = inBrowser ? t("Google and Microsoft sign-in continue in your browser. When you're done there, come back to this window to finish. If nothing happens, press Open the browser again.") : "";
-    $("signInReopen").textContent = inBrowser ? t("Open the browser again") : t("Open the sign-in window again");
+    $("signInWaitNote").textContent = inBrowser ? t("Finish signing in with Google or Microsoft in your browser. If you are done and nothing happens here, press Continue.") : "";
+    $("signInReopen").textContent = inBrowser ? t("Continue") : t("Open the sign-in window again");
     $("signInBtn").textContent = note ? t("Try again") : t("Sign in with Perso");
     // Only a failure's reason goes under the button.
     $("signInHint").textContent = note;
@@ -154,7 +135,6 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 10000, ret
     }
     shownFace = face;
     if (face === "nokey") watchKey();
-    if (waitingInBrowser()) watchBrowser();
   }
 
   function take(s) {
@@ -184,8 +164,8 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 10000, ret
 
   if (auth) {
     $("signInBtn").addEventListener("click", () => run(() => auth.authLogin()));
-    // The waiting sign-in's window brought forward again, or the browser
-    // opened there again: no new sign-in.
+    // The waiting sign-in's window brought forward again, or, waiting in the
+    // browser, Continue: Perso's Google or Microsoft start there again. No new sign-in.
     $("signInReopen").addEventListener("click", () => auth.authShow());
     $("signInCancel").addEventListener("click", () => auth.authCancel());
     $("signInMakeKey").addEventListener("click", () => auth.authOpenKeyPage());
@@ -194,10 +174,9 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 10000, ret
       btn.disabled = true;
       try { await checkKey({ loud: true }); } finally { btn.disabled = false; }
     });
-    // Back from the browser: the window has the focus again, or is in view again.
-    const back = async () => { await retryBrowser(); await lookQuietly(); };
-    win?.addEventListener?.("focus", back);
-    doc?.addEventListener?.("visibilitychange", () => (doc?.visibilityState === "visible" ? back() : undefined));
+    // Back in the app: the window has the focus again, or is in view again.
+    win?.addEventListener?.("focus", () => lookQuietly());
+    doc?.addEventListener?.("visibilitychange", () => (doc?.visibilityState === "visible" ? lookQuietly() : undefined));
     // The no-key face's way out: sign out, and sign in as an account that has a key.
     $("signInSignOut").addEventListener("click", () => run(() => auth.authLogout()));
     if (auth.onAuthState) auth.onAuthState(take);

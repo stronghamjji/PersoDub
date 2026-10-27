@@ -271,7 +271,7 @@ export function tokenStore(file, safeStorage) {
 
 // ---- The sign-in itself --------------------------------------------------------
 
-// One account's sign-in. {outcome}: signed_in, cancelled, failed (error), busy, shown, wait, idle, signed_out, disabled; {key}: saved, no_key, no_kit, failed.
+// One account's sign-in. {outcome}: signed_in, cancelled, failed (error), busy, shown, idle, signed_out, disabled; {key}: saved, no_key, no_kit, failed.
 export function createAuth({
   enabled, cfg, store, fetchFn, makeSignInWindow, clearSignInSession = async () => {}, openExternal = () => {}, kitDir, listen = startCallbackServer, appName = "PersoDub", logo = "",
   log = () => {}, onChange = () => {}, onCallback = () => {}, onSignOut = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
@@ -472,7 +472,7 @@ export function createAuth({
     }
     const redirectUri = redirectUriFor(cfg, server.port);
     return new Promise((resolve) => {
-      const waiting = { ...pkce, redirectUri, server, resolve, where: "window", browserAt: 0, autoOpens: 0 };
+      const waiting = { ...pkce, redirectUri, server, resolve, where: "window" };
       waiting.timer = setTimeout(() => finish(waiting, { outcome: "failed", error: "timeout" }), loginTimeoutMs);
       waiting.timer.unref?.();
       pending = waiting;
@@ -488,7 +488,6 @@ export function createAuth({
             if (pending !== waiting) return;
             waiting.where = "browser";
             waiting.handOff = to;
-            waiting.browserAt = now();
             const u = new URL(to);
             log(`AUTH Google or Microsoft in the sign-in window: the whole sign-in goes on in the computer's browser at ${u.host}${u.pathname}`);
             track("sign_in_handoff", { provider: signInProvider(to) });
@@ -516,8 +515,7 @@ export function createAuth({
   // After a hand-off, Perso's start for that provider afresh, this sign-in's authorize address as the way back: a sign-up
   // leaves the browser signed out, and the authorize address would sign in its old account. Without Perso's answer, or
   // for a provider it has no start for, the first hand-off's address again.
-  async function openHandOffAgain(waiting, auto) {
-    waiting.browserAt = now();
+  async function openHandOffAgain(waiting) {
     const back = authorizeUrl(cfg, waiting);
     const provider = PERSO_PROVIDERS[signInProvider(waiting.handOff)];
     let address = handOffUrl(waiting.handOff, back);
@@ -533,20 +531,16 @@ export function createAuth({
     if (pending !== waiting) return;
     openExternal(address);
     // Never the address: it carries this sign-in's state and Perso's login URL.
-    log(`AUTH browser opened again (${auto ? "automatic" : "pressed"}, ${start} start)`);
+    log(`AUTH browser opened again (${start} start)`);
   }
 
-  // Open again: the window reloaded, or after a hand-off Perso's start again in the browser; `auto` at most twice, 20 s apart.
-  async function showLogin({ auto = false } = {}) {
+  // Open again: the window reloaded, or after a hand-off (Continue) Perso's start again in the browser.
+  async function showLogin() {
     if (!isOn()) return DISABLED;
     if (trading) return { outcome: "busy" };
     if (!pending) return { outcome: "idle" };
     const waiting = pending;
-    if (auto) {
-      if (waiting.where !== "browser" || waiting.autoOpens >= 2 || now() - waiting.browserAt < 20_000) return { outcome: "wait" };
-      waiting.autoOpens += 1;
-    }
-    if (waiting.where === "browser") await openHandOffAgain(waiting, auto);
+    if (waiting.where === "browser") await openHandOffAgain(waiting);
     else waiting.window.show();
     return { outcome: "shown" };
   }

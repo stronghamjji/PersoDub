@@ -114,15 +114,15 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // took it to the computer's browser ("" with none waiting). authLogin opens the sign-in window
   // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
   // (outcomes and key answers are listed at createAuth); authShow brings that
-  // window forward again, or runs the browser's sign-in again ({auto: true}: the
-  // person is back in the app, and the shell may answer "wait"). authCheckKey looks for
+  // window forward again, or, after a hand-off, runs Perso's Google or Microsoft
+  // start again in the browser (Continue). authCheckKey looks for
   // the account's API key again, after authOpenKeyPage let the user make one.
   // onAuthState hears the status whenever it changes. In the open-source
   // edition every answer is {outcome: "disabled"} and authStatus's enabled is false.
   authStatus: () => ipcRenderer.invoke("shell:auth-status"),
   authLogin: () => ipcRenderer.invoke("shell:auth-login"),
   authCancel: () => ipcRenderer.invoke("shell:auth-cancel"),
-  authShow: (opts) => ipcRenderer.invoke("shell:auth-show", opts),
+  authShow: () => ipcRenderer.invoke("shell:auth-show"),
   authLogout: () => ipcRenderer.invoke("shell:auth-logout"),
   authCheckKey: () => ipcRenderer.invoke("shell:auth-check-key"),
   authOpenKeyPage: () => ipcRenderer.invoke("shell:auth-open-key-page"),

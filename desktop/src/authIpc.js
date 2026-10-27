@@ -70,7 +70,7 @@ export function registerAuthIpc({ ipcMain, auth, openKeyWindow, closeKeyWindow, 
   ipcMain.handle("shell:auth-status", () => auth.status());
   ipcMain.handle("shell:auth-login", () => auth.login());
   ipcMain.handle("shell:auth-cancel", () => auth.cancelLogin());
-  ipcMain.handle("shell:auth-show", (_e, opts) => auth.showLogin({ auto: opts?.auto === true }));
+  ipcMain.handle("shell:auth-show", () => auth.showLogin());
   ipcMain.handle("shell:auth-logout", () => {
     closeKeyWindow();
     return auth.logout();

@@ -547,67 +547,24 @@ test("Open again after a hand-off runs Perso's start for that provider afresh, t
   await auth.cancelLogin();
 });
 
-test("back in the app, the browser's sign-in runs again by itself only after a hand-off, 20 seconds after the browser last opened, at most twice; Open again always runs it", async () => {
-  let clock = Date.now();
-  const social = `GET ${CFG.authBase}/v1/auth/sign-in/social?provider=google`;
-  const { auth, windows, browser } = makeAuth({ now: () => clock, routes: persoRoutes({ [social]: () => [200, { result: { loginUrl: "https://perso.ai/ko/oauth/callback" } }] }) });
-  await auth.start();
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "idle" });
-  const done = auth.login();
-  await settle();
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "wait" });
-  assert.equal(windows[0].shown, 0, "the sign-in window was reloaded with nobody pressing");
-  windows[0].onHandOff("https://fake.test/auth/oauth2/authorization/google");
-  clock += 19_999;
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "wait" });
-  assert.equal(browser.length, 0);
-  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  assert.equal(browser.length, 1);
-  clock += 19_999;
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "wait" }, "20 seconds count from the last opening");
-  clock += 1;
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "shown" });
-  clock += 20_000;
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "shown" });
-  clock += 20_000;
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "wait" }, "a third time by itself");
-  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  assert.equal(browser.length, 4);
-  await auth.cancelLogin();
-  await done;
-});
-
-test("every opening of the browser after a hand-off leaves one log line: automatic or pressed, and which start, never the address", async () => {
-  let clock = Date.now();
+test("every opening of the browser after a hand-off leaves one log line saying which start, never the address", async () => {
   const social = `GET ${CFG.authBase}/v1/auth/sign-in/social?provider=google`;
   let answer = () => [200, { result: { loginUrl: "https://perso.ai/ko/oauth/callback" } }];
-  const { auth, windows, browser, logs } = makeAuth({ now: () => clock, routes: persoRoutes({ [social]: () => answer() }) });
+  const { auth, windows, browser, logs } = makeAuth({ routes: persoRoutes({ [social]: () => answer() }) });
   await auth.start();
   const done = auth.login();
   await settle();
   windows[0].onHandOff("https://fake.test/auth/oauth2/authorization/google");
   assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  clock += 20_000;
   answer = () => [500, { code: "E" }];
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "shown" });
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "wait" });
+  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
   assert.deepEqual(logs.filter((l) => l.startsWith("AUTH browser opened again")),
-    ["AUTH browser opened again (pressed, google start)", "AUTH browser opened again (automatic, fallback start)"]);
+    ["AUTH browser opened again (google start)", "AUTH browser opened again (fallback start)"]);
   assert.equal(browser.length, 2);
   const all = logs.join("\n");
   for (const secret of [...browser, stateOf(windows[0].url), "perso.ai/ko/oauth"]) assert.ok(!all.includes(secret), `the log has ${secret}`);
   await auth.cancelLogin();
   await done;
-});
-
-test("the page's Open again reaches showLogin with auto only when the page asks for it", async () => {
-  const seen = [];
-  const handlers = {};
-  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell: {}, auth: { showLogin: async (o) => { seen.push(o); return { outcome: "shown" }; } } });
-  await handlers["shell:auth-show"]({}, { auto: true });
-  await handlers["shell:auth-show"]({});
-  await handlers["shell:auth-show"]({}, { auto: "yes" });
-  assert.deepEqual(seen, [{ auto: true }, { auto: false }, { auto: false }]);
 });
 
 test("handed to the browser, the sign-in keeps waiting there: its window closing is no cancel, Open again opens the browser again, and the way back signs in", async () => {
@@ -907,7 +864,6 @@ test("Sign in, Cancel or Open again pressed while the code is being traded answe
   assert.deepEqual(await again, { outcome: "busy" });
   assert.deepEqual(await auth.cancelLogin(), { outcome: "busy" });
   assert.deepEqual(await auth.showLogin(), { outcome: "busy" });
-  assert.deepEqual(await auth.showLogin({ auto: true }), { outcome: "busy" });
   assert.equal((await auth.status()).waiting, true);
   release();
   assert.equal(await trading, "signed_in");
