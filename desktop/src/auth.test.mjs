@@ -10,7 +10,7 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync, existsSync, statSy
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  AUTH_FILE, authConfig, authorizeUrl, callbackParams, challengeFor, createAuth, newPkce,
+  AUTH_FILE, authConfig, authorizeUrl, isNewAccount, signInProvider, callbackParams, challengeFor, createAuth, newPkce,
   parseActiveKey, parseProfile, redirectUriFor, refreshTokens, tokenExpiry, tokenStore,
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
@@ -110,6 +110,8 @@ function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), 
   const dir = userData || mkdtempSync(join(tmpdir(), "odauth-user-"));
   const { opened, windows, make } = stubWindows();
   const logs = [];
+  // The steps recorded for the charts (events.js track), as [name, props].
+  const steps = [];
   const { fetchFn, calls } = stubFetch(CFG, routes);
   const stub = stubListen();
   const auth = createAuth({
@@ -117,8 +119,9 @@ function makeAuth({ routes = persoRoutes(), enabled = true, kitDir = kitWith(), 
     makeSignInWindow: make, kitDir: () => kitDir,
     log: (line) => logs.push(line), ...(now ? { now } : {}), ...(loginTimeoutMs ? { loginTimeoutMs } : {}),
     ...(onSignOut ? { onSignOut } : {}), ...(clearSignInSession ? { clearSignInSession } : {}),
+    track: (name, props) => steps.push([name, props]),
   });
-  return { auth, opened, windows, logs, calls, kitDir, userData: dir, closed: stub.closed, listened: stub.listened };
+  return { auth, opened, windows, logs, calls, kitDir, userData: dir, closed: stub.closed, listened: stub.listened, steps };
 }
 const stateOf = (url) => new URL(url).searchParams.get("state");
 const settle = () => new Promise((r) => setImmediate(r));
@@ -958,9 +961,11 @@ test("Make a key on the sign-in screen opens the key page with the app's version
     shell, safeStorage: fakeSafeStorage(), net: { fetch: async () => { throw new Error("no network here"); } },
     ctx: { kitDir: kitWith(), win: null }, edition: "production", shellLog: () => {}, env: {} });
   const handlers = {};
-  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell, auth });
+  const steps = [];
+  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell, auth, track: (name, props) => steps.push([name, props]) });
   await handlers["shell:auth-open-key-page"]();
   assert.deepEqual(opened, ["https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup"]);
+  assert.deepEqual(steps, [["key_page_opened", {}]]);
 });
 
 test("switched off (the open-source edition) nothing happens: no window, no file, no port, no network", async () => {
@@ -988,12 +993,15 @@ test("switched off (the open-source edition) nothing happens: no window, no file
   // The page's channels still answer, so its calls never hang -- with "disabled".
   const handlers = {};
   const opened = [];
-  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell: { openExternal: (u) => opened.push(u) }, auth });
+  const steps = [];
+  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell: { openExternal: (u) => opened.push(u) }, auth,
+                    track: (name) => steps.push(name) });
   assert.equal(Object.keys(handlers).length, 7);
   assert.deepEqual(await handlers["shell:auth-show"](), { outcome: "disabled" });
   assert.deepEqual(await handlers["shell:auth-login"](), { outcome: "disabled" });
   assert.equal(await handlers["shell:auth-open-key-page"](), undefined);
   assert.deepEqual(opened, []);
+  assert.deepEqual(steps, [], "no step from a sign-in that is off");
 });
 
 test("`enabled` as a function is asked at every request, so a kit found after the start switches the sign-in on", async () => {
@@ -1161,4 +1169,97 @@ test("a page of the sign-in window that does not load says onFailed; a load stop
   assert.equal(seen.failed, 0);
   win.fire("wc:did-fail-load", -106, "ERR_INTERNET_DISCONNECTED", "https://api.perso.ai/auth/api/v2/authorize", true);
   assert.equal(seen.failed, 1);
+});
+
+// ---- The steps of a sign-in, for the charts (events.js track) ----------------
+
+test("a sign-in records its start, the key it found and how it ended; a quiet look again records nothing; the sign-out says who", async () => {
+  const made = new Date(Date.now() - 2 * 60 * 1000).toISOString().slice(0, 19);
+  const routes = persoRoutes({ [`GET ${CFG.profileUrl}`]: () => [200, { result: { userSeq: "u1", userName: "", email: "new@test.local", createDate: made } }] });
+  const { auth, opened, steps } = makeAuth({ routes });
+  await auth.start();
+  const done = auth.login();
+  await settle();
+  await auth.handleCallback(back(opened));
+  await done;
+  await auth.connectKey();
+  await auth.connectKey();
+  await auth.logout();
+  await auth.logout();
+  assert.deepEqual(steps, [
+    ["sign_in_started", { method: "window" }],
+    ["key_fetched", { present: true, ok: true }],
+    ["sign_in_succeeded", { method: "window", new_account: true, has_key: true }],
+    ["sign_out", { reason: "user" }],
+  ]);
+  assert.ok(!JSON.stringify(steps).includes("new@test.local"), "no address in a step");
+});
+
+test("an account with no key, a cancel, a newer sign-in, Perso's refusal and a timeout each end with their own step", async () => {
+  const { auth, opened, steps } = makeAuth({ routes: persoRoutes({ keys: [] }), loginTimeoutMs: 30 });
+  await auth.start();
+  const first = auth.login();
+  await settle();
+  const second = auth.login();
+  await first;
+  await settle();
+  await auth.cancelLogin();
+  await second;
+  const third = auth.login();
+  await settle();
+  await auth.handleCallback({ error: "access_denied", state: stateOf(opened.at(-1)) });
+  await third;
+  await auth.login();
+  const noKey = auth.login();
+  await settle();
+  await auth.handleCallback(back(opened));
+  await noKey;
+  assert.deepEqual(steps.filter(([n]) => n !== "sign_in_started"), [
+    ["sign_in_cancelled", { method: "window" }],
+    ["sign_in_cancelled", { method: "window" }],
+    ["sign_in_failed", { method: "window", reason: "denied" }],
+    ["sign_in_failed", { method: "window", reason: "timeout" }],
+    ["key_fetched", { present: false, ok: true }],
+    ["sign_in_succeeded", { method: "window", new_account: false, has_key: false }],
+  ]);
+  assert.equal(steps.filter(([n]) => n === "sign_in_started").length, 5);
+});
+
+test("Google in the sign-in window records the hand-off, and a cancel after it says the browser", async () => {
+  const { auth, windows, steps } = makeAuth();
+  await auth.start();
+  const done = auth.login();
+  await settle();
+  windows[0].onHandOff("https://api.perso.ai/auth/oauth2/authorization/google?x=1");
+  await auth.cancelLogin();
+  await done;
+  assert.deepEqual(steps, [["sign_in_started", { method: "window" }], ["sign_in_handoff", { provider: "google" }],
+    ["sign_in_cancelled", { method: "browser" }]]);
+});
+
+test("a refresh Perso refuses records the sign-out as refused, and a key that could not be read as not ok", async () => {
+  const refused = await signedInStore(persoRoutes({ [REFRESH]: () => [400, { error: "invalid_grant" }] }), gone());
+  await refused.auth.start();
+  assert.deepEqual(refused.steps, [["sign_out", { reason: "refresh_refused" }]]);
+  const offline = await signedInStore(persoRoutes({ [`GET ${CFG.apiKeysUrl}`]: () => new TypeError("fetch failed") }), later());
+  await offline.auth.start();
+  await offline.auth.connectKey();
+  assert.deepEqual(offline.steps, [["key_fetched", { present: false, ok: false }]]);
+});
+
+test("the hand-off's provider is read off the address, and a new account is one made in the last ten minutes, in UTC or Korean time", () => {
+  assert.equal(signInProvider("https://api.perso.ai/auth/oauth2/authorization/google"), "google");
+  assert.equal(signInProvider("https://api.perso.ai/auth/oauth2/authorization/azure?state=1"), "microsoft");
+  assert.equal(signInProvider("https://login.live.com/oauth20_authorize.srf"), "microsoft");
+  assert.equal(signInProvider("https://accounts.google.com/o/oauth2/v2/auth"), "google");
+  assert.equal(signInProvider("https://example.test/x"), "other");
+  assert.equal(signInProvider("not a url"), "other");
+  const now = Date.UTC(2026, 9, 27, 3, 0, 0);
+  assert.equal(isNewAccount({ result: { createDate: "2026-10-27T02:55:00" } }, now), true, "UTC");
+  assert.equal(isNewAccount({ result: { createDate: "2026-10-27T11:55:00" } }, now), true, "Korean time");
+  assert.equal(isNewAccount({ result: { createDate: "2026-10-27T02:40:00" } }, now), false);
+  assert.equal(isNewAccount({ result: { createDate: "2026-10-27T02:58:00Z" } }, now), true);
+  assert.equal(isNewAccount({ result: { createDate: "2026-10-27T11:58:00Z" } }, now), false, "a zone given is the zone");
+  assert.equal(isNewAccount({ result: {} }, now), false);
+  assert.equal(isNewAccount(null, now), false);
 });

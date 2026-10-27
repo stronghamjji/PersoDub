@@ -124,6 +124,28 @@ function signInNavigation(url, { authorizeUrl: start, redirectUri }) {
   return host === "perso.ai" || host.endsWith(".perso.ai") ? "allow" : "browser";
 }
 
+/** Which sign-in the window handed to the browser: "google", "microsoft",
+ * or "other", for the charts (events.js track). Off the address alone. */
+export function signInProvider(url) {
+  let u;
+  try { u = new URL(url); } catch { return "other"; }
+  const social = u.pathname.startsWith(SOCIAL_START) ? u.pathname.slice(SOCIAL_START.length).split("/")[0] : "";
+  if (social === "google" || u.hostname === "accounts.google.com") return "google";
+  if (social === "azure" || u.hostname === "login.microsoftonline.com" || u.hostname === "login.live.com") return "microsoft";
+  return "other";
+}
+
+/** Whether the profile answer is an account made in the last ten minutes:
+ * its createDate ("2026-10-27T09:14:03", no zone), read as UTC and as Korean
+ * time, since Perso's answer does not say which. The charts' new_account. */
+export function isNewAccount(json, now = Date.now()) {
+  const made = json?.result?.createDate;
+  if (typeof made !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(made)) return false;
+  const zoned = /(Z|[+-]\d\d:?\d\d)$/.test(made);
+  const at = zoned ? [Date.parse(made)] : [Date.parse(`${made}Z`), Date.parse(`${made}+09:00`)];
+  return at.some((t) => Number.isFinite(t) && Math.abs(now - t) <= 10 * 60 * 1000);
+}
+
 /** {code, state} or {error, state} from the request's query, or null when it
  * carries neither a code nor an error. */
 export function callbackParams({ code, state, error } = {}) {
@@ -303,10 +325,14 @@ export function tokenStore(file, safeStorage) {
  * for what the shell keeps for the account elsewhere. `makeSignInWindow`
  * opens the sign-in window (signInWindow.js signInWindowFactory), and
  * `clearSignInSession` wipes what it kept, waited for at every sign-out.
+ * `track(name, props)` records each step of a sign-in for the charts
+ * (events.js track): started, handed to the browser, how it ended, the key
+ * looked up, the sign-out.
  */
 export function createAuth({
   enabled, cfg, store, fetchFn, makeSignInWindow, clearSignInSession = async () => {}, kitDir, listen = startCallbackServer, appName = "PersoDub", logo = "",
   log = () => {}, onChange = () => {}, onCallback = () => {}, onSignOut = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
+  track = () => {},
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
   let session = null;   // {accessToken, refreshToken, userId, account, email}
@@ -314,6 +340,9 @@ export function createAuth({
   let trading = null;   // the sign-in whose code is being traded
   let refreshing = null;
   let loaded = false;
+  // Whether the last look at the account's keys found one: key_fetched is
+  // recorded when that changes, not at every quiet look of the no-key screen.
+  let keyFound = null;
   const DISABLED = { outcome: "disabled" };
 
   const kit = () => {
@@ -376,6 +405,7 @@ export function createAuth({
   // the next sign-in through as the same account without asking.
   async function dropSession() {
     session = null;
+    keyFound = null;
     store.clear();
     clearKitKeys();
     try { onSignOut(); } catch (err) { log(`AUTH could not tidy up after the sign-out: ${err.message}`, "ERROR"); }
@@ -400,7 +430,10 @@ export function createAuth({
       } catch (err) {
         if (err instanceof AuthHttpError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
           log(`AUTH refresh refused (${err.message}): signed out`, "WARN");
-          if (session === before) await dropSession();
+          if (session === before) {
+            track("sign_out", { reason: "refresh_refused" });
+            await dropSession();
+          }
         } else {
           log(`AUTH refresh failed, kept signed in: ${err.message}`, "WARN");
         }
@@ -433,7 +466,12 @@ export function createAuth({
     try { found = parseActiveKey(await authedGet("api-keys", cfg.apiKeysUrl)); }
     catch (err) {
       log(`AUTH could not read the account's API key: ${err.message}`, "WARN");
+      track("key_fetched", { present: false, ok: false });
       return { key: "failed" };
+    }
+    if (keyFound !== (found.status === "key")) {
+      keyFound = found.status === "key";
+      track("key_fetched", { present: keyFound, ok: true });
     }
     if (found.status !== "key") {
       log(`AUTH the account has no API key (answer fields: ${found.fields.join(", ") || "none"})`);
@@ -452,7 +490,20 @@ export function createAuth({
     return { key: "saved" };
   }
 
+  // How a sign-in ended, for the charts, where it was going on at the end.
+  function trackEnd(waiting, result) {
+    const method = waiting.where;
+    if (result.outcome === "signed_in") {
+      track("sign_in_succeeded", { method, new_account: !!waiting.newAccount, has_key: result.key === "saved" });
+    } else if (result.outcome === "cancelled") {
+      track("sign_in_cancelled", { method });
+    } else if (result.outcome === "failed") {
+      track("sign_in_failed", { method, reason: result.error });
+    }
+  }
+
   function finish(waiting, result) {
+    trackEnd(waiting, result);
     clearTimeout(waiting.timer);
     try { waiting.server.close(); } catch { /* already closed */ }
     if (pending === waiting) pending = null;
@@ -488,6 +539,7 @@ export function createAuth({
       pending = waiting;
       onChange();
       log(`AUTH sign-in started: listening on port ${server.port}, opening the sign-in window`);
+      track("sign_in_started", { method: "window" });
       try {
         waiting.window = makeSignInWindow({
           url: authorizeUrl(cfg, { challenge: pkce.challenge, state: pkce.state, redirectUri }),
@@ -502,6 +554,7 @@ export function createAuth({
             const u = new URL(to);
             const a = new URL(cfg.authorizeUrl);
             log(`AUTH Google or Microsoft in the sign-in window (${u.host}${u.pathname}): the whole sign-in goes on in the computer's browser at ${a.host}${a.pathname}`);
+            track("sign_in_handoff", { provider: signInProvider(to) });
             onChange();
           },
           // Closed by the user, its close button or Esc: as Cancel. Closed
@@ -570,7 +623,9 @@ export function createAuth({
       const tokens = await exchangeCode(cfg, fetchFn, { code: cb.code, verifier: waiting.verifier, redirectUri: waiting.redirectUri });
       session = { ...tokens, userId: null, account: "", email: "" };
       try {
-        const p = parseProfile(await authedGet("profile", cfg.profileUrl));
+        const answer = await authedGet("profile", cfg.profileUrl);
+        const p = parseProfile(answer);
+        waiting.newAccount = isNewAccount(answer, now());
         // `account` is the name, shown in place of an e-mail the account lacks.
         session = { ...session, userId: p.userId, account: p.name, email: p.email };
       } catch (err) { log(`AUTH signed in, but the profile did not load: ${err.message}`, "WARN"); }
@@ -594,6 +649,7 @@ export function createAuth({
     if (!isOn()) return DISABLED;
     if (pending) finish(pending, { outcome: "cancelled" });
     const was = session;
+    if (was) track("sign_out", { reason: "user" });
     await dropSession();
     log("AUTH signed out");
     if (was) {
