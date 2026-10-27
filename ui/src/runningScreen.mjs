@@ -183,6 +183,8 @@ const CREDIT_MODALS = {
  *        anchor's own target="_blank" behaviour by setting its href; passing it
  *        in is what lets a test see which link the user was offered, and what
  *        would let the desktop shell open it its own way later.
+ * @param {Storage} [deps.storage]  where the jobs whose popup was seen are
+ *        kept for the page's session (sessionStorage)
  * @returns the operations the rest of the page calls.
  */
 export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAndLog,
@@ -190,11 +192,22 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
                                       onOpenSettings, openExternal,
                                       jobNote = () => "",
                                       translatorChoices = async () => [],
-                                      onResumeWith = () => {}, record = recordStep }) {
+                                      onResumeWith = () => {}, record = recordStep,
+                                      storage = globalThis.sessionStorage }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
   // ui/src/settingsDialog.mjs. A missing id is a broken page.
-  const shownFor = new Set();   // jobs whose popup has already been seen
+  // Jobs whose popup has already been seen. Kept for the page's session, not
+  // only in memory: a Settings save that changes the language starts the page
+  // again (settingsDialog.mjs startAgain) while the engine still holds the
+  // job's notices, and each such save opened the same popup again (Windows,
+  // 2026-10-27).
+  const SHOWN_KEY = "persodub.popupsShown";
+  const shownFor = new Set();
+  try { for (const id of JSON.parse(storage.getItem(SHOWN_KEY) || "[]")) shownFor.add(String(id)); } catch { /* memory alone */ }
+  const keepShown = () => {
+    try { storage.setItem(SHOWN_KEY, JSON.stringify([...shownFor])); } catch { /* memory alone */ }
+  };
   let modalAction = null;       // "settings" while the open popup's button is an in-app action
   let modalJob = null;          // the job the open popup's translator buttons resume
   let modalPick = null;         // or, from Translate again, what a translator button does instead
@@ -354,6 +367,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     const n = (job.notices || []).find((x) => CREDIT_MODALS[x.type]);
     if (!n || shownFor.has(job.id)) return;
     shownFor.add(job.id);
+    keepShown();
     showCreditModal(n, job);
   }
 
@@ -474,7 +488,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
   }
 
   // A resumed job keeps its id: its popups may be shown again.
-  function forgetPopups(jobId) { shownFor.delete(jobId); }
+  function forgetPopups(jobId) { shownFor.delete(jobId); keepShown(); }
 
   return { paintRunning, paintStopped, paintNotices, showCreditModal, hideCreditModal,
            showNoticeError, paintCancel, reset, starting, forgetPopups };
