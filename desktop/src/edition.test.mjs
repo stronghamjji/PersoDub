@@ -53,11 +53,12 @@ test("an unknown edition at run time is the open-source one", () => {
   assert.equal(readEdition({ payloadDir: null, env: { PERSODUB_EDITION: "constructor" } }), "opensource");
 });
 
-test("the open-source edition's update feed is its repository's GitHub Releases, and production has none there", () => {
+test("the open-source edition's update feed is its repository's GitHub Releases, and production's is Perso's folder", () => {
   assert.deepEqual(editionFeed("opensource"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
-  assert.equal(editionFeed("production"), null, "while PRODUCTION_UPDATE_URL is empty: never the public releases");
-  assert.equal(PRODUCTION_UPDATE_URL, "", "filled in only when the company's download folder exists");
-  // The production edition's own folder, once PRODUCTION_UPDATE_URL is filled in; the open-source edition never reads it.
+  assert.equal(PRODUCTION_UPDATE_URL, "https://portal-static.perso.ai/public/app/desktop/", "the folder, ending with /");
+  assert.deepEqual(editionFeed("production"), { provider: "generic", url: PRODUCTION_UPDATE_URL });
+  assert.equal(editionFeed("production", ""), null, "with no address: never the public releases");
+  // Any other folder given is the production edition's; the open-source edition never reads it.
   assert.deepEqual(editionFeed("production", "https://downloads.test/persodubbing/"), { provider: "generic", url: "https://downloads.test/persodubbing/" });
   assert.deepEqual(editionFeed("opensource", "https://downloads.test/persodubbing/"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
 });

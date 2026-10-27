@@ -98,12 +98,13 @@ export function readEdition({ payloadDir, env }) {
   return Object.hasOwn(EDITIONS, name) ? name : DEFAULT_EDITION;
 }
 
-// !!! FILL IN when the company's download folder exists: the HTTPS folder
-// the production edition updates from (electron-updater's generic provider),
-// holding latest-mac.yml, latest.yml and the files they name. Ends with "/".
-// Empty, the production edition does not check for updates at all: the public
-// releases are open-source builds, under another app id (0.8.3; updater.js resolveFeed).
-export const PRODUCTION_UPDATE_URL = "";
+// The HTTPS folder the production edition updates from (electron-updater's
+// generic provider): Perso's static host, holding latest-mac.yml, latest.yml
+// and the production build's own files they name (PersoDubbing-*, never the
+// open-source PersoDub-* builds, which carry another app id). Ends with "/".
+// Empty, the production edition does not check for updates at all (0.8.3;
+// updater.js resolveFeed).
+export const PRODUCTION_UPDATE_URL = "https://portal-static.perso.ai/public/app/desktop/";
 
 // electron-updater's feed for an edition: the production edition's folder
 // once it is filled in, else the edition's GitHub Releases; null for an

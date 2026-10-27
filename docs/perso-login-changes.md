@@ -15,7 +15,7 @@
 - 사용자가 보는 이름만: 창 제목, 로그인 화면, Dock/시작 메뉴, 설치 파일(PersoDubbing-mac.dmg, PersoDubbing-Setup-1.0.0-rc.1.exe). appId와 데이터 폴더는 그대로라 기존 설치와 설정에 영향 없음.
 - 문장 속 제품 이름은 전부 {app} 자리표시자(페이지·셸·Python 모두)이고 실행 중인 에디션 이름으로 채웁니다. 오픈소스는 PersoDub.
 - 빌드: npm run dist:dmg:prod / dist:win:prod. Windows는 "Build Windows installer" 워크플로에서 production 선택. 공개 릴리스 워크플로는 production 빌드를 거부합니다.
-- 미완 1건: 운영 전용 업데이트 주소. desktop/src/edition.js 의 PRODUCTION_UPDATE_URL 한 줄. 비어 있는 동안은 운영 빌드도 공개 GitHub 릴리스(PersoDub 빌드)에서 업데이트를 받습니다. 인프라 담당이 HTTPS 정적 폴더 주소를 주면 됩니다.
+- 운영 전용 업데이트 주소: desktop/src/edition.js 의 PRODUCTION_UPDATE_URL = https://portal-static.perso.ai/public/app/desktop/ (2026-10-28). 그 폴더엔 운영판 빌드의 latest.yml·latest-mac.yml과 PersoDubbing-* 파일만 올린다.
 
 ## 3. 크레딧 충전 버튼
 - 더빙 준비에서 Perso 모델을 고르면 비용 옆에 "크레딧 충전". 설정의 Workspace 아래에도 같은 버튼. 둘 다 Perso 구독 페이지(UTM 포함)로 갑니다. 잔액은 보여주지 않습니다.

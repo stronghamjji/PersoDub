@@ -27,10 +27,10 @@ test("the open-source feed is its GitHub Releases", () => {
   assert.deepEqual(resolveFeed({}, "opensource"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
 });
 
-test("the production feed is none while PRODUCTION_UPDATE_URL is empty", () => {
-  // Never the public releases: they turned a production install into an
-  // open-source one (0.8.3). The address itself: edition.test.mjs editionFeed.
-  assert.equal(resolveFeed({}, "production"), null);
+test("the production feed is Perso's folder, never the public releases", () => {
+  // The public releases turned a production install into an open-source one
+  // (0.8.3). The address itself: edition.test.mjs editionFeed.
+  assert.deepEqual(resolveFeed({}, "production"), { provider: "generic", url: "https://portal-static.perso.ai/public/app/desktop/" });
 });
 
 test("PERSODUB_UPDATE_URL points the updater at a test feed, whatever the edition", () => {

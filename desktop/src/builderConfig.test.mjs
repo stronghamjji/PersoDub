@@ -33,10 +33,12 @@ test("the arm64 dmg is copied again as <name>-mac.dmg, and nothing else is", () 
   assert.deepEqual(builderConfig("opensource").afterAllArtifactBuild({ artifactPaths: [zip] }), []);
 });
 
-test("the production build's publish entry is its own update address, or none while PRODUCTION_UPDATE_URL is empty", () => {
+test("the production build's publish entry is its own update address, Perso's folder by default", () => {
   assert.deepEqual(builderConfig("production", "https://updates.example/prod/").publish,
     [{ provider: "generic", url: "https://updates.example/prod/" }]);
-  assert.equal(builderConfig("production").publish, null);
+  assert.deepEqual(builderConfig("production").publish,
+    [{ provider: "generic", url: "https://portal-static.perso.ai/public/app/desktop/" }]);
+  assert.equal(builderConfig("production", "").publish, null);
   assert.deepEqual(builderConfig("opensource", "https://updates.example/prod/").publish,
     [{ provider: "github", owner: "stronghamjji", repo: "PersoDub" }]);
 });
