@@ -367,11 +367,10 @@ export const steps = [
                  lines: spans.map((s) => ({ text: s.textContent.trim(), top: s.getBoundingClientRect().top, bottom: s.getBoundingClientRect().bottom })) };
       });
       const lines = got.lines;
-      if (lines.length !== 4) throw new Error(`the job-logs text has ${lines.length} sentences, not 4`);
-      const tangled = lines.slice(1).filter((l, i) => l.top < lines[i].bottom - 1);
-      if (tangled.length) throw new Error(`sentences share a line: ${tangled.map((l) => l.text).join(" / ")}`);
+      // One sentence since 0.9.1 (owner, 2026-10-27): what goes, what never goes and why.
+      if (lines.length !== 1) throw new Error(`the job-logs text has ${lines.length} sentences, not 1`);
       const all = lines.map((l) => l.text).join(" ");
-      const need = app.page.lang === "ko" ? ["실패한 작업만", `${app.page.name}을 더 좋게 만드는 데`] : ["Only failed jobs", `make ${app.page.name} better`];
+      const need = app.page.lang === "ko" ? ["작업 기록만 보내", `${app.page.name} 개선을 도와요`] : ["job records", `Helps improve ${app.page.name}`];
       const absent = need.filter((w) => !all.includes(w));
       if (absent.length) throw new Error(`the job-logs text lacks ${absent.join(", ")}`);
       const was = (await app.api("/api/settings")).analytics_off;
@@ -395,7 +394,7 @@ export const steps = [
       const now = (await app.api("/api/settings")).analytics_off;
       if (now !== was) throw new Error(`analytics_off did not come back to ${was}`);
       const sw = (i) => `${got.labels[i]} ${got.on[i] ? "on" : "off"}`;
-      return `${sw(0)}, ${sw(1)}; job-logs text 4 sentences on 4 lines; usage counts switch → Save → analytics_off ${was}→${flipped}→${now}`;
+      return `${sw(0)}, ${sw(1)}; job-logs text one sentence; usage counts switch → Save → analytics_off ${was}→${flipped}→${now}`;
     } },
 
   { name: "About: version, What's new, Escape", looks: ["#aboutVersion", "#wnTitle"],
