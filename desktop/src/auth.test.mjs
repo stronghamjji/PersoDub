@@ -15,7 +15,7 @@ import {
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
 import { registerAuthIpc } from "./authIpc.js";
-import { SIGN_IN_PARTITION, clearSignInStorage, landedOnPerso, signInWindowFactory, wayBackUrl } from "./signInWindow.js";
+import { SIGN_IN_PARTITION, clearSignInStorage, handOffUrl, landedOnPerso, signInWindowFactory, wayBackUrl } from "./signInWindow.js";
 import { parseEnvFile } from "./kitEnv.js";
 
 // safeStorage's stand-in: reversible, and never the plain text on disk.
@@ -516,15 +516,14 @@ test("handed to the browser, the sign-in keeps waiting there: its window closing
   const done = auth.login();
   await settle();
   const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x&callbackUrl=y";
-  // What the window does at a hand-off (signInWindow.js): the browser opened
-  // on the window's first address, this sign-in's own, then it closes.
+  // What the window does at a hand-off (signInWindow.js): the browser opened, then the window closes.
   windows[0].onHandOff(google);
   windows[0].onClosed();
   assert.equal((await auth.status()).where, "browser");
   assert.equal((await auth.status()).waiting, true);
   assert.deepEqual(closed, [], "the port was given back while the browser was still on its way");
-  assert.ok(logs.includes("AUTH Google or Microsoft in the sign-in window (api.perso.ai/auth/oauth2/authorization/google): "
-    + "the whole sign-in goes on in the computer's browser at fake.test/auth/api/v2/authorize"), logs.join("\n"));
+  assert.ok(logs.includes("AUTH Google or Microsoft in the sign-in window: "
+    + "the whole sign-in goes on in the computer's browser at api.perso.ai/auth/oauth2/authorization/google"), logs.join("\n"));
   // That first address is this sign-in's: the state the way back must carry.
   assert.equal(new URL(windows[0].url).pathname, "/auth/api/v2/authorize");
   assert.equal(stateOf(windows[0].url), stateOf(opened[0]));
@@ -1107,17 +1106,17 @@ test("the sign-in window goes only where navigation lets it: the browser gets wh
   assert.deepEqual(f.external.slice(2), ["https://perso.ai/terms"]);
 });
 
-// Perso's sign-in page keeps where it goes on after Google in the window
-// that shows it, not in Google's address: given only that address, the
-// browser ended on Perso's home (2026-10-27). So the whole sign-in goes.
-test("a hand-off: the window does not go, the browser opens the window's own first address (this sign-in's authorize address), not Google's, the window closes after the event, and Open again opens that address again", async () => {
-  const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x&callbackUrl=y";
+// Perso's Google start with callbackUrl, opened in the browser, comes back as the account chosen at
+// Google, whoever the browser was signed in to Perso as (2026-10-27); the authorize address did not.
+test("a hand-off: the window does not go, the browser opens Perso's Google start with the way back, the window closes after the event, and Open again opens that address again", async () => {
+  const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=https://perso.ai/ko/oauth?a=1&b=2";
+  const opened = `${google}&callbackUrl=https%3A%2F%2Fapi.perso.ai%2Fauth%2Fapi%2Fv2%2Fauthorize%3Fx%3D1`;
   const start = "https://api.perso.ai/auth/api/v2/authorize?x=1";
   for (const name of ["wc:will-navigate", "wc:will-redirect"]) {
     const f = fakeWindows();
     const { win, seen, handle } = openOne(f, { navigation: (url) => (url === google ? "hand-off" : "allow") });
     assert.equal(win.fire(name, google).prevented, true, name);
-    assert.deepEqual(f.external, [start], name);
+    assert.deepEqual(f.external, [opened], name);
     assert.deepEqual(seen.handedOff, [google], name);
     // Not inside the navigation's own event, which Electron is still handling.
     assert.equal(win.destroyed, false, name);
@@ -1126,13 +1125,25 @@ test("a hand-off: the window does not go, the browser opens the window's own fir
     await settle();
     assert.equal(win.destroyed, true, name);
     assert.equal(seen.closed, 1, name);
-    assert.deepEqual(f.external, [start], name);
+    assert.deepEqual(f.external, [opened], name);
     handle.show();
-    assert.deepEqual(f.external, [start, start], name);
+    assert.deepEqual(f.external, [opened, opened], name);
     assert.deepEqual(win.did, [], name);
     assert.deepEqual(win.loaded, [start], name);
     handle.close();
     assert.equal(seen.closed, 1, name);
+  }
+});
+
+test("handOffUrl: a way back already in Perso's address is kept; else callbackUrl is added as text, the rest of the address as it was", () => {
+  const start = "https://api.perso.ai/auth/api/v2/authorize?x=1";
+  const back = "callbackUrl=https%3A%2F%2Fapi.perso.ai%2Fauth%2Fapi%2Fv2%2Fauthorize%3Fx%3D1";
+  const nested = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=https://perso.ai/ko/oauth/callback?lang=ko&next=/x";
+  assert.equal(handOffUrl(nested, start), `${nested}&${back}`);
+  assert.equal(handOffUrl("https://api.perso.ai/auth/oauth2/authorization/azure", start), `https://api.perso.ai/auth/oauth2/authorization/azure?${back}`);
+  for (const kept of ["https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x&callbackUrl=https://perso.ai/ko/workspace",
+    "https://api.perso.ai/auth/oauth2/authorization/google?callbackUrl=y"]) {
+    assert.equal(handOffUrl(kept, start), kept);
   }
 });
 

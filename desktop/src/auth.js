@@ -10,8 +10,7 @@ import { startCallbackServer } from "./authLoopback.js";
 // http://127.0.0.1:<port>/callback, where this app listens for that one
 // request (authLoopback.js), and the app trades the code for tokens. Google
 // and Microsoft take the whole sign-in to the computer's browser instead
-// (signInNavigation below): the same authorize address opens there, and the
-// browser comes back to the same address. The
+// (signInNavigation below), which comes back to the same address. The
 // password stays in Perso's page; the app never reads it. Once signed in, the
 // account's active Perso API key is written into kit.env as PERSO_API_KEY, the
 // line the backend reads (app/settings_env.py current_value).
@@ -92,16 +91,8 @@ export function authorizeUrl(cfg, { challenge, state, redirectUri }) {
   return `${cfg.authorizeUrl}?${q}`;
 }
 
-// Perso's sign-in page offers Google and Microsoft beside the e-mail
-// (perso.ai/login, 2026-10-27), and its buttons go to its sign-in server at
-// /auth/oauth2/authorization/google or /azure. Google refuses a sign-in in a
-// window of an app's own ("400 malformed" after the e-mail), so at either the
-// whole sign-in goes to the computer's browser: this sign-in's authorize
-// address opens there (signInWindow.js), and the person presses Google again
-// on Perso's page in it. That address alone is not enough: Perso's page keeps
-// where it goes on after Google in the window that shows it, and a browser
-// given only that address ended on Perso's home (2026-10-27). The providers'
-// own pages are handed over the same way, should one be reached some other way.
+// Google refuses a sign-in in an app's own window ("400 malformed" after the e-mail), so Perso's
+// Google and Microsoft starts, and the providers' own pages, go on in the computer's browser.
 const SOCIAL_START = "/auth/oauth2/authorization/";
 const SIGN_IN_PROVIDERS = ["accounts.google.com", "login.microsoftonline.com", "login.live.com"];
 
@@ -492,16 +483,12 @@ export function createAuth({
         waiting.window = makeSignInWindow({
           url: authorizeUrl(cfg, { challenge: pkce.challenge, state: pkce.state, redirectUri }),
           navigation: (url) => signInNavigation(url, { authorizeUrl: cfg.authorizeUrl, redirectUri }),
-          // Google or Microsoft (`to`): the window has opened the computer's
-          // browser at this sign-in's authorize address and closes. The
-          // sign-in waits on, for the same state, way back, port and ten
-          // minutes as before.
+          // The sign-in waits on in the computer's browser, with the same state, port and ten minutes.
           onHandOff: (to) => {
             if (pending !== waiting) return;
             waiting.where = "browser";
             const u = new URL(to);
-            const a = new URL(cfg.authorizeUrl);
-            log(`AUTH Google or Microsoft in the sign-in window (${u.host}${u.pathname}): the whole sign-in goes on in the computer's browser at ${a.host}${a.pathname}`);
+            log(`AUTH Google or Microsoft in the sign-in window: the whole sign-in goes on in the computer's browser at ${u.host}${u.pathname}`);
             onChange();
           },
           // Closed by the user, its close button or Esc: as Cancel. Closed
@@ -524,10 +511,8 @@ export function createAuth({
     });
   }
 
-  /** Open again: the waiting sign-in's window reopened on this sign-in's
-   * authorize address and brought forward, or, handed to the browser, the
-   * browser opened at that address again (signInWindow.js): after a sign-up
-   * that ended on Perso's home, either, signed in now, comes straight back. */
+  /** Open again: the window reopened on the authorize address, or, after a hand-off, the browser
+   * opened again at the hand-off address (signInWindow.js). */
   function showLogin() {
     if (!isOn()) return DISABLED;
     if (trading) return { outcome: "busy" };

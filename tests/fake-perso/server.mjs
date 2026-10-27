@@ -11,10 +11,9 @@
 //   GET  /login, POST /login      the sign-in form; sets the browser's session cookie
 //   GET  /auth/oauth2/authorization/<provider>
 //                                 the form's Google button, as Perso's: the browser comes back
-//                                 signed in as b@test.local and goes on to where the form it
-//                                 pressed that on was going, which that browser keeps, not the
-//                                 address (as Perso's page does); a browser that never showed
-//                                 the form goes to Perso's home, GET /
+//                                 signed in as b@test.local, whoever it was signed in as, and goes
+//                                 on to callbackUrl in the address, else to where the form it was
+//                                 pressed on was going (that browser keeps it), else to GET /
 //   GET  /logout                  signs the browser out
 //   POST /auth/api/v2/token       JSON: authorization_code (PKCE S256, one-use code); refresh_token -> 500,
 //                                 as the real one. A form (RFC 6749): refresh_token, answered
@@ -140,7 +139,8 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
       if (req.method === "GET" && url.pathname.startsWith("/auth/oauth2/authorization/")) {
         const sid = cookieOf(req) || rand();
         browserSessions.set(sid, "b@test.local");
-        const next = goingOn.get(sid) || "/";
+        const back = q.get("callbackUrl") ? new URL(q.get("callbackUrl"), `http://${req.headers.host}`) : null;
+        const next = back?.host === req.headers.host ? back.pathname + back.search : goingOn.get(sid) || "/";
         goingOn.delete(sid);
         res.writeHead(302, { Location: next.startsWith("/") ? next : "/", "Set-Cookie": `fake_session=${sid}; Path=/; HttpOnly` });
         return res.end();

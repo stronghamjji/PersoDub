@@ -47,10 +47,16 @@ export function landedOnPerso(url) {
   return Boolean(u && persoPage(u) && !SIGN_PAGE.test(u.pathname) && !hasWayBack(u));
 }
 
+// `to` with callbackUrl=`start` added when it has none, as text: Perso's redirect_uri keeps nested & unencoded.
+export function handOffUrl(to, start) {
+  if (/[?&]callbackUrl=/.test(to)) return to;
+  return `${to}${to.includes("?") ? "&" : "?"}callbackUrl=${encodeURIComponent(start)}`;
+}
+
 /** createAuth's makeSignInWindow: Perso's sign-in on `url` in a window over `parent()`.
  * navigation(to) answers "allow" (the window goes), "browser" (the computer's browser opens `to`),
- * "hand-off" (the whole sign-in goes on in the browser and the window closes) or "deny".
- * show() opens `url` again in the window, or after a hand-off in the browser. */
+ * "hand-off" (the browser opens handOffUrl(to, url) and the window closes) or "deny".
+ * show() opens `url` again in the window, or after a hand-off that address in the browser. */
 export function signInWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
   return ({ url, navigation, onClosed, onFailed, onHandOff }) => {
     const over = parent();
@@ -65,12 +71,12 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     // Camera, microphone, notifications: nothing a sign-in needs.
     wc.session.setPermissionRequestHandler((_wc, _permission, answer) => answer(false));
     win.on("page-title-updated", (e) => e.preventDefault());
-    let handedOff = false; // the sign-in goes on in the computer's browser, from `url`
+    let handedOff = null; // where the sign-in went on in the computer's browser
     let cameBack = false; // the window has gone back to `url` by itself after a landing
     const handOff = (to) => {
       if (handedOff) return;
-      handedOff = true;
-      openExternally(shell, url);
+      handedOff = handOffUrl(to, url);
+      openExternally(shell, handedOff);
       onHandOff(to);
       // After the navigation's event: Electron is still in that navigation.
       setImmediate(() => { if (!win.isDestroyed()) win.destroy(); });
@@ -122,7 +128,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     win.loadURL(url).catch(() => { /* did-fail-load has said it */ });
     return {
       show() {
-        if (handedOff) { openExternally(shell, url); return; }
+        if (handedOff) { openExternally(shell, handedOff); return; }
         if (win.isDestroyed()) return;
         // From the start: Perso's sign-in page, or, signed in, the code at once.
         load(url);
