@@ -631,7 +631,15 @@ test("a sign-in nobody finishes times out, and its window closes", async () => {
   const auth = createAuth({ enabled: true, cfg: CFG, store: tokenStore(join(mkdtempSync(join(tmpdir(), "odauth-")), AUTH_FILE), fakeSafeStorage()),
     fetchFn: async () => { throw new Error("unused"); }, makeSignInWindow: make, kitDir: () => null, listen: stubListen().listen, loginTimeoutMs: 20 });
   await auth.start();
-  assert.deepEqual(await auth.login(), { outcome: "failed", error: "timeout" });
+  // The time limit's timer is unref'd (the app may quit under it), and here
+  // nothing else holds the event loop: on Node 22 the runner ends the test
+  // before the timer fires. A referenced timer keeps the loop until it has.
+  const held = setTimeout(() => {}, 5000);
+  try {
+    assert.deepEqual(await auth.login(), { outcome: "failed", error: "timeout" });
+  } finally {
+    clearTimeout(held);
+  }
   assert.equal((await auth.status()).waiting, false);
   assert.equal(windows[0].closed, 1);
 });
@@ -1652,7 +1660,14 @@ test("an account with no key, a cancel, a newer sign-in, Perso's refusal and a t
   await settle();
   await auth.handleCallback({ error: "access_denied", state: stateOf(opened.at(-1)) });
   await third;
-  await auth.login();
+  // The fourth runs into the time limit, whose timer is unref'd: a referenced
+  // timer keeps the event loop (and so the test, on Node 22) until it fires.
+  const held = setTimeout(() => {}, 5000);
+  try {
+    await auth.login();
+  } finally {
+    clearTimeout(held);
+  }
   const noKey = auth.login();
   await settle();
   await auth.handleCallback(back(opened));
