@@ -26,11 +26,14 @@ const persoPage = (u) => persoSite(u) && u.hostname !== "api.perso.ai";
 const hasWayBack = (u) => Boolean(u.searchParams.get("continue") || u.searchParams.get("callbackUrl"));
 
 // `to` with continue and callbackUrl set to `start` when it is Perso's sign-in or sign-up page without a way back, else null.
-export function wayBackUrl(to, start) {
+// `utm` is the app's utm tail ("utm_source=...&utm_content=sign_in"): its parameters go on the page's own
+// address when it has none, so Perso's web analytics see the visit as the desktop app's.
+export function wayBackUrl(to, start, utm = "") {
   const u = parsed(to);
   if (!u || !persoPage(u) || !SIGN_PAGE.test(u.pathname) || hasWayBack(u)) return null;
   u.searchParams.set("continue", start);
   u.searchParams.set("callbackUrl", start);
+  for (const [k, v] of new URLSearchParams(utm)) if (!u.searchParams.has(k)) u.searchParams.set(k, v);
   return u.href;
 }
 
@@ -75,7 +78,7 @@ function persoWindow({ BrowserWindow, shell, parent, title, width, height }) {
 
 // createAuth's makeSignInWindow: navigation(to) answers allow, browser, hand-off (the browser opens handOffAddress(to), then it closes) or deny; show() reloads `url`, not after a hand-off.
 export function signInWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
-  return ({ url, navigation, handOffAddress, onClosed, onFailed, onHandOff }) => {
+  return ({ url, navigation, handOffAddress, utm = "", onClosed, onFailed, onHandOff }) => {
     const win = persoWindow({ BrowserWindow, shell, parent, title, width: WIDTH, height: HEIGHT });
     const wc = win.webContents;
     let handedOff = false; // the sign-in goes on in the computer's browser
@@ -93,7 +96,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     const loadAfter = (to) => setImmediate(() => load(to));
     const guard = (e, to) => {
       const where = navigation(to);
-      const back = where === "allow" ? wayBackUrl(to, url) : null;
+      const back = where === "allow" ? wayBackUrl(to, url, utm) : null;
       if (where === "allow" && !back) return;
       e.preventDefault();
       if (back) loadAfter(back);
@@ -113,7 +116,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     };
     // Perso's links between its sign-in and sign-up pages change the page in place, without will-navigate.
     const arrived = (to) => {
-      const back = wayBackUrl(to, url);
+      const back = wayBackUrl(to, url, utm);
       if (back) loadAfter(back);
       else if (landedOnPerso(to)) comeBack();
     };

@@ -46,9 +46,9 @@ export function authConfig(env = process.env, version = "") {
 /** A link into Perso with the tail every one carries (app/perso_client.py
  * UTM_TAIL) and the button as utm_content: the sign-in screen's Make a key
  * is "signup", as the key window's link is (SIGNUP_LINK). */
+export const utmTail = (version, content) => `utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v${version}&utm_content=${content}`;
 export function withUtm(url, version, content) {
-  const tail = `utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v${version}&utm_content=${content}`;
-  return `${url}${url.includes("?") ? "&" : "?"}${tail}`;
+  return `${url}${url.includes("?") ? "&" : "?"}${utmTail(version, content)}`;
 }
 
 /** The redirect address for one of the ports: exactly what Perso has registered. */
@@ -493,6 +493,8 @@ export function createAuth({
           url,
           navigation: (to) => signInNavigation(to, { authorizeUrl: cfg.authorizeUrl, redirectUri }),
           handOffAddress: (to) => handOffAddress(cfg, to, url),
+          // Perso's own sign-in and sign-up pages carry the tail too, since Perso drops the authorize address's.
+          utm: utmTail(cfg.version, "sign_in"),
           // The sign-in waits on in the computer's browser, with the same state, port and ten minutes.
           onHandOff: (to) => {
             if (pending !== waiting) return;

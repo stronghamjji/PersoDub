@@ -1383,6 +1383,12 @@ test("wayBackUrl: Perso's sign-in or sign-up page without a way back gets contin
     assert.equal(back.searchParams.get("callbackUrl"), start, page);
   }
   assert.equal(wayBackUrl("https://perso.ai/ko/join", START), `https://perso.ai/ko/join?${BACK}`);
+  // With the app's utm tail: the page's own address carries it, and a tag the page already has is kept.
+  const tagged = new URL(wayBackUrl("https://perso.ai/ko/login", START, "utm_source=desktop_app&utm_content=sign_in"));
+  assert.deepEqual([...tagged.searchParams], [["continue", START], ["callbackUrl", START], ["utm_source", "desktop_app"], ["utm_content", "sign_in"]]);
+  const own = new URL(wayBackUrl("https://perso.ai/ko/login?utm_source=web", START, "utm_source=desktop_app&utm_content=sign_in"));
+  assert.equal(own.searchParams.get("utm_source"), "web");
+  assert.equal(own.searchParams.get("utm_content"), "sign_in");
   const kept = new URL(wayBackUrl("https://perso.ai/ko/login?utm_source=desktop_app&leave=true", START));
   assert.deepEqual([...kept.searchParams], [["utm_source", "desktop_app"], ["leave", "true"], ["continue", START], ["callbackUrl", START]]);
   // An empty one is none: Perso's pages read continue || callbackUrl.
