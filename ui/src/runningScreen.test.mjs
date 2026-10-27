@@ -55,7 +55,7 @@ function harness({ jobId = "j1", status = "running", confirmAnswer = true,
     return els.get(id);
   };
   const log = { homeNoticeAndLog: 0, cancelled: [], settings: 0, opened: [], warned: [],
-                resumed: [], choicesFor: [] };
+                resumed: [], choicesFor: [], steps: [] };
 
   const real = { warn: console.warn };
   console.warn = (m) => log.warned.push(m);
@@ -78,6 +78,7 @@ function harness({ jobId = "j1", status = "running", confirmAnswer = true,
     jobNote: (job) => job.note || "",
     translatorChoices: async (job) => { log.choicesFor.push(job.id); return choices; },
     onResumeWith: (id, translator) => { log.resumed.push([id, translator]); },
+    record: (name, props) => log.steps.push([name, props]),
   });
   return { $, api, log };
 }
@@ -640,4 +641,21 @@ test("a failed dub shows a plain sentence, never what the program said when it b
     "It stopped while getting the dubbing ready. Press Start over. If it stops again, quit and reopen PersoDub, then try again.");
   h.api.paintNotices({ id: "j1", status: "error", error: "local STT reported an error ([Errno 2] No such file)" });
   assert.equal(h.$("doneNotice").innerHTML, "Local STT reported an error.");
+});
+
+// The charts' steps (ui/src/events.mjs): which popup came up, and a Recharge pressed in it.
+test("a popup shown is a step by its notice, and Recharge pressed in it another; See plans and Open Settings are not recharges", async (t) => {
+  const h = harness();
+  t.after(h.log.restore);
+  h.api.showCreditModal({ type: "perso_credit_exhausted", link: "https://perso.example/recharge" });
+  await h.$("creditRechargeBtn").fire("click", { preventDefault() {} });
+  h.api.showCreditModal({ type: "perso_plan_required", link: "https://perso.ai/pricing" });
+  await h.$("creditRechargeBtn").fire("click", { preventDefault() {} });
+  h.api.showCreditModal({ type: "perso_invalid_key" });
+  await h.$("creditRechargeBtn").fire("click", { preventDefault() {} });
+  assert.deepEqual(h.log.steps, [
+    ["credit_popup_shown", { reason: "perso_credit_exhausted" }], ["recharge_opened", { from: "popup" }],
+    ["credit_popup_shown", { reason: "perso_plan_required" }],
+    ["credit_popup_shown", { reason: "perso_invalid_key" }],
+  ]);
 });

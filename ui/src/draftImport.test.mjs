@@ -33,7 +33,7 @@ function makeEl(id) {
   };
 }
 
-function harness({ responses = {}, state, checkFile, onSaveLinkReady } = {}) {
+function harness({ responses = {}, state, checkFile, onSaveLinkReady, record } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -81,7 +81,8 @@ function harness({ responses = {}, state, checkFile, onSaveLinkReady } = {}) {
   };
 
   clearDraft();
-  const api = initDraftImport({ $, state, checkFile, onReplaced: (id) => log.replaced.push(id), onSaveLinkReady });
+  const api = initDraftImport({ $, state, checkFile, onReplaced: (id) => log.replaced.push(id), onSaveLinkReady,
+                                ...(record ? { record } : {}) });
   return { $, api, log };
 }
 
@@ -189,6 +190,30 @@ test("a link is fetched and, once ready, becomes the draft", async () => {
   assert.equal(d.downloadId, "dl1");
   assert.equal(d.name, "street-food");
   log.restore();
+});
+
+// The charts' media_added (ui/src/events.mjs): a link the app took, never the link itself.
+test("a link taken is recorded as a video brought in by link; one refused is not", async () => {
+  const steps = [];
+  const { $, api, log } = harness({
+    responses: { "/api/downloads": ok({ id: "dl1" }), "/api/downloads/dl1": ok({ status: "downloading", percent: 1 }) },
+    record: (name, props) => steps.push([name, props]),
+  });
+  api.render();
+  $("dubbingLinkInput").value = "https://example.com/my-video";
+  await $("dubbingLinkInput").fire("keydown", { key: "Enter", preventDefault() {} });
+  await settle();
+  assert.deepEqual(steps, [["media_added", { source: "link", kind: "video" }]]);
+  log.restore();
+  const refused = [];
+  const h = harness({ responses: { "/api/downloads": { ok: false, status: 400, json: async () => ({ detail: "no" }) } },
+                      record: (name, props) => refused.push([name, props]) });
+  h.api.render();
+  h.$("dubbingLinkInput").value = "https://example.com/other";
+  await h.$("dubbingLinkInput").fire("keydown", { key: "Enter", preventDefault() {} });
+  await settle();
+  assert.deepEqual(refused, []);
+  h.log.restore();
 });
 
 // Save video with no video: the link field alone (owner, 2026-10-24).

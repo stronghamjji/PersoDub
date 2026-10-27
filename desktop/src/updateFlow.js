@@ -19,7 +19,11 @@ import { homeText, secondsSince, sizeText, urlText } from "./logLine.js";
 // `edition` is the build's (edition.js), whose updates are read: its
 // repository's releases, or the production edition's PRODUCTION_UPDATE_URL.
 // `load` imports electron-updater and electron; a test hands it stand-ins.
-export function createUpdater({ app, dialog, ctx, shellLog, edition, load = (name) => import(name) }) {
+// `track` records an update found as a step (events.js track), and
+// `beforeQuit` is waited for before Restart to update quits (the last batch
+// of events, which quitAndInstall may not give will-quit the time to send).
+export function createUpdater({ app, dialog, ctx, shellLog, edition, load = (name) => import(name),
+                                track = () => {}, beforeQuit = async () => {} }) {
   let updaterStarted = false;
   let updateDownloaded = false;
 
@@ -90,6 +94,7 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition, load = (nam
       let checkFrom = null;
       autoUpdater.on("update-available", async (info) => {
         shellLog(`PERSODUB_UPDATE available ${info?.version ?? ""}`);
+        track("update_available", { version: info?.version });
         const file = info?.files?.[0];
         if (file) {
           shellLog(`UPDATE CHECK DONE (${secondsSince(checkFrom)}s): ${info.version} available, ${file.url} ${sizeText(file.size)}`);
@@ -202,6 +207,7 @@ export function createUpdater({ app, dialog, ctx, shellLog, edition, load = (nam
       }
     }
     const { default: electronUpdater } = await import("electron-updater");
+    await beforeQuit();
     // quitAndInstall bypasses will-quit in some paths -- stop the engines
     // explicitly first so no uvicorn is orphaned across the swap.
     if (ctx.engines) ctx.engines.stopAll();

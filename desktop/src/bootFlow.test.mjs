@@ -115,6 +115,32 @@ test("an install that stops names its step on the error screen, and shell.log te
   assert.equal(failed + 2, lines.length, lines.join("\n"));
 });
 
+// The install is a step of its own in the charts (events.js track): it
+// started, how big it was, how it ended and the error screen it left.
+test("an install that stops records its start, its end with the reason, and the error screen", async (t) => {
+  const appDir = join(base, "app-steps");
+  mkdirSync(join(appDir, "resources", "payload", "app-repo"), { recursive: true });
+  writeFileSync(join(appDir, "resources", "payload", "KIT_VERSION"), "9.9.9+test");
+  const kitBefore = process.env.PERSODUB_KIT_DIR;
+  process.env.PERSODUB_KIT_DIR = join(base, "kit-steps");
+  t.after(() => { process.env.PERSODUB_KIT_DIR = kitBefore; });
+  const steps = [];
+  const win = { loadFile: async () => {}, webContents: { send: () => {} } };
+  const app = { getVersion: () => "1.2.3", getPath: () => join(base, "userData") };
+  const boot = createBoot({
+    app, ctx: {}, appDir, edition: "production", shellLog: () => {}, countUsage: () => {}, sendReport: () => {},
+    flushReports: async () => {}, startUpdater: () => {}, track: (name, props) => steps.push([name, props]),
+  });
+  await boot(win);
+  assert.deepEqual(steps.map(([name]) => name), ["kit_install_started", "kit_install_finished", "error_shown"]);
+  assert.equal(steps[0][1].mode, "install");
+  assert.ok(Number.isInteger(steps[0][1].gigabytes));
+  const [, end] = steps[1];
+  assert.deepEqual({ ...end, seconds: 0 }, { outcome: "failed", reason: end.reason, seconds: 0 });
+  assert.ok(Number.isInteger(end.seconds));
+  assert.deepEqual(steps[2][1], { code: end.reason, where: "install" });
+});
+
 // A computer whose install keeps failing never reached the flush after the
 // page is up, so the reports it kept never left. The queue is flushed as the
 // launch starts, before the install, and again once an install that stopped

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_EVENTS, excludedPrefixes, isExcluded, toAmplitude, toGa4, validateEvents } from "./events-logic.js";
+import { MAX_EVENTS, STEPS, excludedPrefixes, isExcluded, stepProps, toAmplitude, toGa4, validateEvents } from "./events-logic.js";
 
 // Run me: node --test relay/*.test.mjs
 
@@ -91,4 +91,68 @@ test("Amplitude gets the same events in the trial's shape", () => {
     event_properties: { button: "home_nav_settings", screen: "home", edition: "production" },
   });
   assert.equal(toAmplitude({ ...BATCH, userId: "u-42" })[0].user_id, "u-42");
+});
+
+// The steps of a person's way through the app (0.9.1): their own names, and
+// only the properties STEPS lists, each of the kind it lists.
+const step = (name, props, t = NOW - 1000) => ({ name, screen: "home", t, props });
+
+test("a step keeps the properties STEPS lists, of the kind it lists, and nothing else", () => {
+  const got = check({ events: [
+    step("dub_started", { mode: "perso", target_lang: "ko", minutes: 3, video_seconds: 170, speakers: 2 }),
+    step("dub_finished", { outcome: "failed", stage: "synthesize", reason: "out-of-memory", mode: "local", seconds: 412 }),
+    step("app_quit", { last_screen: "home", signed_in: false, session_seconds: 95 }),
+    step("update_available", { version: "0.9.2" }),
+    step("key_page_opened", {}),
+  ] });
+  assert.deepEqual(got.batch.events.map((e) => [e.name, e.props]), [
+    ["dub_started", { mode: "perso", target_lang: "ko", minutes: 3, video_seconds: 170, speakers: 2 }],
+    ["dub_finished", { outcome: "failed", stage: "synthesize", reason: "out-of-memory", mode: "local", seconds: 412 }],
+    ["app_quit", { last_screen: "home", signed_in: false, session_seconds: 95 }],
+    ["update_available", { version: "0.9.2" }],
+    ["key_page_opened", {}],
+  ]);
+});
+
+test("a step's text, file name, link or address has no way through: only words off its list", () => {
+  assert.deepEqual(stepProps("media_added", { source: "my_video.mp4", kind: "video", title: "My wedding" }), { kind: "video" });
+  assert.deepEqual(stepProps("dub_started", { target_lang: "Korean", minutes: -1, speakers: 2.5, mode: "cloud" }), {});
+  assert.deepEqual(stepProps("app_quit", { last_screen: "/Users/me", signed_in: "yes", session_seconds: 1e12 }), {});
+  assert.deepEqual(stepProps("inquiry_sent", { kind: "bug", email: "a@b.c", subject: "help" }), { kind: "bug" });
+  assert.deepEqual(stepProps("update_installed", { version: "https://x.y/0.9.2" }), {});
+  for (const [name, spec] of Object.entries(STEPS)) {
+    for (const kind of Object.values(spec)) {
+      if (Array.isArray(kind)) for (const w of kind) assert.match(w, /^[a-z0-9][a-z0-9_.-]{0,31}$/, `${name}: ${w}`);
+    }
+    assert.match(name, /^[a-z][a-z0-9_]{0,39}$/);
+  }
+});
+
+test("a name that is not a step stays a press, props or not; a step without props is a press too", () => {
+  const got = check({ events: [step("home_nav_settings", { mode: "local" }), { name: "sign_out", screen: "home", t: NOW - 1 }] });
+  assert.deepEqual(got.batch.events, [{ name: "home_nav_settings", screen: "home", t: NOW - 1000 },
+    { name: "sign_out", screen: "home", t: NOW - 1 }]);
+  assert.deepEqual(toGa4(got.batch, { now: NOW })[0].events.map((e) => [e.name, e.params.button]),
+    [["button_press", "home_nav_settings"], ["button_press", "sign_out"]]);
+});
+
+test("GA4 and Amplitude chart a step under its own name with its props; GA4 writes true and false as words", () => {
+  const batch = check({ events: [
+    step("sign_in_succeeded", { method: "browser", new_account: true, has_key: false }),
+    step("app_screen", { previous_screen: "home", seconds_on_previous: 12 }),
+    { name: "app_screen", screen: "done", t: NOW - 500 },
+  ] }).batch;
+  const [ga] = toGa4(batch, { now: NOW });
+  assert.deepEqual(ga.events.map((e) => e.name), ["sign_in_succeeded", "app_screen", "app_screen"]);
+  assert.deepEqual(ga.events[0].params, {
+    method: "browser", new_account: "true", has_key: "false", screen: "home", app_version: "0.9.1",
+    edition: "production", os: "mac", os_version: "15.5", session_id: String(Math.floor(BATCH.sessionId / 1000)),
+    engagement_time_msec: 1,
+  });
+  assert.equal(ga.events[1].params.seconds_on_previous, 12);
+  assert.equal("button" in ga.events[0].params, false);
+  const amp = toAmplitude(batch);
+  assert.deepEqual(amp.map((e) => e.event_type), ["sign_in_succeeded", "app_screen", "app_screen"]);
+  assert.deepEqual(amp[0].event_properties, { method: "browser", new_account: true, has_key: false, screen: "home", edition: "production" });
+  assert.deepEqual(amp[2].event_properties, { screen: "done", edition: "production" });
 });

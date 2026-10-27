@@ -19,7 +19,7 @@ import { initEscapeKey } from "./escapeKey.mjs";
 // Escape closes what is on top, and one menu is open at a time
 // (ui/src/escapeKey.mjs). First, so it is asked before every dialog's own listener.
 initEscapeKey();
-import { startEvents } from "./events.mjs";
+import { record, startEvents } from "./events.mjs";
 // The buttons pressed and screens shown, while Settings > Privacy allows it
 // (ui/src/events.mjs). Early, so no press goes unseen.
 startEvents();
@@ -53,10 +53,11 @@ import { initDraftSetup } from "./draftSetup.mjs";
 import { initLanguageRow } from "./languageRow.mjs";
 import { initConfirmDialogs } from "./confirmDialogs.mjs";
 import { initExportDialog } from "./exportDialog.mjs";
-import { clearDraft, getDraft, onDraftChange, setDraft, setRanges, setDraftRatio } from "./draft.mjs";
+import { clearDraft, getDraft, keptSeconds, onDraftChange, setDraft, setRanges, setDraftRatio } from "./draft.mjs";
 import { readKept, keepDraft, dropKept, draftMark } from "./keptDrafts.mjs";
 import { initRatioUi } from "./ratio.mjs";
 import { wireUpdates } from "./updateWindow.mjs";
+import { createDubTracker, startedFromForm, startedFromJob } from "./dubTrack.mjs";
 import { fmtClock, fmtClockTenths, fmtLength, formatBytes, escapeHtml, errorText, serverText, statusParts, rawLogLines, restartFailure, restartRanOutOfMemory } from "./format.mjs";
 import { currentLanguage, languageName, pageLanguage, savedSettings, t } from "./i18n.mjs";
 import { paintMarkupWords } from "./markupWords.mjs";
@@ -107,6 +108,9 @@ const state = {
   job: null,
   pollGeneration: 0, // bumped whenever we switch jobs, so a stale poll loop stops itself
 };
+// A dubbing's stages for the charts, off every job record the page reads
+// (ui/src/dubTrack.mjs).
+const dubTrack = createDubTracker({ parse: parseProgress });
 
 // ---------------- The left panel: the top bar's left pane button -----------
 // Projects moved to the Home screen (new-layout mockup, user 2026-09-29);
@@ -831,7 +835,7 @@ const draftSetup = initDraftSetup({
   // A draft that becomes a dubbing is no longer a draft to come back to.
   submitDubStart: async (o) => {
     const d = getDraft();
-    const started = await submitDubStart(o);
+    const started = await submitDubStart({ ...o, seconds: d ? keptSeconds(d) : undefined });
     if (started && d) forgetDraft(d.downloadId);
     if (started) state.draftProject = null;
     return started;
@@ -1325,7 +1329,10 @@ const runningScreen = initRunningScreenUi({
   // the button that offers to stop it.
   getJobId: () => state.jobId,
   getJobStatus: () => (state.job ? state.job.status : null),
-  onCancel: (jobId) => cancelDubJob(jobId),
+  onCancel: (jobId) => {
+    if (state.job && state.job.id === jobId) dubTrack.cancelled(state.job);
+    return cancelDubJob(jobId);
+  },
   // The question, asked in the app's own dialog rather than the browser's.
   askCancel: () => confirmDialogs.askCancelDub(),
   onOpenSettings: () => settings.openSettings("keys"),
@@ -1368,6 +1375,8 @@ const projects = initProjectsUi({
   // worked out, so nothing here costs a second request.
   onJobs: (jobs) => { home.renderProjects(jobs); languageRow.setJobs(jobs); },
   onRunningPct: (jobId, pct) => home.setRunningPct(jobId, pct),
+  // Every job Home's Up next card reads: a dubbing's stages for the charts.
+  onSeen: (job) => dubTrack.see(job),
 });
 
 const home = initHomeScreen({
@@ -1411,6 +1420,12 @@ function forgetDraft(downloadId) {
   home.renderDrafts(keptDrafts);
 }
 onDraftChange(rememberDraft);
+// A video on the draft screen is a step in the charts, once a draft.
+let draftOnScreen = "";
+onDraftChange((d) => {
+  if (d && d.downloadId !== draftOnScreen) record("draft_opened", {});
+  draftOnScreen = d ? d.downloadId : "";
+});
 async function reopenDraft(downloadId) {
   const kept = keptDrafts.find((k) => k.downloadId === downloadId);
   if (!kept) return;
@@ -1510,6 +1525,7 @@ async function cancelQueuedJob(job) {
   const live = job.status !== "queued";
   const question = job.kind === "separate" ? t("Stop separating?") : job.kind === "erase" ? t("Stop erasing?") : undefined;
   if (live && !(await confirmDialogs.askCancelDub(question))) return;
+  dubTrack.cancelled(job);
   try {
     const r = await fetch(`/api/dub/jobs/${job.id}/cancel`, { method: "POST" });
     // 409: it was over already, and the list drawn below says so.
@@ -1625,10 +1641,13 @@ async function restartVoiceEngine(errorEl) {
 // forever, 2,676 times in 13 seconds on one Mac (issue #117, 2026-09-28).
 // `retry`: try the whole thing again once whatever was missing is fixed (a
 // key saved, a workspace picked, models downloaded, signed in to ChatGPT).
-async function submitDubStart({ fd, label, errorEl, retry, retried = false }) {
+async function submitDubStart({ fd, label, errorEl, retry, retried = false, seconds }) {
   errorEl.textContent = "";
   try {
     const jobId = await startDubJob(fd);
+    // A step in the charts, and its stages watched from here (ui/src/dubTrack.mjs).
+    record("dub_started", startedFromForm(fd, seconds));
+    dubTrack.started(jobId, fd.get("dub_mode"));
     ratioUi.carryTo(jobId);   // a draft's ratio goes with the job it becomes
     state.jobId = jobId;
     noteLastScreen(jobId);
@@ -1659,7 +1678,7 @@ async function submitDubStart({ fd, label, errorEl, retry, retried = false }) {
     } else if (!retried && e && e.status === 422 && /voice engine is not running/.test(serverText(e))) {
       const restart = await restartVoiceEngine(errorEl);
       if (restart.ok) {
-        return submitDubStart({ fd, label, errorEl, retry, retried: true });
+        return submitDubStart({ fd, label, errorEl, retry, retried: true, seconds });
       }
       // The refusal, and under it why starting the engine again did not work.
       errorEl.textContent = restart.alone ? restart.why : [errorText(e), restart.why].filter(Boolean).join("\n");
@@ -1690,6 +1709,7 @@ async function startDubbing() {
     const label = np.file ? np.file.name : (np.probe ? np.probe.title : (np.title || t("Dubbing")));
     const started = await submitDubStart({
       fd, label, errorEl: $("projectError"), retry: () => startDubbing(),
+      seconds: np.probe ? np.probe.duration_sec : undefined,
     });
     if (started) {
       // The video is on its way to the server now; the dialog's copy of it can go.
@@ -1724,7 +1744,9 @@ async function startBatchDubbing(files) {
     for (const f of files) {
       const fd = buildDubFormData({ ...opts, video: f, sourceUrl: null,
                                     downloadId: null, project: undefined, trim: null });
-      await startDubJob(fd);
+      const jobId = await startDubJob(fd);
+      record("dub_started", startedFromForm(fd));
+      dubTrack.started(jobId, fd.get("dub_mode"));
     }
     newProject.closeNewProject();
     projects.renderHistory().catch(() => {});
@@ -1779,6 +1801,8 @@ const JOB_SCREENS = new Set(["running", "done", "failed"]);
 // clicked the job (resumeJob), or the job reported in on its own (the poll).
 // Only the second one has to keep its hands off the screen.
 async function handleJobUpdate(job, { opened = false } = {}) {
+  // Its stage, for the charts, wherever the person is (ui/src/dubTrack.mjs).
+  dubTrack.see(job);
   // The Dubbing tab shows this project's script, not the Import block an
   // empty new project left there: painted when another project takes the
   // screen, not on every report of the same one.
@@ -1970,6 +1994,9 @@ async function retryStopped(jobId) {
       return;
     }
     const { job_id } = await r.json();
+    // A new dubbing in the charts, made as the stopped one was.
+    if (state.job && state.job.id === jobId) record("dub_started", { ...startedFromJob(state.job), again: true });
+    dubTrack.started(job_id, state.job && state.job.dub_mode);
     // Straight onto the new job's running screen, sidebar and all -- the same
     // path Projects takes to open a job.
     projects.renderHistory().catch(() => {});
@@ -2026,6 +2053,7 @@ async function resumeStopped(jobId, translator = null) {
       return;
     }
     runningScreen.forgetPopups(jobId);
+    dubTrack.started(jobId, state.job && state.job.id === jobId ? state.job.dub_mode : undefined);
     projects.renderHistory().catch(() => {});
     if (state.jobId === jobId) await resumeJob(jobId);
   } catch (e) {

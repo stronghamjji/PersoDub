@@ -56,9 +56,11 @@ export function startStopText(message) {
  * The launch: find the kit (installing what it is missing), start the
  * engines, load the app page. Returns boot(win), which the error screen's
  * Retry runs again. Boot sets ctx.installCtx, for the pack IPC, and
- * ctx.engines and ctx.bootedKitDir once the engines are up.
+ * ctx.engines and ctx.bootedKitDir once the engines are up. `track` records
+ * the install and the error screens as steps (events.js track).
  */
-export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, sendReport, flushReports, startUpdater }) {
+export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, sendReport, flushReports, startUpdater,
+                             track = () => {} }) {
   // The old-path kit boot walked away from (issue #6); the cleanup step
   // removes it once its models are carried over.
   let abandonedKitDir = null;
@@ -186,6 +188,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       const tooLong = kitPathTooLong(cfg.kitDir);
       if (tooLong) {
         countUsage("install_failure", cfg.kitDir, "path-too-long");
+        track("error_shown", { code: "path-too-long", where: "install" });
         // The report in English, whatever the screen says it in.
         sendReport({ kind: "install", kitDir: cfg.kitDir, code: "path-too-long", message: kitPathTooLong(cfg.kitDir, process.platform, inEnglish) });
         // No logDir: this stopped before a byte was written, so there is no
@@ -202,6 +205,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       const noRoom = notEnoughSpace(stillNeeded, free);
       if (noRoom) {
         countUsage("install_failure", cfg.kitDir, "disk-full");
+        track("error_shown", { code: "disk-full", where: "install" });
         sendReport({ kind: "install", kitDir: cfg.kitDir, code: "disk-full", message: notEnoughSpace(stillNeeded, free, inEnglish) });
         await showScreen(win, "error.html", { title: t("Not enough space to install"), message: noRoom });
         return false;
@@ -215,6 +219,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       });
       // What this run was given, before its steps' own lines (installer.js).
       shellLog(`INSTALL START (${mode}): ${toRun.length} steps, ${(stillNeeded / 1024 ** 3).toFixed(1)} GB to download`);
+      track("kit_install_started", { mode, gigabytes: Math.round(stillNeeded / 1024 ** 3) });
       shellLog(`Inputs: ${JSON.stringify({
         kitDir: cfg.kitDir, edition, appVersion: app.getVersion(), kitVersion,
         platform: `${process.platform}-${process.arch}`, steps: toRun.map((s) => s.id),
@@ -241,6 +246,8 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         for (const line of detailLines(message)) shellLog(line, "ERROR");
         countUsage("install_failure", cfg.kitDir, code, failedStep);
         sendReport({ kind: "install", kitDir: cfg.kitDir, code, step: failedStep, message });
+        track("kit_install_finished", { outcome: "failed", reason: code, seconds: Math.round((Date.now() - from) / 1000) });
+        track("error_shown", { code, where: "install" });
         // The title says it stopped, the line under it where, and the sentence
         // why and what to press; the tool's own words fold under Details. A
         // download's fetch says only "fetch failed", its reason (a refused
@@ -264,6 +271,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         return false;
       }
       shellLog(`INSTALL ALL DONE (${secondsSince(from)}s)`);
+      track("kit_install_finished", { outcome: "done", seconds: Math.round((Date.now() - from) / 1000) });
     }
     return true;
   }
@@ -326,6 +334,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       // PERSODUB_READY was never reached -- so without this it is invisible.
       countUsage("install_failure", cfg.kitDir, "engine-start");
       sendReport({ kind: "install", kitDir: cfg.kitDir, code: "engine-start", message: errorText(err) });
+      track("error_shown", { code: "engine-start", where: "start" });
       // The screen's own title (PersoDub could not start), the sentence for
       // what happened, and the health check's words under Details.
       await showScreen(win, "error.html", { message: startStopText(errorText(err)), details: errorText(err),

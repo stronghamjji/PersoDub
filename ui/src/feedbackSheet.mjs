@@ -12,6 +12,7 @@
 // #feedbackDetails, #feedbackReplyTo, #feedbackReplyToHint, #feedbackLogsNote, #feedbackConsent,
 // #feedbackPrivacy, #feedbackStatus, #feedbackClose and #feedbackSend.
 import { t } from "./i18n.mjs";
+import { record as recordStep } from "./events.mjs";
 
 // Perso's privacy policy, in Korean and in English.
 export const PRIVACY_URL = {
@@ -29,7 +30,7 @@ export const PRIVACY_URL = {
  * @param {(url: string) => void} deps.openUrl
  * @returns {() => void} opens the form
  */
-export function initFeedbackSheet({ $, send, language, openUrl, account }) {
+export function initFeedbackSheet({ $, send, language, openUrl, account, record = recordStep }) {
   const type = $("feedbackType"), subject = $("feedbackSubjectInput"), details = $("feedbackDetails"),
         consent = $("feedbackConsent"), status = $("feedbackStatus");
   // Optional: left empty, the answer goes to the signed-in account's address,
@@ -66,6 +67,9 @@ export function initFeedbackSheet({ $, send, language, openUrl, account }) {
     // Landed, or kept by the shell for the next launch: either way it is on
     // its way, and the next inquiry starts empty. One the shell could not
     // even keep stays in the form, to be sent again.
+    // A step in the charts: its kind and whether it went now, never what it says.
+    if (answer && (answer.id || answer.queued)) record("inquiry_sent", { kind: type.value, queued: !answer.id });
+    else record("inquiry_failed", { reason: answer && answer.needReplyTo ? "need_reply_to" : "failed" });
     if (answer && (answer.id || answer.queued)) {
       status.textContent = answer.id
         ? t("Received. Reference {id}", { id: answer.id })

@@ -13,6 +13,7 @@
 //
 // Everything this file touches is #signInScreen and Home's #homeAccount.
 import { t } from "./i18n.mjs";
+import { record as recordStep } from "./events.mjs";
 
 // A failed sign-in's reason (createAuth's `error`) as one short line.
 const FAILED = {
@@ -36,7 +37,8 @@ export function signInFace(status) {
   return status.hasKey ? "" : "nokey";
 }
 
-export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win = globalThis.window, doc = globalThis.document }) {
+export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win = globalThis.window, doc = globalThis.document,
+                             record = recordStep }) {
   let status = { enabled: false };
   let note = "";      // why the last sign-in did not finish, on the first face
   let keyNote = "";   // what the last "Check again" found, on the no-key face
@@ -118,8 +120,10 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
     $("homeAccountName").textContent = signedIn ? (status.account || t("Perso account")) : "";
     $("homeAccount").title = signedIn ? t("signed in as {account}", { account: status.account || t("Perso account") }) : "";
     holdBackground(!!face);
-    // A new face takes the keyboard on its first button.
+    // A new face takes the keyboard on its first button, and is a step in
+    // the charts: who stops at the sign-in, and where.
     if (face && face !== shownFace) {
+      record("sign_in_shown", { face });
       ({ start: $("signInBtn"), wait: $("signInReopen"), nokey: $("signInMakeKey") })[face].focus();
     }
     shownFace = face;

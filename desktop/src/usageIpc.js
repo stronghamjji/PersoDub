@@ -42,9 +42,29 @@ export function usageCounter(app) {
   };
 }
 
+/** How a dub ended, as the dub_finished step carries it (events.js track):
+ *  done, failed or cancelled; where a failure stopped (the last stage the
+ *  job's record timed) and the one word for why; how it ran, how long the
+ *  video was and how long the job took -- off the job's own record, and
+ *  whatever it lacks left out. */
+export function dubFinishedProps(status, code, job) {
+  const outcome = status === "done" ? "done" : status === "error" ? "failed" : "cancelled";
+  const facts = dubFacts(job);
+  const stage = Object.keys((job && job.stage_seconds) || {}).at(-1);
+  return {
+    outcome,
+    ...(outcome === "failed" && stage ? { stage } : {}),
+    ...(code ? { reason: code } : {}),
+    ...(facts.engines ? { mode: facts.engines.dub_mode === "perso" ? "perso" : "local" } : {}),
+    ...(Number.isInteger(facts.seconds) ? { minutes: Math.round(facts.seconds / 60), video_seconds: facts.seconds } : {}),
+    ...(Number.isInteger(job && job.elapsed_seconds) ? { seconds: job.elapsed_seconds } : {}),
+  };
+}
+
 /** The page's word that a dub, an erase or a separation ended: counted, a
- *  failure reported, and a finished job's record sent. */
-export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLog, lastRunClosedByUser }) {
+ *  failure reported, and a finished job's record sent. A dub's end is also
+ *  the dub_finished step (`track`), a cancel's too. */
+export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLog, lastRunClosedByUser, track = () => {} }) {
   // A finished job's own record: which engines it ran, what it spent on Perso
   // and how long the video was, for the usage count -- which must not take the
   // page's word for any of it. A backend that will not answer costs the facts,
@@ -84,7 +104,7 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
   const countedJobs = new Set();
   ipcMain.on("shell:count-dub", async (_e, msg) => {
     const status = msg && msg.status;
-    if (status !== "done" && status !== "error") return;
+    if (status !== "done" && status !== "error" && status !== "cancelled") return;
     const detail = String((msg && msg.detail) || "");
     // Only the shell may name the job: the page is a web page, so its id is
     // checked against the shape a job id has before it is put in a URL.
@@ -106,6 +126,10 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
     const code = status === "error"
       ? (job && job.error === "interrupted" ? "interrupted" : classifyError(detail))
       : undefined;
+    // Only a dubbing: a job of another kind the page drew here is not one.
+    if (!job || !job.kind || job.kind === "dub") track("dub_finished", dubFinishedProps(status, code, job));
+    // A cancel is a step in the charts, never a count or a report.
+    if (status === "cancelled") return;
     countUsage(status === "done" ? "dub_success" : "dub_failure", ctx.bootedKitDir, code, undefined, dubFacts(job));
     if (status === "done") return sendRecord("dub", jobId, job);
     // The user closed the app on it: not a fault, so no issue (user,

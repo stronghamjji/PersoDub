@@ -23,6 +23,7 @@ import { CHECK_ICON } from "./icons.mjs";
 import { STAGES, SYNTH_STEP, stepLabels } from "./dubApi.mjs";
 import { resetsSentence } from "./translatorChoice.mjs";
 import { t } from "./i18n.mjs";
+import { record as recordStep } from "./events.mjs";
 
 // The card's steps, in the order parseProgress numbers them: read off the one
 // stage table (dubApi.mjs) rather than written out again, so a seventh pipeline
@@ -188,7 +189,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
                                       onOpenSettings, openExternal,
                                       jobNote = () => "",
                                       translatorChoices = async () => [],
-                                      onResumeWith = () => {} }) {
+                                      onResumeWith = () => {}, record = recordStep }) {
   // Every element this file names is required markup (index.html always has
   // it), so nothing here null-checks what $ returns -- same as
   // ui/src/settingsDialog.mjs. A missing id is a broken page.
@@ -197,6 +198,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
   let modalJob = null;          // the job the open popup's translator buttons resume
   let modalPick = null;         // or, from Translate again, what a translator button does instead
   let modalShown = 0;           // which popup the translators being fetched are for
+  let modalType = "";           // the notice the open popup is for
 
   // The job's own video in the center panel, and under it which part of it is
   // being dubbed. A job that stopped shows the same two (paintStopped).
@@ -369,6 +371,8 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
   function showCreditModal(notice, job = null, onPick = null) {
     const cfg = CREDIT_MODALS[notice.type];
     const shown = ++modalShown;
+    modalType = notice.type;
+    record("credit_popup_shown", { reason: notice.type });
     modalPick = onPick;
     $("creditTitle").textContent = cfg.title;
     $("creditMessage").textContent = creditMessage(notice, cfg, false);
@@ -400,6 +404,7 @@ export function initRunningScreenUi({ $, parseProgress, trimLabel, homeNoticeAnd
     // Link-type button: the link opens in a new tab and the popup closes.
     // Action-type button ("Open Settings"): stay in the app and open Settings.
     if (modalAction === "settings") { e.preventDefault(); onOpenSettings(); }
+    else if (modalType === "perso_credit_exhausted") record("recharge_opened", { from: "popup" });
     hideCreditModal();
   });
   $("creditOverlay").addEventListener("click", (e) => { if (e.target === $("creditOverlay")) hideCreditModal(); });

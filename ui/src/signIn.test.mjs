@@ -370,3 +370,17 @@ test("Home shows the signed-in account under the brand, and nothing when signed 
   await oss.settle();
   assert.equal(oss.$("homeAccount").hidden, true);
 });
+
+// The charts' sign_in_shown (ui/src/events.mjs): who stops at the sign-in, on which face, once a face.
+test("each face the sign-in screen comes to is a step, once while it stays; the app itself is none", async () => {
+  const steps = [];
+  const h = harness(SIGNED_OUT, {}, 5000, { record: (name, props) => steps.push([name, props]) });
+  await h.settle();
+  h.shell.hear(SIGNED_OUT);
+  h.shell.hear(WAITING);
+  h.shell.hear(NO_KEY);
+  h.shell.hear(SIGNED_IN);
+  h.shell.hear(SIGNED_OUT);
+  assert.deepEqual(steps, [["sign_in_shown", { face: "start" }], ["sign_in_shown", { face: "wait" }],
+    ["sign_in_shown", { face: "nokey" }], ["sign_in_shown", { face: "start" }]]);
+});

@@ -29,6 +29,7 @@ import { downloadsLabel, errorText, plainFailure, rawLogLines, fmtLength, fmtClo
          videoCardHtml } from "./format.mjs";
 import { emptyTabHtml, wireImportBlock, wireImportInput } from "./importBlock.mjs";
 import { t } from "./i18n.mjs";
+import { record as recordStep } from "./events.mjs";
 
 // How often the erase is asked how far along it is. The same second the dub's
 // queue card uses: the percentage moves in visible steps and the answer is small.
@@ -69,7 +70,14 @@ export const PACK_ID = "subtitle-eraser";
 export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFile,
                                     installPack, packRow, onPackProgress, onJobsChanged,
                                     onDub, reveal, showTimeline, projectOpen = () => false,
-                                    onEraseStarted = () => {}, pickedFolder = async () => "" }) {
+                                    onEraseStarted = () => {}, pickedFolder = async () => "",
+                                    record = recordStep }) {
+  // The erases started here, whose end is a step in the charts (events.mjs):
+  // one opened from Projects that ended long ago is not.
+  const startedHere = new Set();
+  const ended = (jid, status) => {
+    if (startedHere.delete(jid)) record("tool_finished", { tool: "erase", outcome: status === "done" || status === "cancelled" ? status : "failed" });
+  };
   // No video yet: the shared Import block (ui/src/importBlock.mjs), wired at
   // the end of this function.
   $("eraseImportSlot").outerHTML = emptyTabHtml("erase", "eraseZone", "eraseLink");
@@ -498,6 +506,7 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
             done: !!j.done, error: j.error || "", error_shown: j.error_shown || "", logs: j.logs || [] };
     paint();
     if (["queued", "running", "cancelling"].includes(j.status)) watch(jid);
+    else ended(jid, j.status);
   }
 
   /**
@@ -603,6 +612,7 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
       if (seq === dlSeq) linkFailed(errorText(e));
       return;
     }
+    record("media_added", { source: "link", kind: "video" });
     if (seq !== dlSeq) return;
     // Once a second, the same beat the New project dialog watches on.
     dlTimer = setInterval(async () => {
@@ -832,6 +842,8 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
       return;
     }
     job = { id: jid, status: "queued", percent: 0, done: false };
+    record("tool_started", { tool: "erase", from: "erase" });
+    startedHere.add(jid);
     paint();
     onJobsChanged();
     onEraseStarted(held);
@@ -881,6 +893,8 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
     $("eraseError").textContent = "";
     try {
       const jid = await retryErase(from);
+      record("tool_started", { tool: "erase", from: "erase" });
+      startedHere.add(jid);
       job = { id: jid, status: "queued", percent: 0, done: false, error: "", logs: [] };
       paint();
       onJobsChanged();
@@ -920,6 +934,7 @@ export function initEraseScreenUi({ $, showScreen, getScreen, setTopbar, checkFi
         // persodubShell is undefined and nothing is sent, which is the point:
         // the counts and the reports describe app installs.
         const how = j.status === "done" ? "done" : j.status === "cancelled" ? "cancelled" : "error";
+        ended(jid, j.status);
         if (how !== "cancelled") {
           window.persodubShell?.countErase?.(how, j.error || "", jid);
         }

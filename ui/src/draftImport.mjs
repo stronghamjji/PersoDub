@@ -23,6 +23,7 @@ import { getDraft, setDraft, onDraftChange } from "./draft.mjs";
 import { errorText } from "./format.mjs";
 import { emptyTabHtml, wireImportBlock, wireImportInput } from "./importBlock.mjs";
 import { t } from "./i18n.mjs";
+import { record as recordStep } from "./events.mjs";
 
 const DOWNLOAD_POLL_MS = 1000;
 // The line under each tab's Import block, and the one under the Before
@@ -53,7 +54,8 @@ const STATUS_IDS = ["dubbingImportStatus", "draftImportStatus", "capImportStatus
  *   say: (text: string, isError?: boolean) => void }}
  */
 export function initDraftImport({ $, state = {}, getScreen = () => "done",
-                                  checkFile = () => null, onReplaced = () => {}, onSaveLinkReady = () => {} }) {
+                                  checkFile = () => null, onReplaced = () => {}, onSaveLinkReady = () => {},
+                                  record = recordStep }) {
   const slot = $("dubbingImportSlot");
   if (slot) slot.outerHTML = emptyTabHtml("dubbing", "dubbingZone", "dubbingLink");
   const saveSlot = $("saveImportSlot");
@@ -160,6 +162,8 @@ export function initDraftImport({ $, state = {}, getScreen = () => "done",
       if (seq === importSeq) { linkOnItsWay = ""; setStatus(errorText(e), true); }
       return;
     }
+    // A link taken is a video brought in, for the charts (a file is seen as it is picked or dropped).
+    record("media_added", { source: "link", kind: "video" });
     if (seq !== importSeq) return;
     stopWatching();
     downloadTimer = setInterval(async () => {

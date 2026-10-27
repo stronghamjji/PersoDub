@@ -222,6 +222,20 @@ test("events go to GA4 with the secret in the query and to Amplitude with its ke
   assert.equal(amp.body.events[0].device_id, EVENTS.installId);
 });
 
+test("a step goes to GA4 and Amplitude under its own name with its props, a press as button_press", async (t) => {
+  const calls = outward(t);
+  const quit = { name: "app_quit", screen: "home", t: Date.now() - 500, props: { signed_in: false, session_seconds: 40, file: "a.mp4" } };
+  const res = await sendEvents({ GA4_MEASUREMENT_ID: "G-TEST", GA4_API_SECRET: "s", AMPLITUDE_API_KEY: "amp" },
+    { ...EVENTS, events: [...EVENTS.events, quit] });
+  assert.equal(res.status, 204);
+  const ga4 = calls.find((c) => c.url.hostname === "www.google-analytics.com");
+  assert.deepEqual(ga4.body.events.map((e) => [e.name, e.params.signed_in, e.params.file]),
+    [["button_press", undefined, undefined], ["app_quit", "false", undefined]]);
+  const amp = calls.find((c) => c.url.hostname === "api2.amplitude.com");
+  assert.deepEqual(amp.body.events[1].event_type, "app_quit");
+  assert.deepEqual(amp.body.events[1].event_properties, { signed_in: false, session_seconds: 40, screen: "home", edition: "opensource" });
+});
+
 test("without its keys a destination is not called, and the app still gets 204", async (t) => {
   const calls = outward(t);
   assert.equal((await sendEvents({ GA4_MEASUREMENT_ID: "G-TEST" })).status, 204);

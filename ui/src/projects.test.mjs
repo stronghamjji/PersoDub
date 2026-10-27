@@ -45,7 +45,7 @@ function makeEl(id) {
 }
 
 /** A page, a fetch log and the callbacks the list reaches out through. */
-function harness({ responses = {}, screen = "home", jobId = null, onJobs } = {}) {
+function harness({ responses = {}, screen = "home", jobId = null, onJobs, onSeen } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) els.set(id, makeEl(id));
@@ -77,6 +77,7 @@ function harness({ responses = {}, screen = "home", jobId = null, onJobs } = {})
     onDeleteJob: (job) => log.deleted.push(job.id),
     onCancelJob: (job) => log.cancelled.push(job.id),
     onJobs,
+    ...(onSeen ? { onSeen } : {}),
   });
   return { $, api, log };
 }
@@ -217,6 +218,22 @@ test("only the names too long for their column get a tooltip", async (t) => {
 });
 
 // -- the Up next card ------------------------------------------------------
+
+// The charts' dubbing stages (ui/src/dubTrack.mjs) read every job the card
+// reads: each row of the list, and the one on air with its log.
+test("Up next hands every job it reads to onSeen, the one on air with its log", async (t) => {
+  const seen = [];
+  const h = harness({
+    responses: {
+      [JOBS]: ok({ jobs: [{ id: "q1", status: "queued" }, { id: "r1", status: "running" }, { id: "d1", status: "done" }] }),
+      "/api/dub/jobs/r1": ok({ id: "r1", status: "running", logs: ["2/6 Transcribing"] }),
+    },
+    onSeen: (job) => seen.push([job.id, job.status, Array.isArray(job.logs)]),
+  });
+  t.after(h.log.restore);
+  await h.api.renderQueueCard();
+  assert.deepEqual(seen, [["q1", "queued", false], ["r1", "running", false], ["d1", "done", false], ["r1", "running", true]]);
+});
 
 test("Up next shows the job on air with its percent and the line waiting behind it", async (t) => {
   const h = harness({

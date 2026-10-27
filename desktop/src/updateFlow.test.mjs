@@ -21,3 +21,25 @@ test("a production build without an update address checks nothing, says so once 
   assert.deepEqual(ctx.updateState, { phase: "check-off" });
   assert.deepEqual(sent, [["shell:update-state", { phase: "check-off" }]]);
 });
+
+// An update found is a step in the charts (events.js track): its version.
+test("an update found is recorded with its version", async (t) => {
+  const was = process.env.PERSODUB_UPDATE_URL;
+  process.env.PERSODUB_UPDATE_URL = "http://127.0.0.1:9/feed";
+  t.after(() => { if (was === undefined) delete process.env.PERSODUB_UPDATE_URL; else process.env.PERSODUB_UPDATE_URL = was; });
+  const handlers = {};
+  const autoUpdater = {
+    on: (ev, fn) => { handlers[ev] = fn; },
+    setFeedURL: () => {},
+    checkForUpdates: async () => { await handlers["update-available"]({ version: "0.9.2", files: [] }); },
+  };
+  const web = { onResponseStarted: () => {}, onBeforeRedirect: () => {}, onErrorOccurred: () => {} };
+  const load = async (name) => (name === "electron-updater"
+    ? { default: { autoUpdater } }
+    : { session: { fromPartition: () => ({ webRequest: web }) }, net: { fetch: async () => ({ ok: false }) } });
+  const steps = [];
+  const { startUpdater } = createUpdater({ app: { isPackaged: true, getVersion: () => "0.9.1" }, ctx: {}, shellLog: () => {},
+                                           edition: "opensource", load, track: (name, props) => steps.push([name, props]) });
+  await startUpdater({ isDestroyed: () => false, webContents: { send: () => {} } }, null);
+  assert.deepEqual(steps, [["update_available", { version: "0.9.2" }]]);
+});

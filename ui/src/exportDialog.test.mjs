@@ -214,6 +214,7 @@ test("the first row is ticked until the user says otherwise, for each kind on it
 // ---- the dialog on a fake page ---------------------------------------------
 
 function harness({ ctx, stored = {}, shell = null, fetchFn = null } = {}) {
+  const steps = [];
   const els = {};
   const $ = (id) => (els[id] ||= {
     id, textContent: "", listeners: {}, html: "", disabled: false,
@@ -231,6 +232,7 @@ function harness({ ctx, stored = {}, shell = null, fetchFn = null } = {}) {
     $, getContext: async () => ctx, storage, shell,
     fetchFn: fetchFn || (async (href) => { asked.push(href); return { ok: true }; }),
     follow: (href, name) => followed.push([href, name]),
+    record: (name, props) => steps.push([name, props]),
   });
   const list = $("exportList");
   const tag = (id) => new RegExp(`<a [^>]*data-row="${id}"[^>]*>`).exec(list.html)[0];
@@ -244,7 +246,7 @@ function harness({ ctx, stored = {}, shell = null, fetchFn = null } = {}) {
   const tick = (id) => click({ closest: (sel) => (sel === "a" ? { dataset: { row: id } } : null) });
   const pick = (fmt) => click({ closest: (sel) => (sel === "[data-fmt]" ? { dataset: { fmt } } : null) });
   const go = () => $("exportGoBtn").listeners.click();
-  return { $, api, list, tag, ticked, saved, tick, pick, go, click, store, asked, followed };
+  return { $, api, list, tag, ticked, saved, tick, pick, go, click, store, asked, followed, steps };
 }
 
 test("the dialog draws a dubbing's headings, and a press on one ticks nothing", async () => {
@@ -690,4 +692,25 @@ test("a video with its own subtitles hands back two rows: the subtitled video an
   assert.match(exportRows({ ...ctx, ratio: "9:16" }, "mp3")[0].href, /ratio=9(%3A|:)16/);
   // The first row ticked when nothing was remembered.
   assert.deepEqual(ticksFor(null, "captions", ["subtitled", "srt"]), ["subtitled"]);
+});
+
+// The charts' tool steps (ui/src/events.mjs): a download started, from what,
+// how many files, and how it ended; a Burn in subtitles project's is the burn.
+test("a download is a tool step: export from a dubbing, burn from a subtitles project, and a failure with what went", async () => {
+  const dub = harness({ ctx: STEMS });
+  await dub.api.open();
+  dub.tick("voice");
+  await dub.go();
+  assert.deepEqual(dub.steps, [["tool_started", { tool: "export", from: "dub", files: 2 }],
+    ["tool_finished", { tool: "export", outcome: "done", files: 2 }]]);
+  const burn = harness({ ctx: { kind: "captions", jobId: "C1", subtitled: { href: "/s", name: "s.mp4" } } });
+  await burn.api.open();
+  await burn.go();
+  assert.deepEqual(burn.steps.map(([n, p]) => [n, p.tool, p.outcome]), [["tool_started", "burn", undefined], ["tool_finished", "burn", "done"]]);
+  let n = 0;
+  const failing = harness({ ctx: STEMS, fetchFn: async () => (++n === 1 ? { ok: true } : { ok: false, json: async () => ({ detail: "gone" }) }) });
+  await failing.api.open();
+  failing.tick("voice");
+  await failing.go();
+  assert.deepEqual(failing.steps.at(-1), ["tool_finished", { tool: "export", outcome: "failed", files: 1 }]);
 });

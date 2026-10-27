@@ -6,14 +6,14 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
-import { EVENTS_ENDPOINT, MAX_PER_POST, cleanEvents, createEvents, eventsOn, eventsUserId, osName, resolveEventsMode } from "./events.js";
+import { EVENTS_ENDPOINT, MAX_PER_POST, cleanEvents, cleanProps, createEvents, eventsOn, eventsUserId, osName, resolveEventsMode } from "./events.js";
 
 const DEVICE = "0123456789abcdef0123456789abcdef";
 const press = (name, t = 1793000000000) => ({ name, screen: "home", t });
 
 // A packaged app, its kit and userData in a fresh temp folder; `relay` answers
 // every post with a status.
-function setup({ kitEnv = "PERSODUB_EVENTS=1\n", packaged = true, relay = () => 204, edition = "opensource" } = {}) {
+function setup({ kitEnv = "PERSODUB_EVENTS=1\n", packaged = true, relay = () => 204, edition = "opensource", now = Date.now } = {}) {
   const base = mkdtempSync(join(tmpdir(), "odevents-"));
   const kitDir = join(base, "kit");
   const userData = join(base, "userData");
@@ -24,14 +24,18 @@ function setup({ kitEnv = "PERSODUB_EVENTS=1\n", packaged = true, relay = () => 
   const app = { isPackaged: packaged, getVersion: () => "0.9.1", getPath: () => userData };
   const posts = [];
   const fetchImpl = async (url, init) => {
-    const status = relay();
+    const status = await relay();
     if (status === 0) throw new Error("offline");
+    // A relay that never answers: only the request's own timeout ends it.
+    if (status === "hang") {
+      return new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(new Error("aborted"))));
+    }
     posts.push({ url, body: JSON.parse(init.body) });
     return { status };
   };
   const logged = [];
   const ctx = { bootedKitDir: kitDir, userId: "" };
-  const events = createEvents({ app, ctx, edition, shellLog: (l) => logged.push(l), fetchImpl });
+  const events = createEvents({ app, ctx, edition, shellLog: (l) => logged.push(l), fetchImpl, now });
   const queued = () => (existsSync(join(userData, "events")) ? readdirSync(join(userData, "events")) : []);
   return { events, ctx, posts, logged, queued, userData };
 }
@@ -153,4 +157,97 @@ test("PERSODUB_EVENTS_SEND=1 sends from a from-source run, and is nothing when u
   assert.equal(resolveEventsMode({ isPackaged: false, env: { PERSODUB_EVENTS: "1", PERSODUB_EVENTS_SEND: "1" }, edition: "opensource" }), "on");
   assert.equal(resolveEventsMode({ isPackaged: false, env: { PERSODUB_EVENTS: "1" }, edition: "opensource" }), "debug");
   assert.equal(resolveEventsMode({ isPackaged: false, env: { PERSODUB_EVENTS: "0", PERSODUB_EVENTS_SEND: "1" }, edition: "production" }), "off");
+});
+
+// ---- The steps (0.9.1): a few words and numbers beside a name, never text ----
+
+test("a step's props keep their shape: true or false, a whole number, one short word", () => {
+  assert.deepEqual(cleanProps({ ok: true, minutes: 2.6, stage: "perso-dubbing", version: "0.9.2" }),
+    { ok: true, minutes: 3, stage: "perso-dubbing", version: "0.9.2" });
+  assert.deepEqual(cleanProps({ title: "My wedding video", file: "a b.mp4", link: "https://x.y", Bad: 1, n: Infinity, o: {} }), {});
+  assert.equal(Object.keys(cleanProps(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`k${i}`, i])))).length, 8);
+  assert.equal(cleanProps(undefined), null, "a press has none");
+  assert.deepEqual(cleanEvents([{ name: "dub_stage", screen: "running", t: 1, props: { stage: "separate", note: "Hello there" } }]),
+    [{ name: "dub_stage", screen: "running", t: 1, props: { stage: "separate" } }]);
+});
+
+test("the shell's own step waits for the page's next batch, on the page's last screen, and goes with it", async () => {
+  const s = setup();
+  s.events.take([{ ...press("sign_in_btn"), screen: "home" }]);
+  s.events.track("sign_in_started", { method: "window" });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(s.posts.length, 1, "nothing goes on its own");
+  const answer = s.events.take([]);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(s.posts[1].body.events.map((e) => [e.name, e.screen, e.props]), [["sign_in_started", "home", { method: "window" }]]);
+  assert.equal(answer.recent.at(-1), "sign_in_started");
+});
+
+test("off keeps no step; before the engines are up the kit being installed decides, and with none the edition", () => {
+  const off = setup({ kitEnv: "PERSODUB_EVENTS=0\n", edition: "production" });
+  off.events.track("app_launch", { first_run: true });
+  assert.equal(off.events.take([]).kept, 0, "a production kit with the switch off");
+  const installing = setup({ kitEnv: "PERSODUB_EVENTS=0\n", edition: "production" });
+  installing.ctx.kitDir = installing.ctx.bootedKitDir;
+  installing.ctx.bootedKitDir = null;
+  installing.events.track("app_launch", { first_run: true });
+  assert.equal(installing.events.take([]).kept, 0, "the kit the boot is installing into");
+  const none = setup({ kitEnv: "PERSODUB_EVENTS=0\n", edition: "production" });
+  none.ctx.bootedKitDir = null;
+  none.events.track("app_launch", { first_run: true });
+  assert.equal(none.events.take([]).kept, 1, "no kit known yet: the production edition records");
+});
+
+test("the quit records app_quit and sends it before it resolves, once", async () => {
+  let clock = 1793000000000;
+  const s = setup({ now: () => clock });
+  s.events.take([{ ...press("home_nav_settings"), screen: "settings" }]);
+  await new Promise((r) => setTimeout(r, 20));
+  clock += 95_400;
+  await s.events.quit({ signed_in: false });
+  const last = s.posts.at(-1).body.events;
+  assert.deepEqual(last.map((e) => [e.name, e.screen, e.props]),
+    [["app_quit", "settings", { last_screen: "settings", session_seconds: 95, signed_in: false }]]);
+  assert.deepEqual(s.queued(), []);
+  await s.events.quit({ signed_in: true });
+  assert.equal(s.posts.flatMap((p) => p.body.events).filter((e) => e.name === "app_quit").length, 1, "the second quit adds nothing");
+});
+
+test("a relay that does not answer holds the quit up for the wait at most, and the batch stays for the next launch", async () => {
+  const s = setup({ relay: () => "hang" });
+  const from = Date.now();
+  await s.events.quit({}, { waitMs: 150 });
+  assert.ok(Date.now() - from < 1000, `waited ${Date.now() - from} ms`);
+  assert.equal(s.queued().length, 1);
+  assert.match(readFileSync(join(s.userData, "events", s.queued()[0]), "utf8"), /"app_quit"/);
+});
+
+test("the quit's batch goes even while an earlier round is still out", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let calls = 0;
+  // The first post is held back until the quit has written its own batch.
+  const s = setup({ relay: () => (++calls === 1 ? gate.then(() => 204) : 204) });
+  s.events.take([press("save")]);
+  const quitting = s.events.quit({}, { waitMs: 2000 });
+  await new Promise((r) => setTimeout(r, 20));
+  release();
+  await quitting;
+  assert.deepEqual(s.posts.map((p) => p.body.events.map((e) => e.name)), [["save"], ["app_quit"]]);
+  assert.deepEqual(s.queued(), []);
+});
+
+test("debug counts the quit and says so, and nothing leaves", async () => {
+  const s = setup({ kitEnv: "PERSODUB_EVENTS=1\nPERSODUB_NO_ANALYTICS=1\n" });
+  await s.events.quit({ signed_in: false });
+  assert.deepEqual([s.posts, s.queued()], [[], []]);
+  assert.deepEqual(s.logged, ["PERSODUB_EVENTS would send 1"]);
+});
+
+// The relay holds a step's reason to the usage counts' error codes: a code
+// added there and not here would reach GA4 and Amplitude as nothing.
+test("the relay's reasons are the usage counts' error codes, word for word", async () => {
+  const { ERROR_CODES } = await import("./analytics.js");
+  const { REASONS } = await import("../../relay/events-logic.js");
+  assert.deepEqual([...REASONS].sort(), [...ERROR_CODES].sort());
 });

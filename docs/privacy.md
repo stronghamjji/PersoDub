@@ -90,6 +90,20 @@ hash of its Perso number that cannot be turned back into the account. Never what
 your video, files, filenames, paths, links, scripts, the account's number or its address. The batches go to the same relay as the job logs, every 30
 seconds, which passes them to Google Analytics (and later Amplitude) and keeps nothing itself.
 
+The same switch records the steps of your way through the app: the app opened (and whether
+it is this computer's first time) and closed (on which screen, signed in or not, after how
+many seconds), the install, the sign-in (started, handed to the browser, finished, cancelled
+or failed, whether the account was just made, whether it has an API key), a video brought in
+(picked, dropped or a link, video or sound), a dubbing started (local or Perso API, the
+language it goes into, the video's length in minutes and seconds, the speakers asked for), its
+stages and how long each took, how it ended and, for a failure, the one error code a failure
+report would carry, the erase, burn and download tools, the credit popups and a Recharge
+pressed, a key saved, an inquiry sent (its kind only), an error screen's code and an update
+found or installed (its version). Each step is a name with a few words and numbers chosen by
+the app from a fixed list: never a title, a file name, a link, what an inquiry says or an
+address. The last batch is sent as the app closes, waiting three seconds at most; what does
+not get through goes the next time the app opens.
+
 It is on to begin with in the production edition and off in the open-source edition. Turn
 it on or off in **Settings → Privacy**, or with `PERSODUB_EVENTS=1` or `0` in `kit.env`; it
 applies to the next batch. With the usage counts off (`PERSODUB_NO_ANALYTICS=1`) nothing

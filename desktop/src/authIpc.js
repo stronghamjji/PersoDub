@@ -13,14 +13,15 @@ import { eventsUserId } from "./events.js";
  * when the sign-in window comes back; `makeSignInWindow` opens that window
  * and `clearSignInSession` wipes its cookies (signInWindow.js). Every change of the sign-in sets ctx.userId, so the next
  * batch of button events carries the account, hashed, or nothing;
- * `onSignOut` runs at every sign-out (auth.js createAuth). */
+ * `onSignOut` runs at every sign-out, and `track` records the sign-in's
+ * steps (auth.js createAuth). */
 /** The app's logo as a data: URL for the sign-in's way-back page, or "" without one. */
 export function logoDataUrl(path) {
   try { return `data:image/png;base64,${readFileSync(path).toString("base64")}`; } catch { return ""; }
 }
 
 export function createShellAuth({ app, safeStorage, net, ctx, edition, shellLog, makeSignInWindow, clearSignInSession, focus = () => {}, onSignOut = () => {},
-                                 appName = "PersoDub", logoPath = "", env = process.env }) {
+                                 appName = "PersoDub", logoPath = "", env = process.env, track = () => {} }) {
   const auth = createAuth({
     enabled: edition === "production",
     cfg: authConfig(env, app.getVersion()),
@@ -32,6 +33,7 @@ export function createShellAuth({ app, safeStorage, net, ctx, edition, shellLog,
     log: shellLog,
     onCallback: focus,
     onSignOut,
+    track,
     appName,
     logo: logoPath ? logoDataUrl(logoPath) : "",
     onChange: () => {
@@ -45,8 +47,9 @@ export function createShellAuth({ app, safeStorage, net, ctx, edition, shellLog,
 }
 
 /** The page's channels. Answered in both editions; a disabled sign-in says
- * "disabled" and does nothing. `openKeyWindow` opens the key page in the sign-in's cookies (signInWindow.js). */
-export function registerAuthIpc({ ipcMain, shell, auth, openKeyWindow }) {
+ * "disabled" and does nothing. `openKeyWindow` opens the key page in the sign-in's cookies (signInWindow.js);
+ * opening it is a step (`track`). */
+export function registerAuthIpc({ ipcMain, shell, auth, openKeyWindow, track = () => {} }) {
   ipcMain.handle("shell:auth-status", () => auth.status());
   ipcMain.handle("shell:auth-login", () => auth.login());
   ipcMain.handle("shell:auth-cancel", () => auth.cancelLogin());
@@ -55,6 +58,7 @@ export function registerAuthIpc({ ipcMain, shell, auth, openKeyWindow }) {
   ipcMain.handle("shell:auth-check-key", () => auth.connectKey());
   ipcMain.handle("shell:auth-open-key-page", () => {
     if (!auth.enabled) return undefined;
+    track("key_page_opened", {});
     return auth.keyPageTarget() === "window" ? openKeyWindow(auth.keyPageUrl) : shell.openExternal(auth.keyPageUrl);
   });
 }
