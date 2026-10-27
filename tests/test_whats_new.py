@@ -55,6 +55,7 @@ def _notes_from(monkeypatch, tmp_path, data, edition, language):
     `edition` (PERSODUB_BUILD_EDITION, the page's edition) speaking `language`."""
     import json
     import os
+
     from app import i18n
     (tmp_path / "notes.json").write_text(json.dumps(data), encoding="utf-8")
     real_join = os.path.join
