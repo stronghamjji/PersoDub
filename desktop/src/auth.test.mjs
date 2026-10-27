@@ -141,7 +141,7 @@ test("Perso's addresses default to api.perso.ai, the ports to three of this comp
   // and the button, as the key window's link (SIGNUP_LINK).
   assert.equal(live.keyPageUrl, "https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup");
   assert.equal(live.scope, "profile email");
-  assert.equal(live.clientId, "PERSODUB-CLIENT-ID-NOT-ISSUED-YET");
+  assert.equal(live.clientId, "perso-dubbing-desktop");
   assert.deepEqual(live.redirectPorts, [52290, 52291, 52292]);
   assert.equal(redirectUriFor(live, 52290), "http://127.0.0.1:52290/callback");
 

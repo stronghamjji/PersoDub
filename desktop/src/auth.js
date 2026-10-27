@@ -33,10 +33,11 @@ export function authConfig(env = process.env, version = "") {
     .split(",").map((p) => Number(p.trim())).filter((p) => Number.isInteger(p) && p > 0 && p < 65536);
   return {
     authBase,
-    // !!! PLACEHOLDER until Perso registers PersoDub as a client. Perso must
-    // register, for this client id: every redirect address below (one per
-    // port), scope "profile email", client type PUBLIC.
-    clientId: env.PERSODUB_AUTH_CLIENT_ID || "PERSODUB-CLIENT-ID-NOT-ISSUED-YET",
+    // Perso's registration of PersoDub (dev, qa and prod): a PUBLIC client
+    // (PKCE), scope "profile email", redirect http://127.0.0.1/callback.
+    // Perso ignores the port of a loopback redirect (RFC 8252), so any of the
+    // ports below is accepted, but the host must be 127.0.0.1, never localhost.
+    clientId: env.PERSODUB_AUTH_CLIENT_ID || "perso-dubbing-desktop",
     scope: "profile email",
     redirectHost: env.PERSODUB_AUTH_REDIRECT_HOST || "127.0.0.1",
     redirectPorts: ports.length ? ports : [52290, 52291, 52292],
