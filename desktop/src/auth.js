@@ -524,10 +524,10 @@ export function createAuth({
     });
   }
 
-  /** Open again: the waiting sign-in's window brought forward, or, handed
-   * to the browser, the browser opened at this sign-in's authorize address
-   * again (signInWindow.js): after a sign-up that ended on Perso's home, the
-   * browser, signed in now, comes straight back. */
+  /** Open again: the waiting sign-in's window reopened on this sign-in's
+   * authorize address and brought forward, or, handed to the browser, the
+   * browser opened at that address again (signInWindow.js): after a sign-up
+   * that ended on Perso's home, either, signed in now, comes straight back. */
   function showLogin() {
     if (!isOn()) return DISABLED;
     if (trading) return { outcome: "busy" };

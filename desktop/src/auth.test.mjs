@@ -15,7 +15,7 @@ import {
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
 import { registerAuthIpc } from "./authIpc.js";
-import { SIGN_IN_PARTITION, clearSignInStorage, signInWindowFactory } from "./signInWindow.js";
+import { SIGN_IN_PARTITION, clearSignInStorage, landedOnPerso, signInWindowFactory, wayBackUrl } from "./signInWindow.js";
 import { parseEnvFile } from "./kitEnv.js";
 
 // safeStorage's stand-in: reversible, and never the plain text on disk.
@@ -1041,12 +1041,15 @@ function fakeWindows() {
   const external = [];
   class BrowserWindow {
     constructor(options) {
-      Object.assign(this, { options, handlers: {}, loaded: [], did: [], destroyed: false, permissions: null, openHandler: null });
+      Object.assign(this, { options, handlers: {}, loaded: [], did: [], destroyed: false, permissions: null, openHandler: null, cookies: [], cookieReads: [] });
       const win = this;
       this.webContents = {
         on: (name, fn) => { win.handlers[`wc:${name}`] = fn; },
         setWindowOpenHandler: (fn) => { win.openHandler = fn; },
-        session: { setPermissionRequestHandler: (fn) => { win.permissions = fn; } },
+        session: {
+          setPermissionRequestHandler: (fn) => { win.permissions = fn; },
+          cookies: { get: async (filter) => { win.cookieReads.push(filter); return win.cookies; } },
+        },
       };
       made.push(this);
     }
@@ -1090,10 +1093,10 @@ test("the sign-in window: cookies of its own, sandboxed, no preload, over the ap
 
 test("the sign-in window goes only where navigation lets it: the browser gets what navigation sends there, and nothing else leaves", () => {
   const f = fakeWindows();
-  const answer = { "https://perso.ai/login": "allow", "https://example.com/terms": "browser", "file:///etc/hosts": "deny" };
+  const answer = { "https://perso.ai/login?continue=x": "allow", "https://example.com/terms": "browser", "file:///etc/hosts": "deny" };
   const { win } = openOne(f, { navigation: (url) => answer[url] });
   for (const name of ["wc:will-navigate", "wc:will-redirect"]) {
-    assert.equal(win.fire(name, "https://perso.ai/login").prevented, false, name);
+    assert.equal(win.fire(name, "https://perso.ai/login?continue=x").prevented, false, name);
     assert.equal(win.fire(name, "https://example.com/terms").prevented, true, name);
     assert.equal(win.fire(name, "file:///etc/hosts").prevented, true, name);
   }
@@ -1127,6 +1130,7 @@ test("a hand-off: the window does not go, the browser opens the window's own fir
     handle.show();
     assert.deepEqual(f.external, [start, start], name);
     assert.deepEqual(win.did, [], name);
+    assert.deepEqual(win.loaded, [start], name);
     handle.close();
     assert.equal(seen.closed, 1, name);
   }
@@ -1161,4 +1165,142 @@ test("a page of the sign-in window that does not load says onFailed; a load stop
   assert.equal(seen.failed, 0);
   win.fire("wc:did-fail-load", -106, "ERR_INTERNET_DISCONNECTED", "https://api.perso.ai/auth/api/v2/authorize", true);
   assert.equal(seen.failed, 1);
+});
+
+// Perso's links between its sign-in and sign-up pages drop the way back (perso.ai, 2026-10-27).
+const START = "https://api.perso.ai/auth/api/v2/authorize?x=1";
+const BACK = "continue=https%3A%2F%2Fapi.perso.ai%2Fauth%2Fapi%2Fv2%2Fauthorize%3Fx%3D1&callbackUrl=https%3A%2F%2Fapi.perso.ai%2Fauth%2Fapi%2Fv2%2Fauthorize%3Fx%3D1";
+
+test("wayBackUrl: Perso's sign-in or sign-up page without a way back gets continue and callbackUrl, both the window's first address, and keeps its own query; any other address gets nothing", () => {
+  const start = "https://api.perso.ai/auth/api/v2/authorize?response_type=code&client_id=perso-dubbing-desktop&redirect_uri=http%3A%2F%2F127.0.0.1%3A52290%2Fcallback&scope=profile+email&state=s&code_challenge=c&code_challenge_method=S256";
+  for (const page of ["https://perso.ai/ko/join", "https://perso.ai/ko/login", "https://perso.ai/en/join", "https://perso.ai/en/login/", "https://perso.ai/join", "https://perso.ai/login", "https://perso.ai/es-mx/join", "https://www.perso.ai/ko/login"]) {
+    const back = new URL(wayBackUrl(page, start));
+    const was = new URL(page);
+    assert.equal(back.origin + back.pathname, was.origin + was.pathname, page);
+    assert.equal(back.searchParams.get("continue"), start, page);
+    assert.equal(back.searchParams.get("callbackUrl"), start, page);
+  }
+  assert.equal(wayBackUrl("https://perso.ai/ko/join", START), `https://perso.ai/ko/join?${BACK}`);
+  const kept = new URL(wayBackUrl("https://perso.ai/ko/login?utm_source=desktop_app&leave=true", START));
+  assert.deepEqual([...kept.searchParams], [["utm_source", "desktop_app"], ["leave", "true"], ["continue", START], ["callbackUrl", START]]);
+  // An empty one is none: Perso's pages read continue || callbackUrl.
+  assert.equal(new URL(wayBackUrl("https://perso.ai/ko/login?continue=", START)).searchParams.get("continue"), START);
+  for (const to of [
+    `https://perso.ai/ko/login?continue=${encodeURIComponent(START)}`,
+    `https://perso.ai/ko/join?callbackUrl=${encodeURIComponent(START)}`,
+    `https://perso.ai/ko/join?${BACK}`,
+    "https://api.perso.ai/ko/login", "https://api.perso.ai/join", START,
+    "https://example.com/ko/join", "https://perso.ai.evil.test/ko/login", "https://evilperso.ai/ko/join", "http://perso.ai/ko/join",
+    "https://perso.ai/ko/workspace/vt", "https://perso.ai/ko/join/terms", "https://perso.ai/kor/login",
+    "http://127.0.0.1:52290/callback?code=c&state=s", "not an address",
+  ]) assert.equal(wayBackUrl(to, START), null, to);
+});
+
+test("landedOnPerso: a page of Perso's other than its sign-in and sign-up pages, without a way back; the sign-in going on, Perso's sign-in server and the way back to the app are no landing", () => {
+  for (const url of ["https://perso.ai/ko/workspace/vt", "https://perso.ai/", "https://perso.ai/ko", "https://perso.ai/ko/workspace?utm_source=desktop_app", "https://www.perso.ai/en"]) {
+    assert.equal(landedOnPerso(url), true, url);
+  }
+  for (const url of [
+    "https://perso.ai/ko/login", "https://perso.ai/ko/join", "https://perso.ai/en/login/", "https://perso.ai/join",
+    `https://perso.ai/ko/workspace?continue=${encodeURIComponent(START)}`,
+    `https://perso.ai/ko/workspace?callbackUrl=${encodeURIComponent(START)}`,
+    "https://api.perso.ai/", "https://api.perso.ai/ko/workspace/vt", START, "https://api.perso.ai/auth/oauth2/authorization/google",
+    "http://127.0.0.1:52290/callback?code=c&state=s", "http://perso.ai/ko/workspace/vt", "https://example.com/", "not an address",
+  ]) assert.equal(landedOnPerso(url), false, url);
+});
+
+test("the sign-in window keeps the way back on Perso's sign-in and sign-up pages: a load there without it is stopped and the page opens with it, and so does a page Perso changed in place, as its own links do", async () => {
+  const join = "https://perso.ai/ko/join";
+  for (const name of ["wc:will-navigate", "wc:will-redirect"]) {
+    const f = fakeWindows();
+    const { win } = openOne(f);
+    assert.equal(win.fire(name, join).prevented, true, name);
+    assert.deepEqual(win.loaded, [START], name);
+    await settle();
+    assert.deepEqual(win.loaded, [START, `${join}?${BACK}`], name);
+    assert.equal(win.fire(name, `${join}?${BACK}`).prevented, false, name);
+    assert.equal(win.fire(name, "https://perso.ai/ko/workspace/vt").prevented, false, name);
+    await settle();
+    assert.deepEqual(win.loaded, [START, `${join}?${BACK}`], name);
+    assert.deepEqual(f.external, [], name);
+  }
+  const f = fakeWindows();
+  const { win } = openOne(f);
+  win.fire("wc:did-navigate-in-page", join, false); // a frame inside the page
+  win.fire("wc:did-navigate-in-page", `${join}?${BACK}`, true);
+  win.fire("wc:did-navigate-in-page", "https://perso.ai/ko/login", true);
+  await settle();
+  assert.deepEqual(win.loaded, [START, `https://perso.ai/ko/login?${BACK}`]);
+});
+
+test("after a sign-up or a sign-in that lost the way back, the window goes back to its first address by itself once Perso's session cookie is there, and only once", async () => {
+  const f = fakeWindows();
+  const { win } = openOne(f);
+  // Not signed in (a password-reset or a terms page): it stays.
+  win.fire("wc:did-navigate", "https://perso.ai/ko/workspace/vt");
+  await settle();
+  assert.deepEqual(win.cookieReads, [{ domain: "perso.ai" }]);
+  win.cookies = [{ name: "NEXT_LOCALE", value: "ko", domain: "perso.ai" }];
+  win.fire("wc:did-navigate", "https://perso.ai/");
+  await settle();
+  assert.deepEqual(win.loaded, [START]);
+  win.cookies = [{ name: "refreshToken", value: "r", domain: ".perso.ai" }];
+  for (const to of [`https://perso.ai/ko/workspace?continue=${encodeURIComponent(START)}`, `https://perso.ai/ko/login?${BACK}`, START, "http://127.0.0.1:52290/callback?code=c&state=s"]) {
+    win.fire("wc:did-navigate", to);
+  }
+  await settle();
+  assert.equal(win.cookieReads.length, 2);
+  assert.deepEqual(win.loaded, [START]);
+  win.fire("wc:did-navigate", "https://perso.ai/ko/workspace/vt");
+  await settle();
+  assert.deepEqual(win.loaded, [START, START]);
+  // Once: whatever Perso shows next, the window does not loop.
+  win.fire("wc:did-navigate", "https://perso.ai/ko/workspace/vt");
+  win.fire("wc:did-navigate-in-page", "https://perso.ai/ko/workspace/vt", true);
+  await settle();
+  assert.deepEqual(win.loaded, [START, START]);
+});
+
+test("a landing in place goes back too, on accessToken as well; a cookie read that fails, or a window gone before it answers, leaves the window as it is", async () => {
+  const signedIn = [{ name: "accessToken", value: "a", domain: ".perso.ai" }];
+  const one = openOne(fakeWindows());
+  one.win.cookies = signedIn;
+  one.win.fire("wc:did-navigate-in-page", "https://perso.ai/ko/workspace/vt", false); // a frame inside the page
+  await settle();
+  assert.deepEqual(one.win.loaded, [START]);
+  one.win.fire("wc:did-navigate-in-page", "https://perso.ai/ko/workspace/vt", true);
+  await settle();
+  assert.deepEqual(one.win.loaded, [START, START]);
+
+  // Two landings read before either answers: still once.
+  const twice = openOne(fakeWindows());
+  twice.win.cookies = signedIn;
+  twice.win.fire("wc:did-navigate", "https://perso.ai/ko/workspace");
+  twice.win.fire("wc:did-navigate-in-page", "https://perso.ai/ko/workspace/vt", true);
+  await settle();
+  assert.equal(twice.win.cookieReads.length, 2);
+  assert.deepEqual(twice.win.loaded, [START, START]);
+
+  const two = openOne(fakeWindows());
+  two.win.webContents.session.cookies.get = async () => { throw new Error("no cookies"); };
+  two.win.fire("wc:did-navigate", "https://perso.ai/ko/workspace/vt");
+  await settle();
+  assert.deepEqual(two.win.loaded, [START]);
+
+  const three = openOne(fakeWindows());
+  three.win.cookies = signedIn;
+  three.win.fire("wc:did-navigate", "https://perso.ai/ko/workspace/vt");
+  three.handle.close();
+  await settle();
+  assert.deepEqual(three.win.loaded, [START]);
+  assert.equal(three.seen.closed, 1);
+});
+
+test("Open again opens the window's first address in the window again, then brings it forward", () => {
+  const f = fakeWindows();
+  const { win, handle } = openOne(f);
+  handle.show();
+  assert.deepEqual(win.loaded, [START, START]);
+  assert.deepEqual(win.did, ["restore", "show", "focus"]);
+  assert.deepEqual(f.external, []);
 });
