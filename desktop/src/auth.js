@@ -43,7 +43,7 @@ export function authConfig(env = process.env, version = "") {
     redirectPorts: ports.length ? ports : [52290, 52291, 52292],
     authorizeUrl: `${authBase}/v2/authorize`,
     tokenUrl: `${authBase}/v2/token`,
-    refreshUrl: at(env.PERSODUB_AUTH_REFRESH_PATH || "/auth/api/v1/auth/oauth2/token"),
+    refreshUrl: at(env.PERSODUB_AUTH_REFRESH_PATH || "/auth/api/v2/token"),
     signOutUrl: at(env.PERSODUB_AUTH_SIGNOUT_PATH || "/auth/api/v1/auth/sign-out"),
     profileUrl: at(env.PERSODUB_AUTH_PROFILE_PATH || "/user/api/v1/users/profile"),
     apiKeysUrl: at(env.PERSODUB_AUTH_API_KEYS_PATH || "/auth/api/v1/api-keys/active"),
@@ -107,14 +107,20 @@ export class AuthHttpError extends Error {
   }
 }
 
-export async function callJson(fetchFn, what, url, { method = "GET", token, body, timeoutMs = 15000 } = {}) {
+/** A request to Perso, its answer read as JSON. `body` goes as JSON, `form`
+ * as a form (application/x-www-form-urlencoded). */
+export async function callJson(fetchFn, what, url, { method = "GET", token, body, form, timeoutMs = 15000 } = {}) {
   const headers = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-  const res = await fetchFn(url, {
-    method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let payload;
+  if (form !== undefined) {
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    payload = new URLSearchParams(form).toString();
+  } else if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    payload = JSON.stringify(body);
+  }
+  const res = await fetchFn(url, { method, headers, body: payload, signal: AbortSignal.timeout(timeoutMs) });
   const text = await res.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* not JSON: an error page */ }
@@ -129,8 +135,8 @@ export async function callJson(fetchFn, what, url, { method = "GET", token, body
 export const fieldNames = (o) => (o && typeof o === "object" && !Array.isArray(o)
   ? Object.keys(o).filter((k) => /^[A-Za-z_]{1,32}$/.test(k)) : []);
 
-// The tokens: {result: {accessToken, refreshToken}}, as the token and the
-// refresh endpoints both answer.
+// The tokens: {result: {accessToken, refreshToken}}, as the token endpoint
+// answers the code exchange's JSON.
 export function tokensFrom(json, what) {
   const r = json?.result;
   if (typeof r?.accessToken !== "string" || !r.accessToken) {
@@ -153,15 +159,19 @@ export async function exchangeCode(cfg, fetchFn, { code, verifier, redirectUri }
   return tokensFrom(json, "token");
 }
 
-/** New tokens for a refresh token. A missing refreshToken in the answer means
- * the old one stays good. */
+/** New tokens for a refresh token: a form to v2/token, as RFC 6749 asks
+ * (Perso answers JSON there with a 500), answered {access_token,
+ * refresh_token, expires_in, token_type}. Perso does not rotate this
+ * client's refresh token: an answer without one keeps the old one. */
 export async function refreshTokens(cfg, fetchFn, refreshToken) {
   const json = await callJson(fetchFn, "refresh", cfg.refreshUrl, {
     method: "POST",
-    body: { clientId: cfg.clientId, grantType: "refresh_token", tokenReissueRequest: { refreshToken } },
+    form: { grant_type: "refresh_token", client_id: cfg.clientId, refresh_token: refreshToken },
   });
-  const t = tokensFrom(json, "refresh");
-  return { accessToken: t.accessToken, refreshToken: t.refreshToken || refreshToken };
+  if (typeof json?.access_token !== "string" || !json.access_token) {
+    throw new AuthHttpError("refresh", 200, `no-token; fields: ${fieldNames(json).join(", ") || "none"}`);
+  }
+  return { accessToken: json.access_token, refreshToken: (typeof json.refresh_token === "string" && json.refresh_token) || refreshToken };
 }
 
 /** When an access token runs out, from its JWT "exp", or null when it is not

@@ -10,8 +10,10 @@
 //                                 with one -> 302 <registered redirect_uri>?code&state
 //   GET  /login, POST /login      the sign-in form; sets the browser's session cookie
 //   GET  /logout                  signs the browser out
-//   POST /auth/api/v2/token       authorization_code (PKCE S256, one-use code); refresh_token -> 500, as the real one
-//   POST /auth/api/v1/auth/oauth2/token  refresh_token (rotating); a spent token -> 400 A0002
+//   POST /auth/api/v2/token       JSON: authorization_code (PKCE S256, one-use code); refresh_token -> 500,
+//                                 as the real one. A form (RFC 6749): refresh_token, answered
+//                                 {access_token, refresh_token, expires_in, token_type} with the same
+//                                 refresh token back (not rotated); a spent one -> 400 invalid_grant
 //   POST /auth/api/v1/auth/sign-out
 //   GET  /user/api/v1/users/profile
 //   GET  /auth/api/v1/api-keys/active
@@ -58,13 +60,16 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
   //   noEmail   a profile with no e-mail, only a name (a Google or Microsoft account)
   let bad = {};
 
-  function issue(email) {
+  function issueAccess(email) {
     const exp = Math.floor(Date.now() / 1000) + ttl;
     const accessToken = `${b64url(JSON.stringify({ alg: "none" }))}.${b64url(JSON.stringify({ sub: ACCOUNTS[email].userId, scope: "profile email", iat: exp - ttl, exp }))}.${rand()}`;
-    const refreshToken = rand();
     access.set(accessToken, { email, exp });
+    return accessToken;
+  }
+  function issue(email) {
+    const refreshToken = rand();
     refresh.set(refreshToken, email);
-    return { accessToken, refreshToken };
+    return { accessToken: issueAccess(email), refreshToken };
   }
   function bearer(req) {
     const t = (req.headers.authorization || "").replace(/^Bearer /, "");
@@ -80,8 +85,7 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
 
   const NAMES = {
     "GET /auth/api/v2/authorize": "authorize", "POST /auth/api/v2/token": "token",
-    "POST /auth/api/v1/auth/oauth2/token": "refresh", "GET /user/api/v1/users/profile": "profile",
-    "GET /auth/api/v1/api-keys/active": "apiKeys",
+    "GET /user/api/v1/users/profile": "profile", "GET /auth/api/v1/api-keys/active": "apiKeys",
   };
   const tokenAnswer = (t) => ({ result: t });
 
@@ -89,8 +93,11 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
     const url = new URL(req.url, "http://fake");
     const q = url.searchParams;
     const route = `${req.method} ${url.pathname}`;
+    // The refresh is a form to the token address: told apart by its type.
+    const isForm = (req.headers["content-type"] || "").startsWith("application/x-www-form-urlencoded");
+    const name = route === "POST /auth/api/v2/token" && isForm ? "refresh" : NAMES[route];
     if (bad.delayMs) await new Promise((r) => setTimeout(r, bad.delayMs));
-    if (bad.drop?.includes(NAMES[route])) { stats[NAMES[route]]++; return req.socket.destroy(); }
+    if (bad.drop?.includes(name)) { stats[name]++; return req.socket.destroy(); }
     try {
       if (route === "GET /auth/api/v2/authorize") {
         stats.authorize++;
@@ -131,6 +138,16 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
         res.writeHead(200, { "Set-Cookie": "fake_session=; Path=/; Max-Age=0" });
         return res.end("signed out");
       }
+      if (route === "POST /auth/api/v2/token" && isForm) {
+        const form = new URLSearchParams(await readBody(req));
+        if (form.get("client_id") !== clientId) return json(res, 401, { error: "invalid_client" });
+        if (form.get("grant_type") !== "refresh_token") return json(res, 400, { error: "unsupported_grant_type" });
+        stats.refresh++;
+        if (bad.refreshStatus) return fail(res, bad.refreshStatus, "BUSY");
+        const email = refresh.get(form.get("refresh_token"));
+        if (!email) return json(res, 400, { error: "invalid_grant" });
+        return json(res, 200, { access_token: issueAccess(email), token_type: "Bearer", expires_in: ttl, refresh_token: form.get("refresh_token") });
+      }
       if (route === "POST /auth/api/v2/token") {
         const body = JSON.parse((await readBody(req)) || "{}");
         if (body.clientId !== clientId) return fail(res, 404, "A0003");
@@ -146,18 +163,6 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
         }
         if (body.grantType === "refresh_token") return fail(res, 500, "INTERNAL");
         return fail(res, 400, "C4001");
-      }
-      if (route === "POST /auth/api/v1/auth/oauth2/token") {
-        const body = JSON.parse((await readBody(req)) || "{}");
-        if (body.clientId !== clientId) return fail(res, 404, "A0003");
-        if (body.grantType !== "refresh_token") return fail(res, 400, "C4001");
-        stats.refresh++;
-        if (bad.refreshStatus) return fail(res, bad.refreshStatus, "BUSY");
-        const old = body.tokenReissueRequest?.refreshToken;
-        const email = refresh.get(old);
-        if (!email) return fail(res, 400, "A0002");
-        refresh.delete(old); // rotated
-        return json(res, 200, tokenAnswer(issue(email)));
       }
       if (route === "POST /auth/api/v1/auth/sign-out") {
         stats.signOut++;

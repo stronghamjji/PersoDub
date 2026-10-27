@@ -39,11 +39,14 @@ function kitWith(text = "GEMINI_API_KEY=g-keep\nPERSO_API_KEY=\nPERSO_SPACE_SEQ=
 const kitValues = (dir) => parseEnvFile(readFileSync(join(dir, "kit.env"), "utf8"));
 
 // A stub Perso: `routes` maps "METHOD url" to (body, headers) => [status, json].
+// A form's key ends in " (form)": the refresh is one, sent to the same
+// address as the code exchange's JSON (REFRESH below).
 function stubFetch(cfg, routes) {
   const calls = [];
   const fetchFn = async (url, opts = {}) => {
-    const key = `${opts.method || "GET"} ${url}`;
-    const body = opts.body ? JSON.parse(opts.body) : undefined;
+    const form = opts.headers?.["Content-Type"] === "application/x-www-form-urlencoded";
+    const key = `${opts.method || "GET"} ${url}${form ? " (form)" : ""}`;
+    const body = !opts.body ? undefined : form ? Object.fromEntries(new URLSearchParams(opts.body)) : JSON.parse(opts.body);
     calls.push({ key, body, auth: opts.headers?.Authorization || "" });
     const route = routes[key];
     if (!route) return new Response(JSON.stringify({ code: "NOT_FOUND" }), { status: 404 });
@@ -58,6 +61,7 @@ function stubFetch(cfg, routes) {
 // Two ports of this test's own, apart from the flow test's (52380-52382).
 const CFG = authConfig({ PERSODUB_AUTH_BASE: "https://fake.test/auth/api", PERSODUB_AUTH_CLIENT_ID: "cid", PERSODUB_AUTH_REDIRECT_PORTS: "52390,52391" });
 const REDIRECT_URI = redirectUriFor(CFG, 52390);
+const REFRESH = `POST ${CFG.refreshUrl} (form)`;
 
 // The listener's stand-in: no port is opened, and the test hands the browser's
 // request to auth.handleCallback itself. `listened` counts the doors opened,
@@ -75,7 +79,7 @@ function stubListen() {
 function persoRoutes({ userId = "u1", email = "someone@test.local", keys = [{ apiKey: "pk_test_K1" }], ...over } = {}) {
   return {
     [`POST ${CFG.tokenUrl}`]: () => [200, { result: { accessToken: later(), refreshToken: "r1" } }],
-    [`POST ${CFG.refreshUrl}`]: () => [200, { result: { accessToken: later(), refreshToken: "r2" } }],
+    [REFRESH]: () => [200, { access_token: later(), refresh_token: "r2", token_type: "Bearer", expires_in: 1800 }],
     [`GET ${CFG.profileUrl}`]: () => [200, { result: { userSeq: userId, userName: "", email, provider: "email" } }],
     [`GET ${CFG.apiKeysUrl}`]: () => [200, { result: keys }],
     [`POST ${CFG.signOutUrl}`]: () => [200, { result: null }],
@@ -133,7 +137,7 @@ test("Perso's addresses default to api.perso.ai, the ports to three of this comp
   const live = authConfig({}, "0.9.1");
   assert.equal(live.authorizeUrl, "https://api.perso.ai/auth/api/v2/authorize");
   assert.equal(live.tokenUrl, "https://api.perso.ai/auth/api/v2/token");
-  assert.equal(live.refreshUrl, "https://api.perso.ai/auth/api/v1/auth/oauth2/token");
+  assert.equal(live.refreshUrl, "https://api.perso.ai/auth/api/v2/token");
   assert.equal(live.signOutUrl, "https://api.perso.ai/auth/api/v1/auth/sign-out");
   assert.equal(live.profileUrl, "https://api.perso.ai/user/api/v1/users/profile");
   assert.equal(live.apiKeysUrl, "https://api.perso.ai/auth/api/v1/api-keys/active");
@@ -182,14 +186,14 @@ test("the API key answer: the first key with a value, else none with the field n
   assert.deepEqual(parseActiveKey({ result: [{ seq: 1, apiKeyName: "old", pk_live_x9: 1 }] }), { status: "none", fields: ["seq", "apiKeyName"] });
 });
 
-test("the token answer is {result: {accessToken, refreshToken}}; anything else names its fields, never a value", async () => {
-  const { fetchFn } = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, { result: { accessToken: "a1", refreshToken: "r9" } }] });
+test("the refresh answer is RFC 6749's {access_token, refresh_token}; anything else names its fields, never a value", async () => {
+  const { fetchFn } = stubFetch(CFG, { [REFRESH]: () => [200, { access_token: "a1", refresh_token: "r9", token_type: "Bearer", expires_in: 1800 }] });
   assert.deepEqual(await refreshTokens(CFG, fetchFn, "r1"), { accessToken: "a1", refreshToken: "r9" });
-  for (const answer of [{ accessToken: "a1", refreshToken: "r9" }, { result: { jwt: "secret-value", ttl: 5 } }, { result: null }, null]) {
-    const stub = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, answer] });
+  for (const answer of [{ result: { accessToken: "a1", refreshToken: "r9" } }, { accessToken: "a1" }, { access_token: "" }, { jwt: "secret-value", ttl: 5 }, null]) {
+    const stub = stubFetch(CFG, { [REFRESH]: () => [200, answer] });
     await assert.rejects(refreshTokens(CFG, stub.fetchFn, "r1"), (err) => /no-token/.test(err.message) && !/secret-value|a1/.test(err.message), JSON.stringify(answer));
   }
-  const bare = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, { result: { jwt: "secret-value", ttl: 5 } }] });
+  const bare = stubFetch(CFG, { [REFRESH]: () => [200, { jwt: "secret-value", ttl: 5 }] });
   await assert.rejects(refreshTokens(CFG, bare.fetchFn, "r1"), /jwt, ttl/);
 });
 
@@ -243,10 +247,13 @@ test("an access token's expiry is read from its JWT exp, and anything else has n
   assert.equal(tokenExpiry(undefined), null);
 });
 
-test("the refresh request has the shape the website's refresh uses", async () => {
-  const { fetchFn, calls } = stubFetch(CFG, { [`POST ${CFG.refreshUrl}`]: () => [200, { result: { accessToken: "a2" } }] });
-  assert.deepEqual(await refreshTokens(CFG, fetchFn, "r1"), { accessToken: "a2", refreshToken: "r1" });
-  assert.deepEqual(calls[0].body, { clientId: "cid", grantType: "refresh_token", tokenReissueRequest: { refreshToken: "r1" } });
+// Perso's answer to a JSON refresh at v2/token is a 500 (2026-10-27): only
+// the form is read there.
+test("the refresh is a form to v2/token, as RFC 6749 asks, and an answer with no refresh_token keeps the old one", async () => {
+  const { fetchFn, calls } = stubFetch(CFG, { [REFRESH]: () => [200, { access_token: "a2", token_type: "Bearer", expires_in: 1800 }] });
+  assert.deepEqual(await refreshTokens(CFG, fetchFn, "r+1/="), { accessToken: "a2", refreshToken: "r+1/=" });
+  assert.equal(calls[0].key, "POST https://fake.test/auth/api/v2/token (form)");
+  assert.deepEqual(calls[0].body, { grant_type: "refresh_token", client_id: "cid", refresh_token: "r+1/=" });
 });
 
 // ---- Where the tokens are kept ------------------------------------------------------
@@ -532,7 +539,7 @@ test("an access token that ran out is refreshed quietly at launch, and the new o
   const { auth, calls, userData } = await signedInStore(persoRoutes(), gone());
   await auth.start();
   assert.equal((await auth.status()).signedIn, true);
-  assert.deepEqual(calls.map((c) => c.key), [`POST ${CFG.refreshUrl}`]);
+  assert.deepEqual(calls.map((c) => c.key), [REFRESH]);
   assert.equal(tokenStore(join(userData, AUTH_FILE), fakeSafeStorage()).read().refreshToken, "r2");
 });
 
@@ -542,18 +549,18 @@ test("a 401 refreshes once and asks again", async () => {
   const { auth, calls } = await signedInStore(routes, later());
   await auth.start();
   assert.deepEqual(await auth.connectKey(), { key: "saved" });
-  assert.deepEqual(calls.map((c) => c.key), [`GET ${CFG.apiKeysUrl}`, `POST ${CFG.refreshUrl}`, `GET ${CFG.apiKeysUrl}`]);
+  assert.deepEqual(calls.map((c) => c.key), [`GET ${CFG.apiKeysUrl}`, REFRESH, `GET ${CFG.apiKeysUrl}`]);
 });
 
 test("a refused refresh signs out and clears the key; no network keeps the sign-in", async () => {
-  const refused = await signedInStore(persoRoutes({ [`POST ${CFG.refreshUrl}`]: () => [400, { code: "A0002", message: "로그아웃된 회원입니다.", status: "BAD_REQUEST" }] }), gone());
+  const refused = await signedInStore(persoRoutes({ [REFRESH]: () => [400, { error: "invalid_grant" }] }), gone());
   await refused.auth.start();
   assert.equal((await refused.auth.status()).signedIn, false);
   assert.equal((await refused.auth.status()).required, true);
   assert.equal(existsSync(join(refused.userData, AUTH_FILE)), false);
   assert.deepEqual([kitValues(refused.kitDir).PERSO_API_KEY, kitValues(refused.kitDir).PERSO_SPACE_SEQ], ["", ""]);
 
-  const offline = await signedInStore(persoRoutes({ [`POST ${CFG.refreshUrl}`]: () => new TypeError("fetch failed") }), gone());
+  const offline = await signedInStore(persoRoutes({ [REFRESH]: () => new TypeError("fetch failed") }), gone());
   await offline.auth.start();
   assert.equal((await offline.auth.status()).signedIn, true);
   assert.equal(kitValues(offline.kitDir).PERSO_API_KEY, "pk_test_K1");
@@ -561,14 +568,14 @@ test("a refused refresh signs out and clears the key; no network keeps the sign-
 
 test("Perso too busy (429) or timing out (408) on a refresh keeps the sign-in, like a server error", async () => {
   for (const status of [408, 429, 500, 503]) {
-    const busy = await signedInStore(persoRoutes({ [`POST ${CFG.refreshUrl}`]: () => [status, { code: "BUSY" }] }), gone());
+    const busy = await signedInStore(persoRoutes({ [REFRESH]: () => [status, { code: "BUSY" }] }), gone());
     await busy.auth.start();
     assert.equal((await busy.auth.status()).signedIn, true, `HTTP ${status} signed out`);
     assert.equal(kitValues(busy.kitDir).PERSO_API_KEY, "pk_test_K1");
     assert.ok(existsSync(join(busy.userData, AUTH_FILE)));
   }
   // A timeout of the app's own (AbortSignal.timeout) is no answer at all.
-  const slow = await signedInStore(persoRoutes({ [`POST ${CFG.refreshUrl}`]: () => new DOMException("The operation timed out.", "TimeoutError") }), gone());
+  const slow = await signedInStore(persoRoutes({ [REFRESH]: () => new DOMException("The operation timed out.", "TimeoutError") }), gone());
   await slow.auth.start();
   assert.equal((await slow.auth.status()).signedIn, true);
 });
@@ -677,10 +684,10 @@ test("every sign-out, pressed or a refused refresh, tells the shell; a refresh l
   assert.deepEqual(signedOut, []);
   await pressed.auth.logout();
   assert.deepEqual(signedOut, ["out"]);
-  const refused = await signedInStore(persoRoutes({ [`POST ${CFG.refreshUrl}`]: () => [400, { code: "A0002" }] }), gone(), { onSignOut });
+  const refused = await signedInStore(persoRoutes({ [REFRESH]: () => [400, { error: "invalid_grant" }] }), gone(), { onSignOut });
   await refused.auth.start();
   assert.deepEqual(signedOut, ["out", "out"]);
-  const offline = await signedInStore(persoRoutes({ [`POST ${CFG.refreshUrl}`]: () => new TypeError("fetch failed") }), gone(), { onSignOut });
+  const offline = await signedInStore(persoRoutes({ [REFRESH]: () => new TypeError("fetch failed") }), gone(), { onSignOut });
   await offline.auth.start();
   assert.deepEqual(signedOut, ["out", "out"]);
 });

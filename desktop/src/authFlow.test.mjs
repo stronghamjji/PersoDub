@@ -177,10 +177,15 @@ test("the next launch is signed in at once; a short-lived token is refreshed by 
     await new Promise((r) => setTimeout(r, 1200));
 
     const refreshesBefore = (await getStats()).refresh;
+    const keptBefore = tokenStore(fileOf(first.userData), fakeSafeStorage()).read();
     const second = theApp({ kitDir, browser, userData: first.userData });
     await second.auth.start();
     assert.equal((await second.auth.status()).signedIn, true);
     assert.equal((await getStats()).refresh, refreshesBefore + 1, "the expired token was not refreshed at launch");
+    // A new access token kept, and the same refresh token: Perso does not rotate it for this client.
+    const keptAfter = tokenStore(fileOf(first.userData), fakeSafeStorage()).read();
+    assert.notEqual(keptAfter.accessToken, keptBefore.accessToken);
+    assert.equal(keptAfter.refreshToken, keptBefore.refreshToken);
     // ...and the refreshed token works: the key is read with it.
     assert.deepEqual(await second.auth.connectKey(), { key: "saved" });
   } finally { fake.setAccessTtl(3600); }
