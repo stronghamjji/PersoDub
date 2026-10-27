@@ -103,6 +103,10 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
     // computer's browser once Google or Microsoft took it there.
     const inBrowser = status.where === "browser";
     $("signInWaitTitle").textContent = inBrowser ? t("Finish signing in in your browser") : t("Finish signing in in the sign-in window");
+    // In the browser Google is pressed again on Perso's page, and a sign-up
+    // that ends on Perso's home needs Open again.
+    $("signInWaitNote").hidden = !inBrowser;
+    $("signInWaitNote").textContent = inBrowser ? t("Google and Microsoft sign-in continue in your browser. If you just signed up, press Open the browser again.") : "";
     $("signInReopen").textContent = inBrowser ? t("Open the browser again") : t("Open the sign-in window again");
     $("signInBtn").textContent = note ? t("Try again") : t("Sign in with Perso");
     // Only a failure's reason goes under the button.

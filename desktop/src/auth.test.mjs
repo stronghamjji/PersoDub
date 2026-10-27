@@ -516,13 +516,18 @@ test("handed to the browser, the sign-in keeps waiting there: its window closing
   const done = auth.login();
   await settle();
   const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x&callbackUrl=y";
-  // What the window does at a hand-off (signInWindow.js): the browser opened, then it closes.
+  // What the window does at a hand-off (signInWindow.js): the browser opened
+  // on the window's first address, this sign-in's own, then it closes.
   windows[0].onHandOff(google);
   windows[0].onClosed();
   assert.equal((await auth.status()).where, "browser");
   assert.equal((await auth.status()).waiting, true);
   assert.deepEqual(closed, [], "the port was given back while the browser was still on its way");
-  assert.ok(logs.includes("AUTH the sign-in goes on in the computer's browser at api.perso.ai/auth/oauth2/authorization/google"), logs.join("\n"));
+  assert.ok(logs.includes("AUTH Google or Microsoft in the sign-in window (api.perso.ai/auth/oauth2/authorization/google): "
+    + "the whole sign-in goes on in the computer's browser at fake.test/auth/api/v2/authorize"), logs.join("\n"));
+  // That first address is this sign-in's: the state the way back must carry.
+  assert.equal(new URL(windows[0].url).pathname, "/auth/api/v2/authorize");
+  assert.equal(stateOf(windows[0].url), stateOf(opened[0]));
   assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
   assert.equal(windows[0].shown, 1);
   assert.equal(await auth.handleCallback(back(opened)), "signed_in");
@@ -1099,13 +1104,17 @@ test("the sign-in window goes only where navigation lets it: the browser gets wh
   assert.deepEqual(f.external.slice(2), ["https://perso.ai/terms"]);
 });
 
-test("a hand-off: the window does not go, the browser opens that exact address, the window closes after the event, and Open again opens the browser again", async () => {
+// Perso's sign-in page keeps where it goes on after Google in the window
+// that shows it, not in Google's address: given only that address, the
+// browser ended on Perso's home (2026-10-27). So the whole sign-in goes.
+test("a hand-off: the window does not go, the browser opens the window's own first address (this sign-in's authorize address), not Google's, the window closes after the event, and Open again opens that address again", async () => {
   const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x&callbackUrl=y";
+  const start = "https://api.perso.ai/auth/api/v2/authorize?x=1";
   for (const name of ["wc:will-navigate", "wc:will-redirect"]) {
     const f = fakeWindows();
     const { win, seen, handle } = openOne(f, { navigation: (url) => (url === google ? "hand-off" : "allow") });
     assert.equal(win.fire(name, google).prevented, true, name);
-    assert.deepEqual(f.external, [google], name);
+    assert.deepEqual(f.external, [start], name);
     assert.deepEqual(seen.handedOff, [google], name);
     // Not inside the navigation's own event, which Electron is still handling.
     assert.equal(win.destroyed, false, name);
@@ -1114,9 +1123,9 @@ test("a hand-off: the window does not go, the browser opens that exact address, 
     await settle();
     assert.equal(win.destroyed, true, name);
     assert.equal(seen.closed, 1, name);
-    assert.deepEqual(f.external, [google], name);
+    assert.deepEqual(f.external, [start], name);
     handle.show();
-    assert.deepEqual(f.external, [google, google], name);
+    assert.deepEqual(f.external, [start, start], name);
     assert.deepEqual(win.did, [], name);
     handle.close();
     assert.equal(seen.closed, 1, name);

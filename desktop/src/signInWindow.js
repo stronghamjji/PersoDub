@@ -8,7 +8,7 @@ import { openExternally } from "./windowFactory.js";
 // cookies go at every sign-out instead (clearSignInStorage below). No
 // preload, no Node, sandboxed: the page in it is Perso's, and it reaches
 // nothing of the app. Google and Microsoft, which refuse a window like this,
-// are handed to the computer's browser (auth.js signInNavigation).
+// take the whole sign-in to the computer's browser (auth.js signInNavigation).
 //
 // Over the app's window but not modal: the app's Cancel and Open again stay
 // pressable, and the window keeps its own close button on a Mac, where a modal
@@ -22,11 +22,13 @@ const ABORTED = -3;
 
 /** createAuth's makeSignInWindow: a window over `parent()` on `url`, going
  * only where `navigation(url)` answers "allow" ("browser" opens the address
- * in the computer's browser instead). "hand-off" moves the sign-in itself to
- * the computer's browser: the address opens there, onHandOff(address) is
- * called and the window closes; show() then opens that address in the
- * browser again. onClosed is called once when the window goes, however it
- * goes; onFailed when its page does not load. */
+ * in the computer's browser instead). "hand-off" moves the whole sign-in to
+ * the computer's browser: `url`, the window's first address, opens there,
+ * not the address the window was going to, since Perso's sign-in page keeps
+ * where it goes on after Google in the window that shows it; then
+ * onHandOff(address it was going to) is called and the window closes, and
+ * show() opens `url` in the browser again. onClosed is called once when the
+ * window goes, however it goes; onFailed when its page does not load. */
 export function signInWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
   return ({ url, navigation, onClosed, onFailed, onHandOff }) => {
     const over = parent();
@@ -41,11 +43,11 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     // Camera, microphone, notifications: nothing a sign-in needs.
     wc.session.setPermissionRequestHandler((_wc, _permission, answer) => answer(false));
     win.on("page-title-updated", (e) => e.preventDefault());
-    let handedOff = ""; // the address the sign-in went on at in the computer's browser
+    let handedOff = false; // the sign-in goes on in the computer's browser, from `url`
     const handOff = (to) => {
       if (handedOff) return;
-      handedOff = to;
-      openExternally(shell, to);
+      handedOff = true;
+      openExternally(shell, url);
       onHandOff(to);
       // After the navigation's event has returned: Electron is still in that
       // navigation while its handler runs.
@@ -76,7 +78,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     win.loadURL(url).catch(() => { /* did-fail-load has said it */ });
     return {
       show() {
-        if (handedOff) { openExternally(shell, handedOff); return; }
+        if (handedOff) { openExternally(shell, url); return; }
         if (win.isDestroyed()) return;
         if (win.isMinimized()) win.restore();
         win.show();

@@ -9,9 +9,12 @@
 //   GET  /auth/api/v2/authorize   no browser session -> /login?continue=...
 //                                 with one -> 302 <registered redirect_uri>?code&state
 //   GET  /login, POST /login      the sign-in form; sets the browser's session cookie
-//   GET  /auth/oauth2/authorization/<provider>?callbackUrl=...
+//   GET  /auth/oauth2/authorization/<provider>
 //                                 the form's Google button, as Perso's: the browser comes back
-//                                 signed in as b@test.local and goes on to callbackUrl
+//                                 signed in as b@test.local and goes on to where the form it
+//                                 pressed that on was going, which that browser keeps, not the
+//                                 address (as Perso's page does); a browser that never showed
+//                                 the form goes to Perso's home, GET /
 //   GET  /logout                  signs the browser out
 //   POST /auth/api/v2/token       JSON: authorization_code (PKCE S256, one-use code); refresh_token -> 500,
 //                                 as the real one. A form (RFC 6749): refresh_token, answered
@@ -48,6 +51,7 @@ const rand = () => randomBytes(16).toString("base64url");
 
 export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLIENT_ID, redirectUris = FAKE_REDIRECTS } = {}) {
   const browserSessions = new Map(); // cookie -> email
+  const goingOn = new Map();         // cookie -> where that browser's sign-in form goes on after Google
   const codes = new Map();           // code -> {email, challenge, redirectUri}
   const access = new Map();          // access token -> {email, exp}
   const refresh = new Map();         // refresh token -> email
@@ -122,18 +126,26 @@ export function startFakePerso({ port = 0, accessTtl = 3600, clientId = FAKE_CLI
       }
       if (route === "GET /login") {
         stats.loginForm++;
-        return html(res, 200, `<!doctype html><title>Fake Perso sign-in</title><form method="post" action="/login">
+        // Where the form goes on after Google stays in the browser showing
+        // it (Perso's page keeps it in its own storage), not in the Google
+        // button's address.
+        const sid = cookieOf(req) || rand();
+        goingOn.set(sid, q.get("continue") || "/");
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Set-Cookie": `fake_session=${sid}; Path=/; HttpOnly` });
+        return res.end(`<!doctype html><title>Fake Perso sign-in</title><form method="post" action="/login">
 <input type="hidden" name="continue" value="${esc(q.get("continue") || "/")}">
 <input name="email" placeholder="email"><input name="password" type="password"><button>Sign in</button></form>
-<a href="/auth/oauth2/authorization/google?callbackUrl=${encodeURIComponent(q.get("continue") || "/")}">Google</a>`);
+<a href="/auth/oauth2/authorization/google">Google</a>`);
       }
       if (req.method === "GET" && url.pathname.startsWith("/auth/oauth2/authorization/")) {
-        const sid = rand();
+        const sid = cookieOf(req) || rand();
         browserSessions.set(sid, "b@test.local");
-        const next = q.get("callbackUrl") || "/";
+        const next = goingOn.get(sid) || "/";
+        goingOn.delete(sid);
         res.writeHead(302, { Location: next.startsWith("/") ? next : "/", "Set-Cookie": `fake_session=${sid}; Path=/; HttpOnly` });
         return res.end();
       }
+      if (route === "GET /") return html(res, 200, "<!doctype html><title>Fake Perso home</title><h1>Perso</h1>");
       if (route === "POST /login") {
         const form = new URLSearchParams(await readBody(req));
         const email = form.get("email");

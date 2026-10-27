@@ -34,12 +34,13 @@ const paramsOf = (u) => { const q = new URL(u).searchParams; return { code: q.ge
 // A window with its own cookies, as the app's sign-in window
 // (src/signInWindow.js). `typing` is the account a person would type into
 // Perso's form; null means nobody does (the test fails if a form shows).
-// `press` is the button pressed on that form in place of typing ("google"),
-// whose address the sign-in hands to the computer's browser: open answers
-// {handOff: <that address>} there, as the real window stops there. It
-// follows every redirect until it lands on the app's own port and asks that
-// page, as the real window does; `pages` keeps what each one said. With
-// `hold` it stops short of that last request and returns its address instead.
+// `press` is the button pressed on that form in place of typing ("google"):
+// in the sign-in window, whose `navigation` hands it to the computer's
+// browser, open answers {handOff: <that address>}, as the real window stops
+// there. It follows every redirect until it lands on the app's own port and
+// asks that page, as the real window does; `pages` keeps what each one said.
+// With `hold` it stops short of that last request and returns its address
+// instead. Ending on Perso's home, the way back lost, is an error.
 // Given the sign-in's `navigation`, every address it goes to must be one the
 // real window would go to.
 function scriptedBrowser() {
@@ -62,8 +63,9 @@ function scriptedBrowser() {
       remember(res);
       if (res.status === 302) { url = new URL(res.headers.get("location"), url).href; continue; }
       const page = await res.text();
+      if (res.status === 200 && page.includes("<title>Fake Perso home")) throw new Error("the browser ended on Perso's home");
       if (res.status !== 200 || !page.includes('action="/login"')) throw new Error(`the browser stopped on HTTP ${res.status}`);
-      if (b.press) { url = new URL(new RegExp(`href="([^"]*/oauth2/authorization/${b.press}\\?[^"]*)"`).exec(page)[1], url).href; continue; }
+      if (b.press) { url = new URL(new RegExp(`href="([^"]*/oauth2/authorization/${b.press}[^"]*)"`).exec(page)[1], url).href; continue; }
       if (!b.typing) throw new Error("Perso showed its sign-in form and nobody was there to type");
       b.forms++;
       const post = await fetch(new URL("/login", url), {
@@ -85,22 +87,27 @@ function scriptedBrowser() {
 // made. `hold` keeps its last address in `held` for the test to deliver
 // itself; a window that could not reach Perso puts its error in
 // `browserErrors` and says so as the real one does (onFailed). `windows`
-// keeps whether each was closed. A hand-off goes as the real window does it:
-// the address to the computer's browser (`handedOff`, for the test to open),
-// onHandOff, then the window closes.
+// keeps whether each was closed. A hand-off goes as the real window does it
+// (signInWindow.js): the window's own first address, this sign-in's authorize
+// address, to the computer's browser (`handedOff`, for the test to open),
+// onHandOff with the address it was going to (`pressed`), then the window
+// closes; Open again then opens that first address in the browser again.
 function scriptedWindows(browser, { hold = false } = {}) {
   const held = [];
   const browserErrors = [];
   const handedOff = [];
+  const pressed = [];
   const windows = [];
   const make = ({ url, navigation, onClosed, onFailed, onHandOff }) => {
-    const win = { closed: false, onClosed };
+    const win = { url, closed: false, handedOff: false, onClosed };
     windows.push(win);
     setImmediate(async () => {
       try {
         const end = await browser.open(url, { hold, navigation });
         if (end.handOff) {
-          handedOff.push(end.handOff);
+          win.handedOff = true;
+          handedOff.push(url);
+          pressed.push(end.handOff);
           onHandOff(end.handOff);
           win.closed = true;
           onClosed();
@@ -109,16 +116,16 @@ function scriptedWindows(browser, { hold = false } = {}) {
         if (hold) held.push(end);
       } catch (err) { browserErrors.push(err); onFailed(); }
     });
-    return { show() {}, close() { win.closed = true; } };
+    return { show() { if (win.handedOff) handedOff.push(url); }, close() { win.closed = true; } };
   };
-  return { held, browserErrors, handedOff, windows, make };
+  return { held, browserErrors, handedOff, pressed, windows, make };
 }
 
 // The app as main.js wires it, with scriptedWindows for its sign-in window.
 function theApp({ userData = mkdtempSync(join(tmpdir(), "odflow-user-")), kitDir, browser, hold = false,
                   fetchFn = fetch, safe = fakeSafeStorage(), authBase = fake.authBase }) {
   const logs = [];
-  const { held, browserErrors, handedOff, windows, make } = scriptedWindows(browser, { hold });
+  const { held, browserErrors, handedOff, pressed, windows, make } = scriptedWindows(browser, { hold });
   const auth = createAuth({
     enabled: true,
     cfg: cfgFor(authBase),
@@ -129,7 +136,7 @@ function theApp({ userData = mkdtempSync(join(tmpdir(), "odflow-user-")), kitDir
     kitDir: () => kitDir,
     log: (line) => logs.push(line),
   });
-  return { auth, logs, userData, held, browserErrors, handedOff, windows };
+  return { auth, logs, userData, held, browserErrors, handedOff, pressed, windows };
 }
 const until = async (check) => { for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 10)); };
 const fileOf = (userData) => join(userData, AUTH_FILE);
@@ -141,20 +148,24 @@ function freshKit() {
   return dir;
 }
 
-test("Google pressed in the sign-in window goes on in the computer's browser: the window closes, the status says browser, and the browser's way back signs in", async () => {
+test("Google pressed in the sign-in window takes the whole sign-in to the computer's browser: this sign-in's own authorize address opens there, Google is pressed on Perso's page again, and the way back signs in", async () => {
   const kitDir = freshKit();
   const signInWin = scriptedBrowser();
   signInWin.press = "google";
-  const { auth, handedOff, windows } = theApp({ kitDir, browser: signInWin });
+  const { auth, handedOff, pressed, windows } = theApp({ kitDir, browser: signInWin });
   await auth.start();
   const done = auth.login();
   await until(() => handedOff.length);
-  assert.equal(new URL(handedOff[0]).pathname, "/auth/oauth2/authorization/google");
+  assert.equal(new URL(pressed[0]).pathname, "/auth/oauth2/authorization/google");
+  // Not Google's address: the window's own first one, this sign-in's state and port in it.
+  assert.equal(handedOff[0], windows[0].url);
+  assert.equal(new URL(handedOff[0]).pathname, "/auth/api/v2/authorize");
   assert.equal(windows[0].closed, true);
   assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: true, where: "browser" });
-  // The computer's browser, with cookies of its own: from that address, through
-  // the fake Google, back to the app's port.
+  // The computer's browser, with cookies of its own: Perso's sign-in page,
+  // Google pressed there, the fake Google, and back to the app's port.
   const browser = scriptedBrowser();
+  browser.press = "google";
   await browser.open(handedOff[0]);
   assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
   assert.equal(signInWin.forms + browser.forms, 0, "a password was typed");
@@ -162,6 +173,32 @@ test("Google pressed in the sign-in window goes on in the computer's browser: th
   assert.equal((await auth.status()).account, "b@test.local");
   assert.equal((await auth.status()).where, "");
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["b@test.local"].keys[0].apiKey);
+});
+
+// What 76f7305 did, and the real Perso answered (2026-10-27): Google's
+// address alone in the browser signs it in to Perso but ends on Perso's home,
+// since where the sign-in page goes on stays in the window that showed it.
+// The same is left by a sign-up that ends on Perso's home: Open the browser
+// again opens this sign-in's address once more, and, signed in now, it comes
+// straight back.
+test("a browser left on Perso's home, signed in there (Google's address alone, or a sign-up): Open the browser again opens this sign-in's address again and it comes straight back", async () => {
+  const kitDir = freshKit();
+  const signInWin = scriptedBrowser();
+  signInWin.press = "google";
+  const { auth, handedOff, pressed } = theApp({ kitDir, browser: signInWin });
+  await auth.start();
+  const done = auth.login();
+  await until(() => handedOff.length);
+  const browser = scriptedBrowser();
+  await assert.rejects(browser.open(pressed[0]), /Perso's home/);
+  assert.equal((await auth.status()).where, "browser");
+  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
+  assert.deepEqual(handedOff, [handedOff[0], handedOff[0]]);
+  await browser.open(handedOff[1]);
+  assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
+  assert.deepEqual(browser.pages, ["done"]);
+  assert.equal(browser.forms, 0, "a password was typed");
+  assert.equal((await auth.status()).account, "b@test.local");
 });
 
 test("A signs in and out, and the next sign-in asks for the account again: A again, then B, then C with no key", async () => {
