@@ -14,7 +14,7 @@ import {
   parseActiveKey, parseProfile, redirectUriFor, refreshTokens, tokenExpiry, tokenStore,
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
-import { registerAuthIpc } from "./authIpc.js";
+import { keyMadeCheck, registerAuthIpc } from "./authIpc.js";
 import { SIGN_IN_PARTITION, clearSignInStorage, handOffUrl, keyWindowFactory, landedOnPerso, signInWindowFactory, wayBackUrl } from "./signInWindow.js";
 import { parseEnvFile } from "./kitEnv.js";
 
@@ -1105,6 +1105,23 @@ test("the key window closes once a key is saved, by Check again or the page's qu
   assert.deepEqual(closed, ["closed", "closed"]);
 });
 
+test("a key made in the key window is looked up at once, one look at a time, and the window closes once it is saved", async () => {
+  const looks = [];
+  const closed = [];
+  const keyMade = keyMadeCheck({ auth: { connectKey: () => new Promise((r) => looks.push(r)) }, closeKeyWindow: () => closed.push("closed") });
+  const first = keyMade();
+  const during = keyMade();
+  assert.equal(looks.length, 1, "a second look while the first runs");
+  looks[0]({ key: "no_key" });
+  await Promise.all([first, during]);
+  assert.deepEqual(closed, []);
+  const second = keyMade();
+  assert.equal(looks.length, 2);
+  looks[1]({ key: "saved" });
+  await second;
+  assert.deepEqual(closed, ["closed"]);
+});
+
 test("switched off (the open-source edition) nothing happens: no window, no file, no port, no network", async () => {
   const userData = mkdtempSync(join(tmpdir(), "odauth-user-"));
   const kitDir = kitWith("PERSO_API_KEY=pk_user_typed\nPERSO_SPACE_SEQ=42\n");
@@ -1182,18 +1199,20 @@ const event = () => ({ prevented: false, preventDefault() { this.prevented = tru
 // A stand-in for Electron's BrowserWindow: the options it was made with, the
 // handlers it was given, and what was done to it. `fire` plays an event;
 // `steps` is the cookies set and the pages loaded, in order.
-function fakeWindows({ setCookie = async () => {} } = {}) {
+function fakeWindows({ setCookie = async () => {}, onKeyMade } = {}) {
   const made = [];
   const external = [];
   class BrowserWindow {
     constructor(options) {
-      Object.assign(this, { options, handlers: {}, loaded: [], did: [], steps: [], destroyed: false, permissions: null, openHandler: null, cookies: [], cookieReads: [] });
+      Object.assign(this, { options, handlers: {}, loaded: [], did: [], steps: [], destroyed: false, permissions: null, openHandler: null, cookies: [], cookieReads: [],
+        requestListeners: [] });
       const win = this;
       this.webContents = {
         on: (name, fn) => { win.handlers[`wc:${name}`] = fn; },
         setWindowOpenHandler: (fn) => { win.openHandler = fn; },
         session: {
           setPermissionRequestHandler: (fn) => { win.permissions = fn; },
+          webRequest: { onCompleted: (filter, fn) => { win.requestListeners.push({ filter, fn }); } },
           cookies: {
             get: async (filter) => { win.cookieReads.push(filter); return win.cookies; },
             set: async (cookie) => { win.steps.push(["cookie", cookie]); await setCookie(cookie); },
@@ -1215,7 +1234,7 @@ function fakeWindows({ setCookie = async () => {} } = {}) {
   const parent = { isDestroyed: () => false, getBounds: () => ({ x: 100, y: 40, width: 1280, height: 800 }) };
   const shell = { openExternal: (u) => external.push(u) };
   const make = signInWindowFactory({ BrowserWindow, shell, parent: () => parent, title: "PersoDubbing" });
-  const keyWindow = keyWindowFactory({ BrowserWindow, shell, parent: () => parent, title: "PersoDubbing" });
+  const keyWindow = keyWindowFactory({ BrowserWindow, shell, parent: () => parent, title: "PersoDubbing", onKeyMade });
   return { made, external, parent, make, openKey: keyWindow.open, closeKey: keyWindow.close };
 }
 const openOne = (f, { navigation = () => "allow" } = {}) => {
@@ -1538,6 +1557,28 @@ test("the key window's close() closes the open one, and does nothing when none i
   await f.openKey(page);
   assert.equal(f.made.length, 2);
   assert.equal(f.made[1].destroyed, false);
+});
+
+// The key window stayed open after the key was made, until the page's next look (2026-10-27).
+test("Perso's key page making a key says so at once: a call other than a read to an api-key address of api.perso.ai, answered without an error; a read, a preflight or an error does not", async () => {
+  let made = 0;
+  const f = fakeWindows({ onKeyMade: () => { made++; } });
+  await f.openKey("https://developers.perso.ai/api-keys");
+  await f.openKey("https://developers.perso.ai/api-keys");
+  const listeners = f.made[0].requestListeners;
+  assert.equal(listeners.length, 1, "one listener per window");
+  assert.deepEqual(listeners[0].filter, { urls: ["https://api.perso.ai/*"] });
+  const completed = (method, url, statusCode) => listeners[0].fn({ method, url, statusCode });
+  const keys = "https://api.perso.ai/auth/api/v1/api-keys";
+  completed("GET", keys, 200);
+  completed("HEAD", keys, 200);
+  completed("OPTIONS", keys, 204);
+  completed("POST", keys, 400);
+  completed("POST", keys, 500);
+  completed("POST", "https://api.perso.ai/portal/api/v1/spaces", 200);
+  assert.equal(made, 0);
+  completed("POST", keys, 200);
+  assert.equal(made, 1);
 });
 
 // ---- The steps of a sign-in, for the charts (events.js track) ----------------

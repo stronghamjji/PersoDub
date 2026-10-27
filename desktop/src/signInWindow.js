@@ -146,9 +146,14 @@ async function setSessionCookies(jar, tokens) {
   }
 }
 
+// Calls that make nothing: OPTIONS is the browser's own check before the real call.
+const READS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 // main.js's key window on the sign-in's cookies: open(url, cookies) sets the app's tokens there first, then shows `url`;
-// Perso's https pages stay in it, the rest go to the browser. close() closes it, if it is open.
-export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
+// Perso's https pages stay in it, the rest go to the browser. close() closes it, if it is open. onKeyMade() is called
+// once Perso's page has made a key: a call other than a read to an api-key address of api.perso.ai, answered without
+// an error. The exact address is not known; a call taken for one costs one more look at the account's key.
+export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub", onKeyMade = () => {} }) {
   let win = null;
   const stay = (e, to) => {
     const u = parsed(to);
@@ -156,12 +161,15 @@ export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, ti
     e.preventDefault();
     openExternally(shell, to);
   };
+  const keyCall = (d) => { if (!READS.has(d.method) && /api-key/i.test(d.url) && d.statusCode < 400) onKeyMade(); };
   return {
     async open(url, cookies) {
       if (!win || win.isDestroyed()) {
         win = persoWindow({ BrowserWindow, shell, parent, title, width: 1000, height: 760 });
         win.webContents.on("will-navigate", stay);
         win.webContents.on("will-redirect", stay);
+        // A session has one such listener: a new window's takes the place of the last one's.
+        win.webContents.session.webRequest.onCompleted({ urls: ["https://api.perso.ai/*"] }, keyCall);
       }
       if (cookies?.accessToken) await setSessionCookies(win.webContents.session.cookies, cookies);
       if (win.isDestroyed()) return;

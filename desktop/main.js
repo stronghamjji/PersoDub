@@ -17,7 +17,7 @@ import { EDITIONS, displayName, readEdition, readBuildEnv, findPayloadDir } from
 import { setAppName, useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
 import { writeTimeline } from "./src/timeline.js";
-import { createShellAuth, registerAuthIpc } from "./src/authIpc.js";
+import { createShellAuth, keyMadeCheck, registerAuthIpc } from "./src/authIpc.js";
 import { clearSignInStorage, keyWindowFactory, signInWindowFactory } from "./src/signInWindow.js";
 
 // Two launches must never both start backends: the second would overwrite
@@ -160,7 +160,8 @@ app.whenReady().then(() => {
   };
   registerUsageIpc({ ipcMain, ctx, countUsage, sendReport: reporter.sendReport, shellLog, lastRunClosedByUser, track: events.track });
   registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog });
-  const keyWindow = keyWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) });
+  const keyWindow = keyWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition),
+                                       onKeyMade: keyMadeCheck({ auth, closeKeyWindow: () => keyWindow.close() }) });
   registerAuthIpc({ ipcMain, auth, track: events.track, openKeyWindow: keyWindow.open, closeKeyWindow: keyWindow.close });
   void auth.start();
 

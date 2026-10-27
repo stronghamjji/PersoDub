@@ -48,6 +48,20 @@ export function createShellAuth({ app, safeStorage, net, shell, ctx, edition, sh
   return auth;
 }
 
+/** The key window's onKeyMade (signInWindow.js): the account's key looked up at once, and the window closed once it
+ * is saved. One look at a time; a key made during one is left to the page's next look. */
+export function keyMadeCheck({ auth, closeKeyWindow }) {
+  let checking = false;
+  return async () => {
+    if (checking) return;
+    checking = true;
+    try {
+      const r = await auth.connectKey();
+      if (r.key === "saved") closeKeyWindow();
+    } finally { checking = false; }
+  };
+}
+
 /** The page's channels. Answered in both editions; a disabled sign-in says
  * "disabled" and does nothing. `openKeyWindow` opens the key page in the key window, signed in with the
  * session's own tokens (signInWindow.js); opening it is a step (`track`). `closeKeyWindow` closes it once
