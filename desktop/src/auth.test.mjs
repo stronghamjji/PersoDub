@@ -591,6 +591,30 @@ test("checking for the key again finds one made after the sign-in", async () => 
   assert.equal(kitValues(kitDir).PERSO_API_KEY, "pk_live_new");
 });
 
+test("a key read while the account signs out is not written back; one read across a token refresh is", async () => {
+  let keys = [];
+  let during = async () => {};
+  const { auth, opened, kitDir } = makeAuth({ routes: persoRoutes({ [`GET ${CFG.apiKeysUrl}`]: async () => { await during(); return [200, { result: keys }]; } }) });
+  await auth.start();
+  const done = auth.login();
+  await settle();
+  await auth.handleCallback(back(opened));
+  assert.equal((await done).key, "no_key");
+  keys = [{ apiKey: "pk_test_K1" }];
+  during = () => auth.logout();
+  assert.deepEqual(await auth.connectKey(), { key: "failed", keyReason: "signed_out" });
+  assert.equal(kitValues(kitDir).PERSO_API_KEY, "");
+  assert.equal((await auth.status()).signedIn, false);
+
+  let clock = Date.now();
+  const kept = await signedInStore(persoRoutes({ keys: [{ apiKey: "pk_live_new" }] }), later(), { now: () => clock });
+  await kept.auth.start();
+  clock += 2 * 3600 * 1000;
+  assert.deepEqual(await kept.auth.connectKey(), { key: "saved" });
+  assert.ok(kept.calls.some((c) => c.key === REFRESH));
+  assert.equal(kitValues(kept.kitDir).PERSO_API_KEY, "pk_live_new");
+});
+
 // A folder made read-only stops nothing on Windows, nor for root.
 const cannotLockFolders = process.platform === "win32" || process.getuid?.() === 0;
 

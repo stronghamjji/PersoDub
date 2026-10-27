@@ -301,6 +301,7 @@ export function createAuth({
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
   let session = null;   // {accessToken, refreshToken, userId, account, email, via: where it signed in, "window" or "browser"}
+  let sessionId = 0;    // a new one at every sign-in and sign-out; a token refresh keeps it
   let pending = null;   // the sign-in waiting for its window
   let trading = null;   // the sign-in whose code is being traded
   let refreshing = null;
@@ -371,6 +372,7 @@ export function createAuth({
   // the next sign-in through as the same account without asking.
   async function dropSession() {
     session = null;
+    sessionId++;
     store.clear();
     clearKitKeys();
     try { onSignOut(); } catch (err) { log(`AUTH could not tidy up after the sign-out: ${err.message}`, "ERROR"); }
@@ -424,11 +426,16 @@ export function createAuth({
     if (!session) return { key: "failed" };
     const dir = kit();
     if (!dir) return { key: "no_kit" };
+    const id = sessionId;
     let found;
     try { found = parseActiveKey(await authedGet("api-keys", cfg.apiKeysUrl)); }
     catch (err) {
       log(`AUTH could not read the account's API key: ${err.message}`, "WARN");
       return { key: "failed" };
+    }
+    if (sessionId !== id) {
+      log("AUTH signed out while the account's API key was read: not saved");
+      return { key: "failed", keyReason: "signed_out" };
     }
     if (found.status !== "key") {
       log(`AUTH the account has no API key (answer fields: ${found.fields.join(", ") || "none"})`);
@@ -558,6 +565,7 @@ export function createAuth({
     try {
       const tokens = await exchangeCode(cfg, fetchFn, { code: cb.code, verifier: waiting.verifier, redirectUri: waiting.redirectUri });
       session = { ...tokens, userId: null, account: "", email: "", via: waiting.where };
+      sessionId++;
       try {
         const p = parseProfile(await authedGet("profile", cfg.profileUrl));
         // `account` is the name, shown in place of an e-mail the account lacks.
