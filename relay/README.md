@@ -10,6 +10,12 @@ way as the usage-count worker `persodub-count`.
 - From 0.8.8 the app also sends the record of a job that finished (`POST /record`, then its
   logs the same way). Its logs go into the bucket under `<yyyy-mm>/ok/<id>.tar.gz` for the
   private dashboard, and GitHub never hears of it.
+- From 0.9.1 a failure that is the user's own situation (a full disk, a refused or out-of-credit
+  Perso or Gemini key: `USER_SIDE_CODES` in `desktop/src/report.js`) is sent too, to `POST /report`
+  with `userSide: true`. Its summary and logs are kept as a reported failure's are
+  (`<yyyy-mm>/<fingerprint>/<id>.tar.gz`, `userSide: "true"` in the summary), on rate limits of
+  their own (`rl:us:`), and GitHub never hears of it.
+- From 0.9.1 a report's `env.device` (`describeDevice` in `desktop/src/report.js`, e.g. "Windows 11 25H2 (build 26200) · ...") is the issue's first Environment row.
 - From 0.9.1 the app sends the buttons pressed, the screens shown and the steps of a person's
   way through it (`POST /events`) while the Settings switch for them is on. The relay passes them to GA4, and to Amplitude once
   it has a key, and keeps nothing itself. See "Button and screen events" below.
@@ -93,6 +99,7 @@ For `POST /events` (all optional: without them the route answers 204 and passes 
 | Variable | `GA4_DEBUG` | `1` marks every event for GA4 **DebugView**; remove it once checked |
 | Secret | `AMPLITUDE_API_KEY` | the Amplitude project's API key; set it and the same events go there too |
 | Secret | `EXCLUDED_DEVICES` | the owner's computers, the same value the dashboard has: install ids or their first 12 characters, comma separated |
+| Secret | `EVENTS_USER_KEY` | a long string nobody knows (`openssl rand -hex 32`): the key the signed-in account's id is hashed with before it leaves; without it no user id is sent |
 
 Changing `LOG_SIGNING_KEY` breaks every log link handed out before it (including the
 links left in issues). Keep that in mind if it ever has to change.
@@ -151,6 +158,13 @@ typed; `app_screen` means the screen changed to `screen`. GA4 and Amplitude get 
 name. `installId` is the client id (GA4) and device id (Amplitude); `userId` becomes `user_id`
 once the production edition signs in. Register `button`, `screen`, `edition` and
 `app_version` as custom dimensions in GA4 to chart them.
+
+The app's `userId` is the sha256 of the Perso member number, and member numbers count up
+from 1, so anyone could get them back by hashing 1, 2, 3 and so on. The relay therefore never
+passes it on as it came: GA4 and Amplitude get the first 32 hex characters of its
+HMAC-SHA256 under `EVENTS_USER_KEY` (`keyedUserId` in `events-logic.js`), a secret only the
+relay holds. Without that secret no user id is sent at all, and the install id still counts
+the computer. Changing the key starts every account over as a new user in both.
 
 ### Steps (0.9.1)
 

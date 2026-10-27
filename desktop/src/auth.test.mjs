@@ -64,6 +64,8 @@ function stubFetch(cfg, routes) {
 const CFG = authConfig({ PERSODUB_AUTH_BASE: "https://fake.test/auth/api", PERSODUB_AUTH_CLIENT_ID: "cid", PERSODUB_AUTH_REDIRECT_PORTS: "52390,52391" });
 const REDIRECT_URI = redirectUriFor(CFG, 52390);
 const REFRESH = `POST ${CFG.refreshUrl} (form)`;
+// The utm tail every link into Perso carries, for CFG (no version) and button `content`.
+const UTM = (content) => `utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v&utm_content=${content}`;
 
 // The listener's stand-in: no port is opened, and the test hands the browser's
 // request to auth.handleCallback itself. `listened` counts the doors opened,
@@ -146,13 +148,34 @@ test("a fresh verifier is 43 unreserved characters, and every sign-in gets new v
   assert.notEqual(a.state, b.state);
 });
 
-test("the authorize address carries what Perso's PKCE demo sends, with the port's redirect address", () => {
-  const url = new URL(authorizeUrl(CFG, { challenge: "ch", state: "st", redirectUri: REDIRECT_URI }));
+test("the authorize address carries what Perso's PKCE demo sends, with the port's redirect address, then the utm tail with the app's version", () => {
+  const url = new URL(authorizeUrl(authConfig({ PERSODUB_AUTH_BASE: "https://fake.test/auth/api", PERSODUB_AUTH_CLIENT_ID: "cid" }, "0.9.1"),
+    { challenge: "ch", state: "st", redirectUri: REDIRECT_URI }));
   assert.equal(`${url.origin}${url.pathname}`, "https://fake.test/auth/api/v2/authorize");
-  assert.deepEqual(Object.fromEntries(url.searchParams), {
-    response_type: "code", client_id: "cid", redirect_uri: "http://127.0.0.1:52390/callback", scope: "profile email",
-    state: "st", code_challenge: "ch", code_challenge_method: "S256",
-  });
+  assert.deepEqual([...url.searchParams], [
+    ["response_type", "code"], ["client_id", "cid"], ["redirect_uri", "http://127.0.0.1:52390/callback"], ["scope", "profile email"],
+    ["state", "st"], ["code_challenge", "ch"], ["code_challenge_method", "S256"],
+    ["utm_source", "desktop_app"], ["utm_medium", "desktop-app"], ["utm_campaign", "desktop_app"], ["utm_term", "v0.9.1"], ["utm_content", "sign_in"],
+  ]);
+});
+
+test("the sign-in window's first address ends in utm_content=sign_in; the browser's hand-off to Perso's Google or Microsoft start in sign_in_google or sign_in_microsoft, after the way back, which is left as Perso's page gave it", async () => {
+  const { auth, opened, windows } = makeAuth();
+  await auth.start();
+  void auth.login();
+  await settle();
+  assert.ok(opened[0].endsWith(`&code_challenge_method=S256&${UTM("sign_in")}`), opened[0]);
+  const address = windows[0].handOffAddress;
+  const back = `callbackUrl=${encodeURIComponent(opened[0])}`;
+  assert.equal(address("https://fake.test/auth/oauth2/authorization/google"), `https://fake.test/auth/oauth2/authorization/google?${back}&${UTM("sign_in_google")}`);
+  assert.equal(address("https://api.perso.ai/auth/oauth2/authorization/azure?redirect_uri=https://perso.ai/ko/oauth?a=1&b=2"),
+    `https://api.perso.ai/auth/oauth2/authorization/azure?redirect_uri=https://perso.ai/ko/oauth?a=1&b=2&${back}&${UTM("sign_in_microsoft")}`);
+  const kept = "https://api.perso.ai/auth/oauth2/authorization/google?callbackUrl=https%3A%2F%2Fperso.ai%2Fko%2Fworkspace";
+  assert.equal(new URL(address(kept)).searchParams.get("callbackUrl"), "https://perso.ai/ko/workspace");
+  assert.equal(address(kept), `${kept}&${UTM("sign_in_google")}`);
+  // Google's own page gets no parameters of the app's but the way back it always had.
+  assert.equal(address("https://accounts.google.com/o/oauth2/v2/auth?client_id=x"), `https://accounts.google.com/o/oauth2/v2/auth?client_id=x&${back}`);
+  await auth.cancelLogin();
 });
 
 test("Perso's addresses default to api.perso.ai, the ports to three of this computer's, and each can be changed by the environment", () => {
@@ -531,18 +554,18 @@ test("Open again after a hand-off runs Perso's start for that provider afresh, t
     return browser.at(-1);
   };
   assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/google"),
-    `https://fake.test/auth/oauth2/authorization/google?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
+    `https://fake.test/auth/oauth2/authorization/google?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(opened.at(-1))}&${UTM("sign_in_google")}`);
   assert.equal(calls.find((c) => c.key === social("google")).auth, "", "Perso's start was asked with a token");
   assert.equal(await handedOff("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x"),
-    `https://fake.test/auth/oauth2/authorization/azure?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
+    `https://fake.test/auth/oauth2/authorization/azure?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(opened.at(-1))}&${UTM("sign_in_microsoft")}`);
   for (const bad of [() => [500, { code: "E" }], () => [200, { result: {} }], () => new Error("offline")]) {
     answer = bad;
     assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/google"),
-      `https://fake.test/auth/oauth2/authorization/google?callbackUrl=${encodeURIComponent(opened.at(-1))}`);
+      `https://fake.test/auth/oauth2/authorization/google?callbackUrl=${encodeURIComponent(opened.at(-1))}&${UTM("sign_in_google")}`);
   }
   const asked = calls.length;
   assert.equal(await handedOff("https://fake.test/auth/oauth2/authorization/apple?x=1"),
-    `https://fake.test/auth/oauth2/authorization/apple?x=1&callbackUrl=${encodeURIComponent(opened.at(-1))}`);
+    `https://fake.test/auth/oauth2/authorization/apple?x=1&callbackUrl=${encodeURIComponent(opened.at(-1))}&${UTM("sign_in_other")}`);
   assert.equal(calls.length, asked, "Perso was asked for a start it has none of");
   await auth.cancelLogin();
 });
@@ -1235,7 +1258,8 @@ function fakeWindows({ setCookie = async () => {}, onKeyMade } = {}) {
 }
 const openOne = (f, { navigation = () => "allow" } = {}) => {
   const seen = { closed: 0, failed: 0, handedOff: [] };
-  const handle = f.make({ url: "https://api.perso.ai/auth/api/v2/authorize?x=1", navigation,
+  const url = "https://api.perso.ai/auth/api/v2/authorize?x=1";
+  const handle = f.make({ url, navigation, handOffAddress: (to) => handOffUrl(to, url),
     onClosed: () => { seen.closed++; }, onFailed: () => { seen.failed++; }, onHandOff: (to) => { seen.handedOff.push(to); } });
   return { handle, seen, win: f.made.at(-1) };
 };

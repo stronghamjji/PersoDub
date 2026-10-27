@@ -73,9 +73,9 @@ function persoWindow({ BrowserWindow, shell, parent, title, width, height }) {
   return win;
 }
 
-// createAuth's makeSignInWindow: navigation(to) answers allow, browser, hand-off (handOffUrl, then it closes) or deny; show() reloads `url`, not after a hand-off.
+// createAuth's makeSignInWindow: navigation(to) answers allow, browser, hand-off (the browser opens handOffAddress(to), then it closes) or deny; show() reloads `url`, not after a hand-off.
 export function signInWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
-  return ({ url, navigation, onClosed, onFailed, onHandOff }) => {
+  return ({ url, navigation, handOffAddress, onClosed, onFailed, onHandOff }) => {
     const win = persoWindow({ BrowserWindow, shell, parent, title, width: WIDTH, height: HEIGHT });
     const wc = win.webContents;
     let handedOff = false; // the sign-in goes on in the computer's browser
@@ -83,7 +83,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     const handOff = (to) => {
       if (handedOff) return;
       handedOff = true;
-      openExternally(shell, handOffUrl(to, url));
+      openExternally(shell, handOffAddress(to));
       onHandOff(to);
       // After the navigation's event: Electron is still in that navigation.
       setImmediate(() => { if (!win.isDestroyed()) win.destroy(); });

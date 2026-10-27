@@ -4,6 +4,7 @@ import {
   MAX_BYTES,
   buildReport,
   collectEnvironment,
+  describeDevice,
   fingerprint,
   issueBody,
   issueTitle,
@@ -211,6 +212,27 @@ test("a mac is always the mac platform key", () => {
 test("Windows splits by torch build, the way the pack sizes do", () => {
   assert.equal(collectEnvironment({ sys: WIN, torchVariant: "cpu" }).platformKey, "win-cpu");
   assert.equal(collectEnvironment({ sys: WIN, torchVariant: "cu128" }).platformKey, "win-gpu");
+});
+
+test("the device line names Windows by its build, a Mac by its product version and chip, then the CPU, memory and how the app runs", () => {
+  const win = (build) => describeDevice({ sys: { ...WIN, release: `10.0.${build}` } }).split(" · ")[0];
+  assert.deepEqual([26200, 26300, 26100, 22631, 22621, 22000, 19045, 19044, 19041].map(win), [
+    "Windows 11 25H2 (build 26200)", "Windows 11 25H2 (build 26300)", "Windows 11 24H2 (build 26100)", "Windows 11 23H2 (build 22631)",
+    "Windows 11 22H2 (build 22621)", "Windows 11 21H2 (build 22000)", "Windows 10 22H2 (build 19045)", "Windows 10 21H2 (build 19044)",
+    "Windows 10/11 (build 19041)",
+  ]);
+  assert.equal(describeDevice({ sys: { ...WIN, release: "10.0.26200" }, installed: true, edition: "production" }),
+    "Windows 11 25H2 (build 26200) · Intel i7 (8 cores) · 32 GB RAM · installed · production");
+  const mac = (product, arch = "arm64") => describeDevice({ sys: { ...MAC, product, arch }, edition: "opensource" });
+  assert.equal(mac("26.5.2"), "macOS 26.5.2 (Tahoe) · Apple Silicon · Apple M4 (10 cores) · 24 GB RAM · from source · opensource");
+  assert.deepEqual(["15.1", "14.7.2", "13.0", "12.7", "11.2", "27.0"].map((v) => mac(v).split(" · ")[0]),
+    ["macOS 15.1 (Sequoia)", "macOS 14.7.2 (Sonoma)", "macOS 13.0 (Ventura)", "macOS 12.7 (Monterey)", "macOS 11.2 (Big Sur)", "macOS 27.0"]);
+  assert.equal(mac("14.7.2", "x64").split(" · ")[1], "Intel");
+  assert.equal(describeDevice({ sys: MAC }).split(" · ")[0], "macOS (Darwin 24.6.0)", "sw_vers unread");
+  assert.equal(describeDevice({ sys: { ...MAC, platform: "linux", product: "Ubuntu 24.04 LTS", arch: "x64" } }).split(" · ")[0], "Linux Ubuntu 24.04 LTS");
+  const env = collectEnvironment({ sys: { ...WIN, release: "10.0.26200" }, installed: true, edition: "production" });
+  assert.equal(env.device, "Windows 11 25H2 (build 26200) · Intel i7 (8 cores) · 32 GB RAM · installed · production");
+  assert.equal(env.os, "windows 10.0.26200", "the old field as it was");
 });
 
 test("free disk is rounded to whole gigabytes, and unknown stays unknown", () => {

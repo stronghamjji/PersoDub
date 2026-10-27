@@ -681,7 +681,7 @@ test("the app's record passes the relay's check and becomes the summary the dash
   assert.deepEqual(logSummary(record, ""), {
     issue: "", kind: "dub", stage: "done", marker: "", code: "ok", platform: "mac", os: "mac 24.6.0",
     cpu: "Apple M4", ram: "24", disk: "180", version: "0.8.8", device: DEVICE, priorState: "", reopened: "",
-    outcome: "ok", elapsed: "80", sep: "10", stt: "20", translate: "5", voice: "40",
+    outcome: "ok", userSide: "", elapsed: "80", sep: "10", stt: "20", translate: "5", voice: "40",
   });
 });
 
@@ -700,4 +700,12 @@ test("a failure's summary says it failed and carries no times", () => {
   const s = logSummary(validateReport(GOOD).report, 72);
   assert.equal(s.outcome, "failed");
   for (const key of Object.values(TIMING_KEYS)) assert.equal(key in s, false, key);
+});
+
+test("the issue's Environment table opens with the app's device line when it sent one, kept to one table cell", () => {
+  const sent = { ...GOOD, env: { ...GOOD.env, device: "Windows 11 25H2 (build 26200) · Intel i5 (12 cores) | 32 GB\nRAM" } };
+  const { report } = validateReport(JSON.stringify(sent));
+  assert.equal(report.env.device, "Windows 11 25H2 (build 26200) · Intel i5 (12 cores)   32 GB RAM");
+  assert.match(issueBody(report), /\|---\|---\|\n\| Device \| Windows 11 25H2 \(build 26200\) · Intel i5 \(12 cores\)   32 GB RAM \|\n\| OS \|/);
+  assert.doesNotMatch(issueBody(validateReport(JSON.stringify(GOOD)).report), /\| Device \|/);
 });

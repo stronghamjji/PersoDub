@@ -24,6 +24,7 @@ export function authConfig(env = process.env, version = "") {
     .split(",").map((p) => Number(p.trim())).filter((p) => Number.isInteger(p) && p > 0 && p < 65536);
   return {
     authBase,
+    version,
     // Perso's registration of PersoDub (dev, qa and prod): a PUBLIC client
     // (PKCE), scope "profile email", redirect http://127.0.0.1/callback.
     // Perso ignores the port of a loopback redirect (RFC 8252), so any of the
@@ -65,7 +66,7 @@ export function newPkce() {
   return { verifier, challenge: challengeFor(verifier), state: randomBytes(16).toString("base64url") };
 }
 
-/** The page the sign-in window opens. */
+/** The page the sign-in window opens, with the utm tail after Perso's own parameters. */
 export function authorizeUrl(cfg, { challenge, state, redirectUri }) {
   const q = new URLSearchParams({
     response_type: "code",
@@ -76,7 +77,7 @@ export function authorizeUrl(cfg, { challenge, state, redirectUri }) {
     code_challenge: challenge,
     code_challenge_method: "S256",
   });
-  return `${cfg.authorizeUrl}?${q}`;
+  return withUtm(`${cfg.authorizeUrl}?${q}`, cfg.version, "sign_in");
 }
 
 // Google refuses an app's own window ("400 malformed"): Perso's Google and Microsoft starts, and their own pages, go to the browser.
@@ -105,6 +106,13 @@ export function signInProvider(url) {
   if (social === "google" || u.hostname === "accounts.google.com") return "google";
   if (social === "azure" || u.hostname === "login.microsoftonline.com" || u.hostname === "login.live.com") return "microsoft";
   return "other";
+}
+
+// The browser's address for a hand-off to `to` (handOffUrl), with the utm tail when it is Perso's Google or Microsoft
+// start; Google's or Microsoft's own page goes as it is.
+function handOffAddress(cfg, to, back) {
+  const address = handOffUrl(to, back);
+  return new URL(to).pathname.startsWith(SOCIAL_START) ? withUtm(address, cfg.version, `sign_in_${signInProvider(to)}`) : address;
 }
 
 // Perso's own name for signInProvider's google and microsoft, in its social sign-in.
@@ -480,9 +488,11 @@ export function createAuth({
       log(`AUTH sign-in started: listening on port ${server.port}, opening the sign-in window`);
       track("sign_in_started", { method: "window" });
       try {
+        const url = authorizeUrl(cfg, { challenge: pkce.challenge, state: pkce.state, redirectUri });
         waiting.window = makeSignInWindow({
-          url: authorizeUrl(cfg, { challenge: pkce.challenge, state: pkce.state, redirectUri }),
-          navigation: (url) => signInNavigation(url, { authorizeUrl: cfg.authorizeUrl, redirectUri }),
+          url,
+          navigation: (to) => signInNavigation(to, { authorizeUrl: cfg.authorizeUrl, redirectUri }),
+          handOffAddress: (to) => handOffAddress(cfg, to, url),
           // The sign-in waits on in the computer's browser, with the same state, port and ten minutes.
           onHandOff: (to) => {
             if (pending !== waiting) return;
@@ -518,13 +528,14 @@ export function createAuth({
   async function openHandOffAgain(waiting) {
     const back = authorizeUrl(cfg, waiting);
     const provider = PERSO_PROVIDERS[signInProvider(waiting.handOff)];
-    let address = handOffUrl(waiting.handOff, back);
+    let address = handOffAddress(cfg, waiting.handOff, back);
     let start = "fallback";
     if (provider) {
       try {
         const loginUrl = (await callJson(fetchFn, "social sign-in", `${cfg.authBase}/v1/auth/sign-in/social?provider=${provider}`, { timeoutMs: 10_000 }))?.result?.loginUrl;
         if (typeof loginUrl !== "string" || !loginUrl) throw new Error("no loginUrl in the answer");
-        address = `${new URL(cfg.authorizeUrl).origin}${SOCIAL_START}${provider}?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(back)}`;
+        address = withUtm(`${new URL(cfg.authorizeUrl).origin}${SOCIAL_START}${provider}?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(back)}`,
+          cfg.version, `sign_in_${signInProvider(waiting.handOff)}`);
         start = provider;
       } catch (err) { log(`AUTH Perso's ${provider} start was not read (${err.message}): the first hand-off's address opens again`, "WARN"); }
     }

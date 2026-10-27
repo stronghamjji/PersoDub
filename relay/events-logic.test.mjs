@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_EVENTS, STEPS, excludedPrefixes, isExcluded, stepProps, toAmplitude, toGa4, validateEvents } from "./events-logic.js";
+import { MAX_EVENTS, STEPS, excludedPrefixes, isExcluded, keyedUserId, stepProps, toAmplitude, toGa4, validateEvents } from "./events-logic.js";
 
 // Run me: node --test relay/*.test.mjs
 
@@ -61,7 +61,7 @@ test("EXCLUDED_DEVICES drops the owner's computers by their first twelve charact
 });
 
 test("GA4 gets two event names, the button as a parameter, the install id as the client", () => {
-  const [body, ...more] = toGa4({ ...BATCH, userId: "u-42" }, { now: NOW });
+  const [body, ...more] = toGa4(BATCH, { now: NOW, userId: "u-42" });
   assert.equal(more.length, 0);
   assert.equal(body.client_id, BATCH.installId);
   assert.equal(body.user_id, "u-42");
@@ -90,7 +90,30 @@ test("Amplitude gets the same events in the trial's shape", () => {
     platform: "mac", os_name: "mac", os_version: "15.5", app_version: "0.9.1",
     event_properties: { button: "home_nav_settings", screen: "home", edition: "production" },
   });
-  assert.equal(toAmplitude({ ...BATCH, userId: "u-42" })[0].user_id, "u-42");
+  assert.equal(toAmplitude(BATCH, { userId: "u-42" })[0].user_id, "u-42");
+});
+
+// sha256("42"), as the app sends a member number, keyed with a test key; the
+// expected value is `printf %s <hash> | openssl dgst -sha256 -hmac relay-test-key`.
+const HASHED = "73475cb40a568e8da8a045ced110137e159f890ac4da883b6b17dc651b3a8049";
+
+test("the user id goes on keyed by EVENTS_USER_KEY: 32 hex characters, never the app's hash", async () => {
+  const keyed = await keyedUserId(HASHED, "relay-test-key");
+  assert.equal(keyed, "8c3d81a13a4f9581b3d2977b74b63840");
+  assert.notEqual(await keyedUserId(HASHED, "another-key"), keyed);
+  assert.equal(toGa4({ ...BATCH, userId: HASHED }, { now: NOW, userId: keyed })[0].user_id, keyed);
+  assert.equal(toAmplitude({ ...BATCH, userId: HASHED }, { userId: keyed })[0].user_id, keyed);
+});
+
+test("without EVENTS_USER_KEY no user id at all, the device id kept; nobody signed in stays empty", async () => {
+  for (const key of [undefined, ""]) assert.equal(await keyedUserId(HASHED, key), "");
+  assert.equal(await keyedUserId("", "relay-test-key"), "");
+  // The batch's own userId never reaches either side, even when nothing keys it.
+  const batch = { ...BATCH, userId: HASHED };
+  assert.equal("user_id" in toGa4(batch, { now: NOW })[0], false);
+  assert.equal(toGa4(batch, { now: NOW })[0].client_id, BATCH.installId);
+  assert.equal("user_id" in toAmplitude(batch)[0], false);
+  assert.equal(toAmplitude(batch)[0].device_id, BATCH.installId);
 });
 
 // The steps of a person's way through the app (0.9.1): their own names, and

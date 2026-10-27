@@ -228,6 +228,8 @@ export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
     env: {
       platformKey: oneOf(env.platformKey, PLATFORM_KEYS, "unknown"),
       os: str(env.os, 60),
+      // One line a person can read (desktop/src/report.js describeDevice); a table cell, so no | or line break.
+      device: str(env.device, 200).replace(/[|\r\n]/g, " "),
       arch: str(env.arch, 20),
       cpu: str(env.cpu, 80),
       cores: Number.isInteger(env.cores) ? env.cores : 0,
@@ -240,6 +242,9 @@ export function validateReport(raw, { maxBytes = MAX_REPORT_BYTES } = {}) {
       edition: oneOf(env.edition, EDITIONS, ""),
     },
     packs: flatMap(raw.packs),
+    // The user's own situation (desktop/src/report.js USER_SIDE_CODES): kept
+    // for the dashboard, never an issue (report-worker.js handleReport).
+    ...(raw.userSide === true ? { userSide: true } : {}),
     diagnostics: diagnosticsOf(raw.diagnostics),
     logTails: {
       shell: tailStr(tails.shell, 20000),
@@ -335,6 +340,8 @@ function details(title, body) {
  *  `priorState` is the state GitHub gave the issue a repeat was counted on
  *  ("open" or "closed"; empty for a new issue), and `reopened` whether this
  *  report reopened it (report-worker.js: only one closed as fixed).
+ *  `userSide` is "true" for a failure that is the user's own situation, which
+ *  has no issue (validateReport).
  *  `outcome` is "failed" for a failure and "ok" for a finished job's record
  *  (validateRecord, code "ok"), which also carries how long the job took:
  *  whole seconds under the short names in TIMING_KEYS, empty for a step that
@@ -357,6 +364,7 @@ export function logSummary(report, issue, { priorState = "", reopened = false } 
     priorState: String(priorState || ""),
     reopened: reopened ? "true" : "",
     outcome: ok ? "ok" : "failed",
+    userSide: report.userSide ? "true" : "",
     ...(ok ? Object.fromEntries(Object.entries(TIMING_KEYS)
       .map(([field, key]) => [key, report.timing[field] == null ? "" : String(report.timing[field])])) : {}),
   };
@@ -470,6 +478,7 @@ export function issueBody(report, { logsRef = "" } = {}) {
   const e = report.env;
   const packs = Object.entries(report.packs);
   const rows = [
+    ...(e.device ? [["Device", e.device]] : []),
     ["OS", `${e.os || "?"} (${e.arch || "?"})`],
     ["CPU", `${e.cpu || "?"} · ${e.cores || "?"} cores`],
     ["RAM", e.ramGb == null ? "?" : `${e.ramGb} GB`],

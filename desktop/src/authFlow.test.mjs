@@ -10,7 +10,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { AUTH_FILE, authConfig, createAuth, tokenStore } from "./auth.js";
 import { parseEnvFile } from "./kitEnv.js";
-import { handOffUrl } from "./signInWindow.js";
 import { startFakePerso, FAKE_CLIENT_ID, FAKE_PASSWORD, FAKE_REDIRECTS, ACCOUNTS } from "../../tests/fake-perso/server.mjs";
 
 let fake;
@@ -84,12 +83,15 @@ function scriptedBrowser() {
   return b;
 }
 
+// The utm tail on Perso's Google start, as the browser gets it (cfgFor has no version).
+const UTM_GOOGLE = "utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v&utm_content=sign_in_google";
+
 // The sign-in window as the app opens it, run by `browser` on its own once
 // made. `hold` keeps its last address in `held` for the test to deliver
 // itself; a window that could not reach Perso puts its error in
 // `browserErrors` and says so as the real one does (onFailed). `windows`
 // keeps whether each was closed. A hand-off goes as the real window's: the
-// browser gets handOffUrl (`handedOff`, for the test to open), onHandOff the
+// browser gets handOffAddress (`handedOff`, for the test to open), onHandOff the
 // address it was going to (`pressed`), and the window closes.
 function scriptedWindows(browser, { hold = false } = {}) {
   const held = [];
@@ -97,14 +99,14 @@ function scriptedWindows(browser, { hold = false } = {}) {
   const handedOff = [];
   const pressed = [];
   const windows = [];
-  const make = ({ url, navigation, onClosed, onFailed, onHandOff }) => {
+  const make = ({ url, navigation, handOffAddress, onClosed, onFailed, onHandOff }) => {
     const win = { url, closed: false, onClosed };
     windows.push(win);
     setImmediate(async () => {
       try {
         const end = await browser.open(url, { hold, navigation });
         if (end.handOff) {
-          handedOff.push(handOffUrl(end.handOff, url));
+          handedOff.push(handOffAddress(end.handOff));
           pressed.push(end.handOff);
           onHandOff(end.handOff);
           win.closed = true;
@@ -157,7 +159,7 @@ test("Google pressed in the sign-in window takes the whole sign-in to the comput
   const done = auth.login();
   await until(() => handedOff.length);
   assert.equal(new URL(pressed[0]).pathname, "/auth/oauth2/authorization/google");
-  assert.equal(handedOff[0], `${pressed[0]}?callbackUrl=${encodeURIComponent(windows[0].url)}`);
+  assert.equal(handedOff[0], `${pressed[0]}?callbackUrl=${encodeURIComponent(windows[0].url)}&${UTM_GOOGLE}`);
   assert.equal(windows[0].closed, true);
   assert.deepEqual(await auth.status(), { enabled: true, required: true, signedIn: false, account: "", accountId: "", hasKey: false, waiting: true, where: "browser" });
   const browser = scriptedBrowser();
@@ -203,7 +205,7 @@ test("a browser left on Perso's home after Google: Continue runs Perso's Google 
   const browser = scriptedBrowser();
   await assert.rejects(browser.open(pressed[0]), /Perso's home/);
   assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  assert.equal(handedOff[1], `${fake.url}/auth/oauth2/authorization/google?redirect_uri=${fake.url}/oauth/callback&callbackUrl=${encodeURIComponent(windows[0].url)}`);
+  assert.equal(handedOff[1], `${fake.url}/auth/oauth2/authorization/google?redirect_uri=${fake.url}/oauth/callback&callbackUrl=${encodeURIComponent(windows[0].url)}&${UTM_GOOGLE}`);
   await browser.open(handedOff[1]);
   assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
   assert.deepEqual(browser.pages, ["done"]);

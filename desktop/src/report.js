@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { arch as osArch, cpus, platform as osPlatform, release, totalmem } from "node:os";
 import { ERROR_CODES, INSTALL_STEPS, timingSeconds } from "./analytics.js";
 import { PROBE_NAMES } from "./diagnostics.js";
@@ -52,12 +54,12 @@ export const MAX_DETAILS_CHARS = 4000;
  * subject or details the form allows. What the person typed is sent as typed:
  * they wrote it to us, and agreed on the form to its collection.
  */
-export function buildInquiry({ type, subject, details, replyTo, accountEmail, accountId, locale, installId, version, edition, os, osVersion } = {}) {
+export function buildInquiry({ type, subject, details, replyTo, accountEmail, accountId, locale, installId, version, edition, os, osVersion, device } = {}) {
   const text = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   const inquiry = {
     type, subject: text(subject, MAX_SUBJECT_CHARS), details: text(details, MAX_DETAILS_CHARS), replyTo: text(replyTo, 254),
     accountEmail: text(accountEmail, 254), accountId: text(accountId, 254),
-    installId, version, edition, os, osVersion: text(osVersion, 32), locale: text(locale, 5),
+    installId, version, edition, os, osVersion: text(osVersion, 32), device: text(device, 200), locale: text(locale, 5),
   };
   return INQUIRY_TYPES.has(type) && inquiry.subject && inquiry.details ? inquiry : null;
 }
@@ -353,6 +355,18 @@ export function fingerprint({ platformKey = "", step = "", code = "", lastLine =
 
 // --- The environment ---------------------------------------------------
 
+// The system's own version, read once: a Mac's from sw_vers (Node gives the Darwin kernel's), a Linux's pretty name.
+let product = null;
+function osProduct() {
+  if (product !== null) return product;
+  product = "";
+  try {
+    if (osPlatform() === "darwin") product = execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8", timeout: 3000 }).trim();
+    else if (osPlatform() === "linux") product = (/^PRETTY_NAME="?([^"\n]*)"?$/m.exec(readFileSync("/etc/os-release", "utf8")) || [])[1] || "";
+  } catch { /* the line then names the kernel */ }
+  return product;
+}
+
 /** What node knows about this machine. Separated so collectEnvironment stays
  *  a pure function the tests can hand any machine they like. */
 export function systemFacts() {
@@ -360,6 +374,7 @@ export function systemFacts() {
   return {
     platform: osPlatform(),
     release: release(),
+    product: osProduct(),
     arch: osArch(),
     cpuModel: (list[0] && list[0].model) || "",
     cores: list.length,
@@ -370,6 +385,37 @@ export function systemFacts() {
 const GB = 1024 * 1024 * 1024;
 function gb(bytes) {
   return typeof bytes === "number" && bytes >= 0 ? Math.round(bytes / GB) : null;
+}
+
+// Windows by its build number, as Microsoft names it; 26200 and later is 25H2.
+const WINDOWS_BUILDS = { 26100: "11 24H2", 22631: "11 23H2", 22621: "11 22H2", 22000: "11 21H2", 19045: "10 22H2", 19044: "10 21H2" };
+const MACOS_NAMES = { 26: "Tahoe", 15: "Sequoia", 14: "Sonoma", 13: "Ventura", 12: "Monterey", 11: "Big Sur" };
+
+// The system as a person names it: "Windows 11 25H2 (build 26200)", "macOS 26.5.2 (Tahoe)", "Linux Ubuntu 24.04 LTS".
+function systemName(sys) {
+  const platform = String(sys.platform || "");
+  if (platform.startsWith("win")) {
+    const build = Number(String(sys.release || "").split(".")[2]) || 0;
+    const name = build >= 26200 ? "11 25H2" : WINDOWS_BUILDS[build] || "10/11";
+    return `Windows ${name} (build ${build || "?"})`;
+  }
+  if (platform === "darwin") {
+    if (!sys.product) return `macOS (Darwin ${sys.release || "?"})`;
+    const name = MACOS_NAMES[Number(sys.product.split(".")[0])];
+    return `macOS ${sys.product}${name ? ` (${name})` : ""}`;
+  }
+  return `${platform === "linux" ? "Linux" : platform} ${sys.product || sys.release || ""}`.trim();
+}
+
+/** One line a support person can read: the system, a Mac's chip, the CPU,
+ *  the memory, and how the app runs: installed or from source, and its edition. */
+export function describeDevice({ sys = systemFacts(), installed = false, edition = "" } = {}) {
+  const chip = sys.platform === "darwin" ? (sys.arch === "arm64" ? "Apple Silicon" : "Intel") : "";
+  const ram = gb(sys.totalMemBytes);
+  return [
+    systemName(sys), chip, `${sys.cpuModel || "?"} (${sys.cores || "?"} cores)`, `${ram ?? "?"} GB RAM`,
+    installed ? "installed" : "from source", edition,
+  ].filter(Boolean).join(" · ");
 }
 
 /**
@@ -387,12 +433,14 @@ export function collectEnvironment({
   packs = {},
   freeDiskBytes = null,
   edition = "",
+  installed = false,
   sys = systemFacts(),
 } = {}) {
   const isWin = String(sys.platform || "").startsWith("win");
   return {
     platformKey: isWin ? (torchVariant === "cpu" ? "win-cpu" : "win-gpu") : "mac",
     os: `${isWin ? "windows" : sys.platform === "darwin" ? "mac" : sys.platform} ${sys.release || ""}`.trim(),
+    device: describeDevice({ sys, installed, edition }),
     arch: sys.arch || "",
     cpu: sys.cpuModel || "",
     cores: sys.cores || 0,
@@ -506,6 +554,8 @@ export function buildReport({
       outcome: "ok", timing: timingSeconds(timing),
     });
   }
+  // The user's own situation goes to the dashboard and never to an issue (relay/report-worker.js).
+  if (!worthReporting(report.code)) report.userSide = true;
   report.fingerprint = fingerprint({
     platformKey: machine.platformKey || "",
     step: report.step || report.stage,
