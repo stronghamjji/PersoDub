@@ -167,15 +167,34 @@ export function excludedPrefixes(value) {
 /** One of the owner's own computers? Its batch is dropped whole. */
 export const isExcluded = (installId, value) => excludedPrefixes(value).some((p) => installId.startsWith(p));
 
+// The app's userId is the sha256 of the Perso member number, and member
+// numbers count up from 1: hashing 1..N gives every one of them back. So the
+// relay never passes it on as it came. GA4 and Amplitude get the HMAC-SHA256
+// of it under EVENTS_USER_KEY, a secret only the relay holds (its first 32 hex
+// characters), and without that secret no user id at all: the install id
+// still counts the computer.
+const USER_ID_HEX = 32;
+
+/** The user id GA4 and Amplitude may see: keyed by the secret, or "" when
+ *  there is no secret or nobody is signed in. Web Crypto, as in a Worker. */
+export async function keyedUserId(userId, key) {
+  if (!userId || !key) return "";
+  const enc = new TextEncoder();
+  const k = await crypto.subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, enc.encode(userId)));
+  return Array.from(mac, (b) => b.toString(16).padStart(2, "0")).join("").slice(0, USER_ID_HEX);
+}
+
 /**
  * GA4 Measurement Protocol bodies, 25 events each: the install id is the
- * client, the account the user when there is one. A press is one event name
+ * client, `userId` (keyedUserId's, never the batch's own) the user when there
+ * is one. A press is one event name
  * with the button in a parameter, so the property's 500 event names are never
  * spent on buttons; a step goes under its own name with its props as
  * parameters, true and false as the words (GA4 takes no booleans). `debug`
  * marks them for DebugView.
  */
-export function toGa4(batch, { now = Date.now(), debug = false } = {}) {
+export function toGa4(batch, { now = Date.now(), debug = false, userId = "" } = {}) {
   const events = batch.events.filter((e) => e.t > now - GA4_MAX_AGE_MS).map((e) => ({
     name: chartName(e),
     timestamp_micros: e.t * 1000,
@@ -196,7 +215,7 @@ export function toGa4(batch, { now = Date.now(), debug = false } = {}) {
   for (let i = 0; i < events.length; i += GA4_PER_REQUEST) {
     bodies.push({
       client_id: batch.installId,
-      ...(batch.userId ? { user_id: batch.userId } : {}),
+      ...(userId ? { user_id: userId } : {}),
       events: events.slice(i, i + GA4_PER_REQUEST),
     });
   }
@@ -204,12 +223,13 @@ export function toGa4(batch, { now = Date.now(), debug = false } = {}) {
 }
 
 /** Amplitude's HTTP API events, the 2026-10-12 trial's shape (persodub-analytics
- *  src/amplitude.js): the same event names and the same facts as GA4's. */
-export function toAmplitude(batch) {
+ *  src/amplitude.js): the same event names and the same facts as GA4's, and
+ *  the same keyed `userId`. */
+export function toAmplitude(batch, { userId = "" } = {}) {
   return batch.events.map((e) => ({
     event_type: chartName(e),
     device_id: batch.installId,
-    ...(batch.userId ? { user_id: batch.userId } : {}),
+    ...(userId ? { user_id: userId } : {}),
     session_id: batch.sessionId,
     time: e.t,
     platform: batch.os,
