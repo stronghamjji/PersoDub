@@ -47,9 +47,9 @@ function harness(status, answers = {}, pollMs = 5000, page = {}) {
   const els = new Map();
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const calls = [];
-  const shell = { status, hear: null };
+  const shell = { status, hear: null, args: {} };
   for (const name of ["authLogin", "authCancel", "authShow", "authLogout", "authCheckKey", "authOpenKeyPage"]) {
-    shell[name] = async () => { calls.push(name); return answers[name] ?? {}; };
+    shell[name] = async (...args) => { calls.push(name); (shell.args[name] ||= []).push(args); return answers[name] ?? {}; };
   }
   shell.authStatus = async () => shell.status;
   shell.onAuthState = (cb) => { shell.hear = cb; };
@@ -157,7 +157,7 @@ test("the waiting face says where the sign-in goes on: the sign-in window, or th
   assert.equal(h.$("signInWait").hidden, false);
   assert.equal(h.$("signInWaitTitle").textContent, "Finish signing in in your browser");
   assert.equal(h.$("signInWaitNote").hidden, false);
-  assert.equal(h.$("signInWaitNote").textContent, "Google and Microsoft sign-in continue in your browser.");
+  assert.equal(h.$("signInWaitNote").textContent, "Google and Microsoft sign-in continue in your browser. When you're done there, come back to this window to finish. If nothing happens, press Open the browser again.");
   assert.equal(h.$("signInReopen").textContent, "Open the browser again");
   // The same face: its button already has the keyboard.
   assert.equal(h.$("signInReopen").focused, 1);
@@ -173,7 +173,8 @@ test("the waiting face says where the sign-in goes on: the sign-in window, or th
   assert.equal(ko["Open the sign-in window again"], "로그인 창 다시 열기");
   assert.equal(ko["Finish signing in in your browser"], "브라우저에서 로그인을 마쳐요");
   assert.equal(ko["Open the browser again"], "브라우저 다시 열기");
-  assert.equal(ko["Google and Microsoft sign-in continue in your browser."], "구글·마이크로소프트로 로그인하면 브라우저에서 이어져요.");
+  assert.equal(ko["Google and Microsoft sign-in continue in your browser. When you're done there, come back to this window to finish. If nothing happens, press Open the browser again."],
+    "구글·마이크로소프트로 로그인하면 브라우저에서 이어져요. 마친 뒤 이 창으로 돌아오면 이어서 로그인돼요. 안 되면 '브라우저 다시 열기'를 눌러요.");
   assert.equal(ko["Couldn't open the sign-in window."], "로그인 창을 열지 못했어요.");
   // The screen writes these three, so the markup's translation must not write them back.
   const html = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
@@ -300,6 +301,43 @@ test("coming back to the app on the no-key face looks for a key once, quietly", 
   assert.equal(h.$("signInScreen").hidden, true);
   await win.fire("focus");
   assert.equal(h.calls.length, 3);
+});
+
+test("back in the app while the sign-in waits in the browser, the screen asks the shell to run it again quietly; waiting in the window, or not waiting, it does not", async () => {
+  const win = eventTarget();
+  const doc = eventTarget({ visibilityState: "visible", hasFocus: () => false });
+  const h = harness({ ...WAITING, where: "browser" }, { authShow: { outcome: "wait" } }, 60_000, { win, doc, retryMs: 60_000 });
+  await h.settle();
+  assert.deepEqual(h.calls, []);
+  await win.fire("focus");
+  doc.visibilityState = "hidden";
+  await doc.fire("visibilitychange");
+  doc.visibilityState = "visible";
+  await doc.fire("visibilitychange");
+  assert.deepEqual(h.shell.args.authShow, [[{ auto: true }], [{ auto: true }]]);
+  h.shell.hear(WAITING);
+  await win.fire("focus");
+  h.shell.hear(SIGNED_IN);
+  await win.fire("focus");
+  assert.equal(h.shell.args.authShow.length, 2);
+});
+
+test("waiting in the browser, the screen asks again every few seconds while the app has the focus, and stops once the sign-in moves on", async () => {
+  let focused = false;
+  const doc = eventTarget({ visibilityState: "visible", hasFocus: () => focused });
+  const h = harness({ ...WAITING, where: "browser" }, { authShow: { outcome: "wait" } }, 60_000, { doc, retryMs: 5 });
+  await h.settle();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(h.calls, [], "asked while the app did not have the focus");
+  focused = true;
+  await new Promise((r) => setTimeout(r, 40));
+  assert.ok(h.calls.length >= 1, "not asked while the app had the focus");
+  assert.ok(h.shell.args.authShow.every((a) => a.length === 1 && a[0].auto === true));
+  h.shell.status = SIGNED_IN;
+  h.shell.hear(SIGNED_IN);
+  const asked = h.calls.length;
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(h.calls.length, asked, "still asking after the sign-in moved on");
 });
 
 test("the slow look waits while the app is out of view", async () => {

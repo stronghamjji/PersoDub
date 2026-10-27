@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AUTH_FILE, authConfig, createAuth, tokenStore } from "./auth.js";
 import { eventsUserId } from "./events.js";
+import { openExternally } from "./windowFactory.js";
 
 // The wiring of src/auth.js into the app: the controller and the page's channels.
 
@@ -20,7 +21,7 @@ export function logoDataUrl(path) {
   try { return `data:image/png;base64,${readFileSync(path).toString("base64")}`; } catch { return ""; }
 }
 
-export function createShellAuth({ app, safeStorage, net, ctx, edition, shellLog, makeSignInWindow, clearSignInSession, focus = () => {}, onSignOut = () => {},
+export function createShellAuth({ app, safeStorage, net, shell, ctx, edition, shellLog, makeSignInWindow, clearSignInSession, focus = () => {}, onSignOut = () => {},
                                  appName = "PersoDub", logoPath = "", env = process.env, track = () => {} }) {
   const auth = createAuth({
     enabled: edition === "production",
@@ -29,6 +30,7 @@ export function createShellAuth({ app, safeStorage, net, ctx, edition, shellLog,
     fetchFn: (url, opts) => net.fetch(url, opts), // the system's proxy and certificates, as the update check
     makeSignInWindow,
     clearSignInSession,
+    openExternal: (url) => openExternally(shell, url),
     kitDir: () => ctx.kitDir,
     log: shellLog,
     onCallback: focus,
@@ -53,7 +55,7 @@ export function registerAuthIpc({ ipcMain, shell, auth, openKeyWindow, track = (
   ipcMain.handle("shell:auth-status", () => auth.status());
   ipcMain.handle("shell:auth-login", () => auth.login());
   ipcMain.handle("shell:auth-cancel", () => auth.cancelLogin());
-  ipcMain.handle("shell:auth-show", () => auth.showLogin());
+  ipcMain.handle("shell:auth-show", (_e, opts) => auth.showLogin({ auto: opts?.auto === true }));
   ipcMain.handle("shell:auth-logout", () => auth.logout());
   ipcMain.handle("shell:auth-check-key", () => auth.connectKey());
   ipcMain.handle("shell:auth-open-key-page", () => {
