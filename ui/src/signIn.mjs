@@ -3,8 +3,8 @@
 // window.persodubShell.auth*): this file only shows where it stands.
 //
 // The screen covers the whole window while the app is signed out, while the
-// sign-in window is open on Perso's sign-in, and while the account signed in
-// to has no API key. What it shows is read off the shell's status each time it
+// sign-in window is open on Perso's sign-in (or the computer's browser, for
+// Google and Microsoft), and while the account signed in to has no API key. What it shows is read off the shell's status each time it
 // changes (onAuthState), so a sign-out from anywhere -- Settings, or a token
 // Perso no longer takes -- brings it back on its own.
 //
@@ -99,6 +99,11 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
     $("signInStart").hidden = face !== "start";
     $("signInWait").hidden = face !== "wait";
     $("signInNoKey").hidden = face !== "nokey";
+    // Where a waiting sign-in goes on: the app's sign-in window, or the
+    // computer's browser once Google or Microsoft took it there.
+    const inBrowser = status.where === "browser";
+    $("signInWaitTitle").textContent = inBrowser ? t("Finish signing in in your browser") : t("Finish signing in in the sign-in window");
+    $("signInReopen").textContent = inBrowser ? t("Open the browser again") : t("Open the sign-in window again");
     $("signInBtn").textContent = note ? t("Try again") : t("Sign in with Perso");
     // Only a failure's reason goes under the button.
     $("signInHint").textContent = note;
@@ -149,7 +154,8 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
 
   if (auth) {
     $("signInBtn").addEventListener("click", () => run(() => auth.authLogin()));
-    // The waiting sign-in's window, brought forward again: no new sign-in.
+    // The waiting sign-in's window brought forward again, or the browser
+    // opened there again: no new sign-in.
     $("signInReopen").addEventListener("click", () => auth.authShow());
     $("signInCancel").addEventListener("click", () => auth.authCancel());
     $("signInMakeKey").addEventListener("click", () => auth.authOpenKeyPage());

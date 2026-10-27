@@ -24,9 +24,9 @@ function makeEl(id) {
   };
 }
 
-const SIGNED_OUT = { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false };
-const WAITING = { ...SIGNED_OUT, waiting: true };
-const SIGNED_IN = { enabled: true, required: false, signedIn: true, account: "a@test.local", hasKey: true, waiting: false };
+const SIGNED_OUT = { enabled: true, required: true, signedIn: false, account: "", hasKey: false, waiting: false, where: "" };
+const WAITING = { ...SIGNED_OUT, waiting: true, where: "window" };
+const SIGNED_IN = { enabled: true, required: false, signedIn: true, account: "a@test.local", hasKey: true, waiting: false, where: "" };
 const NO_KEY = { ...SIGNED_IN, account: "c@test.local", hasKey: false };
 
 // The window and the document as far as the screen listens to them: their
@@ -144,18 +144,37 @@ test("a sign-in cancelled by closing its window says nothing about it", async ()
   assert.equal(h.$("signInBtn").textContent, "Sign in with Perso");
 });
 
-// Perso's sign-in is in a window of the app's own since 2026-10-27, not the
-// computer's browser: the waiting face says so, in English and in Korean.
-test("the waiting face names the sign-in window, not the browser", () => {
-  const html = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
-  const wait = html.slice(html.indexOf('id="signInWait"'), html.indexOf('id="signInNoKey"'));
-  assert.ok(wait.includes(">Finish signing in in the sign-in window<"), wait);
-  assert.ok(wait.includes(">Open the sign-in window again<"), wait);
-  assert.ok(!/browser/i.test(wait), wait);
+// Perso's sign-in is in a window of the app's own since 2026-10-27, and
+// Google and Microsoft go on in the computer's browser from there: the
+// waiting face says which, in English and in Korean.
+test("the waiting face says where the sign-in goes on: the sign-in window, or the browser after Google or Microsoft", async () => {
+  const h = harness(WAITING, { authShow: { outcome: "shown" } });
+  await h.settle();
+  assert.equal(h.$("signInWaitTitle").textContent, "Finish signing in in the sign-in window");
+  assert.equal(h.$("signInReopen").textContent, "Open the sign-in window again");
+  h.shell.hear({ ...WAITING, where: "browser" });
+  assert.equal(h.$("signInWait").hidden, false);
+  assert.equal(h.$("signInWaitTitle").textContent, "Finish signing in in your browser");
+  assert.equal(h.$("signInReopen").textContent, "Open the browser again");
+  // The same face: its button already has the keyboard.
+  assert.equal(h.$("signInReopen").focused, 1);
+  // Open again is the same call: the shell opens the browser there again.
+  await h.$("signInReopen").fire("click");
+  assert.deepEqual(h.calls, ["authShow"]);
+
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
   assert.equal(ko["Finish signing in in the sign-in window"], "로그인 창에서 로그인을 마쳐요");
   assert.equal(ko["Open the sign-in window again"], "로그인 창 다시 열기");
+  assert.equal(ko["Finish signing in in your browser"], "브라우저에서 로그인을 마쳐요");
+  assert.equal(ko["Open the browser again"], "브라우저 다시 열기");
   assert.equal(ko["Couldn't open the sign-in window."], "로그인 창을 열지 못했어요.");
+  // The screen writes these two, so the markup's translation must not write them back.
+  const html = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
+  const wait = html.slice(html.indexOf('id="signInWait"'), html.indexOf('id="signInNoKey"'));
+  for (const id of ["signInWaitTitle", "signInReopen"]) {
+    const tag = new RegExp(`<[^>]*id="${id}"[^>]*>`).exec(wait)?.[0];
+    assert.ok(tag && !tag.includes("data-i18n"), `${id}: ${tag}`);
+  }
 });
 
 test("a failed sign-in says why in one line, and its button tries again", async () => {
