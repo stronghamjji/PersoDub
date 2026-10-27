@@ -104,20 +104,22 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // launch, {needReplyTo: true} when there is no Reply-to and the account has
   // no e-mail (nothing sent), and null when it could not be sent at all.
   sendInquiry: (form) => ipcRenderer.invoke("shell:send-inquiry", form),
-  // Perso sign-in in the browser (src/auth.js), the production edition's.
+  // Perso sign-in in a window of the app's (src/auth.js), the production edition's.
   // authStatus answers {enabled, required, signedIn, account, accountId, hasKey, waiting}:
   // `required` is the production edition signed out, when the page shows its
   // sign-in screen; `account` is the account's full e-mail (its name without
   // one), shown on Home and in Settings, and `accountId` Perso's number
-  // for the account; the events key it by a hash of it (src/events.js eventsUserId). authLogin opens the browser
+  // for the account; the events key it by a hash of it (src/events.js eventsUserId). authLogin opens the sign-in window
   // and answers when the sign-in ends: {outcome, key, keyReason?, error?}
-  // (outcomes and key answers are listed at createAuth). authCheckKey looks for
+  // (outcomes and key answers are listed at createAuth); authShow brings that
+  // window forward again. authCheckKey looks for
   // the account's API key again, after authOpenKeyPage let the user make one.
   // onAuthState hears the status whenever it changes. In the open-source
   // edition every answer is {outcome: "disabled"} and authStatus's enabled is false.
   authStatus: () => ipcRenderer.invoke("shell:auth-status"),
   authLogin: () => ipcRenderer.invoke("shell:auth-login"),
   authCancel: () => ipcRenderer.invoke("shell:auth-cancel"),
+  authShow: () => ipcRenderer.invoke("shell:auth-show"),
   authLogout: () => ipcRenderer.invoke("shell:auth-logout"),
   authCheckKey: () => ipcRenderer.invoke("shell:auth-check-key"),
   authOpenKeyPage: () => ipcRenderer.invoke("shell:auth-open-key-page"),

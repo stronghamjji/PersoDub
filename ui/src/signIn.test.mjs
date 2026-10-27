@@ -47,7 +47,7 @@ function harness(status, answers = {}, pollMs = 5000, page = {}) {
   const $ = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
   const calls = [];
   const shell = { status, hear: null };
-  for (const name of ["authLogin", "authCancel", "authLogout", "authCheckKey", "authOpenKeyPage"]) {
+  for (const name of ["authLogin", "authCancel", "authShow", "authLogout", "authCheckKey", "authOpenKeyPage"]) {
     shell[name] = async () => { calls.push(name); return answers[name] ?? {}; };
   }
   shell.authStatus = async () => shell.status;
@@ -126,13 +126,21 @@ test("Sign in asks the shell, waits on the browser, and lands in the app", async
   assert.deepEqual(h.calls, ["authLogin", "authCancel"]);
 });
 
-test("Open the browser again is a new sign-in", async () => {
-  const h = harness(WAITING, { authLogin: { outcome: "cancelled" } });
+test("Open again brings the waiting sign-in's window forward, with no new sign-in", async () => {
+  const h = harness(WAITING, { authShow: { outcome: "shown" } });
   await h.settle();
   await h.$("signInReopen").fire("click");
-  assert.deepEqual(h.calls, ["authLogin"]);
-  // A sign-in replaced or cancelled says nothing about it.
+  assert.deepEqual(h.calls, ["authShow"]);
+  assert.equal(h.$("signInWait").hidden, false);
   assert.equal(h.$("signInHint").textContent, "", "no line under the button: people tried to press it");
+});
+
+test("a sign-in cancelled by closing its window says nothing about it", async () => {
+  const h = harness(SIGNED_OUT, { authLogin: { outcome: "cancelled" } });
+  await h.settle();
+  await h.$("signInBtn").fire("click");
+  assert.equal(h.$("signInHint").textContent, "");
+  assert.equal(h.$("signInBtn").textContent, "Sign in with Perso");
 });
 
 test("a failed sign-in says why in one line, and its button tries again", async () => {

@@ -3,8 +3,8 @@
 // window.persodubShell.auth*): this file only shows where it stands.
 //
 // The screen covers the whole window while the app is signed out, while the
-// browser is open on Perso's sign-in, and while the account signed in to has
-// no API key. What it shows is read off the shell's status each time it
+// sign-in window is open on Perso's sign-in, and while the account signed in
+// to has no API key. What it shows is read off the shell's status each time it
 // changes (onAuthState), so a sign-out from anywhere -- Settings, or a token
 // Perso no longer takes -- brings it back on its own.
 //
@@ -17,7 +17,7 @@ import { t } from "./i18n.mjs";
 // A failed sign-in's reason (createAuth's `error`) as one short line.
 const FAILED = {
   timeout: "Sign-in took too long.",
-  browser: "Couldn't open the browser.",
+  window: "Couldn't open the sign-in window.",
   port: "Couldn't start the sign-in. Try again.",
   network: "Couldn't reach Perso. Check your connection.",
 };
@@ -149,8 +149,8 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
 
   if (auth) {
     $("signInBtn").addEventListener("click", () => run(() => auth.authLogin()));
-    // A new sign-in in place of the one waiting: its browser tab opens again.
-    $("signInReopen").addEventListener("click", () => run(() => auth.authLogin()));
+    // The waiting sign-in's window, brought forward again: no new sign-in.
+    $("signInReopen").addEventListener("click", () => auth.authShow());
     $("signInCancel").addEventListener("click", () => auth.authCancel());
     $("signInMakeKey").addEventListener("click", () => auth.authOpenKeyPage());
     $("signInCheckKey").addEventListener("click", async () => {

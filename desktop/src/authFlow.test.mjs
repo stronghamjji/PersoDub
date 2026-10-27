@@ -1,7 +1,8 @@
 // The whole Perso sign-in against the fake Perso (tests/fake-perso/server.mjs),
-// over real HTTP: the app listens on one of its own ports, opens the authorize
-// address, a scripted browser follows it, fills Perso's sign-in form when
-// Perso shows one, and ends on the app's port the way a real browser does.
+// over real HTTP: the app listens on one of its own ports, opens its sign-in
+// window on the authorize address, a scripted window follows it, fills
+// Perso's sign-in form when Perso shows one, and ends on the app's port the
+// way the real window does.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -30,18 +31,22 @@ const getStats = async () => (await fetch(`${fake.url}/__fake/stats`)).json();
 const isCallback = (u) => { try { const x = new URL(u); return x.hostname === "127.0.0.1" && x.pathname === "/callback"; } catch { return false; } };
 const paramsOf = (u) => { const q = new URL(u).searchParams; return { code: q.get("code"), state: q.get("state"), error: q.get("error") }; };
 
-// A browser with its own cookies. `typing` is the account a person would type
-// into Perso's form; null means nobody does (the test fails if a form shows).
-// It follows every redirect until it lands on the app's own port and asks
-// that page, as a real browser does; `pages` keeps what each one said. With
+// A window with its own cookies, as the app's sign-in window
+// (src/signInWindow.js). `typing` is the account a person would type into
+// Perso's form; null means nobody does (the test fails if a form shows). It
+// follows every redirect until it lands on the app's own port and asks that
+// page, as the real window does; `pages` keeps what each one said. With
 // `hold` it stops short of that last request and returns its address instead.
+// Given the sign-in's `navigation`, every address it goes to must be one the
+// real window would go to.
 function scriptedBrowser() {
   let cookie = "";
   const b = { typing: null, forms: 0, pages: [] };
   const remember = (res) => { const c = res.headers.get("set-cookie"); if (c) cookie = c.split(";")[0]; };
-  b.open = async (start, { hold = false } = {}) => {
+  b.open = async (start, { hold = false, navigation } = {}) => {
     let url = start;
     for (let hop = 0; hop < 10; hop++) {
+      if (navigation && navigation(url) !== "allow") throw new Error(`the sign-in window would not go to ${url}`);
       if (isCallback(url)) {
         if (hold) return url;
         const res = await fetch(url);
@@ -69,32 +74,44 @@ function scriptedBrowser() {
   return b;
 }
 
-// The app as main.js wires it, with a browser that runs on its own once the
-// app has opened it. `hold` keeps the browser's last address in `held` for the
-// test to deliver itself; a browser that could not reach Perso puts its error
-// in `browserErrors`.
+// The sign-in window as the app opens it, run by `browser` on its own once
+// made. `hold` keeps its last address in `held` for the test to deliver
+// itself; a window that could not reach Perso puts its error in
+// `browserErrors` and says so as the real one does (onFailed). `windows`
+// keeps whether each was closed.
+function scriptedWindows(browser, { hold = false } = {}) {
+  const held = [];
+  const browserErrors = [];
+  const windows = [];
+  const make = ({ url, navigation, onClosed, onFailed }) => {
+    const win = { closed: false, onClosed };
+    windows.push(win);
+    setImmediate(async () => {
+      try {
+        const end = await browser.open(url, { hold, navigation });
+        if (hold) held.push(end);
+      } catch (err) { browserErrors.push(err); onFailed(); }
+    });
+    return { show() {}, close() { win.closed = true; } };
+  };
+  return { held, browserErrors, windows, make };
+}
+
+// The app as main.js wires it, with scriptedWindows for its sign-in window.
 function theApp({ userData = mkdtempSync(join(tmpdir(), "odflow-user-")), kitDir, browser, hold = false,
                   fetchFn = fetch, safe = fakeSafeStorage(), authBase = fake.authBase }) {
   const logs = [];
-  const held = [];
-  const browserErrors = [];
+  const { held, browserErrors, windows, make } = scriptedWindows(browser, { hold });
   const auth = createAuth({
     enabled: true,
     cfg: cfgFor(authBase),
     store: tokenStore(join(userData, AUTH_FILE), safe),
     fetchFn,
-    openExternal: async (url) => {
-      setImmediate(async () => {
-        try {
-          const end = await browser.open(url, { hold });
-          if (hold) held.push(end);
-        } catch (err) { browserErrors.push(err); }
-      });
-    },
+    makeSignInWindow: make,
     kitDir: () => kitDir,
     log: (line) => logs.push(line),
   });
-  return { auth, logs, userData, held, browserErrors };
+  return { auth, logs, userData, held, browserErrors, windows };
 }
 const until = async (check) => { for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 10)); };
 const fileOf = (userData) => join(userData, AUTH_FILE);
@@ -109,17 +126,18 @@ function freshKit() {
 test("A signs in, signs out, signs in again without typing, then B after signing out of Perso, then C with no key", async () => {
   const kitDir = freshKit();
   const browser = scriptedBrowser();
-  const { auth, logs, userData } = theApp({ kitDir, browser });
+  const { auth, logs, userData, windows } = theApp({ kitDir, browser });
   await auth.start();
   assert.equal((await auth.status()).required, true);
 
-  // A, typed into Perso's form; the browser ends on the app's port and is told so.
+  // A, typed into Perso's form; the window ends on the app's port and is told so, and closes.
   browser.typing = "a@test.local";
   assert.deepEqual(await auth.login(), { outcome: "signed_in", key: "saved" });
   assert.equal(browser.forms, 1);
-  // The app's answer does not wait on the browser being told; the browser's page comes a moment later.
+  // The app's answer does not wait on the window being told; the window's page comes a moment later.
   await until(() => browser.pages.length);
   assert.deepEqual(browser.pages, ["done"]);
+  assert.equal(windows[0].closed, true);
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["a@test.local"].keys[0].apiKey);
   assert.deepEqual(await auth.status(), { enabled: true, required: false, signedIn: true, account: "a@test.local", accountId: "1001", hasKey: true, waiting: false });
   // The full address stays in the shell, for Customer support's inquiry (reporting.js accountForInquiry).
@@ -230,7 +248,7 @@ test("the fake Perso refuses a wrong client, an unregistered redirect, a reused 
 
 // ---- When things go wrong: the fake Perso's misbehave() --------------------------
 
-test("Perso unreachable while the browser is open: the app keeps waiting, Cancel ends it, and the next try works", async () => {
+test("Perso unreachable from the sign-in window: failed as network, the window closes, and the next try works", async () => {
   const kitDir = freshKit();
   const browser = scriptedBrowser();
   browser.typing = "a@test.local";
@@ -238,17 +256,29 @@ test("Perso unreachable while the browser is open: the app keeps waiting, Cancel
   await app.auth.start();
   fake.misbehave({ drop: ["authorize"] });
   try {
-    const first = app.auth.login();
-    await until(() => app.browserErrors.length);
-    assert.equal(app.browserErrors.length, 1, "the browser reached a Perso that was down");
-    assert.equal((await app.auth.status()).waiting, true);
-    assert.deepEqual(await app.auth.cancelLogin(), { outcome: "cancelled" });
-    assert.deepEqual(await first, { outcome: "cancelled" });
+    assert.deepEqual(await app.auth.login(), { outcome: "failed", error: "network" });
+    assert.equal(app.browserErrors.length, 1, "the window reached a Perso that was down");
+    assert.equal(app.windows[0].closed, true);
+    assert.equal((await app.auth.status()).waiting, false);
   } finally { fake.misbehave({}); }
   assert.deepEqual(await app.auth.login(), { outcome: "signed_in", key: "saved" });
 });
 
-test("a sign-in started again while one waits: the first browser, arriving late, is ignored and the second signs in", async () => {
+test("the sign-in window closed before it goes back cancels the sign-in and gives the port back", async () => {
+  const kitDir = freshKit();
+  const browser = scriptedBrowser();
+  browser.typing = "a@test.local";
+  const app = theApp({ kitDir, browser, hold: true });
+  await app.auth.start();
+  const done = app.auth.login();
+  await until(() => app.held.length);
+  app.windows[0].onClosed();
+  assert.deepEqual(await done, { outcome: "cancelled" });
+  await assert.rejects(fetch(app.held[0]), "the port still answered after the window was closed");
+  assert.equal(kitValues(kitDir).PERSO_API_KEY, "");
+});
+
+test("a sign-in started again while one waits: its window closes, the first window's request, arriving late, is ignored and the second signs in", async () => {
   const kitDir = freshKit();
   const browser = scriptedBrowser();
   browser.typing = "a@test.local";
@@ -259,6 +289,7 @@ test("a sign-in started again while one waits: the first browser, arriving late,
   const second = app.auth.login();
   await until(() => app.held.length === 2);
   assert.deepEqual(await first, { outcome: "cancelled" });
+  assert.deepEqual(app.windows.map((w) => w.closed), [true, false]);
   const tokensBefore = (await getStats()).token;
   assert.equal(await app.auth.handleCallback(paramsOf(app.held[0])), "bad_state");
   assert.equal((await getStats()).token, tokensBefore, "the old browser's code went to Perso");
@@ -379,7 +410,7 @@ test("after an update the same file signs in; the open-source edition on that co
 
   // The open-source edition, started on the same userData: nothing read, nothing changed.
   const oss = createAuth({ enabled: false, cfg: authConfig({}), store: tokenStore(fileOf(first.userData), fakeSafeStorage()),
-    fetchFn: () => { throw new Error("no network in the open-source edition"); }, openExternal: async () => {}, kitDir: () => kitDir });
+    fetchFn: () => { throw new Error("no network in the open-source edition"); }, makeSignInWindow: () => { throw new Error("no window in the open-source edition"); }, kitDir: () => kitDir });
   await oss.start();
   assert.equal((await oss.status()).signedIn, false);
   assert.deepEqual(readFileSync(fileOf(first.userData)), kept);
@@ -423,7 +454,7 @@ test("the events' userId is the signed-in account's hashed number, set at the si
   const ctx = { kitDir, win: null, userId: "" };
   const auth = createShellAuth({
     app: { getPath: () => mkdtempSync(join(tmpdir(), "odflow-user-")), getVersion: () => "0.9.1" },
-    shell: { openExternal: async (url) => { setImmediate(() => browser.open(url)); } },
+    shell: { openExternal: async () => {} }, makeSignInWindow: scriptedWindows(browser).make,
     safeStorage: fakeSafeStorage(), net: { fetch }, ctx, edition: "production", shellLog: () => {},
     env: { PERSODUB_AUTH_BASE: fake.authBase, PERSODUB_AUTH_CLIENT_ID: FAKE_CLIENT_ID, PERSODUB_AUTH_REDIRECT_PORTS: PORTS },
   });
