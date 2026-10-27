@@ -91,23 +91,28 @@ export async function fetchLanguages({ baseUrl = "" } = {}) {
 }
 
 /**
- * The credits left in the Perso workspace a dubbing spends from, as
- * Settings > API keys lists them (GET /api/perso/spaces): the workspace
- * picked there, or the key's only one -- the engine's own rule
+ * The Perso workspace a dubbing spends from, as Settings > API keys lists it
+ * (GET /api/perso/spaces: seq, name, tier, credits): the workspace picked
+ * there, or the key's only one -- the engine's own rule
  * (app/perso_client.py _resolve_space_seq). null when that is not known: no
  * key, several workspaces and none picked, Perso not answering.
  */
-export async function fetchCreditsLeft({ baseUrl = "" } = {}) {
+export async function fetchPersoSpace({ baseUrl = "" } = {}) {
   try {
     const [spaces, settings] = await Promise.all([fetch(`${baseUrl}/api/perso/spaces`), fetch(`${baseUrl}/api/settings`)]);
     if (!spaces.ok || !settings.ok) return null;
     const list = (await spaces.json()).spaces || [];
     const picked = String((await settings.json()).perso_space_seq || "");
-    const space = picked ? list.find((s) => String(s.seq) === picked) : list.length === 1 ? list[0] : null;
-    return space && typeof space.credits === "number" ? space.credits : null;
+    return (picked ? list.find((s) => String(s.seq) === picked) : list.length === 1 ? list[0] : null) || null;
   } catch {
     return null;
   }
+}
+
+/** The credits left in that workspace (fetchPersoSpace), or null. */
+export async function fetchCreditsLeft(opts) {
+  const space = await fetchPersoSpace(opts);
+  return space && typeof space.credits === "number" ? space.credits : null;
 }
 
 export function buildDubFormData(opts) {

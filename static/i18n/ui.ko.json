@@ -13,6 +13,7 @@
   "@Your name": "@내 이름",
   "A dubbing in this project is still running.": "이 프로젝트에서 아직 더빙이 진행 중이에요.",
   "A free-plan workspace cannot download the result. The dubbing is done; see it in your Perso workspace.": "무료 플랜은 결과를 앱으로 못 받아요. 더빙은 끝났으니 Perso 워크스페이스에서 확인해요.",
+  "A free-plan workspace cannot download the result. When it is done, see it in your Perso workspace.": "무료 플랜은 결과를 앱으로 못 받아요. 끝나면 Perso 워크스페이스에서 확인해요.",
   "A one-time download, separate from the app install.": "앱 설치와 따로, 처음 한 번만 다운로드해요.",
   "A video file or a link is required.": "영상 파일이나 링크가 필요해요.",
   "API keys": "API 키",

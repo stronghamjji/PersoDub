@@ -274,14 +274,14 @@ test("the foot's mode follows the quality and the Dubbing choice as they are cha
 
 // Before a Perso API dubbing, what it costs and what is left (owner,
 // 2026-10-22, 2-1): the first thing a paid dubbing should say.
-test("a Perso dubbing's foot says at most what it costs, the model's a second times the whole seconds kept, and asks nothing over the network", async () => {
+test("a Perso dubbing's foot says at most what it costs, the model's a second times the whole seconds kept, and asks only the plan, once", async () => {
   clearDraft();
   const real = globalThis.fetch;
   const asked = [];
   globalThis.fetch = async (url) => {
     asked.push(url);
     return { ok: true, json: async () => (url === "/api/perso/spaces"
-      ? { spaces: [{ seq: 7, name: "Mine", tier: "Free", credits: 1280 }] } : { perso_space_seq: "7" }) };
+      ? { spaces: [{ seq: 7, name: "Mine", tier: "Pro", credits: 1280 }] } : { perso_space_seq: "7" }) };
   };
   try {
     const { $, log } = harness();
@@ -303,12 +303,43 @@ test("a Perso dubbing's foot says at most what it costs, the model's a second ti
     log.model = "ORIOLE";
     setRanges([[0, 1.6]]);
     assert.equal($("draftFootLabel").textContent, "Dubbing 00:01 · Perso API · up to 1 credit");
-    // Nothing is asked over the network for the foot.
-    assert.deepEqual(asked, []);
+    // Only the workspace's plan is asked for the foot, once for this video.
+    assert.deepEqual(asked, ["/api/perso/spaces", "/api/settings"]);
     // Back on Local model the foot is the mode alone again.
     $("dubModeSelect").value = "local";
     await $("dubModeSelect").fire("change");
     assert.equal($("draftFootLabel").textContent, "Dubbing 00:01 · Fast mode");
+  } finally {
+    globalThis.fetch = real;
+    clearDraft();
+  }
+});
+
+// Perso will not hand a free-plan workspace the video (owner, 2026-10-28):
+// said before Start, and asked again each time Perso API is chosen.
+test("on a free-plan workspace a Perso dubbing's foot says the result is seen on Perso", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (url) => {
+    asked.push(url);
+    return { ok: true, json: async () => (url === "/api/perso/spaces"
+      ? { spaces: [{ seq: 7, name: "Mine", tier: "Free", credits: 1280 }] } : { perso_space_seq: "7" }) };
+  };
+  try {
+    const { $ } = harness();
+    setDraft({ downloadId: "d1", name: "a.mp4", duration: 10, videoUrl: "/v" });
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:10 · Perso API · up to 10 credits · "
+      + "A free-plan workspace cannot download the result. When it is done, see it in your Perso workspace.");
+    $("dubModeSelect").value = "local";
+    await $("dubModeSelect").fire("change");
+    assert.equal($("draftFootLabel").textContent, "Dubbing 00:10 · Fast mode");
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    assert.equal(asked.length, 4, "asked again when Perso API is chosen again");
   } finally {
     globalThis.fetch = real;
     clearDraft();

@@ -15,7 +15,7 @@
 // With no video yet the tab shows the shared Import block instead; bringing
 // a video in is ui/src/draftImport.mjs, and this file only calls its
 // importSource for the shortcut above.
-import { buildDubFormData, saveDownloadParts } from "./dubApi.mjs";
+import { buildDubFormData, fetchPersoSpace, saveDownloadParts } from "./dubApi.mjs";
 import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
 import { getDraft, clearDraft, setRanges, keptSeconds, spokenSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { modelInfo } from "./persoModels.mjs";
@@ -114,16 +114,35 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
   // credits (persoCost above), or, while the local choices still need a
   // download, its size the first time (owner, 2026-10-22, 1-3). Painted by
   // itself as well whenever the model rows change (ui/src/app.mjs).
+  // A free-plan workspace cannot download a Perso dubbing's result (owner,
+  // 2026-10-28): the foot says so before Start. The workspace's plan is asked
+  // once each time Perso API is chosen for a video.
+  let planAskedFor = null;
+  let freePlan = false;
+  function askPlan(id) {
+    if (planAskedFor === id) return;
+    planAskedFor = id;
+    freePlan = false;
+    fetchPersoSpace().then((space) => {
+      if (planAskedFor !== id || String((space && space.tier) || "").toLowerCase() !== "free") return;
+      freePlan = true;
+      paintFoot();
+    });
+  }
+
   function paintFoot() {
     const d = getDraft();
     if (!d || state.jobId) return;
     // Perso does the whole job, so the voice-quality choice is not in force.
     const cloud = $("dubModeSelect").value === "perso";
+    if (cloud) askPlan(d.downloadId);
+    else planAskedFor = null;
     const quality = cloud ? "Perso API"
       : $("qualitySelect").value === "high" ? t("High quality mode") : t("Fast mode");
     const first = firstDownloadBytes();
     $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality }),
-      ...(cloud ? persoCost(d) : first ? [t("{size} GB the first time", { size: gb(first) })] : [])].join(" · ");
+      ...(cloud ? persoCost(d) : first ? [t("{size} GB the first time", { size: gb(first) })] : []),
+      ...(cloud && freePlan ? [t("A free-plan workspace cannot download the result. When it is done, see it in your Perso workspace.")] : [])].join(" · ");
     // The way to top up, whenever a Perso dubbing is what is priced.
     const recharge = $("draftRechargeLink");
     recharge.hidden = !cloud;
