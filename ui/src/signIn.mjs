@@ -36,7 +36,7 @@ export function signInFace(status) {
   return status.hasKey ? "" : "nokey";
 }
 
-export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win = globalThis.window, doc = globalThis.document }) {
+export function initSignIn({ $, shell, body = document.body, pollMs = 30000, retryMs = 5000, win = globalThis.window, doc = globalThis.document }) {
   let status = { enabled: false };
   let note = "";      // why the last sign-in did not finish, on the first face
   let keyNote = "";   // what the last "Check again" found, on the no-key face
@@ -89,8 +89,27 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
     };
     later(tick);
   }
+
+  // Waiting in the browser: the person back in the app (the window's focus, or every retryMs while it has it)
+  // asks the shell to run the browser's sign-in again, which it does at most twice, 20 seconds apart.
+  const waitingInBrowser = () => !!status.waiting && status.where === "browser";
+  async function retryBrowser() {
+    if (!waitingInBrowser()) return;
+    try { await auth.authShow({ auto: true }); } catch { /* Open the browser again is still there */ }
+  }
+  let retrying = false;
+  function watchBrowser() {
+    if (retrying || !auth) return;
+    retrying = true;
+    const tick = async () => {
+      if (!waitingInBrowser()) { retrying = false; return; }
+      if (doc?.hasFocus?.()) await retryBrowser();
+      later(tick, retryMs);
+    };
+    later(tick, retryMs);
+  }
   // unref: in a test on Node the pending look must not hold the process open.
-  const later = (fn) => { const timer = setTimeout(fn, pollMs); timer.unref?.(); };
+  const later = (fn, ms = pollMs) => { const timer = setTimeout(fn, ms); timer.unref?.(); };
 
   let shownFace = "";
   function paint() {
@@ -104,7 +123,7 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
     const inBrowser = status.where === "browser";
     $("signInWaitTitle").textContent = inBrowser ? t("Finish signing in in your browser") : t("Finish signing in in the sign-in window");
     $("signInWaitNote").hidden = !inBrowser;
-    $("signInWaitNote").textContent = inBrowser ? t("Google and Microsoft sign-in continue in your browser. Once you are signed in or signed up there, press Open the browser again.") : "";
+    $("signInWaitNote").textContent = inBrowser ? t("Google and Microsoft sign-in continue in your browser. When you're done there, come back to this window to finish. If nothing happens, press Open the browser again.") : "";
     $("signInReopen").textContent = inBrowser ? t("Open the browser again") : t("Open the sign-in window again");
     $("signInBtn").textContent = note ? t("Try again") : t("Sign in with Perso");
     // Only a failure's reason goes under the button.
@@ -124,6 +143,7 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
     }
     shownFace = face;
     if (face === "nokey") watchKey();
+    if (waitingInBrowser()) watchBrowser();
   }
 
   function take(s) {
@@ -167,8 +187,9 @@ export function initSignIn({ $, shell, body = document.body, pollMs = 30000, win
       try { await checkKey({ loud: true }); } finally { btn.disabled = false; }
     });
     // Back from the browser: the window has the focus again, or is in view again.
-    win?.addEventListener?.("focus", () => lookQuietly());
-    doc?.addEventListener?.("visibilitychange", () => (doc?.visibilityState === "visible" ? lookQuietly() : undefined));
+    const back = async () => { await retryBrowser(); await lookQuietly(); };
+    win?.addEventListener?.("focus", back);
+    doc?.addEventListener?.("visibilitychange", () => (doc?.visibilityState === "visible" ? back() : undefined));
     // The no-key face's way out: sign out, and sign in as an account that has a key.
     $("signInSignOut").addEventListener("click", () => run(() => auth.authLogout()));
     if (auth.onAuthState) auth.onAuthState(take);

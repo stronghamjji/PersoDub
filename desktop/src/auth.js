@@ -297,6 +297,8 @@ export function tokenStore(file, safeStorage) {
  *               or, handed to the browser, Perso's Google or Microsoft start
  *               opened there again
  *   idle        cancelLogin or showLogin with no sign-in waiting
+ *   wait        showLogin({auto: true}) that opened nothing: at most twice
+ *               per sign-in, 20 seconds after the browser last opened
  *   signed_out  logout
  *   disabled    not enabled
  * and a sign-in's `key` says what happened to the API key: saved, no_key
@@ -497,7 +499,7 @@ export function createAuth({
     }
     const redirectUri = redirectUriFor(cfg, server.port);
     return new Promise((resolve) => {
-      const waiting = { ...pkce, redirectUri, server, resolve, where: "window" };
+      const waiting = { ...pkce, redirectUri, server, resolve, where: "window", browserAt: 0, autoOpens: 0 };
       waiting.timer = setTimeout(() => finish(waiting, { outcome: "failed", error: "timeout" }), loginTimeoutMs);
       waiting.timer.unref?.();
       pending = waiting;
@@ -512,6 +514,7 @@ export function createAuth({
             if (pending !== waiting) return;
             waiting.where = "browser";
             waiting.handOff = to;
+            waiting.browserAt = now();
             const u = new URL(to);
             log(`AUTH Google or Microsoft in the sign-in window: the whole sign-in goes on in the computer's browser at ${u.host}${u.pathname}`);
             onChange();
@@ -540,6 +543,7 @@ export function createAuth({
   // which an account made by then (a sign-up that ended on Perso's workspace) answers at once. Without Perso's
   // answer, or for a provider it does not know, the first hand-off's address again.
   async function openHandOffAgain(waiting) {
+    waiting.browserAt = now();
     const back = authorizeUrl(cfg, waiting);
     const provider = signInProvider(waiting.handOff);
     let address = handOffUrl(waiting.handOff, back);
@@ -553,13 +557,19 @@ export function createAuth({
     if (pending === waiting) openExternal(address);
   }
 
-  /** Open again: the window reopened on the authorize address, or after a hand-off the browser's sign-in run again. */
-  async function showLogin() {
+  /** Open again: the window reopened on the authorize address, or after a hand-off the browser's sign-in run again.
+   * `auto` is the person back in the app: only after a hand-off, at most twice, 20 seconds after the browser opened. */
+  async function showLogin({ auto = false } = {}) {
     if (!isOn()) return DISABLED;
     if (trading) return { outcome: "busy" };
     if (!pending) return { outcome: "idle" };
-    if (pending.where === "browser") await openHandOffAgain(pending);
-    else pending.window.show();
+    const waiting = pending;
+    if (auto) {
+      if (waiting.where !== "browser" || waiting.autoOpens >= 2 || now() - waiting.browserAt < 20_000) return { outcome: "wait" };
+      waiting.autoOpens += 1;
+    }
+    if (waiting.where === "browser") await openHandOffAgain(waiting);
+    else waiting.window.show();
     return { outcome: "shown" };
   }
 

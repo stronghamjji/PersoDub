@@ -52,7 +52,7 @@ export function registerAuthIpc({ ipcMain, shell, auth, openKeyWindow }) {
   ipcMain.handle("shell:auth-status", () => auth.status());
   ipcMain.handle("shell:auth-login", () => auth.login());
   ipcMain.handle("shell:auth-cancel", () => auth.cancelLogin());
-  ipcMain.handle("shell:auth-show", () => auth.showLogin());
+  ipcMain.handle("shell:auth-show", (_e, opts) => auth.showLogin({ auto: opts?.auto === true }));
   ipcMain.handle("shell:auth-logout", () => auth.logout());
   ipcMain.handle("shell:auth-check-key", () => auth.connectKey());
   ipcMain.handle("shell:auth-open-key-page", () => {
