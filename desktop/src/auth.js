@@ -274,7 +274,7 @@ export function createAuth({
   track = () => {}, // the sign-in's steps for the charts (events.js track)
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
-  let session = null;   // {accessToken, refreshToken, userId, account, email, via: where it signed in, "window" or "browser"}
+  let session = null;   // {accessToken, refreshToken, userId, account, email}
   let sessionId = 0;    // a new one at every sign-in and sign-out; a token refresh keeps it
   let pending = null;   // the sign-in waiting for its window
   let trading = null;   // the sign-in whose code is being traded
@@ -314,9 +314,6 @@ export function createAuth({
       where: open ? open.where : "",
     };
   }
-
-  // The key page needs the account's cookies: the window's if it signed in there; a kept session without `via`, the browser.
-  const keyPageTarget = () => (isOn() && session?.via === "window" ? "window" : "browser");
 
   // The full e-mail and Perso number for Customer support's inquiry (reporting.js); null signed out or disabled.
   function signedInAccount() {
@@ -384,6 +381,13 @@ export function createAuth({
       if (!(err instanceof AuthHttpError) || err.status !== 401 || !(await refresh())) throw err;
       return callJson(fetchFn, what, url, { token: session.accessToken });
     }
+  }
+
+  // The tokens for the key window's Perso cookies, refreshed first within a minute of running out; null signed out or disabled.
+  async function sessionCookies() {
+    if (!isOn() || !session) return null;
+    if (expired(session.accessToken)) await refresh();
+    return session ? { accessToken: session.accessToken, refreshToken: session.refreshToken } : null;
   }
 
   // The account's active key into kit.env; a different key also clears PERSO_SPACE_SEQ, the old key's workspace.
@@ -550,7 +554,7 @@ export function createAuth({
     }
     try {
       const tokens = await exchangeCode(cfg, fetchFn, { code: cb.code, verifier: waiting.verifier, redirectUri: waiting.redirectUri });
-      session = { ...tokens, userId: null, account: "", email: "", via: waiting.where };
+      session = { ...tokens, userId: null, account: "", email: "" };
       sessionId++;
       try {
         const answer = await authedGet("profile", cfg.profileUrl);
@@ -618,7 +622,7 @@ export function createAuth({
     connectKey: loadedFirst(async () => (isOn() ? connectKey() : DISABLED)),
     handleCallback,
     signedInAccount,
-    keyPageTarget,
+    sessionCookies: loadedFirst(sessionCookies),
     keyPageUrl: cfg.keyPageUrl,
   };
 }

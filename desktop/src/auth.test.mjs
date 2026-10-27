@@ -1036,65 +1036,54 @@ test("no token, key or e-mail ever reaches a log line", async () => {
 
 test("Make a key on the sign-in screen opens the key page with the app's version and utm_content=signup", async () => {
   const { createShellAuth } = await import("./authIpc.js");
-  const opened = [];
-  const shell = { openExternal: async (u) => { opened.push(u); } };
+  const browser = [];
+  const shell = { openExternal: async (u) => { browser.push(u); } };
   const auth = createShellAuth({ app: { getPath: () => mkdtempSync(join(tmpdir(), "odauth-user-")), getVersion: () => "0.9.1" },
     shell, safeStorage: fakeSafeStorage(), net: { fetch: async () => { throw new Error("no network here"); } },
     ctx: { kitDir: kitWith(), win: null }, edition: "production", shellLog: () => {}, env: {} });
   const handlers = {};
   const steps = [];
-  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell, auth, track: (name, props) => steps.push([name, props]) });
+  const inWindow = [];
+  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, auth, openKeyWindow: async (...args) => { inWindow.push(args); },
+    track: (name, props) => steps.push([name, props]) });
   await handlers["shell:auth-open-key-page"]();
-  assert.deepEqual(opened, ["https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup"]);
+  assert.deepEqual(inWindow, [["https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup", null]]);
+  assert.deepEqual(browser, []);
   assert.deepEqual(steps, [["key_page_opened", {}]]);
 });
 
-// After an e-mail sign-up in the window, the browser's Perso cookies were the previous account's (2026-10-27).
-test("the key page opens where the account signed in: the window, or the browser after a hand-off; kept without `via`, or signed out, the browser", async () => {
-  const one = makeAuth();
-  await one.auth.start();
-  assert.equal(one.auth.keyPageTarget(), "browser");
-  let done = one.auth.login();
+// The browser's Perso cookies can be another account's, and after Google or Microsoft the window has none (2026-10-27).
+test("Make a key always opens the key window, with the session's tokens for its cookies; signed out, with none", async () => {
+  const token = later();
+  const { auth, opened, windows } = makeAuth({ routes: persoRoutes({ [`POST ${CFG.tokenUrl}`]: () => [200, { result: { accessToken: token, refreshToken: "r1" } }] }) });
+  const handlers = {};
+  const inWindow = [];
+  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, auth, openKeyWindow: async (...args) => { inWindow.push(args); } });
+  await auth.start();
+  await handlers["shell:auth-open-key-page"]();
+  const done = auth.login();
   await settle();
-  await one.auth.handleCallback(back(one.opened));
+  windows[0].onHandOff("https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x");
+  await auth.handleCallback(back(opened));
   await done;
-  assert.equal(one.auth.keyPageTarget(), "window");
-  assert.equal(tokenStore(join(one.userData, AUTH_FILE), fakeSafeStorage()).read().via, "window");
-  const kept = makeAuth({ userData: one.userData });
-  await kept.auth.start();
-  assert.equal(kept.auth.keyPageTarget(), "window");
-  await one.auth.logout();
-  assert.equal(one.auth.keyPageTarget(), "browser");
-
-  const two = makeAuth();
-  await two.auth.start();
-  done = two.auth.login();
-  await settle();
-  two.windows[0].onHandOff("https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x");
-  await two.auth.handleCallback(back(two.opened));
-  await done;
-  assert.equal(two.auth.keyPageTarget(), "browser");
-
-  const userData = mkdtempSync(join(tmpdir(), "odauth-user-"));
-  tokenStore(join(userData, AUTH_FILE), fakeSafeStorage()).write({ accessToken: later(), refreshToken: "r1", userId: "u1", account: "so***@test.local" });
-  const old = makeAuth({ userData });
-  await old.auth.start();
-  assert.equal((await old.auth.status()).signedIn, true);
-  assert.equal(old.auth.keyPageTarget(), "browser");
+  await handlers["shell:auth-open-key-page"]();
+  assert.deepEqual(inWindow, [[CFG.keyPageUrl, null], [CFG.keyPageUrl, { accessToken: token, refreshToken: "r1" }]]);
 });
 
-test("Make a key opens the key window when the account signed in there, and the computer's browser otherwise", async () => {
-  const keyPageUrl = "https://developers.perso.ai/api-keys?utm_content=signup";
-  for (const target of ["window", "browser"]) {
-    const handlers = {};
-    const inBrowser = [];
-    const inWindow = [];
-    const auth = { enabled: true, keyPageUrl, keyPageTarget: () => target };
-    registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell: { openExternal: async (u) => { inBrowser.push(u); } },
-      auth, openKeyWindow: (u) => { inWindow.push(u); } });
-    await handlers["shell:auth-open-key-page"]();
-    assert.deepEqual([inWindow, inBrowser], target === "window" ? [[keyPageUrl], []] : [[], [keyPageUrl]], target);
-  }
+test("the key window's cookies are the session's two tokens, the access token refreshed first within a minute of running out; signed out or switched off, none", async () => {
+  let clock = Date.now();
+  const token = later();
+  const { auth, calls } = await signedInStore(persoRoutes({ [REFRESH]: () => [200, { access_token: "a2", refresh_token: "r2" }] }), token, { now: () => clock });
+  await auth.start();
+  assert.deepEqual(await auth.sessionCookies(), { accessToken: token, refreshToken: "r1" });
+  assert.equal(calls.length, 0);
+  clock = tokenExpiry(token) - 30_000;
+  assert.deepEqual(await auth.sessionCookies(), { accessToken: "a2", refreshToken: "r2" });
+  assert.deepEqual(calls.map((c) => c.key), [REFRESH]);
+  await auth.logout();
+  assert.equal(await auth.sessionCookies(), null);
+  const off = await signedInStore(persoRoutes(), later(), { enabled: false });
+  assert.equal(await off.auth.sessionCookies(), null);
 });
 
 test("switched off (the open-source edition) nothing happens: no window, no file, no port, no network", async () => {
@@ -1123,7 +1112,7 @@ test("switched off (the open-source edition) nothing happens: no window, no file
   const handlers = {};
   const opened = [];
   const steps = [];
-  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell: { openExternal: (u) => opened.push(u) }, auth,
+  registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, auth, openKeyWindow: (u) => opened.push(u),
                     track: (name) => steps.push(name) });
   assert.equal(Object.keys(handlers).length, 7);
   assert.deepEqual(await handlers["shell:auth-show"](), { outcome: "disabled" });
@@ -1172,27 +1161,31 @@ test("the way-back page: the app's name, the logo, one language picked from the 
 const event = () => ({ prevented: false, preventDefault() { this.prevented = true; } });
 
 // A stand-in for Electron's BrowserWindow: the options it was made with, the
-// handlers it was given, and what was done to it. `fire` plays an event.
-function fakeWindows() {
+// handlers it was given, and what was done to it. `fire` plays an event;
+// `steps` is the cookies set and the pages loaded, in order.
+function fakeWindows({ setCookie = async () => {} } = {}) {
   const made = [];
   const external = [];
   class BrowserWindow {
     constructor(options) {
-      Object.assign(this, { options, handlers: {}, loaded: [], did: [], destroyed: false, permissions: null, openHandler: null, cookies: [], cookieReads: [] });
+      Object.assign(this, { options, handlers: {}, loaded: [], did: [], steps: [], destroyed: false, permissions: null, openHandler: null, cookies: [], cookieReads: [] });
       const win = this;
       this.webContents = {
         on: (name, fn) => { win.handlers[`wc:${name}`] = fn; },
         setWindowOpenHandler: (fn) => { win.openHandler = fn; },
         session: {
           setPermissionRequestHandler: (fn) => { win.permissions = fn; },
-          cookies: { get: async (filter) => { win.cookieReads.push(filter); return win.cookies; } },
+          cookies: {
+            get: async (filter) => { win.cookieReads.push(filter); return win.cookies; },
+            set: async (cookie) => { win.steps.push(["cookie", cookie]); await setCookie(cookie); },
+          },
         },
       };
       made.push(this);
     }
     on(name, fn) { this.handlers[name] = fn; }
     fire(name, ...args) { const e = event(); this.handlers[name](e, ...args); return e; }
-    loadURL(url) { this.loaded.push(url); return Promise.reject(new Error("ERR_ABORTED")); }
+    loadURL(url) { this.loaded.push(url); this.steps.push(["load", url]); return Promise.reject(new Error("ERR_ABORTED")); }
     isDestroyed() { return this.destroyed; }
     isMinimized() { return true; }
     restore() { this.did.push("restore"); }
@@ -1489,6 +1482,29 @@ test("the key window: the sign-in's cookies, sandboxed, 1000x760 over the app's 
   assert.equal(win.destroyed, true);
   f.openKey(page);
   assert.equal(f.made.length, 2);
+});
+
+test("the key window sets the app's tokens as Perso's session cookies, then loads the page; a cookie refused still loads it, a window closed meanwhile does not", async () => {
+  const page = "https://developers.perso.ai/api-keys?utm_content=signup";
+  const cookie = (name, value) => ["cookie", { url: "https://perso.ai/", name, value, domain: ".perso.ai", path: "/", secure: true, sameSite: "lax" }];
+  const f = fakeWindows();
+  await f.openKey(page, { accessToken: "a1", refreshToken: "r1" });
+  const win = f.made[0];
+  assert.deepEqual(win.steps, [cookie("accessToken", "a1"), cookie("refreshToken", "r1"), ["load", page]]);
+  await f.openKey(page, { accessToken: "a2", refreshToken: "" });
+  assert.deepEqual(win.steps.slice(3), [cookie("accessToken", "a2"), ["load", page]]);
+
+  const refused = fakeWindows({ setCookie: async () => { throw new Error("refused"); } });
+  await refused.openKey(page, { accessToken: "a1", refreshToken: "r1" });
+  assert.deepEqual(refused.made[0].steps, [cookie("accessToken", "a1"), cookie("refreshToken", "r1"), ["load", page]]);
+
+  let release;
+  const closed = fakeWindows({ setCookie: () => new Promise((r) => { release = r; }) });
+  const opening = closed.openKey(page, { accessToken: "a1" });
+  closed.made[0].fire("wc:before-input-event", { type: "keyDown", key: "Escape" });
+  release();
+  await opening;
+  assert.deepEqual(closed.made[0].loaded, []);
 });
 
 // ---- The steps of a sign-in, for the charts (events.js track) ----------------
