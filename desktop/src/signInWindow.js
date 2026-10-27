@@ -37,6 +37,15 @@ export function wayBackUrl(to, start, utm = "") {
   return u.href;
 }
 
+// Perso's sign-in or sign-up page that already has its way back but not the app's utm tail: the same
+// address with the tail, else null. Perso's own redirect from the authorize address arrives this way.
+export function taggedPageUrl(to, utm) {
+  const u = parsed(to);
+  if (!utm || !u || !persoPage(u) || !SIGN_PAGE.test(u.pathname) || u.searchParams.has("utm_source")) return null;
+  for (const [k, v] of new URLSearchParams(utm)) if (!u.searchParams.has(k)) u.searchParams.set(k, v);
+  return u.href;
+}
+
 // Where a sign-in or sign-up that lost its way back ends: Perso's other pages, without a way back.
 export function landedOnPerso(url) {
   const u = parsed(url);
@@ -96,7 +105,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     const loadAfter = (to) => setImmediate(() => load(to));
     const guard = (e, to) => {
       const where = navigation(to);
-      const back = where === "allow" ? wayBackUrl(to, url, utm) : null;
+      const back = where === "allow" ? (wayBackUrl(to, url, utm) || taggedPageUrl(to, utm)) : null;
       if (where === "allow" && !back) return;
       e.preventDefault();
       if (back) loadAfter(back);
@@ -116,7 +125,7 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     };
     // Perso's links between its sign-in and sign-up pages change the page in place, without will-navigate.
     const arrived = (to) => {
-      const back = wayBackUrl(to, url, utm);
+      const back = wayBackUrl(to, url, utm) || taggedPageUrl(to, utm);
       if (back) loadAfter(back);
       else if (landedOnPerso(to)) comeBack();
     };

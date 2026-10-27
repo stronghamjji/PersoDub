@@ -15,7 +15,7 @@ import {
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
 import { keyMadeCheck, registerAuthIpc } from "./authIpc.js";
-import { SIGN_IN_PARTITION, clearSignInStorage, handOffUrl, keyWindowFactory, landedOnPerso, signInWindowFactory, wayBackUrl } from "./signInWindow.js";
+import { SIGN_IN_PARTITION, clearSignInStorage, handOffUrl, keyWindowFactory, landedOnPerso, signInWindowFactory, taggedPageUrl, wayBackUrl } from "./signInWindow.js";
 import { parseEnvFile } from "./kitEnv.js";
 
 // safeStorage's stand-in: reversible, and never the plain text on disk.
@@ -1386,6 +1386,13 @@ test("wayBackUrl: Perso's sign-in or sign-up page without a way back gets contin
   // With the app's utm tail: the page's own address carries it, and a tag the page already has is kept.
   const tagged = new URL(wayBackUrl("https://perso.ai/ko/login", START, "utm_source=desktop_app&utm_content=sign_in"));
   assert.deepEqual([...tagged.searchParams], [["continue", START], ["callbackUrl", START], ["utm_source", "desktop_app"], ["utm_content", "sign_in"]]);
+  // Perso's own redirect brings continue along: the page still gets the tail, once.
+  const redirected = `https://perso.ai/ko/login?continue=${encodeURIComponent(START)}`;
+  assert.equal(wayBackUrl(redirected, START, "utm_source=desktop_app&utm_content=sign_in"), null);
+  const tagged2 = new URL(taggedPageUrl(redirected, "utm_source=desktop_app&utm_content=sign_in"));
+  assert.deepEqual([...tagged2.searchParams], [["continue", START], ["utm_source", "desktop_app"], ["utm_content", "sign_in"]]);
+  assert.equal(taggedPageUrl(tagged2.href, "utm_source=desktop_app&utm_content=sign_in"), null, "tagged once, never again");
+  assert.equal(taggedPageUrl("https://perso.ai/ko/workspace/vt", "utm_source=desktop_app"), null, "not a sign page");
   const own = new URL(wayBackUrl("https://perso.ai/ko/login?utm_source=web", START, "utm_source=desktop_app&utm_content=sign_in"));
   assert.equal(own.searchParams.get("utm_source"), "web");
   assert.equal(own.searchParams.get("utm_content"), "sign_in");
