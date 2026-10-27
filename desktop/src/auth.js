@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSy
 import { join } from "node:path";
 import { KIT_ENV, envWithKit, writeKitValues } from "./kitEnv.js";
 import { startCallbackServer } from "./authLoopback.js";
+import { handOffUrl } from "./signInWindow.js";
 
 // Perso sign-in for the production edition (the model is atop signInWindow.js); off unless enabled; no token, key or e-mail in a log line.
 
@@ -105,6 +106,9 @@ export function signInProvider(url) {
   if (social === "azure" || u.hostname === "login.microsoftonline.com" || u.hostname === "login.live.com") return "microsoft";
   return "other";
 }
+
+// Perso's own name for signInProvider's google and microsoft, in its social sign-in.
+const PERSO_PROVIDERS = { google: "google", microsoft: "azure" };
 
 // The charts' new_account: the profile's createDate within ten minutes, read as UTC and as Korean time (it has no zone).
 export function isNewAccount(json, now = Date.now()) {
@@ -483,6 +487,7 @@ export function createAuth({
           onHandOff: (to) => {
             if (pending !== waiting) return;
             waiting.where = "browser";
+            waiting.handOff = to;
             waiting.browserAt = now();
             const u = new URL(to);
             log(`AUTH Google or Microsoft in the sign-in window: the whole sign-in goes on in the computer's browser at ${u.host}${u.pathname}`);
@@ -508,8 +513,26 @@ export function createAuth({
     });
   }
 
-  // Open again: the window reloaded, or after a hand-off the authorize address in the browser; `auto` at most twice, 20 s apart.
-  function showLogin({ auto = false } = {}) {
+  // After a hand-off, Perso's start for that provider afresh, this sign-in's authorize address as the way back: a sign-up
+  // leaves the browser signed out, and the authorize address would sign in its old account. Without Perso's answer, or
+  // for a provider it has no start for, the first hand-off's address again.
+  async function openHandOffAgain(waiting) {
+    waiting.browserAt = now();
+    const back = authorizeUrl(cfg, waiting);
+    const provider = PERSO_PROVIDERS[signInProvider(waiting.handOff)];
+    let address = handOffUrl(waiting.handOff, back);
+    if (provider) {
+      try {
+        const loginUrl = (await callJson(fetchFn, "social sign-in", `${cfg.authBase}/v1/auth/sign-in/social?provider=${provider}`, { timeoutMs: 10_000 }))?.result?.loginUrl;
+        if (typeof loginUrl !== "string" || !loginUrl) throw new Error("no loginUrl in the answer");
+        address = `${new URL(cfg.authorizeUrl).origin}${SOCIAL_START}${provider}?redirect_uri=${loginUrl}&callbackUrl=${encodeURIComponent(back)}`;
+      } catch (err) { log(`AUTH Perso's ${provider} start was not read (${err.message}): the first hand-off's address opens again`, "WARN"); }
+    }
+    if (pending === waiting) openExternal(address);
+  }
+
+  // Open again: the window reloaded, or after a hand-off Perso's start again in the browser; `auto` at most twice, 20 s apart.
+  async function showLogin({ auto = false } = {}) {
     if (!isOn()) return DISABLED;
     if (trading) return { outcome: "busy" };
     if (!pending) return { outcome: "idle" };
@@ -518,10 +541,8 @@ export function createAuth({
       if (waiting.where !== "browser" || waiting.autoOpens >= 2 || now() - waiting.browserAt < 20_000) return { outcome: "wait" };
       waiting.autoOpens += 1;
     }
-    if (waiting.where === "browser") {
-      waiting.browserAt = now();
-      openExternal(authorizeUrl(cfg, waiting));
-    } else waiting.window.show();
+    if (waiting.where === "browser") await openHandOffAgain(waiting);
+    else waiting.window.show();
     return { outcome: "shown" };
   }
 

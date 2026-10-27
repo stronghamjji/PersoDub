@@ -4,7 +4,7 @@ import { openExternally } from "./windowFactory.js";
 // browser, at Perso's start for them with the return address (handOffUrl).
 // Three rules keep the way back: a Perso sign-in/sign-up page without the return address gets it (wayBackUrl);
 // a window left elsewhere on Perso while signed in goes back to the start address once (landedOnPerso);
-// after a browser hand-off, coming back to the app (or Open again) opens the start address again (auth.js showLogin).
+// after a browser hand-off, coming back to the app (or Open again) runs Perso's Google or Microsoft start again (auth.js showLogin).
 // Sign-out clears the window's cookies. The key page always opens in a window of the same partition, with the app's tokens.
 
 export const SIGN_IN_PARTITION = "persist:perso-sign-in";
