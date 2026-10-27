@@ -184,15 +184,17 @@ B가 비어 있어도 앱은 돌아갑니다. 운영 앱이 공개 오픈소스 
 
 **측정:** Amplitude가 붙으면 세 자리의 "충전하기" 누름을 자리별로 기록해 어디가 결제로 이어지는지 봄.
 
-## 11. 로그인은 앱이 띄우는 로그인 창에서, 쿠키는 따로 (2026-10-27)
+## 11. 로그인은 앱이 띄우는 로그인 창에서, 쿠키는 따로. Google·Microsoft만 브라우저로 (2026-10-27)
 
 Perso는 브라우저의 perso.ai 쿠키로 "이미 로그인됨"을 판단하고 prompt=login도 로그아웃 주소도 없어서, 컴퓨터 브라우저로 로그인하면 앱에서 로그아웃해도 다음 로그인이 비밀번호 없이 통과했습니다. Perso 인증 팀 권고대로 앱 쪽에서 고쳤습니다.
 
 - "Perso로 로그인"은 앱 창 위에 로그인 창(520x720, 모달 아님: 앱의 취소·다시 열기 버튼이 눌리고 Mac에서도 닫기 버튼이 있음)을 띄웁니다. 쿠키 저장소는 앱 전용 `persist:perso-sign-in`, sandbox, preload 없음. PKCE와 127.0.0.1 loopback은 그대로입니다.
 - 로그아웃(직접 누름, refresh 거절 둘 다) 때 그 저장소를 비우고(`clearStorageData` + `clearCache`) 끝난 뒤에 답합니다. 다음 로그인은 Perso 로그인 폼을 다시 보여 줍니다.
-- 창이 갈 수 있는 곳: perso.ai와 그 하위 주소, Perso 로그인 화면에 있는 Google·Microsoft 로그인(accounts.google.com, login.microsoftonline.com, login.live.com), 이번 로그인의 127.0.0.1 포트. 다른 https는 컴퓨터 브라우저로, 나머지는 막습니다. 창을 닫거나 Esc = 취소. 페이지를 못 불러오면 network 실패로 끝내고 창을 닫습니다.
-- 코드: `desktop/src/signInWindow.js`, `desktop/src/auth.js`(signInNavigation, showLogin, dropSession).
-- 사람이 확인할 것: 실제 Perso 계정으로 창 안 로그인과 로그아웃 뒤 폼 다시 뜨는지, Google로 로그인(Google은 앱 안 창 로그인을 막는 경우가 있음), Keychain 묻는 창. 키 만들기·크레딧 충전 페이지는 여전히 컴퓨터 브라우저로 열리므로, 거기엔 Perso 로그인이 없어 한 번 더 로그인해야 할 수 있습니다(10절의 "브라우저는 이미 로그인돼 있음"은 이제 맞지 않을 수 있음).
+- 창이 갈 수 있는 곳: perso.ai와 그 하위 주소, 이번 로그인의 127.0.0.1 포트. 다른 https는 컴퓨터 브라우저로, 나머지는 막습니다. 창을 닫거나 Esc = 취소. 페이지를 못 불러오면 network 실패로 끝내고 창을 닫습니다.
+- Google·Microsoft는 컴퓨터 브라우저에서 이어 갑니다. 실제 계정으로 확인(2026-10-27): 이메일 로그인은 창 안에서 되지만, Google은 앱 안 창을 이메일 다음 단계에서 "400 malformed"로 막습니다. Perso 로그인 화면의 Google·Microsoft 버튼은 `https://api.perso.ai/auth/oauth2/authorization/google`(Microsoft는 `/azure`)로 넘어가는데, 창이 그 주소로 가려는 순간 멈추고 같은 주소를 그대로 컴퓨터 브라우저로 연 뒤 창을 닫습니다. accounts.google.com, login.microsoftonline.com, login.live.com으로 곧장 가려 해도 같습니다. 그 주소의 callbackUrl에 이번 로그인이 실려 있어 브라우저도 같은 127.0.0.1 포트로 돌아오고, 포트와 10분 제한은 그대로입니다. 앱 화면은 "브라우저에서 로그인을 마쳐요"와 "브라우저 다시 열기"(같은 주소를 다시 엶), 돌아온 페이지는 "이 탭을 닫고 PersoDubbing으로 돌아가면 돼요"입니다.
+- Google 정책 때문에 남는 한계: Google·Microsoft로 로그인한 사람은 브라우저에 그 로그인이 남습니다. 로그아웃은 앱 창의 저장소(`persist:perso-sign-in`)만 비우므로, 로그아웃 뒤 다시 Google로 로그인하면 비밀번호 없이 같은 계정으로 바로 통과할 수 있습니다. 다른 계정으로 바꾸려면 브라우저에서 Google(또는 Microsoft)에서 로그아웃해야 합니다. Google이 앱 안 창 로그인을 막는 한 앱에서 고칠 수 없습니다.
+- 코드: `desktop/src/signInWindow.js`(넘기기), `desktop/src/auth.js`(signInNavigation의 "hand-off", status의 `where`, showLogin, dropSession), `desktop/src/authLoopback.js`(돌아온 페이지), `ui/src/signIn.mjs`(기다리는 화면 문구).
+- 사람이 확인할 것: 실제 Perso 계정으로 창 안 이메일 로그인과 로그아웃 뒤 폼 다시 뜨는지, 실제 Google 로그인이 브라우저로 넘어가 끝까지 되는지(앱 창이 닫히고, 브라우저가 127.0.0.1 페이지에서 "이 탭을 닫고 ..."를 보여 주고, 앱이 앞으로 나와 로그인되는지), Microsoft도 같은지, "브라우저 다시 열기", Keychain 묻는 창. 키 만들기·크레딧 충전 페이지는 여전히 컴퓨터 브라우저로 열리므로, 이메일로 로그인한 사람은 거기서 한 번 더 로그인해야 할 수 있습니다(10절의 "브라우저는 이미 로그인돼 있음"은 이제 맞지 않을 수 있음).
 
 ## 6. 참고한 저장소와 사실 확인 기록
 
