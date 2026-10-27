@@ -91,7 +91,7 @@ function scriptedBrowser() {
 // keeps whether each was closed. A hand-off goes as the real window's: the
 // browser gets handOffUrl (`handedOff`, for the test to open), onHandOff the
 // address it was going to (`pressed`), the window closes, and Open again opens
-// that same address again.
+// the authorize address there.
 function scriptedWindows(browser, { hold = false } = {}) {
   const held = [];
   const browserErrors = [];
@@ -116,7 +116,7 @@ function scriptedWindows(browser, { hold = false } = {}) {
         if (hold) held.push(end);
       } catch (err) { browserErrors.push(err); onFailed(); }
     });
-    return { show() { if (win.handedOff) handedOff.push(win.handedOff); }, close() { win.closed = true; } };
+    return { show() { if (win.handedOff) handedOff.push(url); }, close() { win.closed = true; } };
   };
   return { held, browserErrors, handedOff, pressed, windows, make };
 }
@@ -172,7 +172,7 @@ test("Google pressed in the sign-in window takes the whole sign-in to the comput
 
 // The authorize address in a browser signed in to Perso as another account
 // signed that account in without a form (2026-10-27).
-test("a browser signed in to Perso as another account: the hand-off still signs in the account chosen at Google, and Open the browser again opens the same address", async () => {
+test("a browser signed in to Perso as another account: the hand-off still signs in the account chosen at Google", async () => {
   const kitDir = freshKit();
   const signInWin = scriptedBrowser();
   signInWin.press = "google";
@@ -180,17 +180,36 @@ test("a browser signed in to Perso as another account: the hand-off still signs 
   await auth.start();
   const done = auth.login();
   await until(() => handedOff.length);
-  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
-  assert.deepEqual(handedOff, [handedOff[0], handedOff[0]]);
   const browser = scriptedBrowser();
   browser.typing = "a@test.local";
   await assert.rejects(browser.open(`${fake.url}/login`), /Perso's home/);
   browser.typing = null;
-  await browser.open(handedOff[1]);
+  await browser.open(handedOff[0]);
   assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
   assert.deepEqual(browser.pages, ["done"]);
   assert.equal((await auth.status()).account, "b@test.local");
   assert.equal(kitValues(kitDir).PERSO_API_KEY, ACCOUNTS["b@test.local"].keys[0].apiKey);
+});
+
+// A new Google account's sign-up drops callbackUrl and ends on Perso's workspace
+// (2026-10-27), signed in by then: the authorize address answers at once.
+test("a browser left on Perso's home after Google: Open the browser again opens this sign-in's authorize address, which comes straight back", async () => {
+  const kitDir = freshKit();
+  const signInWin = scriptedBrowser();
+  signInWin.press = "google";
+  const { auth, handedOff, pressed, windows } = theApp({ kitDir, browser: signInWin });
+  await auth.start();
+  const done = auth.login();
+  await until(() => handedOff.length);
+  const browser = scriptedBrowser();
+  await assert.rejects(browser.open(pressed[0]), /Perso's home/);
+  assert.deepEqual(await auth.showLogin(), { outcome: "shown" });
+  assert.equal(handedOff[1], windows[0].url);
+  await browser.open(handedOff[1]);
+  assert.deepEqual(await done, { outcome: "signed_in", key: "saved" });
+  assert.deepEqual(browser.pages, ["done"]);
+  assert.equal(browser.forms, 0, "a password was typed");
+  assert.equal((await auth.status()).account, "b@test.local");
 });
 
 test("A signs in and out, and the next sign-in asks for the account again: A again, then B, then C with no key", async () => {

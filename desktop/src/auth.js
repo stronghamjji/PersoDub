@@ -522,8 +522,7 @@ export function createAuth({
     });
   }
 
-  /** Open again: the window reopened on the authorize address, or, after a hand-off, the browser
-   * opened again at the hand-off address (signInWindow.js). */
+  /** Open again: the authorize address reopened in the window, or, after a hand-off, in the browser (signInWindow.js). */
   function showLogin() {
     if (!isOn()) return DISABLED;
     if (trading) return { outcome: "busy" };

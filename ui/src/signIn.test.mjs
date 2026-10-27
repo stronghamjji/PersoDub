@@ -157,7 +157,7 @@ test("the waiting face says where the sign-in goes on: the sign-in window, or th
   assert.equal(h.$("signInWait").hidden, false);
   assert.equal(h.$("signInWaitTitle").textContent, "Finish signing in in your browser");
   assert.equal(h.$("signInWaitNote").hidden, false);
-  assert.equal(h.$("signInWaitNote").textContent, "Google and Microsoft sign-in continue in your browser.");
+  assert.equal(h.$("signInWaitNote").textContent, "Google and Microsoft sign-in continue in your browser. Once you are signed in or signed up there, press Open the browser again.");
   assert.equal(h.$("signInReopen").textContent, "Open the browser again");
   // The same face: its button already has the keyboard.
   assert.equal(h.$("signInReopen").focused, 1);
@@ -173,7 +173,8 @@ test("the waiting face says where the sign-in goes on: the sign-in window, or th
   assert.equal(ko["Open the sign-in window again"], "로그인 창 다시 열기");
   assert.equal(ko["Finish signing in in your browser"], "브라우저에서 로그인을 마쳐요");
   assert.equal(ko["Open the browser again"], "브라우저 다시 열기");
-  assert.equal(ko["Google and Microsoft sign-in continue in your browser."], "구글·마이크로소프트로 로그인하면 브라우저에서 이어져요.");
+  assert.equal(ko["Google and Microsoft sign-in continue in your browser. Once you are signed in or signed up there, press Open the browser again."],
+    "구글·마이크로소프트로 로그인하면 브라우저에서 이어져요. 브라우저에서 로그인이나 가입을 마쳤으면 '브라우저 다시 열기'를 눌러요.");
   assert.equal(ko["Couldn't open the sign-in window."], "로그인 창을 열지 못했어요.");
   // The screen writes these three, so the markup's translation must not write them back.
   const html = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");

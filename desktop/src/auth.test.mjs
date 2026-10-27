@@ -1182,7 +1182,9 @@ test("the sign-in window goes only where navigation lets it: the browser gets wh
 
 // Perso's Google start with callbackUrl, opened in the browser, comes back as the account chosen at
 // Google, whoever the browser was signed in to Perso as (2026-10-27); the authorize address did not.
-test("a hand-off: the window does not go, the browser opens Perso's Google start with the way back, the window closes after the event, and Open again opens that address again", async () => {
+// Open again opens the authorize address: a new account's sign-up drops callbackUrl, and by then the
+// browser is signed in.
+test("a hand-off: the window does not go, the browser opens Perso's Google start with the way back, the window closes after the event, and Open again opens this sign-in's authorize address there", async () => {
   const google = "https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=https://perso.ai/ko/oauth?a=1&b=2";
   const opened = `${google}&callbackUrl=https%3A%2F%2Fapi.perso.ai%2Fauth%2Fapi%2Fv2%2Fauthorize%3Fx%3D1`;
   const start = "https://api.perso.ai/auth/api/v2/authorize?x=1";
@@ -1201,7 +1203,7 @@ test("a hand-off: the window does not go, the browser opens Perso's Google start
     assert.equal(seen.closed, 1, name);
     assert.deepEqual(f.external, [opened], name);
     handle.show();
-    assert.deepEqual(f.external, [opened, opened], name);
+    assert.deepEqual(f.external, [opened, start], name);
     assert.deepEqual(win.did, [], name);
     assert.deepEqual(win.loaded, [start], name);
     handle.close();
