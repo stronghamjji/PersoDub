@@ -67,7 +67,7 @@ export const STEPS = {
   key_saved: { ok: B, kind: ["perso", "gemini"] },
   media_added: { source: ["file", "link", "drop"], kind: ["video", "audio"] },
   draft_opened: {},
-  dub_started: { mode: MODES, target_lang: L, minutes: N, video_seconds: N, speakers: N },
+  dub_started: { mode: MODES, target_lang: L, minutes: N, video_seconds: N, speakers: N, again: B },
   dub_stage: { stage: STAGES, state: ["start", "done", "failed"], seconds: N, mode: MODES },
   dub_cancelled: { stage: STAGES, mode: MODES },
   dub_finished: { outcome: OUTCOMES, stage: STAGES, reason: REASONS, mode: MODES, minutes: N,

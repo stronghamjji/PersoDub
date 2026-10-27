@@ -186,7 +186,7 @@ Where: **shell** is the desktop shell (`desktop/src`), **page** the app's page (
 | `key_saved` | `ok`, `kind` perso/gemini | page, the key window's Save |
 | `media_added` | `source` file/link/drop, `kind` video/audio | page, a file picked or dropped, a link taken |
 | `draft_opened` | | page, a video on the draft screen |
-| `dub_started` | `mode`, `target_lang`, `minutes`, `video_seconds`, `speakers` | page, the dubbing accepted |
+| `dub_started` | `mode`, `target_lang`, `minutes`, `video_seconds`, `speakers`, `again` | page, the dubbing accepted; `again` for Start over |
 | `dub_stage` | `stage`, `state` start/done/failed, `seconds`, `mode` | page, while it watches the dubbing |
 | `dub_cancelled` | `stage`, `mode` | page, Stop dubbing confirmed |
 | `dub_finished` | `outcome`, `stage`, `reason`, `mode`, `minutes`, `video_seconds`, `seconds` | shell, once a job, when its end is first shown |

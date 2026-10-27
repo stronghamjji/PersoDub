@@ -1016,7 +1016,7 @@ test("a start that restarted the voice engine tries once more, never in a loop",
   const branch = html.match(/else if \(([^\n]*voice engine is not running[^\n]*)\) \{\n[^\n]*restartVoiceEngine[^\n]*\n\s*if \(restart\.ok\) \{\n\s*(return submitDubStart\([^;]*\));/);
   assert.ok(branch, "the voice-engine retry branch is where it was");
   assert.match(branch[1], /^!retried && /);
-  assert.equal(branch[2], "return submitDubStart({ fd, label, errorEl, retry, retried: true })");
+  assert.equal(branch[2], "return submitDubStart({ fd, label, errorEl, retry, retried: true, seconds })");
 });
 
 test("a Perso key is asked for with its workspace, and a missing workspace is asked for at the start", () => {
@@ -1556,7 +1556,7 @@ test("a draft is kept when it changes and when it is left, and let go when it is
   // Kept with the tab it is on, and opened there again; Home keeps the one it had.
   assert.match(html, /const tab = screen === "erase" \? "erase" : screen === "home"\n    \? \(keptDrafts\.find\(\(k\) => k\.downloadId === d\.downloadId\) \|\| \{\}\)\.tab : leftTabs\.current\(\);\n  keptDrafts = keepDraft\(localStorage, \{ \.\.\.d, tab \}, keptDrafts\);/);
   assert.match(html, /if \(kept\.tab === "erase"\) \{ eraseScreen\.openEraseTab\(\); return; \}\n  draftSetup\.showDraftScreen\(\);\n  leftTabs\.show\(kept\.tab\);\n\}/);
-  assert.match(html, /const started = await submitDubStart\(o\);\n    if \(started && d\) forgetDraft\(d\.downloadId\);/);
+  assert.match(html, /const started = await submitDubStart\(\{ \.\.\.o, seconds: d \? keptSeconds\(d\) : undefined \}\);\n    if \(started && d\) forgetDraft\(d\.downloadId\);/);
   // The delete question is ui/src/confirmDialogs.mjs's, written one level in.
   assert.match(readFileSync(CONFIRMS, "utf8"), /if \(job\.draftId\) \{\n      forgetDraft\(job\.draftId\);/);
   // Reopened: held again first (the app forgets what it holds when it restarts).

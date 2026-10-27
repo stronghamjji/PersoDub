@@ -113,7 +113,9 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
                                  // onJobs gets the raw list renderHistory just
                                  // fetched, onRunningPct the percent
                                  // renderQueueCard works out for the job on air.
-                                 onJobs, onRunningPct }) {
+                                 // onSeen gets each job renderQueueCard reads,
+                                 // the one on air with its log.
+                                 onJobs, onRunningPct, onSeen = () => {} }) {
   // A name too long for the column is cut off with an ellipsis, and hovering it
   // is then the only way to read the rest. Only the names actually cut off get a
   // tooltip: one that repeats a name already fully on show is noise under the
@@ -143,6 +145,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
     try {
       jobs = (await (await fetch("/api/dub/jobs")).json()).jobs || [];
     } catch { return; }
+    for (const j of jobs) onSeen(j);
     const running = jobs.filter((j) => j.status === "running" || j.status === "cancelling");
     const waiting = jobs.filter((j) => j.status === "queued");
     // A job that finished while the user was on Home: the cards kept saying
@@ -159,6 +162,7 @@ export function initProjectsUi({ $, getActiveJobId, isHomeScreen, langName,
     if (running.length) {
       try {
         const detail = await (await fetch(`/api/dub/jobs/${running[0].id}`)).json();
+        onSeen(detail);
         // The two kinds of work count themselves differently: a dub logs the
         // stage it is on, an erase logs a percentage of one long stage.
         // A separation has no percentage of its own to give.
