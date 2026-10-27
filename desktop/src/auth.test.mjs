@@ -15,7 +15,7 @@ import {
 } from "./auth.js";
 import { callbackPage, startCallbackServer } from "./authLoopback.js";
 import { registerAuthIpc } from "./authIpc.js";
-import { SIGN_IN_PARTITION, clearSignInStorage, handOffUrl, landedOnPerso, signInWindowFactory, wayBackUrl } from "./signInWindow.js";
+import { SIGN_IN_PARTITION, clearSignInStorage, handOffUrl, keyWindowFactory, landedOnPerso, signInWindowFactory, wayBackUrl } from "./signInWindow.js";
 import { parseEnvFile } from "./kitEnv.js";
 
 // safeStorage's stand-in: reversible, and never the plain text on disk.
@@ -962,6 +962,54 @@ test("Make a key on the sign-in screen opens the key page with the app's version
   assert.deepEqual(opened, ["https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup"]);
 });
 
+// After an e-mail sign-up in the window, the browser's Perso cookies were the previous account's (2026-10-27).
+test("the key page opens where the account signed in: the window, or the browser after a hand-off; kept without `via`, or signed out, the browser", async () => {
+  const one = makeAuth();
+  await one.auth.start();
+  assert.equal(one.auth.keyPageTarget(), "browser");
+  let done = one.auth.login();
+  await settle();
+  await one.auth.handleCallback(back(one.opened));
+  await done;
+  assert.equal(one.auth.keyPageTarget(), "window");
+  assert.equal(tokenStore(join(one.userData, AUTH_FILE), fakeSafeStorage()).read().via, "window");
+  const kept = makeAuth({ userData: one.userData });
+  await kept.auth.start();
+  assert.equal(kept.auth.keyPageTarget(), "window");
+  await one.auth.logout();
+  assert.equal(one.auth.keyPageTarget(), "browser");
+
+  const two = makeAuth();
+  await two.auth.start();
+  done = two.auth.login();
+  await settle();
+  two.windows[0].onHandOff("https://api.perso.ai/auth/oauth2/authorization/google?redirect_uri=x");
+  await two.auth.handleCallback(back(two.opened));
+  await done;
+  assert.equal(two.auth.keyPageTarget(), "browser");
+
+  const userData = mkdtempSync(join(tmpdir(), "odauth-user-"));
+  tokenStore(join(userData, AUTH_FILE), fakeSafeStorage()).write({ accessToken: later(), refreshToken: "r1", userId: "u1", account: "so***@test.local" });
+  const old = makeAuth({ userData });
+  await old.auth.start();
+  assert.equal((await old.auth.status()).signedIn, true);
+  assert.equal(old.auth.keyPageTarget(), "browser");
+});
+
+test("Make a key opens the key window when the account signed in there, and the computer's browser otherwise", async () => {
+  const keyPageUrl = "https://developers.perso.ai/api-keys?utm_content=signup";
+  for (const target of ["window", "browser"]) {
+    const handlers = {};
+    const inBrowser = [];
+    const inWindow = [];
+    const auth = { enabled: true, keyPageUrl, keyPageTarget: () => target };
+    registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, shell: { openExternal: async (u) => { inBrowser.push(u); } },
+      auth, openKeyWindow: (u) => { inWindow.push(u); } });
+    await handlers["shell:auth-open-key-page"]();
+    assert.deepEqual([inWindow, inBrowser], target === "window" ? [[keyPageUrl], []] : [[], [keyPageUrl]], target);
+  }
+});
+
 test("switched off (the open-source edition) nothing happens: no window, no file, no port, no network", async () => {
   const userData = mkdtempSync(join(tmpdir(), "odauth-user-"));
   const kitDir = kitWith("PERSO_API_KEY=pk_user_typed\nPERSO_SPACE_SEQ=42\n");
@@ -1063,8 +1111,10 @@ function fakeWindows() {
     destroy() { if (this.destroyed) return; this.destroyed = true; this.handlers.closed?.(); }
   }
   const parent = { isDestroyed: () => false, getBounds: () => ({ x: 100, y: 40, width: 1280, height: 800 }) };
-  const make = signInWindowFactory({ BrowserWindow, shell: { openExternal: (u) => external.push(u) }, parent: () => parent, title: "PersoDubbing" });
-  return { made, external, parent, make };
+  const shell = { openExternal: (u) => external.push(u) };
+  const make = signInWindowFactory({ BrowserWindow, shell, parent: () => parent, title: "PersoDubbing" });
+  const openKey = keyWindowFactory({ BrowserWindow, shell, parent: () => parent, title: "PersoDubbing" });
+  return { made, external, parent, make, openKey };
 }
 const openOne = (f, { navigation = () => "allow" } = {}) => {
   const seen = { closed: 0, failed: 0, handedOff: [] };
@@ -1314,4 +1364,39 @@ test("Open again opens the window's first address in the window again, then brin
   assert.deepEqual(win.loaded, [START, START]);
   assert.deepEqual(win.did, ["restore", "show", "focus"]);
   assert.deepEqual(f.external, []);
+});
+
+test("the key window: the sign-in's cookies, sandboxed, 1000x760 over the app's window, one at a time; Perso's https pages stay in it, anything else goes to the browser", () => {
+  const f = fakeWindows();
+  const page = "https://developers.perso.ai/api-keys?utm_content=signup";
+  f.openKey(page);
+  const win = f.made.at(-1);
+  assert.deepEqual(win.options.webPreferences, { partition: "persist:perso-sign-in", sandbox: true, contextIsolation: true, nodeIntegration: false });
+  assert.deepEqual([win.options.width, win.options.height, win.options.x, win.options.y, win.options.parent], [1000, 760, 240, 60, f.parent]);
+  assert.equal(win.options.title, "PersoDubbing");
+  assert.ok(win.fire("page-title-updated").prevented);
+  const answers = [];
+  win.permissions(null, "media", (ok) => answers.push(ok));
+  assert.deepEqual(answers, [false]);
+  assert.deepEqual(win.loaded, [page]);
+  assert.deepEqual(win.did, ["restore", "show", "focus"]);
+  for (const name of ["wc:will-navigate", "wc:will-redirect"]) {
+    for (const to of [page, "https://perso.ai/ko/login?continue=x", "https://api.perso.ai/auth/api/v2/authorize?x=1"]) {
+      assert.equal(win.fire(name, to).prevented, false, `${name} ${to}`);
+    }
+    for (const to of ["https://example.com/", "https://perso.ai.evil.test/", "http://developers.perso.ai/api-keys", "file:///etc/hosts"]) {
+      assert.equal(win.fire(name, to).prevented, true, `${name} ${to}`);
+    }
+  }
+  const outside = ["https://example.com/", "https://perso.ai.evil.test/", "http://developers.perso.ai/api-keys"];
+  assert.deepEqual(f.external, [...outside, ...outside]);
+  assert.deepEqual(win.openHandler({ url: "https://perso.ai/terms" }), { action: "deny" });
+  assert.equal(f.external.at(-1), "https://perso.ai/terms");
+  f.openKey(page);
+  assert.equal(f.made.length, 1);
+  assert.deepEqual(win.loaded, [page, page]);
+  assert.equal(win.fire("wc:before-input-event", { type: "keyDown", key: "Escape" }).prevented, true);
+  assert.equal(win.destroyed, true);
+  f.openKey(page);
+  assert.equal(f.made.length, 2);
 });

@@ -18,7 +18,7 @@ import { setAppName, useLanguage, systemLocale } from "./src/i18n.js";
 import { logLine } from "./src/logLine.js";
 import { writeTimeline } from "./src/timeline.js";
 import { createShellAuth, registerAuthIpc } from "./src/authIpc.js";
-import { clearSignInStorage, signInWindowFactory } from "./src/signInWindow.js";
+import { clearSignInStorage, keyWindowFactory, signInWindowFactory } from "./src/signInWindow.js";
 
 // Two launches must never both start backends: the second would overwrite
 // pids.json with its own PIDs, and killStalePids on the NEXT boot (whichever
@@ -145,7 +145,8 @@ app.whenReady().then(() => {
   };
   registerUsageIpc({ ipcMain, ctx, countUsage, sendReport: reporter.sendReport, shellLog, lastRunClosedByUser });
   registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog });
-  registerAuthIpc({ ipcMain, shell, auth });
+  registerAuthIpc({ ipcMain, shell, auth,
+                    openKeyWindow: keyWindowFactory({ BrowserWindow, shell, parent: () => ctx.win, title: displayName(edition) }) });
   void auth.start();
 
   // What the page needs to say "Report sent - #142": whether reports are on at

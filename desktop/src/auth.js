@@ -300,7 +300,7 @@ export function createAuth({
   log = () => {}, onChange = () => {}, onCallback = () => {}, onSignOut = () => {}, now = Date.now, loginTimeoutMs = 10 * 60 * 1000,
 }) {
   const isOn = typeof enabled === "function" ? () => Boolean(enabled()) : () => Boolean(enabled);
-  let session = null;   // {accessToken, refreshToken, userId, account, email}
+  let session = null;   // {accessToken, refreshToken, userId, account, email, via: where it signed in, "window" or "browser"}
   let pending = null;   // the sign-in waiting for its window
   let trading = null;   // the sign-in whose code is being traded
   let refreshing = null;
@@ -341,6 +341,10 @@ export function createAuth({
       where: open ? open.where : "",
     };
   }
+
+  // The key page needs the account's cookies: the sign-in window's for an account signed in there.
+  // A kept sign-in from before `via` was kept opens it in the browser, as it did.
+  const keyPageTarget = () => (isOn() && session?.via === "window" ? "window" : "browser");
 
   /** The signed-in account for the shell's own use: the full e-mail and
    * Perso's number for it, which Customer support's inquiry carries
@@ -553,7 +557,7 @@ export function createAuth({
     }
     try {
       const tokens = await exchangeCode(cfg, fetchFn, { code: cb.code, verifier: waiting.verifier, redirectUri: waiting.redirectUri });
-      session = { ...tokens, userId: null, account: "", email: "" };
+      session = { ...tokens, userId: null, account: "", email: "", via: waiting.where };
       try {
         const p = parseProfile(await authedGet("profile", cfg.profileUrl));
         // `account` is the name, shown in place of an e-mail the account lacks.
@@ -621,6 +625,7 @@ export function createAuth({
     connectKey: loadedFirst(async () => (isOn() ? connectKey() : DISABLED)),
     handleCallback,
     signedInAccount,
+    keyPageTarget,
     keyPageUrl: cfg.keyPageUrl,
   };
 }

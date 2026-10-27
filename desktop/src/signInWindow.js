@@ -26,9 +26,9 @@ const SIGN_PAGE = /^\/(?:[a-z]{2}(?:-[A-Za-z]{2})?\/)?(login|join)\/?$/;
 const SESSION_COOKIES = ["accessToken", "refreshToken"];
 
 const parsed = (url) => { try { return new URL(url); } catch { return null; } };
-// Perso's site over https, except its sign-in server api.perso.ai.
-const persoPage = (u) => u.protocol === "https:" && u.hostname !== "api.perso.ai"
-  && (u.hostname === "perso.ai" || u.hostname.endsWith(".perso.ai"));
+const persoSite = (u) => u.protocol === "https:" && (u.hostname === "perso.ai" || u.hostname.endsWith(".perso.ai"));
+// Perso's site, except its sign-in server api.perso.ai.
+const persoPage = (u) => persoSite(u) && u.hostname !== "api.perso.ai";
 // Perso's pages go on to continue, or else callbackUrl, after a sign-in or a sign-up.
 const hasWayBack = (u) => Boolean(u.searchParams.get("continue") || u.searchParams.get("callbackUrl"));
 
@@ -53,24 +53,41 @@ export function handOffUrl(to, start) {
   return `${to}${to.includes("?") ? "&" : "?"}callbackUrl=${encodeURIComponent(start)}`;
 }
 
+// A window over `parent()` on the sign-in's cookies: sandboxed, no permissions, Esc closes it, new windows go to the browser.
+function persoWindow({ BrowserWindow, shell, parent, title, width, height }) {
+  const over = parent();
+  const p = over && !over.isDestroyed() ? over.getBounds() : null;
+  const win = new BrowserWindow({
+    title, width, height,
+    ...(p ? { parent: over, x: Math.round(p.x + (p.width - width) / 2), y: Math.max(p.y, Math.round(p.y + (p.height - height) / 2)) } : {}),
+    autoHideMenuBar: true,
+    webPreferences: { partition: SIGN_IN_PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false },
+  });
+  const wc = win.webContents;
+  wc.session.setPermissionRequestHandler((_wc, _permission, answer) => answer(false));
+  win.on("page-title-updated", (e) => e.preventDefault());
+  wc.setWindowOpenHandler(({ url }) => {
+    openExternally(shell, url);
+    return { action: "deny" };
+  });
+  // A page that asks to stay (beforeunload) cannot keep the window from closing.
+  wc.on("will-prevent-unload", (e) => e.preventDefault());
+  wc.on("before-input-event", (e, input) => {
+    if (input.type !== "keyDown" || input.key !== "Escape") return;
+    e.preventDefault();
+    win.destroy();
+  });
+  return win;
+}
+
 /** createAuth's makeSignInWindow: Perso's sign-in on `url` in a window over `parent()`.
  * navigation(to) answers "allow" (the window goes), "browser" (the computer's browser opens `to`),
  * "hand-off" (the browser opens handOffUrl(to, url) and the window closes) or "deny".
  * show() opens `url` again in the window, or after a hand-off that address in the browser. */
 export function signInWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
   return ({ url, navigation, onClosed, onFailed, onHandOff }) => {
-    const over = parent();
-    const p = over && !over.isDestroyed() ? over.getBounds() : null;
-    const win = new BrowserWindow({
-      title, width: WIDTH, height: HEIGHT,
-      ...(p ? { parent: over, x: Math.round(p.x + (p.width - WIDTH) / 2), y: Math.max(p.y, Math.round(p.y + (p.height - HEIGHT) / 2)) } : {}),
-      autoHideMenuBar: true,
-      webPreferences: { partition: SIGN_IN_PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false },
-    });
+    const win = persoWindow({ BrowserWindow, shell, parent, title, width: WIDTH, height: HEIGHT });
     const wc = win.webContents;
-    // Camera, microphone, notifications: nothing a sign-in needs.
-    wc.session.setPermissionRequestHandler((_wc, _permission, answer) => answer(false));
-    win.on("page-title-updated", (e) => e.preventDefault());
     let handedOff = null; // where the sign-in went on in the computer's browser
     let cameBack = false; // the window has gone back to `url` by itself after a landing
     const handOff = (to) => {
@@ -112,17 +129,6 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
     };
     wc.on("did-navigate", (_e, to) => arrived(to));
     wc.on("did-navigate-in-page", (_e, to, mainFrame) => { if (mainFrame) arrived(to); });
-    wc.setWindowOpenHandler(({ url: to }) => {
-      openExternally(shell, to);
-      return { action: "deny" };
-    });
-    // A page that asks to stay (beforeunload) cannot keep the window from closing.
-    wc.on("will-prevent-unload", (e) => e.preventDefault());
-    wc.on("before-input-event", (e, input) => {
-      if (input.type !== "keyDown" || input.key !== "Escape") return;
-      e.preventDefault();
-      win.destroy();
-    });
     wc.on("did-fail-load", (_e, code, _text, _url, mainFrame) => { if (mainFrame && code !== ABORTED) onFailed(); });
     win.on("closed", () => onClosed());
     win.loadURL(url).catch(() => { /* did-fail-load has said it */ });
@@ -138,6 +144,29 @@ export function signInWindowFactory({ BrowserWindow, shell, parent = () => null,
       },
       close() { if (!win.isDestroyed()) win.destroy(); },
     };
+  };
+}
+
+/** main.js's openKeyWindow(url): one window over `parent()` on the sign-in's cookies, so Perso's pages
+ * in it are the account signed in there. Perso's https pages stay in it; anything else opens in the browser. */
+export function keyWindowFactory({ BrowserWindow, shell, parent = () => null, title = "PersoDub" }) {
+  let win = null;
+  const stay = (e, to) => {
+    const u = parsed(to);
+    if (u && persoSite(u)) return;
+    e.preventDefault();
+    openExternally(shell, to);
+  };
+  return (url) => {
+    if (!win || win.isDestroyed()) {
+      win = persoWindow({ BrowserWindow, shell, parent, title, width: 1000, height: 760 });
+      win.webContents.on("will-navigate", stay);
+      win.webContents.on("will-redirect", stay);
+    }
+    win.loadURL(url).catch(() => { /* the window shows the error */ });
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
   };
 }
 
