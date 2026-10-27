@@ -1282,36 +1282,31 @@
           <div class="set-ctl">
             <input type="checkbox" class="switch" id="analyticsToggle" checked>
             <!-- The shell re-reads the file before every count, so promising
-                 a restart would be wrong. The hint is empty until a save
-                 fails -- the label says what the switch does. -->
-            <div class="settings-hint" id="analyticsHint"></div>
+                 a restart would be wrong. One sentence: what goes and why. -->
+            <div class="settings-hint" id="analyticsHint"><span data-i18n>Helps improve {app} by sending only how often the app is used, anonymously.</span></div>
           </div>
         </div>
         <div class="set-row">
-          <label data-i18n for="eventsToggle">Button and screen use</label>
+          <label data-i18n for="eventsToggle">Share App Analytics</label>
           <div class="set-ctl">
             <!-- Checked from GET /api/settings' events_enabled: with nothing
                  saved, on in the production edition and off in the
                  open-source one (desktop/src/events.js). -->
             <input type="checkbox" class="switch" id="eventsToggle">
-            <div class="settings-hint" id="eventsHint"><span data-i18n>Sends only the names of the buttons you press and the screens you open, never what you type, your files or links.</span></div>
+            <div class="settings-hint" id="eventsHint"><span data-i18n>Helps improve {app} by sending only which screens and buttons you used, never what you type.</span></div>
           </div>
         </div>
         <div class="set-row">
-          <label data-i18n for="reportsToggle">Send job logs</label>
+          <label data-i18n for="reportsToggle">Help improve {app}</label>
           <div class="set-ctl">
             <input type="checkbox" class="switch" id="reportsToggle" checked>
             <!-- Separate from the counts: this one carries the logs of finished
                  and failed jobs, so it is its own choice. Nothing personal
                  leaves -- keys and folder names are taken out first
-                 (desktop/src/report.js). What goes, where, for how long, what
-                 never goes and what it is for, a sentence a line (owner,
-                 2026-10-22, 9). -->
+                 (desktop/src/report.js). One sentence: what goes, what never
+                 goes and why; the rest is in docs/privacy.md (owner, 2026-10-27). -->
             <div class="settings-hint" id="reportsHint">
-              <span data-i18n>Keeps a record of finished and failed jobs (masked logs, time per step, device ID) on a private dashboard for 30 days.</span>
-              <span data-i18n>Only failed jobs go into a public GitHub issue, as a summary of the cause.</span>
-              <span data-i18n>Titles, file names, links and dialogue are not sent.</span>
-              <span data-i18n>What you send helps make {app} better.</span>
+              <span data-i18n>Helps improve {app} by sending only job records, never titles, files or dialogue.</span>
             </div>
           </div>
         </div>

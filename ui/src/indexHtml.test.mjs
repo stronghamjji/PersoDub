@@ -1120,27 +1120,29 @@ test("the models dialog keeps its line break, and is wider than the other confir
   assert.ok(en >= 351 + 34 && ko >= 299 + 34, `${en} and ${ko} are too narrow`);
 });
 
-// Settings > Privacy, Send job logs: what goes and where, for how long, what
-// never goes, and what it is for, a sentence a line (owner, 2026-10-22, 9).
-// It used to call the failed jobs stopped ones, and said nothing of where.
-test("Send job logs says what goes where, what never goes and why, a sentence a line", () => {
+// Settings > Privacy: each switch says in one sentence what goes, what never
+// goes and why, in the words the owner chose (2026-10-27); the rest is in
+// docs/privacy.md. It used to say it in four sentences, a line each.
+test("each privacy switch says in one sentence what goes, what never goes and why", () => {
   const html = readPage();
-  const hint = html.match(/<div class="settings-hint" id="reportsHint">([\s\S]*?)<\/div>/)[1];
-  const sentences = [...hint.matchAll(/<span data-i18n>([^<]*)<\/span>/g)].map((m) => m[1]);
+  const hintOf = (id) => [...html.match(new RegExp(`<div class="settings-hint" id="${id}">([\\s\\S]*?)<\\/div>`))[1]
+    .matchAll(/<span data-i18n>([^<]*)<\/span>/g)].map((m) => m[1]);
+  const labels = [...html.matchAll(/<label data-i18n for="(analyticsToggle|eventsToggle|reportsToggle)">([^<]*)<\/label>/g)].map((m) => m[2]);
+  assert.deepEqual(labels, ["Anonymous usage counts", "Share App Analytics", "Help improve {app}"]);
+  const sentences = [...hintOf("analyticsHint"), ...hintOf("eventsHint"), ...hintOf("reportsHint")];
   assert.deepEqual(sentences, [
-    "Keeps a record of finished and failed jobs (masked logs, time per step, device ID) on a private dashboard for 30 days.",
-    "Only failed jobs go into a public GitHub issue, as a summary of the cause.",
-    "Titles, file names, links and dialogue are not sent.",
-    "What you send helps make {app} better.",
+    "Helps improve {app} by sending only how often the app is used, anonymously.",
+    "Helps improve {app} by sending only which screens and buttons you used, never what you type.",
+    "Helps improve {app} by sending only job records, never titles, files or dialogue.",
   ]);
   const ko = JSON.parse(readFileSync(new URL("../../static/i18n/ui.ko.json", import.meta.url), "utf8"));
-  assert.deepEqual(sentences.map((s) => ko[s]), [
-    "끝난 작업과 실패한 작업의 기록(가린 로그, 단계별 시간, 기기 번호)을 비공개 대시보드에 30일 보관해요.",
-    "실패한 작업만 깃헙 공개 이슈에 원인 요약으로 올라가요.",
-    "제목·파일 이름·링크·대사는 안 보내요.",
-    "보내 주시면 {app}을 더 좋게 만드는 데 써요.",
+  assert.deepEqual([...labels, ...sentences].map((s) => ko[s]), [
+    "익명 사용 통계", "앱 분석 공유", "앱 개선에 참여",
+    "앱을 쓴 횟수만 익명으로 보내 {app} 개선을 도와요.",
+    "입력한 내용 없이 어떤 화면과 버튼을 썼는지만 보내 {app} 개선을 도와요.",
+    "제목·파일·대사 없이 작업 기록만 보내 {app} 개선을 도와요.",
   ]);
-  // Each sentence starts a line of its own, and the label stays by the switch.
+  // The label stays by the switch, beside a hint of its own.
   assert.match(html, /#reportsHint > span \{ display: block; \}/);
   assert.match(html, /\.set-row:has\(> \.set-ctl > #reportsHint\) \{ align-items: start; \}/);
   const old = "Keeps the logs of finished and failed jobs for 30 days. Only failed jobs go into a public issue.";

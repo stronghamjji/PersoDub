@@ -1,4 +1,4 @@
-// The sweep's button events: Settings > Privacy's "Button and screen use"
+// The sweep's button events: Settings > Privacy's "Share App Analytics"
 // switch turned on, two presses, and the shell's own count of what it kept
 // (persodubShell.sendEvents([]) only asks: {on, kept, sent, recent}); then
 // the switch off, two more presses, and nothing more kept. The switch is put
