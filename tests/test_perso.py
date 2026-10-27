@@ -1516,3 +1516,22 @@ def test_a_refused_download_names_its_step_address_status_and_code_in_the_jobs_f
     assert traced[failed].endswith("PersoUnavailableError: Perso server error (HTTP 500, VT5099 / SOMETHING_ELSE)")
     assert traced[failed + 1] == (
         f'  HTTP 500 GET {LINK_URL}: {{"code":"VT5099","detailCode":"SOMETHING_ELSE","message":"Odd"}}')
+
+
+# What Perso answered a free-plan workspace's download, seen live 2026-10-27.
+FREE_PLAN_REFUSAL = {"code": "VT5003", "detailCode": "FREE_USER_CAN_NOT_DOWNLOAD",
+                     "message": "Free user cannot download"}
+
+
+def test_a_free_plan_workspaces_refused_download_is_its_own_error_and_not_asked_again(monkeypatch):
+    from app.perso_client import PersoFreePlanError
+
+    waits = _answering(monkeypatch, [(200, {"result": {"hasTranslatedVideo": True}}), (500, FREE_PLAN_REFUSAL)])
+    client = PersoClient(api_key="dummy-key", space_seq=999)
+    with pytest.raises(PersoFreePlanError) as caught:
+        client.download_dub(888, "/nowhere/out.mp4")
+    assert waits == []
+    assert not isinstance(caught.value, PersoUnavailableError)
+    assert str(caught.value) == ("Perso does not let a free-plan workspace download the result "
+                                 "(HTTP 500, VT5003 / FREE_USER_CAN_NOT_DOWNLOAD)")
+    assert caught.value.response.status_code == 500   # for the job log's HTTP line

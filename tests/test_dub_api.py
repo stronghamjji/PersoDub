@@ -1542,6 +1542,34 @@ def test_a_cloud_job_keeps_its_project_from_the_moment_perso_takes_it(monkeypatc
     assert (seen["perso_project_seq"], seen["perso_space_seq"]) == (435920, 625615)
 
 
+def test_a_free_plan_cloud_job_ends_on_perso_with_its_project_and_no_failure(monkeypatch):
+    """Perso dubbed it and will not hand a free-plan workspace the video:
+    done on Perso, not failed, and the project kept for Open in Perso."""
+    from app.perso_client import PersoFreePlanError
+
+    class FreePlan(_FakeCloudClient):
+        project_seq = 435920
+
+        def dub_video(self, *a, on_project=None, **kw):
+            on_project(self.project_seq, 625615)
+            raise PersoFreePlanError("Perso does not let a free-plan workspace download the result")
+
+    monkeypatch.setattr(perso_client, "PersoClient", FreePlan)
+    r = client.post(
+        "/api/dub/start",
+        files={"video": ("v.mp4", b"vid", "video/mp4")},
+        data={"language": "English", "language_code": "en", "dub_mode": "perso"},
+    )
+    j = _wait_done(r.json()["job_id"])
+    assert j["status"] == "on_perso"
+    assert (j["perso_project_seq"], j["perso_space_seq"]) == (435920, 625615)
+    assert not j.get("error") and not j.get("notices")
+    assert any("done on Perso" in line for line in j["logs"])
+    with open(os.path.join(state.job_store.get(j["id"])["work_dir"], "job.json"), encoding="utf-8") as f:
+        assert json.load(f)["status"] == "on_perso"
+    assert client.post(f"/api/dub/jobs/{j['id']}/cancel").status_code == 409
+
+
 def test_cloud_job_without_a_recorded_project_404s_the_script(monkeypatch):
     monkeypatch.setattr(perso_client, "PersoClient", _FakeCloudClient)
     r = client.post(

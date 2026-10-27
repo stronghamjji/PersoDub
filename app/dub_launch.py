@@ -79,6 +79,7 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
     # be made (no key, or the workspace lookup offline or refused) is worded
     # like a failed call. ws is set first because the `finally` reads it.
     ws = None
+    on_perso = False
 
     def project_known(seq, space):
         # The Perso project number is how the script viewer (and later the
@@ -108,6 +109,14 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
         perso_client.note_credits(ws, pc, log, "the Perso cloud dub")
     except JobCancelled:
         raise
+    except perso_client.PersoFreePlanError:
+        # Not a failure: Perso made the dubbing and took its credits, and a
+        # free-plan workspace only cannot take the video home. The job ends
+        # on Perso (app/jobs.py) and the screen sends the user there (owner,
+        # 2026-10-28).
+        perso_client.note_credits(ws, pc, log, "the Perso cloud dub")
+        log("   The dubbing is done on Perso. A free-plan workspace cannot download it, so it is seen on Perso.")
+        on_perso = True
     # Among them, a project Perso took and gave up on: the request was fine,
     # the answer said it had failed. Without it here a cloud dub that Perso
     # abandoned fell through to the generic handler and lost Perso's own
@@ -137,7 +146,8 @@ def run_cloud_dub(jid, video_path, out_path, source_code, target_code, num_speak
     except Exception:
         duration = None
     return {"job_id": jid, "out_path": out_path, "num_segments": 0, "dub_mode": "perso",
-            "perso_credits": getattr(pc, "credits_used", None), "duration": duration}
+            "perso_credits": getattr(pc, "credits_used", None), "duration": duration,
+            **({"on_perso": True} if on_perso else {})}
 
 
 def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,

@@ -189,7 +189,7 @@ Where: **shell** is the desktop shell (`desktop/src`), **page** the app's page (
 | `dub_started` | `mode`, `target_lang`, `minutes`, `video_seconds`, `speakers`, `again` | page, the dubbing accepted; `again` for Start over |
 | `dub_stage` | `stage`, `state` start/done/failed, `seconds`, `mode` | page, while it watches the dubbing |
 | `dub_cancelled` | `stage`, `mode` | page, Stop dubbing confirmed |
-| `dub_finished` | `outcome`, `stage`, `reason`, `mode`, `minutes`, `video_seconds`, `seconds` | shell, once a job, when its end is first shown |
+| `dub_finished` | `outcome` done/on_perso/failed/cancelled, `stage`, `reason`, `mode`, `minutes`, `video_seconds`, `seconds` | shell, once a job, when its end is first shown; `on_perso`: a free-plan workspace's Perso dubbing, seen on Perso's site |
 | `tool_started` | `tool` erase/burn/export, `from`, `files` | page |
 | `tool_finished` | `tool`, `outcome`, `files` | page |
 | `credit_popup_shown` | `reason` (the notice) | page |

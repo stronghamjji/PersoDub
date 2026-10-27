@@ -739,7 +739,7 @@ def dub_job_cancel(jid: str):
     boundaries (see app/pipeline.py's cancel_check checkpoints) rather than
     being killed mid-stage, so the job's status goes running -> cancelling ->
     cancelled, not straight to cancelled. 404 for an unknown job id, 409 if
-    the job already finished (done/error) or was already cancelled -- there
+    the job already finished (done/on_perso/error) or was already cancelled -- there
     is nothing left to interrupt.
     """
     was_queued = (state.job_store.get(jid) or {}).get("status") == JobStatus.QUEUED
@@ -748,7 +748,7 @@ def dub_job_cancel(jid: str):
         raise HTTPException(status_code=404, detail=t("Unknown job: {jid}", jid=jid))
     # A queued job comes back "cancelled" from the call that cancelled it --
     # that is this request doing its work, not a job with nothing left to stop.
-    if status in (JobStatus.DONE, JobStatus.ERROR, JobStatus.CANCELLED) and not was_queued:
+    if status in (JobStatus.DONE, JobStatus.ON_PERSO, JobStatus.ERROR, JobStatus.CANCELLED) and not was_queued:
         raise HTTPException(status_code=409, detail=t("Job already {status}, nothing to cancel", status=status))
     return {"job_id": jid, "status": status}
 

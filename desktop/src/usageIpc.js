@@ -43,12 +43,13 @@ export function usageCounter(app) {
 }
 
 /** How a dub ended, as the dub_finished step carries it (events.js track):
- *  done, failed or cancelled; where a failure stopped (the last stage the
+ *  done, on_perso (a free-plan workspace's Perso dubbing, seen on Perso's
+ *  site), failed or cancelled; where a failure stopped (the last stage the
  *  job's record timed) and the one word for why; how it ran, how long the
  *  video was and how long the job took -- off the job's own record, and
  *  whatever it lacks left out. */
 export function dubFinishedProps(status, code, job) {
-  const outcome = status === "done" ? "done" : status === "error" ? "failed" : "cancelled";
+  const outcome = status === "done" || status === "on_perso" ? status : status === "error" ? "failed" : "cancelled";
   const facts = dubFacts(job);
   const stage = Object.keys((job && job.stage_seconds) || {}).at(-1);
   return {
@@ -104,7 +105,7 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
   const countedJobs = new Set();
   ipcMain.on("shell:count-dub", async (_e, msg) => {
     const status = msg && msg.status;
-    if (status !== "done" && status !== "error" && status !== "cancelled") return;
+    if (status !== "done" && status !== "on_perso" && status !== "error" && status !== "cancelled") return;
     const detail = String((msg && msg.detail) || "");
     // Only the shell may name the job: the page is a web page, so its id is
     // checked against the shape a job id has before it is put in a URL.
@@ -130,8 +131,10 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
     if (!job || !job.kind || job.kind === "dub") track("dub_finished", dubFinishedProps(status, code, job));
     // A cancel is a step in the charts, never a count or a report.
     if (status === "cancelled") return;
-    countUsage(status === "done" ? "dub_success" : "dub_failure", ctx.bootedKitDir, code, undefined, dubFacts(job));
-    if (status === "done") return sendRecord("dub", jobId, job);
+    // Done on Perso is a dubbing made: only the file stayed on Perso's site.
+    const made = status === "done" || status === "on_perso";
+    countUsage(made ? "dub_success" : "dub_failure", ctx.bootedKitDir, code, undefined, dubFacts(job));
+    if (made) return sendRecord("dub", jobId, job);
     // The user closed the app on it: not a fault, so no issue (user,
     // 2026-09-28). Still counted above, as "interrupted".
     if (status === "error" && code === "interrupted" && lastRunClosedByUser) {

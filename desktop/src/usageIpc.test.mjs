@@ -70,6 +70,21 @@ test("a cancel is neither counted nor reported; a success is counted with the jo
   }
 });
 
+test("a dubbing done on Perso is a success: counted, its record sent, and its own outcome in the step", async () => {
+  // A free-plan workspace's Perso dubbing: made and paid for, the file left
+  // on Perso's site.
+  const be = await backend({ fedcba: { kind: "dub", dub_mode: "perso", perso_credits: 3, duration: 12.4, elapsed_seconds: 80 } });
+  try {
+    const s = setup({ engines: { url: be.url } });
+    await s.on["shell:count-dub"]({}, { status: "on_perso", job: "fedcba" });
+    assert.deepEqual(s.counted.map((c) => c[0]), ["dub_success"]);
+    assert.deepEqual(s.reported.map((r) => [r.code, r.jobId]), [["ok", "fedcba"]]);
+    assert.deepEqual(s.steps, [["dub_finished", { outcome: "on_perso", mode: "perso", minutes: 0, video_seconds: 12, seconds: 80 }]]);
+  } finally {
+    be.close();
+  }
+});
+
 test("a dub the app stopped under is counted as interrupted, and reported only when the app did not quit normally", async () => {
   const be = await backend({ abc123: { error: "interrupted" } });
   try {

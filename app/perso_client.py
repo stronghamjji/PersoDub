@@ -223,6 +223,20 @@ class PersoPlanRequiredError(RuntimeError):
         super().__init__(f"Perso refused the voice model for this plan: {reason or code}")
 
 
+# What Perso answers a free-plan workspace's download of a finished dubbing
+# with: HTTP 500, {"code": "VT5003", "detailCode": "FREE_USER_CAN_NOT_DOWNLOAD"},
+# while download-info says hasTranslatedVideo (seen live 2026-10-27).
+FREE_DOWNLOAD_CODE = "FREE_USER_CAN_NOT_DOWNLOAD"
+
+
+class PersoFreePlanError(RuntimeError):
+    """Perso made the dubbing, took its credits, and will not hand the video
+    over: a free-plan workspace cannot download the result (FREE_DOWNLOAD_CODE).
+    Not an outage, which the 500 it comes as read as, and nothing to retry:
+    the dubbing is on Perso's site, and that is where the job sends the user
+    (app/dub_launch.py)."""
+
+
 class PersoModelRefusedError(RuntimeError):
     """Perso refused because this project's voice model cannot do what was
     asked (HTTP 400, code VT40918): a NIGHTINGALE project has no per-sentence
@@ -442,6 +456,10 @@ def _raise_for_status(r: httpx.Response) -> None:
     HTTP 402" approach) rather than by inspecting which exception type
     r.raise_for_status() happens to throw.
     """
+    if r.status_code >= 400 and FREE_DOWNLOAD_CODE in _perso_answer(r)[0]:
+        # Before the 5xx below, which it comes as.
+        raise _from(r, PersoFreePlanError("Perso does not let a free-plan workspace download the result "
+                                          "(HTTP %d, %s)" % (r.status_code, _perso_answer(r)[0])))
     if r.status_code == 402:
         raise _from(r, PersoCreditExhaustedError())
     if r.status_code == 403 and PLAN_REQUIRED_CODE in _perso_said(r):
