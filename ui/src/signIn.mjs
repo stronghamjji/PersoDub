@@ -37,7 +37,7 @@ export function signInFace(status) {
   return status.hasKey ? "" : "nokey";
 }
 
-export function initSignIn({ $, shell, body = document.body, pollMs = 30000, retryMs = 5000, win = globalThis.window, doc = globalThis.document,
+export function initSignIn({ $, shell, body = document.body, pollMs = 10000, retryMs = 5000, win = globalThis.window, doc = globalThis.document,
                              record = recordStep }) {
   let status = { enabled: false };
   let note = "";      // why the last sign-in did not finish, on the first face
