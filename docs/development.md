@@ -179,7 +179,7 @@ address, never from the public releases.
 | `PERSODUB_EDITION` | unset (or `opensource`) | `production` |
 | Name (window, dock, taskbar, installer, About, every `{app}` in a sentence) | `PersoDub` | `PersoDubbing` |
 | App id | `com.persodub.desktop` | `ai.perso.desktopapp` |
-| Installers | `PersoDub-Setup-<version>.exe`, `PersoDub-mac.dmg` | `PersoDubbing-Setup-<version>.exe`, `PersoDubbing-mac.dmg` |
+| Installers | `PersoDub-Setup-<version>.exe`, `PersoDub-<version>-arm64.dmg` | `PersoDubbing-Setup-<version>.exe`, `PersoDubbing-<version>-arm64.dmg` |
 | Kit folder | `~/Library/Application Support/PersoDub`, `%LOCALAPPDATA%\PersoDub` | `~/Library/Application Support/PersoDubbing`, `%LOCALAPPDATA%\PersoDubbing` |
 | Electron's data folder (logs, sign-in) | `persodub-desktop-shell` | `perso-desktopapp-shell` |
 | Updates | the repository's GitHub Releases | `PRODUCTION_UPDATE_URL` in `src/edition.js`, or none while it is empty |

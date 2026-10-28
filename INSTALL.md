@@ -108,14 +108,14 @@ Download **`PersoDub-Setup-<version>.exe`** from the project's
 
 ### "Windows protected your PC"
 
-The build is not code-signed yet, so Windows shows a blue box titled
-**"Windows protected your PC"** with only a **Don't run** button. This is ordinary for
-unsigned open-source software. To carry on:
+The installer is signed by ESTsoft Corp. Windows still judges each new file by how
+many people have run it, so for a while after a release it can show a blue box titled
+**"Windows protected your PC"** with only a **Don't run** button. To carry on:
 
 1. Click **More info**.
 2. Click **Run anyway**.
 
-Signing is planned. Once the build is signed, the warning stops appearing.
+The warning goes away by itself once enough people have installed that release.
 
 ### Where it installs
 

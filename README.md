@@ -128,7 +128,7 @@ First setup is under 1 GB. A Perso API dub downloads nothing more. The first dub
 
 **macOS** — Open the `.dmg` and drag **PersoDub** into Applications. It is signed and notarized, so it opens with a normal double-click, and it checks for updates on launch.
 
-**Windows** — Run the `.exe`. It installs for your user account only. It is not code-signed yet, so SmartScreen shows "Windows protected your PC" the first time: click **More info**, then **Run anyway**. [Details](INSTALL.md#windows).
+**Windows** — Run the `.exe`. It installs for your user account only. It is signed by ESTsoft Corp. A new release can still show SmartScreen's "Windows protected your PC" for a while: click **More info**, then **Run anyway**. [Details](INSTALL.md#windows).
 
 A screen-by-screen walkthrough is in [docs/usage.md](docs/usage.md).
 
@@ -148,7 +148,7 @@ Repository: https://github.com/stronghamjji/PersoDub
    If this computer falls short, say so and stop.
 2. Install the latest release for my OS:
    https://github.com/stronghamjji/PersoDub/releases/latest
-   On Windows, SmartScreen warns (not code-signed yet): More info, then Run anyway.
+   On Windows, SmartScreen may warn about a new release: More info, then Run anyway.
 3. Open PersoDub and wait for the first setup (under 1 GB).
 4. Start dubbing uses this computer by default and needs no key. Ask me if I want
    a free Perso API key, for better transcription or the Perso API. If yes, open
