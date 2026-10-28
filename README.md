@@ -22,8 +22,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-mac.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.0.0-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.0.0.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
 <p align="center">
@@ -113,7 +113,7 @@ Listen for pacing: PersoDub fits the translation to the time instead of speeding
 
 ## Get started
 
-1. Download for [macOS](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-mac.dmg) or [Windows](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup.exe).
+1. Download for [macOS](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.0.0-arm64.dmg) or [Windows](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.0.0.exe).
 2. Drop in a video, or paste a link.
 3. Pick a language and press **Start dubbing**.
 
