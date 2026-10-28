@@ -202,7 +202,7 @@ def copy_to(ctx, folder, name):
 def dub(ctx):
     """The dub this run made and finished, which the script tools work on."""
     if not ctx.get("dub"):
-        raise Skip("needs the finished dub of step 7")
+        raise Skip("needs the finished dub of step 5")
     return ctx["dub"]
 
 
@@ -298,8 +298,11 @@ def step_job_status(ctx):
 def queue_args(ctx):
     """English to Korean on this computer, every stage named local so no saved
     default can send one through Perso."""
-    return {"video_path": ctx["dub_clip"], "target_language": "ko", "dub_mode": "local",
+    args = {"video_path": ctx["dub_clip"], "target_language": "ko", "dub_mode": "local",
             "source_language": "en", "stt": "local", "separation": "local", "voice": "qwen3"}
+    if ctx["args"].translator:
+        args["translator"] = ctx["args"].translator
+    return args
 
 
 def step_cancel(ctx):
@@ -395,8 +398,10 @@ def step_edit(ctx):
     back = line_of(ctx, 2)
     if edited.get("text") != EDIT_MARKER or back["text"] != EDIT_MARKER or back["voice_stale"] is not True:
         raise Fail(f"answered {edited.get('text')!r}, reads back {back['text']!r}, voice_stale {back['voice_stale']}")
-    # Like export_script's, edit_line's ValueError reaches the agent without its words.
     said = agent.refused("edit_script_line", job_id=jid, line=9, text=EDIT_MARKER)
+    # The reason names the line in either language ("there is no line 9", "9번 줄은 없어요").
+    if "9" not in said:
+        raise Fail(f"line 9 refused without its reason: {said[:200]}")
     return (f"line 2 \"{original}\" -> \"{EDIT_MARKER}\", read back, voice_stale true, fits {edited.get('fits')}; "
             f"line 9 refused: \"{said[:80]}\"")
 
@@ -489,12 +494,11 @@ def step_export(ctx):
     said = agent.refused("export_script", job_id=jid, out_path="../outside.srt")
     if os.path.exists(outside):
         raise Fail(f"\"../outside.srt\" was written: {outside}")
-    # export_srt's ValueError is not a Refusal, so mcp >= 2.2 hands the agent
-    # the bare "Error executing tool export_script" without its reason. The
-    # refusal holds; whether it carries its words is said, not failed on.
-    reason = ("with its reason" if "only be written inside its own job folder" in said
-              else "WITHOUT its reason (the agent only sees \"Error executing tool export_script\")")
-    return f"{os.path.basename(path)} in the job folder, {LINES} cues; \"../outside.srt\" refused, nothing written, {reason}"
+    # The refusal carries its reason to the agent (a Refusal since 2026-10-28;
+    # before, mcp >= 2.2 handed over a bare "Error executing tool export_script").
+    if "only be written inside its own job folder" not in said:
+        raise Fail(f"\"../outside.srt\" refused without its reason: {said[:200]}")
+    return f"{os.path.basename(path)} in the job folder, {LINES} cues; \"../outside.srt\" refused with its reason, nothing written"
 
 
 def step_burn(ctx):
@@ -615,24 +619,29 @@ def models_on_disk(ctx):
 
 def step_download_model(ctx):
     """download_model fetches nothing: Demucs answers that it is downloaded,
-    in under 5 s; Hunyuan answers with the button and stays not downloaded."""
+    in under 5 s; a model this computer does not have yet answers with the
+    button and stays not downloaded."""
     agent = ctx["agent"]
+    missing = [m["id"] for m in agent.call("get_setup")["models"] if m["state"] == "not_downloaded"]
+    if not missing:
+        raise Skip("every model is already downloaded here, so the download button cannot be checked")
+    other = missing[0]
     before = models_on_disk(ctx)
     began = time.monotonic()
     ready = agent.call("download_model", model_id="demucs")
     took = time.monotonic() - began
-    offer = agent.call("download_model", model_id="hunyuan")
+    offer = agent.call("download_model", model_id=other)
     said = agent.refused("download_model", model_id="e2e-no-such-model")
     time.sleep(3)
-    hunyuan = {m["id"]: m["state"] for m in agent.call("get_setup")["models"]}["hunyuan"]
+    state = {m["id"]: m["state"] for m in agent.call("get_setup")["models"]}[other]
     after = models_on_disk(ctx)
     if (ready != {"model": "Demucs", "state": "ready", "message": "Demucs is already downloaded."} or took > 5
             or offer.get("button_shown") is not True or offer.get("state") != "not_downloaded"
-            or hunyuan != "not_downloaded" or after != before or not said.startswith("No such model: e2e-no-such-model")):
-        raise Fail(f"demucs {ready} in {took:.1f}s; hunyuan {offer}, then {hunyuan}; models folder {before} -> {after}")
+            or state != "not_downloaded" or after != before or not said.startswith("No such model: e2e-no-such-model")):
+        raise Fail(f"demucs {ready} in {took:.1f}s; {other} {offer}, then {state}; models folder {before} -> {after}")
     disk = "models folder unchanged" + (f" ({after[0]} files, {after[1] / 1e9:.2f} GB)" if after else " (not checked: no --kit)")
-    return (f"demucs: \"{ready['message']}\" in {took:.1f}s; hunyuan: button_shown, {offer['gb']} GB, still "
-            f"{hunyuan}; {disk}; unknown id refused")
+    return (f"demucs: \"{ready['message']}\" in {took:.1f}s; {other}: button_shown, {offer['gb']} GB, still "
+            f"{state}; {disk}; unknown id refused")
 
 
 def step_download_video(ctx):
@@ -663,10 +672,11 @@ def step_leaks(ctx):
 STEPS = (("1. tools/list", step_tools_list),
          ("2. get_setup", step_setup),
          ("3. list_videos", step_list_videos),
-         ("4. list_jobs", step_list_jobs),
-         ("5. get_job_status", step_job_status),
-         ("6. queue_dub, cancel_dub", step_cancel),
-         ("7. queue_dub to the end", step_dub),
+         # The dubs first, so a freshly installed app has a finished e2e- dub to list.
+         ("4. queue_dub, cancel_dub", step_cancel),
+         ("5. queue_dub to the end", step_dub),
+         ("6. list_jobs", step_list_jobs),
+         ("7. get_job_status", step_job_status),
          ("8. get_script", step_get_script),
          ("9. check_fit", step_check_fit),
          ("10. edit_script_line", step_edit),
@@ -718,6 +728,7 @@ def main():
     parser.add_argument("--out", required=True, help="folder for report.md, report.json and the files made")
     parser.add_argument("--python", help="the Python that runs app.mcp_server (default: <repo>/.venv's, else this one)")
     parser.add_argument("--kit", help="the app's kit folder: its models folder is checked for downloads")
+    parser.add_argument("--translator", default="", help="translator for the local dubs (default: the app's saved one)")
     args = parser.parse_args()
     venv = os.path.join(repo, ".venv", "bin", "python")
     regress.BASE, regress.FFPROBE = args.base.rstrip("/"), regress.find_ffprobe()

@@ -599,25 +599,28 @@ def step_captions(ctx):
 
 
 def step_edition(ctx):
-    """Which edition the app answers as: GET /api/setup's default Dubbing
-    mode is "local", the open-source edition's (app/setup.py _fallback; the
-    production edition's is "perso"), and with --kit, kit.env holds no
-    PERSODUB_EDITION=production line."""
+    """Which edition the app answers as, against --edition (open-source by
+    default): GET /api/setup's default Dubbing mode is "local" for the
+    open-source edition and "perso" for the production one (app/setup.py
+    _fallback), and with --kit, kit.env holds a PERSODUB_EDITION=production
+    line only for the production edition."""
+    want = ctx["args"].edition
     status, setup = api("GET", "/api/setup")
     if status != 200:
         raise Fail(f"GET /api/setup: HTTP {status} {detail(setup)}")
     mode = (setup.get("defaults") or {}).get("dub_mode")
-    if mode != "local":
-        raise Fail(f"the default Dubbing mode is {mode!r}, not 'local'")
-    said = f"defaults.dub_mode local, choices {setup['choices']['dub_mode']}"
+    expected = "perso" if want == "production" else "local"
+    if mode != expected:
+        raise Fail(f"the default Dubbing mode is {mode!r}, not {expected!r} ({want} edition)")
+    said = f"{want}: defaults.dub_mode {mode}, choices {setup['choices']['dub_mode']}"
     if not ctx["args"].kit:
         return said + "; kit.env not read (no --kit)"
     with open(os.path.join(ctx["args"].kit, "kit.env"), encoding="utf-8") as f:
         editions = [line.strip() for line in f if line.strip().startswith("PERSODUB_EDITION=")]
     production = [line for line in editions if line.split("=", 1)[1].strip() == "production"]
-    if production:
-        raise Fail(f"kit.env has {len(production)} PERSODUB_EDITION=production line(s)")
-    return said + f"; kit.env: 0 production lines, edition lines {editions or 'none'}"
+    if bool(production) != (want == "production"):
+        raise Fail(f"kit.env has {len(production)} PERSODUB_EDITION=production line(s) for the {want} edition")
+    return said + f"; kit.env: {len(production)} production lines, edition lines {editions or 'none'}"
 
 
 def step_srt_dub(ctx):
@@ -876,6 +879,8 @@ def main():
     parser.add_argument("--srt", help="a subtitle file for step 11's dub, cues in Korean; "
                                       "default: three cues the run writes")
     parser.add_argument("--kit", help="the app's kit folder, whose kit.env step 10 reads")
+    parser.add_argument("--edition", choices=("opensource", "production"), default="opensource",
+                        help="the edition step 10 expects (default: opensource)")
     parser.add_argument("--logs", help="the app's logs folder, whose job-<id>.log steps 15 and 16 read; "
                                        "default: the job record's log")
     args = parser.parse_args()

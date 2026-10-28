@@ -323,7 +323,11 @@ export const steps = [
       const d2 = await openDialog("banner");
       if (d2.refused || d2.title !== want) throw new Error(`the Home banner gave ${JSON.stringify(d2).slice(0, 200)}`);
       const c = await app.inPage(choices);
-      assertNoCredits(c);
+      // Refused here, the dialog is closed first, so the steps after this one start clear.
+      try { assertNoCredits(c); } catch (e) {
+        await app.click("#projectClose").catch(() => app.key("Escape"));
+        throw e;
+      }
       const before = new Set((await jobsNow(app)).map((j) => j.id));
       const t0 = Date.now();
       await app.click("#startBtn");

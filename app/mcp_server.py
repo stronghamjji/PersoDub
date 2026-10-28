@@ -316,7 +316,13 @@ def edit_script_line(job_id: str, line: int, text: str) -> dict:
         if r.status_code in PERSO_REFUSALS:
             raise Refusal(r.json().get("detail", "could not fetch this dubbing from Perso"))
         r.raise_for_status()
-    return edit_line(work_dir, line, text, _lang(job))
+    try:
+        return edit_line(work_dir, line, text, _lang(job))
+    except FileNotFoundError:
+        # Its own words carry the job's whole folder path; this is what they mean.
+        raise Refusal("this job has no script yet. Finish dubbing first, then edit its lines")
+    except ValueError as e:
+        raise Refusal(str(e))
 
 
 @mcp.tool()
@@ -348,7 +354,10 @@ def export_script(job_id: str, out_path: str) -> str:
     from this script.
     """
     job = _job(job_id)
-    return export_srt(_work_dir(job), out_path)
+    try:
+        return export_srt(_work_dir(job), out_path)
+    except ValueError as e:
+        raise Refusal(str(e))
 
 
 @mcp.tool()

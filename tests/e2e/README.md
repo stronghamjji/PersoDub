@@ -81,9 +81,10 @@ into `%USERPROFILE%\e2e-fixtures` first.
    a finished job of kind `captions`; its video in the Sticker look is as long
    as the clip and its .srt has 3 cues. A file with no subtitles is refused with
    422, a video that is not held with 404.
-10. The edition: `GET /api/setup`'s default Dubbing mode is `local`, the
-    open-source edition's, and with `--kit` kit.env has 0
-    `PERSODUB_EDITION=production` lines.
+10. The edition named by `--edition` (`opensource`, the default, or
+    `production`): `GET /api/setup`'s default Dubbing mode is `local` for the
+    open-source edition and `perso` for the production one, and with `--kit`
+    kit.env has a `PERSODUB_EDITION=production` line only for the production one.
 11. A dub started with a subtitle file attached (the `srt` field, used as is):
     `stage_seconds.translate` 0 or absent, the script's lines equal the file's cues
     (3 for the fixture), and the video as long as the clip. Speech is still
@@ -176,16 +177,18 @@ plan in one reply, the yes in the next, and a yes in the same reply must be refu
   The repository's own `app/` is put on its `PYTHONPATH`.
 - `--kit`: the app's kit folder; its `models` folder must not change while
   `download_model` is called.
+- `--translator`: the translator for its local dubs (e.g. `hunyuan`); default the
+  app's saved one, which may need a sign-in this computer does not have.
 
 It spends no Perso credits and downloads nothing: the dub, the erase and the
 subtitles are all on this computer, `change_speaker` and `proofread_dub` are only
 asked of a local dub (and must refuse), `download_model` only ever offers a button,
 and `download_video` gets `not-a-link`, which the app refuses before going online.
 The steps and their numbers: 23 tools listed with descriptions; get_setup's six
-stages; list_videos and list_jobs against the folder and the app; get_job_status on
-the newest finished `e2e-` dub and `no such job: ...` for a bad id; a local dub
-cancelled once running (cancelled within 60 s), and another run to done (within
-400 s out of line) and listed done; get_script's 3 lines and 14 fields, check_fit per
+stages; list_videos against the folder; a local dub cancelled once running
+(cancelled within 60 s), and another run to done (within 400 s out of line) and
+listed done; list_jobs against the app; get_job_status on the newest finished
+`e2e-` dub and `no such job: ...` for a bad id; get_script's 3 lines and 14 fields, check_fit per
 line; line 2 edited, translated again (the dub's own translator) and put back;
 line 1's voice and then every voice made again (the dub's video rewritten, 10.0 s
 ± 0.1); the script exported as .srt (3 cues; the tool has no other format, the

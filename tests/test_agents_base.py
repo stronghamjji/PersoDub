@@ -305,11 +305,11 @@ QUICK_CLI = ("import sys\n"
              "sys.stdout.write('{\"type\": \"bye\"}\\n')\n")
 
 
-def _drain(script, translate, out):
+def _drain(script, translate, out, **kw):
     """Run one turn to the end on a thread, collecting what it yielded."""
     t = threading.Thread(
         target=lambda: out.extend(
-            base.run(sys.executable, ["-c", script], translate)))
+            base.run(sys.executable, ["-c", script], translate, **kw)))
     t.start()
     return t
 
@@ -351,6 +351,33 @@ def test_the_turn_after_a_stopped_one_runs_normally():
                            lambda e: [{"kind": "text", "text": "hi"}]))
     assert {"kind": "text", "text": "hi"} in second
     assert not any(e.get("stopped") for e in second)
+
+
+def test_a_late_stop_for_an_ended_turn_leaves_the_next_one_alone():
+    """A stream's clean-up can run seconds after its turn was stopped, when the
+    turn on air is already the user's next message (2026-10-28). Named, an
+    ended turn is not stopped again, and the turn on air is left running."""
+    started = threading.Event()
+
+    def note(event):
+        started.set()
+        return []
+
+    old_turns, old_out = [], []
+    old = _drain(SLOW_CLI, note, old_out, turns=old_turns)
+    assert started.wait(20), "the stand-in CLI never started"
+    assert base.stop_turn() is True         # the user's Stop
+    old.join(20)
+
+    started.clear()
+    new_turns, new_out = [], []
+    new = _drain(SLOW_CLI, note, new_out, turns=new_turns)
+    assert started.wait(20), "the next turn never started"
+    # The first stream's clean-up, arriving late.
+    assert base.stop_turn(turn=old_turns[-1]) is False
+    assert new_turns[-1].proc.poll() is None and not new_turns[-1].stopped
+    assert base.stop_turn() is True
+    new.join(20)
 
 
 def test_a_turn_outlasts_the_longest_tool_it_can_call():

@@ -1271,6 +1271,35 @@ def test_editing_a_perso_dub_nobody_opened_fetches_it_first(monkeypatch, tmp_pat
     assert edited == [(str(tmp_path), 1, "Hello", "en")]
 
 
+# export_script and edit_script_line said no with a plain ValueError, which
+# mcp >= 2.2 hands the agent as "Error executing tool X" with no reason
+# (0.9.2 agent tool run, 2026-10-28).
+def test_export_and_edit_refusals_reach_the_agent_with_their_reason(monkeypatch, tmp_path):
+    from mcp.server.mcpserver.exceptions import ToolError
+    job = {"id": "job7", "dub_mode": "local", "language_code": "ko",
+           "result": {"out_path": str(tmp_path / "dubbed.mp4")}}
+    monkeypatch.setattr(mcp_server, "_job", lambda job_id: job)
+
+    def no(*a):
+        raise ValueError("only inside its own job folder")
+    monkeypatch.setattr(mcp_server, "export_srt", no)
+    monkeypatch.setattr(mcp_server, "edit_line", no)
+    with pytest.raises(ToolError, match="only inside its own job folder"):
+        mcp_server.export_script("job7", "../outside.srt")
+    with pytest.raises(ToolError, match="only inside its own job folder"):
+        mcp_server.edit_script_line("job7", 9, "Hello")
+
+
+def test_editing_a_job_with_no_script_says_so_without_its_folder(monkeypatch, tmp_path):
+    from mcp.server.mcpserver.exceptions import ToolError
+    job = {"id": "job7", "dub_mode": "local", "language_code": "ko",
+           "result": {"out_path": str(tmp_path / "dubbed.mp4")}}
+    monkeypatch.setattr(mcp_server, "_job", lambda job_id: job)
+    with pytest.raises(ToolError, match="no script yet") as e:
+        mcp_server.edit_script_line("job7", 1, "Hello")
+    assert str(tmp_path) not in str(e.value)
+
+
 # Several plans put in one reply ("Shall I start all three?") are all the
 # user's to say yes to in the next. Only the last was kept on file, so a batch
 # that spends credits started one video per answer (final review, 2026-10-12).

@@ -397,10 +397,18 @@ def _finish(turn: "_Turn") -> None:
             _turn = None
 
 
-def stop_turn(grace: float = STOP_GRACE) -> bool:
-    """End the turn on air. False when there was nothing to stop."""
-    with _turn_lock:
-        turn = _turn
+def stop_turn(grace: float = STOP_GRACE, turn: Optional[_Turn] = None) -> bool:
+    """End the turn on air, or only `turn` when one is named. False when there
+    was nothing to stop.
+
+    A stream ending names its own turn. Its clean-up can run seconds late --
+    a response nobody reads any more is closed when it is collected -- and by
+    then the turn on air is the user's next message, which came back
+    "stopped" with no Stop pressed (Mac and Windows, 2026-10-28).
+    """
+    if turn is None:
+        with _turn_lock:
+            turn = _turn
     if turn is None or turn.proc.poll() is not None:
         return False
     turn.stopped = True
@@ -420,7 +428,8 @@ RETRY_DELAY = 1.5
 def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         cwd: Optional[str] = None, agent_name: str = "The assistant",
         login_command: str = "",
-        input_text: Optional[str] = None, env: Optional[dict] = None) -> Iterator[dict]:
+        input_text: Optional[str] = None, env: Optional[dict] = None,
+        turns: Optional[list] = None) -> Iterator[dict]:
     """Spawn one turn and yield our events as they arrive.
 
     `input_text` is the prompt, piped to the CLI's stdin (see the drivers'
@@ -434,6 +443,10 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
     first time -- retrying real errors would double their wait, and double the
     work of anything that changes state.
 
+    `turns`, when given, gets each spawn's _Turn as it starts (a retried turn
+    is two; the last is the one running), so whoever reads this can stop its
+    own turn and no other (stop_turn).
+
     Yields an error event rather than raising: a failed turn is something the
     panel shows in a bubble, not a crash.
     """
@@ -443,7 +456,7 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
         for event in _run_once(binary, args, translate, cwd=cwd,
                                agent_name=agent_name,
                                login_command=login_command,
-                               input_text=input_text, env=env):
+                               input_text=input_text, env=env, turns=turns):
             if (attempt == 0 and not yielded
                     and event.get("kind") == "error"
                     and _STALE_LOCK in (event.get("detail") or "")):
@@ -459,7 +472,8 @@ def run(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
 def _run_once(binary: str, args: List[str], translate: Callable[[dict], List[dict]],
               cwd: Optional[str] = None, agent_name: str = "The assistant",
               login_command: str = "",
-              input_text: Optional[str] = None, env: Optional[dict] = None) -> Iterator[dict]:
+              input_text: Optional[str] = None, env: Optional[dict] = None,
+              turns: Optional[list] = None) -> Iterator[dict]:
     """One spawn of the CLI -- run() above decides whether it gets another."""
     try:
         proc = subprocess.Popen(
@@ -489,6 +503,8 @@ def _run_once(binary: str, args: List[str], translate: Callable[[dict], List[dic
                          type(e).__name__)
 
     turn = _Turn(proc)
+    if turns is not None:
+        turns.append(turn)
     _begin(turn)
     # _end, not proc.kill: on Windows kill() reaches only the .cmd shim and a
     # timed-out CLI would keep running underneath it (same story as Stop).

@@ -1,22 +1,22 @@
 {
   "notes": [
-    "Links from the app into Perso carry the app's version, so Perso knows the visit came from the app.",
-    "The app can record which buttons you press and which screens you open, never what you type. It is off in the open-source edition; turn it on under Settings > Privacy > Button and screen use.",
-    "Settings opens on API keys, now the first tab, and a Perso API dub's price has a Recharge credits button beside it."
+    "After you press Stop, the Dub Agent answers your next message as usual.",
+    "A job you open after restarting the app shows its work log again.",
+    "When the Dub Agent cannot edit or export a script, it tells you why."
   ],
   "notes_ko": [
-    "앱에서 Perso로 가는 링크에 앱 버전이 붙어, Perso가 앱에서 온 방문인지 알 수 있어요.",
-    "앱이 어떤 버튼을 누르고 어떤 화면을 여는지 기록할 수 있어요. 입력한 내용은 기록하지 않아요. 오픈소스 에디션에서는 꺼져 있고, 설정 > 개인정보 > 버튼·화면 사용 기록에서 켤 수 있어요.",
-    "설정이 첫 탭인 API 키로 열리고, Perso API 더빙 가격 옆에 크레딧 충전 버튼이 생겼어요."
+    "에이전트를 멈춘 뒤에도 다음 질문에 바로 답해요.",
+    "앱을 다시 켠 뒤 연 작업에서도 작업 기록이 보여요.",
+    "에이전트가 대본을 고치거나 내보내지 못하면 이유를 알려 줘요."
   ],
   "notes_production": [
-    "Links from the app into Perso carry the app's version, so Perso knows the visit came from the app.",
-    "The app can record which buttons you press and which screens you open, never what you type. You can turn it off under Settings > Privacy > Button and screen use.",
-    "Settings opens on Account and keys, now the first tab, and a Perso API dub's price has a Recharge credits button beside it."
+    "After you press Stop, the Dub Agent answers your next message as usual.",
+    "A job you open after restarting the app shows its work log again.",
+    "When the Dub Agent cannot edit or export a script, it tells you why."
   ],
   "notes_production_ko": [
-    "앱에서 Perso로 가는 링크에 앱 버전이 붙어, Perso가 앱에서 온 방문인지 알 수 있어요.",
-    "앱이 어떤 버튼을 누르고 어떤 화면을 여는지 기록할 수 있어요. 입력한 내용은 기록하지 않아요. 설정 > 개인정보 > 버튼·화면 사용 기록에서 끌 수 있어요.",
-    "설정이 첫 탭인 계정과 키로 열리고, Perso API 더빙 가격 옆에 크레딧 충전 버튼이 생겼어요."
+    "에이전트를 멈춘 뒤에도 다음 질문에 바로 답해요.",
+    "앱을 다시 켠 뒤 연 작업에서도 작업 기록이 보여요.",
+    "에이전트가 대본을 고치거나 내보내지 못하면 이유를 알려 줘요."
   ]
 }

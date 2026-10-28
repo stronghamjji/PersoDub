@@ -228,13 +228,15 @@ export const steps = [
     await drag(app, m.x, m.y, -30, -30);
     const moved = await app.inPage(BOX);
     const d = 30 / before.s;
-    const want = [before.area[0] - d, before.area[1] - d, before.area[2] - d, before.area[3] - d];
+    // The box stops at the frame's top and left edges, as the app keeps it inside the picture.
+    const dy = Math.min(d, before.area[0]), dx = Math.min(d, before.area[2]);
+    const want = [before.area[0] - dy, before.area[1] - dy, before.area[2] - dx, before.area[3] - dx];
     if (!near(moved.area, want, 3)) throw new Error(`moved −30,−30 px: ${before.area} → ${moved.area}, not about ${want.map(Math.round)}`);
     const c = await app.inPage(GRIP, "nw");
     if (!c.ok) throw new Error("the top-left handle is covered");
     await drag(app, c.x, c.y, -20, -10);
     const sized = await app.inPage(BOX);
-    const want2 = [moved.area[0] - 10 / before.s, moved.area[1], moved.area[2] - 20 / before.s, moved.area[3]];
+    const want2 = [Math.max(0, moved.area[0] - 10 / before.s), moved.area[1], Math.max(0, moved.area[2] - 20 / before.s), moved.area[3]];
     if (!near(sized.area, want2, 3)) throw new Error(`top-left corner −20,−10 px: ${moved.area} → ${sized.area}, not about ${want2.map(Math.round)}`);
     await resetBox(app, s.offered);
     const size = (a) => `${a[3] - a[2]}x${a[1] - a[0]}`;

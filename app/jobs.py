@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -408,6 +409,13 @@ def shown_text_for_ui(exc: BaseException) -> str:
     return getattr(exc, "shown", None) or error_text_for_ui(exc)
 
 
+# How much of a job's log file a restart reads back into its record: the end
+# only. The list in memory has no limit of its own, but every job is read at
+# boot, so one runaway log must not slow the start or sit in memory for good.
+# 64 KB is several times the longest job log seen so far (about 15 KB).
+RESTORED_LOG_BYTES = 64 * 1024
+
+
 class JobStore:
     def __init__(self, log_dir: Optional[str] = None):
         self._jobs: Dict[str, dict] = {}
@@ -610,9 +618,45 @@ class JobStore:
             self._restore_clipped(rec, os.path.dirname(path))
             job = self._blank(jid)
             job.update(rec)
+            job["logs"] = self._log_tail(jid)
             with self._lock:
                 self._jobs.setdefault(jid, job)
         self._restore_old_folders(root, loaded)
+
+    def _log_tail(self, jid: str) -> list:
+        """The end of job-<jid>.log as the screen's list held it.
+
+        The list itself dies with the process, so without this a job loaded
+        after a restart answered the screen and the agent with no log at all.
+        Each line loses the stamp _write_log_line put in front of it, and a
+        message that ran over several lines (a traceback) is put back together.
+        The file also holds the lines that never went to the screen (log.trace's
+        step banners); nothing in it tells the two apart, so those come back too.
+        Missing or unreadable is an empty list: a job must load without its log.
+        """
+        try:
+            # Binary, so the seek can count bytes; decoded below as the file
+            # was written. A text file's seek takes an opaque position instead.
+            with open(os.path.join(self.log_dir, "job-%s.log" % jid), "rb") as f:
+                size = os.fstat(f.fileno()).st_size
+                if size > RESTORED_LOG_BYTES:
+                    f.seek(size - RESTORED_LOG_BYTES)
+                    f.readline()   # drop the half line the seek landed in
+                data = f.read()
+        except Exception:
+            return []
+        # Windows wrote every "\n" as "\r\n" (the file is opened in text mode).
+        text = data.decode("utf-8", errors="replace").replace("\r\n", "\n")
+        stamp = re.compile(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3} - job-%s - [A-Z]+ - " % re.escape(jid))
+        lines = []
+        for line in text.removesuffix("\n").split("\n"):
+            m = stamp.match(line)
+            if m:
+                lines.append(line[m.end():])
+            elif lines:
+                lines[-1] += "\n" + line
+            # else: the rest of a message whose start was cut off by the seek.
+        return lines
 
     @staticmethod
     def _restore_clipped(rec: dict, work_dir: str) -> None:

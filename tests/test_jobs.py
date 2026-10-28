@@ -777,6 +777,66 @@ def test_a_restart_without_a_cut_list_leaves_the_result_alone(tmp_path):
     assert "clipped" not in store.get("abc12346")["result"]
 
 
+# The screen's list of log lines lives in memory only, so a job loaded after a
+# restart answered with no log at all although its job-<id>.log was on disk:
+# the agent's get_job_status said "0 log lines" for a finished dub (Windows,
+# 0.9.2).
+def test_a_restarted_job_answers_with_the_lines_in_its_log_file(tmp_path):
+    (tmp_path / "x").mkdir()
+    logs = tmp_path / "logs"
+    store = JobStore(log_dir=str(logs))
+    jid = store.create()
+    store.append_log(jid, "1/6 Separating background audio…")
+    store.append_log(jid, "Traceback (most recent call last):\n  File \"x.py\", line 1\nValueError: boom\n")
+    store.append_log(jid, "✅ Done!")
+    store.update(jid, status="done", result={"out_path": str(tmp_path / "x" / "dubbed.mp4")})
+    store.persist(jid, str(tmp_path / "x"))
+
+    store2 = JobStore(log_dir=str(logs)); store2.restore(str(tmp_path))
+    assert store2.get(jid)["logs"] == store.get(jid)["logs"]
+
+
+def test_a_restarted_job_whose_log_cannot_be_read_still_comes_back(tmp_path):
+    # A folder where the file should be, and a Windows file (CRLF) holding a
+    # byte that is not UTF-8: the job loads either way.
+    logs = tmp_path / "logs"
+    (logs / "job-aaaa0001.log").mkdir(parents=True)
+    (logs / "job-aaaa0002.log").write_bytes(
+        b"2026-10-28 09:00:00,123 - job-aaaa0002 - INFO - caf\xe9 line\r\n"
+        b"2026-10-28 09:00:01,456 - job-aaaa0002 - ERROR - Error: RuntimeError: x\r\n")
+    for jid in ("aaaa0001", "aaaa0002"):
+        (tmp_path / "day" / jid).mkdir(parents=True)
+        (tmp_path / "day" / jid / "job.json").write_text(
+            json.dumps({"id": jid, "status": "done"}), encoding="utf-8")
+
+    store = JobStore(log_dir=str(logs))
+    store.restore(str(tmp_path))
+
+    assert store.get("aaaa0001")["logs"] == []
+    assert store.get("aaaa0002")["logs"] == ["caf� line", "Error: RuntimeError: x"]
+
+
+def test_a_restarted_job_keeps_only_the_end_of_a_long_log(tmp_path, monkeypatch):
+    from app import jobs as jobs_module
+
+    monkeypatch.setattr(jobs_module, "RESTORED_LOG_BYTES", 1000)
+    (tmp_path / "x").mkdir()
+    logs = tmp_path / "logs"
+    store = JobStore(log_dir=str(logs))
+    jid = store.create()
+    for n in range(100):
+        # Two lines each, so the cut lands inside a message as often as not.
+        store.append_log(jid, "line %d\n  more %d" % (n, n))
+    store.update(jid, status="done")
+    store.persist(jid, str(tmp_path / "x"))
+
+    store2 = JobStore(log_dir=str(logs)); store2.restore(str(tmp_path))
+    kept = store2.get(jid)["logs"]
+    assert 0 < len(kept) < 100
+    # Whole messages from the end, never the back half of one cut in two.
+    assert kept == store.get(jid)["logs"][-len(kept):]
+
+
 def test_the_cancel_checkpoint_writes_its_line_and_stops_only_when_cancel_was_pressed():
     # One checkpoint for the stages, the voice lines and the pace-fit rounds:
     # the job log's line and the exception's text are what each wrote before.

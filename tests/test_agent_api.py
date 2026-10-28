@@ -4,11 +4,15 @@ No CLI is spawned. The runner is replaced, so these say what the two endpoints
 promise the panel -- which assistant is usable, why one is not, and that the
 backend the panel names is the backend that answers.
 """
+import asyncio
 import json
 import os
+import re
+import sys
 import time
 
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 import app.api.agent as agent_api
 from app.main import app
@@ -147,7 +151,7 @@ def _capture(monkeypatch, tmp_path):
     seen = {}
 
     def fake_run(binary, args, translate, cwd=None, agent_name="", login_command="",
-                 input_text=None, env=None):
+                 input_text=None, env=None, turns=None):
         seen["binary"] = binary
         seen["args"] = args
         seen["translate"] = translate
@@ -191,16 +195,19 @@ def test_a_turn_ended_on_a_usage_limit_says_so_once(monkeypatch, tmp_path):
     limit = "Usage limit reached. Wait a while or pick another assistant."
     stopped = []
 
-    def fake_run(binary, args, translate, **kw):
+    def fake_run(binary, args, translate, turns=None, **kw):
+        turns.append("this turn")
         yield {"kind": "progress", "tool": "transport", "label": "Reconnecting…"}
         yield {"kind": "error", "message": limit, "stop": True}
         yield {"kind": "error", "message": limit}
 
     monkeypatch.setattr(agent_api.agent_base, "run", fake_run)
-    monkeypatch.setattr(agent_api.agent_base, "stop_turn", lambda: stopped.append(1) or True)
+    monkeypatch.setattr(agent_api.agent_base, "stop_turn",
+                        lambda turn=None: stopped.append(turn) or True)
     r = client.post("/api/agent/chat", json={"message": "hi", "agent": "codex"})
     assert r.status_code == 200
-    assert r.text.count("Usage limit reached") == 1 and stopped
+    # Its own turn, by name: never whichever turn is on air by then.
+    assert r.text.count("Usage limit reached") == 1 and stopped == ["this turn"]
     assert "Reconnecting" in r.text   # what came before the stop still shows
 
 
@@ -362,6 +369,58 @@ def test_the_message_after_a_stop_carries_the_conversation_on(monkeypatch, tmp_p
     assert "-c" in seen["args"]          # Claude's "carry on" flag
 
 
+# Stop while the answer streams, the next message five seconds later: that
+# message came back "stopped" within a second or two, with one Stop pressed
+# (Mac and Windows, 2026-10-28). A response nobody reads any more is closed
+# when it is collected, seconds late, and its clean-up stopped the turn on air
+# by then -- the next one. Stand-in CLIs, so the real runner keeps the turns.
+def test_a_stopped_turns_late_clean_up_leaves_the_next_message_alone(monkeypatch, tmp_path):
+    real_run = agent_api.agent_base.run
+    _capture(monkeypatch, tmp_path)
+    go_on = tmp_path / "go-on"
+    scripts = [
+        # The long answer: says it is working, then sits there until stopped.
+        "import time\nprint('{\"type\": \"hello\"}', flush=True)\ntime.sleep(30)\n",
+        # The next message: says it is working, finishes when the test says
+        # (or after 30 s, so a failed test leaves nothing running).
+        "import os, time\nprint('{\"type\": \"hello\"}', flush=True)\n"
+        "for _ in range(600):\n    if os.path.exists(%r):\n        break\n    time.sleep(0.05)\n"
+        "print('{\"type\": \"bye\"}', flush=True)\n" % str(go_on),
+    ]
+
+    def stand_in(binary, args, translate, **kw):
+        return real_run(sys.executable, ["-c", scripts.pop(0)],
+                        lambda e: [{"kind": "done", "text": "Done."} if e.get("type") == "bye"
+                                   else {"kind": "progress", "tool": "get_script"}], **kw)
+
+    monkeypatch.setattr(agent_api.agent_base, "run", stand_in)
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request({"type": "http", "method": "POST", "scheme": "http", "path": "/api/agent/chat",
+                       "root_path": "", "query_string": b"", "server": ("127.0.0.1", 80),
+                       "headers": [(b"host", b"127.0.0.1")]}, receive)
+    body = agent_api.AgentChatRequest(message="hi", agent="claude")
+
+    async def lines(stream):
+        return [json.loads(line) async for line in stream]
+
+    async def turns():
+        first = (await agent_api.agent_chat(body, request)).body_iterator
+        assert json.loads(await first.__anext__())["kind"] == "progress"
+        assert agent_api.agent_stop() == {"stopped": True}
+        second = (await agent_api.agent_chat(body, request)).body_iterator
+        assert json.loads(await second.__anext__())["kind"] == "progress"
+        await first.aclose()            # the first stream's clean-up, late
+        go_on.touch()
+        return await asyncio.wait_for(lines(second), 20)
+
+    rest = asyncio.run(turns())
+    assert not any(e.get("stopped") for e in rest), rest
+    assert rest[-1] == {"kind": "done", "text": "Done."}
+
+
 def test_a_deliberate_ask_does_not_get_a_minute_old_answer(monkeypatch):
     """Signing out in a Terminal and opening the picker showed "signed in"
     three opens running, and only came right on the fourth, fifty seconds
@@ -446,6 +505,80 @@ def test_an_email_address_never_reaches_the_panel_in_an_error_either(monkeypatch
     error = next(e for e in events if e.get("kind") == "error")
     assert "@" not in json.dumps(events)
     assert error["message"] == "Stopped for (email hidden)."
+
+
+# --- the app's log ----------------------------------------------------------
+# 0.9.2 wrote not one line about a turn, so a stop bug could only be traced
+# from uvicorn's access lines, which carry no time. Each turn now says how it
+# started and how it ended -- and never what the user asked or was answered.
+
+def _agent_lines(caplog):
+    return [r.getMessage() for r in caplog.records if r.name == "persodub.api.agent"]
+
+
+def test_a_turn_logs_how_it_started_and_how_it_ended_but_not_its_words(monkeypatch, tmp_path, caplog):
+    def fake_run(binary, args, translate, **kw):
+        yield {"kind": "text", "text": "Line 3 now reads 'see you soon'."}
+        yield {"kind": "done", "text": "Line 3 now reads 'see you soon'."}
+
+    _capture(monkeypatch, tmp_path)
+    monkeypatch.setattr(agent_api.agent_base, "run", fake_run)
+    with caplog.at_level("INFO", logger="persodub.api.agent"):
+        r = client.post("/api/agent/chat", json={"message": "make line 3 shorter", "agent": "claude",
+                                                 "model": "sonnet", "resume": False, "job_id": "abc12345"})
+    assert r.status_code == 200
+    start, end = _agent_lines(caplog)
+    assert re.fullmatch(r"AGENT TURN \d+ START Claude, model sonnet, resume no, job abc12345", start)
+    assert re.fullmatch(r"AGENT TURN \d+ DONE Claude in \d+\.\ds", end)
+    assert start.split()[2] == end.split()[2]   # the same turn's number
+    assert "shorter" not in caplog.text and "see you soon" not in caplog.text
+
+
+def test_the_pages_job_id_reaches_the_log_as_id_characters_only(monkeypatch, tmp_path, caplog):
+    def fake_run(binary, args, translate, **kw):
+        yield {"kind": "done", "text": "ok"}
+
+    _capture(monkeypatch, tmp_path)
+    monkeypatch.setattr(agent_api.agent_base, "run", fake_run)
+    with caplog.at_level("INFO", logger="persodub.api.agent"):
+        client.post("/api/agent/chat", json={"message": "hi", "agent": "claude",
+                                             "job_id": "abc\n2026-10-28 FAKE LINE"})
+    start, _ = _agent_lines(caplog)
+    assert start.endswith("job abc?2026-10-28?FAKE?LINE") and "\n" not in start
+
+
+def test_a_stopped_or_failed_turn_says_so_and_why(monkeypatch, tmp_path, caplog):
+    endings = [
+        [{"kind": "done", "stopped": True, "text": ""}],
+        [{"kind": "error", "message": "Stopped for some.one@example.com.", "detail": "some.one@example.com"}],
+        # A usage limit ends the turn from here; the stop that follows is ours.
+        [{"kind": "error", "message": "Usage limit reached.", "stop": True},
+         {"kind": "done", "stopped": True, "text": ""}],
+    ]
+
+    def fake_run(binary, args, translate, **kw):
+        yield from endings.pop(0)
+
+    _capture(monkeypatch, tmp_path)
+    monkeypatch.setattr(agent_api.agent_base, "run", fake_run)
+    monkeypatch.setattr(agent_api.agent_base, "stop_turn", lambda turn=None: True)
+    with caplog.at_level("INFO", logger="persodub.api.agent"):
+        for _ in range(3):
+            client.post("/api/agent/chat", json={"message": "hi", "agent": "codex"})
+    ends = [line for line in _agent_lines(caplog) if " START " not in line]
+    assert re.fullmatch(r"AGENT TURN \d+ STOPPED Codex in \d+\.\ds", ends[0])
+    assert re.fullmatch(r"AGENT TURN \d+ FAILED Codex in \d+\.\ds: Stopped for \(email hidden\)\.", ends[1])
+    assert re.fullmatch(r"AGENT TURN \d+ FAILED Codex in \d+\.\ds: Usage limit reached\.", ends[2])
+    assert "@" not in caplog.text
+
+
+def test_pressing_stop_is_logged_with_whether_a_turn_was_stopped(monkeypatch, caplog):
+    with caplog.at_level("INFO", logger="persodub.api.agent"):
+        client.post("/api/agent/stop")
+        monkeypatch.setattr(agent_api.agent_base, "stop_turn", lambda turn=None: True)
+        client.post("/api/agent/stop")
+    assert _agent_lines(caplog) == ["AGENT STOP pressed: no turn was running",
+                                    "AGENT STOP pressed: a turn was stopped"]
 
 
 def _texts(events):

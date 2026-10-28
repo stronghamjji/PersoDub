@@ -311,7 +311,7 @@ export const steps = [
       }, d.id);
       await app.shot("recovery-failure-card");
       if (!/[가-힣]/.test(c.why) || sentences(c.why) !== 1) throw new Error(`#doneFailWhy is not one Korean sentence: "${c.why}"`);
-      if (!/[가-힣]/.test(c.notice) || /[A-Za-z]{4,}/.test(c.notice.replace(/PersoDub|Perso API/g, ""))) {
+      if (!/[가-힣]/.test(c.notice) || /[A-Za-z]{4,}/.test(c.notice.replace(/PersoDubbing|PersoDub|Perso API/g, ""))) {
         throw new Error(`the cause under it is not plain Korean: "${c.notice}"`);
       }
       if (c.resume !== app.tr("Resume") || c.retry !== app.tr("Start over")) throw new Error(`the buttons read "${c.resume}" and "${c.retry}"`);

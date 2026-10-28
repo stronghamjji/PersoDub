@@ -15,6 +15,7 @@ clear _login_cache/_login_busy directly and pin AGENT_LOGIN_TTL, would have to
 reach through the instance to do the same thing. Nothing here is read off
 app.main, so there is no _main() seam: the tests patch this module.
 """
+import itertools
 import json
 import logging
 import os
@@ -317,6 +318,31 @@ class _HideEmails:
         return hide_emails(rest)
 
 
+# Each turn's number in the app's log, so a START line can be paired with its
+# end even when a stopped turn is still winding down under the next one.
+_TURN_NUMBERS = itertools.count(1)
+
+
+def _log_turn_end(number: int, name: str, secs: float, ending: dict) -> None:
+    """The line that closes a turn's START line in the app's log.
+
+    A failure names its reason in the sentence the panel showed, on one line,
+    cut short and with any address taken out: the CLI can put the signed-in
+    account in it. Never the user's words or the answer.
+    """
+    if ending.get("kind") == "error":
+        # str(): this runs before the stream is told the turn is over, so it
+        # must not be able to raise and leave the panel waiting.
+        reason = " ".join(hide_emails(str(ending.get("message") or "no reason given")).split())[:200]
+        logger.warning("AGENT TURN %d FAILED %s in %.1fs: %s", number, name, secs, reason)
+    elif ending.get("kind") == "done":
+        logger.info("AGENT TURN %d %s %s in %.1fs", number,
+                    "STOPPED" if ending.get("stopped") else "DONE", name, secs)
+    else:
+        # The runner always says how a turn ended; only an exception skips that.
+        logger.warning("AGENT TURN %d FAILED %s in %.1fs: it ended without saying how", number, name, secs)
+
+
 # A model name is letters, digits and . _ : - only. It reaches a command line,
 # and on Windows an npm .cmd shim hands that line to cmd.exe (review 2026-09-23).
 _MODEL_NAME = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
@@ -390,7 +416,9 @@ def agent_stop():
     way out, and that is what the next message resumes from. `stopped` is False
     when there was no turn running -- pressing Stop twice is not an error.
     """
-    return {"stopped": agent_base.stop_turn()}
+    stopped = agent_base.stop_turn()
+    logger.info("AGENT STOP pressed: %s", "a turn was stopped" if stopped else "no turn was running")
+    return {"stopped": stopped}
 
 
 @router.post("/api/agent/chat")
@@ -449,15 +477,32 @@ async def agent_chat(body: AgentChatRequest, request: Request):
         # closed tab used to leave the CLI running to the end, talking to
         # nobody, with the next turn queued behind it.
         events = queue.Queue()
+        # This stream's own turns, as the runner starts them. Only those are
+        # ever stopped from here: this clean-up can run seconds late, and by
+        # then the turn on air is the user's next message (agents/base.py
+        # stop_turn). None started yet is nothing of ours to stop.
+        mine = []
+
+        def stop_mine():
+            if mine:
+                agent_base.stop_turn(turn=mine[-1])
 
         def pump():
             stopped = False
             hide = _HideEmails()
+            number = next(_TURN_NUMBERS)
+            began = time.monotonic()
+            ending = {}       # the event that said how the turn ended
+            logger.info("AGENT TURN %d START %s, model %s, resume %s, job %s", number, meta["name"],
+                        model or "default", "yes" if body.resume else "no",
+                        # The page's word for it: only an id's own characters reach the log.
+                        re.sub(r"[^A-Za-z0-9_-]", "?", body.job_id)[:40] if body.job_id else "none")
             try:
                 for event in agent_base.run(binary, args, driver.translate,
                                             cwd=work_dir, agent_name=meta["name"],
                                             login_command=meta.get("login", ""),
-                                            input_text=prompt, env=_turn_env(meta)):
+                                            input_text=prompt, env=_turn_env(meta),
+                                            turns=mine):
                     # The turn was ended and said why: what the stopped CLI
                     # says on its way out is that sentence again, and the panel
                     # showed it twice (Windows test H18, 2026-10-10).
@@ -480,15 +525,23 @@ async def agent_chat(body: AgentChatRequest, request: Request):
                         event = {**event, **{k: hide_emails(event[k]) for k in ("text", "message", "detail")
                                              if isinstance(event.get(k), str) and event[k]}}
                     events.put(event)
+                    # Once this side has stopped the turn, the "stopped" that
+                    # follows is ours, and the error before it is the reason.
+                    if not stopped and (event.get("kind") == "done" or (
+                            event.get("kind") == "error" and event.get("ends_turn", True))):
+                        ending = event
                     # A reader that knows the turn cannot go on (a usage
                     # limit the CLI would retry for minutes) ends it here.
                     if event.get("kind") == "error" and event.get("stop"):
                         stopped = True
-                        agent_base.stop_turn()
+                        stop_mine()
             finally:
                 rest = hide.flush()
                 if rest:
                     events.put({"kind": "text", "text": rest})
+                # Before the stream is told it is over, so the line is written
+                # by the time the panel has its answer.
+                _log_turn_end(number, meta["name"], time.monotonic() - began, ending)
                 events.put(None)      # whatever happened, the turn is over
 
         threading.Thread(target=pump, daemon=True).start()
@@ -508,6 +561,6 @@ async def agent_chat(body: AgentChatRequest, request: Request):
         finally:
             # Stopped, or nobody left to read it. Either way the child goes.
             if not finished:
-                agent_base.stop_turn()
+                stop_mine()
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")

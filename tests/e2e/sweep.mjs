@@ -23,6 +23,20 @@ if (!opt.video || !existsSync(opt.video)) {
   console.error("usage: node tests/e2e/sweep.mjs --video <short mp4 with speech> [--srt <file>] [--out <folder>] [--port 9333] [--only a,b] [--fixtures <folder>]");
   process.exit(2);
 }
+const dir = join(import.meta.dirname, "sweep");
+const only = opt.only ? new Set(opt.only.split(",")) : null;
+const modules = [], known = [];
+for (const f of readdirSync(dir).filter((f) => f.endsWith(".mjs")).sort()) {
+  const m = await import(pathToFileURL(join(dir, f)).href);
+  known.push(m.area);
+  if (!only || only.has(m.area)) modules.push(m);
+}
+// A misspelt --only name used to be skipped without a word, and its area never ran.
+const unknown = only ? [...only].filter((a) => !known.includes(a)) : [];
+if (unknown.length) {
+  console.error(`no such area: ${unknown.join(", ")} (the areas: ${known.join(", ")})`);
+  process.exit(2);
+}
 const startedAt = new Date();
 const clock = (d = new Date()) => d.toLocaleString("sv-SE");
 const stamp = clock(startedAt).replace(/[-:]/g, "").replace(" ", "-");
@@ -32,13 +46,6 @@ const app = await connect({ port: opt.port, out });
 const ctx = { video: resolve(opt.video), srt: opt.srt ? resolve(opt.srt) : "", out, stamp, state: {},
               fixtures: resolve(opt.fixtures || dirname(resolve(opt.video))) };
 
-const dir = join(import.meta.dirname, "sweep");
-const only = opt.only ? new Set(opt.only.split(",")) : null;
-const modules = [];
-for (const f of readdirSync(dir).filter((f) => f.endsWith(".mjs")).sort()) {
-  const m = await import(pathToFileURL(join(dir, f)).href);
-  if (!only || only.has(m.area)) modules.push(m);
-}
 const results = [];
 let n = 0;
 for (const m of modules) {
