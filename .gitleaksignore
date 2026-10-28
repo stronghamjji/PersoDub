@@ -10,3 +10,4 @@ d1d000ff5fee30077a7bd0c90efb51fed363a84c:tests/test_agent_log.py:generic-api-key
 # A test's expected value: the keyed form of a made-up user id under a made-up key (32 hex characters), not a secret.
 f821c6682a6299b2311e5f3d22d48447ac5e5096:relay/events-logic.test.mjs:generic-api-key:102
 d43dfd1fb00a3e08991fe8d5fabb475b938ec591:relay/events-logic.test.mjs:generic-api-key:102
+1913eee0a4ace162085f46b19326f4cce39501bd:relay/events-logic.test.mjs:generic-api-key:102
