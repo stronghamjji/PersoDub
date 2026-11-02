@@ -104,7 +104,8 @@ the app from a fixed list: never a title, a file name, a link, what an inquiry s
 address. The last batch is sent as the app closes, waiting three seconds at most; what does
 not get through goes the next time the app opens.
 
-It is on to begin with in the production edition and off in the open-source edition. Turn
+It is on to begin with in both editions (before 1.0.1, in the production edition only), and
+each batch names its edition, production or open source, so the two are counted apart. Turn
 it on or off in **Settings → Privacy**, or with `PERSODUB_EVENTS=1` or `0` in `kit.env`; it
 applies to the next batch. With the usage counts off (`PERSODUB_NO_ANALYTICS=1`) nothing
 leaves, and `PERSODUB_EVENTS_DEBUG=1` writes how many would have been sent into the app's

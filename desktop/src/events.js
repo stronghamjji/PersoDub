@@ -25,9 +25,9 @@ import { REPORT_EXT, partitionQueue, queueBase } from "./reportQueue.js";
 // page's next batch, or the quit, and go with it.
 //
 // The switch is PERSODUB_EVENTS in kit.env (Settings > Privacy writes it).
-// With no line, the production build records and the open-source one does
-// not (owner, 2026-10-25): the build's own edition, never the one a kit
-// remembers (edition.js), which is a dub's default only.
+// With no line, both editions record (owner, 2026-11-02; until 1.0.1 only the
+// production build did), and each batch names the build's own edition, so the
+// two are told apart in GA4 and Amplitude.
 export const EVENTS_ENDPOINT = `${REPORT_ENDPOINT}/events`;
 export const EVENTS_KEY = "PERSODUB_EVENTS";
 export const MAX_PER_POST = 500;
@@ -46,11 +46,9 @@ const MAX_PROPS = 8;
 // not gone by then stays in the queue for the next launch.
 export const QUIT_WAIT_MS = 3000;
 
-/** Whether this kit records: its kit.env line, or the edition's default. */
-export function eventsOn(env, edition) {
-  if (env[EVENTS_KEY] === "1") return true;
-  if (env[EVENTS_KEY] === "0") return false;
-  return edition === "production";
+/** Whether this kit records: its kit.env line, or on with none. */
+export function eventsOn(env) {
+  return env[EVENTS_KEY] !== "0";
 }
 
 /**
@@ -63,8 +61,8 @@ export function eventsOn(env, edition) {
  *            so a from-source run can be checked end to end in GA4 and
  *            Amplitude (docs/privacy.md); it is never set in a build.
  */
-export function resolveEventsMode({ isPackaged, env, edition }) {
-  if (!eventsOn(env, edition)) return "off";
+export function resolveEventsMode({ isPackaged, env }) {
+  if (!eventsOn(env)) return "off";
   if (env.PERSODUB_EVENTS_SEND === "1") return "on";
   if (!isPackaged || env.PERSODUB_NO_ANALYTICS === "1" || env.PERSODUB_EVENTS_DEBUG === "1") return "debug";
   return "on";
@@ -131,7 +129,7 @@ export function createEvents({ app, ctx, edition, shellLog, fetchImpl = fetch, n
   // The kit the boot found, or the one it is installing into: a step from
   // before the engines are up still follows that kit's switch.
   function mode() {
-    return resolveEventsMode({ isPackaged: app.isPackaged, env: envWithKit(ctx.bootedKitDir || ctx.kitDir), edition });
+    return resolveEventsMode({ isPackaged: app.isPackaged, env: envWithKit(ctx.bootedKitDir || ctx.kitDir) });
   }
 
   // Written down before it is sent, as a failure report is: the last batch

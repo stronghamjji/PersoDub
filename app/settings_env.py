@@ -234,14 +234,9 @@ def write_reports_off(off: bool) -> None:
 
 
 def read_events_enabled() -> bool:
-    """Whether button and screen events are recorded: kit.env's line, or with
-    none the app file's edition's default, as the desktop shell decides
-    (events.js). Never PERSODUB_EDITION, the edition the kit remembers, which
-    only a dub's default follows (app/setup.py)."""
-    value = read_value(EVENTS_KEY)
-    if value in ("0", "1"):
-        return value == "1"
-    return os.environ.get("PERSODUB_BUILD_EDITION") == "production"
+    """Whether button and screen events are recorded: kit.env's line, or on
+    with none, in both editions, as the desktop shell decides (events.js)."""
+    return read_value(EVENTS_KEY) != "0"
 
 
 def write_events_enabled(on: bool) -> None:

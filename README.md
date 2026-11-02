@@ -178,6 +178,6 @@ Finish the setup, not just a plan. Tell me any step you could not do.
 | **Languages** | 10 on your computer, 100+ with the Perso API, depending on the dubbing model. [Full list](docs/languages.md) |
 | **Translation** | A local model, or ChatGPT for free. No subscription. [Configuration](docs/configuration.md) |
 | **Better quality** | A free Perso key: better transcription, less to download. [Configuration](docs/configuration.md) |
-| **Privacy** | By default the video is dubbed on this computer. With Whisper and a local translator, it stays here; the Perso API, if you choose it, uploads it. [What is sent](docs/privacy.md) |
+| **Privacy** | By default the video is dubbed on this computer. With Whisper and a local translator, it stays here; the Perso API, if you choose it, uploads it. Which buttons are pressed is counted, never what you type; turn it off in Settings. [What is sent](docs/privacy.md) |
 | **How it works** | The Perso API, or on your computer: Mel-Band RoFormer or Demucs, Whisper, CAM++, a local LLM or ChatGPT, Qwen3-TTS. [Architecture](docs/architecture.md) · [Pipeline](docs/architecture.md#2-the-dubbing-pipeline) · [Comparison](docs/comparison.md) · [Roadmap](docs/roadmap.md) |
 | **Build from source** | [INSTALL.md](INSTALL.md) · [Development](docs/development.md) · [Contributing and security](docs/contributing.md) |

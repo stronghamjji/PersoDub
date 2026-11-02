@@ -40,11 +40,10 @@ function setup({ kitEnv = "PERSODUB_EVENTS=1\n", packaged = true, relay = () => 
   return { events, ctx, posts, logged, queued, userData };
 }
 
-test("the switch: kit.env's line wins, and with none the production edition records and the open-source one does not", () => {
-  assert.equal(eventsOn({}, "production"), true);
-  assert.equal(eventsOn({}, "opensource"), false);
-  assert.equal(eventsOn({ PERSODUB_EVENTS: "1" }, "opensource"), true);
-  assert.equal(eventsOn({ PERSODUB_EVENTS: "0" }, "production"), false);
+test("the switch: kit.env's line wins, and with none it records", () => {
+  assert.equal(eventsOn({}), true);
+  assert.equal(eventsOn({ PERSODUB_EVENTS: "1" }), true);
+  assert.equal(eventsOn({ PERSODUB_EVENTS: "0" }), false);
 });
 
 test("recorded is not sent: a from-source run, the debug line and the usage counts' switch keep them here", () => {
@@ -131,16 +130,15 @@ test("off keeps nothing and writes nothing; debug counts and says so, and nothin
   assert.deepEqual(debug.logged, ["PERSODUB_EVENTS would send 2"]);
 });
 
-test("the production edition records with no line in kit.env", () => {
+test("both editions record with no line in kit.env", () => {
   assert.equal(setup({ kitEnv: "", edition: "production" }).events.take([press("save")]).on, true);
-  assert.equal(setup({ kitEnv: "", edition: "opensource" }).events.take([press("save")]).on, false);
+  assert.equal(setup({ kitEnv: "", edition: "opensource" }).events.take([press("save")]).on, true);
 });
 
 // A 0.8.4 or 0.8.5 production install later updated to the public build
 // keeps PERSODUB_EDITION=production in kit.env, for its dubs' default only:
-// what records, and the edition a batch names, is the build's.
-test("the build's edition decides the default and the batch's edition, never the kit's remembered one", async () => {
-  assert.equal(setup({ kitEnv: "PERSODUB_EDITION=production\n", edition: "opensource" }).events.take([press("save")]).on, false);
+// the edition a batch names is the build's.
+test("the batch names the build's edition, never the kit's remembered one", async () => {
   const s = setup({ kitEnv: "PERSODUB_EDITION=opensource\n", edition: "production" });
   assert.equal(s.events.take([press("save")]).on, true);
   await new Promise((r) => setTimeout(r, 20));
