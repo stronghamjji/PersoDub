@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getDraft, setDraft, clearDraft, setRanges, normalizeRanges,
-  keptSeconds, isWhole, onDraftChange, spokenSeconds, toOriginal,
+  keptSeconds, isWhole, onDraftChange, spokenSeconds, toOriginal, firstSeconds,
 } from "./draft.mjs";
 
 const video = { downloadId: "d1", name: "a.mp4", duration: 10, videoUrl: "/v" };
@@ -71,4 +71,9 @@ test("a dubbing's lines land on the video it was cut from through the parts it k
     [[12, 15], [18, 20], [30, 33], [35, 38]]);
   // Kept all of it: the two clocks are one.
   assert.deepEqual(toOriginal([[2, 5]], null), [[2, 5]]);
+});
+
+test("the kept parts cut to their first minute keep their order and stop at sixty seconds", () => {
+  assert.deepEqual(firstSeconds([[0, 40], [50, 100], [120, 150]], 60), [[0, 40], [50, 70]]);
+  assert.deepEqual(firstSeconds([[10, 30]], 60), [[10, 30]]);
 });

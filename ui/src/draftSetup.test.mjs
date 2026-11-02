@@ -315,6 +315,39 @@ test("a Perso dubbing's foot says at most what it costs, the model's a second ti
   }
 });
 
+// A free plan dubs one minute at most (user, 2026-10-30): a longer video's
+// first minute is what goes, and the foot and the card say so before Start.
+test("on a free-plan workspace a video over a minute is dubbed for its first minute, said before Start", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  let answer;
+  const gate = new Promise((r) => { answer = r; });
+  globalThis.fetch = async (url) => {
+    if (url === "/api/perso/spaces") await gate;
+    return { ok: true, json: async () => (url === "/api/perso/spaces"
+      ? { spaces: [{ seq: 7, name: "Mine", tier: "Free", credits: 1280 }] } : { perso_space_seq: "7" }) };
+  };
+  try {
+    const { $, log } = harness();
+    log.model = "ORIOLE";
+    setDraft({ downloadId: "d1", name: "a.mp4", duration: 150, videoUrl: "/v" });
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    // Start pressed before the plan is known waits for it, rather than send the whole video.
+    const started = $("draftStartBtn").fire("click");
+    answer();
+    await started;
+    assert.equal($("draftFootLabel").textContent, "Dubbing 01:00 · Perso API · up to 60 credits · "
+      + "A free-plan workspace dubs the first minute only. When it is done, see it in your Perso workspace.");
+    assert.equal($("draftResultWhat").textContent, "The first minute, dubbed, in your Perso workspace");
+    assert.equal(log.started[0].fd.get("trim_start"), "0");
+    assert.equal(log.started[0].fd.get("trim_end"), "60");
+  } finally {
+    globalThis.fetch = real;
+    clearDraft();
+  }
+});
+
 // Perso will not hand a free-plan workspace the video (owner, 2026-10-28):
 // said before Start, and asked again each time Perso API is chosen.
 test("on a free-plan workspace a Perso dubbing's foot says the result is seen on Perso", async () => {
