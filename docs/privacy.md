@@ -62,7 +62,7 @@ assistant means nothing runs and nothing is sent.
 
 PersoDub reports six events — app launch, dub finished, dub failed, subtitles erased,
 erasing failed, install failed — to see how many installs finish a dub. Each carries the app version, your operating
-system, a random install ID, and on a failure one short code off a fixed list. A failed
+system, which edition it is (from 1.0.1), a random install ID, and on a failure one short code off a fixed list. A failed
 install also names which of its twelve steps it stopped at, again off a fixed list. From
 0.6.2 a dub also says which of its parts went through Perso — transcription, separation,
 or the whole dub — each as one of two words, how many Perso credits that one job used,
