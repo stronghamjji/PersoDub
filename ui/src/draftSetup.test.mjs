@@ -348,6 +348,59 @@ test("on a free-plan workspace a video over a minute is dubbed for its first min
   }
 });
 
+// The plan is asked again at Start, for the workspace the dubbing goes to:
+// one changed in Settings after Perso API was chosen, or picked only when
+// Start asked for it, is the one that decides (cross-check, 2026-11-02).
+test("Start asks the plan again, so a workspace changed since the foot was drawn decides the cut", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  let tier = "Free";
+  globalThis.fetch = async (url) => ({ ok: true, json: async () => (url === "/api/perso/spaces"
+    ? { spaces: [{ seq: 7, name: "Mine", tier, credits: 1280 }] } : { perso_space_seq: "7" }) });
+  try {
+    const { $, log } = harness();
+    log.model = "ORIOLE";
+    setDraft({ downloadId: "d1", name: "a.mp4", duration: 150, videoUrl: "/v" });
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    await new Promise((r) => setTimeout(r, 0));
+    tier = "Pro";   // Settings, before Start
+    await $("draftStartBtn").fire("click");
+    assert.equal(log.started[0].fd.get("trim_end"), null, "a paid workspace's video goes whole");
+  } finally {
+    globalThis.fetch = real;
+    clearDraft();
+  }
+});
+
+test("the mode Start was pressed with decides the cut, not one chosen while the plan was asked", async () => {
+  clearDraft();
+  const real = globalThis.fetch;
+  let answer;
+  const gate = new Promise((r) => { answer = r; });
+  let calls = 0;
+  globalThis.fetch = async (url) => {
+    if (url === "/api/perso/spaces" && ++calls > 1) await gate;
+    return { ok: true, json: async () => (url === "/api/perso/spaces"
+      ? { spaces: [{ seq: 7, name: "Mine", tier: "Free", credits: 1280 }] } : { perso_space_seq: "7" }) };
+  };
+  try {
+    const { $, log } = harness();
+    log.model = "ORIOLE";
+    setDraft({ downloadId: "d1", name: "a.mp4", duration: 150, videoUrl: "/v" });
+    $("dubModeSelect").value = "perso";
+    await $("dubModeSelect").fire("change");
+    const started = $("draftStartBtn").fire("click");
+    $("dubModeSelect").value = "local";   // while Start waits
+    answer();
+    await started;
+    assert.equal(log.started[0].fd.get("trim_end"), "60");
+  } finally {
+    globalThis.fetch = real;
+    clearDraft();
+  }
+});
+
 // Perso will not hand a free-plan workspace the video (owner, 2026-10-28):
 // said before Start, and asked again each time Perso API is chosen.
 test("on a free-plan workspace a Perso dubbing's foot says the result is seen on Perso", async () => {

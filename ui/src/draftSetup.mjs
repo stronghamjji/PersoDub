@@ -135,7 +135,7 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
   // A free-plan workspace dubs one minute at most (Perso's F4008): past that,
   // the first minute of the kept parts is what goes (user, 2026-10-30).
   const FREE_PLAN_SECONDS = 60;
-  const cutForPlan = (d) => (freePlan && $("dubModeSelect").value === "perso" && keptSeconds(d) > FREE_PLAN_SECONDS
+  const cutForPlan = (d, mode = $("dubModeSelect").value) => (freePlan && mode === "perso" && keptSeconds(d) > FREE_PLAN_SECONDS
     ? { ...d, ranges: firstSeconds(d.ranges, FREE_PLAN_SECONDS) } : d);
 
   function paintFoot() {
@@ -202,8 +202,14 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
         // Add language: the project this dubbing joins (ui/src/languageRow.mjs).
         projectId: state.draftProject || undefined,
       };
-      if (opts.dubMode === "perso") await planCheck;
-      const sent = cutForPlan(d);
+      // Asked again here: the workspace may have changed in Settings, or been
+      // picked only now, since the foot asked (cross-check, 2026-11-02).
+      if (opts.dubMode === "perso") {
+        planAskedFor = null;
+        askPlan(d.downloadId);
+        await planCheck;
+      }
+      const sent = cutForPlan(d, opts.dubMode);
       if (sent !== d || !isWhole(d)) {
         if (sent.ranges.length === 1) opts.trim = { start: sent.ranges[0][0], end: sent.ranges[0][1] };
         // Pairs of seconds, as app/api/dub.py parse_ranges reads them.
