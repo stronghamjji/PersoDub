@@ -21,7 +21,7 @@ const INQUIRY_URL = "https://script.example/macros/s/abc/exec";
 // stands in for the machine's own diagnostics (diagnostics.js).
 function setup({ packaged = true, kitEnv = "PERSODUB_NO_REPORTS=0\nPERSODUB_REPORTS_DEBUG=0\n",
                  engines = null, relay = () => ok(ISSUE), probes = async () => ({}), inquiryUrl = INQUIRY_URL,
-                 account = undefined, base = mkdtempSync(join(tmpdir(), "odreporting-")) } = {}) {
+                 account = undefined, edition = undefined, base = mkdtempSync(join(tmpdir(), "odreporting-")) } = {}) {
   const kitDir = join(base, "kit");
   const userData = join(base, "userData");
   mkdirSync(kitDir, { recursive: true });
@@ -40,7 +40,7 @@ function setup({ packaged = true, kitEnv = "PERSODUB_NO_REPORTS=0\nPERSODUB_REPO
   const ctx = { engines };
   const reporter = createReporter({
     app, BrowserWindow: { getAllWindows: () => [win] }, ctx,
-    shellLog: (line) => logged.push(line), inquiryUrl, account, fetchImpl, probeImpl: probes,
+    shellLog: (line) => logged.push(line), inquiryUrl, account, edition, fetchImpl, probeImpl: probes,
   });
   const queued = () => (existsSync(join(kitDir, "reports")) ? readdirSync(join(kitDir, "reports")).sort() : []);
   const readQueued = (name) => JSON.parse(readFileSync(join(kitDir, "reports", name), "utf8"));
@@ -77,6 +77,18 @@ test("a failure goes to the relay with the backend's half, then its logs, and th
   assert.deepEqual(s.reporter.lastReport(), announced);
   assert.deepEqual(s.queued(), [], "nothing left to retry");
   assert.ok(s.logged.includes(`[persodub-report] sent id r1 issue #142 (${ISSUE.url})`), s.logged.join("\n"));
+});
+
+test("a failure before kit.env names an edition says the app file's, and the kit's once it does", async () => {
+  // An install that dies at its first step has no kit.env edition yet: the
+  // dashboard's Edition read "?" (2026-10-30).
+  const first = setup({ edition: "production" });
+  await first.reporter.sendReport({ kind: "install", kitDir: first.kitDir, code: "unknown", step: "payload", message: "boom" });
+  assert.equal(JSON.parse(first.calls[0].body).env.edition, "production");
+
+  const kept = setup({ edition: "production", kitEnv: "PERSODUB_EDITION=opensource\n" });
+  await kept.reporter.sendReport({ kind: "install", kitDir: kept.kitDir, code: "unknown", step: "payload", message: "boom" });
+  assert.equal(JSON.parse(kept.calls[0].body).env.edition, "opensource");
 });
 
 test("the same failure six times in four seconds goes to the relay once, and a different one still goes", async () => {

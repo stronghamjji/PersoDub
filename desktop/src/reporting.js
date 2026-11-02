@@ -76,11 +76,12 @@ function unqueue(kitDir, base) {
  * may not be up yet, or never came up. `inquiryUrl` is the support web app
  * Customer support's inquiries go to, "" when the build names none, and
  * `account` answers the signed-in Perso account an inquiry is from.
+ * `edition` is the app file's, which a failure says while kit.env names none.
  * `fetchImpl` is the real fetch, and `probeImpl` the real probes, everywhere
  * but the tests.
  */
 export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl = "", account = () => null,
-                                 fetchImpl = fetch, probeImpl = runProbes }) {
+                                 edition = "", fetchImpl = fetch, probeImpl = runProbes }) {
   // The report's install id, which the relay's daily limit counts by, lives in
   // its own file and is minted only by a run that really reports. The id the
   // dashboard knows a computer by is analytics.json's, which the launch makes
@@ -218,7 +219,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
         torchVariant: torchVariantFor(kitDir),
         packs,
         freeDiskBytes: await freeSpaceAt(kitDir),
-        edition: kitEdition(kitDir) || "",
+        edition: kitEdition(kitDir) || edition,
         installed: app.isPackaged,
       }),
       timing,
