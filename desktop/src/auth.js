@@ -45,8 +45,9 @@ export function authConfig(env = process.env, version = "") {
 
 /** A link into Perso with the tail every one carries (app/perso_client.py
  * UTM_TAIL) and the button as utm_content: the sign-in screen's Make a key
- * is "signup", as the key window's link is (SIGNUP_LINK). */
-export const utmTail = (version, content) => `utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v${version}&utm_content=${content}`;
+ * is "signup", as the key window's link is (SIGNUP_LINK). The campaign is the
+ * production edition's (UTM_CAMPAIGN): sign-in is that edition's alone. */
+export const utmTail = (version, content) => `utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app_production&utm_term=v${version}&utm_content=${content}`;
 export function withUtm(url, version, content) {
   return `${url}${url.includes("?") ? "&" : "?"}${utmTail(version, content)}`;
 }

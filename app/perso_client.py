@@ -95,7 +95,15 @@ PERSO_WORKSPACE_URL = os.environ.get("PERSO_WORKSPACE_URL", "https://perso.ai/wo
 # link was clicked, which is what separates new signups from repeat recharges in the report.
 # The tail every link into Perso carries; the page adds utm_content for the
 # button pressed (ui/src/edition.mjs persoLink), so each link says which.
-UTM_TAIL = f"utm_source={CLIENT_HOST}&utm_medium=desktop-app&utm_campaign={APP_NAME}&utm_term=v{APP_VERSION}"
+# utm_campaign names the edition of the running app file, so a visit, a signup
+# or a recharge says which of the two brought it (user, 2026-10-30); utm_source
+# stays the API's CLIENT_HOST for the reason above.
+def utm_campaign(env) -> str:
+    return f"{APP_NAME}_" + ("production" if env.get("PERSODUB_BUILD_EDITION") == "production" else "opensource")
+
+
+UTM_CAMPAIGN = utm_campaign(os.environ)
+UTM_TAIL = f"utm_source={CLIENT_HOST}&utm_medium=desktop-app&utm_campaign={UTM_CAMPAIGN}&utm_term=v{APP_VERSION}"
 
 
 def _with_utm(url: str, content: str) -> str:

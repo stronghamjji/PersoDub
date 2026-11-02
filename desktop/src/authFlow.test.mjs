@@ -84,7 +84,7 @@ function scriptedBrowser() {
 }
 
 // The utm tail on Perso's Google start, as the browser gets it (cfgFor has no version).
-const UTM_GOOGLE = "utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v&utm_content=sign_in_google";
+const UTM_GOOGLE = "utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app_production&utm_term=v&utm_content=sign_in_google";
 
 // The sign-in window as the app opens it, run by `browser` on its own once
 // made. `hold` keeps its last address in `held` for the test to deliver

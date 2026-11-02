@@ -528,6 +528,15 @@ def test_outbound_links_carry_the_running_identity():
         assert "utm_source=%s" % perso_client_module.CLIENT_HOST in link
         assert "utm_content=%s" % kind in link
         assert "utm_term=v%s" % perso_client_module.APP_VERSION in link
+        assert "utm_campaign=%s" % perso_client_module.UTM_CAMPAIGN in link
+
+
+def test_outbound_links_name_the_edition_in_the_campaign():
+    # Two editions, one campaign each, so Perso can tell which brought a visit or a
+    # signup (user, 2026-10-30). Anything that is not the production build is open source.
+    assert perso_client_module.utm_campaign({"PERSODUB_BUILD_EDITION": "production"}) == "desktop_app_production"
+    assert perso_client_module.utm_campaign({"PERSODUB_BUILD_EDITION": "opensource"}) == "desktop_app_opensource"
+    assert perso_client_module.utm_campaign({}) == "desktop_app_opensource"
 
 
 # ── 7. PersoClient.separate() HTTP flow (mocked httpx, no network) ─────────
