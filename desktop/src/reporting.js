@@ -94,6 +94,16 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
   // counted twice, and spends two of the five a day the relay takes from one
   // machine. An entry in here is left to whoever has it.
   const inHand = new Set();
+  // When this run last sent each failure, by fingerprint. Try again pressed six
+  // times in four seconds was six reports, and the relay, asked them all at
+  // once, opened five issues for one failure (#204-#208, 2026-10-29).
+  const SAME_FAILURE_MS = 10 * 60 * 1000;
+  const lastSent = new Map();
+  function sentJustNow(print, now = Date.now()) {
+    if (now - (lastSent.get(print) ?? -Infinity) < SAME_FAILURE_MS) return true;
+    lastSent.set(print, now);
+    return false;
+  }
 
   function reportMode(kitDir) {
     return resolveReportMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
@@ -320,6 +330,12 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
           queueReport(kitDir, base, { failure: { kind, code, step, message, jobId, timing }, at });
         }
         const { report, archive } = await collectReport(opts);
+        // A finished job's record is never one of these: each is its own job.
+        if (report.outcome !== "ok" && report.fingerprint && sentJustNow(report.fingerprint)) {
+          shellLog(`[persodub-report] same failure ${report.fingerprint} as one sent in the last 10 minutes, not sent again`);
+          if (base) unqueue(kitDir, base);
+          return;
+        }
         if (mode === "debug") {
           shellLog(`[persodub-report] would send: ${JSON.stringify(report)}`);
           shellLog(`[persodub-report] would attach ${archive ? archive.length : 0} bytes of logs`);
