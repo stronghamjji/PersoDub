@@ -1,22 +1,25 @@
 {
+  "version": "1.0.2",
   "notes": [
-    "After you press Stop, the Dub Agent answers your next message as usual.",
-    "A job you open after restarting the app shows its work log again.",
-    "When the Dub Agent cannot edit or export a script, it tells you why."
+    "On Windows, an install folder that cannot take files is caught before the download starts.",
+    "On a free Perso plan, a video over one minute is dubbed for its first minute, and the app says so before you start.",
+    "The app is smaller.",
+    "Which buttons you press is now counted, never what you type. Turn it off in Settings → Privacy."
   ],
   "notes_ko": [
-    "에이전트를 멈춘 뒤에도 다음 질문에 바로 답해요.",
-    "앱을 다시 켠 뒤 연 작업에서도 작업 기록이 보여요.",
-    "에이전트가 대본을 고치거나 내보내지 못하면 이유를 알려 줘요."
+    "윈도우에서 파일을 넣을 수 없는 설치 폴더는 내려받기 전에 알려 줘요.",
+    "Perso 무료 요금제에서는 1분 넘는 영상의 앞 1분만 더빙하고, 시작 전에 알려 줘요.",
+    "앱이 더 가벼워졌어요.",
+    "누른 버튼 기록이 기본으로 켜져요. 입력한 내용은 남기지 않고, 설정 → 개인정보에서 끌 수 있어요."
   ],
   "notes_production": [
-    "After you press Stop, the Dub Agent answers your next message as usual.",
-    "A job you open after restarting the app shows its work log again.",
-    "When the Dub Agent cannot edit or export a script, it tells you why."
+    "On Windows, an install folder that cannot take files is caught before the download starts.",
+    "On a free Perso plan, a video over one minute is dubbed for its first minute, and the app says so before you start.",
+    "The app is smaller."
   ],
   "notes_production_ko": [
-    "에이전트를 멈춘 뒤에도 다음 질문에 바로 답해요.",
-    "앱을 다시 켠 뒤 연 작업에서도 작업 기록이 보여요.",
-    "에이전트가 대본을 고치거나 내보내지 못하면 이유를 알려 줘요."
+    "윈도우에서 파일을 넣을 수 없는 설치 폴더는 내려받기 전에 알려 줘요.",
+    "Perso 무료 요금제에서는 1분 넘는 영상의 앞 1분만 더빙하고, 시작 전에 알려 줘요.",
+    "앱이 더 가벼워졌어요."
   ]
 }
