@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, lstatSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { statfs } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,6 +100,43 @@ export function notEnoughSpace(neededBytes, freeBytes, t = inUserLanguage) {
 export function notEnoughMemory(totalBytes, t = inUserLanguage) {
   if (!totalBytes || totalBytes >= 7 * GB) return null;
   return t("This computer needs 8 GB of memory to dub.");
+}
+
+// The kit folders the install writes into first. One that cannot take a file
+// stopped the payload step at 0.0s with an error nobody could act on: access
+// denied on kit\app while another program held it, and "no such file" or "file
+// already exists" where the kit, or models\ inside it, was a link whose target
+// was gone (Windows, #191-#209, 2026-10-26..29).
+const KIT_FIRST_WRITES = ["", "app", "models"];
+
+const isBrokenLink = (path) => {
+  try { return lstatSync(path).isSymbolicLink() && !existsSync(path); } catch { return false; }
+};
+
+/** null when each of the kit's first folders takes a file; otherwise the
+ * folder that refused and the error it gave.
+ *
+ * A link whose target is gone is removed on the way: there is nothing behind
+ * it to lose, and the install then makes a real folder in its place. A live
+ * link and a real folder are never removed.
+ */
+export function kitFolderProblem(kitDir, log = () => {}) {
+  for (const sub of KIT_FIRST_WRITES) {
+    const dir = join(kitDir, sub);
+    const probe = join(dir, ".persodub-write-test");
+    try {
+      if (isBrokenLink(dir)) {
+        unlinkSync(dir);
+        log(`PERSODUB_KIT removed a broken link at ${dir}`);
+      }
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(probe, "");
+      rmSync(probe, { force: true });
+    } catch (error) {
+      return { dir, error };
+    }
+  }
+  return null;
 }
 
 /** Bytes free on the volume the kit will live on, or null if unreadable.

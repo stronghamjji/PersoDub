@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, notEnoughMemory, freeSpaceAt, KIT_DEEPEST_RELATIVE, WINDOWS_PATH_LIMIT } from "./config.js";
+import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, kitFolderProblem, notEnoughSpace, notEnoughMemory, freeSpaceAt, KIT_DEEPEST_RELATIVE, WINDOWS_PATH_LIMIT } from "./config.js";
 
 const GB = 1024 ** 3;
 
@@ -170,4 +170,49 @@ test("a filesystem that will not answer never blocks the install", async () => {
   const free = await freeSpaceAt("/anywhere", async () => { throw new Error("nope"); });
   assert.equal(free, null);
   assert.equal(notEnoughSpace(19 * GB, null), null);
+});
+
+// --- the kit's folders take a file before the install starts --------------
+
+test("a kit folder that takes a file passes, and the test file is gone after", () => {
+  const kit = join(mkdtempSync(join(tmpdir(), "kit-")), "PersoDub");
+  assert.equal(kitFolderProblem(kit), null);
+  for (const sub of ["", "app", "models"]) {
+    assert.deepEqual(readdirSync(join(kit, sub)).filter((f) => f.startsWith(".persodub")), [], sub);
+  }
+});
+
+test("a link whose target is gone is removed, logged, and replaced by a real folder", () => {
+  // #196, #197, #209: mkdir models\campplus said "no such file" -- what a
+  // models\ pointing at a deleted folder answers.
+  const kit = mkdtempSync(join(tmpdir(), "kit-"));
+  symlinkSync(join(kit, "gone"), join(kit, "models"));
+  const said = [];
+  assert.equal(kitFolderProblem(kit, (line) => said.push(line)), null);
+  assert.equal(lstatSync(join(kit, "models")).isDirectory(), true);
+  assert.match(said.join("\n"), /removed a broken link/);
+});
+
+test("a live link is never removed", () => {
+  const kit = mkdtempSync(join(tmpdir(), "kit-"));
+  mkdirSync(join(kit, "elsewhere"));
+  writeFileSync(join(kit, "elsewhere", "weights.bin"), "x");
+  symlinkSync(join(kit, "elsewhere"), join(kit, "models"));
+  assert.equal(kitFolderProblem(kit), null);
+  assert.equal(lstatSync(join(kit, "models")).isSymbolicLink(), true);
+  assert.equal(existsSync(join(kit, "elsewhere", "weights.bin")), true);
+});
+
+test("a kit folder that refuses a file names the folder and the error", { skip: process.platform === "win32" || process.getuid?.() === 0 }, () => {
+  // #204-#208: access denied on kit\app, every Try again failing at 0.0s.
+  const kit = mkdtempSync(join(tmpdir(), "kit-"));
+  mkdirSync(join(kit, "app"));
+  chmodSync(join(kit, "app"), 0o500);
+  try {
+    const refused = kitFolderProblem(kit);
+    assert.equal(refused.dir, join(kit, "app"));
+    assert.equal(refused.error.code, "EACCES");
+  } finally {
+    chmodSync(join(kit, "app"), 0o700);
+  }
 });
