@@ -298,8 +298,8 @@ test("hands the backend its desktop identity, overriding a stale kit.env", async
       // What "auto" means to the backend's language (app/i18n.py).
       PERSODUB_LOCALE: "ko",
       PERSODUB_EDITION: "opensource",
-      // The app file's own edition, which the events switch defaults by
-      // (app/settings_env.py read_events_enabled), whatever the kit remembers.
+      // The app file's own edition, which the links into Perso and the API's
+      // User-Agent name (app/perso_client.py), whatever the kit remembers.
       PERSODUB_BUILD_EDITION: "production",
       // The engine's own logs go in the shell's log folder, beside shell.log.
       PERSODUB_LOG_DIR: logDir,

@@ -275,7 +275,7 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, b
   // The computer's language goes the same way: what a language setting of "auto" means to
   // the backend (app/i18n.py), a fact of this computer and not a setting. The edition
   // decides where a dub runs by default (app/setup.py); the app file's own edition is
-  // what the events switch defaults by (app/settings_env.py read_events_enabled). And the
+  // what the links into Perso and the API's User-Agent name (app/perso_client.py). And the
   // log folder: the backend's persodub.log and job-<id>.log go beside shell.log and the
   // engines' console logs, so everything a support request needs is in one folder.
   env = { ...env, PERSODUB_CLIENT: "desktop", PERSODUB_APP_VERSION: appVersion ?? "",

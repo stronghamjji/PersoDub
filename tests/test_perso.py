@@ -509,7 +509,16 @@ def test_identity_names_the_platform_in_friendly_words(platform, expected_os):
     version, host, ua = perso_client_module.resolve_identity(
         platform, {"PERSODUB_APP_VERSION": "1.2.3"})
     assert (version, host) == ("1.2.3", "desktop_app")
-    assert ua == "desktop_app/1.2.3 (os=%s)" % expected_os
+    assert ua == "desktop_app/1.2.3 (os=%s; edition=opensource)" % expected_os
+
+
+def test_identity_names_the_edition_in_the_user_agent_only():
+    # The host stays desktop_app, which Perso's logs already count by; the edition rides
+    # in the User-Agent so the two apps can be told apart there.
+    version, host, ua = perso_client_module.resolve_identity(
+        "darwin", {"PERSODUB_APP_VERSION": "1.2.3", "PERSODUB_BUILD_EDITION": "production"})
+    assert host == "desktop_app"
+    assert ua == "desktop_app/1.2.3 (os=mac; edition=production)"
 
 
 def test_version_is_not_a_second_hardcoded_copy():
