@@ -186,7 +186,9 @@ test("a link whose target is gone is removed, logged, and replaced by a real fol
   // #196, #197, #209: mkdir models\campplus said "no such file" -- what a
   // models\ pointing at a deleted folder answers.
   const kit = mkdtempSync(join(tmpdir(), "kit-"));
-  symlinkSync(join(kit, "gone"), join(kit, "models"));
+  // A junction, as the reporters' kits had: Windows makes one without admin
+  // rights or Developer Mode, and elsewhere the type is ignored.
+  symlinkSync(join(kit, "gone"), join(kit, "models"), "junction");
   const said = [];
   assert.equal(kitFolderProblem(kit, (line) => said.push(line)), null);
   assert.equal(lstatSync(join(kit, "models")).isDirectory(), true);
@@ -197,7 +199,7 @@ test("a live link is never removed", () => {
   const kit = mkdtempSync(join(tmpdir(), "kit-"));
   mkdirSync(join(kit, "elsewhere"));
   writeFileSync(join(kit, "elsewhere", "weights.bin"), "x");
-  symlinkSync(join(kit, "elsewhere"), join(kit, "models"));
+  symlinkSync(join(kit, "elsewhere"), join(kit, "models"), "junction");
   assert.equal(kitFolderProblem(kit), null);
   assert.equal(lstatSync(join(kit, "models")).isSymbolicLink(), true);
   assert.equal(existsSync(join(kit, "elsewhere", "weights.bin")), true);
