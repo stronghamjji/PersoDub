@@ -101,3 +101,17 @@ def test_the_production_editions_notes_never_name_the_open_source_edition():
     assert len(own[0]) == len(own[1])
     for n in (own[0] + own[1]) or (data["notes"] + data["notes_ko"]):
         assert "open-source" not in n and "오픈소스" not in n, n
+
+
+def test_the_notes_are_this_versions():
+    """1.0.1 went out with 1.0.0's three lines under "1.0.1" (2026-11-02): the
+    file names the version its lines are for, and it is the app's version, so
+    a release that does not write its own notes fails here."""
+    import json
+    import os
+    root = os.path.dirname(os.path.dirname(misc_api.__file__))
+    with open(os.path.join(root, "whats_new.json"), encoding="utf-8") as f:
+        notes_for = json.load(f).get("version")
+    with open(os.path.join(os.path.dirname(root), "desktop", "package.json"), encoding="utf-8") as f:
+        app_version = json.load(f)["version"]
+    assert notes_for == app_version, f"app/whats_new.json is for {notes_for}, the app is {app_version}"
