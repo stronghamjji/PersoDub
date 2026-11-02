@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "notes": [
     "On Windows, an install folder that cannot take files is caught before the download starts.",
     "On a free Perso plan, a video over one minute is dubbed for its first minute, and the app says so before you start.",
