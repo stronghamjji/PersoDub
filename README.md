@@ -22,8 +22,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.0.0-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
-  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.0.0.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.0.1-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(.dmg)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.0.1.exe"><img src="https://img.shields.io/badge/Download-Windows%20(.exe)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
 <p align="center">
@@ -113,7 +113,7 @@ Listen for pacing: PersoDub fits the translation to the time instead of speeding
 
 ## Get started
 
-1. Download for [macOS](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.0.0-arm64.dmg) or [Windows](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.0.0.exe).
+1. Download for [macOS](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-1.0.1-arm64.dmg) or [Windows](https://github.com/stronghamjji/PersoDub/releases/latest/download/PersoDub-Setup-1.0.1.exe).
 2. Drop in a video, or paste a link.
 3. Pick a language and press **Start dubbing**.
 
@@ -178,6 +178,6 @@ Finish the setup, not just a plan. Tell me any step you could not do.
 | **Languages** | 10 on your computer, 100+ with the Perso API, depending on the dubbing model. [Full list](docs/languages.md) |
 | **Translation** | A local model, or ChatGPT for free. No subscription. [Configuration](docs/configuration.md) |
 | **Better quality** | A free Perso key: better transcription, less to download. [Configuration](docs/configuration.md) |
-| **Privacy** | By default the video is dubbed on this computer. With Whisper and a local translator, it stays here; the Perso API, if you choose it, uploads it. [What is sent](docs/privacy.md) |
+| **Privacy** | By default the video is dubbed on this computer. With Whisper and a local translator, it stays here; the Perso API, if you choose it, uploads it. Which buttons are pressed is counted, never what you type; turn it off in Settings. [What is sent](docs/privacy.md) |
 | **How it works** | The Perso API, or on your computer: Mel-Band RoFormer or Demucs, Whisper, CAM++, a local LLM or ChatGPT, Qwen3-TTS. [Architecture](docs/architecture.md) · [Pipeline](docs/architecture.md#2-the-dubbing-pipeline) · [Comparison](docs/comparison.md) · [Roadmap](docs/roadmap.md) |
 | **Build from source** | [INSTALL.md](INSTALL.md) · [Development](docs/development.md) · [Contributing and security](docs/contributing.md) |

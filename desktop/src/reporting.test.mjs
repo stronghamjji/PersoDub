@@ -21,7 +21,7 @@ const INQUIRY_URL = "https://script.example/macros/s/abc/exec";
 // stands in for the machine's own diagnostics (diagnostics.js).
 function setup({ packaged = true, kitEnv = "PERSODUB_NO_REPORTS=0\nPERSODUB_REPORTS_DEBUG=0\n",
                  engines = null, relay = () => ok(ISSUE), probes = async () => ({}), inquiryUrl = INQUIRY_URL,
-                 account = undefined, base = mkdtempSync(join(tmpdir(), "odreporting-")) } = {}) {
+                 account = undefined, edition = undefined, base = mkdtempSync(join(tmpdir(), "odreporting-")) } = {}) {
   const kitDir = join(base, "kit");
   const userData = join(base, "userData");
   mkdirSync(kitDir, { recursive: true });
@@ -40,7 +40,7 @@ function setup({ packaged = true, kitEnv = "PERSODUB_NO_REPORTS=0\nPERSODUB_REPO
   const ctx = { engines };
   const reporter = createReporter({
     app, BrowserWindow: { getAllWindows: () => [win] }, ctx,
-    shellLog: (line) => logged.push(line), inquiryUrl, account, fetchImpl, probeImpl: probes,
+    shellLog: (line) => logged.push(line), inquiryUrl, account, edition, fetchImpl, probeImpl: probes,
   });
   const queued = () => (existsSync(join(kitDir, "reports")) ? readdirSync(join(kitDir, "reports")).sort() : []);
   const readQueued = (name) => JSON.parse(readFileSync(join(kitDir, "reports", name), "utf8"));
@@ -77,6 +77,31 @@ test("a failure goes to the relay with the backend's half, then its logs, and th
   assert.deepEqual(s.reporter.lastReport(), announced);
   assert.deepEqual(s.queued(), [], "nothing left to retry");
   assert.ok(s.logged.includes(`[persodub-report] sent id r1 issue #142 (${ISSUE.url})`), s.logged.join("\n"));
+});
+
+test("a failure before kit.env names an edition says the app file's, and the kit's once it does", async () => {
+  // An install that dies at its first step has no kit.env edition yet: the
+  // dashboard's Edition read "?" (2026-10-30).
+  const first = setup({ edition: "production" });
+  await first.reporter.sendReport({ kind: "install", kitDir: first.kitDir, code: "unknown", step: "payload", message: "boom" });
+  assert.equal(JSON.parse(first.calls[0].body).env.edition, "production");
+
+  const kept = setup({ edition: "production", kitEnv: "PERSODUB_EDITION=opensource\n" });
+  await kept.reporter.sendReport({ kind: "install", kitDir: kept.kitDir, code: "unknown", step: "payload", message: "boom" });
+  assert.equal(JSON.parse(kept.calls[0].body).env.edition, "opensource");
+});
+
+test("the same failure six times in four seconds goes to the relay once, and a different one still goes", async () => {
+  // #204-#208: Try again pressed six times on one computer, every press a
+  // report, and the relay -- asked them all at once -- opened five issues.
+  const s = setup();
+  const failure = { kind: "install", kitDir: s.kitDir, code: "unknown", step: "payload", message: "EIO, access denied 'C:\\kit\\app'" };
+  await Promise.all(Array.from({ length: 6 }, () => s.reporter.sendReport(failure)));
+  await s.reporter.sendReport({ ...failure, step: "python", message: "fetch failed" });
+  const posted = s.calls.filter((c) => c.url === `${REPORT_ENDPOINT}/report`).map((c) => JSON.parse(c.body).step);
+  assert.deepEqual(posted, ["payload", "python"]);
+  assert.deepEqual(s.queued(), [], "the ones not sent are not left to retry either");
+  assert.ok(s.logged.some((l) => /not sent again/.test(l)), s.logged.join("\n"));
 });
 
 // The backend's tail of a long job has lost the job's opening; its whole log,
@@ -409,7 +434,8 @@ test("a report and a record carry the first twelve characters of the computer's 
   for (const kitEnv of ["", "PERSODUB_NO_ANALYTICS=1\n"]) {
     writeFileSync(join(s.kitDir, "kit.env"), kitEnv);
     s.calls.length = 0;
-    await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: "boom" });
+    // A failure of its own each time: the same one again within ten minutes is not sent.
+    await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "unknown", message: `boom ${kitEnv || "counts on"}` });
     await s.reporter.sendReport({ kind: "dub", kitDir: s.kitDir, code: "ok", jobId: "abc123", timing: TIMING });
     const sent = s.calls.filter((c) => /\/(report|record)$/.test(c.url)).map((c) => [c.url.split("/").pop(), JSON.parse(c.body).device]);
     assert.deepEqual(sent, [["report", "0123456789ab"], ["record", "0123456789ab"]], kitEnv || "counts on");

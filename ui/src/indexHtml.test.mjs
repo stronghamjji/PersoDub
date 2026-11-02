@@ -1334,7 +1334,7 @@ test("the Video card has Replace · Remove at its top right, and a line under it
 test("Before dubbing says what you get under the last choice: dubbed video, subtitles and audio files", () => {
   const html = readPage();
   const card = html.slice(html.indexOf('<div class="draft-setup" id="draftSetup" hidden>'), html.indexOf('id="dubbingPaneHead"'));
-  assert.match(card, /<div id="draftOptionsSlot"><\/div>\s*<!--[^]*?-->\s*<div class="erase-card draft-result" id="draftResult"><div data-i18n class="k">What you get<\/div><div class="m"><span data-i18n>Dubbed video, subtitles and audio files<\/span><\/div><\/div>\s*<div class="form-error" id="draftError"><\/div>\s*<div class="draft-foot">/);
+  assert.match(card, /<div id="draftOptionsSlot"><\/div>\s*<!--[^]*?-->\s*<div class="erase-card draft-result" id="draftResult"><div data-i18n class="k">What you get<\/div><div class="m"><span data-i18n id="draftResultWhat">Dubbed video, subtitles and audio files<\/span><\/div><\/div>\s*<div class="form-error" id="draftError"><\/div>\s*<div class="draft-foot">/);
   assert.match(html, /\.draft-result \{ margin: 12px 0 10px; \}\n  \.draft-result \.m \{ line-height: 1\.5; \}/);
   // Nothing in the page's code writes over it, in either mode.
   assert.ok(!html.includes('$("draftResult")'));

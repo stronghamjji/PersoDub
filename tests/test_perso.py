@@ -509,7 +509,16 @@ def test_identity_names_the_platform_in_friendly_words(platform, expected_os):
     version, host, ua = perso_client_module.resolve_identity(
         platform, {"PERSODUB_APP_VERSION": "1.2.3"})
     assert (version, host) == ("1.2.3", "desktop_app")
-    assert ua == "desktop_app/1.2.3 (os=%s)" % expected_os
+    assert ua == "desktop_app/1.2.3 (os=%s; edition=opensource)" % expected_os
+
+
+def test_identity_names_the_edition_in_the_user_agent_only():
+    # The host stays desktop_app, which Perso's logs already count by; the edition rides
+    # in the User-Agent so the two apps can be told apart there.
+    version, host, ua = perso_client_module.resolve_identity(
+        "darwin", {"PERSODUB_APP_VERSION": "1.2.3", "PERSODUB_BUILD_EDITION": "production"})
+    assert host == "desktop_app"
+    assert ua == "desktop_app/1.2.3 (os=mac; edition=production)"
 
 
 def test_version_is_not_a_second_hardcoded_copy():
@@ -528,6 +537,15 @@ def test_outbound_links_carry_the_running_identity():
         assert "utm_source=%s" % perso_client_module.CLIENT_HOST in link
         assert "utm_content=%s" % kind in link
         assert "utm_term=v%s" % perso_client_module.APP_VERSION in link
+        assert "utm_campaign=%s" % perso_client_module.UTM_CAMPAIGN in link
+
+
+def test_outbound_links_name_the_edition_in_the_campaign():
+    # Two editions, one campaign each, so Perso can tell which brought a visit or a
+    # signup (user, 2026-10-30). Anything that is not the production build is open source.
+    assert perso_client_module.utm_campaign({"PERSODUB_BUILD_EDITION": "production"}) == "desktop_app_production"
+    assert perso_client_module.utm_campaign({"PERSODUB_BUILD_EDITION": "opensource"}) == "desktop_app_opensource"
+    assert perso_client_module.utm_campaign({}) == "desktop_app_opensource"
 
 
 # ── 7. PersoClient.separate() HTTP flow (mocked httpx, no network) ─────────

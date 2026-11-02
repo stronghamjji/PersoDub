@@ -65,7 +65,7 @@ const CFG = authConfig({ PERSODUB_AUTH_BASE: "https://fake.test/auth/api", PERSO
 const REDIRECT_URI = redirectUriFor(CFG, 52390);
 const REFRESH = `POST ${CFG.refreshUrl} (form)`;
 // The utm tail every link into Perso carries, for CFG (no version) and button `content`.
-const UTM = (content) => `utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v&utm_content=${content}`;
+const UTM = (content) => `utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app_production&utm_term=v&utm_content=${content}`;
 
 // The listener's stand-in: no port is opened, and the test hands the browser's
 // request to auth.handleCallback itself. `listened` counts the doors opened,
@@ -155,7 +155,7 @@ test("the authorize address carries what Perso's PKCE demo sends, with the port'
   assert.deepEqual([...url.searchParams], [
     ["response_type", "code"], ["client_id", "cid"], ["redirect_uri", "http://127.0.0.1:52390/callback"], ["scope", "profile email"],
     ["state", "st"], ["code_challenge", "ch"], ["code_challenge_method", "S256"],
-    ["utm_source", "desktop_app"], ["utm_medium", "desktop-app"], ["utm_campaign", "desktop_app"], ["utm_term", "v0.9.1"], ["utm_content", "sign_in"],
+    ["utm_source", "desktop_app"], ["utm_medium", "desktop-app"], ["utm_campaign", "desktop_app_production"], ["utm_term", "v0.9.1"], ["utm_content", "sign_in"],
   ]);
 });
 
@@ -188,7 +188,7 @@ test("Perso's addresses default to api.perso.ai, the ports to three of this comp
   assert.equal(live.apiKeysUrl, "https://api.perso.ai/auth/api/v1/api-keys/active");
   // With the tail every link into Perso carries (app/perso_client.py UTM_TAIL)
   // and the button, as the key window's link (SIGNUP_LINK).
-  assert.equal(live.keyPageUrl, "https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup");
+  assert.equal(live.keyPageUrl, "https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app_production&utm_term=v0.9.1&utm_content=signup");
   assert.equal(live.scope, "profile email");
   assert.equal(live.clientId, "perso-dubbing-desktop");
   assert.deepEqual(live.redirectPorts, [52290, 52291, 52292]);
@@ -201,7 +201,7 @@ test("Perso's addresses default to api.perso.ai, the ports to three of this comp
   assert.equal(own.tokenUrl, "http://127.0.0.1:9/auth/api/v2/token");
   assert.deepEqual([own.refreshUrl, own.profileUrl, own.apiKeysUrl, own.signOutUrl], ["http://127.0.0.1:9/r", "http://127.0.0.1:9/p", "http://127.0.0.1:9/k", "http://127.0.0.1:9/o"]);
   assert.equal(own.clientId, "mine");
-  assert.equal(own.keyPageUrl, "http://keys.test/?from=x&utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup");
+  assert.equal(own.keyPageUrl, "http://keys.test/?from=x&utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app_production&utm_term=v0.9.1&utm_content=signup");
   assert.deepEqual(own.redirectPorts, [5173]);
   assert.equal(redirectUriFor(own, 5173), "http://localhost:5173/callback");
   assert.deepEqual(authConfig({ PERSODUB_AUTH_REDIRECT_PORTS: "nonsense" }).redirectPorts, [52290, 52291, 52292]);
@@ -1075,7 +1075,7 @@ test("Make a key on the sign-in screen opens the key page with the app's version
   registerAuthIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, auth, openKeyWindow: async (...args) => { inWindow.push(args); },
     track: (name, props) => steps.push([name, props]) });
   await handlers["shell:auth-open-key-page"]();
-  assert.deepEqual(inWindow, [["https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app&utm_term=v0.9.1&utm_content=signup", null]]);
+  assert.deepEqual(inWindow, [["https://developers.perso.ai/api-keys?utm_source=desktop_app&utm_medium=desktop-app&utm_campaign=desktop_app_production&utm_term=v0.9.1&utm_content=signup", null]]);
   assert.deepEqual(browser, []);
   assert.deepEqual(steps, [["key_page_opened", {}]]);
 });

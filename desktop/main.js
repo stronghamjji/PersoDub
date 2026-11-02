@@ -104,8 +104,8 @@ const auth = createShellAuth({ app, safeStorage, net, shell, ctx, edition, shell
                                track: events.track });
 
 const reporter = createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl: built.PERSODUB_INQUIRY_URL || "",
-                                  account: () => auth.signedInAccount() });
-const countUsage = usageCounter(app);
+                                  account: () => auth.signedInAccount(), edition });
+const countUsage = usageCounter(app, edition);
 // The last batch of events, sent once as the app goes (src/events.js quit):
 // before Restart to update quits, or at the first will-quit, which waits for it.
 let eventsSent = false;

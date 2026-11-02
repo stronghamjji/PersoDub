@@ -76,11 +76,12 @@ function unqueue(kitDir, base) {
  * may not be up yet, or never came up. `inquiryUrl` is the support web app
  * Customer support's inquiries go to, "" when the build names none, and
  * `account` answers the signed-in Perso account an inquiry is from.
+ * `edition` is the app file's, which a failure says while kit.env names none.
  * `fetchImpl` is the real fetch, and `probeImpl` the real probes, everywhere
  * but the tests.
  */
 export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl = "", account = () => null,
-                                 fetchImpl = fetch, probeImpl = runProbes }) {
+                                 edition = "", fetchImpl = fetch, probeImpl = runProbes }) {
   // The report's install id, which the relay's daily limit counts by, lives in
   // its own file and is minted only by a run that really reports. The id the
   // dashboard knows a computer by is analytics.json's, which the launch makes
@@ -94,6 +95,16 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
   // counted twice, and spends two of the five a day the relay takes from one
   // machine. An entry in here is left to whoever has it.
   const inHand = new Set();
+  // When this run last sent each failure, by fingerprint. Try again pressed six
+  // times in four seconds was six reports, and the relay, asked them all at
+  // once, opened five issues for one failure (#204-#208, 2026-10-29).
+  const SAME_FAILURE_MS = 10 * 60 * 1000;
+  const lastSent = new Map();
+  function sentJustNow(print, now = Date.now()) {
+    if (now - (lastSent.get(print) ?? -Infinity) < SAME_FAILURE_MS) return true;
+    lastSent.set(print, now);
+    return false;
+  }
 
   function reportMode(kitDir) {
     return resolveReportMode({ isPackaged: app.isPackaged, env: envWithKit(kitDir) });
@@ -208,7 +219,7 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
         torchVariant: torchVariantFor(kitDir),
         packs,
         freeDiskBytes: await freeSpaceAt(kitDir),
-        edition: kitEdition(kitDir) || "",
+        edition: kitEdition(kitDir) || edition,
         installed: app.isPackaged,
       }),
       timing,
@@ -320,6 +331,12 @@ export function createReporter({ app, BrowserWindow, ctx, shellLog, inquiryUrl =
           queueReport(kitDir, base, { failure: { kind, code, step, message, jobId, timing }, at });
         }
         const { report, archive } = await collectReport(opts);
+        // A finished job's record is never one of these: each is its own job.
+        if (report.outcome !== "ok" && report.fingerprint && sentJustNow(report.fingerprint)) {
+          shellLog(`[persodub-report] same failure ${report.fingerprint} as one sent in the last 10 minutes, not sent again`);
+          if (base) unqueue(kitDir, base);
+          return;
+        }
         if (mode === "debug") {
           shellLog(`[persodub-report] would send: ${JSON.stringify(report)}`);
           shellLog(`[persodub-report] would attach ${archive ? archive.length : 0} bytes of logs`);

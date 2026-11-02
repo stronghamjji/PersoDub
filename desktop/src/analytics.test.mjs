@@ -73,6 +73,14 @@ test("every dub is reported, however many land on one day", () => {
 
 // ---- buildPayload: nothing but the agreed fields may leave ----
 
+test("a count names the edition it came from, and only one of the two", () => {
+  const base = { event: "app_launch", os: "mac", version: "1.0.1", device: "a".repeat(32) };
+  assert.equal(buildPayload({ ...base, edition: "opensource" }).edition, "opensource");
+  assert.equal(buildPayload({ ...base, edition: "production" }).edition, "production");
+  assert.equal("edition" in buildPayload({ ...base, edition: "/Users/someone" }), false);
+  assert.equal("edition" in buildPayload(base), false);
+});
+
 test("an unlisted error code leaves as unknown", () => {
   const p = buildPayload({
     event: "dub_failure", os: "mac", version: "0.3.2", device: "a".repeat(32),

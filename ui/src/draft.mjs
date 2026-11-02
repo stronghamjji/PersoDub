@@ -69,6 +69,19 @@ export function keptSeconds(d = draft) {
   return d ? d.ranges.reduce((s, [a, b]) => s + (b - a), 0) : 0;
 }
 
+/** The kept parts cut down to their first `limit` seconds, in order. */
+export function firstSeconds(ranges, limit) {
+  const out = [];
+  let left = limit;
+  for (const [a, b] of ranges) {
+    if (left <= 0) break;
+    const take = Math.min(b - a, left);
+    out.push([a, a + take]);
+    left -= take;
+  }
+  return out;
+}
+
 /** Seconds of speech in the kept parts, or null when the draft does not
     know where its video is spoken (no `speech`). */
 export function spokenSeconds(d = draft) {

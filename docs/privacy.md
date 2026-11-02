@@ -62,7 +62,7 @@ assistant means nothing runs and nothing is sent.
 
 PersoDub reports six events — app launch, dub finished, dub failed, subtitles erased,
 erasing failed, install failed — to see how many installs finish a dub. Each carries the app version, your operating
-system, a random install ID, and on a failure one short code off a fixed list. A failed
+system, which edition it is (from 1.0.1), a random install ID, and on a failure one short code off a fixed list. A failed
 install also names which of its twelve steps it stopped at, again off a fixed list. From
 0.6.2 a dub also says which of its parts went through Perso — transcription, separation,
 or the whole dub — each as one of two words, how many Perso credits that one job used,
@@ -104,7 +104,8 @@ the app from a fixed list: never a title, a file name, a link, what an inquiry s
 address. The last batch is sent as the app closes, waiting three seconds at most; what does
 not get through goes the next time the app opens.
 
-It is on to begin with in the production edition and off in the open-source edition. Turn
+It is on to begin with in both editions (before 1.0.1, in the production edition only), and
+each batch names its edition, production or open source, so the two are counted apart. Turn
 it on or off in **Settings → Privacy**, or with `PERSODUB_EVENTS=1` or `0` in `kit.env`; it
 applies to the next batch. With the usage counts off (`PERSODUB_NO_ANALYTICS=1`) nothing
 leaves, and `PERSODUB_EVENTS_DEBUG=1` writes how many would have been sent into the app's

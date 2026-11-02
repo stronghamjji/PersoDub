@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, notEnoughSpace, freeSpaceAt, inEnglish } from "./config.js";
+import { loadConfig, DEFAULTS, defaultKitDir, kitPathTooLong, kitFolderProblem, notEnoughSpace, freeSpaceAt, inEnglish } from "./config.js";
 import { checkKit, readKitVersion } from "./engineCheck.js";
 import { startEngines } from "./orchestrator.js";
 import { rememberedEdition, kitEdition, editionLine, findPayloadDir, displayName } from "./edition.js";
@@ -194,6 +194,24 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         // No logDir: this stopped before a byte was written, so there is no
         // log to point at.
         await showScreen(win, "error.html", { title: t("Choose a shorter install location"), message: tooLong });
+        return false;
+      }
+      // A kit folder that will not take a file: said here, before the payload
+      // step stops at 0.0s on it. A broken link is cleared inside the check.
+      const refused = kitFolderProblem(cfg.kitDir, shellLog);
+      if (refused) {
+        const said = errorText(refused.error);
+        shellLog(`PERSODUB_KIT cannot write to ${refused.dir}: ${said}`, "ERROR");
+        countUsage("install_failure", cfg.kitDir, "permission");
+        track("error_shown", { code: "permission", where: "install" });
+        sendReport({ kind: "install", kitDir: cfg.kitDir, code: "permission", message: `${refused.dir}: ${said}` });
+        await showScreen(win, "error.html", {
+          title: t("Can't write to the install folder"),
+          where: refused.dir,
+          message: t("Another program is using or blocking this folder. Close every {app} window, then press Try again."),
+          note: t("If antivirus software is blocking it, add {app} to its allowed list."),
+          details: said,
+        });
         return false;
       }
       // The other preflight, and for the same reason: five machines reported a

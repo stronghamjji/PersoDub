@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { STEP_IDS } from "./installSpec.js";
+import { EDITIONS } from "./edition.js";
 
 // Usage counts. The decisions live here as pure functions so they can be tested
 // without Electron; usageIpc.js and the renderer do the wiring. What a payload is
@@ -108,9 +109,12 @@ export function timingSeconds(timing) {
 }
 
 /** The whole message. A field not named here cannot leave. */
-export function buildPayload({ event, os, version, device, errorCode, step,
+export function buildPayload({ event, os, version, device, edition, errorCode, step,
                                engines, credits, seconds, timing, persoKey }) {
   const payload = { event, os, version, device };
+  // Which app sent it (1.0.1), so the dashboard counts the two apart: one of
+  // the two names, or nothing.
+  if (Object.hasOwn(EDITIONS, edition ?? "")) payload.edition = edition;
   if (FAILURE_EVENTS.has(event)) {
     payload.error_code = ERROR_CODES.has(errorCode) ? errorCode : "unknown";
   }
@@ -269,7 +273,7 @@ export function keepDevice(file) {
  * not. It never throws: a count must never be able to break a launch or a dub.
  */
 export async function countEvent(event, {
-  mode, stateFile, url, os, version, errorCode, step,
+  mode, stateFile, url, os, version, edition, errorCode, step,
   engines, credits, seconds, timing, persoKey,
   today = new Date().toISOString().slice(0, 10),
   timeoutMs, fetchImpl, log = console.log,
@@ -281,7 +285,7 @@ export async function countEvent(event, {
   const state = loadState(stateFile);
   if (!shouldReport({ event, lastDay: state.lastDay, today })) return false;
 
-  const payload = buildPayload({ event, os, version, device: state.device, errorCode, step,
+  const payload = buildPayload({ event, os, version, device: state.device, edition, errorCode, step,
                                  engines, credits, seconds, timing, persoKey });
 
   if (mode === "debug") {

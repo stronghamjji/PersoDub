@@ -17,7 +17,7 @@
 // importSource for the shortcut above.
 import { buildDubFormData, fetchPersoSpace, saveDownloadParts } from "./dubApi.mjs";
 import { errorText, fmtLength, videoCardHtml } from "./format.mjs";
-import { getDraft, clearDraft, setRanges, keptSeconds, spokenSeconds, isWhole, onDraftChange } from "./draft.mjs";
+import { getDraft, clearDraft, setRanges, keptSeconds, spokenSeconds, firstSeconds, isWhole, onDraftChange } from "./draft.mjs";
 import { modelInfo } from "./persoModels.mjs";
 import { savedSettings, t } from "./i18n.mjs";
 import { gb } from "./modelsUi.mjs";
@@ -119,16 +119,24 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
   // once each time Perso API is chosen for a video.
   let planAskedFor = null;
   let freePlan = false;
+  // The answer, for Start to wait on: pressed before it came, a free plan's
+  // video would go whole and Perso refuse it.
+  let planCheck = Promise.resolve();
   function askPlan(id) {
     if (planAskedFor === id) return;
     planAskedFor = id;
     freePlan = false;
-    fetchPersoSpace().then((space) => {
+    planCheck = fetchPersoSpace().then((space) => {
       if (planAskedFor !== id || String((space && space.tier) || "").toLowerCase() !== "free") return;
       freePlan = true;
       paintFoot();
-    });
+    }).catch(() => {});
   }
+  // A free-plan workspace dubs one minute at most (Perso's F4008): past that,
+  // the first minute of the kept parts is what goes (user, 2026-10-30).
+  const FREE_PLAN_SECONDS = 60;
+  const cutForPlan = (d, mode = $("dubModeSelect").value) => (freePlan && mode === "perso" && keptSeconds(d) > FREE_PLAN_SECONDS
+    ? { ...d, ranges: firstSeconds(d.ranges, FREE_PLAN_SECONDS) } : d);
 
   function paintFoot() {
     const d = getDraft();
@@ -140,9 +148,14 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
     const quality = cloud ? "Perso API"
       : $("qualitySelect").value === "high" ? t("High quality mode") : t("Fast mode");
     const first = firstDownloadBytes();
-    $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(d)), mode: quality }),
-      ...(cloud ? persoCost(d) : first ? [t("{size} GB the first time", { size: gb(first) })] : []),
-      ...(cloud && freePlan ? [t("A free-plan workspace cannot download the result. When it is done, see it in your Perso workspace.")] : [])].join(" · ");
+    const sent = cutForPlan(d);
+    const cut = sent !== d;
+    $("draftFootLabel").textContent = [t("Dubbing {length} · {mode}", { length: fmtLength(keptSeconds(sent)), mode: quality }),
+      ...(cloud ? persoCost(sent) : first ? [t("{size} GB the first time", { size: gb(first) })] : []),
+      ...(cloud && freePlan ? [cut ? t("A free-plan workspace dubs the first minute only. When it is done, see it in your Perso workspace.")
+        : t("A free-plan workspace cannot download the result. When it is done, see it in your Perso workspace.")] : [])].join(" · ");
+    $("draftResultWhat").textContent = cut
+      ? t("The first minute, dubbed, in your Perso workspace") : t("Dubbed video, subtitles and audio files");
     // The way to top up, whenever a Perso dubbing is what is priced.
     const recharge = $("draftRechargeLink");
     recharge.hidden = !cloud;
@@ -189,10 +202,18 @@ export function initDraftSetup({ $, state, showScreen, setTopbar, fitLayout, siz
         // Add language: the project this dubbing joins (ui/src/languageRow.mjs).
         projectId: state.draftProject || undefined,
       };
-      if (!isWhole(d)) {
-        if (d.ranges.length === 1) opts.trim = { start: d.ranges[0][0], end: d.ranges[0][1] };
+      // Asked again here: the workspace may have changed in Settings, or been
+      // picked only now, since the foot asked (cross-check, 2026-11-02).
+      if (opts.dubMode === "perso") {
+        planAskedFor = null;
+        askPlan(d.downloadId);
+        await planCheck;
+      }
+      const sent = cutForPlan(d, opts.dubMode);
+      if (sent !== d || !isWhole(d)) {
+        if (sent.ranges.length === 1) opts.trim = { start: sent.ranges[0][0], end: sent.ranges[0][1] };
         // Pairs of seconds, as app/api/dub.py parse_ranges reads them.
-        else opts.ranges = d.ranges;
+        else opts.ranges = sent.ranges;
       }
       const fd = buildDubFormData(opts);
       const started = await submitDubStart({

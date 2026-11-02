@@ -70,7 +70,7 @@ def test_get_reports_unset_keys(tmp_path, monkeypatch):
     assert body == {"gemini_key_set": False, "perso_key_set": False,
                     "gemini_api_key": None, "perso_api_key": None,
                     "perso_space_seq": None, "analytics_off": False,
-                    "reports_off": False, "events_enabled": False, "ui_language": "auto"}
+                    "reports_off": False, "events_enabled": True, "ui_language": "auto"}
 
 
 def test_get_carries_the_utm_tagged_signup_link(tmp_path, monkeypatch):
@@ -535,18 +535,13 @@ def test_cleared_workspace_pin_does_not_fall_back_to_the_process_env(tmp_path, m
 
 # --- the button events switch ----------------------------------------------
 
-def test_events_follow_the_build_edition_until_the_switch_is_saved(tmp_path, monkeypatch):
+def test_events_are_on_in_both_editions_until_the_switch_is_saved(tmp_path, monkeypatch):
     # The shell decides the same way (desktop/src/events.js eventsOn): no line
-    # in kit.env means on for the production build and off for open source.
-    # The kit's remembered edition (PERSODUB_EDITION) is for a dub's default
-    # only: an open-source build whose kit says production records nothing.
+    # in kit.env means on, whichever edition the build is.
     _kit(tmp_path, monkeypatch, BASE)
-    monkeypatch.setenv("PERSODUB_EDITION", "opensource")
-    monkeypatch.setenv("PERSODUB_BUILD_EDITION", "production")
-    assert client.get("/api/settings").json()["events_enabled"] is True
-    monkeypatch.setenv("PERSODUB_EDITION", "production")
-    monkeypatch.setenv("PERSODUB_BUILD_EDITION", "opensource")
-    assert client.get("/api/settings").json()["events_enabled"] is False
+    for edition in ("production", "opensource"):
+        monkeypatch.setenv("PERSODUB_BUILD_EDITION", edition)
+        assert client.get("/api/settings").json()["events_enabled"] is True
 
 
 def test_the_events_switch_writes_the_line_the_shell_reads(tmp_path, monkeypatch):

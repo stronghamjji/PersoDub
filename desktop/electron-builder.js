@@ -21,7 +21,8 @@ export function builderConfig(edition, productionUrl = PRODUCTION_UPDATE_URL) {
     extraMetadata: { name: pkg },
     copyright: "Copyright © 2026 ESTsoft corp.",
     directories: { output: "dist" },
-    files: ["main.js", "preload.cjs", "src/**", "screens/**", "i18n/**", "fake/**", "config.json"],
+    // The tests beside the code stay out of app.asar (2026-10-28, 1.0.0's had 47).
+    files: ["main.js", "preload.cjs", "src/**", "!src/**/*.test.mjs", "screens/**", "i18n/**", "fake/**", "config.json"],
     extraResources: [
       { from: "resources/payload", to: "payload" },
       { from: "../LICENSE", to: "LICENSE" },

@@ -1,7 +1,7 @@
 // Build-time payload collector: gathers everything the installer needs into
 // resources/payload/ so electron-builder can bundle it as extraResources.
 import { cpSync, rmSync, mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { EDITIONS, BUILD_ENV, BUILD_KEYS, PRODUCTION_UPDATE_URL, buildEdition, buildEnvText } from "../src/edition.js";
@@ -29,6 +29,15 @@ export function buildKitVersion(version, gitSha) {
 // over PERSODUB_EDITION in the environment: package.json's dist:*:prod
 // scripts pass it, so a production build never depends on how the shell sets
 // a variable. Undefined when not given; a flag without a name stops the build.
+// What of the app goes in the payload: not the tests beside the code nor their
+// helpers, which app.asar leaves out too (electron-builder.js, 1.0.1). `rel` is
+// the path under the repo, in either slash.
+export function shipped(rel) {
+  const p = rel.split("\\").join("/");
+  return !p.includes("__pycache__") && !p.endsWith(".test.mjs")
+    && !/^ui\/(testlib|check-inline\.mjs)(\/|$)/.test(p);
+}
+
 export function editionFromArgs(args) {
   for (const [i, arg] of args.entries()) {
     let name;
@@ -53,7 +62,7 @@ function main() {
   for (const item of ["app", "static", "ui", "requirements.txt"]) {
     cpSync(join(REPO, item), join(OUT, "app-repo", item), {
       recursive: true,
-      filter: (src) => !src.includes("__pycache__"),
+      filter: (src) => shipped(relative(REPO, src)),
     });
   }
   cpSync(join(DESKTOP, "vendor"), join(OUT, "kit-src"), { recursive: true });
