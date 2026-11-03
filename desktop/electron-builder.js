@@ -37,6 +37,12 @@ export function builderConfig(edition, productionUrl = PRODUCTION_UPDATE_URL) {
     win: {
       target: [{ target: "nsis", arch: ["x64"] }],
       artifactName: "${productName}-Setup-${version}.${ext}",
+      // The auto-updater installs a downloaded installer only when its
+      // Authenticode signature names this publisher (the company's
+      // certificate, applied after the build); without the name it checked
+      // nothing beyond latest.yml's hash. electron-builder 26 reads the name
+      // from signtoolOptions, and signs nothing while no certificate is set.
+      signtoolOptions: { publisherName: ["ESTsoft Corp."] },
     },
     nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },
     // Where latest.yml and app-update.yml say the updates are: the public
