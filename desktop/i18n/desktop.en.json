@@ -3,7 +3,7 @@
   "(unknown)": "(unknown)",
   "A company network or security program blocked the connection. Connect to another Wi-Fi or a hotspot, then press Resume.": "A company network or security program blocked the connection. Connect to another Wi-Fi or a hotspot, then press Resume.",
   "A company network or security program blocked the download. Connect to another Wi-Fi or a hotspot, then press Try again.": "A company network or security program blocked the download. Connect to another Wi-Fi or a hotspot, then press Try again.",
-  "Another program is using {app}'s files. Restart your computer, then press Try again.": "Another program is using {app}'s files. Restart your computer, then press Try again.",
+  "A security program or another program is blocking {app}'s folder. Allow {app} in your antivirus or restart your computer, then press Try again.": "A security program or another program is blocking {app}'s folder. Allow {app} in your antivirus or restart your computer, then press Try again.",
   "Cancelled.": "Cancelled.",
   "Checking the subtitle eraser": "Checking the subtitle eraser",
   "Choose a shorter install location": "Choose a shorter install location",

@@ -124,6 +124,25 @@ test("every other cause reads the same during an install", () => {
   }
 });
 
+// A Brazilian Windows machine failed the payload step 33 times with the
+// refusal in its own language behind an odd code, and every one read as
+// "unknown" (2026-10-29). The words name it now, and so does the step: the
+// payload step only copies the app's own files, so anything it cannot read
+// there is the folder being blocked.
+test("a refusal in the computer's own language, or any payload-step failure, is a permission problem", () => {
+  const said = "EIO, Acesso negado. '\\\\?\\C:\\Users\\x\\AppData\\Local\\PersoDubbing\\app'";
+  assert.equal(classifyError(said), "permission");
+  for (const words of ["Zugriff verweigert", "Accès refusé", "액세스가 거부되었습니다", "Access is denied."]) {
+    assert.equal(classifyError(`EIO, ${words}`), "permission", words);
+  }
+  assert.equal(classifyError("EIO, something nobody knows", { install: true, step: "payload" }), "permission");
+  // The step tells nothing about the other steps, and a known cause keeps its name.
+  assert.equal(classifyError("EIO, something nobody knows", { install: true, step: "models" }), "unknown");
+  assert.equal(classifyError("EIO, something nobody knows", { install: true }), "unknown");
+  assert.equal(classifyError("ENOSPC", { install: true, step: "payload" }), "disk-full");
+  assert.equal(classifyError("ENOENT: no such file or directory, mkdir 'C:\\k\\models\\campplus'", { install: true, step: "payload" }), "unknown");
+});
+
 test("step-failed is on the published list and travels as itself", () => {
   const p = buildPayload({
     event: "install_failure", os: "windows", version: "0.3.6", device: "a".repeat(32),

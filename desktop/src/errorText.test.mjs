@@ -10,3 +10,10 @@ test("an error reads as its message, anything else as itself", () => {
   // An empty message is no use: the error's own text stands in for it.
   assert.equal(errorText(new Error("")), "Error");
 });
+
+test("a system error's code and path join a message that lacks them", () => {
+  // A spawn error names the code and nothing else; an fs error already holds both.
+  assert.equal(errorText(Object.assign(new Error("spawn failed"), { code: "ENOENT", path: "C:\\x\\app" })), "spawn failed [ENOENT C:\\x\\app]");
+  assert.equal(errorText(Object.assign(new Error("EACCES: permission denied, mkdir '/k/app'"), { code: "EACCES", path: "/k/app" })),
+    "EACCES: permission denied, mkdir '/k/app'");
+});

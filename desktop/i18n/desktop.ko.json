@@ -3,7 +3,7 @@
   "(unknown)": "(알 수 없음)",
   "A company network or security program blocked the connection. Connect to another Wi-Fi or a hotspot, then press Resume.": "회사망이나 보안 프로그램이 연결을 막았어요. 다른 와이파이나 핫스팟에 연결하고 '이어 하기'를 누르면 돼요.",
   "A company network or security program blocked the download. Connect to another Wi-Fi or a hotspot, then press Try again.": "회사망이나 보안 프로그램이 다운로드를 막았어요. 다른 와이파이나 핫스팟에 연결하고 '다시 시도'를 누르면 돼요.",
-  "Another program is using {app}'s files. Restart your computer, then press Try again.": "다른 프로그램이 {app} 파일을 쓰고 있어요. 컴퓨터를 다시 켠 뒤 '다시 시도'를 누르면 돼요.",
+  "A security program or another program is blocking {app}'s folder. Allow {app} in your antivirus or restart your computer, then press Try again.": "백신이나 다른 프로그램이 {app} 폴더를 막고 있어요. 백신에서 {app}을 허용하거나 컴퓨터를 다시 켠 뒤 '다시 시도'를 누르면 돼요.",
   "Cancelled.": "취소됐어요.",
   "Checking the subtitle eraser": "자막 지우기 도구 확인 중",
   "Choose a shorter install location": "더 짧은 설치 위치를 골라 주세요",

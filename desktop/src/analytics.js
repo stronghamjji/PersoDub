@@ -313,6 +313,10 @@ export async function countEvent(event, {
 const ERROR_PATTERNS = [
   [/ENOSPC|no space left|not enough space/i,         "disk-full"],
   [/EACCES|EPERM|permission denied/i,                "permission"],
+  // Windows says the same refusal in the computer's own language, behind a
+  // code that need not be EACCES: a Brazilian machine failed 33 times with
+  // "EIO, Acesso negado." and every one counted as "unknown" (2026-10-29).
+  [/access is denied|acesso negado|acceso denegado|accès refusé|zugriff verweigert|accesso negato|доступ запрещ|액세스가 거부|アクセスが拒否|拒绝访问/i, "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
   // pip and Python's ssl refusing a certificate. Ahead of "network" because
   // the answer is the machine's security software, not its connection: two
@@ -388,13 +392,20 @@ const ERROR_PATTERNS = [
  * running engine dying mid-dub, but its pattern (a nonzero exit) also matches
  * every pip install and model download that fails during setup -- so install
  * failures arrived claiming an engine had crashed when none had started yet.
+ *
+ * `step` is the install step that failed (installSpec.js). The payload step
+ * copies the app's own files into the kit folder: nothing is downloaded and
+ * nothing runs, so a message the table does not know can only mean the folder
+ * is blocked -- by a security program, another program, or its permissions --
+ * whatever language and code the system wrapped it in. A missing file (ENOENT)
+ * is the one other thing it can say, and that is not a blocked folder.
  */
-export function classifyError(message, { install = false } = {}) {
+export function classifyError(message, { install = false, step = "" } = {}) {
   if (typeof message !== "string" || message === "") return "unknown";
   for (const [pattern, code] of ERROR_PATTERNS) {
     if (pattern.test(message)) {
       return install && code === "engine-crash" ? "step-failed" : code;
     }
   }
-  return "unknown";
+  return install && step === "payload" && !/ENOENT/i.test(message) ? "permission" : "unknown";
 }

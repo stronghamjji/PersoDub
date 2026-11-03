@@ -177,7 +177,10 @@ test("an install that stopped is told by its cause, and the unknown by what to p
   // A download's fetch names the certificate only in its cause, which boot adds.
   assert.equal(installStopText("fetch failed: self-signed certificate in certificate chain")[0], cert);
   assert.match(installStopText("OSError: [Errno 28] No space left on device")[0], /^There is not enough storage space\./);
-  assert.match(installStopText("EPERM: operation not permitted, rename")[0], /^Another program is using PersoDub's files\./);
+  assert.match(installStopText("EPERM: operation not permitted, rename")[0], /^A security program or another program is blocking PersoDub's folder\./);
+  // The payload step's refusal in the computer's own language reads the same, by its step.
+  assert.match(installStopText("EIO, something nobody knows", "payload")[0], /^A security program or another program is blocking PersoDub's folder\./);
+  assert.match(installStopText("EIO, something nobody knows", "models")[0], /^Press Try again to go on from where it stopped\./);
   assert.match(installStopText("download failed 503: https://example.test/x")[0], /^The internet connection dropped\./);
   // A dropped connection the report has no word for is still the internet.
   assert.match(installStopText("ConnectionResetError: [Errno 54] Connection reset by peer")[0],
