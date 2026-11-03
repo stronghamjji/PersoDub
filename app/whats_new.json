@@ -1,25 +1,19 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "notes": [
-    "On Windows, an install folder that cannot take files is caught before the download starts.",
-    "On a free Perso plan, a video over one minute is dubbed for its first minute, and the app says so before you start.",
-    "The app is smaller.",
-    "Which buttons you press is now counted, never what you type. Turn it off in Settings → Privacy."
+    "The app runs on a newer Electron (45) with this year's security fixes, and needs macOS 13 or later.",
+    "On Windows, an update installs only when its installer carries ESTsoft's signature."
   ],
   "notes_ko": [
-    "윈도우에서 파일을 넣을 수 없는 설치 폴더는 내려받기 전에 알려 줘요.",
-    "Perso 무료 요금제에서는 1분 넘는 영상의 앞 1분만 더빙하고, 시작 전에 알려 줘요.",
-    "앱이 더 가벼워졌어요.",
-    "누른 버튼 기록이 기본으로 켜져요. 입력한 내용은 남기지 않고, 설정 → 개인정보에서 끌 수 있어요."
+    "앱 바탕을 새 일렉트론(45)으로 올려 올해 나온 보안 고침을 받았어요. 이제 macOS 13 이상이 필요해요.",
+    "윈도우에서 업데이트는 ESTsoft 서명이 있는 설치 파일만 설치해요."
   ],
   "notes_production": [
-    "On Windows, an install folder that cannot take files is caught before the download starts.",
-    "On a free Perso plan, a video over one minute is dubbed for its first minute, and the app says so before you start.",
-    "The app is smaller."
+    "The app runs on a newer Electron (45) with this year's security fixes, and needs macOS 13 or later.",
+    "On Windows, an update installs only when its installer carries ESTsoft's signature."
   ],
   "notes_production_ko": [
-    "윈도우에서 파일을 넣을 수 없는 설치 폴더는 내려받기 전에 알려 줘요.",
-    "Perso 무료 요금제에서는 1분 넘는 영상의 앞 1분만 더빙하고, 시작 전에 알려 줘요.",
-    "앱이 더 가벼워졌어요."
+    "앱 바탕을 새 일렉트론(45)으로 올려 올해 나온 보안 고침을 받았어요. 이제 macOS 13 이상이 필요해요.",
+    "윈도우에서 업데이트는 ESTsoft 서명이 있는 설치 파일만 설치해요."
   ]
 }
