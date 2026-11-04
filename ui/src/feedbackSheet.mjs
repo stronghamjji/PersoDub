@@ -6,7 +6,7 @@
 // a computer without a mail account left the person with nothing (owner,
 // 2026-10-27).
 // The open-source edition has no payments, so its form has no Payment or
-// refund kind.
+// refund kind, and its title is Feedback, like the button that opens it.
 //
 // Owns #feedbackOverlay, #feedbackType, #feedbackSubjectInput,
 // #feedbackDetails, #feedbackReplyTo, #feedbackReplyToHint, #feedbackLogsNote, #feedbackConsent,
@@ -35,6 +35,7 @@ export function initFeedbackSheet({ $, send, language, openUrl, account, product
   const type = $("feedbackType"), subject = $("feedbackSubjectInput"), details = $("feedbackDetails"),
         consent = $("feedbackConsent"), status = $("feedbackStatus");
   $("feedbackTypePayment").hidden = !production;
+  $("feedbackTitle").textContent = t(production ? "Service inquiry" : "Feedback");
   // Optional: left empty, the answer goes to the signed-in account's address,
   // which the shell adds itself (desktop/src/reporting.js accountForInquiry).
   // An account with no e-mail has none: then the shell answers needReplyTo.

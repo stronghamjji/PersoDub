@@ -152,6 +152,11 @@ test("Payment or refund is a kind in the production edition only", () => {
   assert.equal(harness().$("feedbackTypePayment").hidden, true, "not said: not production");
 });
 
+test("the title is Service inquiry in the production edition and Feedback in the open-source one", () => {
+  assert.equal(harness({ production: true }).$("feedbackTitle").textContent, "Service inquiry");
+  assert.equal(harness({ production: false }).$("feedbackTitle").textContent, "Feedback");
+});
+
 test("Close keeps the draft and sends nothing", () => {
   const h = harness();
   h.open();
