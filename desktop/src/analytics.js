@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { STEP_IDS } from "./installSpec.js";
 import { EDITIONS } from "./edition.js";
+import { readWindowsText } from "./windowsText.js";
 
 // Usage counts. The decisions live here as pure functions so they can be tested
 // without Electron; usageIpc.js and the renderer do the wiring. What a payload is
@@ -446,6 +447,7 @@ const ERROR_PATTERNS = [
  */
 export function classifyError(message, { install = false, step = "" } = {}) {
   if (typeof message !== "string" || message === "") return "unknown";
+  message = readWindowsText(message);
   for (const [pattern, code] of ERROR_PATTERNS) {
     if (pattern.test(message)) {
       return install && code === "engine-crash" ? "step-failed" : code;
