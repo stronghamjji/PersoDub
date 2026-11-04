@@ -71,6 +71,7 @@ export function registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog }) {
       try {
         await runInstall(steps, {
           stop: () => packCancelled,
+          blocked: (detail, stepId) => classifyError(detail, { install: true, step: stepId }) === "permission",
           // Each step's lines say which pack they are for; the banner stays bare.
           log: (line, level) => shellLog(line.startsWith("#") ? line : `pack ${id} ${line}`, level),
           onProgress: (p) => {

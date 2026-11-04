@@ -596,6 +596,8 @@ test("a retry notice is shown on its own, so the Settings row does not cut it of
   const row = listRows(h)[0];
   assert.equal(row.children[2].textContent, "Connection problem, retrying (2/3)");
   assert.equal(row.children[3].textContent, "Cancel");
+  shell.progress({ pack: "engine", stepId: "models", title: "Downloading sound-separation model (~80 MB)", state: "progress", pct: 63, detail: "Folder is blocked, retrying (2/3)" });
+  assert.equal(listRows(h)[0].children[2].textContent, "Folder is blocked, retrying (2/3)");
   // The next ordinary progress line puts the title back.
   shell.progress({ pack: "engine", stepId: "models", title: "Downloading sound-separation model (~80 MB)", state: "progress", pct: 70, detail: "12 MB / 80 MB" });
   assert.equal(listRows(h)[0].children[2].textContent, "Downloading Python + PyTorch… 70% · Downloading sound-separation model (~80 MB): 12 MB / 80 MB");

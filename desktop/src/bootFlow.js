@@ -254,6 +254,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       try {
         await runInstall(toRun, {
           log: shellLog,
+          blocked: (detail, stepId) => classifyError(detail, { install: true, step: stepId }) === "permission",
           onProgress: (p) => {
             if (p.state === "error") { failedStep = p.stepId; failedTitle = p.title; }
             win.webContents.send("shell:install-progress", p);

@@ -13,6 +13,7 @@
   "Cleaning up": "Cleaning up",
   "Close {names} first, then update": "Close {names} first, then update",
   "Connection problem, retrying ({n}/{m})": "Connection problem, retrying ({n}/{m})",
+  "Folder is blocked, retrying ({n}/{m})": "Folder is blocked, retrying ({n}/{m})",
   "Copying app code": "Copying app code",
   "Copying bundled files": "Copying bundled files",
   "Could not remove {file} yet; will retry next launch": "Could not remove {file} yet; will retry next launch",

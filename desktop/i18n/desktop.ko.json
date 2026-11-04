@@ -13,6 +13,7 @@
   "Cleaning up": "정리",
   "Close {names} first, then update": "업데이트 전에 이 프로그램을 닫아 주세요: {names}",
   "Connection problem, retrying ({n}/{m})": "연결이 끊겨 다시 시도하는 중 ({n}/{m})",
+  "Folder is blocked, retrying ({n}/{m})": "폴더가 막혀 다시 시도하는 중 ({n}/{m})",
   "Copying app code": "앱 코드 복사 중",
   "Copying bundled files": "앱 파일 복사",
   "Could not remove {file} yet; will retry next launch": "{file} 파일을 아직 못 지웠어요. 다음에 켤 때 다시 지울게요",

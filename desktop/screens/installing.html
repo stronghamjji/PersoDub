@@ -38,6 +38,7 @@
   <span id="toDownload" data-i18n>{size} to download</span>
   <span id="ofTotal" data-i18n>{done} of {total}</span>
   <span id="retrying" data-i18n>Connection problem, retrying ({n}/{m})</span>
+  <span id="retryingFolder" data-i18n>Folder is blocked, retrying ({n}/{m})</span>
   <span id="failed" data-i18n>failed</span>
 </div>
 <script>
@@ -98,9 +99,9 @@
       // lines ("Collecting torch==2.5.1") are for shell.log, not this screen.
       // installer.js sends the retry in English; the page's models dialog
       // reads it by the same words (ui/src/modelsDialog.mjs retryLine).
-      const retry = /^Connection problem, retrying \((\d+)\/(\d+)\)/.exec(p.detail || "");
+      const retry = /^(Connection problem|Folder is blocked), retrying \((\d+)\/(\d+)\)/.exec(p.detail || "");
       detail.textContent = retry
-        ? say("retrying").replace("{n}", retry[1]).replace("{m}", retry[2])
+        ? say(retry[1] === "Folder is blocked" ? "retryingFolder" : "retrying").replace("{n}", retry[2]).replace("{m}", retry[3])
         : total
           ? say("ofTotal").replace("{done}", gb(received + (p.pct || 0) / 100 * (p.bytes || 0))).replace("{total}", gb(total))
           : "";
