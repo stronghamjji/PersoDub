@@ -355,13 +355,21 @@ export const ACCESS_REFUSED = [
   "存取被拒",                      // Chinese (Traditional)
 ];
 
+// A word without its accents, so "Accès refusé" and "Acces refuse" are the
+// same word: a Windows whose display language is not its system language
+// drops the accents its code page lacks before the message reaches the app
+// (a Korean Windows showing Portuguese said "Nao e possivel", 2026-11-04).
+// Both the table and the message go through this; the English patterns
+// have no accents to lose.
+const unaccented = (s) => s.normalize("NFD").replace(/\p{M}/gu, "");
+
 const ERROR_PATTERNS = [
   [/ENOSPC|no space left|not enough space/i,         "disk-full"],
   [/EACCES|EPERM|permission denied/i,                "permission"],
   // Windows says the same refusal in the computer's own language, behind a
   // code that need not be EACCES: a Brazilian machine failed 33 times with
   // "EIO, Acesso negado." and every one counted as "unknown" (2026-10-29).
-  [new RegExp(ACCESS_REFUSED.join("|"), "i"), "permission"],
+  [new RegExp(ACCESS_REFUSED.map(unaccented).join("|"), "i"), "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
   // pip and Python's ssl refusing a certificate. Ahead of "network" because
   // the answer is the machine's security software, not its connection: two
@@ -447,7 +455,7 @@ const ERROR_PATTERNS = [
  */
 export function classifyError(message, { install = false, step = "" } = {}) {
   if (typeof message !== "string" || message === "") return "unknown";
-  message = readWindowsText(message);
+  message = unaccented(readWindowsText(message));
   for (const [pattern, code] of ERROR_PATTERNS) {
     if (pattern.test(message)) {
       return install && code === "engine-crash" ? "step-failed" : code;

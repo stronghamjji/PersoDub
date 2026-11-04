@@ -138,6 +138,10 @@ test("a refusal in the computer's own language, or any payload-step failure, is 
     assert.equal(classifyError(`EIO, ${shown} '\\\\?\\C:\\k\\app'`), "permission", shown);
     assert.equal(classifyError(`EIO, ${shown}`, { install: true, step: "models" }), "permission", shown);
   }
+  // Accents the computer dropped on the way do not hide the word.
+  for (const words of ["Acces refuse", "Pristup bol odmietnuty", "Erisim engellendi", "Juurdepaas on keelatud"]) {
+    assert.equal(classifyError(`EIO, ${words}.`, { install: true, step: "models" }), "permission", words);
+  }
   // A language the table does not know (Swahili is not a Windows display
   // language) is still a blocked folder at the payload step, and only there.
   assert.equal(classifyError("EIO, Ufikiaji umekataliwa.", { install: true, step: "payload" }), "permission");
