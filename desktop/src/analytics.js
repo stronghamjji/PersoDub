@@ -310,13 +310,57 @@ export async function countEvent(event, {
 // matches on the machine-readable part -- an errno, a status word -- and throws
 // the rest away. A message nobody has taught this table about becomes
 // "unknown", which is the safe answer, not a reason to send the text instead.
+// "Access is denied" (Windows error 5) in every language Windows can show
+// itself in, lower-cased, without the final full stop. Exported for the test
+// that tries each one.
+export const ACCESS_REFUSED = [
+  "access is denied",             // English
+  "acesso negado",                // Portuguese (Brazil, Portugal)
+  "acceso denegado",              // Spanish
+  "accès refusé",                 // French
+  "zugriff verweigert",           // German
+  "accesso negato",               // Italian
+  "toegang geweigerd",            // Dutch
+  "adgang nægtet",                // Danish
+  "åtkomst nekad",                // Swedish
+  "ingen tilgang",                // Norwegian
+  "käyttö estetty",               // Finnish
+  "odmowa dostępu",               // Polish
+  "přístup byl odepřen",          // Czech
+  "prístup bol odmietnutý",       // Slovak
+  "a hozzáférés megtagadva",      // Hungarian
+  "acces refuzat",                // Romanian
+  "достъпът е отказан",           // Bulgarian
+  "pristup je odbijen",           // Croatian, Serbian (Latin)
+  "приступ је одбијен",           // Serbian (Cyrillic)
+  "dostop je zavrnjen",           // Slovenian
+  "отказано в доступе",           // Russian
+  "доступ запрещ",                // Russian, the other wording
+  "доступ заборонено",            // Ukrainian
+  "δεν επιτρέπεται η πρόσβαση",   // Greek
+  "erişim engellendi",            // Turkish
+  "juurdepääs on keelatud",       // Estonian
+  "piekļuve liegta",              // Latvian
+  "prieiga uždrausta",            // Lithuanian
+  "הגישה נדחתה",                  // Hebrew
+  "تم رفض الوصول",                // Arabic
+  "การเข้าถึงถูกปฏิเสธ",           // Thai
+  "truy cập bị từ chối",          // Vietnamese
+  "akses ditolak",                // Indonesian
+  "akses dinafikan",              // Malay
+  "액세스가 거부",                 // Korean
+  "アクセスが拒否",                // Japanese
+  "拒绝访问",                      // Chinese (Simplified)
+  "存取被拒",                      // Chinese (Traditional)
+];
+
 const ERROR_PATTERNS = [
   [/ENOSPC|no space left|not enough space/i,         "disk-full"],
   [/EACCES|EPERM|permission denied/i,                "permission"],
   // Windows says the same refusal in the computer's own language, behind a
   // code that need not be EACCES: a Brazilian machine failed 33 times with
   // "EIO, Acesso negado." and every one counted as "unknown" (2026-10-29).
-  [/access is denied|acesso negado|acceso denegado|accès refusé|zugriff verweigert|accesso negato|доступ запрещ|액세스가 거부|アクセスが拒否|拒绝访问/i, "permission"],
+  [new RegExp(ACCESS_REFUSED.join("|"), "i"), "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
   // pip and Python's ssl refusing a certificate. Ahead of "network" because
   // the answer is the machine's security software, not its connection: two

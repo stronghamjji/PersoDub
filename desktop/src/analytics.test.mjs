@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { getFreePort } from "./freePort.js";
-import { resolveAnalyticsMode, shouldReport, buildPayload, dubFacts, report } from "./analytics.js";
+import { resolveAnalyticsMode, shouldReport, buildPayload, dubFacts, report, ACCESS_REFUSED } from "./analytics.js";
 
 // A server that records what it was posted. Real HTTP, no mocks -- the point of
 // these tests is that a request actually leaves (or actually does not).
@@ -132,9 +132,16 @@ test("every other cause reads the same during an install", () => {
 test("a refusal in the computer's own language, or any payload-step failure, is a permission problem", () => {
   const said = "EIO, Acesso negado. '\\\\?\\C:\\Users\\x\\AppData\\Local\\PersoDubbing\\app'";
   assert.equal(classifyError(said), "permission");
-  for (const words of ["Zugriff verweigert", "Accès refusé", "액세스가 거부되었습니다", "Access is denied."]) {
-    assert.equal(classifyError(`EIO, ${words}`), "permission", words);
+  // Every language Windows can show itself in, as Windows capitalises it.
+  for (const words of ACCESS_REFUSED) {
+    const shown = words.charAt(0).toUpperCase() + words.slice(1) + ".";
+    assert.equal(classifyError(`EIO, ${shown} '\\\\?\\C:\\k\\app'`), "permission", shown);
+    assert.equal(classifyError(`EIO, ${shown}`, { install: true, step: "models" }), "permission", shown);
   }
+  // A language the table does not know (Swahili is not a Windows display
+  // language) is still a blocked folder at the payload step, and only there.
+  assert.equal(classifyError("EIO, Ufikiaji umekataliwa.", { install: true, step: "payload" }), "permission");
+  assert.equal(classifyError("EIO, Ufikiaji umekataliwa.", { install: true, step: "models" }), "unknown");
   assert.equal(classifyError("EIO, something nobody knows", { install: true, step: "payload" }), "permission");
   // The step tells nothing about the other steps, and a known cause keeps its name.
   assert.equal(classifyError("EIO, something nobody knows", { install: true, step: "models" }), "unknown");
