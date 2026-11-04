@@ -86,14 +86,15 @@ function main() {
   // it runs in cannot change it (src/edition.js readEdition).
   writeFileSync(join(OUT, "EDITION"), edition);
   console.log(`payload: ${edition} edition, ${EDITIONS[edition] || "no repository"}`);
-  // The production build's support web app, from this command's environment
-  // (src/edition.js BUILD_KEYS): one built without PERSODUB_INQUIRY_URL cannot
-  // send Customer support's inquiries. Its update address is in the code
-  // (src/edition.js PRODUCTION_UPDATE_URL), and without one it never checks.
-  const built = buildEnvText(edition, process.env);
+  // The support web app, from this command's environment (src/edition.js
+  // BUILD_KEYS): a build without PERSODUB_INQUIRY_URL cannot send an inquiry,
+  // and sends the open-source Send feedback to the issues page instead. The
+  // production build's update address is in the code (src/edition.js
+  // PRODUCTION_UPDATE_URL), and without one it never checks.
+  const built = buildEnvText(process.env);
   if (built) writeFileSync(join(OUT, BUILD_ENV), built);
+  for (const k of BUILD_KEYS) console.log(`payload: ${k} ${process.env[k] ? "set" : "NOT set"}`);
   if (edition === "production") {
-    for (const k of BUILD_KEYS) console.log(`payload: ${k} ${process.env[k] ? "set" : "NOT set"}`);
     console.log(`payload: PRODUCTION_UPDATE_URL ${PRODUCTION_UPDATE_URL ? "set" : "NOT set: no update checks"}`);
   }
 

@@ -44,17 +44,16 @@ const DEFAULT_EDITION = "opensource";
 /** The name on screen for an edition; the open-source one's for an unknown name. */
 export const displayName = (edition) => (PRODUCTS[edition] || PRODUCTS[DEFAULT_EDITION]).name;
 
-// What a production build takes from the packager's environment, which the
-// packaged app cannot read again: the support web app Customer support's
-// inquiries go to. Nothing in the repository names it; scripts/collect-payload.mjs
-// writes it, when set, into the payload's build.env, and the open-source build
-// carries none (docs/development.md).
+// What a build takes from the packager's environment, which the packaged app
+// cannot read again: the support web app that Customer support's and Send
+// feedback's inquiries go to. Nothing in the repository names it;
+// scripts/collect-payload.mjs writes it, when set, into the payload's
+// build.env, for either edition (docs/development.md).
 export const BUILD_ENV = "build.env";
 export const BUILD_KEYS = ["PERSODUB_INQUIRY_URL"];
 
-/** build.env's text for an edition: the production build's set values, one KEY=value a line. */
-export function buildEnvText(edition, env) {
-  if (edition !== "production") return "";
+/** build.env's text: the build's set values, one KEY=value a line. */
+export function buildEnvText(env) {
   return BUILD_KEYS.filter((k) => env[k]).map((k) => `${k}=${env[k]}\n`).join("");
 }
 

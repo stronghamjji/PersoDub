@@ -134,6 +134,9 @@ contextBridge.exposeInMainWorld("persodubShell", {
   locale: process.argv.find((a) => a.startsWith(LOCALE_ARG))?.slice(LOCALE_ARG.length) || "",
   // "" when the window passed none: the page is the open-source one.
   edition: process.argv.find((a) => a.startsWith(EDITION_ARG))?.slice(EDITION_ARG.length) || "",
+  // Whether the build has somewhere to send an inquiry (src/windowFactory.js):
+  // the page opens its form when it has, the issues page when not.
+  inquiry: process.argv.includes("--persodub-inquiry=1"),
   // What the app is called on screen: "PersoDub", or "PersoDubbing" in the production edition.
   name: process.argv.find((a) => a.startsWith(NAME_ARG))?.slice(NAME_ARG.length) || "PersoDub",
 });

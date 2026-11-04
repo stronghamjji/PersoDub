@@ -7,7 +7,7 @@ import { loadTable, setLanguage } from "./i18n.mjs";
 
 // The form's elements, the shell's sendInquiry answering `answer`, the
 // page's language, and the signed-in account's line (an e-mail, or a name).
-function harness({ answer = { id: "7C2E91AB" }, language = "ko", account = "a@test.local" } = {}) {
+function harness({ answer = { id: "7C2E91AB" }, language = "ko", account = "a@test.local", production } = {}) {
   const els = new Map();
   const $ = (id) => {
     if (!els.has(id)) {
@@ -25,7 +25,7 @@ function harness({ answer = { id: "7C2E91AB" }, language = "ko", account = "a@te
   };
   $("feedbackType").value = "problem";
   const sent = [], urls = [], steps = [];
-  const open = initFeedbackSheet({ $, language: () => language, openUrl: (u) => urls.push(u), account: () => account,
+  const open = initFeedbackSheet({ $, language: () => language, openUrl: (u) => urls.push(u), account: () => account, production,
                                    send: async (form) => { sent.push(form); return answer; },
                                    record: (name, props) => steps.push([name, props]) });
   const type = (id, text) => { $(id).value = text; $(id).fire("input"); };
@@ -143,6 +143,13 @@ test("asked for an address (no Reply-to and an account with no e-mail), it says 
     globalThis.fetch = real;
     setLanguage("en");
   }
+});
+
+// The open-source edition has no payments, so its form has no Payment or refund kind.
+test("Payment or refund is a kind in the production edition only", () => {
+  assert.equal(harness({ production: true }).$("feedbackTypePayment").hidden, false);
+  assert.equal(harness({ production: false }).$("feedbackTypePayment").hidden, true);
+  assert.equal(harness().$("feedbackTypePayment").hidden, true, "not said: not production");
 });
 
 test("Close keeps the draft and sends nothing", () => {

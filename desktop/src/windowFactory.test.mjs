@@ -11,7 +11,7 @@ import { currentLanguage, useLanguage } from "./i18n.js";
 
 const DESKTOP = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin", edition } = {}) {
+function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin", edition, inquiry } = {}) {
   const opened = [];
   const on = {};
   class BrowserWindow {
@@ -33,7 +33,7 @@ function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "
   }
   const win = createWindow({
     app: { isPackaged: true }, BrowserWindow, ctx, appDir: "/app", repo: "owner/PersoDub", locale: "ko", platform,
-    edition,
+    edition, inquiry,
     screen: { getPrimaryDisplay: () => ({ workAreaSize: workArea }) },
     shell: { openExternal: (url) => opened.push(url) },
   });
@@ -71,6 +71,13 @@ test("the production window is PersoDubbing whatever its page is called, and tel
   const args = win.options.webPreferences.additionalArguments;
   assert.ok(args.includes("--persodub-edition=production"));
   assert.ok(args.includes("--persodub-name=PersoDubbing"));
+});
+
+// Send feedback is the inquiry form only when the build has somewhere to
+// send it (main.js, src/edition.js BUILD_KEYS); the page is told so.
+test("the page is told when the build can send an inquiry, and not otherwise", () => {
+  assert.ok(setup({ inquiry: true }).win.options.webPreferences.additionalArguments.includes("--persodub-inquiry=1"));
+  assert.ok(!setup().win.options.webPreferences.additionalArguments.some((a) => a.startsWith("--persodub-inquiry")));
 });
 
 // Windows hung its white system title bar over the dark app, with the app's own
