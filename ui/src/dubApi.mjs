@@ -215,7 +215,7 @@ const RUNTIME_TRANSLATORS = { hunyuan: "Hunyuan", gemma: "Gemma 3" };
  * ram_warning, GET /api/engines ram_slow): one line each.
  *
  * @param {Object} av - GET /api/engines JSON: {gemma_available, qwen_available, hunyuan_available, gemini_available, perso_available, local_engines, ram_gb, ram_slow}
- * @param {Object} current - {translate, stt, dubMode} the Upload form's current select values
+ * @param {Object} current - {translate, stt, dubMode, voice} the Upload form's current select values
  * @returns {{disable: {gemma: boolean, gemini: boolean, perso: boolean}, translate: string, warning: (string|null)}}
  */
 export function applyEngineAvailability(av, current) {
@@ -231,7 +231,8 @@ export function applyEngineAvailability(av, current) {
   // Its message is the engine's sentence of why and what to do
   // (app/engines_status.py), kept in English there and said in the page's
   // language here, on its own: a line above it said the same thing again.
-  const voice = (av.local_engines || {}).voice || {};
+  // OmniVoice's engine is its own process (local_engines.omnivoice); "voice" is Qwen3-TTS.
+  const voice = (av.local_engines || {})[current.voice === "omnivoice" ? "omnivoice" : "voice"] || {};
   const voiceOff = local && voice.state === "failed" ? t(voice.message) : null;
   const runtime = (av.local_engines || {}).translation || {};
   const name = RUNTIME_TRANSLATORS[current.translate];
@@ -778,6 +779,7 @@ const ENGINE_LABELS = {
   chatgpt: { label: "ChatGPT", api: false },
   vertex: { label: "Vertex", api: true },
   qwen3: { label: "Qwen3-TTS", api: false },
+  omnivoice: { label: "OmniVoice", api: false },
 };
 
 /**

@@ -68,6 +68,8 @@
   "No file.": "파일이 없어요.",
   "No script was recorded for this project, so its voices cannot be made again.": "이 프로젝트에는 저장된 대본이 없어서 목소리를 다시 만들 수 없어요.",
   "No script was recorded for this project.": "이 프로젝트에는 저장된 대본이 없어요.",
+  "OmniVoice engine": "OmniVoice 엔진",
+  "Second voice engine, its own Python parts": "두 번째 목소리 엔진, 전용 파이썬 부품",
   "This video has no speech.": "이 영상에는 말소리가 없어요.",
   "No subtitle file to lay on. Extract subtitles first, or name an .srt file.": "입힐 자막 파일이 없어요. 먼저 자막을 추출하거나 .srt 파일을 알려 주세요.",
   "No subtitles were found in that area. Move the box and try again.": "그 영역에서 자막을 찾지 못했어요. 상자를 옮긴 뒤 다시 시도해 주세요.",
@@ -262,5 +264,6 @@
   "{translator} translation failed.": "{translator} 번역에 실패했어요.",
   "This subtitle file has no lines {app} can read.": "이 자막 파일에서 읽을 수 있는 줄이 없어요.",
   "Every line of this subtitle file starts after the video ends.": "이 자막 파일의 줄이 모두 영상이 끝난 뒤에 시작해요.",
-  "{app}": "{app}"
+  "{app}": "{app}",
+  "Personal, non-commercial use only": "개인·비상업 용도로만 써요"
 }

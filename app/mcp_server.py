@@ -741,7 +741,8 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     dub from then on.
 
     voice picks, FOR THIS DUB ONLY, the engine that speaks a local dub:
-    "qwen3" (free, this machine); empty keeps the app's default.
+    "qwen3" or "omnivoice" (both free, this machine; omnivoice in the
+    open-source edition only); empty keeps the app's default.
 
     perso_model picks the voice model of a perso dub when the user names one
     -- any model Perso lists for the language, such as "linnet_4" (the default,
@@ -792,7 +793,7 @@ def _check_dub_choices(target_language, dub_mode, translator, stt, separation, v
         if value not in ("", *STAGES[name][1]):
             raise Refusal('%s must be %s or empty' % (name, ", ".join('"%s"' % c for c in STAGES[name][1])))
     if voice not in ("", *STAGES["voice"][1]):
-        raise Refusal('voice must be "qwen3" or empty')
+        raise Refusal('voice must be %s or empty' % ", ".join('"%s"' % c for c in STAGES["voice"][1]))
     code = (target_language or "").strip()
     if languages.lookup(dub_mode, code) is None:
         known = [e["id"] for e in languages.languages_for(dub_mode)]
@@ -947,7 +948,7 @@ def set_default(stage: str, choice: str, confirm: bool = False) -> dict:
     before asking, the user declined the dub, and the paid default stayed. stage is one of dub_mode (local |
     perso), separation (local | roformer | perso), stt (local | perso), translator
     (chatgpt | hunyuan | gemma | gemini), voice_quality (fast | high),
-    voice (qwen3). Cloud choices
+    voice (qwen3 | omnivoice). Cloud choices
     need the matching key saved (see get_setup); a local model that is not
     downloaded is not a reason to refuse -- download_model handles that.
     Returns the defaults now in force.

@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
-import { startEngines, startPackProcesses, killStalePids, applyBinDir, sidecarArgv, packAlive, OUT_OF_MEMORY } from "./orchestrator.js";
+import { startEngines, startPackProcesses, killStalePids, applyBinDir, sidecarArgv, omnivoiceArgv, packAlive, OUT_OF_MEMORY,
+         PACK_RUNTIME_KEY, PACK_PID_KEY, PACK_STATE_KEY, PACK_FAILURE_KEY } from "./orchestrator.js";
 import { readRuntime } from "./runtimeFile.js";
 import { DEFAULTS } from "./config.js";
 import { PATH_SEP, venvBin } from "./platform.js";
@@ -317,6 +318,50 @@ test("the sidecar is launched from the engines venv", () => {
   const argv = sidecarArgv("/k", 3901);
   assert.equal(argv[0], venvBin(join("/k", "engines_venv"), "uvicorn"));
   assert.deepEqual(argv.slice(1), ["server:app", "--host", "127.0.0.1", "--port", "3901"]);
+});
+
+// OmniVoice has a venv of its own: its transformers pin and qwen-tts's
+// cannot share the engines one.
+test("OmniVoice is launched from its own venv, and announces itself under its own keys", () => {
+  const argv = omnivoiceArgv("/k", 3902);
+  assert.equal(argv[0], venvBin(join("/k", "omnivoice_venv"), "uvicorn"));
+  assert.deepEqual(argv.slice(1), ["omnivoice_server:app", "--host", "127.0.0.1", "--port", "3902"]);
+  assert.deepEqual([PACK_RUNTIME_KEY, PACK_PID_KEY, PACK_STATE_KEY, PACK_FAILURE_KEY].map((m) => m.omnivoice),
+    ["omnivoice_url", "omnivoice_pid", "omnivoice_state", "omnivoice_failure"]);
+});
+
+// Last launch's OmniVoice address must not outlive it, and the fake sidecar
+// stands in for the engine pack only: dev and tests start no OmniVoice.
+test("a stale OmniVoice address is wiped at boot, and the fake mode never starts it, installed or not", async () => {
+  const cfg = fakeCfg();
+  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
+  mkdirSync(join(cfg.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(cfg.kitDir, ".install", "venv-omnivoice.ok"), "fp");
+  writeFileSync(join(cfg.kitDir, "runtime.json"),
+    JSON.stringify({ omnivoice_url: "http://127.0.0.1:1", omnivoice_pid: 4242, omnivoice_state: "failed", omnivoice_failure: "memory" }));
+  const engines = await startEngines(cfg, { logDir });
+  try {
+    const rt = readRuntime(cfg.kitDir);
+    for (const key of ["omnivoice_url", "omnivoice_pid", "omnivoice_state", "omnivoice_failure"]) assert.equal(rt[key], undefined, key);
+    assert.ok(!engines.processes().some((p) => p.name === "omnivoice"));
+  } finally {
+    engines.stopAll();
+  }
+});
+
+test("an OmniVoice pack whose venv cannot run is marked failed under its own state key", async () => {
+  const cfg = { ...DEFAULTS, kitDir: mkdtempSync(join(tmpdir(), "odkit-")), sidecarHealthTimeoutMs: 10000 };
+  mkdirSync(join(cfg.kitDir, "sidecar"), { recursive: true });
+  const logDir = mkdtempSync(join(tmpdir(), "odlog-"));
+  const children = [];
+  await assert.rejects(
+    startPackProcesses(cfg, "omnivoice", { logDir, env: process.env, children, record: () => {} }),
+    /omnivoice stopped while starting \(could not run: ENOENT\)/);
+  assert.equal(children.length, 0, "the dead process is forgotten");
+  const rt = readRuntime(cfg.kitDir);
+  assert.equal(rt.omnivoice_state, "failed");
+  assert.equal(rt.omnivoice_url, undefined);
+  assert.equal(rt.tts_state, undefined, "the engine pack's state is not touched");
 });
 
 test("the backend comes up on the preferred port when it is free, and says which port it used", async () => {

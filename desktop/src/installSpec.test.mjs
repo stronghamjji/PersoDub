@@ -35,18 +35,19 @@ function makePayload(payloadDir, { campplus = true, version = "1.0.0+abc1234" } 
   writeFileSync(join(payloadDir, "kit-src", "sidecar", "server.py"), "# sidecar");
   writeFileSync(join(payloadDir, "kit-src", `requirements_engines_${REQ_SUFFIX}.txt`), "torch");
   writeFileSync(join(payloadDir, "kit-src", "requirements_eraser.txt"), "paddleocr");
+  writeFileSync(join(payloadDir, "kit-src", `requirements_omnivoice_${REQ_SUFFIX}.txt`), "omnivoice");
   if (campplus) writeFileSync(join(payloadDir, "campplus.onnx"), "onnx");
   writeFileSync(join(payloadDir, "KIT_VERSION"), version);
 }
 
 const byId = (ctx) => Object.fromEntries(buildSteps(ctx).map((s) => [s.id, s]));
 
-test("returns the 12 steps in install order", () => {
+test("returns the 13 steps in install order", () => {
   const ids = buildSteps(freshCtx()).map((s) => s.id);
   assert.deepEqual(ids, [
     "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup",
     "models", "ollama-runtime", "nonverbal-weights",
-    "eraser-src", "venv-eraser", "kit-env",
+    "eraser-src", "venv-eraser", "venv-omnivoice", "kit-env",
   ]);
   assert.deepEqual(ids, STEP_IDS);
 });
@@ -58,14 +59,17 @@ test("PACKS names the steps that leave the base install", () => {
   assert.deepEqual(packSteps(steps, "engine").map((s) => s.id), ["venv-engines", "models", "nonverbal-weights"]);
   assert.deepEqual(packSteps(steps, "ollama-runtime").map((s) => s.id), ["ollama-runtime"]);
   assert.deepEqual(packSteps(steps, "subtitle-eraser").map((s) => s.id), ["eraser-src", "venv-eraser"]);
+  assert.deepEqual(packSteps(steps, "omnivoice").map((s) => s.id), ["venv-omnivoice"]);
   assert.equal(tagged.payload, undefined);
 });
 
 // What shell:remove-pack deletes. The eraser owns two folders (its source
-// tree and its venv) where the other packs own one apiece.
+// tree and its venv) where the other packs own one apiece. OmniVoice's model
+// stays: the model catalog owns models/omnivoice, as it owns models/qwen3-tts.
 test("every pack names the folders removing it takes", () => {
-  assert.deepEqual(Object.keys(PACK_DIRS), ["engine", "ollama-runtime", "subtitle-eraser"]);
+  assert.deepEqual(Object.keys(PACK_DIRS), ["engine", "ollama-runtime", "subtitle-eraser", "omnivoice"]);
   assert.deepEqual(PACK_DIRS["subtitle-eraser"], ["eraser", "venv-eraser"]);
+  assert.deepEqual(PACK_DIRS.omnivoice, ["omnivoice_venv"]);
 });
 test("the base install adds up to under a gigabyte", () => {
   const total = baseSteps(buildSteps(freshCtx())).reduce((n, s) => n + s.bytes, 0) / 1024 ** 3;
@@ -79,6 +83,11 @@ test("packInstalled means the pack's stamp: a folder without it is a paused pack
   mkdirSync(join(ctx.kitDir, ".install"), { recursive: true });
   writeFileSync(join(ctx.kitDir, ".install", "venv-engines.ok"), "fp");
   assert.equal(packInstalled(ctx.kitDir, "engine"), true);
+  assert.equal(packInstalled(ctx.kitDir, "omnivoice"), false);
+  mkdirSync(join(ctx.kitDir, "omnivoice_venv"), { recursive: true });
+  assert.equal(packInstalled(ctx.kitDir, "omnivoice"), false, "cancelled halfway: not installed");
+  writeFileSync(join(ctx.kitDir, ".install", "venv-omnivoice.ok"), "fp");
+  assert.equal(packInstalled(ctx.kitDir, "omnivoice"), true);
 });
 
 test("the boot install is the base steps plus only the packs already on the kit's disk", () => {
@@ -138,6 +147,7 @@ test("payload step copies bundle including campplus and marks done", async () =>
   assert.ok(existsSync(join(ctx.kitDir, "app", "app", "main.py")));
   assert.ok(existsSync(join(ctx.kitDir, "sidecar", "server.py")));
   assert.ok(existsSync(join(ctx.kitDir, `requirements_engines_${REQ_SUFFIX}.txt`)));
+  assert.ok(existsSync(join(ctx.kitDir, `requirements_omnivoice_${REQ_SUFFIX}.txt`)));
   // One list for both platforms -- the subtitle-eraser pack installs from it.
   assert.ok(existsSync(join(ctx.kitDir, "requirements_eraser.txt")));
   assert.equal(existsSync(join(ctx.kitDir, `requirements_qwen_${REQ_SUFFIX}.txt`)), false,
@@ -305,12 +315,32 @@ test("venv-engines installs only the merged engines list", async () => {
   assert.ok(!argvs.some((a) => a.includes("qwen_venv")), "no second venv is created");
 });
 
+// OmniVoice gets a venv of its own (its transformers pin and qwen-tts's
+// cannot share one), with the same torch first on Windows.
+test("venv-omnivoice installs its own list into its own venv, torch first on Windows", async () => {
+  const argvs = [];
+  const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });
+  await byId(ctx)["venv-omnivoice"].run(() => {});
+  assert.ok(argvs.some((a) => a.includes("-m venv") && a.endsWith(join(ctx.kitDir, "omnivoice_venv"))));
+  const installs = argvs.filter((a) => a.includes(" install ") && !a.includes("--upgrade pip") && !a.includes("--no-index"));
+  assert.ok(installs.at(-1).includes(`requirements_omnivoice_${REQ_SUFFIX}.txt`), installs.join("\n"));
+  assert.equal(installs.some((a) => a.includes("torch==2.8.0") && a.includes("--index-url")), IS_WIN);
+  assert.ok(existsSync(join(ctx.kitDir, ".install", "venv-omnivoice.ok")));
+  assert.ok(!argvs.some((a) => a.includes("engines_venv")), "never touches the engines venv");
+});
+
+test("venv-omnivoice budget follows the platform's torch variant", () => {
+  const GB = 1024 ** 3;
+  const expected = IS_WIN ? (TORCH_VARIANT === "cpu" ? 1.5 * GB : 8 * GB) : 2.2 * GB;
+  assert.equal(byId(freshCtx())["venv-omnivoice"].bytes, expected);
+});
+
 test("every venv gets the OS trust hook before its first download", async () => {
   // Company security software that inspects HTTPS hands Python a certificate
   // only the OS knows (2026-10-15): truststore goes in from the payload, with
   // no network, before pip's own upgrade, and a .pth loads it in every
   // interpreter of the venv.
-  for (const id of ["venv-app", "venv-engines", "venv-eraser"]) {
+  for (const id of ["venv-app", "venv-engines", "venv-eraser", "venv-omnivoice"]) {
     const argvs = [];
     const ctx = freshCtx({ run: async (argv) => { argvs.push(argv.join(" ")); } });
     await byId(ctx)[id].run(() => {});
@@ -739,6 +769,27 @@ test("writeKitEnv substitutes kitDir everywhere", () => {
   assert.ok(s.includes(venvBin(k("engines_venv"), "python")));
   assert.ok(s.includes(`PERSODUB_APP_REPO_DIR=${k("app")}`));
   assert.ok(s.includes(`PERSODUB_BIN_DIR=${k("bin")}`));
+  assert.ok(s.includes(`OMNIVOICE_MODEL=${k("models", "omnivoice")}`));
+  assert.ok(s.includes(`OMNIVOICE_DEVICE=${TTS_DEVICE}`));
+});
+
+// A kit.env from before OmniVoice gains its two keys on the next kit-env
+// refresh, the model path made from that kit's own folder, and the user's
+// own lines stay as they were.
+test("kit-env step adds the OmniVoice keys to an existing kit.env and keeps the user's lines", async () => {
+  const ctx = freshCtx();
+  const before = "PERSODUB_KIT_DIR=/old/kit\nGEMINI_API_KEY=sk-legacy-key\nPERSODUB_LEAKAGE_GATE=on\n"
+    + "PERSODUB_SCORER_ASR_TIMEOUT=60\nPERSODUB_DIAR_TIMEOUT=1800\n"
+    + `PERSODUB_TORCH_VARIANT=${IS_WIN ? "cu128" : "mps"}\n`;
+  writeFileSync(join(ctx.kitDir, "kit.env"), before);
+  const step = byId(ctx)["kit-env"];
+  assert.equal(await step.isDone(), false);
+  await step.run(() => {});
+  const env = readFileSync(join(ctx.kitDir, "kit.env"), "utf8");
+  assert.ok(env.startsWith(before));
+  assert.ok(env.includes(`OMNIVOICE_MODEL=${join(ctx.kitDir, "models", "omnivoice")}\n`));
+  assert.ok(env.includes(`OMNIVOICE_DEVICE=${TTS_DEVICE}\n`));
+  assert.equal(await step.isDone(), true);
 });
 
 // gate=on: the leakage check fixes what it finds in the finished dub (the
@@ -832,7 +883,7 @@ test("an installed kit's recorded torch variant wins over the hardware guess", (
   // The kit-env step writes the same value back, not the guess.
   assert.match(writeKitEnv({ kitDir: ctx.kitDir }), /PERSODUB_TORCH_VARIANT=cpu/);
   // A kit.env from before the key existed gets the build those kits had.
-  const patched = withMissingKitEnvKeys("PERSODUB_KIT_DIR=x\n");
+  const patched = withMissingKitEnvKeys("PERSODUB_KIT_DIR=x\n", ctx.kitDir);
   assert.match(patched, new RegExp(`PERSODUB_TORCH_VARIANT=${IS_WIN ? "cu128" : "mps"}`));
   // ...and is read as that build from the first boot after the update, before
   // the kit-env step has recorded it -- never as the hardware guess (which on

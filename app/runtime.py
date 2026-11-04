@@ -26,6 +26,7 @@ from app import config
 _DEV_FALLBACK = {
     "ollama": "OLLAMA_URL",
     "tts": "QWEN_TTS_URL",
+    "omnivoice": "OMNIVOICE_URL",
 }
 
 

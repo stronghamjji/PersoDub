@@ -218,9 +218,11 @@ TRANSLATORS = {t.name: t for t in (
 TRANSLATOR_NAMES = {t.name: t.label for t in TRANSLATORS.values() if t.offered}
 
 
-# The two engines the desktop shell starts and a local dub may need: the name
-# the runtime announces it under, and its pack.
-_LOCAL_ENGINES = {"voice": ("tts", "engine"), "translation": ("ollama", "ollama-runtime")}
+# The engines the desktop shell starts and a local dub may need: the name
+# the runtime announces it under, and its pack. "voice" is Qwen3-TTS; the
+# OmniVoice voice engine has a pack of its own and is told in the same words.
+_LOCAL_ENGINES = {"voice": ("tts", "engine"), "translation": ("ollama", "ollama-runtime"),
+                  "omnivoice": ("omnivoice", "omnivoice")}
 
 
 def _engine_words(which: str, state: str, failure: str = "") -> str:
@@ -230,7 +232,7 @@ def _engine_words(which: str, state: str, failure: str = "") -> str:
     "voice engine is not running" sentences stay in English: the page answers
     that phrase by asking the shell to start the engine again (ui/src/app.mjs).
     `failure` is why it failed, when the shell could tell (app/runtime.py)."""
-    if which == "voice":
+    if which in ("voice", "omnivoice"):
         # Out of memory: closing other programs and pressing Start again (which
         # restarts the engine once) is what works (issue #187).
         if state == "failed" and failure == "memory":
@@ -252,7 +254,7 @@ def _engine_words(which: str, state: str, failure: str = "") -> str:
 
 
 def local_engine(which: str) -> dict:
-    """{"state", "message"} for "voice" or "translation".
+    """{"state", "message"} for "voice", "translation" or "omnivoice".
 
     state: "running" (it announced itself), "starting", "failed" (the shell
     gave up on it at start), "stopped" (installed, but nothing is running

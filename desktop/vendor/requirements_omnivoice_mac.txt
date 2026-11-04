@@ -1,0 +1,22 @@
+# "omnivoice" venv: the interpreter behind the OmniVoice voice engine
+# (sidecar/omnivoice_server.py, a small FastAPI app like sidecar/server.py).
+#
+# A venv of its own, not the engines one: omnivoice pins transformers>=5.3,
+# and the engines venv's qwen-tts pins transformers==4.57.3 -- the two cannot
+# share one environment.
+#
+# omnivoice is the official k2-fsa package (Apache-2.0). Its weights are a
+# separate download under their own non-commercial license, fetched by the
+# app's model catalog into models/omnivoice, never by this list.
+#
+# torch/torchaudio: pip auto-selects the Apple Silicon (arm64, MPS-capable)
+# wheel for these version numbers on macOS -- do not add a CUDA index-url.
+torch==2.8.0
+torchaudio==2.8.0
+
+omnivoice==0.2.1
+fastapi
+uvicorn[standard]
+python-multipart
+soundfile==0.14.0
+numpy==2.4.6

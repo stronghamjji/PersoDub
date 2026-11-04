@@ -961,8 +961,8 @@ def _stage_synthesize(segments, ref_cues, work_dir, vocals_path, background_path
     # "fast" UI mode: best-of-N selection is disabled (see config.QWEN_N_TAKES).
     mode = ("fast, 1 take/line" if effective_n_takes <= 1
             else f"high quality, best of {effective_n_takes} takes")
-    _log_stage(log, "synthesize", f"Cloning & synthesizing voices (Qwen3-TTS — {mode})…")
     engine = qwen_engine or QwenTTSEngine()
+    _log_stage(log, "synthesize", f"Cloning & synthesizing voices ({engine.display_name} — {mode})…")
     # Say which device this is about to run on. Without it the only symptom of
     # a CPU fallback is the wait, and the user has no way to tell that from the
     # app being slow. Absent (not guessed) when the engine cannot say.

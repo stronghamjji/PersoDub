@@ -2,9 +2,9 @@
 
 "Mem[Host total 24576M avail 11376M | backend 310M | engine 8200M |
 ollama-runtime 1200M]", in MiB: the computer's memory and how much of it is
-still available, this process, and the two pack processes the desktop shell
+still available, this process, and the pack processes the desktop shell
 started, found by the pids it writes into runtime.json (app/runtime.py pid).
-Each of the three counts with every process it started: the memory is often
+Each of them counts with every process it started: the memory is often
 in a child -- the backend's Demucs and Whisper workers, Ollama's model runner,
 the real engine under the uvicorn launcher on Windows. app/jobs.py writes the
 line beside every step's START and DONE, so a job that runs out of memory
@@ -22,7 +22,8 @@ from app import runtime
 _MIB = 1024 * 1024
 
 # Each pack as the shell names it, and the runtime.json pid key it is under.
-_PACKS = (("engine", "tts"), ("ollama-runtime", "ollama"))
+# OmniVoice, the second voice engine, has a process of its own.
+_PACKS = (("engine", "tts"), ("ollama-runtime", "ollama"), ("omnivoice", "omnivoice"))
 
 
 def _tree_mib(proc) -> int:

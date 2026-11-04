@@ -108,6 +108,7 @@ export function buildLogArchive(logs = {}, {
     ["job.log", logs.job],
     ["backend.log", logs.backend],
     ["sidecar.log", logs.sidecar],
+    ["omnivoice.log", logs.omnivoice],
     ["ollama.log", logs.ollama],
     ["diagnostics.json", logs.diagnostics],
   ].filter(([, text]) => String(text ?? "").trim() !== "");

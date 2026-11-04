@@ -23,6 +23,7 @@ import os
 from typing import Optional
 
 from app import config, engines_status, languages, media, perso_client, state
+from app.engines import engine_for
 from app.jobs import JobCancelled
 from app.pipeline import _PERSO_NOTICE_ERRORS, _raise_perso_failed, raise_notice
 from app.pipeline import run_dub as _run_dub
@@ -234,6 +235,7 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
             # The one engine choice a redub still answers to: how many takes
             # per line the voice engine scores before picking a winner.
             n_takes=job.get("quality"),
+            qwen_engine=engine_for(job.get("tts")),
             source_language_code=None if voices_only else job.get("source_lang"),
             cancel_check=cancel_check,
             on_notice=on_notice,

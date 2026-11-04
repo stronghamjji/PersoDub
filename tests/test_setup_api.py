@@ -162,6 +162,15 @@ def test_a_saved_elevenlabs_voice_default_reads_as_qwen3(tmp_path, monkeypatch):
     assert dub_api._engines_used()["tts"] == "qwen3"
 
 
+def test_omnivoice_can_be_saved_as_the_voice_and_drives_the_dub(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch)
+    monkeypatch.delenv("TTS_ENGINE", raising=False)
+    r = client.post("/api/setup", json={"voice": "omnivoice"})
+    assert r.status_code == 200 and r.json()["defaults"]["voice"] == "omnivoice"
+    assert "TTS_ENGINE=omnivoice" in (kit / "kit.env").read_text(encoding="utf-8")
+    assert dub_api._engines_used()["tts"] == "omnivoice"
+
+
 def test_no_kit_means_503(monkeypatch, tmp_path):
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path / "nowhere"))
     r = client.post("/api/setup", json={"translator": "gemma"})
@@ -189,3 +198,19 @@ def test_an_install_that_has_hunyuan_keeps_it_as_the_default(tmp_path, monkeypat
     assert client.get("/api/setup").json()["defaults"]["translator"] == "hunyuan"
     monkeypatch.setattr(setup_mod, "_hunyuan_installed", lambda: False)
     assert client.get("/api/setup").json()["defaults"]["translator"] == "chatgpt"
+
+
+def test_production_edition_offers_no_omnivoice(monkeypatch):
+    """OmniVoice's weights are non-commercial, so the production edition
+    (part of a paid service) neither lists the choice nor the catalog rows."""
+    import importlib
+    import app.setup as setup_mod
+    monkeypatch.setenv("PERSODUB_EDITION", "production")
+    importlib.reload(setup_mod)
+    try:
+        assert setup_mod.STAGES["voice"][1] == ("qwen3",)
+        from app import models as model_store
+        assert not [r for r in model_store.status_rows() if r["id"].startswith("omnivoice")]
+    finally:
+        monkeypatch.delenv("PERSODUB_EDITION")
+        importlib.reload(setup_mod)

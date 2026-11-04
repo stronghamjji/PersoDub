@@ -370,7 +370,7 @@ def _dub(monkeypatch, restart=None, **data):
         monkeypatch.setattr(engines_status, "%s_status" % name, lambda: "available")
     monkeypatch.setattr(engines_status, "chatgpt_available", lambda: True)
     monkeypatch.setattr(engines_status, "gemini_available", lambda: True)
-    monkeypatch.setattr(dub_api, "_require_voice_engine_running", lambda: None)
+    monkeypatch.setattr(dub_api, "_require_voice_engine_running", lambda voice=None: None)
 
     def start():
         r = client.post("/api/dub/start", data={"language_code": "ko", "dub_mode": "local",

@@ -195,7 +195,7 @@ def test_a_project_id_that_is_not_a_job_id_is_refused():
 
 
 def test_starting_a_language_again_keeps_it_in_its_project(monkeypatch):
-    monkeypatch.setattr(dub_api, "_require_voice_engine_running", lambda: None)
+    monkeypatch.setattr(dub_api, "_require_voice_engine_running", lambda voice=None: None)
     held = _held()
     first = _dub_held(held, [[0, 2], [4, 6]])
     second = _add_language(held, first)

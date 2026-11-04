@@ -40,6 +40,7 @@
   "Installing AI engines": "AI 엔진 설치",
   "Installing app environment": "앱 구성 요소 설치",
   "Installing its Python parts (2 of 2, about {size} GB)": "Python 구성 요소 설치 (2/2, 약 {size} GB)",
+  "Installing the OmniVoice voice engine": "OmniVoice 목소리 엔진 설치",
   "It stopped while starting. Press Try again. If it stops again, restart your computer, then open {app}.": "켜는 도중에 멈췄어요. '다시 시도'를 눌러 봐요. 또 멈추면 컴퓨터를 다시 켠 뒤 열면 돼요.",
   "Log folder:": "기록 폴더:",
   "Missing:": "없는 파일:",

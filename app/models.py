@@ -208,7 +208,10 @@ def shown_words(text: str) -> str:
     return {
         "Audio separation, speech-to-text, voices": t("Audio separation, speech-to-text, voices"),
         "Local translation (Hunyuan, Gemma 3)": t("Local translation (Hunyuan, Gemma 3)"),
+        "Personal, non-commercial use only": t("Personal, non-commercial use only"),
         "Subtitle eraser": t("Subtitle eraser"),
+        "OmniVoice engine": t("OmniVoice engine"),
+        "Second voice engine, its own Python parts": t("Second voice engine, its own Python parts"),
         "More careful": t("More careful"),
         "Small and quick": t("Small and quick"),
         "Default · Comes with Python + PyTorch": t("Default · Comes with Python + PyTorch"),
@@ -231,6 +234,10 @@ def status_rows():
     rows = []
     for m in load_catalog():
         if m["role"] == "always":
+            continue
+        # A row the catalog keeps to one edition (OmniVoice: open-source only,
+        # see app/setup.py's voice stage) is not listed by the other.
+        if m.get("edition") == "production" or (m.get("edition") == "opensource" and os.environ.get("PERSODUB_EDITION") == "production"):
             continue
         row = {"id": m["id"], "role": m["role"], "name": shown_words(m["name"]), "bytes": _pack_bytes(m),
                # A short note after "Ready" in Settings, only where the row's

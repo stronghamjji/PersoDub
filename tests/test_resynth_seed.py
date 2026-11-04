@@ -23,7 +23,7 @@ def test_each_remake_rolls_a_new_seed(monkeypatch, tmp_path):
         def clone(self, ref_wav, ref_text):
             return "voice"
 
-    monkeypatch.setattr("app.engines.base.get_engine", lambda name: FakeEngine())
+    monkeypatch.setattr("app.engines.engine_for", lambda voice: FakeEngine())
 
     def fake_synth(engine, seg, voice_id, language, seed, out_path, log, label, **_later):
         seeds.append(seed)
@@ -50,7 +50,7 @@ def test_a_remade_line_is_heard_back_like_a_first_made_one(monkeypatch, tmp_path
         def clone(self, ref_wav, ref_text):
             return "voice"
 
-    monkeypatch.setattr("app.engines.base.get_engine", lambda name: FakeEngine())
+    monkeypatch.setattr("app.engines.engine_for", lambda voice: FakeEngine())
     monkeypatch.setattr(qwen_pipeline, "_synth_one", lambda engine, seg, voice_id, language, seed, out_path, *a, **k: out_path)
     checked = {}
 
@@ -78,7 +78,7 @@ def test_a_line_that_could_not_be_made_is_not_checked(monkeypatch, tmp_path):
         def clone(self, ref_wav, ref_text):
             return "voice"
 
-    monkeypatch.setattr("app.engines.base.get_engine", lambda name: FakeEngine())
+    monkeypatch.setattr("app.engines.engine_for", lambda voice: FakeEngine())
     monkeypatch.setattr(qwen_pipeline, "_synth_one", lambda *a, **k: None)
     monkeypatch.setattr(qwen_pipeline, "_check_fast_lines", lambda *a, **k: (_ for _ in ()).throw(AssertionError("checked")))
     assert qwen_pipeline.resynth_one_line(work_dir, {"i": 0, "speaker": "SPK1"}, "Hi", "English") is None

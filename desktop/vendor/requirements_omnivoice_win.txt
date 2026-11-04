@@ -1,0 +1,21 @@
+# Windows (x86_64) "omnivoice" venv -- the mirror of
+# requirements_omnivoice_mac.txt. Same pinned versions; the ONLY difference is
+# torch:
+#
+# torch/torchaudio are NOT listed here. installSpec.js (buildSteps: torchCuda)
+# installs them first from the pytorch.org cu128 or cpu index, as it does for
+# the engines venv.
+#
+# A venv of its own, not the engines one: omnivoice pins transformers>=5.3,
+# and the engines venv's qwen-tts pins transformers==4.57.3 -- the two cannot
+# share one environment.
+#
+# omnivoice is the official k2-fsa package (Apache-2.0). Its weights are a
+# separate download under their own non-commercial license, fetched by the
+# app's model catalog into models/omnivoice, never by this list.
+omnivoice==0.2.1
+fastapi
+uvicorn[standard]
+python-multipart
+soundfile==0.14.0
+numpy==2.4.6

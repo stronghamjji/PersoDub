@@ -30,6 +30,8 @@ class _FailingSeparationEngine:
 
 
 class _FakeQwenEngine:
+    display_name = "Qwen3-TTS (local voice clone)"   # the voice stage's log names it
+
     def __init__(self):
         self.cloned = []
         self.synth_calls = []

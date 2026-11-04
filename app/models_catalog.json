@@ -1,34 +1,183 @@
 [
-  {"id": "engine", "role": "pack", "name": "Python + PyTorch",
-   "hint": "Audio separation, speech-to-text, voices",
-   "bytes": {"mac": 2000000000, "win-gpu": 9000000000, "win-cpu": 1500000000},
-   "dir": "engines_venv", "markers": [".install/venv-engines.ok", "models/demucs/HTDemucs/955717e8.safetensors"]},
-  {"id": "ollama-runtime", "role": "pack", "name": "Ollama",
-   "hint": "Local translation (Hunyuan, Gemma 3)",
-   "bytes": {"mac": 460000000, "win-gpu": 1900000000, "win-cpu": 1900000000},
-   "dir": "ollama", "markers": ["ollama/ollama"]},
-  {"id": "subtitle-eraser", "role": "pack", "name": "Subtitle eraser",
-   "bytes": {"mac": 4400000000, "win-gpu": 9300000000, "win-cpu": 4400000000},
-   "dir": "eraser", "markers": [".install/venv-eraser.ok"]},
-  {"id": "qwen3-tts", "role": "tts", "name": "Qwen3-TTS", "bytes": 4544000000,
-   "source": {"kind": "hf", "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "rev": "fd4b254389122332181a7c3db7f27e918eec64e3"},
-   "dir": "models/qwen3-tts", "markers": ["model.safetensors", "speech_tokenizer/model.safetensors"]},
-  {"id": "whisper", "role": "stt", "name": "Whisper", "bytes": 3091000000,
-   "source": {"kind": "hf", "repo": "Systran/faster-whisper-large-v3", "rev": "edaa852ec7e145841d8ffdb056a99866b5f0a478"},
-   "dir": "models/whisper/faster-whisper-large-v3", "markers": ["model.bin"]},
-  {"id": "demucs", "role": "sep", "name": "Demucs", "bytes": 81000000,
-   "hint": "Default · Comes with Python + PyTorch", "comes_with": "engine",
-   "source": {"kind": "hf", "repo": "adefossez/HTDemucs", "rev": "bf35a81b663819a8255c8fefee17f9d812b786b5", "files": ["htdemucs.yaml", "955717e8.safetensors"]},
-   "dir": "models/demucs/HTDemucs", "markers": ["955717e8.safetensors"]},
-  {"id": "vocal-separator", "role": "sep", "name": "Mel-Band RoFormer", "bytes": 913106900,
-   "source": {"kind": "hf", "repo": "KimberleyJSN/melbandroformer", "rev": "ac9b0614ab3cd7f77219e18ba494dfd93956c348", "files": ["MelBandRoformer.ckpt"]},
-   "dir": "models/melband-roformer", "markers": ["MelBandRoformer.ckpt"]},
-  {"id": "gemma", "role": "translate", "name": "Gemma 3", "bytes": 8149000000,
-   "hint": "More careful",
-   "source": {"kind": "ollama", "tag": "gemma3:12b"},
-   "dir": "models/ollama", "markers": ["manifests/registry.ollama.ai/library/gemma3/12b"]},
-  {"id": "hunyuan", "role": "translate", "name": "Hunyuan", "bytes": 1100000000,
-   "hint": "Small and quick",
-   "source": {"kind": "ollama", "pull": "hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M", "tag": "hy-mt2:1.8b", "needs_template": true},
-   "dir": "models/ollama", "markers": ["manifests/registry.ollama.ai/library/hy-mt2/1.8b"]}
+  {
+    "id": "engine",
+    "role": "pack",
+    "name": "Python + PyTorch",
+    "hint": "Audio separation, speech-to-text, voices",
+    "bytes": {
+      "mac": 2000000000,
+      "win-gpu": 9000000000,
+      "win-cpu": 1500000000
+    },
+    "dir": "engines_venv",
+    "markers": [
+      ".install/venv-engines.ok",
+      "models/demucs/HTDemucs/955717e8.safetensors"
+    ]
+  },
+  {
+    "id": "ollama-runtime",
+    "role": "pack",
+    "name": "Ollama",
+    "hint": "Local translation (Hunyuan, Gemma 3)",
+    "bytes": {
+      "mac": 460000000,
+      "win-gpu": 1900000000,
+      "win-cpu": 1900000000
+    },
+    "dir": "ollama",
+    "markers": [
+      "ollama/ollama"
+    ]
+  },
+  {
+    "id": "subtitle-eraser",
+    "role": "pack",
+    "name": "Subtitle eraser",
+    "bytes": {
+      "mac": 4400000000,
+      "win-gpu": 9300000000,
+      "win-cpu": 4400000000
+    },
+    "dir": "eraser",
+    "markers": [
+      ".install/venv-eraser.ok"
+    ]
+  },
+  {
+    "id": "omnivoice",
+    "role": "pack",
+    "name": "OmniVoice engine",
+    "hint": "Second voice engine, its own Python parts",
+    "bytes": {
+      "mac": 2200000000,
+      "win-gpu": 8000000000,
+      "win-cpu": 1500000000
+    },
+    "dir": "omnivoice_venv",
+    "markers": [
+      ".install/venv-omnivoice.ok"
+    ],
+    "edition": "opensource"
+  },
+  {
+    "id": "qwen3-tts",
+    "role": "tts",
+    "name": "Qwen3-TTS",
+    "bytes": 4544000000,
+    "source": {
+      "kind": "hf",
+      "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+      "rev": "fd4b254389122332181a7c3db7f27e918eec64e3"
+    },
+    "dir": "models/qwen3-tts",
+    "markers": [
+      "model.safetensors",
+      "speech_tokenizer/model.safetensors"
+    ]
+  },
+  {
+    "id": "omnivoice-model",
+    "role": "tts",
+    "name": "OmniVoice",
+    "bytes": 3000000000,
+    "source": {
+      "kind": "hf",
+      "repo": "k2-fsa/OmniVoice",
+      "rev": "c5fdb5ccb189668d56333f77ba2629f4cd7535f4"
+    },
+    "dir": "models/omnivoice",
+    "markers": [
+      "model.safetensors",
+      "audio_tokenizer/model.safetensors"
+    ],
+    "edition": "opensource",
+    "hint": "Personal, non-commercial use only"
+  },
+  {
+    "id": "whisper",
+    "role": "stt",
+    "name": "Whisper",
+    "bytes": 3091000000,
+    "source": {
+      "kind": "hf",
+      "repo": "Systran/faster-whisper-large-v3",
+      "rev": "edaa852ec7e145841d8ffdb056a99866b5f0a478"
+    },
+    "dir": "models/whisper/faster-whisper-large-v3",
+    "markers": [
+      "model.bin"
+    ]
+  },
+  {
+    "id": "demucs",
+    "role": "sep",
+    "name": "Demucs",
+    "bytes": 81000000,
+    "hint": "Default · Comes with Python + PyTorch",
+    "comes_with": "engine",
+    "source": {
+      "kind": "hf",
+      "repo": "adefossez/HTDemucs",
+      "rev": "bf35a81b663819a8255c8fefee17f9d812b786b5",
+      "files": [
+        "htdemucs.yaml",
+        "955717e8.safetensors"
+      ]
+    },
+    "dir": "models/demucs/HTDemucs",
+    "markers": [
+      "955717e8.safetensors"
+    ]
+  },
+  {
+    "id": "vocal-separator",
+    "role": "sep",
+    "name": "Mel-Band RoFormer",
+    "bytes": 913106900,
+    "source": {
+      "kind": "hf",
+      "repo": "KimberleyJSN/melbandroformer",
+      "rev": "ac9b0614ab3cd7f77219e18ba494dfd93956c348",
+      "files": [
+        "MelBandRoformer.ckpt"
+      ]
+    },
+    "dir": "models/melband-roformer",
+    "markers": [
+      "MelBandRoformer.ckpt"
+    ]
+  },
+  {
+    "id": "gemma",
+    "role": "translate",
+    "name": "Gemma 3",
+    "bytes": 8149000000,
+    "hint": "More careful",
+    "source": {
+      "kind": "ollama",
+      "tag": "gemma3:12b"
+    },
+    "dir": "models/ollama",
+    "markers": [
+      "manifests/registry.ollama.ai/library/gemma3/12b"
+    ]
+  },
+  {
+    "id": "hunyuan",
+    "role": "translate",
+    "name": "Hunyuan",
+    "bytes": 1100000000,
+    "hint": "Small and quick",
+    "source": {
+      "kind": "ollama",
+      "pull": "hf.co/tencent/Hy-MT2-1.8B-GGUF:Q4_K_M",
+      "tag": "hy-mt2:1.8b",
+      "needs_template": true
+    },
+    "dir": "models/ollama",
+    "markers": [
+      "manifests/registry.ollama.ai/library/hy-mt2/1.8b"
+    ]
+  }
 ]

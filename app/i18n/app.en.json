@@ -68,6 +68,8 @@
   "No file.": "No file.",
   "No script was recorded for this project, so its voices cannot be made again.": "No script was recorded for this project, so its voices cannot be made again.",
   "No script was recorded for this project.": "No script was recorded for this project.",
+  "OmniVoice engine": "OmniVoice engine",
+  "Second voice engine, its own Python parts": "Second voice engine, its own Python parts",
   "This video has no speech.": "This video has no speech.",
   "No subtitle file to lay on. Extract subtitles first, or name an .srt file.": "No subtitle file to lay on. Extract subtitles first, or name an .srt file.",
   "No subtitles were found in that area. Move the box and try again.": "No subtitles were found in that area. Move the box and try again.",
@@ -262,5 +264,6 @@
   "{translator} translation failed.": "{translator} translation failed.",
   "This subtitle file has no lines {app} can read.": "This subtitle file has no lines {app} can read.",
   "Every line of this subtitle file starts after the video ends.": "Every line of this subtitle file starts after the video ends.",
-  "{app}": "{app}"
+  "{app}": "{app}",
+  "Personal, non-commercial use only": "Personal, non-commercial use only"
 }

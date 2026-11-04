@@ -39,7 +39,7 @@ const reportsDir = (kitDir) => join(kitDir, "reports");
 
 // The engines' console logs, beside shell.log (orchestrator.js): where a voice
 // engine or Ollama that crashed says why. Their last 2 MB is plenty of history.
-const ENGINE_LOGS = { backend: "backend.log", sidecar: "sidecar.log", ollama: "ollama.log" };
+const ENGINE_LOGS = { backend: "backend.log", sidecar: "sidecar.log", omnivoice: "omnivoice.log", ollama: "ollama.log" };
 const ENGINE_LOG_BYTES = 2 * 1024 * 1024;
 
 // A bug inquiry's logs ride inside it as base64. Past 20 MB they are left out

@@ -154,12 +154,29 @@ test("the pack's percent is none until a byte counts, then the bytes' own", asyn
 test("pack status is read from the kit's disk, the booted kit's when nothing is being installed", async () => {
   const s = setup({ installCtx: false });
   assert.deepEqual(await s.ask("shell:pack-status"),
-    { engine: "missing", "ollama-runtime": "missing", "subtitle-eraser": "missing" });
+    { engine: "missing", "ollama-runtime": "missing", "subtitle-eraser": "missing", omnivoice: "missing" });
   s.ctx.bootedKitDir = s.kitDir;
   mkdirSync(join(s.kitDir, ".install"), { recursive: true });
   writeFileSync(join(s.kitDir, ".install", "venv-eraser.ok"), "");
+  writeFileSync(join(s.kitDir, ".install", "venv-omnivoice.ok"), "");
   assert.deepEqual(await s.ask("shell:pack-status"),
-    { engine: "missing", "ollama-runtime": "missing", "subtitle-eraser": "ready" });
+    { engine: "missing", "ollama-runtime": "missing", "subtitle-eraser": "ready", omnivoice: "ready" });
+});
+
+// OmniVoice's venv and stamp go; its model stays for the model catalog,
+// as the engine pack's models/qwen3-tts does.
+test("removing the OmniVoice pack takes its venv and stamp, never its model", async () => {
+  const stopped = [];
+  const s = setup({ engines: { stopPack: (id) => stopped.push(id) } });
+  mkdirSync(join(s.kitDir, "omnivoice_venv"), { recursive: true });
+  mkdirSync(join(s.kitDir, "models", "omnivoice"), { recursive: true });
+  mkdirSync(join(s.kitDir, ".install"), { recursive: true });
+  writeFileSync(join(s.kitDir, ".install", "venv-omnivoice.ok"), "");
+  assert.deepEqual(await s.ask("shell:remove-pack", "omnivoice"), { ok: true });
+  assert.deepEqual(stopped, ["omnivoice"]);
+  assert.equal(existsSync(join(s.kitDir, "omnivoice_venv")), false);
+  assert.equal(existsSync(join(s.kitDir, ".install", "venv-omnivoice.ok")), false);
+  assert.equal(existsSync(join(s.kitDir, "models", "omnivoice")), true);
 });
 
 test("removing a pack stops its process and takes its folders and done-stamps", async () => {

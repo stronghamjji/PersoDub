@@ -39,11 +39,12 @@ export function registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog }) {
     if (!ctx.installCtx) return { ok: false, reason: t("This build carries no bundled files to install from.") };
     if (packInFlight) return { ok: false, reason: t("{pack} is still installing. Wait for it to finish.", { pack: packInFlight }) };
     // Before a byte, and again on every press, so installing the runtime and
-    // pressing Download and Start once more goes straight on.
-    if (id === "engine") {
+    // pressing Download and Start once more goes straight on. OmniVoice runs
+    // on the same torch, which needs the same runtime.
+    if (id === "engine" || id === "omnivoice") {
       const missing = missingVcRuntime();
       if (missing.length) {
-        shellLog(`PERSODUB_PACK engine: Visual C++ runtime missing (${missing.join(", ")})`);
+        shellLog(`PERSODUB_PACK ${id}: Visual C++ runtime missing (${missing.join(", ")})`);
         return offerVcRuntime();
       }
     }
@@ -51,8 +52,8 @@ export function registerPackIpc({ ipcMain, dialog, shell, ctx, shellLog }) {
     const noRoom = notEnoughSpace(await bytesStillNeeded(steps), await freeSpaceAt(ctx.installCtx.kitDir));
     if (noRoom) return { ok: false, reason: noRoom };
     // The engine pack is what dubs on this computer: gigabytes spent on one
-    // that cannot run it help nobody.
-    const noMemory = id === "engine" ? notEnoughMemory(totalmem()) : null;
+    // that cannot run it help nobody. The same for OmniVoice, a voice engine too.
+    const noMemory = id === "engine" || id === "omnivoice" ? notEnoughMemory(totalmem()) : null;
     if (noMemory) return { ok: false, reason: noMemory };
     packCancelled = false;
     packInFlight = id;

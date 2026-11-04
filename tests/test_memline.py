@@ -28,6 +28,12 @@ def test_the_line_names_both_packs_the_shell_started(tmp_path, monkeypatch, fixe
     assert mem_line() == "Mem[Host total 24576M avail 11376M | backend 310M | engine 8200M | ollama-runtime 1200M]"
 
 
+def test_the_omnivoice_engine_has_its_own_figure(tmp_path, monkeypatch, fixed_memory):
+    fixed_memory.mib.update({4101: 900, 4103: 5100})
+    _kit_naming(tmp_path, monkeypatch, tts_pid=4101, omnivoice_pid=4103)
+    assert mem_line() == "Mem[Host total 24576M avail 11376M | backend 310M | engine 900M | omnivoice 5100M]"
+
+
 def test_without_runtime_json_only_the_computer_and_the_backend(tmp_path, monkeypatch, fixed_memory):
     assert mem_line() == MEM                                   # no kit at all
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))      # a kit, no runtime.json yet

@@ -14,6 +14,7 @@ test("neededModelId maps each dropdown choice to its catalog model", () => {
   assert.equal(neededModelId("translate", "hunyuan"), "hunyuan");
   assert.equal(neededModelId("translate", "gemini"), null);
   assert.equal(neededModelId("voice", "qwen3"), "qwen3-tts");
+  assert.equal(neededModelId("voice", "omnivoice"), "omnivoice-model");
 });
 
 test("modelStatusLine covers the four states with the mockup's words", () => {
@@ -123,6 +124,23 @@ test("neededPackIds names the pack behind each dropdown choice", () => {
   assert.deepEqual(neededPackIds("translate", "hunyuan"), ["ollama-runtime"]);
   assert.deepEqual(neededPackIds("translate", "gemini"), []);
   assert.deepEqual(neededPackIds("voice", "qwen3"), ["engine"]);
+  assert.deepEqual(neededPackIds("voice", "omnivoice"), ["engine", "omnivoice"]);
+});
+
+test("OmniVoice's line lists its own pack and model, Python + PyTorch once, and no Qwen3-TTS", () => {
+  const rows = { engine: { id: "engine", bytes: 2.0e9, state: "not_downloaded" },
+                 whisper: { id: "whisper", bytes: 3.1e9, state: "ready" },
+                 omnivoice: { id: "omnivoice", bytes: 2.2e9, state: "not_downloaded" },
+                 "omnivoice-model": { id: "omnivoice-model", bytes: 3.0e9, state: "not_downloaded" },
+                 "qwen3-tts": { id: "qwen3-tts", bytes: 4.5e9, state: "not_downloaded" } };
+  const rowOf = (id) => rows[id] || null;
+  const lines = stageNeeds([["stt", "local"], ["voice", "omnivoice"]], rowOf);
+  assert.deepEqual(lines.map((l) => l.needs.map((r) => r.id)), [["engine"], ["omnivoice", "omnivoice-model"]]);
+  // Its download dialog points to Perso dubbing, as Qwen's does.
+  const d = dubStartDialog({ missing: [{ id: "omnivoice", kind: "pack", bytes: 2.2e9 },
+                                       { id: "omnivoice-model", kind: "model", bytes: 3.0e9 }] });
+  assert.equal(d.perso, true);
+  assert.deepEqual(d.packs, ["omnivoice"]);
 });
 
 test("overallProgress is byte-weighted and treats ready as done", () => {

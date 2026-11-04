@@ -50,7 +50,17 @@ def test_the_voice_engine_is_registered_without_the_api_module():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True,
                          encoding="utf-8", check=True).stdout
-    assert out.strip() == "['qwen3_tts'] False"
+    assert out.strip() == "['qwen3_tts', 'omnivoice'] False"
+
+
+def test_the_voice_choice_names_its_engine():
+    # kit.env TTS_ENGINE / a dub's "tts" -> the engine that makes its voices;
+    # anything else (an old job without one) is Qwen3-TTS, as before.
+    from app.engines import engine_for
+    assert engine_for("qwen3").id == "qwen3_tts"
+    assert engine_for("omnivoice").id == "omnivoice"
+    assert engine_for("OmniVoice").id == "omnivoice"
+    assert engine_for(None).id == "qwen3_tts" and engine_for("nonsense").id == "qwen3_tts"
 
 
 def test_the_voice_stage_treats_each_engine_as_it_did_by_its_id():
@@ -60,6 +70,11 @@ def test_the_voice_stage_treats_each_engine_as_it_did_by_its_id():
     assert [getattr(QwenTTSEngine, f) for f in flags] == [True, True, True]
     assert [getattr(TTSEngine, f) for f in flags] == [False, False, False]
     assert QwenTTSEngine.log_name == "Qwen"
+    # OmniVoice runs on this computer like Qwen, through the same sidecar
+    # contract, and keeps all three; the log names it as itself.
+    from app.engines.omnivoice import OmniVoiceEngine
+    assert [getattr(OmniVoiceEngine, f) for f in flags] == [True, True, True]
+    assert OmniVoiceEngine.log_name == "OmniVoice"
 
 
 def test_an_engine_without_a_member_keeps_the_sockets_safe_default():
