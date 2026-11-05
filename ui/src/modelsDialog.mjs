@@ -14,12 +14,12 @@
 import { gb, modelStatusLine, dubStartDialog, overallProgress, downloadStopped, allReady, groupModels } from "./modelsUi.mjs";
 import { t } from "./i18n.mjs";
 
-/** The desktop app's "Connection problem, retrying (2/3)" in the page's
- * language. The shell sends it in English, because this file knows a retry by
- * those words (desktop/src/installer.js). */
+/** The desktop app's "Connection problem, retrying (2/3)" (or "Folder is
+ * blocked, retrying (2/3)") in the page's language. The shell sends it in
+ * English, because this file knows a retry by those words (desktop/src/installer.js). */
 export function retryLine(detail) {
-  const m = /^Connection problem, retrying \((\d+)\/(\d+)\)/.exec(detail || "");
-  return m ? t("Connection problem, retrying ({n}/{m})", { n: m[1], m: m[2] }) : detail;
+  const m = /^(Connection problem|Folder is blocked), retrying \((\d+)\/(\d+)\)/.exec(detail || "");
+  return m ? t(`${m[1]}, retrying ({n}/{m})`, { n: m[2], m: m[3] }) : detail;
 }
 
 /**
@@ -100,7 +100,7 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
       packBusy.title = p.title || "";
       // A retry notice stands alone: with the step title in front of it, the
       // Settings row's 34 characters ended before the word "retrying" (W22).
-      packBusy.retry = p.state === "progress" && /^Connection problem/.test(p.detail || "");
+      packBusy.retry = p.state === "progress" && /^(Connection problem|Folder is blocked)/.test(p.detail || "");
       packBusy.line = packBusy.retry ? retryLine(p.detail) : p.state === "progress" && p.detail && p.detail !== p.title ? `${p.title}: ${p.detail}` : (p.title || "");
       // The shell sends the pack's overall percent on every event.
       if (p.pct != null) packBusy.pct = p.pct;

@@ -16,7 +16,7 @@ export function openExternally(shell, url) {
  * loads or navigates, since none of them exists yet when the window is made.
  */
 export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, repo, locale, platform = process.platform,
-                              edition = "opensource" }) {
+                              edition = "opensource", inquiry = false }) {
   // What this edition is called on screen (src/edition.js displayName).
   const name = displayName(edition);
   // The finished screen is a table beside a video with a strip under both, and
@@ -75,9 +75,11 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
       // the window is moved by on both.
       // And the build's edition, which the page shows the production
       // edition's names and links for (ui/src/edition.mjs), and the name it
-      // shows, for the window title and the sign-in screen.
+      // shows, for the window title and the sign-in screen. And whether the
+      // build has somewhere to send an inquiry (main.js, src/edition.js
+      // BUILD_KEYS): then Send feedback is the inquiry form, else the issues page.
       additionalArguments: [`--persodub-repo=${repo}`, `--persodub-locale=${locale}`, `--persodub-platform=${platform}`,
-        `--persodub-edition=${edition}`, `--persodub-name=${name}`],
+        `--persodub-edition=${edition}`, `--persodub-name=${name}`, ...(inquiry ? ["--persodub-inquiry=1"] : [])],
     },
     // The production edition's window is PersoDubbing whatever page is in
     // it (the event below); the open-source window takes each page's title.

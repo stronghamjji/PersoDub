@@ -1,12 +1,12 @@
-// Customer support in the production edition (ui/src/edition.mjs): a Service
-// inquiry form like Perso's own -- the kind, a subject, the details and an
+// Customer support in the production edition, Send feedback in the open-source
+// one (ui/src/homeSidebar.mjs): a Service inquiry form like Perso's own -- the kind, a subject, the details and an
 // address to answer -- and Send hands it to the shell, which sends it to the
 // support web app with the app's version and this computer, a bug report with
 // the app's masked logs (desktop/src/reporting.js sendInquiry). No mail app:
 // a computer without a mail account left the person with nothing (owner,
 // 2026-10-27).
-// The open-source edition's Send feedback opens the repository's issues
-// instead (ui/src/homeSidebar.mjs).
+// The open-source edition has no payments, so its form has no Payment or
+// refund kind, and its title is Feedback, like the button that opens it.
 //
 // Owns #feedbackOverlay, #feedbackType, #feedbackSubjectInput,
 // #feedbackDetails, #feedbackReplyTo, #feedbackReplyToHint, #feedbackLogsNote, #feedbackConsent,
@@ -28,11 +28,14 @@ export const PRIVACY_URL = {
  * @param {() => string} deps.account      the signed-in account's line (ui/src/signIn.mjs status):
  *        its e-mail, or its name when it has none
  * @param {(url: string) => void} deps.openUrl
+ * @param {boolean} [deps.production]  the production edition: the only one with a Payment or refund kind
  * @returns {() => void} opens the form
  */
-export function initFeedbackSheet({ $, send, language, openUrl, account, record = recordStep }) {
+export function initFeedbackSheet({ $, send, language, openUrl, account, production = false, record = recordStep }) {
   const type = $("feedbackType"), subject = $("feedbackSubjectInput"), details = $("feedbackDetails"),
         consent = $("feedbackConsent"), status = $("feedbackStatus");
+  $("feedbackTypePayment").hidden = !production;
+  $("feedbackTitle").textContent = t(production ? "Service inquiry" : "Feedback");
   // Optional: left empty, the answer goes to the signed-in account's address,
   // which the shell adds itself (desktop/src/reporting.js accountForInquiry).
   // An account with no e-mail has none: then the shell answers needReplyTo.

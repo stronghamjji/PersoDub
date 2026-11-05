@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { getFreePort } from "./freePort.js";
-import { resolveAnalyticsMode, shouldReport, buildPayload, dubFacts, report } from "./analytics.js";
+import { resolveAnalyticsMode, shouldReport, buildPayload, dubFacts, report, ACCESS_REFUSED } from "./analytics.js";
 
 // A server that records what it was posted. Real HTTP, no mocks -- the point of
 // these tests is that a request actually leaves (or actually does not).
@@ -122,6 +122,36 @@ test("every other cause reads the same during an install", () => {
                              ["ETIMEDOUT", "network"], ["ENOMEM", "out-of-memory"]]) {
     assert.equal(classifyError(msg, { install: true }), code, msg);
   }
+});
+
+// A Brazilian Windows machine failed the payload step 33 times with the
+// refusal in its own language behind an odd code, and every one read as
+// "unknown" (2026-10-29). The words name it now, and so does the step: the
+// payload step only copies the app's own files, so anything it cannot read
+// there is the folder being blocked.
+test("a refusal in the computer's own language, or any payload-step failure, is a permission problem", () => {
+  const said = "EIO, Acesso negado. '\\\\?\\C:\\Users\\x\\AppData\\Local\\PersoDubbing\\app'";
+  assert.equal(classifyError(said), "permission");
+  // Every language Windows can show itself in, as Windows capitalises it.
+  for (const words of ACCESS_REFUSED) {
+    const shown = words.charAt(0).toUpperCase() + words.slice(1) + ".";
+    assert.equal(classifyError(`EIO, ${shown} '\\\\?\\C:\\k\\app'`), "permission", shown);
+    assert.equal(classifyError(`EIO, ${shown}`, { install: true, step: "models" }), "permission", shown);
+  }
+  // Accents the computer dropped on the way do not hide the word.
+  for (const words of ["Acces refuse", "Pristup bol odmietnuty", "Erisim engellendi", "Juurdepaas on keelatud"]) {
+    assert.equal(classifyError(`EIO, ${words}.`, { install: true, step: "models" }), "permission", words);
+  }
+  // A language the table does not know (Swahili is not a Windows display
+  // language) is still a blocked folder at the payload step, and only there.
+  assert.equal(classifyError("EIO, Ufikiaji umekataliwa.", { install: true, step: "payload" }), "permission");
+  assert.equal(classifyError("EIO, Ufikiaji umekataliwa.", { install: true, step: "models" }), "unknown");
+  assert.equal(classifyError("EIO, something nobody knows", { install: true, step: "payload" }), "permission");
+  // The step tells nothing about the other steps, and a known cause keeps its name.
+  assert.equal(classifyError("EIO, something nobody knows", { install: true, step: "models" }), "unknown");
+  assert.equal(classifyError("EIO, something nobody knows", { install: true }), "unknown");
+  assert.equal(classifyError("ENOSPC", { install: true, step: "payload" }), "disk-full");
+  assert.equal(classifyError("ENOENT: no such file or directory, mkdir 'C:\\k\\models\\campplus'", { install: true, step: "payload" }), "unknown");
 });
 
 test("step-failed is on the published list and travels as itself", () => {

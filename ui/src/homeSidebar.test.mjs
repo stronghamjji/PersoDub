@@ -90,6 +90,16 @@ test("the production edition hides the repository button, shows the big logo and
   assert.deepEqual(h.log.urls, [], "nothing opens the repository");
 });
 
+test("the open-source Send feedback opens the inquiry form when the build has an address", (t) => {
+  const opened = [];
+  const h = harness({ production: false, onFeedback: () => opened.push("sheet") });
+  t.after(h.log.restore);
+  assert.equal(h.$("homeFeedbackLabel").dataset.i18n, undefined, "still Send feedback, not Customer support");
+  h.$("homeFeedback").fire("click");
+  assert.deepEqual(opened, ["sheet"]);
+  assert.deepEqual(h.log.urls, [], "not the issues page");
+});
+
 test("a production build with no feedback address has no Send feedback", (t) => {
   const h = harness({ production: true, onFeedback: null });
   t.after(h.log.restore);

@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { STEP_IDS } from "./installSpec.js";
 import { EDITIONS } from "./edition.js";
+import { readWindowsText } from "./windowsText.js";
 
 // Usage counts. The decisions live here as pure functions so they can be tested
 // without Electron; usageIpc.js and the renderer do the wiring. What a payload is
@@ -310,9 +311,65 @@ export async function countEvent(event, {
 // matches on the machine-readable part -- an errno, a status word -- and throws
 // the rest away. A message nobody has taught this table about becomes
 // "unknown", which is the safe answer, not a reason to send the text instead.
+// "Access is denied" (Windows error 5) in every language Windows can show
+// itself in, lower-cased, without the final full stop. Exported for the test
+// that tries each one.
+export const ACCESS_REFUSED = [
+  "access is denied",             // English
+  "acesso negado",                // Portuguese (Brazil, Portugal)
+  "acceso denegado",              // Spanish
+  "accès refusé",                 // French
+  "zugriff verweigert",           // German
+  "accesso negato",               // Italian
+  "toegang geweigerd",            // Dutch
+  "adgang nægtet",                // Danish
+  "åtkomst nekad",                // Swedish
+  "ingen tilgang",                // Norwegian
+  "käyttö estetty",               // Finnish
+  "odmowa dostępu",               // Polish
+  "přístup byl odepřen",          // Czech
+  "prístup bol odmietnutý",       // Slovak
+  "a hozzáférés megtagadva",      // Hungarian
+  "acces refuzat",                // Romanian
+  "достъпът е отказан",           // Bulgarian
+  "pristup je odbijen",           // Croatian, Serbian (Latin)
+  "приступ је одбијен",           // Serbian (Cyrillic)
+  "dostop je zavrnjen",           // Slovenian
+  "отказано в доступе",           // Russian
+  "доступ запрещ",                // Russian, the other wording
+  "доступ заборонено",            // Ukrainian
+  "δεν επιτρέπεται η πρόσβαση",   // Greek
+  "erişim engellendi",            // Turkish
+  "juurdepääs on keelatud",       // Estonian
+  "piekļuve liegta",              // Latvian
+  "prieiga uždrausta",            // Lithuanian
+  "הגישה נדחתה",                  // Hebrew
+  "تم رفض الوصول",                // Arabic
+  "การเข้าถึงถูกปฏิเสธ",           // Thai
+  "truy cập bị từ chối",          // Vietnamese
+  "akses ditolak",                // Indonesian
+  "akses dinafikan",              // Malay
+  "액세스가 거부",                 // Korean
+  "アクセスが拒否",                // Japanese
+  "拒绝访问",                      // Chinese (Simplified)
+  "存取被拒",                      // Chinese (Traditional)
+];
+
+// A word without its accents, so "Accès refusé" and "Acces refuse" are the
+// same word: a Windows whose display language is not its system language
+// drops the accents its code page lacks before the message reaches the app
+// (a Korean Windows showing Portuguese said "Nao e possivel", 2026-11-04).
+// Both the table and the message go through this; the English patterns
+// have no accents to lose.
+const unaccented = (s) => s.normalize("NFD").replace(/\p{M}/gu, "");
+
 const ERROR_PATTERNS = [
   [/ENOSPC|no space left|not enough space/i,         "disk-full"],
   [/EACCES|EPERM|permission denied/i,                "permission"],
+  // Windows says the same refusal in the computer's own language, behind a
+  // code that need not be EACCES: a Brazilian machine failed 33 times with
+  // "EIO, Acesso negado." and every one counted as "unknown" (2026-10-29).
+  [new RegExp(ACCESS_REFUSED.map(unaccented).join("|"), "i"), "permission"],
   [/path is too long|too long to install/i,          "path-too-long"],
   // pip and Python's ssl refusing a certificate. Ahead of "network" because
   // the answer is the machine's security software, not its connection: two
@@ -388,13 +445,21 @@ const ERROR_PATTERNS = [
  * running engine dying mid-dub, but its pattern (a nonzero exit) also matches
  * every pip install and model download that fails during setup -- so install
  * failures arrived claiming an engine had crashed when none had started yet.
+ *
+ * `step` is the install step that failed (installSpec.js). The payload step
+ * copies the app's own files into the kit folder: nothing is downloaded and
+ * nothing runs, so a message the table does not know can only mean the folder
+ * is blocked -- by a security program, another program, or its permissions --
+ * whatever language and code the system wrapped it in. A missing file (ENOENT)
+ * is the one other thing it can say, and that is not a blocked folder.
  */
-export function classifyError(message, { install = false } = {}) {
+export function classifyError(message, { install = false, step = "" } = {}) {
   if (typeof message !== "string" || message === "") return "unknown";
+  message = unaccented(readWindowsText(message));
   for (const [pattern, code] of ERROR_PATTERNS) {
     if (pattern.test(message)) {
       return install && code === "engine-crash" ? "step-failed" : code;
     }
   }
-  return "unknown";
+  return install && step === "payload" && !/ENOENT/i.test(message) ? "permission" : "unknown";
 }

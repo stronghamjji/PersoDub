@@ -9,6 +9,10 @@ import { BANNER, secondsSince } from "./logLine.js";
 // A network error that passes on its own (Hugging Face resetting a download,
 // GitHub's file host answering 503 "Backend is unhealthy", issues #89 #92)
 // gets the step tried again after these waits; anything else fails at once.
+// blocked(detail, stepId) says whether a failure is the kit folder being held
+// by a security program (bootFlow.js answers from analytics.js classifyError):
+// a scan holds a file for seconds, so that too is tried again before it stops
+// the install (a Brazilian machine failed 33 times in a row, 2026-10-29).
 // stop() is true once the person cancelled: the killed process's last lines
 // can read like a network error, and a cancel must not come back as a retry.
 const RETRY_DELAYS_MS = [5000, 20000];
@@ -23,7 +27,7 @@ export function worthRetrying(message) {
 // is in the user's language, and the log is read in English.
 export async function runInstall(steps, {
   onProgress = () => {}, stop = () => false, retryDelaysMs = RETRY_DELAYS_MS,
-  sleep = (ms) => new Promise((r) => setTimeout(r, ms)), log = () => {},
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms)), log = () => {}, blocked = () => false,
 } = {}) {
   for (const [i, step] of steps.entries()) {
     const tag = `[Step ${i + 1}/${steps.length}] ${step.id}`;
@@ -52,12 +56,14 @@ export async function runInstall(steps, {
         break;
       } catch (err) {
         const detail = errorText(err);
-        const retry = attempt <= retryDelaysMs.length && worthRetrying(detail) && !stop();
+        const folder = blocked(detail, step.id);
+        const retry = attempt <= retryDelaysMs.length && (worthRetrying(detail) || folder) && !stop();
         if (retry) {
           log(`${tag} RETRY (${attempt + 1}/${retryDelaysMs.length + 1}): ${lastReason(detail)}`);
           // Left in English: the page knows a retry by this sentence's first
-          // words (ui/src/modelsDialog.mjs).
-          onProgress({ stepId: step.id, title: step.title, state: "progress", pct: null, detail: `Connection problem, retrying (${attempt + 1}/${retryDelaysMs.length + 1})`, bytes: step.bytes });
+          // words (ui/src/modelsDialog.mjs, screens/installing.html).
+          const why = folder ? "Folder is blocked" : "Connection problem";
+          onProgress({ stepId: step.id, title: step.title, state: "progress", pct: null, detail: `${why}, retrying (${attempt + 1}/${retryDelaysMs.length + 1})`, bytes: step.bytes });
           await sleep(retryDelaysMs[attempt - 1]);
         }
         // A cancel during the wait ends it here too, not with one more try.

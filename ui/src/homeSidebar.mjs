@@ -72,7 +72,7 @@ export function whatsNewTitle(version) {
  * @param {() => void} deps.onHelp        the Help dialog: what each tool does
  * @param {() => Promise<{version?: string}>} deps.loadWhatsNew
  * @param {boolean} [deps.production]     the production edition (ui/src/edition.mjs)
- * @param {(() => void) | null} [deps.onFeedback]  its Customer support form; null when it was built without an address
+ * @param {(() => void) | null} [deps.onFeedback]  the inquiry form (Customer support, or Send feedback in open source); null when the build has no address
  */
 export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing, onErase,
                                   onCaptions, onSaveVideo, onSettings, onHelp, loadWhatsNew,
@@ -92,8 +92,10 @@ export function initHomeSidebar({ $, body, repoUrl, persoUrl, openUrl, onDubbing
     else $("homeFeedback").hidden = true;
   } else {
     on("homeGhName", () => openUrl(repoUrl));
-    // The app has no feedback form of its own; the issues page is where it goes.
-    on("homeFeedback", () => openUrl(`${repoUrl}/issues`));
+    // Send feedback is the same inquiry form, so a person without a GitHub
+    // account can write too (owner, 2026-11-03); a build with no address to
+    // send it to opens the issues page instead.
+    on("homeFeedback", onFeedback || (() => openUrl(`${repoUrl}/issues`)));
   }
   on("homePerso", () => openUrl(persoUrl()));
   on("homeNavDub", onDubbing);
