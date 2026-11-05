@@ -64,6 +64,9 @@ export function initChatgptSignIn({ $, startDubbing, onTranslateHere }) {
     paintSignIn("ask");
     $("chatgptSignInOverlay").classList.add("open");
   }
+  // Ends the wait between checks early when the window gets focus back.
+  let wake = null;
+  window.addEventListener("focus", () => wake?.());
   window.addEventListener("persodub:chatgpt-signin", (e) =>
     askChatgptSignIn(typeof e.detail === "function" ? e.detail : () => {}, true));
   $("csCancel").addEventListener("click", () => {
@@ -98,7 +101,8 @@ export function initChatgptSignIn({ $, startDubbing, onTranslateHere }) {
       if (run !== chatgptSignInRun) return;
       paintSignIn("wait");
       for (let i = 0; i < 60; i++) {            // every 3 s for three minutes
-        await new Promise((res) => setTimeout(res, 3000));
+        await new Promise((res) => { wake = res; setTimeout(res, 3000); });
+        wake = null;
         if (run !== chatgptSignInRun) return;
         const st = await fetch("/api/agent/status?login=1").then((x) => x.json()).catch(() => ({}));
         const a = (st.agents || []).find((x) => x.id === "chatgpt");
@@ -109,6 +113,7 @@ export function initChatgptSignIn({ $, startDubbing, onTranslateHere }) {
           $("chatgptSignInOverlay").classList.remove("open");
           return chatgptSignedInThen();
         }
+        if (a && a.signing_in === false && a.logged_in === false) break;
       }
       if (run === chatgptSignInRun) paintSignIn("ask", t("Didn\u2019t finish. Try again."));
     } catch (e) {

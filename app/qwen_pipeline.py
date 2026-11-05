@@ -393,6 +393,9 @@ ENGINE_RESTART_MB = 10 * 1024
 
 
 def _rest_engine(engine, log: Callable[[str], None]) -> None:
+    # A restart with no line made since would only restart again.
+    if getattr(engine, "fresh", False):
+        return
     mb = getattr(engine, "memory_mb", lambda: None)()
     if mb is None or mb <= ENGINE_RESTART_MB:
         return

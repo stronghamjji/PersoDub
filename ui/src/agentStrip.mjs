@@ -303,7 +303,16 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
     // other (Windows saw it, 2026-09-11).
     stateLine.classList.add("warn");
     // A sign-in started from here is waiting on the browser.
-    if (signingIn) { stateLine.textContent = t("Finish in your browser."); return; }
+    if (signingIn) {
+      stateLine.textContent = t("Finish in your browser.");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "state-signin";
+      b.textContent = t("Cancel");
+      b.addEventListener("click", cancelSignIn);
+      stateLine.append(" ", b);
+      return;
+    }
     const oneOut = anySignedIn();
     // A button, not a terminal command: one for the assistant that is out, or
     // one each when both are, named, since either will do.
@@ -340,15 +349,32 @@ export function initAgentStripUi({ $, fetch = globalThis.fetch, getScreen, getJo
       })
       .catch((e) => signInFailed(a, e && e.message));
   }
-  function waitForSignIn(id, left) {
-    setTimeout(async () => {
+  // Checked every 3 s, and at once when the window gets focus back.
+  let signInCheck = null;
+  let signInLeft = 0;
+  function waitForSignIn(id, left, delay = 3000) {
+    clearTimeout(signInCheck);
+    signInLeft = left;
+    signInCheck = setTimeout(async () => {
+      signInCheck = null;
       if (signingIn !== id) return;
       await loadAgents({ login: true }).catch(() => {});
+      if (signingIn !== id) return;
       const a = agentList.find((x) => x.id === id);
       if (a && a.logged_in === true) { signingIn = ""; signedIn(id); return; }
-      if (left > 1) waitForSignIn(id, left - 1);
+      if (left > 1 && !(a && a.signing_in === false && a.logged_in === false)) waitForSignIn(id, left - 1);
       else signInFailed(a || { name: "", login_command: "" }, t("The sign-in did not finish. Try again."));
-    }, 3000);
+    }, delay);
+  }
+  globalThis.window?.addEventListener("focus", () => {
+    if (signingIn && signInCheck) waitForSignIn(signingIn, signInLeft, 0);
+  });
+  function cancelSignIn() {
+    clearTimeout(signInCheck);
+    signInCheck = null;
+    signingIn = "";
+    paintState();
+    fetch("/api/agent/login/cancel", { method: "POST" }).catch(() => {});
   }
   // The terminal command is the way left when the app could not start it.
   function signInFailed(a, why) {
