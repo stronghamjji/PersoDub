@@ -106,6 +106,9 @@ test("an install step that merely exited nonzero is not called an engine crash",
 
 test("a dub-time engine death keeps the name it was made for", () => {
   assert.equal(classifyError("worker exit 1"), "engine-crash");
+  assert.equal(classifyError("No subtitle file to lay on. Extract subtitles first, or name an .srt file."), "no-subtitle-file");
+  assert.equal(classifyError("자막 파일을 찾지 못했어요."), "no-subtitle-file");
+  assert.equal(classifyError("입힐 자막 파일이 없어요. 먼저 자막을 추출하거나 .srt 파일을 알려 주세요."), "no-subtitle-file");
   // A video longer than the Perso plan allows (F4008): its own word.
   assert.equal(classifyError("This video is longer than your Perso plan allows. Upgrade your plan, or switch "
     + "Dubbing to Local model. Perso said: 영상 길이가 60000ms를 초과했습니다 (F4008)"), "perso-length");

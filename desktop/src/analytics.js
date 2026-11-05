@@ -49,6 +49,9 @@ export const ERROR_CODES = new Set([
   // A certificate the computer's Python refused: something on the machine or
   // the company network signing HTTPS itself (2026-10-15).
   "certificate",
+  // Burn in subtitles asked for a subtitle file that is not there (app/api/
+  // results.py, 404). The user's files, not our code (2026-11-05).
+  "no-subtitle-file",
   "unknown",
 ]);
 
@@ -412,6 +415,10 @@ const ERROR_PATTERNS = [
   [/out of memory|not enough memory|ENOMEM|allocate|os error 1455|paging file/i, "out-of-memory"],
   [/unsupported|unrecognized codec|invalid data found/i, "unsupported-format"],
   [/did not become ready|exit \d+/i,                 "engine-crash"],
+  // The two sentences results.py answers a burn with when the .srt is gone,
+  // in both of the languages the app speaks (app/i18n).
+  [new RegExp(["no subtitle file", "subtitle file not found", "입힐 자막 파일이 없어요", "자막 파일을 찾지 못했어요"]
+    .map(unaccented).join("|"), "i"), "no-subtitle-file"],
   // The cloud service saying no. These sentences are the app's own published
   // words (app/pipeline.py's _NOTICE_ERRORS), and none of them is a fact about
   // the user's machine -- counting them as "unknown" made a service outage look

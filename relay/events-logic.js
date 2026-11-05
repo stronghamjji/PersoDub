@@ -42,7 +42,7 @@ export const REASONS = ["path-too-long", "disk-full", "network", "permission", "
   "out-of-memory", "timeout", "unsupported-format", "engine-crash", "step-failed", "cloud-refused",
   "perso-busy", "perso-credits", "perso-key", "perso-failed", "perso-length", "perso-plan",
   "gemini-busy", "gemini-quota", "model-download", "engine-500", "perso-bad-request",
-  "translate-parse", "interrupted", "certificate", "unknown"];
+  "translate-parse", "interrupted", "certificate", "no-subtitle-file", "unknown"];
 // The popups ui/src/runningScreen.mjs opens, by the notice that opened them.
 const NOTICES = ["perso_credit_exhausted", "perso_duration_limit", "perso_plan_required",
   "perso_invalid_key", "perso_unavailable", "gemini_quota_exhausted", "chatgpt_signed_out",
