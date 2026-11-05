@@ -714,3 +714,27 @@ test("a download is a tool step: export from a dubbing, burn from a subtitles pr
   await failing.go();
   assert.deepEqual(failing.steps.at(-1), ["tool_finished", { tool: "export", outcome: "failed", files: 1 }]);
 });
+
+// The burn's own count goes through the shell (desktop/src/usageIpc.js
+// shell:count-burn); a plain download is not one.
+test("a burn's download is counted through the shell, done or failed, and a plain download is not", async () => {
+  const BURN = { kind: "captions", jobId: "C1", subtitled: { href: "/s", name: "s.mp4" } };
+  const counted = [];
+  const shell = { countBurn: (status, detail) => counted.push([status, detail]) };
+  const burn = harness({ ctx: BURN, shell });
+  await burn.api.open();
+  await burn.go();
+  assert.deepEqual(counted, [["done", ""]]);
+  counted.length = 0;
+  const failing = harness({ ctx: BURN, shell, fetchFn: async () => ({ ok: false, json: async () => ({ detail: "gone" }) }) });
+  await failing.api.open();
+  await failing.go();
+  assert.equal(counted.length, 1);
+  assert.equal(counted[0][0], "error");
+  assert.match(counted[0][1], /gone/);
+  counted.length = 0;
+  const dub = harness({ ctx: STEMS, shell });
+  await dub.api.open();
+  await dub.go();
+  assert.deepEqual(counted, []);
+});

@@ -85,6 +85,9 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // likeliest to fail on someone else's machine, and it was the one kind of
   // failure that sent nothing at all (user, 2026-09-11).
   countErase: (status, detail, job) => ipcRenderer.send("shell:count-erase", { status, detail, job }),
+  // The same for a burn (Burn in subtitles): a captions project's download is
+  // the burn, so the Download dialog says how it ended. Counted only.
+  countBurn: (status, detail) => ipcRenderer.send("shell:count-burn", { status, detail }),
   // The buttons pressed and screens shown, as names the page made from its
   // own markup (ui/src/events.mjs); the shell checks them and sends them
   // (src/events.js). Resolves to {on, kept, sent, recent}; [] only asks.

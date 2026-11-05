@@ -60,8 +60,8 @@ assistant means nothing runs and nothing is sent.
 
 ## Usage counts
 
-PersoDub reports six events — app launch, dub finished, dub failed, subtitles erased,
-erasing failed, install failed — to see how many installs finish a dub. Each carries the app version, your operating
+PersoDub reports eight events — app launch, dub finished, dub failed, subtitles erased,
+erasing failed, subtitles burned in, burning in failed, install failed — to see how many installs finish a dub. Each carries the app version, your operating
 system, which edition it is (from 1.0.1), a random install ID, and on a failure one short code off a fixed list. A failed
 install also names which of its twelve steps it stopped at, again off a fixed list. From
 0.6.2 a dub also says which of its parts went through Perso — transcription, separation,
@@ -69,7 +69,9 @@ or the whole dub — each as one of two words, how many Perso credits that one j
 and the video's length in seconds (0.6.2 and 0.6.3 sent whole minutes). From 0.8.6 it
 also says the hour it started on your computer's clock, how many seconds it ran, and
 the seconds of each of separation, transcription, translation and voices that ran, as
-whole numbers. A launch says whether a Perso key is set, as yes or no. Never your video, audio, subtitles, filenames, paths, error text, key,
+whole numbers. From 1.0.4 a dub also says the original's language and the dubbing's
+language, each as a short code such as `en` or `pt-BR`. Burning in subtitles says only
+whether it finished or failed, and on a failure its short code. A launch says whether a Perso key is set, as yes or no. Never your video, audio, subtitles, filenames, paths, error text, key,
 workspace or balance; no IP address is stored.
 
 A launch counts once a day; every dub counts. Turn it off in **Settings → Privacy** or

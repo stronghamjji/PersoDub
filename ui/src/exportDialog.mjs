@@ -379,8 +379,11 @@ export function initExportDialog({ $, getContext, storage = null, shell = null,
       where.textContent = last && folder && folder.missing
         ? `${t("Cannot find {folder}.", { folder: folderName(folder.chosen) })} ${said}` : said;
       record("tool_finished", { tool, outcome: "done", files: todo.length });
+      // The burn's own count (desktop/src/usageIpc.js), the shell's alone.
+      if (tool === "burn") shell?.countBurn?.("done", "");
     } catch (e) {
       record("tool_finished", { tool, outcome: "failed", files: went });
+      if (tool === "burn") shell?.countBurn?.("error", errorText(e));
       where.textContent = errorText(e);
     } finally {
       saving = false;
