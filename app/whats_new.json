@@ -1,19 +1,21 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "notes": [
-    "The app runs on a newer Electron (45) with this year's security fixes, and needs macOS 13 or later.",
-    "On Windows, an update installs only when its installer carries ESTsoft's signature."
+    "On Windows, a blocked install folder is retried after 5 and 20 seconds, and \"access denied\" is recognized in any Windows language.",
+    "Send feedback sends from inside the app; no GitHub account needed.",
+    "The anonymous usage count also notes a dub's two languages and whether a subtitle burn finished."
   ],
   "notes_ko": [
-    "앱 바탕을 새 일렉트론(45)으로 올려 올해 나온 보안 고침을 받았어요. 이제 macOS 13 이상이 필요해요.",
-    "윈도우에서 업데이트는 ESTsoft 서명이 있는 설치 파일만 설치해요."
+    "윈도우에서 설치 폴더가 막히면 5초, 20초 뒤에 스스로 다시 해 봐요. 어떤 언어의 윈도우든 \"접근 거부\"를 알아봐요.",
+    "\"피드백 보내기\"가 앱 안에서 바로 보내져요. 깃헙 계정이 없어도 돼요.",
+    "익명 사용 기록에 더빙한 언어와 자막 입히기 결과가 더해져요."
   ],
   "notes_production": [
-    "The app runs on a newer Electron (45) with this year's security fixes, and needs macOS 13 or later.",
-    "On Windows, an update installs only when its installer carries ESTsoft's signature."
+    "On Windows, a blocked install folder is retried after 5 and 20 seconds, and \"access denied\" is recognized in any Windows language.",
+    "The anonymous usage count also notes a dub's two languages and whether a subtitle burn finished."
   ],
   "notes_production_ko": [
-    "앱 바탕을 새 일렉트론(45)으로 올려 올해 나온 보안 고침을 받았어요. 이제 macOS 13 이상이 필요해요.",
-    "윈도우에서 업데이트는 ESTsoft 서명이 있는 설치 파일만 설치해요."
+    "윈도우에서 설치 폴더가 막히면 5초, 20초 뒤에 스스로 다시 해 봐요. 어떤 언어의 윈도우든 \"접근 거부\"를 알아봐요.",
+    "익명 사용 기록에 더빙한 언어와 자막 입히기 결과가 더해져요."
   ]
 }
