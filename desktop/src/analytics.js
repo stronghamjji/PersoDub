@@ -11,10 +11,12 @@ import { readWindowsText } from "./windowsText.js";
 // docs/privacy.md's "Usage counts" -- the two must not drift. The count worker
 // (not in this repository) accepts exactly these names; a dub's are stt,
 // separation, mode, credits, seconds and, from 0.8.6, started_hour,
-// elapsed_seconds, sep_seconds, stt_seconds, translate_seconds, voice_seconds.
+// elapsed_seconds, sep_seconds, stt_seconds, translate_seconds, voice_seconds,
+// and from 1.0.4 source_lang and target_lang. A burn (Burn in subtitles, 1.0.4)
+// sends burn_success or burn_failure and, on a failure, its error_code.
 
 const DAILY_EVENTS = new Set(["app_launch"]);
-const FAILURE_EVENTS = new Set(["dub_failure", "install_failure", "erase_failure"]);
+const FAILURE_EVENTS = new Set(["dub_failure", "install_failure", "erase_failure", "burn_failure"]);
 
 // The published list. An error code that is not on it becomes "unknown" rather
 // than travelling verbatim -- that is what keeps a stray path or message, which
@@ -88,6 +90,10 @@ const persoOrLocal = (v) => (v === "perso" ? "perso" : "local");
 // A count that is a count: a whole, non-negative number. Anything else is left
 // out of the message, and the table stores NULL for it.
 const isCount = (n) => Number.isInteger(n) && n >= 0;
+// A language as a code (en, ko, pt-BR, zh-Hans) and nothing else: a name, a
+// path or any other text is left out, and the dashboard decides what a
+// missing one reads as.
+const isLangCode = (v) => typeof v === "string" && /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(v);
 
 // A step's seconds by the name the job's record keeps it under (app/jobs.py
 // timed_step, app/stages.py) -> the name it travels as. Only these four leave.
@@ -111,7 +117,7 @@ export function timingSeconds(timing) {
 
 /** The whole message. A field not named here cannot leave. */
 export function buildPayload({ event, os, version, device, edition, errorCode, step,
-                               engines, credits, seconds, timing, persoKey }) {
+                               engines, credits, seconds, timing, languages, persoKey }) {
   const payload = { event, os, version, device };
   // Which app sent it (1.0.1), so the dashboard counts the two apart: one of
   // the two names, or nothing.
@@ -145,6 +151,12 @@ export function buildPayload({ event, os, version, device, edition, errorCode, s
       if (isCount(timing.started_hour) && timing.started_hour < 24) payload.started_hour = timing.started_hour;
       Object.assign(payload, timingSeconds(timing));
     }
+    // The original's language and the dubbing's (1.0.4), as codes only. An
+    // original not known yet is left out.
+    if (languages) {
+      if (isLangCode(languages.source)) payload.source_lang = languages.source;
+      if (isLangCode(languages.target)) payload.target_lang = languages.target;
+    }
   }
   // Whether a Perso key is set when the app starts -- yes or no, never the key.
   if (event === "app_launch" && typeof persoKey === "boolean") {
@@ -155,8 +167,9 @@ export function buildPayload({ event, os, version, device, edition, errorCode, s
 
 /**
  * What a job's own record tells the count: its engine fields, the Perso
- * credits it spent, its length in seconds, and how long it ran (the record's
- * started_hour, elapsed_seconds and stage_seconds, app/jobs.py). A record the
+ * credits it spent, its length in seconds, how long it ran (the record's
+ * started_hour, elapsed_seconds and stage_seconds, app/jobs.py), and its two
+ * languages (source_lang, language_code). A record the
  * shell could not fetch gives nothing, and buildPayload then sends nothing for it.
  *
  * Seconds, not minutes. 0.6.2 and 0.6.3 sent whole minutes and two thirds of
@@ -173,6 +186,7 @@ export function dubFacts(job) {
     seconds: Number.isFinite(job.duration) ? Math.round(job.duration) : undefined,
     timing: { started_hour: job.started_hour, elapsed_seconds: job.elapsed_seconds,
               stage_seconds: job.stage_seconds },
+    languages: { source: job.source_lang, target: job.language_code },
   };
 }
 
@@ -275,7 +289,7 @@ export function keepDevice(file) {
  */
 export async function countEvent(event, {
   mode, stateFile, url, os, version, edition, errorCode, step,
-  engines, credits, seconds, timing, persoKey,
+  engines, credits, seconds, timing, languages, persoKey,
   today = new Date().toISOString().slice(0, 10),
   timeoutMs, fetchImpl, log = console.log,
 }) {
@@ -287,7 +301,7 @@ export async function countEvent(event, {
   if (!shouldReport({ event, lastDay: state.lastDay, today })) return false;
 
   const payload = buildPayload({ event, os, version, device: state.device, edition, errorCode, step,
-                                 engines, credits, seconds, timing, persoKey });
+                                 engines, credits, seconds, timing, languages, persoKey });
 
   if (mode === "debug") {
     log(`[persodub-analytics] would send: ${JSON.stringify(payload)}`);
