@@ -212,7 +212,10 @@ def _require_voice_engine_running(voice: Optional[str] = None) -> None:
     if engine is not None and engine.id != "qwen3_tts":
         # Another engine is chosen for this dub: ask it, not the Qwen pack,
         # and say it as the Qwen one is said (still starting, or not running).
-        if not engine.is_available():
+        # Answering /health is enough, as for Qwen: the sidecar loads weights
+        # downloaded after it started on first use, so model_loaded is not asked.
+        url = runtime.url("omnivoice")
+        if not url or not _voice_engine_answers(url):
             told = engines_status.local_engine("omnivoice")["message"]
             raise HTTPException(422, told or english("The voice engine is not running. Quit and reopen {app}."))
         return

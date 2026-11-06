@@ -331,7 +331,7 @@ test("venv-omnivoice installs its own list into its own venv, torch first on Win
 
 test("venv-omnivoice budget follows the platform's torch variant", () => {
   const GB = 1024 ** 3;
-  const expected = IS_WIN ? (TORCH_VARIANT === "cpu" ? 1.5 * GB : 8 * GB) : 2.2 * GB;
+  const expected = IS_WIN ? (TORCH_VARIANT === "cpu" ? 4.1 * GB : 8 * GB) : 2.2 * GB;
   assert.equal(byId(freshCtx())["venv-omnivoice"].bytes, expected);
 });
 

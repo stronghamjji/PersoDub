@@ -505,9 +505,9 @@ const venvEnginesBytes = (variant) => (IS_WIN ? (variant === "cpu" ? 1.5 * GB : 
 const venvEraserBytes = (variant) => (IS_WIN ? (variant === "cpu" ? 3.5 * GB : 7.5 * GB) : 3 * GB);
 
 // What the OmniVoice engine's own venv leaves on disk: the engines venv's
-// shape (the same torch per platform) without its other engines. Not
-// measured yet; re-measure after the first install on each platform.
-const venvOmnivoiceBytes = (variant) => (IS_WIN ? (variant === "cpu" ? 1.5 * GB : 8 * GB) : 2.2 * GB);
+// shape (the same torch per platform) without its other engines. Windows
+// measured 2026-11-05: 4.1 GB with the CPU torch, 7.9 GB with cu128.
+const venvOmnivoiceBytes = (variant) => (IS_WIN ? (variant === "cpu" ? 4.1 * GB : 8 * GB) : 2.2 * GB);
 
 // The translation runtime's archive is 139 MB on macOS but ~1.5 GB on
 // Windows; unpacked, Windows measured 1.5-1.9 GB on disk (audit, 2026-09-29).

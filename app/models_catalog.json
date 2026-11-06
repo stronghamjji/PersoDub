@@ -52,7 +52,7 @@
     "bytes": {
       "mac": 2200000000,
       "win-gpu": 8000000000,
-      "win-cpu": 1500000000
+      "win-cpu": 4100000000
     },
     "dir": "omnivoice_venv",
     "markers": [

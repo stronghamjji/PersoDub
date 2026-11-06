@@ -344,16 +344,21 @@ def test_an_omnivoice_dub_waits_for_its_own_engine(monkeypatch, _kit):
     _put_omnivoice_model(_kit)
     _mk(_kit, ".install", "venv-omnivoice.ok")
     monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
-    up = {"now": False}
-    monkeypatch.setattr(OmniVoiceEngine, "is_available", lambda self: up["now"])
     # Qwen's engine is announced (the fixture), OmniVoice's is not: refused
     # with the phrase the page restarts an engine on.
     r = _start({"tts_engine": "omnivoice"})
     assert r.status_code == 422 and "voice engine is not running" in r.json()["detail"]
     _runtime(_kit, tts_url="http://127.0.0.1:1", omnivoice_state="starting")
     assert "still starting" in _start({"tts_engine": "omnivoice"}).json()["detail"]
-    up["now"] = True
+    # A model downloaded after the engine started must not block the dub:
+    # /health answers but model_loaded is still false (Windows, 2026-11-05).
+    monkeypatch.setattr(OmniVoiceEngine, "is_available", lambda self: False)
+    _runtime(_kit, tts_url="http://127.0.0.1:1", omnivoice_url="http://127.0.0.1:2")
     assert _start({"tts_engine": "omnivoice"}).status_code == 200
+    # Announced but not answering (it died): refused like a missing one.
+    monkeypatch.setattr(dub_api, "_voice_engine_answers", lambda url: False)
+    r = _start({"tts_engine": "omnivoice"})
+    assert r.status_code == 422 and "voice engine is not running" in r.json()["detail"]
 
 
 def _runtime(kit, **data):
