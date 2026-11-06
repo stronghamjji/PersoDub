@@ -331,6 +331,8 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       ctx.memoryTimer ??= setInterval(logMemory, 5 * 60 * 1000).unref();
       rememberPorts({ backend: ctx.engines.port });
       await win.loadURL(ctx.engines.url);
+      // Back (e.g. a mouse button) must not return to the loading screen.
+      win.webContents.navigationHistory.clear();
       shellLog(`PERSODUB_READY ${ctx.engines.url}`);
       // An engine that did not start no longer stops the app (orchestrator.js):
       // the page tells the user through GET /api/engines. Counted and reported
