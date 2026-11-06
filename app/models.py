@@ -211,7 +211,7 @@ def shown_words(text: str) -> str:
         "Personal, non-commercial use only": t("Personal, non-commercial use only"),
         "Subtitle eraser": t("Subtitle eraser"),
         "OmniVoice engine": t("OmniVoice engine"),
-        "Second voice engine, its own Python parts": t("Second voice engine, its own Python parts"),
+        "Voices (OmniVoice)": t("Voices (OmniVoice)"),
         "More careful": t("More careful"),
         "Small and quick": t("Small and quick"),
         "Default · Comes with Python + PyTorch": t("Default · Comes with Python + PyTorch"),

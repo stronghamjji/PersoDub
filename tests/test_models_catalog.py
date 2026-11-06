@@ -311,7 +311,7 @@ def test_only_a_row_its_group_title_does_not_explain_carries_a_hint():
     rows = {m["id"]: m for m in models_module.status_rows()}
     assert rows["engine"]["hint"] == "Audio separation, speech-to-text, voices"
     assert rows["ollama-runtime"]["hint"] == "Local translation (Hunyuan, Gemma 3)"
-    assert rows["omnivoice"]["hint"] == "Second voice engine, its own Python parts"
+    assert rows["omnivoice"]["hint"] == "Voices (OmniVoice)"
     assert rows["omnivoice-model"]["hint"] == "Personal, non-commercial use only"
     assert rows["whisper"]["hint"] == ""
 

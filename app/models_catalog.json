@@ -48,7 +48,7 @@
     "id": "omnivoice",
     "role": "pack",
     "name": "OmniVoice engine",
-    "hint": "Second voice engine, its own Python parts",
+    "hint": "Voices (OmniVoice)",
     "bytes": {
       "mac": 2200000000,
       "win-gpu": 8000000000,
