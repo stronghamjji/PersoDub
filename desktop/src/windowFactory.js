@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { zoomResetter } from "./zoomReset.js";
 import { useLanguage } from "./i18n.js";
 import { displayName } from "./edition.js";
+import { blockedKey } from "./shortcuts.js";
 
 // Outbound links (the credit popup's Recharge button, Settings' "get a key") belong in
 // the user's own browser. Only http(s) is handed to the OS, so a page can never make
@@ -120,6 +121,20 @@ export function createWindow({ app, BrowserWindow, screen, shell, ctx, appDir, r
     } catch { /* unparseable URL: treat as external */ }
     e.preventDefault();
     openExternally(shell, url);
+  });
+  // The keys a browser's chrome answers -- close, reload, the developer
+  // tools, zoom, full screen -- are swallowed (src/shortcuts.js): with no
+  // chrome, Cmd/Ctrl+W quit the whole app with no warning (owner, 2026-11-05).
+  win.webContents.on("before-input-event", (e, input) => {
+    if (blockedKey(input, platform)) e.preventDefault();
+  });
+  // ...and the window keeps nothing to go back to. The loading screen comes
+  // before the app page, and a Back of any kind (a mouse's side button, a
+  // keyboard's browser key) returned to it with the boot long finished, so
+  // nothing moved the user on again. The history is cleared as each page
+  // lands, so the one on screen is all there is.
+  win.webContents.on("did-navigate", () => {
+    if (!win.isDestroyed()) win.webContents.navigationHistory.clear();
   });
   return win;
 }
