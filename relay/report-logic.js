@@ -46,6 +46,8 @@ export const ERROR_CODES = [
   "interrupted",
   // A certificate the computer's Python refused (2026-10-15).
   "certificate",
+  // Burn in subtitles asked for a subtitle file that is not there (2026-11-05).
+  "no-subtitle-file",
   "unknown",
 ];
 // A finished job's record (POST /record, 0.8.8): the three kinds of job, and

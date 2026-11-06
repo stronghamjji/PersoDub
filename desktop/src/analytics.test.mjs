@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { getFreePort } from "./freePort.js";
-import { resolveAnalyticsMode, shouldReport, buildPayload, dubFacts, report } from "./analytics.js";
+import { resolveAnalyticsMode, shouldReport, buildPayload, dubFacts, report, ACCESS_REFUSED } from "./analytics.js";
 
 // A server that records what it was posted. Real HTTP, no mocks -- the point of
 // these tests is that a request actually leaves (or actually does not).
@@ -106,6 +106,9 @@ test("an install step that merely exited nonzero is not called an engine crash",
 
 test("a dub-time engine death keeps the name it was made for", () => {
   assert.equal(classifyError("worker exit 1"), "engine-crash");
+  assert.equal(classifyError("No subtitle file to lay on. Extract subtitles first, or name an .srt file."), "no-subtitle-file");
+  assert.equal(classifyError("자막 파일을 찾지 못했어요."), "no-subtitle-file");
+  assert.equal(classifyError("입힐 자막 파일이 없어요. 먼저 자막을 추출하거나 .srt 파일을 알려 주세요."), "no-subtitle-file");
   // A video longer than the Perso plan allows (F4008): its own word.
   assert.equal(classifyError("This video is longer than your Perso plan allows. Upgrade your plan, or switch "
     + "Dubbing to Local model. Perso said: 영상 길이가 60000ms를 초과했습니다 (F4008)"), "perso-length");
@@ -122,6 +125,36 @@ test("every other cause reads the same during an install", () => {
                              ["ETIMEDOUT", "network"], ["ENOMEM", "out-of-memory"]]) {
     assert.equal(classifyError(msg, { install: true }), code, msg);
   }
+});
+
+// A Brazilian Windows machine failed the payload step 33 times with the
+// refusal in its own language behind an odd code, and every one read as
+// "unknown" (2026-10-29). The words name it now, and so does the step: the
+// payload step only copies the app's own files, so anything it cannot read
+// there is the folder being blocked.
+test("a refusal in the computer's own language, or any payload-step failure, is a permission problem", () => {
+  const said = "EIO, Acesso negado. '\\\\?\\C:\\Users\\x\\AppData\\Local\\PersoDubbing\\app'";
+  assert.equal(classifyError(said), "permission");
+  // Every language Windows can show itself in, as Windows capitalises it.
+  for (const words of ACCESS_REFUSED) {
+    const shown = words.charAt(0).toUpperCase() + words.slice(1) + ".";
+    assert.equal(classifyError(`EIO, ${shown} '\\\\?\\C:\\k\\app'`), "permission", shown);
+    assert.equal(classifyError(`EIO, ${shown}`, { install: true, step: "models" }), "permission", shown);
+  }
+  // Accents the computer dropped on the way do not hide the word.
+  for (const words of ["Acces refuse", "Pristup bol odmietnuty", "Erisim engellendi", "Juurdepaas on keelatud"]) {
+    assert.equal(classifyError(`EIO, ${words}.`, { install: true, step: "models" }), "permission", words);
+  }
+  // A language the table does not know (Swahili is not a Windows display
+  // language) is still a blocked folder at the payload step, and only there.
+  assert.equal(classifyError("EIO, Ufikiaji umekataliwa.", { install: true, step: "payload" }), "permission");
+  assert.equal(classifyError("EIO, Ufikiaji umekataliwa.", { install: true, step: "models" }), "unknown");
+  assert.equal(classifyError("EIO, something nobody knows", { install: true, step: "payload" }), "permission");
+  // The step tells nothing about the other steps, and a known cause keeps its name.
+  assert.equal(classifyError("EIO, something nobody knows", { install: true, step: "models" }), "unknown");
+  assert.equal(classifyError("EIO, something nobody knows", { install: true }), "unknown");
+  assert.equal(classifyError("ENOSPC", { install: true, step: "payload" }), "disk-full");
+  assert.equal(classifyError("ENOENT: no such file or directory, mkdir 'C:\\k\\models\\campplus'", { install: true, step: "payload" }), "unknown");
 });
 
 test("step-failed is on the published list and travels as itself", () => {
@@ -325,6 +358,21 @@ test("debug mode shows the payload and still sends nothing", async () => {
   assert.deepEqual(sent, []);
   assert.equal(printed.length, 1);
   assert.match(printed[0], /app_launch/);
+});
+
+test("a dub's languages reach the payload through countEvent, not only buildPayload", async () => {
+  const file = tempStateFile();
+  const { sent, fetchImpl } = recorder();
+  const printed = [];
+
+  await countEvent("dub_success", { ...BASE, version: "1.0.4", mode: "debug", stateFile: file, fetchImpl,
+                                     ...dubFacts({ language_code: "en", source_lang: "ko", duration: 12 }),
+                                     log: (m) => printed.push(m) });
+
+  assert.deepEqual(sent, []);
+  const payload = JSON.parse(printed[0].replace(/^.*would send: /, ""));
+  assert.equal(payload.source_lang, "ko");
+  assert.equal(payload.target_lang, "en");
 });
 
 test("a launch is sent once and the day is remembered", async () => {
@@ -697,4 +745,34 @@ test("a step that did not run is left out, and a time that is not a whole number
   // An erase carries none of it.
   const e = buildPayload({ ...base, event: "erase_success", timing: { started_hour: 3, elapsed_seconds: 9 } });
   assert.deepEqual(Object.keys(e).sort(), ["device", "event", "os", "version"]);
+});
+
+// ---- a dub's two languages, and the burn (1.0.4) ----
+
+test("a dub sends its two languages as codes, and leaves out a missing or odd one", () => {
+  const base = { os: "mac", version: "1.0.4", device: "a".repeat(32) };
+  for (const event of ["dub_success", "dub_failure"]) {
+    const p = buildPayload({ ...base, event, ...dubFacts({ source_lang: "en", language_code: "pt-BR" }) });
+    assert.equal(p.source_lang, "en");
+    assert.equal(p.target_lang, "pt-BR");
+  }
+  const missing = buildPayload({ ...base, event: "dub_success", ...dubFacts({ language_code: "ko" }) });
+  assert.equal("source_lang" in missing, false);
+  assert.equal(missing.target_lang, "ko");
+  for (const odd of ["/Users/me/clip.mp4", "EN", "English", "en-", "", 7]) {
+    const p = buildPayload({ ...base, event: "dub_success", languages: { source: odd, target: odd } });
+    assert.equal("source_lang" in p, false, String(odd));
+    assert.equal("target_lang" in p, false, String(odd));
+  }
+  const launch = buildPayload({ ...base, event: "app_launch", languages: { source: "en", target: "ko" } });
+  assert.equal("source_lang" in launch, false);
+  assert.equal("target_lang" in launch, false);
+});
+
+test("a failed burn carries an error code off the list; a finished one carries nothing more", () => {
+  const base = { os: "mac", version: "1.0.4", device: "a".repeat(32) };
+  assert.equal(buildPayload({ ...base, event: "burn_failure", errorCode: "disk-full" }).error_code, "disk-full");
+  assert.equal(buildPayload({ ...base, event: "burn_failure", errorCode: "/a/path" }).error_code, "unknown");
+  const ok = buildPayload({ ...base, event: "burn_success", languages: { source: "en", target: "ko" } });
+  assert.deepEqual(Object.keys(ok).sort(), ["device", "event", "os", "version"]);
 });

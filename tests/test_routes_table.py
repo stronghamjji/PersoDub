@@ -94,6 +94,7 @@ ROUTES = [
     ('HEAD', '/redoc'),
     ('POST', '/api/agent/chat'),
     ('POST', '/api/agent/login'),
+    ('POST', '/api/agent/login/cancel'),
     ('POST', '/api/agent/stop'),
     ('POST', '/api/captions/import'),
     ('POST', '/api/clips/cut'),

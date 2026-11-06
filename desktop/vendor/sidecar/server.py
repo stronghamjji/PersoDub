@@ -130,18 +130,14 @@ def _rss_mb():
     it no longer uses, about 8-12 GB more per 50 lines (2026-10-07). On macOS
     that is the physical footprint top and Activity Monitor show -- the
     model's unified memory is in it, while RSS read 1.2 GB against a 7.8 GB
-    footprint and 0.2 GB once swapped out (2026-10-07). Elsewhere the larger
-    of RSS and its peak. None where none of these can be read."""
+    footprint and 0.2 GB once swapped out (2026-10-07). Elsewhere the current
+    RSS: the peak stays at the model load's spike and set off a restart before
+    every line. None where none of these can be read."""
     try:
         if sys.platform == "darwin":
             return int(_phys_footprint() // (1024 * 1024))
         import psutil
-        info = psutil.Process().memory_info()
-        peak = getattr(info, "peak_wset", 0)   # Windows
-        if not peak:
-            import resource
-            peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024   # Linux: KB
-        return int(max(info.rss, peak) // (1024 * 1024))
+        return int(psutil.Process().memory_info().rss // (1024 * 1024))
     except Exception:
         return None
 

@@ -11,7 +11,7 @@ import { currentLanguage, useLanguage } from "./i18n.js";
 
 const DESKTOP = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin", edition } = {}) {
+function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "darwin", edition, inquiry } = {}) {
   const opened = [];
   const on = {};
   class BrowserWindow {
@@ -20,12 +20,14 @@ function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "
       this.url = "";
       this.zooms = [];
       this.sent = [];
+      this.historyCleared = 0;
       this.webContents = {
         on: (event, fn) => { on[event] = fn; },
         send: (channel, value) => this.sent.push([channel, value]),
         setWindowOpenHandler: (fn) => { on.windowOpen = fn; },
         getURL: () => this.url,
         setZoomLevel: (z) => this.zooms.push(z),
+        navigationHistory: { clear: () => { this.historyCleared += 1; } },
       };
     }
     isDestroyed() { return false; }
@@ -33,7 +35,7 @@ function setup({ workArea = { width: 1440, height: 900 }, ctx = {}, platform = "
   }
   const win = createWindow({
     app: { isPackaged: true }, BrowserWindow, ctx, appDir: "/app", repo: "owner/PersoDub", locale: "ko", platform,
-    edition,
+    edition, inquiry,
     screen: { getPrimaryDisplay: () => ({ workAreaSize: workArea }) },
     shell: { openExternal: (url) => opened.push(url) },
   });
@@ -71,6 +73,13 @@ test("the production window is PersoDubbing whatever its page is called, and tel
   const args = win.options.webPreferences.additionalArguments;
   assert.ok(args.includes("--persodub-edition=production"));
   assert.ok(args.includes("--persodub-name=PersoDubbing"));
+});
+
+// Send feedback is the inquiry form only when the build has somewhere to
+// send it (main.js, src/edition.js BUILD_KEYS); the page is told so.
+test("the page is told when the build can send an inquiry, and not otherwise", () => {
+  assert.ok(setup({ inquiry: true }).win.options.webPreferences.additionalArguments.includes("--persodub-inquiry=1"));
+  assert.ok(!setup().win.options.webPreferences.additionalArguments.some((a) => a.startsWith("--persodub-inquiry")));
 });
 
 // Windows hung its white system title bar over the dark app, with the app's own
@@ -174,4 +183,27 @@ test("each page load reads the language off kit.env again, so a language saved i
   useLanguage({ kitDir });
   setup({ ctx: {} }).on["did-finish-load"]();
   assert.equal(currentLanguage(), "en");
+});
+
+// The window has no chrome, and the keys a browser's chrome answers did their
+// work here all the same: Cmd/Ctrl+W quit the app with no warning (2026-11-05).
+test("the close, reload, tools and zoom keys are swallowed before the page or a menu sees them", () => {
+  for (const platform of ["darwin", "win32"]) {
+    const { on } = setup({ platform });
+    const press = (input) => { let prevented = false; on["before-input-event"]({ preventDefault: () => { prevented = true; } }, { type: "keyDown", ...input }); return prevented; };
+    const mod = platform === "darwin" ? { meta: true } : { control: true };
+    assert.equal(press({ key: "w", ...mod }), true, `${platform}: close`);
+    assert.equal(press({ key: "r", ...mod }), true, `${platform}: reload`);
+    assert.equal(press({ key: "-", ...mod }), true, `${platform}: zoom out`);
+    assert.equal(press({ key: "c", ...mod }), false, `${platform}: copy still types`);
+  }
+});
+
+// A Back of any kind returned to the loading screen with the boot long
+// finished, and nothing moved the user on again (2026-11-05).
+test("each page that lands clears the history behind it, so there is nothing to go back to", () => {
+  const { win, on } = setup();
+  on["did-navigate"]();
+  on["did-navigate"]();
+  assert.equal(win.historyCleared, 2);
 });

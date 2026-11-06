@@ -224,6 +224,7 @@ def agent_status(login: int = 0):
     for key, meta in AGENTS.items():
         path = agent_base.find_cli(meta["binary"])
         driver = meta["driver"]
+        signing_in = _signing_in(key)
         # Only asked of a CLI we would actually run, and only when the caller
         # says the assistant is on screen (?login=1). `logged_in` is None until
         # the answer lands, and this call never waits for it.
@@ -244,6 +245,7 @@ def agent_status(login: int = 0):
             # ("ChatGPT", "claude.ai") -- never an address, never a token.
             "logged_in": state["logged_in"],
             "account": state["account"],
+            "signing_in": signing_in,
             # What to type in a terminal to sign in, said in one place.
             "login_command": meta.get("login", ""),
             # Why it is greyed out, in the picker's own words. Empty when the
@@ -350,6 +352,31 @@ _MODEL_NAME = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 # The one sign-in in flight. A second click used to start a second `codex
 # login` that fought the first for its callback port (review 2026-09-23).
 _login_proc = None
+_login_agent = ""
+_login_reaped = True
+
+
+def _forget_login(agent: str) -> None:
+    meta = AGENTS[agent]
+    with _login_lock:
+        for key, other in AGENTS.items():
+            if key == agent or (_env_of(other) is not None) == (_env_of(meta) is not None) \
+                    and other.get("binary") == meta.get("binary"):
+                _login_cache.pop(key, None)
+
+
+def _signing_in(agent: str) -> bool:
+    """Whether this agent's sign-in process is still running. The first look
+    after it exits drops the cached login, so the next check is a fresh one."""
+    global _login_reaped
+    if _login_proc is None or _login_agent != agent:
+        return False
+    if _login_proc.poll() is None:
+        return True
+    if not _login_reaped:
+        _login_reaped = True
+        _forget_login(agent)
+    return False
 
 
 class AgentLoginRequest(BaseModel):
@@ -379,7 +406,7 @@ def agent_login(body: AgentLoginRequest):
     if not binary:
         raise HTTPException(status_code=409, detail=t("{name} is not installed on this computer.", name=meta["name"]))
     codex_agent.forget_models()
-    global _login_proc
+    global _login_proc, _login_agent, _login_reaped
     if _login_proc is not None and _login_proc.poll() is None:
         agent_base._end(_login_proc)
     try:
@@ -392,13 +419,19 @@ def agent_login(body: AgentLoginRequest):
         logger.warning("Could not start the sign-in (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail=t("Could not start the sign-in. "
                                                       "Quit and reopen {app}, then press it again."))
+    _login_agent = body.agent
+    _login_reaped = False
     # Every assistant that reads this same sign-in is asked afresh.
-    with _login_lock:
-        for key, other in AGENTS.items():
-            if key == body.agent or (_env_of(other) is not None) == (_env_of(meta) is not None) \
-                    and other.get("binary") == meta.get("binary"):
-                _login_cache.pop(key, None)
+    _forget_login(body.agent)
     return {"started": True}
+
+
+@router.post("/api/agent/login/cancel")
+def agent_login_cancel():
+    """Stop the sign-in in flight, if any."""
+    if _login_proc is not None and _login_proc.poll() is None:
+        agent_base._end(_login_proc)
+    return {"cancelled": True}
 
 
 @router.get("/api/agent/login/progress")

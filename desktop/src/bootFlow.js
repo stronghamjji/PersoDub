@@ -29,15 +29,19 @@ const INSTALL_HOSTS = ["pypi.org", "files.pythonhosted.org", "download.pytorch.o
  * sorts it (analytics.js classifyError), and what to press -- never a cause
  * nobody found. [sentence, note]; the note, smaller, only for a certificate.
  * The tool's own words go under Details on the screen, and into shell.log.
+ * `step` is the install step that stopped, which sorts a refusal the table
+ * cannot read (analytics.js classifyError).
  */
-export function installStopText(message) {
-  const code = classifyError(message, { install: true });
+export function installStopText(message, step = "") {
+  const code = classifyError(message, { install: true, step });
   if (code === "certificate") {
     return [t("A company network or security program blocked the download. Connect to another Wi-Fi or a hotspot, then press Try again."),
       `${t("You can also ask your company's IT team to open these addresses.")}\n${INSTALL_HOSTS.join(" · ")}`];
   }
   if (code === "disk-full") return [t("There is not enough storage space. Free some up, then press Try again to pick up where it stopped."), ""];
-  if (code === "permission") return [t("Another program is using {app}'s files. Restart your computer, then press Try again."), ""];
+  // A folder the app could not write: a security program holding it is as
+  // common as another program using it, so the sentence names both.
+  if (code === "permission") return [t("A security program or another program is blocking {app}'s folder. Allow {app} in your antivirus or restart your computer, then press Try again."), ""];
   if (code === "network" || downloadInterrupted(message)) {
     return [t("The internet connection dropped. Check it, then press Try again to pick up where it stopped."), ""];
   }
@@ -250,6 +254,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       try {
         await runInstall(toRun, {
           log: shellLog,
+          blocked: (detail, stepId) => classifyError(detail, { install: true, step: stepId }) === "permission",
           onProgress: (p) => {
             if (p.state === "error") { failedStep = p.stepId; failedTitle = p.title; }
             win.webContents.send("shell:install-progress", p);
@@ -257,7 +262,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         });
       } catch (err) {
         const message = errorText(err);
-        const code = classifyError(message, { install: true });
+        const code = classifyError(message, { install: true, step: failedStep });
         const place = toRun.findIndex((s) => s.id === failedStep) + 1;
         shellLog(`INSTALL FAILED at step ${place}/${toRun.length} ${failedStep} (${secondsSince(from)}s): ${code}`, "ERROR");
         // ...and under it what the tool said: its own last lines (exec.js), or the download's error.
@@ -271,7 +276,7 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
         // download's fetch says only "fetch failed", its reason (a refused
         // certificate) is the cause it carries.
         const said = [message, err?.cause?.message].filter(Boolean).join(": ");
-        const [sentence, note] = installStopText(said);
+        const [sentence, note] = installStopText(said, failedStep);
         await showScreen(win, "error.html", {
           title: t("The install stopped"),
           ...(failedTitle ? { where: t("Where it stopped · {step}", { step: failedTitle }) } : {}),
@@ -326,6 +331,8 @@ export function createBoot({ app, ctx, appDir, edition, shellLog, countUsage, se
       ctx.memoryTimer ??= setInterval(logMemory, 5 * 60 * 1000).unref();
       rememberPorts({ backend: ctx.engines.port });
       await win.loadURL(ctx.engines.url);
+      // Back (e.g. a mouse button) must not return to the loading screen.
+      win.webContents.navigationHistory.clear();
       shellLog(`PERSODUB_READY ${ctx.engines.url}`);
       // An engine that did not start no longer stops the app (orchestrator.js):
       // the page tells the user through GET /api/engines. Counted and reported

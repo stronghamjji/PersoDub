@@ -102,5 +102,6 @@ test("errorText says the engine's English refusal in Korean; serverText keeps it
   assert.equal(resetsSentence("ChatGPT usage limit reached. Resets tomorrow. Resume then."),
     "tomorrow에 다시 쓸 수 있어요.", "a time it cannot read is left as it came");
   assert.equal(retryLine("Connection problem, retrying (2/3)"), "연결이 끊겨 다시 시도하는 중 (2/3)");
+  assert.equal(retryLine("Folder is blocked, retrying (2/3)"), "폴더가 막혀 다시 시도하는 중 (2/3)");
   assert.equal(retryLine("Downloading"), "Downloading", "anything else is left as it came");
 });

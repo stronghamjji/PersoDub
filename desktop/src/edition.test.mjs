@@ -63,12 +63,11 @@ test("the open-source edition's update feed is its repository's GitHub Releases,
   assert.deepEqual(editionFeed("opensource", "https://downloads.test/persodubbing/"), { provider: "github", owner: "stronghamjji", repo: "PersoDub" });
 });
 
-test("build.env carries the production build's set values only", () => {
+test("build.env carries the build's set values only, whichever edition it is", () => {
   const env = { PERSODUB_INQUIRY_URL: "", PERSODUB_UPDATE_URL: "https://updates.example/", OTHER: "x" };
-  assert.equal(buildEnvText("production", env), "");
-  assert.equal(buildEnvText("production", { ...env, PERSODUB_INQUIRY_URL: "https://script.example/exec" }),
+  assert.equal(buildEnvText(env), "");
+  assert.equal(buildEnvText({ ...env, PERSODUB_INQUIRY_URL: "https://script.example/exec" }),
     "PERSODUB_INQUIRY_URL=https://script.example/exec\n");
-  assert.equal(buildEnvText("opensource", { ...env, PERSODUB_INQUIRY_URL: "https://script.example/exec" }), "");
 });
 
 test("the running app reads its build values from the payload's build.env, or the environment without a payload", () => {

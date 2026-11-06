@@ -63,7 +63,8 @@ test("a cancel is neither counted nor reported; a success is counted with the jo
     await s.on["shell:count-dub"]({}, { status: "done", job: "fedcba" });   // drawn again
     const timing = { started_hour: 9, elapsed_seconds: 80, stage_seconds: { transcribe: 20 } };
     assert.deepEqual(s.counted, [["dub_success", "/kit", undefined, undefined,
-      { engines: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso" }, credits: 3, seconds: 12, timing }]]);
+      { engines: { stt_engine: "whisper", separation: "demucs", dub_mode: "perso" }, credits: 3, seconds: 12, timing,
+        languages: { source: undefined, target: undefined } }]]);
     assert.deepEqual(s.reported, [{ kind: "dub", kitDir: "/kit", code: "ok", jobId: "fedcba", timing }]);
   } finally {
     be.close();
@@ -111,6 +112,15 @@ test("an erase is counted, and a failed one reported without a job id that is no
   assert.deepEqual(s.counted, [["erase_failure", "/kit", "engine-crash"], ["erase_success", "/kit", undefined]]);
   assert.deepEqual(s.reported, [{ kind: "erase", kitDir: "/kit", code: "engine-crash", message: "exit 1", jobId: undefined }],
     "a finished erase the page could not name sends no record");
+});
+
+test("a burn is counted, with a failure's one word, and neither reported nor recorded", () => {
+  const s = setup();
+  s.on["shell:count-burn"]({}, { status: "error", detail: "exit 1" });
+  s.on["shell:count-burn"]({}, { status: "done", detail: "" });
+  s.on["shell:count-burn"]({}, { status: "cancelled" });
+  assert.deepEqual(s.counted, [["burn_failure", "/kit", "engine-crash"], ["burn_success", "/kit"]]);
+  assert.deepEqual(s.reported, []);
 });
 
 // An erase is timed as a whole only: its record carries what the job's own

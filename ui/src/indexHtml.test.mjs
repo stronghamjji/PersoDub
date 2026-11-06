@@ -125,8 +125,10 @@ test("Customer support's form asks the kind, a subject, the details, a reply-to 
   const dialog = html.slice(at, html.indexOf('<div class="modal-overlay"', at + 1));
   assert.match(dialog, /<h2 data-i18n id="feedbackTitle">Service inquiry<\/h2>/);
   // The values are the shell's kinds (desktop/src/report.js INQUIRY_TYPES), the words the form's.
-  assert.deepEqual([...dialog.matchAll(/<option value="([^"]+)" data-i18n>([^<]+)<\/option>/g)].map((m) => [m[1], m[2]]),
+  // Payment or refund has an id: the open-source form hides it (ui/src/feedbackSheet.mjs).
+  assert.deepEqual([...dialog.matchAll(/<option value="([^"]+)"(?: id="feedbackTypePayment")? data-i18n>([^<]+)<\/option>/g)].map((m) => [m[1], m[2]]),
     [["problem", "Problem or inconvenience"], ["bug", "Bug report"], ["payment", "Payment or refund"], ["other", "Other"]]);
+  assert.match(dialog, /<option value="payment" id="feedbackTypePayment" data-i18n>/);
   assert.match(dialog, /<label data-i18n for="feedbackSubjectInput">Subject<\/label><input type="text" id="feedbackSubjectInput" maxlength="120" required>/);
   assert.match(dialog, /<label data-i18n for="feedbackDetails">Details<\/label><textarea id="feedbackDetails" rows="5" maxlength="4000" required><\/textarea>/);
   assert.match(dialog, /<label data-i18n for="feedbackReplyTo">Reply-to email<\/label><input type="text" id="feedbackReplyTo" inputmode="email" autocomplete="email" maxlength="254">/);

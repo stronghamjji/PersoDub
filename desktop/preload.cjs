@@ -85,6 +85,9 @@ contextBridge.exposeInMainWorld("persodubShell", {
   // likeliest to fail on someone else's machine, and it was the one kind of
   // failure that sent nothing at all (user, 2026-09-11).
   countErase: (status, detail, job) => ipcRenderer.send("shell:count-erase", { status, detail, job }),
+  // The same for a burn (Burn in subtitles): a captions project's download is
+  // the burn, so the Download dialog says how it ended. Counted only.
+  countBurn: (status, detail) => ipcRenderer.send("shell:count-burn", { status, detail }),
   // The buttons pressed and screens shown, as names the page made from its
   // own markup (ui/src/events.mjs); the shell checks them and sends them
   // (src/events.js). Resolves to {on, kept, sent, recent}; [] only asks.
@@ -134,6 +137,9 @@ contextBridge.exposeInMainWorld("persodubShell", {
   locale: process.argv.find((a) => a.startsWith(LOCALE_ARG))?.slice(LOCALE_ARG.length) || "",
   // "" when the window passed none: the page is the open-source one.
   edition: process.argv.find((a) => a.startsWith(EDITION_ARG))?.slice(EDITION_ARG.length) || "",
+  // Whether the build has somewhere to send an inquiry (src/windowFactory.js):
+  // the page opens its form when it has, the issues page when not.
+  inquiry: process.argv.includes("--persodub-inquiry=1"),
   // What the app is called on screen: "PersoDub", or "PersoDubbing" in the production edition.
   name: process.argv.find((a) => a.startsWith(NAME_ARG))?.slice(NAME_ARG.length) || "PersoDub",
 });

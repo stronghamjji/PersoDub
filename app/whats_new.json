@@ -1,19 +1,23 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.5",
   "notes": [
-    "The app runs on a newer Electron (45) with this year's security fixes, and needs macOS 13 or later.",
-    "On Windows, an update installs only when its installer carries ESTsoft's signature."
+    "Keyboard shortcuts that close, reload, zoom or open the developer tools of the window no longer do anything, and Back can no longer land on the loading screen.",
+    "Local dubbing no longer restarts the voice engine for every line.",
+    "An agent sign-in can be cancelled."
   ],
   "notes_ko": [
-    "앱 바탕을 새 일렉트론(45)으로 올려 올해 나온 보안 고침을 받았어요. 이제 macOS 13 이상이 필요해요.",
-    "윈도우에서 업데이트는 ESTsoft 서명이 있는 설치 파일만 설치해요."
+    "창을 닫거나 새로고침하거나 확대하거나 개발자 도구를 여는 단축키가 더는 안 먹어요. 뒤로 가기로 로딩 화면에 갇히는 일도 없어요.",
+    "로컬 더빙에서 목소리 엔진을 줄마다 다시 켜지 않아요.",
+    "에이전트 로그인을 취소할 수 있어요."
   ],
   "notes_production": [
-    "The app runs on a newer Electron (45) with this year's security fixes, and needs macOS 13 or later.",
-    "On Windows, an update installs only when its installer carries ESTsoft's signature."
+    "Keyboard shortcuts that close, reload, zoom or open the developer tools of the window no longer do anything, and Back can no longer land on the loading screen.",
+    "Local dubbing no longer restarts the voice engine for every line.",
+    "An agent sign-in can be cancelled."
   ],
   "notes_production_ko": [
-    "앱 바탕을 새 일렉트론(45)으로 올려 올해 나온 보안 고침을 받았어요. 이제 macOS 13 이상이 필요해요.",
-    "윈도우에서 업데이트는 ESTsoft 서명이 있는 설치 파일만 설치해요."
+    "창을 닫거나 새로고침하거나 확대하거나 개발자 도구를 여는 단축키가 더는 안 먹어요. 뒤로 가기로 로딩 화면에 갇히는 일도 없어요.",
+    "로컬 더빙에서 목소리 엔진을 줄마다 다시 켜지 않아요.",
+    "에이전트 로그인을 취소할 수 있어요."
   ]
 }

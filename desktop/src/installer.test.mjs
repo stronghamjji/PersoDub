@@ -146,6 +146,27 @@ function flaky(errors, log) {
 }
 const noWait = { sleep: async () => {}, retryDelaysMs: [5, 20] };
 
+// A folder held by a security program for a moment: the step is tried again
+// after the same waits, says so in its own words, and a folder still held
+// after the last wait fails like before. Without blocked() nothing changes.
+test("a blocked folder is tried again, and told apart from a connection problem", async () => {
+  const { classifyError } = await import("./analytics.js");
+  const blocked = (detail, stepId) => classifyError(detail, { install: true, step: stepId }) === "permission";
+  const refused = "EIO, Acesso negado. 'C:\\Users\\x\\AppData\\Local\\PersoDubbing\\app'";
+  let log = [], events = [];
+  await runInstall([flaky([refused], log)], { ...noWait, blocked, onProgress: (e) => events.push(e) });
+  assert.deepEqual(log, [1, 2]);
+  assert.deepEqual(events.filter((e) => /retrying/.test(e.detail || "")).map((e) => e.detail), ["Folder is blocked, retrying (2/3)"]);
+  assert.equal(events.at(-1).state, "done");
+  log = []; events = [];
+  await assert.rejects(runInstall([flaky([refused, refused, refused], log)], { ...noWait, blocked, onProgress: (e) => events.push(e) }), /Acesso negado/);
+  assert.deepEqual(log, [1, 2, 3]);
+  assert.equal(events.at(-1).state, "error");
+  log = [];
+  await assert.rejects(runInstall([flaky([refused], log)], { ...noWait }), /Acesso negado/);
+  assert.deepEqual(log, [1]);
+});
+
 test("a 503 twice then success runs the step three times and reports the retries", async () => {
   const log = [];
   const events = [];

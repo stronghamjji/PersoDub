@@ -96,6 +96,8 @@ class QwenTTSEngine(TTSEngine):
     def __init__(self, base_url: Optional[str] = None):
         self._base_url = base_url
         self._clones = {}   # voice_id -> (ref wav path, ref_text, mode), for restart()
+        # True from a restart until the next line is made.
+        self.fresh = False
 
     @property
     def base_url(self) -> str:
@@ -143,6 +145,7 @@ class QwenTTSEngine(TTSEngine):
                 self.clone(path, ref_text, mode=mode)
             else:
                 del self._clones[voice_id]
+        self.fresh = True
 
     def device_label(self) -> Optional[str]:
         """Human-readable compute device, or None when it cannot be known.
@@ -245,6 +248,7 @@ class QwenTTSEngine(TTSEngine):
             if ref_file is not None:
                 ref_file.close()
         r.raise_for_status()
+        self.fresh = False
         dur = r.headers.get("x-audio-duration")
         seed = r.headers.get("x-seed")
         if r.headers.get("x-audio-cut") == "1":

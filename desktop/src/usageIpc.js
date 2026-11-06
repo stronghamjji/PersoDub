@@ -63,7 +63,7 @@ export function dubFinishedProps(status, code, job) {
   };
 }
 
-/** The page's word that a dub, an erase or a separation ended: counted, a
+/** The page's word that a dub, an erase, a burn or a separation ended: counted, a
  *  failure reported, and a finished job's record sent. A dub's end is also
  *  the dub_finished step (`track`), a cancel's too. */
 export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLog, lastRunClosedByUser, track = () => {} }) {
@@ -168,5 +168,15 @@ export function registerUsageIpc({ ipcMain, ctx, countUsage, sendReport, shellLo
     const jobId = isJobId(msg && msg.job) ? msg.job : undefined;
     if (status === "done") return sendRecord("erase", jobId);
     sendReport({ kind: "erase", kitDir: ctx.bootedKitDir, code, message: detail, jobId });
+  });
+
+  // A burn that ended (Burn in subtitles: a captions project's download). A
+  // count and nothing more -- no report, no record: whether it finished, and
+  // a failure's one word for why (1.0.4).
+  ipcMain.on("shell:count-burn", (_e, msg) => {
+    const status = msg && msg.status;
+    if (status !== "done" && status !== "error") return;
+    if (status === "done") return countUsage("burn_success", ctx.bootedKitDir);
+    countUsage("burn_failure", ctx.bootedKitDir, classifyError(String((msg && msg.detail) || "")));
   });
 }

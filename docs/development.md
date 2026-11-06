@@ -194,13 +194,12 @@ updates, and `shell.log` says so once a launch.
 The production build takes one value from the environment it is built in
 (`BUILD_KEYS` in `src/edition.js`). Nothing in the repository names it:
 `scripts/collect-payload.mjs` writes it, when set, into the payload's
-`build.env`, and the packaged app reads it from there. The open-source
-build ignores it.
+`build.env`, and the packaged app reads it from there, in either edition.
 
 | Variable | Used by | What it does | When it is not set |
 |---|---|---|---|
 | `PERSODUB_EDITION` | both | which edition the payload, and so the app, is (`--edition` on `collect-payload.mjs` wins over it) | the open-source edition |
-| `PERSODUB_INQUIRY_URL` | production | the support web app's address (a Google Apps Script web app's `/exec` URL) that Customer support's inquiries are posted to as JSON; it mails each one to the support inbox and answers `{ok, id}` | Send says it could not send, and `shell.log` says `inquiry no destination` |
+| `PERSODUB_INQUIRY_URL` | both | the support web app's address (a Google Apps Script web app's `/exec` URL) that Customer support's (production) and Send feedback's (open source) inquiries are posted to as JSON; it mails each one to the support inbox, with the edition in its subject, and answers `{ok, id}` | the production build hides Customer support; the open-source build's Send feedback opens the issues page |
 | `CAMPPLUS_SRC` | both | the path of your `campplus.onnx` | the build stops |
 
 Set them when the payload is collected. `electron-builder.js` reads the
@@ -212,7 +211,8 @@ download button links to.
 
 ```bash
 # open source
-CAMPPLUS_SRC=/path/to/campplus.onnx node scripts/collect-payload.mjs
+CAMPPLUS_SRC=/path/to/campplus.onnx PERSODUB_INQUIRY_URL=<support web app address> \
+  node scripts/collect-payload.mjs
 npx electron-builder --mac dmg zip --arm64 --publish never
 
 # production (the same as npm run dist:dmg:prod)
@@ -225,14 +225,14 @@ On Windows, `npm run dist:win` (or `npm run dist:win:prod`) with the same
 variables builds the installer. `npm run dist:dmg` would build the dmg alone.
 An unknown edition stops the build. Before a release, check what the packaged
 app carries: `cat dist/mac-arm64/<name>.app/Contents/Resources/payload/EDITION`
-must print the edition you meant, and for production `payload/build.env` must
-hold the support web app's address. A development run (`npm start`, no
+must print the edition you meant, and `payload/build.env` must hold the
+support web app's address. A development run (`npm start`, no
 payload) reads them from its own environment. The Windows workflows set the
 edition from their input, and the public release workflow refuses a
-production build. `build-windows.yml` gives a production build
-`PERSODUB_INQUIRY_URL` from the repository secret of that name, so the secret
-must exist in the repository (Settings > Secrets and variables > Actions);
-without it the installer is built with nowhere to send an inquiry.
+production build. Both give the build `PERSODUB_INQUIRY_URL` from the
+repository secret of that name, so the secret must exist in the repository
+(Settings > Secrets and variables > Actions); without it the installer is
+built with nowhere to send an inquiry.
 
 ## Project layout
 
