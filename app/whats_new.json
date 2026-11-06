@@ -1,21 +1,23 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "notes": [
-    "On Windows, a blocked install folder is retried after 5 and 20 seconds, and \"access denied\" is recognized in any Windows language.",
-    "Send feedback sends from inside the app; no GitHub account needed.",
-    "The anonymous usage count also notes a dub's two languages and whether a subtitle burn finished."
+    "Keyboard shortcuts that close, reload, zoom or open the developer tools of the window no longer do anything, and Back can no longer land on the loading screen.",
+    "Local dubbing no longer restarts the voice engine for every line.",
+    "An agent sign-in can be cancelled."
   ],
   "notes_ko": [
-    "윈도우에서 설치 폴더가 막히면 5초, 20초 뒤에 스스로 다시 해 봐요. 어떤 언어의 윈도우든 \"접근 거부\"를 알아봐요.",
-    "\"피드백 보내기\"가 앱 안에서 바로 보내져요. 깃헙 계정이 없어도 돼요.",
-    "익명 사용 기록에 더빙한 언어와 자막 입히기 결과가 더해져요."
+    "창을 닫거나 새로고침하거나 확대하거나 개발자 도구를 여는 단축키가 더는 안 먹어요. 뒤로 가기로 로딩 화면에 갇히는 일도 없어요.",
+    "로컬 더빙에서 목소리 엔진을 줄마다 다시 켜지 않아요.",
+    "에이전트 로그인을 취소할 수 있어요."
   ],
   "notes_production": [
-    "On Windows, a blocked install folder is retried after 5 and 20 seconds, and \"access denied\" is recognized in any Windows language.",
-    "The anonymous usage count also notes a dub's two languages and whether a subtitle burn finished."
+    "Keyboard shortcuts that close, reload, zoom or open the developer tools of the window no longer do anything, and Back can no longer land on the loading screen.",
+    "Local dubbing no longer restarts the voice engine for every line.",
+    "An agent sign-in can be cancelled."
   ],
   "notes_production_ko": [
-    "윈도우에서 설치 폴더가 막히면 5초, 20초 뒤에 스스로 다시 해 봐요. 어떤 언어의 윈도우든 \"접근 거부\"를 알아봐요.",
-    "익명 사용 기록에 더빙한 언어와 자막 입히기 결과가 더해져요."
+    "창을 닫거나 새로고침하거나 확대하거나 개발자 도구를 여는 단축키가 더는 안 먹어요. 뒤로 가기로 로딩 화면에 갇히는 일도 없어요.",
+    "로컬 더빙에서 목소리 엔진을 줄마다 다시 켜지 않아요.",
+    "에이전트 로그인을 취소할 수 있어요."
   ]
 }
