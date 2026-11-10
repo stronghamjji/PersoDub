@@ -95,14 +95,15 @@ _run_cloud_dub = dub_launch.run_cloud_dub
 _LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2,8}([-_][A-Za-z0-9]{2,8})?$")
 
 
-def _valid_language_code(code: str, dub_mode: str = "local") -> bool:
-    """A code the chosen path knows: local = config.LANGUAGE_NAMES (region
-    variant allowed: "pt-BR" is still Portuguese), perso = Perso's own list
-    (app/languages.py; "hi", "en-GB" yes there, not locally). The shape alone
+def _valid_language_code(code: str, dub_mode: str = "local", voice: Optional[str] = None) -> bool:
+    """A code the chosen path knows: local = what the dub's voice engine
+    speaks (`voice`; Qwen3-TTS's ten or OmniVoice's 646, region variant
+    allowed: "pt-BR" is still Portuguese), perso = Perso's own list
+    (app/languages.py; "hi", "en-GB" yes there, not with Qwen3-TTS). The shape alone
     let "xx" start a job that only failed at translation (2026-09-08)."""
     if not _LANGUAGE_CODE.match(code or ""):
         return False
-    return languages.lookup(dub_mode, code) is not None
+    return languages.lookup(dub_mode, code, voice) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -651,7 +652,7 @@ def dub_job_retry(jid: str):
     # in job.json has only its code, so work the name back out of it -- handing
     # run_dub "ko" would put "ko" in the translation prompt and in what the
     # voice sidecar is told to speak.
-    language = job.get("language") or dub_launch.language_name(language_code)
+    language = job.get("language") or dub_launch.language_name(language_code, voice=job.get("tts"))
     project = job.get("project") or os.path.basename(work_dir)
     check_space(state.WORKSPACE)
 
@@ -894,7 +895,7 @@ def _start_plan(*, video, source_url, download_id, language, language_code, num_
         # The cloud does everything -- the per-stage engine choices (and their
         # preflights, including the local-model 409) do not apply.
         stt_engine = sep_engine = translate_engine = tts_engine = None
-    if not _valid_language_code(language_code, dub_mode):
+    if not _valid_language_code(language_code, dub_mode, tts_engine):
         raise HTTPException(422, t("Unknown language_code: {code}", code=language_code))
     if dub_mode == "perso":
         try:

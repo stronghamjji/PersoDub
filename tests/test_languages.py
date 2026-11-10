@@ -14,6 +14,59 @@ def test_local_is_the_models_ten_in_product_order():
     assert all(e["tag"] is None for e in languages.local_languages())
 
 
+def test_local_list_is_the_voice_engines_own():
+    # Qwen3-TTS speaks ten languages, OmniVoice 646: a local dub offers what
+    # the engine that will speak it can say.
+    ten = languages.local_languages("qwen3")
+    omni = languages.local_languages("omnivoice")
+    assert len(ten) == 10 and len(omni) == 646
+    # The ten open OmniVoice's list, under the same codes and names.
+    assert sorted(omni[:10], key=lambda e: e["id"]) == sorted(ten, key=lambda e: e["id"])
+    assert len({e["id"] for e in omni}) == 646
+    assert all(set(e) == {"id", "code", "name", "tag"} and e["id"] == e["code"] and e["tag"] is None for e in omni)
+
+
+def test_local_list_without_a_voice_named_is_the_default_voices(monkeypatch):
+    monkeypatch.setattr(languages.setup, "default_for", lambda stage: "omnivoice")
+    assert len(languages.local_languages()) == 646
+    assert len(languages.local_languages("no-such-engine")) == 646
+    assert len(languages.local_languages("qwen3")) == 10
+    monkeypatch.setattr(languages.setup, "default_for", lambda stage: "qwen3")
+    assert len(languages.local_languages("")) == 10
+    assert len(languages.languages_for("local", "OmniVoice ")) == 646   # as a form may send it
+
+
+def test_an_edition_without_omnivoice_offers_the_ten_whatever_is_asked(monkeypatch):
+    # The production edition has no OmniVoice (app/setup.py STAGES).
+    key, _, fallback = languages.setup.STAGES["voice"]
+    monkeypatch.setitem(languages.setup.STAGES, "voice", (key, ("qwen3",), fallback))
+    assert len(languages.local_languages("omnivoice")) == 10
+    assert languages.lookup("local", "yue", "omnivoice") is None
+
+
+def test_lookup_judges_a_local_code_by_the_voice_engine():
+    assert languages.lookup("local", "yue", "omnivoice")["name"] == "Cantonese"
+    assert languages.lookup("local", "yue", "qwen3") is None
+    assert languages.lookup("local", "arb", "omnivoice")["name"] == "Standard Arabic"
+    assert languages.lookup("local", "ko", "omnivoice")["name"] == "Korean"
+    by_region = languages.lookup("local", "pt-BR", "omnivoice")    # region ignored, as for the ten
+    assert by_region["code"] == "pt" and by_region["id"] == "pt-BR"
+    assert languages.lookup("local", "xx", "omnivoice") is None
+    assert languages.lookup("local", "../etc", "omnivoice") is None
+
+
+def test_api_languages_lists_each_voice_engines_languages_and_persos(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    monkeypatch.setattr(languages, "_fetch", lambda: None)
+    body = TestClient(app, base_url="http://127.0.0.1").get("/api/languages").json()
+    assert set(body) == {"local", "omnivoice", "perso"}
+    assert body["local"] == languages.local_languages("qwen3") and len(body["local"]) == 10
+    assert len(body["omnivoice"]) == 646 and body["omnivoice"][0] == body["local"][0]
+    assert body["perso"] == languages.perso_languages()
+
+
 def test_bundled_perso_list_is_persos_offered_models_minus_auto_with_region_tags(monkeypatch):
     monkeypatch.setattr(languages, "_fetch", lambda: None)
     langs = languages.perso_languages()

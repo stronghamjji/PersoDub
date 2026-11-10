@@ -74,19 +74,21 @@ function qualityModeToNTakes(qualityMode) {
  * The languages each dubbing path offers, from GET /api/languages:
  * {local: [{id, code, name, tag}], perso: [{..., models}]}. Perso's list is
  * the one it publishes (111 entries, 2026-10-02), each entry with the voice
- * models that language has; the local one is the model's ten. When
- * the app cannot answer, both fall back to LANGUAGES so the dialog still works.
+ * models that language has; the local one is the model's ten. `omnivoice`
+ * is what the OmniVoice voice engine speaks instead of the ten (646, the ten
+ * first), for a local dubbing with that engine chosen. When
+ * the app cannot answer, all fall back to LANGUAGES so the dialog still works.
  */
 export async function fetchLanguages({ baseUrl = "" } = {}) {
   const fallback = LANGUAGES.map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null }));
   try {
     const r = await fetch(`${baseUrl}/api/languages`);
-    if (!r.ok) return { local: fallback, perso: fallback };
+    if (!r.ok) return { local: fallback, perso: fallback, omnivoice: fallback };
     const d = await r.json();
     const ok = (xs) => Array.isArray(xs) && xs.length ? xs : fallback;
-    return { local: ok(d.local), perso: ok(d.perso) };
+    return { local: ok(d.local), perso: ok(d.perso), omnivoice: ok(d.omnivoice) };
   } catch {
-    return { local: fallback, perso: fallback };
+    return { local: fallback, perso: fallback, omnivoice: fallback };
   }
 }
 
@@ -127,7 +129,7 @@ export function buildDubFormData(opts) {
       throw new Error(t("Source and target languages must be different."));
     }
     // opts.languages is the list the dialog is showing for the chosen path
-    // (Perso's own, or the model's ten); an entry's id is what the server
+    // (Perso's own, OmniVoice's, or the model's ten); an entry's id is what the server
     // takes as language_code -- a region tag such as en-GB, else the code.
     const list = opts.languages || LANGUAGES;
     const target = list.find((l) => (l.id || l.code) === opts.targetLang);

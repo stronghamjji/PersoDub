@@ -30,11 +30,11 @@ from app.pipeline import run_dub as _run_dub
 from app.source_fetch import fetch as _fetch_source
 
 
-def language_name(code: str, dub_mode: str = "local") -> str:
+def language_name(code: str, dub_mode: str = "local", voice: Optional[str] = None) -> str:
     """The name a job shows for its target: Perso's own for its list ("Hindi",
-    "English (UK)"), the model's for the local ten; the code itself when
-    neither knows it."""
-    entry = languages.lookup(dub_mode, code)
+    "English (UK)"), the voice engine's (`voice`, the job's "tts") for a local
+    dub; the code itself when neither knows it."""
+    entry = languages.lookup(dub_mode, code, voice)
     if entry:
         return entry["name"]
     return _legacy_language_name(code)
@@ -179,7 +179,7 @@ def work_for(job, *, cancel_check, on_notice, voices_only=False, resume=False,
     video_path = os.path.join(work, "input.mp4")
     out_path = os.path.join(work, "dubbed.mp4")
     language_code = job.get("language_code") or "en"
-    language = job.get("language") or language_name(language_code, job.get("dub_mode") or "local")
+    language = job.get("language") or language_name(language_code, job.get("dub_mode") or "local", job.get("tts"))
     srt_path = _in_folder(work, "sub.srt")
     source_srt_path = _in_folder(work, "source.srt")
     trim = job.get("trim")

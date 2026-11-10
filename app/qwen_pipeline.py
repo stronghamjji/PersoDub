@@ -44,7 +44,7 @@ from app.audio.lead_burst import (
     tidy_reference,
 )
 from app.audio.merge import group_merge_units, split_unit_audio
-from app.config import QWEN_GATE_MODE, QWEN_KEEP_NONVERBAL, QWEN_VOICE_MODE
+from app.config import LANGUAGE_NAMES, QWEN_GATE_MODE, QWEN_KEEP_NONVERBAL, QWEN_VOICE_MODE
 from app.engines.base import (
     SynthesisCut,
     SynthesisRequest,
@@ -601,6 +601,14 @@ def _hear_tries(tries: List[tuple], segments: List[dict], seg_speakers: List[str
     with and without a stray sound at its edges, and judged (_judge_try).
     Returns (line, judgement) per try, in order; None when Whisper did not
     run."""
+    # Only the ten languages this check was measured in are heard back. The
+    # small Whisper that listens heard none of a correct Hindi line (the
+    # large one read it word for word, 2026-11-10), so every line was made
+    # three times and called wrong; a language Whisper does not know at all
+    # (most of OmniVoice's 646) would fare no better.
+    if whisper_code(language) not in LANGUAGE_NAMES:
+        log("   line check skipped: not measured for %s" % language)
+        return None
     cuts = {p: _edge_cut_copy(p, _words_of(segments[i]), language) for i, p in tries}
     cuts = {p: q for p, q in cuts.items() if q}
     # A sound too close to the sentence to cut (a word's own first

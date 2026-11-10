@@ -1748,6 +1748,19 @@ def test_one_line_voice_speaks_in_the_engines_own_language_name(monkeypatch, tmp
     assert said[0][3] == "English"
 
 
+def test_one_line_voice_of_an_omnivoice_dub_names_omnivoices_language(monkeypatch, tmp_path):
+    # Cantonese is no language of Qwen3-TTS: the name comes from the job's own
+    # voice engine, whatever the manifest says.
+    said = []
+    monkeypatch.setattr(script_api, "resynth_one_line", lambda *a: said.append(a) or "made.wav")
+    monkeypatch.setattr(script_api, "rebuild_dub", lambda *a: None)
+    jid = _dubbed_job(tmp_path, ["one"], edits={1: "ONE"})
+    state.job_store._update(jid, language_code="yue", tts="omnivoice")
+
+    assert client.post(f"/api/dub/jobs/{jid}/script/1/voice").status_code == 200
+    assert said[0][3] == "Cantonese"
+
+
 def test_one_line_voice_says_the_engine_was_busy_instead_of_crashing(monkeypatch, tmp_path):
     # Another dub was running, the voice clone outlived its timeout, and the
     # route answered 500 -- which the agent read as "still waiting" (F18).

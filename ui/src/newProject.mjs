@@ -27,45 +27,6 @@ import { lucide } from "./icons.mjs";
 import { placeList, listKeys } from "./pickList.mjs";
 import { languageName, t } from "./i18n.mjs";
 
-// The flags are the app's one deliberate use of emoji: where the dub is headed
-// is the single most-glanced-at line in the dialog, and a flag says it faster
-// than a word. The Original dropdown stays plain -- its default is not a
-// country at all ("Auto-detect"), so a half-flagged list would only look broken.
-// One flag per language the app can dub into, keyed by the language's id
-// (a region tag such as en-GB where Perso tells variants apart, else the
-// code). A language spoken in many countries gets the country it is most
-// associated with (Arabic: Saudi Arabia, Swahili: Kenya, the Indian
-// languages: India); Welsh gets the Union Jack -- the Welsh flag is a tag
-// sequence that Windows draws as a bare black flag, unlike the two-letter
-// codes it draws for every other flag here (its emoji font has none), which
-// is how the original ten already looked there.
-// The local list says plainly "Portuguese" and "Spanish": those keep the
-// flags they always had. Perso's default regions for the same codes are
-// Brazil and Mexico, which is what the Perso list shows.
-const LOCAL_FLAGS = { pt: "🇵🇹", es: "🇪🇸" };
-const LANG_FLAGS = {
-  "af": "🇿🇦", "ar": "🇸🇦", "as": "🇮🇳", "az": "🇦🇿", "be": "🇧🇾", "bg": "🇧🇬", "bn": "🇧🇩", "bs": "🇧🇦",
-  "ca": "🇪🇸", "ceb": "🇵🇭", "cs": "🇨🇿", "cy": "🇬🇧", "da": "🇩🇰", "de": "🇩🇪", "el": "🇬🇷", "en": "🇺🇸",
-  "en-GB": "🇬🇧", "es": "🇲🇽", "es-ES": "🇪🇸", "et": "🇪🇪", "fa": "🇮🇷", "fi": "🇫🇮", "fil": "🇵🇭", "fr": "🇫🇷",
-  "ga": "🇮🇪", "gl": "🇪🇸", "gu": "🇮🇳", "ha": "🇳🇬", "he": "🇮🇱", "hi": "🇮🇳", "hr": "🇭🇷", "hu": "🇭🇺",
-  "hy": "🇦🇲", "id": "🇮🇩", "is": "🇮🇸", "it": "🇮🇹", "ja": "🇯🇵", "jv": "🇮🇩", "ka": "🇬🇪", "kk": "🇰🇿",
-  "kn": "🇮🇳", "ko": "🇰🇷", "ky": "🇰🇬", "lb": "🇱🇺", "ln": "🇨🇩", "lt": "🇱🇹", "lv": "🇱🇻", "mk": "🇲🇰",
-  "ml": "🇮🇳", "mr": "🇮🇳", "ms": "🇲🇾", "ne": "🇳🇵", "nl": "🇳🇱", "no": "🇳🇴", "ny": "🇲🇼", "pa": "🇮🇳",
-  "pl": "🇵🇱", "ps": "🇦🇫", "pt": "🇧🇷", "pt-PT": "🇵🇹", "ro": "🇷🇴", "ru": "🇷🇺", "sd": "🇵🇰", "sk": "🇸🇰",
-  "sl": "🇸🇮", "so": "🇸🇴", "sr": "🇷🇸", "sv": "🇸🇪", "sw": "🇰🇪", "ta": "🇮🇳", "te": "🇮🇳", "th": "🇹🇭",
-  "tr": "🇹🇷", "uk": "🇺🇦", "ur": "🇵🇰", "vi": "🇻🇳", "zh": "🇨🇳",
-  // The languages only Perso's Nightingale model has (its list, 2026-10-02).
-  // Tibetan, Uyghur, Cantonese and Chinese (Taiwan) carry no flag on purpose:
-  // any one country's flag on them is a statement to someone (user, 2026-10-03).
-  "ak": "🇬🇭", "am": "🇪🇹", "ar-EG": "🇪🇬", "dgo": "🇮🇳", "en-AU": "🇦🇺", "en-CA": "🇨🇦", "es-AR": "🇦🇷",
-  "es-CL": "🇨🇱", "eu": "🇪🇸", "fr-CA": "🇨🇦", "ki": "🇰🇪", "lg": "🇺🇬", "mn": "🇲🇳", "my": "🇲🇲", "nso": "🇿🇦",
-  "rn": "🇧🇮", "rw": "🇷🇼", "sq": "🇦🇱", "ss": "🇸🇿", "st": "🇱🇸", "su": "🇮🇩", "tg": "🇹🇯", "tn": "🇧🇼",
-  "ts": "🇿🇦", "uz": "🇺🇿", "ve": "🇿🇦", "war": "🇵🇭", "wo": "🇸🇳", "yo": "🇳🇬", "zu": "🇿🇦",
-  // In Perso's list by 2026-10-19: Asturian and Occitan under the country
-  // they are spoken in, as Basque is.
-  "ast": "🇪🇸", "mi": "🇳🇿", "mt": "🇲🇹", "oc": "🇫🇷", "or": "🇮🇳",
-};
-
 // How often the dialog asks how far along a link's download is. A second is
 // what the progress row is worth: the percent moves in visible steps and the
 // question costs one small answer.
@@ -122,15 +83,13 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   // material dubbed outward, until a target is chosen: that one is remembered
   // (startOnDefaults).
   function fillLanguageSelects() {
-    for (const [selId, defCode, withFlag] of [["sourceLangSelect", null, false], ["targetLangSelect", "en", true]]) {
+    for (const [selId, defCode] of [["sourceLangSelect", null], ["targetLangSelect", "en"]]) {
       const sel = $(selId);
       if (!sel) continue;
       for (const l of LANGUAGES) {
         const o = document.createElement("option");
         o.value = l.code;
-        const flag = LOCAL_FLAGS[l.code] || LANG_FLAGS[l.code];
-        const name = languageName(l.code, l.name);
-        o.textContent = withFlag && flag ? `${flag} ${name}` : name;
+        o.textContent = languageName(l.code, l.name);
         if (l.code === defCode) o.selected = true;
         sel.appendChild(o);
       }
@@ -141,13 +100,14 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   // The target list follows the dubbing path: when the cloud dubs, the
   // languages the chosen Perso voice model has (of Perso's 111 on 2026-10-02,
   // with regional variants such as English (UK)); the model's ten when this
-  // computer does. Until GET /api/languages
+  // computer does -- or, with OmniVoice as its voice engine, the 646 that
+  // engine speaks. Until GET /api/languages
   // answers, both paths show the ten. The source dropdown stays as it is:
   // "Auto-detect" covers the cloud, and the ten are what Whisper is asked for.
   const asEntries = (xs) => xs.map((l) => ({ id: l.id || l.code, code: l.code, name: l.name, tag: l.tag || null,
                                              // Perso's entries: the voice models the language has.
                                              ...(l.models ? { models: l.models } : {}) }));
-  let languageLists = { local: asEntries(LANGUAGES), perso: asEntries(LANGUAGES) };
+  let languageLists = { local: asEntries(LANGUAGES), perso: asEntries(LANGUAGES), omnivoice: asEntries(LANGUAGES) };
   let persoModel = DEFAULT_MODEL;
   // Whether the model is one the person chose (or a choice put back). Until
   // then it is the target language's own default, Linnet 4 or Oriole
@@ -160,7 +120,7 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   let wantedTarget = null;
   function currentLanguages() {
     const mode = $("dubModeSelect") ? $("dubModeSelect").value : "local";
-    if (mode !== "perso") return languageLists.local;
+    if (mode !== "perso") return $("voiceSelect").value === "omnivoice" ? languageLists.omnivoice : languageLists.local;
     return modelChosen ? languagesFor(languageLists.perso, persoModel) : defaultLanguages(languageLists.perso);
   }
   function refillTargetLanguages() {
@@ -175,14 +135,16 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     const want = wantedTarget && list.some((l) => l.id === wantedTarget) ? wantedTarget : null;
     if (want) wantedTarget = null;
     const keep = want || sel.value || "en";
-    const local = list === languageLists.local;
+    // The browser can give two of OmniVoice's languages one name (Yiddish and
+    // Eastern Yiddish in Korean): those keep the English names that tell them apart.
+    const names = list.map((l) => languageName(l.id, l.name));
     sel.innerHTML = "";
-    for (const l of list) {
+    for (const [i, l] of list.entries()) {
       const o = document.createElement("option");
       o.value = l.id;
-      const flag = (local && LOCAL_FLAGS[l.code]) || LANG_FLAGS[l.id] || (!l.tag && LANG_FLAGS[l.code]);
-      const name = languageName(l.id, l.name);
-      o.textContent = flag ? `${flag} ${name}` : name;
+      // Names only, no country flags, in every list: most of OmniVoice's 646
+      // languages cannot have one, and a half-flagged list looks broken.
+      o.textContent = names.indexOf(names[i]) === names.lastIndexOf(names[i]) ? names[i] : l.name;
       o.dataset.name = l.name;   // English, for the list's search
       sel.appendChild(o);
     }
@@ -460,10 +422,12 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
   paintTargetPick();
 
   fetchLanguages().then((lists) => {
-    languageLists = { local: asEntries(lists.local), perso: asEntries(lists.perso) };
+    languageLists = { local: asEntries(lists.local), perso: asEntries(lists.perso), omnivoice: asEntries(lists.omnivoice) };
     refillTargetLanguages();
   });
   if ($("dubModeSelect")) $("dubModeSelect").addEventListener("change", refillTargetLanguages);
+  // The voice engine decides the local list: the ten, or OmniVoice's own.
+  $("voiceSelect").addEventListener("change", refillTargetLanguages);
 
   // Processing: the two halves above the languages (owner, 2026-10-22) set
   // #dubModeSelect, kept hidden, and fire its change, so everything that
@@ -517,6 +481,8 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     };
     pick("dubModeSelect", c.dubMode);
     paintModeSwitch();
+    // Before the languages are drawn: the local list is the voice engine's.
+    pick("voiceSelect", c.voice);
     // The Perso voice model has no saved default: without one handed in, the
     // row starts on the target language's default again.
     persoModel = c.persoModel || DEFAULT_MODEL;
@@ -526,7 +492,6 @@ export function initNewProjectUi({ $, state, onStart, applyEngineAvailability,
     pick("sttSelect", c.stt);
     pick("translateSelect", c.translator);
     pick("qualitySelect", c.quality);
-    pick("voiceSelect", c.voice);
     // Add language also starts on the dubbing's own source language ("" is
     // Auto-detect) and speaker count (ui/src/languageRow.mjs choicesOf).
     const src = $("sourceLangSelect");

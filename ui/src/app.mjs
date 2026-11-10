@@ -1234,7 +1234,7 @@ function trimLabel(job, withLength = false) {
 // running card says it, and so does the foot of a finished dub's script.
 function jobNote(job) {
   return [
-    `${langName(job.source_lang) || t("Auto-detect")} → ${langName(job.language_code) || ""}`.trim(),
+    `${langName(job.source_lang) || t("Auto-detect")} → ${langName(job.language_code, job.language) || ""}`.trim(),
     engineLine(job, { voiceModels }),
   ].filter(Boolean).join(" · ");
 }
@@ -1614,8 +1614,11 @@ updateQualityHint();
 // The one line under the job's name while it runs: which way the dub is going.
 function langsLabel() {
   const src = $("sourceLangSelect");
-  // Plain names only -- the flag belongs to the dropdown, not the top bar.
-  return `${langName(src.value) || t("Auto-detect")} → ${langName($("targetLangSelect").value)}`;
+  const target = $("targetLangSelect");
+  // Plain names, as the dropdown shows them.
+  // The chosen option carries its English name: only the ten are known here.
+  const name = [...target.options].find((o) => o.value === target.value)?.dataset.name;
+  return `${langName(src.value) || t("Auto-detect")} → ${langName(target.value, name)}`;
 }
 
 // Lives in the New project dialog, which is where the whole start-a-job
@@ -1891,11 +1894,12 @@ async function handleJobUpdate(job, { opened = false } = {}) {
 }
 
 // Human name for a language code, falling back to the code itself; in the
-// page's language (ui/src/i18n.mjs languageName).
-function langName(code) {
+// page's language (ui/src/i18n.mjs languageName). `english` is the name a job
+// was started with: a Perso or OmniVoice language is not one of the ten here.
+function langName(code, english) {
   if (!code) return null;
   const l = LANGUAGES.find((x) => x.code === code);
-  return languageName(code, l ? l.name : code.toUpperCase());
+  return languageName(code, english || (l ? l.name : code.toUpperCase()));
 }
 
 // The two language names, as the script table heads its columns and the

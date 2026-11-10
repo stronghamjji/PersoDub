@@ -299,6 +299,18 @@ def test_whisper_code_maps_names_and_codes():
     assert qsc.whisper_code(None) is None
 
 
+def test_whisper_code_for_the_languages_only_omnivoice_speaks():
+    # Whisper's own code where it has one, which is not always OmniVoice's;
+    # None (Whisper detects) for a language it has no code for.
+    assert qsc.whisper_code("Hindi") == "hi"
+    assert qsc.whisper_code("Standard Arabic") == "ar"
+    assert qsc.whisper_code("arb") == "ar"
+    # Only Whisper large-v3 knows Cantonese; the line check hears with a smaller one.
+    assert qsc.whisper_code("Cantonese") is None
+    assert qsc.whisper_code("Abadi") is None
+    assert qsc.whisper_code("kbt") is None
+
+
 def test_score_takes_hands_the_scorer_the_dub_language(monkeypatch, tmp_path):
     import sys
     monkeypatch.setattr(qsc, "QWEN_SCORER_PYTHON", sys.executable)

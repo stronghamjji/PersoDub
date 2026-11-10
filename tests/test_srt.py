@@ -308,3 +308,25 @@ def test_every_language_the_local_voice_speaks_has_a_measured_rate():
     from app.text.srt import _SYL_PER_SEC
     for code, name in LANGUAGE_NAMES.items():
         assert _SYL_PER_SEC[code] == _SYL_PER_SEC[name.lower()]
+
+
+def test_a_han_script_language_without_a_pace_of_its_own_is_counted_by_its_letters():
+    # Cantonese has no entry in the pace table, no spaces and no Latin vowels:
+    # counted like a Latin-script line, a whole sentence was one syllable.
+    from app.text.srt import _count_syllables
+    assert _count_syllables("你喺邊度呀？", "Cantonese") == 5
+    assert _count_syllables("Where are you now?", "Swahili") == _count_syllables("Where are you now?", "Spanish")
+
+
+
+def test_a_language_with_no_pace_and_no_latin_vowels_is_not_one_syllable_a_word():
+    from app.text.srt import _count_syllables
+    # Counted as Latin text these were one syllable a word, so every line
+    # looked short and was asked for longer. Cyrillic and Greek by their
+    # vowels; any other script by two letters to a syllable (an estimate).
+    assert _count_syllables("Привіт, як справи", "Ukrainian") == 5
+    assert _count_syllables("Καλημέρα", "Greek") == 4
+    assert _count_syllables("مرحبا كيف حالك", "Standard Arabic") == 6
+    # Russian keeps its measured words-per-second count, Latin text its vowels.
+    assert _count_syllables("Привет как дела", "ru") == 3
+    assert _count_syllables("Xin chào bạn", "Vietnamese") == 3

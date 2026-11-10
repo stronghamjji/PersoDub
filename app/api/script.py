@@ -35,7 +35,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app import config, dub_launch, engines_status, netlog, perso_client, perso_edit, perso_materialize, state
+from app import dub_launch, engines_status, languages, netlog, perso_client, perso_edit, perso_materialize, state
 from app import setup as dub_setup
 from app.api._launch import check_space
 from app.api._shared import script_work_dir
@@ -322,10 +322,11 @@ def _voice_language(job: dict, data: dict) -> str:
     it is Perso's name for the language ("English (US)"), and the engine knows
     only "English": every remake on such a job was refused with "Unsupported
     languages" (0.6.2 full test, 2026-09-16). The code's first half is the
-    engine's language whatever the region.
+    engine's language whatever the region; the engine is the job's own
+    ("tts"), since OmniVoice speaks languages Qwen3-TTS has no name for.
     """
-    code = (job.get("language_code") or "").split("-")[0].lower()
-    return config.LANGUAGE_NAMES.get(code) or data.get("language") or "English"
+    entry = languages.lookup("local", job.get("language_code") or "", job.get("tts"))
+    return (entry or {}).get("name") or data.get("language") or "English"
 
 
 logger = logging.getLogger("persodub.api.script")
@@ -525,7 +526,7 @@ def dub_job_retranslate(jid: str, body: RetranslateRequest):
         require_translator(translator)
     name = engines_status.TRANSLATOR_NAMES.get(translator, translator.capitalize())
     code = job.get("language_code") or "en"
-    language = job.get("language") or dub_launch.language_name(code)
+    language = job.get("language") or dub_launch.language_name(code, voice=job.get("tts"))
     try:
         changed = retranslate_lines(work_dir, body.lines, code, language,
                                     get_translator(translator))

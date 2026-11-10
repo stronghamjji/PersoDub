@@ -24,7 +24,8 @@ import os
 import subprocess
 from typing import Callable, Dict, List, Optional
 
-from app.config import LANGUAGE_NAMES, QWEN_SCORER_PYTHON
+from app.config import QWEN_SCORER_PYTHON
+from app.languages import omnivoice_table
 
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "qwen_score_takes.py")
 
@@ -43,14 +44,16 @@ def _scorer_asr_timeout_per_take() -> float:
 
 def whisper_code(language) -> Optional[str]:
     """The Whisper code for a dub language, given as the app passes it (a name
-    like "Spanish" or a code like "es"); None lets Whisper detect it. Every
-    language the local path speaks (LANGUAGE_NAMES) is one Whisper knows by
-    the same code. Reading everything but Korean as English scored a correct
+    like "Spanish" or a code like "es"); None lets Whisper detect it. Each of
+    the ten languages Qwen3-TTS speaks is one Whisper knows by the same code;
+    of the rest OmniVoice speaks, Whisper knows 97, some by a code of its own
+    (app/omnivoice_languages.json, which opens with the ten), and has none
+    for the others. Reading everything but Korean as English scored a correct
     Spanish take as a poor one, so High quality picked by voice alone."""
     lang = str(language or "").strip().lower()
-    for code, name in LANGUAGE_NAMES.items():
-        if lang in (code, name.lower()):
-            return code
+    for entry in omnivoice_table():
+        if lang in (entry["code"], entry["name"].lower()):
+            return entry.get("whisper")
     return None
 
 

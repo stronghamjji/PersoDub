@@ -412,6 +412,43 @@ def test_queue_dub_refuses_a_language_the_voices_cannot_speak(tmp_path):
         mcp_server.queue_dub(str(video), "sw", confirm=True)
 
 
+def test_queue_dub_takes_omnivoices_languages_when_omnivoice_speaks(monkeypatch, tmp_path):
+    video = _tmp_video(tmp_path)
+    calls = {}
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        calls["data"] = data
+        return _Response(200, {"job_id": "j3", "status": "running"})
+
+    monkeypatch.setattr(mcp_server.httpx, "post", fake_post)
+    mcp_server.queue_dub(str(video), "yue", voice="omnivoice", confirm=True)
+    assert calls["data"]["language"] == "Cantonese" and calls["data"]["language_code"] == "yue"
+    assert calls["data"]["tts_engine"] == "omnivoice"
+    with pytest.raises(ValueError, match="target_language must be one of: de en es fr it ja ko pt ru zh"):
+        mcp_server.queue_dub(str(video), "yue", voice="qwen3", confirm=True)
+    # A refusal for OmniVoice does not spell out 646 codes: the count, and the
+    # codes of the languages named like what was given.
+    with pytest.raises(ValueError) as refused:
+        mcp_server.queue_dub(str(video), "Cantonese", voice="omnivoice", confirm=True)
+    assert "646 language codes" in str(refused.value) and "yue (Cantonese)" in str(refused.value)
+    assert len(str(refused.value)) < 300
+
+
+def test_queue_dub_without_a_voice_judges_the_language_by_the_apps_saved_voice(monkeypatch, tmp_path):
+    # The saved voice is the app's to say (GET /api/setup): this process is
+    # started by the agent's CLI and need not see the kit's settings.
+    video = _tmp_video(tmp_path)
+    calls = {}
+    monkeypatch.setattr(mcp_server.httpx, "get",
+                        lambda url, **kw: _Response(200, {"defaults": {"voice": "omnivoice"}}))
+    monkeypatch.setattr(mcp_server.httpx, "post",
+                        lambda url, data=None, files=None, timeout=None:
+                        calls.update(data=data) or _Response(200, {"job_id": "j4", "status": "running"}))
+    mcp_server.queue_dub(str(video), "yue", confirm=True)
+    assert calls["data"]["language"] == "Cantonese"
+    assert "tts_engine" not in calls["data"]     # not named for this dub, so the app's default stands
+
+
 def test_queue_dub_names_every_separation_it_takes_and_passes_the_roformer_through(monkeypatch, tmp_path):
     video = _tmp_video(tmp_path)
     with pytest.raises(ValueError, match='separation must be "local", "roformer", "perso" or empty'):
