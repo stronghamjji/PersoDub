@@ -84,6 +84,22 @@ def test_hf_model_with_an_empty_marker_or_pieces_left_is_paused(tmp_path):
     assert models_module.model_state(_entry(cat, "whisper"), kit) == "ready"
 
 
+def test_omnivoice_is_a_pack_and_a_model_of_its_own(tmp_path):
+    # The second voice engine: its Python parts are a pack the desktop app
+    # installs (ready by the shell's .ok stamp), its model a download here.
+    cat = models_module.load_catalog()
+    kit = str(tmp_path)
+    pack, model = _entry(cat, "omnivoice"), _entry(cat, "omnivoice-model")
+    assert pack["role"] == "pack" and model["role"] == "tts"
+    assert models_module.model_state(pack, kit) == "not_downloaded"
+    _mk(kit, ".install", "venv-omnivoice.ok")
+    assert models_module.model_state(pack, kit) == "ready"
+    _mk(kit, "models", "omnivoice", "model.safetensors", content=b"w")
+    assert models_module.model_state(model, kit) == "paused"
+    _mk(kit, "models", "omnivoice", "audio_tokenizer", "model.safetensors", content=b"w")
+    assert models_module.model_state(model, kit) == "ready"
+
+
 def test_hf_model_not_downloaded_when_dir_missing(tmp_path):
     cat = models_module.load_catalog()
     assert models_module.model_state(_entry(cat, "whisper"), str(tmp_path)) == "not_downloaded"
@@ -289,10 +305,14 @@ def test_only_a_row_its_group_title_does_not_explain_carries_a_hint():
     # translators side by side, what each base program carries, and where
     # Demucs comes from.
     hinted = {m["id"] for m in models_module.load_catalog() if m.get("hint")}
-    assert hinted == {"engine", "ollama-runtime", "gemma", "hunyuan", "demucs"}
+    # The OmniVoice model's hint is its terms: the one row a user should read
+    # before downloading (its weights are non-commercial).
+    assert hinted == {"engine", "ollama-runtime", "gemma", "hunyuan", "demucs", "omnivoice", "omnivoice-model"}
     rows = {m["id"]: m for m in models_module.status_rows()}
     assert rows["engine"]["hint"] == "Audio separation, speech-to-text, voices"
     assert rows["ollama-runtime"]["hint"] == "Local translation (Hunyuan, Gemma 3)"
+    assert rows["omnivoice"]["hint"] == "Voices (OmniVoice)"
+    assert rows["omnivoice-model"]["hint"] == "Personal, non-commercial use only"
     assert rows["whisper"]["hint"] == ""
 
 

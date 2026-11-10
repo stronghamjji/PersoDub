@@ -69,13 +69,13 @@ export const ERASER_SRC_URL =
 export const ERASER_SRC_SHA256 =
   "a541953b41399e019803e421c0a74be299994d859a6396eeb047e313061ce27f";
 
-// The twelve step ids in install order, exported as the one place they live --
+// The thirteen step ids in install order, exported as the one place they live --
 // analytics.js publishes exactly this list, and a rename here that never
 // reached its copy used to make a failing step travel as "unknown".
 export const STEP_IDS = [
   "payload", "python", "venv-app", "ffmpeg", "venv-engines", "cleanup",
   "models", "ollama-runtime", "nonverbal-weights",
-  "eraser-src", "venv-eraser", "kit-env",
+  "eraser-src", "venv-eraser", "venv-omnivoice", "kit-env",
 ];
 
 // The steps that leave the base install (payload, python, venv-app, ffmpeg,
@@ -86,15 +86,19 @@ export const PACKS = [
   { id: "engine", steps: ["venv-engines", "models", "nonverbal-weights"] },
   { id: "ollama-runtime", steps: ["ollama-runtime"] },
   { id: "subtitle-eraser", steps: ["eraser-src", "venv-eraser"] },
+  { id: "omnivoice", steps: ["venv-omnivoice"] },
 ];
 
 // The kit folders a pack owns, taken with it by shell:remove-pack. Models
 // pulled through Ollama are deliberately absent: they are listed and removed
-// as models, one at a time, out of a blob store the runtime shares.
+// as models, one at a time, out of a blob store the runtime shares. So is
+// models/omnivoice: the model catalog downloads and removes it, as it does
+// models/qwen3-tts for the engine pack.
 export const PACK_DIRS = {
   engine: ["engines_venv", join("models", "demucs")],
   "ollama-runtime": ["ollama"],
   "subtitle-eraser": ["eraser", "venv-eraser"],
+  omnivoice: ["omnivoice_venv"],
 };
 
 /** The steps with no pack tag -- what the first install downloads. */
@@ -118,6 +122,7 @@ export function packInstalled(kitDir, id) {
   if (id === "engine") return existsSync(join(kitDir, ".install", "venv-engines.ok"));
   if (id === "ollama-runtime") return existsSync(join(kitDir, "ollama", exeName("ollama")));
   if (id === "subtitle-eraser") return existsSync(join(kitDir, ".install", "venv-eraser.ok"));
+  if (id === "omnivoice") return existsSync(join(kitDir, ".install", "venv-omnivoice.ok"));
   return false;
 }
 
@@ -273,6 +278,19 @@ const KIT_ENV_MANAGED_ADDITIONS = [
     // would reopen the engines step and reinstall gigabytes on update.
     line: `PERSODUB_TORCH_VARIANT=${LEGACY_TORCH_VARIANT}`,
   },
+  // The second voice engine's two keys (sidecar/omnivoice_server.py reads
+  // them), written whether or not its pack is installed, as QWEN_TTS_* are.
+  // The model's path is the kit's own, so this line is made from it.
+  {
+    key: "OMNIVOICE_MODEL",
+    comment: "# The OmniVoice engine's model folder, downloaded through the in-app model catalog.",
+    line: (kitDir) => `OMNIVOICE_MODEL=${join(kitDir, "models", "omnivoice")}`,
+  },
+  {
+    key: "OMNIVOICE_DEVICE",
+    comment: "# The OmniVoice engine's device (mps/auto/cpu/cuda:0).",
+    line: `OMNIVOICE_DEVICE=${TTS_DEVICE}`,
+  },
 ];
 
 // The torch build this kit's engines venv has, or should get: what its
@@ -421,6 +439,8 @@ export function writeKitEnv({ kitDir, torchVariant = torchVariantFor(kitDir) }) 
     "QWEN_TTS_URL=http://127.0.0.1:3901",
     `QWEN_TTS_MODEL=${k("models", "qwen3-tts")}`,
     `QWEN_TTS_DEVICE=${TTS_DEVICE}`,
+    `OMNIVOICE_MODEL=${k("models", "omnivoice")}`,
+    `OMNIVOICE_DEVICE=${TTS_DEVICE}`,
     // The laughter/breath whitelist shells out to openai-whisper; left unset it
     // falls back to the system python3, finds no whisper, and fail-closes every
     // candidate (the dub loses all laughs, breaths and sighs).
@@ -459,13 +479,13 @@ const LEAKAGE_GATE_DARK_LAUNCH = /^PERSODUB_LEAKAGE_GATE=measure$/m;
 // turns the leakage check's dark-launch value on, preserving every other line
 // untouched -- app/settings_env.py writes user API keys into this same file
 // and they must survive an upgrade. A no-op (returns text unchanged) once all
-// managed keys are already present.
-export function withMissingKitEnvKeys(text) {
+// managed keys are already present. kitDir makes the lines that name a kit path.
+export function withMissingKitEnvKeys(text, kitDir) {
   text = text.replace(LEAKAGE_GATE_DARK_LAUNCH, "PERSODUB_LEAKAGE_GATE=on");
   const missing = KIT_ENV_MANAGED_ADDITIONS.filter((a) => !text.includes(`${a.key}=`));
   if (missing.length === 0) return text;
   const sep = text.endsWith("\n") ? "" : "\n";
-  return text + sep + missing.flatMap((a) => [a.comment, a.line]).join("\n") + "\n";
+  return text + sep + missing.flatMap((a) => [a.comment, typeof a.line === "function" ? a.line(kitDir) : a.line]).join("\n") + "\n";
 }
 
 const GB = 1024 ** 3;
@@ -483,6 +503,11 @@ const venvEnginesBytes = (variant) => (IS_WIN ? (variant === "cpu" ? 1.5 * GB : 
 // machine with no NVIDIA GPU installs the CPU wheel instead; that one has not
 // been measured, so it is budgeted at the Mac figure plus half a gigabyte.
 const venvEraserBytes = (variant) => (IS_WIN ? (variant === "cpu" ? 3.5 * GB : 7.5 * GB) : 3 * GB);
+
+// What the OmniVoice engine's own venv leaves on disk: the engines venv's
+// shape (the same torch per platform) without its other engines. Windows
+// measured 2026-11-05: 4.1 GB with the CPU torch, 7.9 GB with cu128.
+const venvOmnivoiceBytes = (variant) => (IS_WIN ? (variant === "cpu" ? 4.1 * GB : 8 * GB) : 2.2 * GB);
 
 // The translation runtime's archive is 139 MB on macOS but ~1.5 GB on
 // Windows; unpacked, Windows measured 1.5-1.9 GB on disk (audit, 2026-09-29).
@@ -534,6 +559,9 @@ export function buildSteps(ctx) {
   // One list for both platforms: the eraser's pinned packages, with torch
   // installed ahead of them (per platform) the way the engines venv does it.
   const reqEraser = "requirements_eraser.txt";
+  // The OmniVoice engine's list, per platform like the engines one: torch
+  // goes in ahead of it the same way (torchCuda below).
+  const reqOmnivoice = `requirements_omnivoice_${reqSuffix}.txt`;
   // On Windows, torch/torchaudio come from a dedicated index: the CUDA build
   // when an NVIDIA GPU is present, else PyPI's own CPU-only wheel -- either
   // way installed before the rest of the engines list. macOS gets the MPS
@@ -804,6 +832,7 @@ export function buildSteps(ctx) {
         cpSync(join(ctx.payloadDir, "kit-src", "sidecar"), k("sidecar"), { recursive: true });
         cpSync(join(ctx.payloadDir, "kit-src", reqEngines), k(reqEngines));
         cpSync(join(ctx.payloadDir, "kit-src", reqEraser), k(reqEraser));
+        cpSync(join(ctx.payloadDir, "kit-src", reqOmnivoice), k(reqOmnivoice));
         mkdirSync(k("models", "campplus"), { recursive: true });
         const cam = join(ctx.payloadDir, "campplus.onnx");
         if (existsSync(cam)) {
@@ -1092,6 +1121,12 @@ export function buildSteps(ctx) {
         await eraserVenv.run(report);
         syncEraserKitEnv(ctx.kitDir);
       } },
+    // The OmniVoice engine's venv, apart from the engines one: omnivoice pins
+    // transformers>=5.3 and qwen-tts 4.57.3 (vendor/requirements_omnivoice_*.txt).
+    venvStep("venv-omnivoice", t("Installing the OmniVoice voice engine"), venvOmnivoiceBytes(torchVariant), "omnivoice_venv", [
+      ...torchCuda,
+      ["-r", k(reqOmnivoice)],
+    ]),
     {
       id: "kit-env",
       title: t("Writing configuration"),
@@ -1116,7 +1151,7 @@ export function buildSteps(ctx) {
         // clobber -- app/settings_env.py writes user API keys into this same
         // file and they must survive.
         report(null, t("Updating the settings file"));
-        writeFileSync(path, withMissingKitEnvKeys(readFileSync(path, "utf8")));
+        writeFileSync(path, withMissingKitEnvKeys(readFileSync(path, "utf8"), ctx.kitDir));
       },
     },
   ];

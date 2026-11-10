@@ -72,12 +72,12 @@ def wait_seconds(slot: Optional[float]) -> float:
     return round(base * PERSODUB_TTS_WAIT_SCALE, 2)
 
 
-def _no_words_to_clone_with() -> ValueError:
+def _no_words_to_clone_with(what: str = "Qwen3-TTS ICL voice clone") -> ValueError:
     """An ICL clone without the words its reference says, which the model
-    refuses. The English names the cause for the log; the screen says it in
-    the user's language (a failed job's error_shown, app/jobs.py), with the
-    button that runs the dub again."""
-    e = ValueError("Qwen3-TTS ICL voice clone requires ref_text (the transcript of the "
+    refuses. The English names the cause for the log (`what`: which clone,
+    OmniVoice's too); the screen says it in the user's language (a failed
+    job's error_shown, app/jobs.py), with the button that runs the dub again."""
+    e = ValueError(what + " requires ref_text (the transcript of the "
                    "reference audio); empty ref_text is rejected by the model.")
     e.shown = i18n.t("Could not find where this speaker talks, so their voice could not be copied. "
                      "Press Start over.")

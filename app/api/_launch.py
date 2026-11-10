@@ -117,10 +117,16 @@ def engine_hint(separation_local: bool, stt_local: bool) -> str:
 
 def missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = True, *,
                    need_engine: bool = False, need_ollama: bool = False,
-                   separation_local: bool = True, need_roformer: bool = False):
+                   separation_local: bool = True, need_roformer: bool = False,
+                   voice: Optional[str] = None):
     """Catalog entries this job still needs: the packs first (the desktop app
     installs those, kind "pack"), then the models in catalog order (kind
     "model", downloaded by this process).
+
+    `voice` is the dub's Text-to-speech choice (app/setup.py "voice"). Qwen3-TTS
+    runs in the engine pack; OmniVoice runs in a pack of its own, with its own
+    model, and does not need Qwen's. The engine pack is need_engine's either
+    way: separation, transcription and the voice checks run there.
 
     Pure lookups (disk markers via the catalog; the caller already resolved
     the Ollama-side statuses) so tests can drive it without a network. The
@@ -131,13 +137,16 @@ def missing_models(need_whisper: bool, translate_missing_id, need_tts: bool = Tr
     wanted_packs = []
     if kit and need_engine:       # no kit, no packs (see app/api/dub.py _pack_ready)
         wanted_packs.append("engine")
+    omnivoice = need_tts and voice == "omnivoice"
+    if kit and omnivoice:
+        wanted_packs.append("omnivoice")
     if kit and need_ollama:
         wanted_packs.append("ollama-runtime")
     wanted = []
     if need_whisper:
         wanted.append("whisper")
     if need_tts:
-        wanted.append("qwen3-tts")
+        wanted.append("omnivoice-model" if omnivoice else "qwen3-tts")
     if need_roformer:
         wanted.append("vocal-separator")
     packs, models = [], []

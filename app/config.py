@@ -46,6 +46,8 @@ def _env_number(cast, expected, name, default, minimum):
 # launch, and this constant's own QWEN_TTS_URL env fallback is a dev-run
 # convenience only, for running the backend without the shell at all).
 QWEN_TTS_URL = os.environ.get("QWEN_TTS_URL", "http://127.0.0.1:3901")
+# An OmniVoice speech server (app/engines/omnivoice.py), local or remote.
+OMNIVOICE_URL = os.environ.get("OMNIVOICE_URL", "http://127.0.0.1:3900")
 
 # Qwen3-TTS voice-clone mode: "timbre" (speaker-embedding-only, clones from
 # reference audio alone -- no transcript needed) | "icl" (in-context-learning,

@@ -224,10 +224,11 @@ def engines_status_route():
         # Not a dubbing engine: the screen reads it to know whether Erase
         # subtitles can be offered at all on this computer.
         "eraser_available": engines_status.eraser_available(),
-        # The two engines the desktop app starts, each {state, message}: one
+        # The engines the desktop app starts, each {state, message}: one
         # that failed to start leaves the rest of the app working, and this
-        # is how the page knows which local work is off and why.
-        "local_engines": {w: engines_status.local_engine(w) for w in ("voice", "translation")},
+        # is how the page knows which local work is off and why. "voice" is
+        # Qwen3-TTS, "omnivoice" the other voice engine.
+        "local_engines": {w: engines_status.local_engine(w) for w in ("voice", "translation", "omnivoice")},
         # False when this computer has too little memory to dub on it -- the
         # same rule a start refuses by (app/room.py) -- so the download dialog
         # can say so before 3 GB are fetched for nothing. A size the computer

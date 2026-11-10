@@ -65,6 +65,7 @@ from app.api._shared import (
 from app.config import QWEN_N_TAKES, default_stt_engine
 from app.downloads import Download
 from app.dub_script import EDITED_NAME, script_path
+from app.engines import engine_for
 from app.i18n import english, t
 from app.jobs import JobKind, JobStatus, kind_of
 from app.pipeline import run_dub
@@ -200,12 +201,23 @@ def _voice_engine_answers(url: str) -> bool:
         return False
 
 
-def _require_voice_engine_running() -> None:
+def _require_voice_engine_running(voice: Optional[str] = None) -> None:
     """The engine pack is on disk, so the preflight let a local dub through --
     but its process is not announced (its start failed) or not answering (it
     died). Without this the voice stage fails with a raw library error; with
     it the page asks the desktop app to start the engine again."""
     if not model_store.kit_dir():
+        return
+    engine = engine_for(voice)
+    if engine is not None and engine.id != "qwen3_tts":
+        # Another engine is chosen for this dub: ask it, not the Qwen pack,
+        # and say it as the Qwen one is said (still starting, or not running).
+        # Answering /health is enough, as for Qwen: the sidecar loads weights
+        # downloaded after it started on first use, so model_loaded is not asked.
+        url = runtime.url("omnivoice")
+        if not url or not _voice_engine_answers(url):
+            told = engines_status.local_engine("omnivoice")["message"]
+            raise HTTPException(422, told or english("The voice engine is not running. Quit and reopen {app}."))
         return
     url = runtime.url("tts")
     if not url or not _voice_engine_answers(url):
@@ -300,10 +312,11 @@ def _require_local_models(engines: dict, translator) -> None:
     missing = launch_api.missing_models(engines.get("stt_engine") != "perso", translate_missing_id,
                                         need_engine=True, need_ollama=need_ollama,
                                         separation_local=engines.get("separation") != "perso",
-                                        need_roformer=engines.get("separation") == "roformer")
+                                        need_roformer=engines.get("separation") == "roformer",
+                                        voice=engines.get("tts"))
     if missing:
         launch_api.raise_models_needed(missing)
-    _require_voice_engine_running()
+    _require_voice_engine_running(engines.get("tts"))
 
 
 def _same_project(job) -> dict:
@@ -448,11 +461,11 @@ def dub_job_redub(jid: str):
     # not a crash.
     missing = launch_api.missing_models(False, None,
                               need_engine=job.get("dub_mode") != "perso",
-                              separation_local=False)
+                              separation_local=False, voice=engines.get("tts"))
     if missing:
         launch_api.raise_models_needed(missing)
     if job.get("dub_mode") != "perso":
-        _require_voice_engine_running()
+        _require_voice_engine_running(engines.get("tts"))
 
     fields = {"language_code": language_code, "project": project,
               "day": launch_api.today(), "from_link": False, "work_dir": work, "voices_only": True,
@@ -978,10 +991,11 @@ def _start_preflight(plan: _StartPlan, has_script: bool) -> Optional[str]:
         missing = launch_api.missing_models(need_whisper, translate_missing_id,
                                   need_engine=True, need_ollama=need_ollama,
                                   separation_local=plan.sep_engine != "perso",
-                                  need_roformer=plan.sep_engine == "roformer")
+                                  need_roformer=plan.sep_engine == "roformer",
+                                  voice=plan.tts_engine)
         if missing:
             launch_api.raise_models_needed(missing)
-        _require_voice_engine_running()
+        _require_voice_engine_running(plan.tts_engine)
     return warning
 
 

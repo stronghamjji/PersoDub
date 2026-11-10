@@ -21,7 +21,7 @@ export const CHOICE_MODEL = {
   sep: { local: "demucs", roformer: "vocal-separator" },
   stt: { local: "whisper" },
   translate: { hunyuan: "hunyuan", gemma: "gemma" },
-  voice: { qwen3: "qwen3-tts" },
+  voice: { qwen3: "qwen3-tts", omnivoice: "omnivoice-model" },
 };
 
 // What each choice is, in a few words: the line under its name. Getters, so
@@ -36,7 +36,8 @@ const CHARACTER = {
                get hunyuan() { return t("Small and fast"); },
                get gemma() { return t("Bigger and more careful"); },
                get gemini() { return t("Most accurate · Gemini key"); } },
-  voice: { get qwen3() { return t("Follows the voice of each speaker"); } },
+  voice: { get qwen3() { return t("Follows the voice of each speaker"); },
+           get omnivoice() { return t("Follows the voice of each speaker · Personal use only"); } },
 };
 
 /** A model's state in a word or two, with its look: Ready, Downloading 43%

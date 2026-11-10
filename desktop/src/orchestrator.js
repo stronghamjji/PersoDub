@@ -120,14 +120,21 @@ export function sidecarArgv(kitDir, port) {
           "server:app", "--host", "127.0.0.1", "--port", String(port)];
 }
 
+// The second voice engine's launch line: its own venv (its transformers pin
+// and qwen-tts's cannot share one) and its own app in the same sidecar folder.
+export function omnivoiceArgv(kitDir, port) {
+  return [venvBin(join(kitDir, "omnivoice_venv"), "uvicorn"),
+          "omnivoice_server:app", "--host", "127.0.0.1", "--port", String(port)];
+}
+
 // The address a pack announces in runtime.json, if it has one. A pack that is
 // only files (subtitle-eraser: a source tree and a venv the backend runs on
 // demand) has none -- and must not withdraw another pack's address when it is
 // installed or removed.
-export const PACK_RUNTIME_KEY = { engine: "tts_url", "ollama-runtime": "ollama_url" };
+export const PACK_RUNTIME_KEY = { engine: "tts_url", "ollama-runtime": "ollama_url", omnivoice: "omnivoice_url" };
 // ...and its process id beside the address, written and withdrawn with it, so
 // the backend can measure that process's memory (app/runtime.py).
-export const PACK_PID_KEY = { engine: "tts_pid", "ollama-runtime": "ollama_pid" };
+export const PACK_PID_KEY = { engine: "tts_pid", "ollama-runtime": "ollama_pid", omnivoice: "omnivoice_pid" };
 
 // One pack's process: started at boot for every pack already on disk, and
 // again by the install-pack IPC the moment a pack finishes downloading -- the
@@ -151,11 +158,11 @@ export function packAlive(children) {
 // in runtime.json: "starting" while it comes up, "failed" when it did not,
 // gone once it answers. The backend words it (app/runtime.py, GET /api/engines)
 // and its preflight refuses a local dub that needs it with that sentence.
-export const PACK_STATE_KEY = { engine: "tts_state", "ollama-runtime": "ollama_state" };
+export const PACK_STATE_KEY = { engine: "tts_state", "ollama-runtime": "ollama_state", omnivoice: "omnivoice_state" };
 // ...and beside "failed", why, when the engine's last lines say: "memory"
 // when the computer ran out of it, "" otherwise. The voice engine then says
 // so (app/engines_status.py) instead of "PersoDub could not start it".
-export const PACK_FAILURE_KEY = { engine: "tts_failure", "ollama-runtime": "ollama_failure" };
+export const PACK_FAILURE_KEY = { engine: "tts_failure", "ollama-runtime": "ollama_failure", omnivoice: "omnivoice_failure" };
 // What an engine that ran out of memory leaves as its last words: Windows'
 // "paging file is too small" (os error 1455, the only part that is not in the
 // computer's own language -- issue #187's log is mojibake around it), Python's
@@ -211,6 +218,23 @@ export async function startPackProcesses(cfg, packId, { logDir, env, children, r
     // that IS on disk loads after the port opens, and "loading" is progress.
     await announceWhenUp(port, `http://127.0.0.1:${port}/health`, (b) => b.status === "ok",
                          () => writeRuntime(cfg.kitDir, { tts_url: `http://127.0.0.1:${port}`, tts_pid: child.pid }),
+                         (b) => b.status === "loading");
+    return [child];
+  }
+  if (packId === "omnivoice") {
+    // The engine pack's shape, with no fake: dev and tests that stand a fake
+    // sidecar in for the engine pack simply have no OmniVoice.
+    const port = await getFreePort();
+    writeRuntime(cfg.kitDir, { omnivoice_state: "starting" });
+    const child = launch(omnivoiceArgv(cfg.kitDir, port), {
+      cwd: join(cfg.kitDir, "sidecar"), env, logPath: join(logDir, "omnivoice.log"), name: packId, log, onExit,
+    });
+    children.push(child);
+    record();
+    // Status ok without the model, as the engine pack: the model comes
+    // through the in-app catalog, and "loading" is progress.
+    await announceWhenUp(port, `http://127.0.0.1:${port}/health`, (b) => b.status === "ok",
+                         () => writeRuntime(cfg.kitDir, { omnivoice_url: `http://127.0.0.1:${port}`, omnivoice_pid: child.pid }),
                          (b) => b.status === "loading");
     return [child];
   }
@@ -308,7 +332,7 @@ export async function startEngines(cfg, { logDir, appVersion, locale, edition, b
   try {
     // Addresses (and states) from the last launch must not outlive it: a
     // pack that was removed since would otherwise still be announced.
-    clearRuntime(cfg.kitDir, ["ollama_url", "tts_url", ...Object.values(PACK_PID_KEY), ...Object.values(PACK_STATE_KEY),
+    clearRuntime(cfg.kitDir, ["ollama_url", "tts_url", "omnivoice_url", ...Object.values(PACK_PID_KEY), ...Object.values(PACK_STATE_KEY),
                               ...Object.values(PACK_FAILURE_KEY)]);
     for (const id of bootPacks) {
       try {

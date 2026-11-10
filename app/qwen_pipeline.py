@@ -1358,7 +1358,7 @@ def resynth_one_line(work_dir, entry, text, language):
     The speaker's reference wav and speaker_refs.json survive a finished job, so
     the voice can be cloned again rather than approximated.
     """
-    from app.engines.base import get_engine
+    from app.engines import engine_for
 
     i = int(entry["i"])
     spk = entry.get("speaker") or DEFAULT_SPEAKER
@@ -1371,7 +1371,12 @@ def resynth_one_line(work_dir, entry, text, language):
         refs = json.load(f)
     ref_text = (refs.get(spk) or {}).get("ref_text") or ""
 
-    engine = get_engine("qwen3_tts")
+    try:
+        with open(os.path.join(work_dir, "job.json"), encoding="utf-8") as f:
+            voice = json.load(f).get("tts")
+    except (OSError, ValueError):
+        voice = None
+    engine = engine_for(voice)
     voice_id = engine.clone(ref_wav, ref_text)
     out_path = os.path.join(work_dir, "qwen_line_%d.wav" % i)
     # A fresh seed every time: a remake is asked for because the voice there

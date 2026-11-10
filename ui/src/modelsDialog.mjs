@@ -405,7 +405,9 @@ export function initModelsUi({ $, onStartDubbing, onOpenSettings, onUsePerso = (
         // A program not here yet, with nothing else to say, says what it is
         // for where "Ready" would stand: a bare "Ollama" under Required
         // programs said nothing of why to download it (owner, 2026-10-22).
-        const forWhat = m.role === "pack" && m.state === "not_downloaded" && !status.textContent && !!m.hint;
+        // A pack says what it is for before it is downloaded; so does a model
+        // whose terms the user should see first (OmniVoice: non-commercial).
+        const forWhat = (m.role === "pack" || m.role === "tts") && m.state === "not_downloaded" && !status.textContent && !!m.hint;
         if (forWhat) status.className = "settings-hint";
         if ((m.state === "ready" || m.comes_with || forWhat) && m.hint) {
           // What it is for, after "Ready", where the group's title does not

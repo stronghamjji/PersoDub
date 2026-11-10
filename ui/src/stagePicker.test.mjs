@@ -17,6 +17,8 @@ const ROWS = {
   hunyuan: { id: "hunyuan", role: "translate", bytes: 1.1e9, state: "downloading", progress: 43 },
   gemma: { id: "gemma", role: "translate", bytes: 8.149e9, state: "paused" },
   "qwen3-tts": { id: "qwen3-tts", role: "tts", bytes: 4.544e9, state: "downloading", progress: null },
+  omnivoice: { id: "omnivoice", role: "pack", bytes: 2.2e9, state: "ready" },
+  "omnivoice-model": { id: "omnivoice-model", role: "tts", bytes: 3.0e9, state: "not_downloaded" },
 };
 const rowOf = (id) => ROWS[id] || null;
 const select = (value, options, disabled = false) =>
@@ -31,6 +33,14 @@ test("the separation list holds every choice, the RoFormer not downloaded includ
   ]);
   assert.equal(view.name, "Demucs");
   assert.equal(view.ready, true, "Demucs is here, so its button says Ready");
+});
+
+test("the voice list sizes OmniVoice by its own model and says whether it is here", () => {
+  const view = stageView("voice", select("omnivoice", [["qwen3", "Qwen3-TTS"], ["omnivoice", "OmniVoice"]]), rowOf);
+  assert.deepEqual(view.options.map((o) => [o.name, o.line, o.state && o.state.text, o.on]), [
+    ["Qwen3-TTS", "Follows the voice of each speaker · 4.5 GB", "Getting ready…", false],
+    ["OmniVoice", "Follows the voice of each speaker · Personal use only · 3.0 GB", "Not downloaded", true],
+  ]);
 });
 
 test("each model says its state in a word or two, a download its percent", () => {
@@ -59,6 +69,10 @@ test("Ready only once the model and the pack it runs in are both here", () => {
   assert.equal(choiceReady("translate", "hunyuan", (id) => (id === "hunyuan" ? { state: "ready" } : rowOf(id))), false,
                "Hunyuan is here, Ollama is not");
   assert.equal(choiceReady("voice", "qwen3", rowOf), false);
+  assert.equal(choiceReady("voice", "omnivoice", rowOf), false, "its model is not here yet");
+  assert.equal(choiceReady("voice", "omnivoice", (id) => (id === "omnivoice-model" ? { state: "ready" } : rowOf(id))), true);
+  assert.equal(choiceReady("voice", "omnivoice", (id) => (id === "omnivoice" ? { state: "paused" } : id === "omnivoice-model"
+    ? { state: "ready" } : rowOf(id))), false, "the model is here, its own pack is not");
   assert.equal(choiceReady("stt", "perso", rowOf), false);
   // Greyed for a Perso dubbing: no Ready on a choice that will not run.
   assert.equal(stageView("stt", select("local", [["local", "Whisper"]], true), rowOf).ready, false);
@@ -67,7 +81,7 @@ test("Ready only once the model and the pack it runs in are both here", () => {
 test("every line the lists say is in the page's tables", () => {
   const lines = [];
   for (const [role, opts] of [["sep", ["local", "roformer", "perso"]], ["stt", ["local", "perso"]],
-                              ["translate", ["chatgpt", "hunyuan", "gemma", "gemini"]], ["voice", ["qwen3"]]]) {
+                              ["translate", ["chatgpt", "hunyuan", "gemma", "gemini"]], ["voice", ["qwen3", "omnivoice"]]]) {
     const view = stageView(role, select(opts[0], opts.map((v) => [v, v])), () => null);
     lines.push(...view.options.map((o) => o.line));
   }

@@ -235,7 +235,7 @@ def test_resume_works_on_the_joined_video_in_place(monkeypatch):
     jid = _start([[0, 2], [4, 6]]).json()["job_id"]
     assert _wait_done(jid) == "error"
     monkeypatch.setattr(dub_api, "_cut_ranges", lambda *a, **kw: pytest.fail("joined already"))
-    monkeypatch.setattr(dub_api, "_require_voice_engine_running", lambda: None)
+    monkeypatch.setattr(dub_api, "_require_voice_engine_running", lambda voice=None: None)
     r = client.post(f"/api/dub/jobs/{jid}/resume")
     assert r.status_code == 200, r.text
     _wait_done(jid)

@@ -1243,6 +1243,12 @@ def test_dub_start_records_the_engines_the_job_was_made_with(monkeypatch, tmp_pa
     assert saved["tts"] == "qwen3" and saved["quality"] == 4
 
 
+def test_dub_start_records_the_omnivoice_voice_it_was_asked_for(monkeypatch):
+    # The remade lines and Try again read it back to pick the same engine.
+    jid = _start_and_settle(monkeypatch, translate_engine="gemini", tts_engine="omnivoice")
+    assert client.get(f"/api/dub/jobs/{jid}").json()["tts"] == "omnivoice"
+
+
 def test_dub_start_records_what_the_defaults_resolved_to_not_the_blank(monkeypatch):
     # The form left every choice out, so what is saved has to be the answer the
     # app gave -- otherwise the finished screen has nothing to show.

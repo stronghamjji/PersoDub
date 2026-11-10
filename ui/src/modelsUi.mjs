@@ -20,7 +20,7 @@ export function neededModelId(role, value) {
   if (role === "sep") return value === "roformer" ? "vocal-separator" : null;
   if (role === "stt") return value === "perso" ? null : "whisper";
   if (role === "translate") return value === "gemma" ? "gemma" : value === "hunyuan" ? "hunyuan" : null;
-  if (role === "voice") return "qwen3-tts";
+  if (role === "voice") return value === "omnivoice" ? "omnivoice-model" : "qwen3-tts";
   return null;
 }
 
@@ -73,8 +73,8 @@ export function dubStartDialog(detail, ramOk = true) {
   // they are is nobody's question (user, 2026-09-28), and the app install
   // was under 1 GB, so the size said nothing of how the two differ (owner,
   // 2026-10-22, 1-3). The voice parts are the ones Perso dubbing does
-  // instead, so they are the ones that point there.
-  const voice = ids.includes("engine") || ids.includes("qwen3-tts");
+  // instead, so they are the ones that point there: either voice engine's.
+  const voice = ["engine", "qwen3-tts", "omnivoice", "omnivoice-model"].some((id) => ids.includes(id));
   return {
     title: t("Download {size} GB?", { size: gb(total) }),
     line: t("A one-time download, separate from the app install."),
@@ -101,12 +101,13 @@ export function dubStartDialog(detail, ramOk = true) {
 
 /** The packs a dropdown choice needs, alongside the model neededModelId
  * names: the RoFormer, local STT and the voice run in the engine pack; Gemma
- * and Hunyuan run in the translation runtime. */
+ * and Hunyuan run in the translation runtime. OmniVoice speaks from a pack of
+ * its own, and the engine pack still checks its voices. */
 export function neededPackIds(role, value) {
   if (role === "sep") return value === "roformer" ? ["engine"] : [];
   if (role === "stt") return value === "perso" ? [] : ["engine"];
   if (role === "translate") return value === "gemma" || value === "hunyuan" ? ["ollama-runtime"] : [];
-  if (role === "voice") return ["engine"];
+  if (role === "voice") return value === "omnivoice" ? ["engine", "omnivoice"] : ["engine"];
   return [];
 }
 

@@ -284,6 +284,7 @@ async function applyEngineAvailabilityToForm() {
     translate: translateSel.value,
     stt: sttSel.value,
     dubMode: $("dubModeSelect").value,
+    voice: $("voiceSelect").value,
   });
 
   keySaved.perso = !result.disable.perso;
@@ -433,6 +434,8 @@ for (const id of ["sepSelect", "sttSelect", "translateSelect", "voiceSelect"]) {
 // The translator decides two of the warnings over the options: its runtime
 // off, and a memory slow for it.
 $("translateSelect").addEventListener("change", () => applyEngineAvailabilityToForm());
+// ...and the voice engine's warning is the chosen one's.
+$("voiceSelect").addEventListener("change", () => applyEngineAvailabilityToForm());
 // One sentence per line (they read as a wall when joined -- user feedback):
 // the hint slots render these with pre-line whitespace. Getters, so each is
 // read in the language of the moment. The Perso API dubbing hint names the
@@ -452,7 +455,8 @@ const ENGINE_HINTS = {
                get gemma() { return [t("Runs on this computer, free."), t("For accuracy, use the Gemini API.")]; },
                get gemini() { return [t("Most accurate."), t("Needs a Google (Gemini) key in Settings > API keys.")]; },
                get chatgpt() { return [t("Free within a ChatGPT account's limit. Sign in once, no download.")]; } },
-  voice: { get qwen3() { return [t("Runs on this computer, free."), t("Clones each speaker\u2019s voice.")]; } },
+  voice: { get qwen3() { return [t("Runs on this computer, free."), t("Clones each speaker\u2019s voice.")]; },
+           get omnivoice() { return [t("Runs on this computer, free."), t("Personal, non-commercial use only.")]; } },
 };
 // Perso does every stage of a Perso API dubbing: the greyed rows say so, not
 // what they would do on this computer (owner, 2026-10-22).
@@ -956,6 +960,9 @@ const languageRow = initLanguageRow({
 // repository.
 const REPO_URL = `https://github.com/${window.persodubShell?.repo || "stronghamjji/PersoDub"}`;
 $("brandBtn").addEventListener("click", () => window.open(isProduction() ? persoLink(DESKTOP_APP_URL, "about", savedSettings()?.perso_utm) : REPO_URL, "_blank", "noopener"));
+// OmniVoice is the open-source edition's only (app/setup.py's voice stage):
+// the production edition does not offer it, so its row leaves the list.
+if (isProduction()) $("voiceSelect").querySelector('option[value="omnivoice"]')?.remove();
 if (isProduction()) {
   const brand = $("brandBtn");
   brand.removeAttribute("data-i18n-title");
@@ -1622,12 +1629,13 @@ function langsLabel() {
 // {ok, why, alone}: why is the line said under the refusal when it did not
 // come back (ui/src/format.mjs restartFailure) -- without it the same "try
 // again" came back and the shell's reason was thrown away. alone: the memory
-// ran out again, and that line says all of it.
-async function restartVoiceEngine(errorEl) {
+// ran out again, and that line says all of it. `voice`: the dub's
+// Text-to-speech choice; OmniVoice runs in a pack of its own.
+async function restartVoiceEngine(errorEl, voice) {
   const shell = window.persodubShell;
   if (!shell || !shell.installPack) return { ok: false, why: "" };
   errorEl.textContent = t("Starting the voice engine…");
-  const r = await shell.installPack("engine").catch(() => ({ ok: false }));
+  const r = await shell.installPack(voice === "omnivoice" ? "omnivoice" : "engine").catch(() => ({ ok: false }));
   return r && r.ok ? { ok: true }
     : { ok: false, why: restartFailure(r && r.reason), alone: restartRanOutOfMemory(r && r.reason) };
 }
@@ -1678,7 +1686,7 @@ async function submitDubStart({ fd, label, errorEl, retry, retried = false, seco
       // A key with several workspaces and none picked: pick one here, then go on.
       keyWindow.askKey("perso", null, null, { spaceOnly: true, then: retry });
     } else if (!retried && e && e.status === 422 && /voice engine is not running/.test(serverText(e))) {
-      const restart = await restartVoiceEngine(errorEl);
+      const restart = await restartVoiceEngine(errorEl, fd.get("tts_engine"));
       if (restart.ok) {
         return submitDubStart({ fd, label, errorEl, retry, retried: true, seconds });
       }

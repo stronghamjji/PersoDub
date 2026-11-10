@@ -1,7 +1,7 @@
 // Build-time payload collector: gathers everything the installer needs into
 // resources/payload/ so electron-builder can bundle it as extraResources.
 import { cpSync, rmSync, mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, dirname, relative } from "node:path";
+import { basename, join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { EDITIONS, BUILD_ENV, BUILD_KEYS, PRODUCTION_UPDATE_URL, buildEdition, buildEnvText } from "../src/edition.js";
@@ -65,7 +65,8 @@ function main() {
       filter: (src) => shipped(relative(REPO, src)),
     });
   }
-  cpSync(join(DESKTOP, "vendor"), join(OUT, "kit-src"), { recursive: true });
+  // The sidecars' own tests stay with the repo, like the app's do.
+  cpSync(join(DESKTOP, "vendor"), join(OUT, "kit-src"), { recursive: true, filter: (src) => !basename(src).startsWith("test_") });
 
   if (existsSync(campplusSrc)) {
     cpSync(campplusSrc, join(OUT, "campplus.onnx"));

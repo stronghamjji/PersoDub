@@ -23,6 +23,7 @@ function makePayload(payloadDir) {
   writeFileSync(join(payloadDir, "kit-src", "sidecar", "server.py"), "# sidecar");
   writeFileSync(join(payloadDir, "kit-src", `requirements_engines_${REQ_SUFFIX}.txt`), "torch");
   writeFileSync(join(payloadDir, "kit-src", "requirements_eraser.txt"), "paddleocr");
+  writeFileSync(join(payloadDir, "kit-src", `requirements_omnivoice_${REQ_SUFFIX}.txt`), "omnivoice");
   mkdirSync(join(payloadDir, "kit-src", "truststore"), { recursive: true });
   writeFileSync(join(payloadDir, "kit-src", "truststore", "persodub_truststore.py"), "# hook");
   writeFileSync(join(payloadDir, "campplus.onnx"), "onnx");

@@ -29,7 +29,10 @@ STAGES = {
     "stt": ("STT_ENGINE", ("local", "perso"), "local"),
     "translator": ("TRANSLATE_ENGINE", tuple(t.name for t in TRANSLATORS.values() if t.offered), None),
     "voice_quality": ("VOICE_QUALITY", ("fast", "high"), "fast"),
-    "voice": ("TTS_ENGINE", ("qwen3",), "qwen3"),
+    # OmniVoice only in the open-source edition: its weights are licensed for
+    # non-commercial use, and the production edition is part of a paid service
+    # (owner, 2026-11-04). The desktop shell passes the edition.
+    "voice": ("TTS_ENGINE", ("qwen3",) if os.environ.get("PERSODUB_EDITION") == "production" else ("qwen3", "omnivoice"), "qwen3"),
 }
 
 # What the voice engine's best-of-N count is for each quality word (the same

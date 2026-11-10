@@ -764,9 +764,11 @@ test("the page hands the desktop bridge to the models controller and hints name 
 // desktop app to start it and tries the dub again, once.
 test("a dub refused because the voice engine is not running is retried after the desktop app starts it", () => {
   const html = readPage();
-  assert.match(html, /async function restartVoiceEngine\(errorEl\)/);
+  assert.match(html, /async function restartVoiceEngine\(errorEl, voice\)/);
+  // The pack of the voice the dub asked for: OmniVoice has its own.
+  assert.match(html, /shell\.installPack\(voice === "omnivoice" \? "omnivoice" : "engine"\)/);
   // serverText: the engine's English, which the refusal is known by (ui/src/format.mjs).
-  assert.match(html, /voice engine is not running\/\.test\(serverText\(e\)\)\) \{\n\s*const restart = await restartVoiceEngine\(errorEl\);/);
+  assert.match(html, /voice engine is not running\/\.test\(serverText\(e\)\)\) \{\n\s*const restart = await restartVoiceEngine\(errorEl, fd\.get\("tts_engine"\)\);/);
   // When it does not come back, why is said under the refusal, not thrown away
   // -- or alone, when the memory ran out again and it says all of it (A37).
   assert.match(html, /errorEl\.textContent = restart\.alone \? restart\.why : \[errorText\(e\), restart\.why\]\.filter\(Boolean\)\.join\("\\n"\);/);

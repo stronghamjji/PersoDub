@@ -343,3 +343,45 @@ def test_restart_gives_up_when_no_engine_comes_back(monkeypatch):
     monkeypatch.setattr(mod.time, "monotonic", lambda: next(clock))
     with pytest.raises(RuntimeError, match="did not come back"):
         QwenTTSEngine(base_url="http://x").restart()
+
+
+# --- OmniVoice: our second sidecar speaks the same contract (app/engines/omnivoice.py) ---
+
+def test_omnivoice_clones_only_with_the_words_of_its_sample(monkeypatch, tmp_path):
+    from app.engines.omnivoice import OmniVoiceEngine
+    p = tmp_path / "ref.wav"
+    p.write_bytes(b"RIFFxxxx")
+    captured = {}
+
+    class _R:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"voice_id": "omni1"}
+
+    def fake_post(url, data=None, files=None, timeout=None):
+        captured.update(url=url, data=data)
+        return _R()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    engine = OmniVoiceEngine(base_url="http://omni")
+    # Qwen's "timbre" (the sound alone) does not apply: the words always go.
+    assert engine.clone(str(p), "hello there", mode="timbre") == "omni1"
+    assert captured["url"] == "http://omni/clone"
+    assert captured["data"]["ref_text"] == "hello there"
+    with pytest.raises(ValueError) as refused:
+        engine.clone(str(p), "  ")
+    assert str(refused.value).startswith("OmniVoice voice clone requires ref_text")
+    assert refused.value.shown.startswith("Could not find where this speaker talks")
+
+
+def test_omnivoice_is_found_where_the_desktop_app_announced_it(monkeypatch, tmp_path):
+    import json
+
+    from app.engines.omnivoice import OmniVoiceEngine
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
+    (tmp_path / "runtime.json").write_text(json.dumps(
+        {"version": 1, "tts_url": "http://127.0.0.1:5001", "omnivoice_url": "http://127.0.0.1:5003/"}))
+    assert OmniVoiceEngine().base_url == "http://127.0.0.1:5003"
+    assert QwenTTSEngine().base_url == "http://127.0.0.1:5001"

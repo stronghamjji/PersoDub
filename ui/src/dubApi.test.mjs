@@ -365,6 +365,12 @@ test("applyEngineAvailability: a voice engine that failed to start is a warning 
     const other = { ...av, local_engines: { voice: { state, message: "" } } };
     assert.equal(applyEngineAvailability(other, { translate: "chatgpt", stt: "local", dubMode: "local" }).warning, null);
   }
+  // OmniVoice chosen: its own engine's state is the one told, not Qwen's.
+  const omni = { ...av, local_engines: { voice: failed, omnivoice: { state: "running", message: "" } } };
+  assert.equal(applyEngineAvailability(omni, { translate: "chatgpt", dubMode: "local", voice: "omnivoice" }).warning, null);
+  const omniOff = { ...av, local_engines: { voice: { state: "running", message: "" }, omnivoice: failed } };
+  assert.equal(applyEngineAvailability(omniOff, { translate: "chatgpt", dubMode: "local", voice: "omnivoice" }).warning,
+    "The voice engine is not running because it could not start.");
 });
 
 // A28: the translation runtime that failed at start, said for the translators
@@ -468,6 +474,8 @@ test("voiceLabel: the engine with its model, long for the dropdown and short for
   // Not downloaded yet, or the page has not heard: the name alone.
   assert.equal(voiceLabel("qwen3", { qwen3: "" }), "Qwen3-TTS");
   assert.equal(voiceLabel("qwen3", undefined, true), "Qwen3-TTS");
+  // OmniVoice has no model size to name (GET /api/engines leaves it out).
+  assert.equal(voiceLabel("omnivoice", models), "OmniVoice");
 });
 
 test("engineChips: the voice chip carries its model when the page knows it", () => {
