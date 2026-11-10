@@ -204,6 +204,7 @@ def test_production_edition_offers_no_omnivoice(monkeypatch):
     """OmniVoice's weights are non-commercial, so the production edition
     (part of a paid service) neither lists the choice nor the catalog rows."""
     import importlib
+
     import app.setup as setup_mod
     monkeypatch.setenv("PERSODUB_EDITION", "production")
     importlib.reload(setup_mod)

@@ -378,6 +378,7 @@ def test_omnivoice_clones_only_with_the_words_of_its_sample(monkeypatch, tmp_pat
 
 def test_omnivoice_is_found_where_the_desktop_app_announced_it(monkeypatch, tmp_path):
     import json
+
     from app.engines.omnivoice import OmniVoiceEngine
     monkeypatch.setenv("PERSODUB_KIT_DIR", str(tmp_path))
     (tmp_path / "runtime.json").write_text(json.dumps(
