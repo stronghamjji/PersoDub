@@ -56,13 +56,12 @@ test("a human co-author passes", () => {
   }
 });
 
-test("a fork's pull request skips the account rule but not the signature rule", () => {
+test("a fork's pull request is not checked: a contributor's name and signatures are their own", () => {
   const stranger = { author: "stranger", committer: "stranger" };
   assert.deepEqual(findProblems([commit(stranger)], FORK), []);
   assert.deepEqual(findProblems([commit({ author: null, committer: null })], FORK), []);
-
-  const signed = commit({ ...stranger, message: "Fix\n\nCo-authored-by: Cursor <cursor@example.com>" });
-  assert.equal(findProblems([signed], FORK).length, 1);
+  const signed = commit({ ...stranger, message: "Fix\n\nCo-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: s" });
+  assert.deepEqual(findProblems([signed], FORK), []);
 });
 
 test("another account fails in a same-repository pull request", () => {

@@ -1,6 +1,7 @@
-// Checks the commits a pull request brings: no coding-assistant signature in
-// any commit message and, when the branch lives in this repository, every
-// commit made by the repository owner. Run by the `commits` job in ci.yml.
+// Checks the commits of a pull request whose branch lives in this repository:
+// no coding-assistant signature in a commit message, and every commit made by
+// the repository owner. A fork's pull request is not checked -- a contributor's
+// commits are their own. Run by the `commits` job in ci.yml.
 import { pathToFileURL } from "node:url";
 
 const SIGNATURES = [
@@ -20,6 +21,7 @@ const REAUTHOR = "re-commit it under the owner's git identity (git commit --amen
 // Problems never print another account's login or the e-mail in the commit.
 export function findProblems(commits, { owner, sameRepo }) {
   const problems = [];
+  if (!sameRepo) return problems;
   for (const { sha, commit, author, committer } of commits) {
     const short = sha.slice(0, 7);
     const lines = commit.message.split("\n").map((line) => line.trim());
@@ -29,7 +31,6 @@ export function findProblems(commits, { owner, sameRepo }) {
         problems.push(problem);
       }
     }
-    if (!sameRepo) continue;
     const bot = author?.login === "dependabot[bot]";
     if (!bot && author?.login !== owner) {
       problems.push(`${short} is authored by ${author ? OTHER : UNKNOWN}, not the repository owner ${owner}; ${REAUTHOR}`);

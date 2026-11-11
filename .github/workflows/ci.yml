@@ -109,11 +109,11 @@ jobs:
       # names the file and commit, which is all a fix needs.
       - run: ./gitleaks git . --redact --no-banner
 
-  # Fails a pull request whose commits carry the wrong identity. Whatever is
-  # merged becomes the public history for good, so a coding assistant's
-  # signature in a commit message, or a second account's name on a commit, must
-  # not ride in. On a fork's pull request only the signature rule applies -- a
-  # contributor's commits are rightly their own.
+  # Fails a pull request from a branch of this repository whose commits carry
+  # the wrong identity. Whatever is merged becomes the public history for good,
+  # so a coding assistant's signature in a commit message, or a second account's
+  # name on a commit, must not ride in. A fork's pull request is not checked --
+  # a contributor's commits are rightly their own.
   commits:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
