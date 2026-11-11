@@ -115,7 +115,7 @@ jobs:
   # name on a commit, must not ride in. A fork's pull request is not checked --
   # a contributor's commits are rightly their own.
   commits:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -130,4 +130,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}

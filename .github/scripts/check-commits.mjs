@@ -1,16 +1,16 @@
 // Checks the commits of a pull request whose branch lives in this repository:
 // no coding-assistant signature in a commit message, and every commit made by
-// the repository owner. A fork's pull request is not checked -- a contributor's
-// commits are their own. Run by the `commits` job in ci.yml.
+// the repository owner. Run by the `commits` job in ci.yml, which skips a
+// fork's pull request -- a contributor's commits are their own.
 import { pathToFileURL } from "node:url";
 
 const SIGNATURES = [
   // An assistant signs with its vendor's address or with its bare product
   // name; a person who happens to be called Claude does neither.
   [/^co-authored-by:.*<[^>]*@([\w.-]+\.)?(anthropic|openai|cursor)\.com>/i, "'Co-authored-by:' line that names a coding assistant"],
-  [/^co-authored-by:\s*(claude( code)?|codex|(github )?copilot|cursor( agent)?)\s*</i, "'Co-authored-by:' line that names a coding assistant"],
+  [/^co-authored-by:\s*(claude( code)?|codex|chatgpt|gemini|(github )?copilot|cursor( agent)?)\s*</i, "'Co-authored-by:' line that names a coding assistant"],
   [/^claude-session:/i, "'Claude-Session:' line"],
-  [/^[^a-z]*generated with\s+\[?(claude|codex|cursor|copilot)\b/i, "'Generated with ...' line"],
+  [/^[^a-z]*generated with\s+\[?(claude|codex|chatgpt|gemini|cursor|copilot)\b/i, "'Generated with ...' line"],
 ];
 const OTHER = "another account";
 const UNKNOWN = "an account GitHub does not recognise";
@@ -19,9 +19,8 @@ const REAUTHOR = "re-commit it under the owner's git identity (git commit --amen
 
 // `commits` is the array GET /repos/{owner}/{repo}/pulls/{n}/commits returns.
 // Problems never print another account's login or the e-mail in the commit.
-export function findProblems(commits, { owner, sameRepo }) {
+export function findProblems(commits, owner) {
   const problems = [];
-  if (!sameRepo) return problems;
   for (const { sha, commit, author, committer } of commits) {
     const short = sha.slice(0, 7);
     const lines = commit.message.split("\n").map((line) => line.trim());
@@ -44,13 +43,13 @@ export function findProblems(commits, { owner, sameRepo }) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const required = ["GITHUB_REPOSITORY", "PR_NUMBER", "HEAD_REPO", "GITHUB_REPOSITORY_OWNER", "GITHUB_TOKEN"];
+  const required = ["GITHUB_REPOSITORY", "PR_NUMBER", "GITHUB_REPOSITORY_OWNER", "GITHUB_TOKEN"];
   const missing = required.filter((name) => !process.env[name]);
   if (missing.length) {
     console.error(`Missing environment variables: ${missing.join(", ")}`);
     process.exit(1);
   }
-  const { GITHUB_REPOSITORY, PR_NUMBER, HEAD_REPO, GITHUB_REPOSITORY_OWNER, GITHUB_TOKEN } = process.env;
+  const { GITHUB_REPOSITORY, PR_NUMBER, GITHUB_REPOSITORY_OWNER, GITHUB_TOKEN } = process.env;
   const api = process.env.GITHUB_API_URL || "https://api.github.com";
 
   const commits = [];
@@ -76,10 +75,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     process.exit(1);
   }
 
-  const problems = findProblems(commits, {
-    owner: GITHUB_REPOSITORY_OWNER,
-    sameRepo: HEAD_REPO === GITHUB_REPOSITORY,
-  });
+  const problems = findProblems(commits, GITHUB_REPOSITORY_OWNER);
   if (problems.length) {
     for (const problem of problems) console.error(problem);
     process.exitCode = 1;

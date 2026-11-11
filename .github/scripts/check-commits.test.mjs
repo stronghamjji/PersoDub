@@ -4,8 +4,7 @@ import { test } from "node:test";
 import { findProblems } from "./check-commits.mjs";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
-const SAME_REPO = { owner: "owner", sameRepo: true };
-const FORK = { owner: "owner", sameRepo: false };
+const OWNER = "owner";
 
 function commit({ message = "Fix the thing", author = "owner", committer = "owner" } = {}) {
   return {
@@ -17,21 +16,23 @@ function commit({ message = "Fix the thing", author = "owner", committer = "owne
 }
 
 test("a clean commit by the owner passes", () => {
-  assert.deepEqual(findProblems([commit()], SAME_REPO), []);
+  assert.deepEqual(findProblems([commit()], OWNER), []);
 });
 
 test("each signature form fails, and the problem starts with the short sha", () => {
   const signatures = [
     "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>",
     "co-authored-by: Codex <codex@example.com>",
+    "Co-authored-by: Gemini <gemini@example.com>",
     "Co-authored-by: Copilot <1+Copilot@users.noreply.example.com>",
     "Claude-Session: https://example.com/session_1",
     "  claude-session: abc",
     "🤖 Generated with [Claude Code](https://example.com)",
     "generated with Copilot",
+    "Generated with ChatGPT",
   ];
   for (const signature of signatures) {
-    const problems = findProblems([commit({ message: `Fix the thing\n\n${signature}\r\n` })], SAME_REPO);
+    const problems = findProblems([commit({ message: `Fix the thing\n\n${signature}\r\n` })], OWNER);
     assert.equal(problems.length, 1, signature);
     assert.match(problems[0], /^0123456 remove the /, signature);
   }
@@ -45,49 +46,41 @@ test("prose that mentions an assistant passes", () => {
     'Docs: explain the "Generated with Claude" footer',
   ];
   for (const message of messages) {
-    assert.deepEqual(findProblems([commit({ message })], SAME_REPO), [], message);
+    assert.deepEqual(findProblems([commit({ message })], OWNER), [], message);
   }
 });
 
 test("a human co-author passes", () => {
   for (const name of ["A Human", "Claude Martin"]) {
     const message = `Fix the thing\n\nCo-authored-by: ${name} <human@example.com>`;
-    assert.deepEqual(findProblems([commit({ message })], SAME_REPO), [], name);
+    assert.deepEqual(findProblems([commit({ message })], OWNER), [], name);
   }
 });
 
-test("a fork's pull request is not checked: a contributor's name and signatures are their own", () => {
-  const stranger = { author: "stranger", committer: "stranger" };
-  assert.deepEqual(findProblems([commit(stranger)], FORK), []);
-  assert.deepEqual(findProblems([commit({ author: null, committer: null })], FORK), []);
-  const signed = commit({ ...stranger, message: "Fix\n\nCo-authored-by: Claude <noreply@anthropic.com>\nClaude-Session: s" });
-  assert.deepEqual(findProblems([signed], FORK), []);
-});
-
-test("another account fails in a same-repository pull request", () => {
-  const problems = findProblems([commit({ author: "stranger", committer: "stranger" })], SAME_REPO);
+test("another account fails", () => {
+  const problems = findProblems([commit({ author: "stranger", committer: "stranger" })], OWNER);
   assert.equal(problems.length, 2);
   assert.match(problems[0], /^0123456 is authored by another account, not the repository owner owner/);
   assert.match(problems[1], /^0123456 is committed by another account, not the repository owner owner/);
 });
 
-test("an author or committer GitHub does not recognise fails in a same-repository pull request", () => {
-  const problems = findProblems([commit({ author: null, committer: null })], SAME_REPO);
+test("an author or committer GitHub does not recognise fails", () => {
+  const problems = findProblems([commit({ author: null, committer: null })], OWNER);
   assert.equal(problems.length, 2);
   assert.match(problems[0], /authored by an account GitHub does not recognise/);
   assert.match(problems[1], /committed by an account GitHub does not recognise/);
 });
 
 test("web-flow may commit the owner's work but not author it", () => {
-  assert.deepEqual(findProblems([commit({ committer: "web-flow" })], SAME_REPO), []);
-  assert.equal(findProblems([commit({ author: "web-flow", committer: "web-flow" })], SAME_REPO).length, 1);
+  assert.deepEqual(findProblems([commit({ committer: "web-flow" })], OWNER), []);
+  assert.equal(findProblems([commit({ author: "web-flow", committer: "web-flow" })], OWNER).length, 1);
 });
 
 test("dependabot passes, with itself or web-flow as committer", () => {
   for (const committer of ["dependabot[bot]", "web-flow"]) {
-    assert.deepEqual(findProblems([commit({ author: "dependabot[bot]", committer })], SAME_REPO), []);
+    assert.deepEqual(findProblems([commit({ author: "dependabot[bot]", committer })], OWNER), []);
   }
-  assert.equal(findProblems([commit({ committer: "dependabot[bot]" })], SAME_REPO).length, 1);
+  assert.equal(findProblems([commit({ committer: "dependabot[bot]" })], OWNER).length, 1);
 });
 
 test("a problem never prints an e-mail address", () => {
@@ -95,7 +88,7 @@ test("a problem never prints an e-mail address", () => {
     commit({ message: "Fix\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: s\nGenerated with Codex" }),
     commit({ author: "stranger", committer: null }),
   ];
-  const problems = findProblems(commits, SAME_REPO);
+  const problems = findProblems(commits, OWNER);
   assert.equal(problems.length, 5);
   for (const problem of problems) assert.ok(!problem.includes("@"), problem);
 });
