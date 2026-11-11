@@ -4,9 +4,12 @@
 import { pathToFileURL } from "node:url";
 
 const SIGNATURES = [
-  [/^co-authored-by:.*(claude|anthropic|codex|openai|copilot|cursor)/i, "'Co-authored-by:' line that names a coding assistant"],
+  // An assistant signs with its vendor's address or with its bare product
+  // name; a person who happens to be called Claude does neither.
+  [/^co-authored-by:.*<[^>]*@([\w.-]+\.)?(anthropic|openai|cursor)\.com>/i, "'Co-authored-by:' line that names a coding assistant"],
+  [/^co-authored-by:\s*(claude( code)?|codex|(github )?copilot|cursor( agent)?)\s*</i, "'Co-authored-by:' line that names a coding assistant"],
   [/^claude-session:/i, "'Claude-Session:' line"],
-  [/generated with\s+\[?(claude|codex|cursor|copilot)\b/i, "'Generated with ...' line"],
+  [/^[^a-z]*generated with\s+\[?(claude|codex|cursor|copilot)\b/i, "'Generated with ...' line"],
 ];
 const OTHER = "another account";
 const UNKNOWN = "an account GitHub does not recognise";
@@ -21,8 +24,9 @@ export function findProblems(commits, { owner, sameRepo }) {
     const short = sha.slice(0, 7);
     const lines = commit.message.split("\n").map((line) => line.trim());
     for (const [pattern, what] of SIGNATURES) {
-      if (lines.some((line) => pattern.test(line))) {
-        problems.push(`${short} remove the ${what} from the commit message (${REWORD})`);
+      const problem = `${short} remove the ${what} from the commit message (${REWORD})`;
+      if (lines.some((line) => pattern.test(line)) && !problems.includes(problem)) {
+        problems.push(problem);
       }
     }
     if (!sameRepo) continue;
@@ -64,6 +68,11 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const items = await response.json();
     commits.push(...items);
     if (items.length < 100) break;
+  }
+  // The endpoint lists 250 commits at most; past that, some would go unread.
+  if (commits.length >= 250) {
+    console.error("This pull request has 250 commits or more, too many to check; split it.");
+    process.exit(1);
   }
 
   const problems = findProblems(commits, {

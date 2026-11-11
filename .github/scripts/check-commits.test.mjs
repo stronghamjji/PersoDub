@@ -22,8 +22,9 @@ test("a clean commit by the owner passes", () => {
 
 test("each signature form fails, and the problem starts with the short sha", () => {
   const signatures = [
-    "Co-Authored-By: Claude Fable 5.1 <x@y>",
-    "co-authored-by: Codex <codex@openai.example>",
+    "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>",
+    "co-authored-by: Codex <codex@example.com>",
+    "Co-authored-by: Copilot <1+Copilot@users.noreply.example.com>",
     "Claude-Session: https://example.com/session_1",
     "  claude-session: abc",
     "🤖 Generated with [Claude Code](https://example.com)",
@@ -41,6 +42,7 @@ test("prose that mentions an assistant passes", () => {
     "The Claude assistant is allowed every tool",
     "Docs: the page is generated with care; Cursor users see the same text",
     "Generated with cursory testing only",
+    'Docs: explain the "Generated with Claude" footer',
   ];
   for (const message of messages) {
     assert.deepEqual(findProblems([commit({ message })], SAME_REPO), [], message);
@@ -48,8 +50,10 @@ test("prose that mentions an assistant passes", () => {
 });
 
 test("a human co-author passes", () => {
-  const message = "Fix the thing\n\nCo-authored-by: A Human <human@example.com>";
-  assert.deepEqual(findProblems([commit({ message })], SAME_REPO), []);
+  for (const name of ["A Human", "Claude Martin"]) {
+    const message = `Fix the thing\n\nCo-authored-by: ${name} <human@example.com>`;
+    assert.deepEqual(findProblems([commit({ message })], SAME_REPO), [], name);
+  }
 });
 
 test("a fork's pull request skips the account rule but not the signature rule", () => {
@@ -89,7 +93,7 @@ test("dependabot passes, with itself or web-flow as committer", () => {
 
 test("a problem never prints an e-mail address", () => {
   const commits = [
-    commit({ message: "Fix\n\nCo-Authored-By: Claude Fable 5.1 <x@y>\nClaude-Session: s\nGenerated with Codex" }),
+    commit({ message: "Fix\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: s\nGenerated with Codex" }),
     commit({ author: "stranger", committer: null }),
   ];
   const problems = findProblems(commits, SAME_REPO);
