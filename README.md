@@ -45,7 +45,7 @@
 
 ### Dub
 
-One video in, one dubbed video out, in each speaker's own voice. 646 languages on your computer with OmniVoice (10 with Qwen3-TTS), 100+ with the Perso API, depending on the dubbing model.
+One video in, one dubbed video out, in each speaker's own voice. 646 languages on your computer with OmniVoice, 100+ with the Perso API, depending on the dubbing model.
 
 </td>
 <td width="50%" valign="top">
@@ -175,7 +175,7 @@ Finish the setup, not just a plan. Tell me any step you could not do.
 | | |
 |---|---|
 | **Requirements** | Apple Silicon Mac or 64-bit Windows · 16 GB memory recommended · 30 GB free disk, 40 GB on Windows with an NVIDIA GPU. [Full table](docs/requirements.md) |
-| **Languages** | On your computer, 646 with OmniVoice or 10 with Qwen3-TTS; 100+ with the Perso API, depending on the dubbing model. [Full list](docs/languages.md) |
+| **Languages** | 646 on your computer with OmniVoice; 100+ with the Perso API, depending on the dubbing model. [Full list](docs/languages.md) |
 | **Translation** | A local model, or ChatGPT for free. No subscription. [Configuration](docs/configuration.md) |
 | **Better quality** | A free Perso key: better transcription, less to download. [Configuration](docs/configuration.md) |
 | **Privacy** | By default the video is dubbed on this computer. With Whisper and a local translator, it stays here; the Perso API, if you choose it, uploads it. Which buttons are pressed is counted, never what you type; turn it off in Settings. [What is sent](docs/privacy.md) |

@@ -147,6 +147,13 @@ Not redistributed by this project -- each is downloaded from its own source on
 the user's machine during installation. Listed for attribution.
 
 Qwen3-TTS                 https://github.com/QwenLM/Qwen3-TTS
+OmniVoice (package)       https://github.com/k2-fsa/OmniVoice
+                          (k2-fsa, Apache 2.0; installed only when the user
+                          chooses it as the voice engine)
+OmniVoice (weights)       https://huggingface.co/k2-fsa/OmniVoice
+                          (under their own non-commercial licence: personal,
+                          non-commercial use only; downloaded only when the
+                          user chooses it)
 Demucs (package/weights)  https://github.com/adefossez/demucs
                           (ported code is redistributed -- see above)
 faster-whisper            https://github.com/SYSTRAN/faster-whisper

@@ -5,6 +5,7 @@ PersoDub stands on these open-source projects.
 | Project | Role |
 |---|---|
 | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) | Voice-cloning speech synthesis |
+| [OmniVoice](https://github.com/k2-fsa/OmniVoice) | Voice-cloning speech synthesis in 646 languages, in place of Qwen3-TTS once its model is downloaded. The model is for personal, non-commercial use only |
 | [Demucs](https://github.com/adefossez/demucs) | Source separation — splits speech from background audio |
 | [Mel-Band RoFormer](https://huggingface.co/KimberleyJSN/melbandroformer) (network after [BS-RoFormer](https://github.com/lucidrains/BS-RoFormer)) | Source separation in place of Demucs, once its model is downloaded |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | Speech recognition |
@@ -26,7 +27,7 @@ flowchart LR
     B --> C["Transcription<br/>(faster-whisper)"]
     C --> D["Speaker diarization<br/>(CAM++)"]
     D --> E["Translation<br/>(ChatGPT, or a local model via Ollama)"]
-    E --> F["Speech synthesis<br/>(Qwen3-TTS)"]
+    E --> F["Speech synthesis<br/>(Qwen3-TTS or OmniVoice)"]
     F --> G["Mix &amp; mux<br/>(FFmpeg)"]
     G --> H["Finished video<br/>(.mp4 + .srt)"]
     P --> H
