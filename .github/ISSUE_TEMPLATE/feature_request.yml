@@ -1,0 +1,17 @@
+name: Feature request
+description: Something PersoDub should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What should it do?
+      description: One thing per request. Say what you were trying to get done.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: What do you do today instead?
+    validations:
+      required: false
