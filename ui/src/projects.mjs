@@ -82,7 +82,7 @@ export function projectMeta(job, langName) {
   if (isSeparate(job)) return SEPARATE_META[job.status] || t("Separating the audio");
   // A video with the user's own subtitles (a Burn in subtitles project).
   if (job.kind === "captions") return t("Burn in subtitles");
-  const langs = `${langName(job.source_lang) || t("Auto")} → ${langName(job.language_code) || t("Script")}`;
+  const langs = `${langName(job.source_lang) || t("Auto")} → ${langName(job.language_code, job.language) || t("Script")}`;
   const length = job.trim ? fmtLength(job.trim.end - job.trim.start) : "";
   return [langs, length].filter(Boolean).join(" · ");
 }

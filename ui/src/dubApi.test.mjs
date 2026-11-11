@@ -19,6 +19,7 @@ import {
   startedLabel,
   startErase,
   fetchCreditsLeft,
+  fetchLanguages,
 } from "./dubApi.mjs";
 
 test("buildDubFormData sends exactly the fields app/main.py:dub_start expects", () => {
@@ -275,6 +276,24 @@ test("LANGUAGES lists the 10 Qwen3-TTS languages, English and Korean first", () 
   // From the model's own config.json codec_language_id table.
   const codes = LANGUAGES.map((l) => l.code).sort();
   assert.deepEqual(codes, ["de", "en", "es", "fr", "it", "ja", "ko", "pt", "ru", "zh"]);
+});
+
+// GET /api/languages: the local ten, Perso's list and OmniVoice's own.
+test("fetchLanguages hands over OmniVoice's list, and the ten wherever the app has none", async (t) => {
+  const realFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = realFetch; });
+  const ten = LANGUAGES.map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null }));
+  const arb = { id: "arb", code: "arb", name: "Standard Arabic", tag: null };
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ local: ten, perso: ten, omnivoice: [...ten, arb] }) });
+  assert.deepEqual((await fetchLanguages()).omnivoice.at(-1), arb);
+  // An app from before the list existed answers without it.
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ local: ten, perso: ten }) });
+  assert.deepEqual((await fetchLanguages()).omnivoice, ten);
+  globalThis.fetch = async () => ({ ok: false, status: 500 });
+  assert.deepEqual((await fetchLanguages()).omnivoice, ten);
+  globalThis.fetch = async () => { throw new TypeError("Failed to fetch"); };
+  assert.deepEqual(await fetchLanguages(), { local: ten, perso: ten, omnivoice: ten });
 });
 
 test("buildDubFormData accepts a source/target pair and sends the whisper hint", () => {

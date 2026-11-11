@@ -77,14 +77,33 @@ _SYL_PER_SEC = {
 }
 
 _VOWEL_GROUP = re.compile(r"[aeiouyAEIOUY]+")
+_HAN_OR_KANA = re.compile("[\u3040-\u30ff\u4e00-\u9fff]")
+# Cyrillic and Greek write every vowel, and one vowel is one syllable.
+_CYRILLIC_OR_GREEK_VOWEL = re.compile("[аеёиоуыэюяіїєўАЕЁИОУЫЭЮЯІЇЄЎαεηιουωάέήίόύώϊϋΐΰΑΕΗΙΟΥΩΆΈΉΊΌΎΏ]")
 
 
 def _count_syllables(text: str, lang: str) -> int:
     """Rough syllable count. For Hangul/Kanji/Kana one character ~ one syllable; for Latin scripts one vowel group ~ one syllable."""
     lang = lang.lower()
-    if lang in ("ko", "korean", "ja", "japanese", "zh", "chinese"):
+    # A language with no pace of its own in the table above (OmniVoice speaks
+    # 646) is counted by its letters when it is written in Han characters or
+    # kana: Cantonese has no spaces and no Latin vowels, so the count below
+    # made a whole line one syllable.
+    if lang in ("ko", "korean", "ja", "japanese", "zh", "chinese") or (
+            lang not in _SYL_PER_SEC and _HAN_OR_KANA.search(text)):
         # exclude punctuation/whitespace; one character ~ one syllable (digits also count as one syllable)
         return sum(1 for ch in text if ch.isalnum())
+    if lang not in _SYL_PER_SEC and not _VOWEL_GROUP.search(text):
+        # No Latin vowel to count in a language with no pace of its own
+        # (Ukrainian, Greek, Arabic, Hindi, Thai): the count below made every
+        # word one syllable, so a line looked short and was asked for longer.
+        # Cyrillic and Greek are counted by their vowels. Any other script is
+        # an estimate, not a measurement: two letters to a syllable, which is
+        # near enough for scripts that leave vowels out or write them as marks.
+        vowels = len(_CYRILLIC_OR_GREEK_VOWEL.findall(text))
+        letters = sum(1 for ch in text if ch.isalpha())
+        digits = sum(ch.isdigit() for ch in text)
+        return max(vowels or letters // 2, len(text.split())) + digits
     n = 0
     for word in text.split():
         syl = len(_VOWEL_GROUP.findall(word)) + sum(ch.isdigit() for ch in word)

@@ -1,6 +1,9 @@
 """The languages a dub can be made in, per path.
 
-Local dubbing knows the ten Qwen3-TTS speaks (config.LANGUAGE_NAMES). Perso's
+Local dubbing knows what its voice engine speaks: the ten Qwen3-TTS does
+(config.LANGUAGE_NAMES), or the 646 OmniVoice does (app/omnivoice_languages.json,
+taken from the omnivoice package's own table, under OmniVoice's own codes:
+"arb" is Standard Arabic, "yue" Cantonese). Perso's
 cloud dubbing knows what Perso says it knows: 116 entries (106 languages) on
 2026-10-19, some of them regional variants told apart by a tag (en-GB, es-ES, pt-PT).
 The screen sends one id per language -- the tag when there is one, else the
@@ -13,25 +16,45 @@ when the API cannot be reached (no key, offline) the last answer is used,
 and before any answer the copy shipped with the app (app/perso_languages.json,
 taken from the same endpoint).
 """
+import functools
 import json
 import os
 import re
 import time
 from typing import Optional
 
-from app import config
+from app import config, setup
 from app.i18n import t
 from app.perso_client import DEFAULT_TTS_MODEL, FALLBACK_TTS_MODEL, TTS_MODEL_RE, TTS_MODELS, model_label
 
 BUNDLED = os.path.join(os.path.dirname(__file__), "perso_languages.json")
+OMNIVOICE = os.path.join(os.path.dirname(__file__), "omnivoice_languages.json")
 CACHE_NAME = "perso_languages.json"
 MAX_AGE = 24 * 3600
 _CODE = re.compile(r"^[A-Za-z]{2,8}([-_][A-Za-z0-9]{2,8})?$")
 
 
-def local_languages() -> list:
-    """[{id, code, name, tag}] for the local path: the model's ten, in the
-    product's order (English, Korean, then the rest as configured)."""
+@functools.lru_cache(maxsize=1)
+def omnivoice_table() -> tuple:
+    """OmniVoice's languages as shipped: ({code, name, whisper?}, ...), the
+    ten first. Read once; the file only changes with the app."""
+    with open(OMNIVOICE, encoding="utf-8") as f:
+        return tuple(json.load(f)["languages"])
+
+
+def voice_engine(voice: Optional[str] = None) -> str:
+    """The voice engine a local dub is made with: the one named, or the app's
+    default (app/setup.py) when none is, or one this edition does not offer."""
+    voice = (voice or "").strip().lower()
+    return voice if voice in setup.STAGES["voice"][1] else setup.default_for("voice")
+
+
+def local_languages(voice: Optional[str] = None) -> list:
+    """[{id, code, name, tag}] for the local path, by voice engine: Qwen3-TTS's
+    ten, in the product's order (English, Korean, then the rest as
+    configured), or OmniVoice's 646 (the same ten first, then by name)."""
+    if voice_engine(voice) == "omnivoice":
+        return [{"id": e["code"], "code": e["code"], "name": e["name"], "tag": None} for e in omnivoice_table()]
     return [{"id": c, "code": c, "name": n, "tag": None} for c, n in config.LANGUAGE_NAMES.items()]
 
 
@@ -108,13 +131,14 @@ def perso_languages(refresh: bool = True) -> list:
     return _read(path) or _read(BUNDLED) or []
 
 
-def languages_for(dub_mode: str) -> list:
-    return perso_languages() if dub_mode == "perso" else local_languages()
+def languages_for(dub_mode: str, voice: Optional[str] = None) -> list:
+    return perso_languages() if dub_mode == "perso" else local_languages(voice)
 
 
-def lookup(dub_mode: str, lang_id: str) -> Optional[dict]:
-    """The entry an id names on this path, or None. Local ids may carry a
-    region the model ignores ("pt-BR" is still Portuguese)."""
+def lookup(dub_mode: str, lang_id: str, voice: Optional[str] = None) -> Optional[dict]:
+    """The entry an id names on this path, or None. Local ids are judged by
+    the dub's voice engine (`voice`; empty is the app's default) and may carry
+    a region the model ignores ("pt-BR" is still Portuguese)."""
     lang_id = (lang_id or "").strip()
     if not _CODE.match(lang_id):
         return None
@@ -125,7 +149,7 @@ def lookup(dub_mode: str, lang_id: str) -> Optional[dict]:
                 return e
         return None
     base = re.split(r"[-_]", lang_id)[0].lower()
-    for e in local_languages():
+    for e in local_languages(voice):
         if e["code"] == base:
             return {**e, "id": lang_id}
     return None

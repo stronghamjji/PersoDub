@@ -2,7 +2,7 @@
 // saved defaults, so the tests hand it a paper-thin page: elements that are
 // plain objects, a document that makes more of them, and a fetch that answers
 // from a script. What is asserted is what the user would see (the dialog open,
-// the flags in the target dropdown, the trim readout) and what a dub would be
+// the names in the target dropdown, the trim readout) and what a dub would be
 // started with (readOptions' object, field for field).
 //
 // Run with: node --test ui/src/newProject.test.mjs
@@ -163,14 +163,14 @@ function fillAdvanced($) {
 
 // -- the two dropdowns the dialog fills for itself -------------------------
 
-test("the language dropdowns are filled from LANGUAGES, flags on the target only", (t) => {
+test("the language dropdowns are filled from LANGUAGES, names without flags", (t) => {
   const h = harness();
   t.after(h.log.restore);
 
   assert.equal(h.$("sourceLangSelect").children.length, 10);
   assert.equal(h.$("targetLangSelect").children.length, 10);
   assert.equal(h.$("sourceLangSelect").children[0].textContent, "English");
-  assert.equal(h.$("targetLangSelect").children[0].textContent, "🇺🇸 English");
+  assert.equal(h.$("targetLangSelect").children[0].textContent, "English");
   // English is the target's default; the source keeps its markup's Auto-detect.
   assert.equal(h.$("targetLangSelect").children[0].selected, true);
   assert.ok(!h.$("sourceLangSelect").children.some((o) => o.selected));
@@ -1245,7 +1245,7 @@ test("the Target language opens as a list with a search: 스페 leaves the two S
   await inKorean(t);
   const h = await bundledPerso();
   t.after(h.log.restore);
-  assert.equal(langBox(h).children[0].children[0].textContent, "🇺🇸 영어(미국)", "the button names the language");
+  assert.equal(langBox(h).children[0].children[0].textContent, "영어(미국)", "the button names the language");
   const { opts, field, count } = await openLanguages(h);
   assert.equal(opts.children.length, 83, "Linnet 4's 80 and the three only Oriole has");
   assert.equal(opts.children[0].attrs["aria-selected"], "true", "the chosen one is marked");
@@ -1253,7 +1253,7 @@ test("the Target language opens as a list with a search: 스페 leaves the two S
   assert.equal(field.placeholder, "언어 검색");
   field.value = "스페";
   await field.fire("input");
-  assert.deepEqual(rowNames(opts), ["🇲🇽 스페인어(멕시코)", "🇪🇸 스페인어(스페인)"]);
+  assert.deepEqual(rowNames(opts), ["스페인어(멕시코)", "스페인어(스페인)"]);
   assert.equal(count.hidden, false);
   assert.equal(count.textContent, "83개 중 2개");
   field.value = "";
@@ -1269,12 +1269,12 @@ test("the search also finds a language by its English name and its code, so eng 
   field.value = "eng";
   await field.fire("input");
   // Bengali too: its English name has "eng" in it.
-  assert.deepEqual(rowNames(opts), ["🇺🇸 영어(미국)", "🇧🇩 벵골어", "🇬🇧 영어(영국)"]);
+  assert.deepEqual(rowNames(opts), ["영어(미국)", "벵골어", "영어(영국)"]);
   assert.equal(count.textContent, "83개 중 3개");
   // "zh" is in no name: Chinese is found by its code.
   field.value = "ZH";
   await field.fire("input");
-  assert.deepEqual(rowNames(opts), ["🇨🇳 중국어"]);
+  assert.deepEqual(rowNames(opts), ["중국어"]);
 });
 
 test("a language chosen in the list is the hidden dropdown's, so it is what is started with and remembered", async (t) => {
@@ -1283,11 +1283,11 @@ test("a language chosen in the list is the hidden dropdown's, so it is what is s
   const { opts, field } = await openLanguages(h);
   field.value = "spanish";
   await field.fire("input");
-  assert.deepEqual(rowNames(opts), ["🇲🇽 Spanish (Mexico)", "🇪🇸 Spanish (Spain)"]);
+  assert.deepEqual(rowNames(opts), ["Spanish (Mexico)", "Spanish (Spain)"]);
   await opts.children[1].fire("click");
   assert.equal(h.$("targetLangSelect").value, "es-ES");
   assert.equal(langBox(h).children.length, 1, "choosing closes the list");
-  assert.equal(langBox(h).children[0].children[0].textContent, "🇪🇸 Spanish (Spain)");
+  assert.equal(langBox(h).children[0].children[0].textContent, "Spanish (Spain)");
   assert.equal(h.api.readOptions().targetLang, "es-ES");
   h.log.restore();
 
@@ -1295,7 +1295,7 @@ test("a language chosen in the list is the hidden dropdown's, so it is what is s
   const h2 = await bundledPerso(store);
   t.after(h2.log.restore);
   assert.equal(h2.$("targetLangSelect").value, "es-ES");
-  assert.equal(langBox(h2).children[0].children[0].textContent, "🇪🇸 Spanish (Spain)");
+  assert.equal(langBox(h2).children[0].children[0].textContent, "Spanish (Spain)");
 });
 
 test("Enter in the search takes the first language left, and Escape closes the list", async (t) => {
@@ -1341,33 +1341,46 @@ test("a dubbing nobody chose a model for is Linnet 4, Oriole where the language 
   assert.equal(targets(h2).length, 77);
 });
 
-// The four languages that are shown by name alone, no country's flag.
-const NO_FLAG = ["bo", "ug", "yue", "zh-TW"];
+// A country flag is a pair of regional-indicator letters.
+const FLAG = /\p{Regional_Indicator}/u;
 
-test("every Perso language gets a flag, regional variants their own country", async (t) => {
-  // The bundled list is the one the app ships (app/perso_languages.json).
+test("no language in any of the three lists carries a flag, regional variants keep their own names", async (t) => {
+  // The bundled lists are the ones the app ships (app/perso_languages.json,
+  // app/omnivoice_languages.json).
   const { readFileSync } = await import("node:fs");
   const perso = JSON.parse(readFileSync(new URL("../../app/perso_languages.json", import.meta.url), "utf8")).languages
     .map((l) => ({ id: l.tag || l.code, code: l.code, name: l.name, tag: l.tag }));
-  const h = harness({ responses: { "/api/languages": { ok: true, json: async () => ({ local: [], perso }) } } });
+  const omnivoice = JSON.parse(readFileSync(new URL("../../app/omnivoice_languages.json", import.meta.url), "utf8")).languages
+    .map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null }));
+  const h = harness({ responses: { "/api/languages": { ok: true, json: async () => ({ local: [], perso, omnivoice }) } } });
   t.after(h.log.restore);
+  const voice = makeEl("option");
+  voice.value = "omnivoice";
+  h.$("voiceSelect").appendChild(voice);
   await new Promise((r) => setTimeout(r, 0));
   h.$("dubModeSelect").value = "perso";
   await h.$("dubModeSelect").fire("change");
   const opts = h.$("targetLangSelect").options;
   assert.equal(opts.length, perso.length);
-  const bare = opts.filter((o) => !/^\p{Extended_Pictographic}|^\p{Regional_Indicator}/u.test(o.textContent));
-  assert.deepEqual(bare.map((o) => o.value).sort(), [...NO_FLAG].sort(), "every option but the four starts with a flag");
+  assert.deepEqual(opts.filter((o) => FLAG.test(o.textContent)).map((o) => o.value), [], "no Perso option has a flag");
   const byId = Object.fromEntries(opts.map((o) => [o.value, o.textContent]));
-  assert.ok(byId["en-GB"].startsWith("🇬🇧") && byId["en"].startsWith("🇺🇸"), "UK and US English differ");
-  assert.ok(byId["pt"].startsWith("🇧🇷") && byId["pt-PT"].startsWith("🇵🇹"));
-  assert.ok(byId["es"].startsWith("🇲🇽") && byId["es-ES"].startsWith("🇪🇸"));
-  // Back on the local list, plain Portuguese and Spanish keep their own flags.
+  assert.notEqual(byId["en-GB"], byId["en"], "UK and US English differ");
+  assert.notEqual(byId["pt"], byId["pt-PT"]);
+  assert.notEqual(byId["es"], byId["es-ES"]);
+  // Back on the local list, plain Portuguese and Spanish are just their names.
   h.$("dubModeSelect").value = "local";
   await h.$("dubModeSelect").fire("change");
-  const localById = Object.fromEntries(h.$("targetLangSelect").options.map((o) => [o.value, o.textContent]));
-  assert.equal(localById["pt"], "🇵🇹 Portuguese");
-  assert.equal(localById["es"], "🇪🇸 Spanish");
+  const local = h.$("targetLangSelect").options;
+  assert.deepEqual(local.filter((o) => FLAG.test(o.textContent)).map((o) => o.value), [], "no local option has a flag");
+  const localById = Object.fromEntries(local.map((o) => [o.value, o.textContent]));
+  assert.equal(localById["pt"], "Portuguese");
+  assert.equal(localById["es"], "Spanish");
+  // And OmniVoice's own list, where most languages could never have had one.
+  h.$("voiceSelect").value = "omnivoice";
+  await h.$("voiceSelect").fire("change");
+  const omni = h.$("targetLangSelect").options;
+  assert.equal(omni.length, omnivoice.length);
+  assert.deepEqual(omni.filter((o) => FLAG.test(o.textContent)).map((o) => o.value), [], "no OmniVoice option has a flag");
 });
 
 // The dialog's bottom line (mockup 2026-09-29): "Duration: 00:10", and what
@@ -1416,4 +1429,84 @@ test("the options block goes home to the box that scrolls, in order, and out to 
   const slot = h.$("draftOptionsSlot");
   h.api.moveOptionsInto(slot);
   assert.deepEqual(slot.children.map((e) => e.id), ["langGrid", "engineWarning", "stageHead", "advancedBody"]);
+});
+
+// -- OmniVoice's languages ----------------------------------------------------
+// A local dubbing with OmniVoice as its voice engine offers that engine's own
+// languages (app/omnivoice_languages.json), not the ten.
+
+const TEN = LANGUAGES.map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null }));
+const OMNI = JSON.parse(readFileSync(new URL("../../app/omnivoice_languages.json", import.meta.url), "utf8")).languages
+  .map((l) => ({ id: l.code, code: l.code, name: l.name, tag: null }));
+async function omniHarness() {
+  const h = harness({ responses: { "/api/languages": ok({ local: TEN, perso: PERSO_LANGS, omnivoice: OMNI }), ...setupWith() } });
+  fillAdvanced(h.$);
+  const o = makeEl("option");
+  o.value = "omnivoice";
+  h.$("voiceSelect").appendChild(o);
+  await tick();
+  return h;
+}
+
+test("the target list is the voice engine's: the ten with Qwen3-TTS, OmniVoice's 646 with OmniVoice", async (t) => {
+  const h = await omniHarness();
+  t.after(h.log.restore);
+  assert.deepEqual(targets(h), TEN.map((l) => l.id));
+
+  await choose(h, "voiceSelect", "omnivoice");
+  assert.equal(targets(h).length, 646);
+  assert.deepEqual(targets(h).slice(0, 10).sort(), TEN.map((l) => l.id).sort(), "the ten come first");
+  assert.equal(h.$("targetLangSelect").children[0].textContent, "English", "and look as they always did");
+  assert.equal(h.api.readOptions().languages.length, 646, "what Start resolves the language against");
+  assert.equal(h.$("sourceLangSelect").children.length, 10, "the original language is the speech-to-text engine's");
+
+  // Perso dubs with its own voices, whatever the voice engine row says.
+  await choose(h, "dubModeSelect", "perso");
+  assert.deepEqual(targets(h), ["en", "en-GB"]);
+  await choose(h, "dubModeSelect", "local");
+  await choose(h, "voiceSelect", "qwen3");
+  assert.deepEqual(targets(h), TEN.map((l) => l.id));
+});
+
+test("a voice engine change keeps the target the new list has, and falls back to English otherwise", async (t) => {
+  const h = await omniHarness();
+  t.after(h.log.restore);
+  await choose(h, "voiceSelect", "omnivoice");
+  await choose(h, "targetLangSelect", "arb");
+  const o = h.api.readOptions();
+  assert.deepEqual([o.targetLang, o.ttsEngine, o.languages.find((l) => l.id === "arb").name],
+                   ["arb", "omnivoice", "Standard Arabic"]);
+  assert.equal(langBox(h).children[0].children[0].textContent, "Standard Arabic", "the button names it");
+
+  await choose(h, "voiceSelect", "qwen3");
+  assert.equal(h.$("targetLangSelect").value, "en", "Qwen3-TTS has no Standard Arabic");
+  assert.equal(langBox(h).children[0].children[0].textContent, "English");
+
+  await choose(h, "targetLangSelect", "ko");
+  await choose(h, "voiceSelect", "omnivoice");
+  assert.equal(h.$("targetLangSelect").value, "ko", "both have Korean");
+});
+
+test("a dubbing made with OmniVoice (Add language) opens on OmniVoice's languages", async (t) => {
+  const h = await omniHarness();
+  t.after(h.log.restore);
+  await h.api.startOnDefaults({ dubMode: "local", voice: "omnivoice", source: "", speakers: "" });
+  assert.equal(h.$("voiceSelect").value, "omnivoice");
+  assert.equal(targets(h).length, 646);
+  await h.api.startOnDefaults({ dubMode: "local", voice: "qwen3", source: "", speakers: "" });
+  assert.equal(targets(h).length, 10);
+});
+
+test("in Korean no two of OmniVoice's languages share a name, and a search finds one by its English name", async (t) => {
+  await inKorean(t);
+  const h = await omniHarness();
+  t.after(h.log.restore);
+  await choose(h, "voiceSelect", "omnivoice");
+  const { opts, field, count } = await openLanguages(h);
+  assert.equal(new Set(rowNames(opts)).size, 646);
+  field.value = "standard arabic";
+  await field.fire("input");
+  assert.equal(opts.children.length, 1);
+  assert.equal(opts.children[0].dataset.lang, "arb");
+  assert.equal(count.textContent, "646개 중 1개");
 });

@@ -12,6 +12,8 @@ import json
 import re
 from typing import List, Optional
 
+from app.config import LANGUAGE_NAMES
+
 
 # --- Dubbing translation prompt/parsing (shared across engines, testable without network) ---
 def build_dub_prompt(
@@ -86,6 +88,9 @@ def parse_json_array(raw: str, n: int) -> List[str]:
     return out
 
 
+# The ten languages script_ok knows the script of, as the app names a target:
+# by code or by name, lowercased.
+_SCRIPT_KNOWN = set(LANGUAGE_NAMES) | {name.lower() for name in LANGUAGE_NAMES.values()}
 _NON_LATIN = re.compile(r"[가-힣ぁ-んァ-ヶ一-鿕]")
 _HANGUL_CHAR = re.compile(r"[가-힣]")
 _LATIN_CHAR = re.compile(r"[a-zA-ZÀ-ɏ]")  # includes extended Latin (đ, é, etc.)
@@ -107,8 +112,14 @@ def register_rule(target_lang: str) -> str:
 
 
 def script_ok(text: str, lang: str) -> bool:
-    """Quick check that the translation is in the target language's script (prevents wrong-language output)."""
+    """Quick check that the translation is in the target language's script (prevents wrong-language output).
+
+    Only for the ten languages whose script is written down here. Any other
+    passes: OmniVoice speaks 646, and "not Korean, Japanese or Chinese, so
+    Latin letters" refused every line of Cantonese, Wu or Hakka."""
     lang = lang.lower()
+    if lang not in _SCRIPT_KNOWN:
+        return True
     if lang in ("ko", "korean"):
         # Dubbing lines must be pure Hangul for the TTS to read — mixed-in Latin letters are invalid
         # (blocks real cases like "덴 đâu?", "dent 자리에")

@@ -705,7 +705,11 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     """Put ONE video into PersoDub's dubbing queue.
 
     target_language (and optional source_language, else auto-detected) are
-    codes: en ko zh fr de it ja pt ru es. dub_mode is the user's choice:
+    codes: en ko zh fr de it ja pt ru es. A local dub spoken by the omnivoice
+    voice (below) takes any of OmniVoice's 646 language codes as its target
+    instead, such as yue (Cantonese), hi (Hindi) or arb (Standard Arabic): a
+    refusal names the codes whose language matches what was given. A perso
+    dub takes Perso's own codes. dub_mode is the user's choice:
     "local" (free, dubbed on this machine, one at a time in the queue) or
     "perso" (paid -- Perso's cloud, about 1 credit per SECOND of video,
     starts at once without waiting in the local line).
@@ -753,20 +757,20 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     Returns {"job_id", "status"}; the home screen's Up next card shows the
     queue, and get_job_status follows one job.
     """
-    code = _check_dub_choices(target_language, dub_mode, translator, stt, separation, voice,
-                              perso_model)
+    code, speaks = _check_dub_choices(target_language, dub_mode, translator, stt, separation, voice,
+                                      perso_model)
     path = os.path.expanduser(video_path)
     cloud_stages, spends = _paid_choices(dub_mode, stt, separation, translator)
     plan = "%s|%s|%s|%s%s" % (os.path.basename(path), code, dub_mode, ",".join(cloud_stages),
                               "|quota" if spends else "")
     if not confirm:
-        return _ask("queue_dub", _dub_question(video_path, path, code, dub_mode, cloud_stages, spends),
+        return _ask("queue_dub", _dub_question(video_path, path, code, dub_mode, cloud_stages, spends, speaks),
                     plan=plan)
     _answered("queue_dub", plan, paid=dub_mode == "perso" or bool(cloud_stages) or bool(spends))
     if not os.path.isfile(path):
         raise Refusal("No such video: %s" % video_path)
     fields = _dub_start_fields(code, dub_mode, source_language, num_speakers, translator, stt,
-                               separation, voice, perso_model)
+                               separation, voice, perso_model, speaks)
     with open(path, "rb") as f:
         r = _api_post("/api/dub/start", data=fields,
                       files={"video": (os.path.basename(path), f, "video/mp4")},
@@ -778,13 +782,19 @@ def queue_dub(video_path: str, target_language: str, dub_mode: str = "local",
     return r.json()
 
 
+# The longest list of language codes a refusal spells out: Perso's own list
+# (116 entries on 2026-10-19) fits, OmniVoice's 646 do not.
+_MOST_CODES_LISTED = 150
+
+
 def _check_dub_choices(target_language, dub_mode, translator, stt, separation, voice,
-                       perso_model) -> str:
+                       perso_model) -> tuple:
     """queue_dub's choices, checked before anything is asked or started: each
     engine against the choices its stage offers (app/setup.py STAGES, the
     table set_default and the Settings screen read too; "" keeps the app's
-    default), then the language against the chosen path's list. Returns the
-    language's code."""
+    default), then the language against the chosen path's list (a local
+    dub's is its voice engine's). Returns the language's code and the voice
+    engine its name is read from."""
     if dub_mode not in STAGES["dub_mode"][1]:
         raise Refusal('dub_mode must be "local" or "perso"')
     if translator not in ("", *STAGES["translator"][1]):
@@ -795,15 +805,29 @@ def _check_dub_choices(target_language, dub_mode, translator, stt, separation, v
     if voice not in ("", *STAGES["voice"][1]):
         raise Refusal('voice must be %s or empty' % ", ".join('"%s"' % c for c in STAGES["voice"][1]))
     code = (target_language or "").strip()
-    if languages.lookup(dub_mode, code) is None:
-        known = [e["id"] for e in languages.languages_for(dub_mode)]
-        raise Refusal("target_language must be one of: %s" % " ".join(sorted(known)))
+    if dub_mode == "local" and not voice and languages.lookup("local", code, "qwen3") is None:
+        # No voice named and not one of the ten every voice speaks: whether it
+        # can be spoken is up to the app's saved voice, asked of the app as
+        # _paid_choices asks. This process is started by the agent's CLI and
+        # need not see the kit's settings.
+        voice = _api_get("/api/setup", timeout=10.0).json().get("defaults", {}).get("voice") or ""
+    if languages.lookup(dub_mode, code, voice) is None:
+        known = languages.languages_for(dub_mode, voice)
+        if len(known) <= _MOST_CODES_LISTED:
+            raise Refusal("target_language must be one of: %s" % " ".join(sorted(e["id"] for e in known)))
+        # OmniVoice's 646 codes are not a sentence anyone reads. The ones whose
+        # language is named like what was given are what an agent holding
+        # "Cantonese" and not "yue" needs.
+        like = ["%s (%s)" % (e["id"], e["name"]) for e in known if code.lower() in e["name"].lower()]
+        hint = ". Named like %s: %s" % (code, ", ".join(like[:10])) if code and like else ""
+        raise Refusal("target_language must be one of the %d language codes this voice speaks, "
+                      "such as en, ko, hi, yue or arb%s" % (len(known), hint))
     if dub_mode == "perso":
         try:
             languages.model_for(languages.lookup(dub_mode, code), perso_model)
         except ValueError as e:
             raise Refusal(str(e))
-    return code
+    return code, voice
 
 
 def _paid_choices(dub_mode, stt, separation, translator):
@@ -829,7 +853,7 @@ def _paid_choices(dub_mode, stt, separation, translator):
             info.spends if info else "")
 
 
-def _dub_question(video_path, path, code, dub_mode, cloud_stages, spends="") -> dict:
+def _dub_question(video_path, path, code, dub_mode, cloud_stages, spends="", voice="") -> dict:
     """The plan queue_dub puts to the user before anything starts: the file,
     the language, the video's length and what the dub will spend."""
     # The estimate route already measures the video and, for perso, the
@@ -867,18 +891,20 @@ def _dub_question(video_path, path, code, dub_mode, cloud_stages, spends="") -> 
     # The plan says which file and which language: "Proceed?" alone let
     # "2 dubbing, 1 erase" start without the user seeing which was which.
     message = "%s into %s. %s Proceed?" % (os.path.basename(path),
-                                           languages.lookup(dub_mode, code)["name"], message)
+                                           languages.lookup(dub_mode, code, voice)["name"], message)
     return {"needs_confirmation": True, "message": message, "seconds": seconds}
 
 
 def _dub_start_fields(code, dub_mode, source_language, num_speakers, translator, stt, separation,
-                      voice, perso_model) -> dict:
+                      voice, perso_model, speaks="") -> dict:
     """The form queue_dub posts to POST /api/dub/start, in dub_start's own
-    field names (tests/test_mcp_dub_contract.py holds the two sides together)."""
+    field names (tests/test_mcp_dub_contract.py holds the two sides together).
+    `voice` is the engine named for this dub and is posted; `speaks` is the
+    one the language's name is read from (the app's default when none was named)."""
     # Always said, local included: the server's own default is Perso in the
     # production edition (app/setup.py), and a local dub that left it unsaid went to
     # Perso and spent credits the agent had promised were not needed (Windows F10, 2026-10-07).
-    fields = {"language": languages.lookup(dub_mode, code)["name"], "language_code": code,
+    fields = {"language": languages.lookup(dub_mode, code, speaks)["name"], "language_code": code,
               "dub_mode": dub_mode}
     if dub_mode == "perso" and perso_model:
         fields["perso_model"] = perso_model.upper()

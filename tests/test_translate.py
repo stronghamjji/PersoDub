@@ -147,6 +147,19 @@ def test_translate_falls_back_to_per_line(monkeypatch):
     assert len(calls) == 5  # 3 batch failures + 2 single-line
 
 
+def test_script_ok_passes_a_language_whose_script_it_does_not_know():
+    # OmniVoice speaks 646 languages. "Not Korean, Japanese or Chinese, so
+    # Latin letters" would refuse every Cantonese line for its Han characters.
+    from app.text.dub_prompt import script_ok
+    assert script_ok("你喺邊度呀？", "Cantonese")
+    assert script_ok("你喺邊度呀？", "yue")
+    assert script_ok("आप कहाँ हैं?", "Hindi")
+    assert script_ok("Where is Dent?", "Min Nan Chinese")
+    # The ten keep their rules, by name or by code.
+    assert not script_ok("你喺邊度呀？", "French") and not script_ok("你喺邊度呀？", "fr")
+    assert not script_ok("Where is Dent?", "zh") and not script_ok("Where is Dent?", "Japanese")
+
+
 def test_script_ok_korean_rejects_mixed_latin():
     from app.text.dub_prompt import script_ok
     assert not script_ok("덴 đâu?", "Korean")        # Hangul + Vietnamese (real case)

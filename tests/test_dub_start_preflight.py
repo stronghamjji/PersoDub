@@ -312,6 +312,25 @@ def test_an_engine_pack_whose_process_is_not_running_is_told_plainly(monkeypatch
     assert r.status_code == 422 and "voice engine is not running" in r.json()["detail"]
 
 
+def test_a_language_only_omnivoice_speaks_starts_with_omnivoice_and_not_with_qwen(monkeypatch, _kit):
+    # Cantonese is one of OmniVoice's 646 and not one of Qwen3-TTS's ten.
+    _put_whisper(_kit)
+    _put_tts(_kit)
+    _put_omnivoice_model(_kit)
+    _mk(_kit, ".install", "venv-omnivoice.ok")
+    _runtime(_kit, tts_url="http://127.0.0.1:1", omnivoice_url="http://127.0.0.1:2")
+    monkeypatch.setattr(dub_api, "run_dub", _fake_run_dub)
+    cantonese = {"language": "Cantonese", "language_code": "yue"}
+    assert _start({**cantonese, "tts_engine": "omnivoice"}).status_code == 200
+    r = _start({**cantonese, "tts_engine": "qwen3"})
+    assert r.status_code == 422 and "language_code" in r.json()["detail"]
+    # No engine named: the saved voice decides.
+    assert _start(cantonese).status_code == 422
+    monkeypatch.setattr(dub_api.dub_setup, "default_for",
+                        lambda stage, _real=dub_api.dub_setup.default_for: "omnivoice" if stage == "voice" else _real(stage))
+    assert _start(cantonese).status_code == 200
+
+
 def _put_omnivoice_model(kit):
     _mk(kit, "models", "omnivoice", "model.safetensors")
     _mk(kit, "models", "omnivoice", "audio_tokenizer", "model.safetensors")

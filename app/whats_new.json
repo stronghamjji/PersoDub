@@ -1,23 +1,13 @@
 {
-  "version": "1.0.5",
+  "version": "1.1.0",
   "notes": [
-    "Keyboard shortcuts that close, reload, zoom or open the developer tools of the window no longer do anything, and Back can no longer land on the loading screen.",
-    "Local dubbing no longer restarts the voice engine for every line.",
-    "An agent sign-in can be cancelled."
+    "A second voice engine for local dubbing: pick OmniVoice under Text-to-speech. It is an optional download, and Qwen3-TTS stays the default.",
+    "With OmniVoice, a video can be dubbed on your computer into 646 languages, up from 10.",
+    "The OmniVoice model is licensed for personal, non-commercial use only."
   ],
   "notes_ko": [
-    "창을 닫거나 새로고침하거나 확대하거나 개발자 도구를 여는 단축키가 더는 안 먹어요. 뒤로 가기로 로딩 화면에 갇히는 일도 없어요.",
-    "로컬 더빙에서 목소리 엔진을 줄마다 다시 켜지 않아요.",
-    "에이전트 로그인을 취소할 수 있어요."
-  ],
-  "notes_production": [
-    "Keyboard shortcuts that close, reload, zoom or open the developer tools of the window no longer do anything, and Back can no longer land on the loading screen.",
-    "Local dubbing no longer restarts the voice engine for every line.",
-    "An agent sign-in can be cancelled."
-  ],
-  "notes_production_ko": [
-    "창을 닫거나 새로고침하거나 확대하거나 개발자 도구를 여는 단축키가 더는 안 먹어요. 뒤로 가기로 로딩 화면에 갇히는 일도 없어요.",
-    "로컬 더빙에서 목소리 엔진을 줄마다 다시 켜지 않아요.",
-    "에이전트 로그인을 취소할 수 있어요."
+    "로컬 더빙에 목소리 엔진이 하나 더 생겼어요. 목소리 만들기에서 OmniVoice를 골라요. 따로 내려받는 선택 항목이고, 기본은 그대로 Qwen3-TTS예요.",
+    "OmniVoice를 쓰면 내 컴퓨터에서 더빙할 수 있는 언어가 10개에서 646개로 늘어요.",
+    "OmniVoice 모델은 개인·비상업 용도로만 쓸 수 있어요."
   ]
 }

@@ -518,3 +518,11 @@ test("in Korean the words under an erase or a separation name the tool", async (
   assert.equal(doingWord({ kind: "separate" }), "분리 중");
   assert.equal(doingWord({ kind: "erase" }), "지우는 중");
 });
+
+// A Perso or OmniVoice language is not one of the ten the page knows by code.
+test("a dubbing's line names its language by the name it was started with", () => {
+  const langName = (code, english) => (code ? english || code.toUpperCase() : null);
+  assert.equal(projectMeta({ status: "done", source_lang: "ko", language_code: "arb", language: "Standard Arabic" }, langName),
+               "KO → Standard Arabic");
+  assert.equal(projectMeta({ status: "done", source_lang: "ko", language_code: "arb" }, langName), "KO → ARB");
+});

@@ -1413,3 +1413,20 @@ def test_synth_lines_restarts_a_bloated_engine_between_lines(tmp_path):
     assert all(paths)
     assert [req.text for req in engine.synth_calls] == ["line zero", "line one", "line two"]
     assert any("starting it again" in m for m in logs)
+
+
+import pytest
+
+
+@pytest.mark.parametrize("language", ["Abadi", "Hindi"])
+def test_fast_check_is_only_for_the_ten_languages_it_was_measured_in(monkeypatch, tmp_path, language):
+    # The small Whisper heard none of a correct Hindi line, and does not know
+    # Abadi at all: the line is made once and kept, not three times and called wrong.
+    asked = []
+    monkeypatch.setattr(qp, "transcribe_batch", lambda paths, language=None, timeout=None: asked.append(paths))
+    engine = _QwenWavEngine()
+    logs = []
+    paths = qp.synth_lines(engine, [{"text": "hello"}], ["A"], {"A": "v"}, language, str(tmp_path),
+                           usable_slots=[3.0], log=logs.append)
+    assert len(engine.synth_calls) == 1 and os.path.exists(paths[0]) and not asked
+    assert any("line check skipped: not measured for %s" % language in m for m in logs)

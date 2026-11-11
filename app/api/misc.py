@@ -169,10 +169,13 @@ def font(name: str):
 
 @router.get("/api/languages")
 def api_languages():
-    """The languages each dubbing path offers: local = the model's ten,
+    """The languages each dubbing path offers: local = the Qwen3-TTS voice
+    engine's ten, omnivoice = the OmniVoice voice engine's 646 (a local dub
+    made with it; the ten again where this edition has no OmniVoice),
     perso = Perso's list (asked daily, kept locally). One id per entry is
     what the New project dropdown sends as language_code."""
-    return {"local": languages.local_languages(), "perso": languages.perso_languages()}
+    return {"local": languages.local_languages("qwen3"), "omnivoice": languages.local_languages("omnivoice"),
+            "perso": languages.perso_languages()}
 
 
 @router.get("/api/whats-new")

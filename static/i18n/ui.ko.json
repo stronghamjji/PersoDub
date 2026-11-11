@@ -319,7 +319,7 @@
   "Line {n} runs {secs}s past its time": "{n}번 줄이 시간을 {secs}초 넘어요",
   "Local dubbing": "내 컴퓨터에서 더빙",
   "Local model": "로컬 모델",
-  "Local model (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).": "로컬 모델(10개 언어, 무료) 또는 Perso API(모두 100개 이상, 더빙 모델마다 달라요. 크레딧).",
+  "Local model (10 languages, 646 with OmniVoice; free) or Perso API (100+ languages in all, depending on the dubbing model; credits).": "로컬 모델(10개 언어, OmniVoice는 646개. 무료) 또는 Perso API(모두 100개 이상, 더빙 모델마다 달라요. 크레딧).",
   "Local model · about {n} min": "로컬 모델 · 약 {n}분",
   "Locked while erasing": "지우는 동안 잠김",
   "Looking through a folder": "폴더 살펴보는 중",

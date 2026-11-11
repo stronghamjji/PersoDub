@@ -39,7 +39,7 @@ const words = () => [
   ["#helpTitle", t("What {app} does")],
   ["#helpOverlay .help-item:nth-child(1) b", t("Dubbing")],
   ["#helpOverlay .help-item:nth-child(1) p", t("Voices a video in another language, in each speaker’s own voice. You get the dubbed video, its subtitles and a script you can fix line by line.")],
-  ["#helpOverlay .help-item:nth-child(1) .help-where", t("Local model (10 languages, free) or Perso API (100+ languages in all, depending on the dubbing model; credits).")],
+  ["#helpOverlay .help-item:nth-child(1) .help-where", t("Local model (10 languages, 646 with OmniVoice; free) or Perso API (100+ languages in all, depending on the dubbing model; credits).")],
   ["#helpOverlay .help-item:nth-child(2) b", t("Erase subtitles")],
   // Erase subtitles says why, how and how long, a line each (owner, 2026-10-22).
   ["#helpOverlay .help-item:nth-child(2) p:nth-of-type(1)", t("Why: Original subtitles left in the video overlap the translated ones.")],
