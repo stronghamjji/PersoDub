@@ -69,9 +69,10 @@ on the choices you made last.
 
 **Original language** can stay on *Auto-detect* unless detection gets it wrong.
 
-**Target language** is the language to dub into: ten on this computer (English, Korean,
-Chinese, Japanese, French, German, Italian, Portuguese, Russian and Spanish), 100+ with
-the Perso API, depending on the **Dubbing model** above ([full list](languages.md)).
+**Target language** is the language to dub into: 646 on this computer with OmniVoice
+picked under **Text-to-speech**, 100+ with the Perso API, depending on the **Dubbing
+model** above ([full list](languages.md)). With Qwen3-TTS the list is its ten: English,
+Korean, Chinese, Japanese, French, German, Italian, Portuguese, Russian and Spanish.
 It opens as a list with a search field on top: type part of a name, in your language
 or in English, or a code such as *zh*, and only the languages that match stay, with a
 count such as *2 of 77* under them.
