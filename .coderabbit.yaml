@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "**/*"
+      instructions: >-
+        PersoDub ships for macOS and Windows. Flag a path separator, a shell
+        command, a file lock or an encoding assumption that holds on only one
+        of them. Prefer the smallest change that fixes the problem; flag
+        abstraction or configurability nobody asked for.
+    - path: "relay/**"
+      instructions: >-
+        Everything this Worker writes becomes a public GitHub issue. Flag any
+        change that lets a user's name, home folder, video title, link, API key
+        or account id reach an issue title, body, label or comment.
+    - path: "desktop/src/report*.js"
+      instructions: >-
+        This builds the crash report that leaves the user's computer. Flag
+        anything that sends more than before, or weakens a mask.
+    - path: "static/index.html"
+      instructions: >-
+        Inline script: one unbalanced quote blanks the whole screen. Check every
+        string and template literal that was touched.
+    - path: "**/package-lock.json"
+      instructions: >-
+        A lock file change must match the npm registry: flag a resolved URL
+        that is not registry.npmjs.org and a version the registry does not list.
+chat:
+  auto_reply: true
