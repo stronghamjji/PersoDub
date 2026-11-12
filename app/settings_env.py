@@ -11,7 +11,7 @@ everything that needs one reads it back through current_value() below.
 """
 import os
 import shutil
-from typing import Dict, Optional
+from typing import Dict, Iterator, Optional, Tuple
 
 MANAGED_KEYS = ("GEMINI_API_KEY", "PERSO_API_KEY", "PERSO_SPACE_SEQ")
 
@@ -82,21 +82,39 @@ def update_env_text(text: str, values: Dict[str, str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _assignments(path: str) -> Iterator[Tuple[str, str]]:
+    """Every KEY=value line of kit.env, as (key, value), read the way the
+    desktop shell reads it (kitEnv.js parseEnvFile) so the two cannot disagree
+    about what a line says: a byte-order mark at the top of the file is not
+    part of the first key, a leading `export ` is dropped, and one pair of
+    quotes around a value is taken off. A kit.env saved by Notepad with a mark,
+    or one with PERSODUB_NO_ANALYTICS="1", read here as having no such line,
+    so a computer that had turned everything off looked partly on."""
+    with open(path, encoding="utf-8-sig") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            yield key.strip(), value
+
+
 def read_key_status() -> Optional[Dict[str, bool]]:
     """{key_set booleans} from kit.env, or None when there is no kit."""
     path = env_path()
     if not path or not os.path.exists(path):
         return None
     status = dict.fromkeys(MANAGED_KEYS, False)
-    with open(path, encoding="utf-8") as f:
-        lines = f.readlines()
-    for raw in lines:
-        line = raw.strip()
-        if line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        if key.strip() in status and value.strip():
-            status[key.strip()] = True
+    for key, value in _assignments(path):
+        if key in status and value:
+            status[key] = True
     return status
 
 
@@ -107,14 +125,9 @@ def read_value(key: str) -> Optional[str]:
     if not path or not os.path.exists(path):
         return None
     value = None
-    with open(path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            if k.strip() == key and v.strip():
-                value = v.strip()
+    for k, v in _assignments(path):
+        if k == key and v:
+            value = v
     return value
 
 
@@ -131,14 +144,9 @@ def defined_value(key: str) -> Optional[str]:
     if not path or not os.path.exists(path):
         return None
     value = None
-    with open(path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            if k.strip() == key:
-                value = v.strip()
+    for k, v in _assignments(path):
+        if k == key:
+            value = v
     return value
 
 
@@ -161,7 +169,8 @@ def current_value(key: str) -> str:
 
 
 def _write_env(to_set: Dict[str, str]) -> None:
-    """Write KEY=value lines into kit.env, backing it up first.
+    """Write KEY=value lines into kit.env, backing it up first (kit.env.bak is
+    the file as it was before this write).
 
     Raises FileNotFoundError without a kit, even when there is nothing to
     write: a caller that thinks it saved something must not be told it did."""
@@ -178,8 +187,29 @@ def _write_env(to_set: Dict[str, str]) -> None:
         shutil.copy2(path, path + ".bak")
         with open(path, encoding="utf-8") as f:
             text = f.read()
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(update_env_text(text, to_set))
+        new_text = update_env_text(text, to_set)
+        # Written beside it and moved over it, as the shell's writer does
+        # (kitEnv.js setKitEnvValue): kit.env is never seen half-written, and a
+        # write that stops part way leaves the file as it was.
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(new_text)
+            os.chmod(tmp, 0o600)
+            try:
+                os.replace(tmp, path)
+            except OSError:
+                # Windows will not replace a file another program has open at
+                # that moment (the shell reading it, a virus scanner): then it
+                # is written in place, as it always was before.
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(new_text)
+        finally:
+            # No copy of the keys is left lying beside them, whatever happened.
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
         # Keys live here now -- keep both files owner-only.
         os.chmod(path, 0o600)
         os.chmod(path + ".bak", 0o600)

@@ -454,6 +454,124 @@ def test_the_app_still_starts_when_kit_env_is_not_utf8(tmp_path, monkeypatch):
     assert (kit / "kit.env").read_bytes() == saved
 
 
+# --- kit.env read the way the desktop shell reads it -------------------------
+# desktop/src/kitEnv.js parseEnvFile is what decides whether anything is sent:
+# a byte-order mark before the first key, `export ` before a key and quotes
+# round a value all still say "off" there, so they must say it here too.
+
+BOM = b"\xef\xbb\xbf"
+
+
+@pytest.mark.parametrize("saved", [
+    BOM + b"PERSODUB_NO_ANALYTICS=1\nPERSODUB_NO_REPORTS=1\n",
+    BOM + b"PERSODUB_NO_ANALYTICS=1\r\nPERSODUB_NO_REPORTS=1\r\nPERSODUB_EVENTS=0\r\n",
+    b"PERSODUB_NO_ANALYTICS=\"1\"\nPERSODUB_NO_REPORTS='1'\n",
+    b"export PERSODUB_NO_ANALYTICS=1\nexport PERSODUB_NO_REPORTS=1\n",
+    BOM + b"export PERSODUB_NO_ANALYTICS=\"1\"\n  export  PERSODUB_NO_REPORTS = '1' \n",
+])
+def test_everything_off_is_still_off_with_a_mark_quotes_or_export(tmp_path, monkeypatch, saved):
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    (kit / "kit.env").write_bytes(saved)
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    assert settings_env.read_share_usage() is False
+    settings_env.settle_share_usage()
+    # Not turned on, and not written at all.
+    assert (kit / "kit.env").read_bytes() == saved
+    assert not (kit / "kit.env.bak").exists()
+    assert client.get("/api/settings").json()["share_usage"] is False
+
+
+@pytest.mark.parametrize("line, value", [
+    ("GEMINI_API_KEY=abc", "abc"),
+    ('GEMINI_API_KEY="abc"', "abc"),
+    ("GEMINI_API_KEY='abc'", "abc"),
+    ("export GEMINI_API_KEY=abc", "abc"),
+    ("  export   GEMINI_API_KEY = \"a b\"  ", "a b"),
+    # One pair of quotes comes off, and only a matching pair.
+    ("GEMINI_API_KEY=\"'abc'\"", "'abc'"),
+    ("GEMINI_API_KEY=\"abc'", "\"abc'"),
+    ("GEMINI_API_KEY=\"", "\""),
+    # Empty, quoted or not, is no value.
+    ("GEMINI_API_KEY=", None),
+    ('GEMINI_API_KEY=""', None),
+    ("# GEMINI_API_KEY=abc", None),
+])
+def test_a_line_reads_as_the_shell_reads_it(tmp_path, monkeypatch, line, value):
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    (kit / "kit.env").write_bytes(BOM + line.encode("utf-8") + b"\n")
+    monkeypatch.setenv("PERSODUB_KIT_DIR", str(kit))
+    assert settings_env.read_value("GEMINI_API_KEY") == value
+    assert settings_env.read_key_status()["GEMINI_API_KEY"] is bool(value)
+    # An empty line is still a line: it outranks the process environment.
+    monkeypatch.setenv("GEMINI_API_KEY", "from-the-environment")
+    commented = line.startswith("#")
+    assert settings_env.current_value("GEMINI_API_KEY") == ("from-the-environment" if commented else value or "")
+
+
+# --- kit.env is written beside itself and moved into place -------------------
+
+def test_a_write_goes_to_a_file_beside_kit_env_and_is_moved_over_it(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE)
+    moves = []
+    real_replace = settings_env.os.replace
+
+    def replace(src, dst):
+        # At the move the new text is whole in the other file and kit.env is
+        # still the old one, whole.
+        moves.append((src, dst, open(src, encoding="utf-8").read(), open(dst, encoding="utf-8").read()))
+        real_replace(src, dst)
+    monkeypatch.setattr(settings_env.os, "replace", replace)
+    settings_env.write_share_usage(False)
+    assert moves == [(str(kit / "kit.env.tmp"), str(kit / "kit.env"), BASE + ALL_OFF, BASE)]
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_OFF
+    assert (kit / "kit.env.bak").read_text(encoding="utf-8") == BASE
+    assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
+
+
+def test_a_write_that_stops_part_way_leaves_kit_env_as_it_was(tmp_path, monkeypatch):
+    kit = _kit(tmp_path, monkeypatch, BASE + "GEMINI_API_KEY=gvalue\n")
+
+    class HalfWritten:
+        def __init__(self, f):
+            self.f = f
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.f.close()
+
+        def write(self, text):
+            self.f.write(text[:len(text) // 2])
+            raise OSError(28, "No space left on device")
+
+    def full_disk(path, mode="r", **kw):
+        f = open(path, mode, **kw)
+        return HalfWritten(f) if "w" in mode else f
+    monkeypatch.setattr(settings_env, "open", full_disk, raising=False)
+    with pytest.raises(OSError):
+        settings_env.write_share_usage(False)
+    monkeypatch.undo()
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + "GEMINI_API_KEY=gvalue\n"
+    # The half-written copy, which has the keys in it, is not left behind.
+    assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
+
+
+def test_a_kit_env_that_cannot_be_replaced_is_written_in_place(tmp_path, monkeypatch):
+    # Windows refuses the move while another program has kit.env open.
+    kit = _kit(tmp_path, monkeypatch, BASE)
+
+    def refuse(_src, _dst):
+        raise PermissionError(13, "The process cannot access the file")
+    monkeypatch.setattr(settings_env.os, "replace", refuse)
+    settings_env.write_share_usage(False)
+    assert (kit / "kit.env").read_text(encoding="utf-8") == BASE + ALL_OFF
+    assert (kit / "kit.env.bak").read_text(encoding="utf-8") == BASE
+    assert sorted(p.name for p in kit.iterdir()) == ["kit.env", "kit.env.bak"]
+
+
 # --- POST /api/perso/spaces/preview (workspaces for a TYPED, unsaved key) ---
 # This is what removes the second restart: the picker can list workspaces for a
 # key the user has only pasted, so key + workspace are saved in one go.
