@@ -93,9 +93,9 @@ workspace or balance; no IP address is stored.
 A launch counts once a day; every dub counts. Turn them off with **Share usage data** in
 **Settings → Privacy**; its line in the kit's `kit.env` is `PERSODUB_NO_ANALYTICS=1`. It
 applies to the next event, no restart. `PERSODUB_ANALYTICS_DEBUG=1` prints what would be sent instead of sending it.
-The random install ID is made the first time the app starts, whether the counts are on
-or off, and kept on this computer. With the counts off it is not sent here; its first 12
-characters still go with the job logs below while they are on.
+The random install ID is made the first time the app starts, whether Share usage data is
+on or off, and kept on this computer. With it off the ID is not sent here, nor with the job
+logs below; while it is on, its first 12 characters also go with those logs.
 
 ## Screens and buttons
 
@@ -104,12 +104,13 @@ screens you open, to see which parts of it people use. Each press is a name take
 app's own markup (for example `home_nav_settings`), the screen's name and the time; each
 batch also carries the random install ID, the app version, the edition, and your operating
 system and its version. Never what you type,
-your video, files, filenames, paths, links, scripts, the account's number or its address. The batches go to the same relay as the job logs, every 30
+your video, files, filenames, paths, links or scripts. PersoDub has no account of its own:
+the place for one in each batch is always empty. The batches go to the same relay as the job logs, every 30
 seconds, which passes them to Google Analytics (and later Amplitude) and keeps nothing itself.
 
 It also records the steps of your way through the app: the app opened (and whether
-it is this computer's first time) and closed (on which screen, signed in or not, after how
-many seconds), the install, a video brought in
+it is this computer's first time) and closed (on which screen and after how many seconds; its
+`signed_in` is always `false`, PersoDub having no sign-in of its own), the install, a video brought in
 (picked, dropped or a link, video or sound), a dubbing started (local or Perso API, the
 language it goes into, the video's length in minutes and seconds, the speakers asked for), its
 stages and how long each took, how it ended and, for a failure, the one error code a failure

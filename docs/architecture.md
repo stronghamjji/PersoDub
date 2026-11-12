@@ -97,7 +97,7 @@ Outside the computer:
 | npm's registry | the Codex CLI for ChatGPT sign-in, on a computer that has none | `app/codex_fetch.py` |
 | The site a pasted link points to; PyPI | reading and fetching the video with yt-dlp; a newer yt-dlp, installed with pip when a fetch fails for a reason other than the network | `app/source_fetch.py` |
 | GitHub Releases | auto-update (packaged builds) | `desktop/src/updateFlow.js` (electron-updater) |
-| Two Cloudflare Workers | usage counts and failure reports, each switchable off in Settings | `desktop/src/usageIpc.js`, `desktop/src/reporting.js`; the report relay's code is `relay/`, the count worker's is not in this repository |
+| Two Cloudflare Workers | usage counts and failure reports, switched off together by Share usage data in Settings | `desktop/src/usageIpc.js`, `desktop/src/reporting.js`; the report relay's code is `relay/`, the count worker's is not in this repository |
 
 <a id="repository"></a>**The repository.** The app points at one
 repository, `stronghamjji/PersoDub`.
@@ -719,7 +719,7 @@ values are written bare.
 | `ERASER_PYTHON`, `ERASER_VSR_DIR` (present only while the pack is installed) | installer, pack removal | backend (absence means "not installed") |
 | `GEMINI_API_KEY`, `PERSO_API_KEY`, `PERSO_SPACE_SEQ` | Settings (`write_keys`) | backend at every use; the shell checks whether a Perso key is set |
 | `DUB_MODE`, `SEP_ENGINE`, `STT_ENGINE`, `TRANSLATE_ENGINE`, `VOICE_QUALITY`, `TTS_ENGINE` | Settings and the Dub Agent (`app/setup.py set_defaults`) | backend at every use |
-| `PERSODUB_NO_ANALYTICS`, `PERSODUB_NO_REPORTS` (`1` means off), `PERSODUB_EVENTS` (`0` means off) | Settings (one switch writes all three) | shell, re-read before every send |
+| `PERSODUB_NO_ANALYTICS`, `PERSODUB_NO_REPORTS` (`1` means off), `PERSODUB_EVENTS` (`0` means off) | Settings (one switch writes all three); the backend as it starts, once, on a kit that had only some of them off (`settle_share_usage`) | shell, re-read before every send |
 | `PERSODUB_LANG` (`auto`, `en`, `ko`; `auto` means `PERSODUB_LOCALE`) | Settings > About | backend (`app/i18n.py`, switched on save), page (through `GET /api/settings`), shell (`desktop/src/i18n.js`, at launch) |
 
 **runtime.json.** `{"version": 1, "tts_url", "ollama_url", "tts_pid", "ollama_pid",

@@ -165,7 +165,7 @@ The desktop app is PersoDub: it dubs on this computer when nothing is
 chosen, reads its updates from the public repository's releases, and its
 GitHub button, Send feedback, Help documents and release notes open there.
 
-| | |
+| What | Value |
 |---|---|
 | Name (window, dock, taskbar, installer, About, every `{app}` in a sentence) | `PersoDub` |
 | App id | `com.persodub.desktop` |
